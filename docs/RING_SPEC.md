@@ -206,6 +206,39 @@ read_only = "methods"          # or "none"
   per-peer adapters for origins (`commonwealth-media/src/fanout.rs:334`) and
   knowledge (`sovereign-daemon/src/routes_knowledge.rs:459`). Built.
 
+### 3.10 A person in many rings
+
+A person is the intersection of their rings, and only they see the
+intersection.
+
+- **Isolation by construction.** One journal and one register per ring; nothing
+  written in one ring is rendered in another (I7, extended from transports to
+  rings).
+- **The sharing table.** The person's node holds, privately, what they lend to
+  which rings: an app, a library, a corpus, a calendar, each with the rings it
+  goes to. It is the person-side view of U5's allow lists, and the default for
+  a new ring is nothing. A *ring group* ("close: house, family") is a local label
+  for sharing to several rings in one tap; no ring learns it exists. Joining a
+  ring offers "share this here too?" from the table, computed on the device.
+- **The door names the ring.** A caller reaching an app lent to several rings
+  arrives with a verified `X-Mesh-Rings` header — the rings the door admitted
+  them through, client-sent copies stripped like every `x-mesh-*` header — so
+  one library can keep the family album from the house.
+- **Names are per ring.** The register holds a person per ring.
+- **The person's own cross-ring view** (their week across every ring) is local
+  `view` work on their device and never travels.
+- **Carry is the only move between rings** (`ra-2`): a person re-posts an act
+  into another ring under their own key, marked carried. Carrying someone
+  else's act needs that author's consent or a rule their ring set (O6).
+- **Leaving is per ring.** `Remove` is scoped to one register; a sealed ring
+  ends every lend made to it.
+- **The honest limit.** One node shows one transport key to the peers it syncs
+  with in every ring (LIB §15), so peers who compare notes can tell it is one
+  machine. A per-ring signing key keeps the records unlinkable and is offered
+  for rings where that matters (a party, dating); the app says what it does not
+  hide.
+- Depends on U4: today a node syncs one mesh's online members.
+
 ## 4. Names
 
 `Keeper` is `ra-7`'s copy-holding role: it holds what it does not author and
@@ -245,6 +278,12 @@ the `ring-apps` rung it lands, or `new`.
 | U21 browser-key | ra-11 | U16 | rail-core in wasm against golden vectors; client-signed append through `RingJournal::ingest` | `sovereign/apps/ring-runtime` | entry-one-link |
 | U22 provisioner | new | U4 | per-member Jellyfin accounts reconciled from the register, beside today's shared viewer | `sovereign-cli-mesh/src/mesh_media/` | entry-revocation |
 | U23 uninsured-notice | new | U9, U14 | the clerk lists a leaving host's uninsured apps to the ring | the bridge's clerk | — |
+| U24 ring-header | new | U5 | the door adds a verified `X-Mesh-Rings`, stripping client copies | `commonwealth-transport/src/iroh_identity_forward.rs` | proto-ring-header |
+| U25 sharing-table | new | U5 | the person's lend table across rings, ring groups, and the "share here too?" prompt on join | the node's config owner, and the desktop | proto-nothing-by-default |
+| U26 per-ring-key | ra-5 | U2 | an optional signing key per ring, bound to the person by one `Admit` | `ring_cmd`, the keystore | proto-records-unlinkable |
+| U27 carry-consent | ra-2 | O6 | Carry refuses another author's act without their consent or their ring's rule | the Carry act, when `ra-2` builds it | proto-carry-consent |
+| U28 protocol-v1 | ra-23 | U1, U3 | the journal protocol published as v1: signing bytes, canonical form, sync digest, gaps, membership, each with golden vectors | `commonwealth-rail-core/fixtures/`, `docs/internal/rings/reference/RAIL_PROTOCOL_SKETCH.md` | proto-second-implementation |
+| U29 connector-kits | new | U8, U14, U22 | one kit per edge in §10's order, each with schema, conformance, `svrn new <kind>`, a dev loop, a reference, a skill | `.claude/skills/`, the schema crates | proto-thirty-minute-brick |
 
 **Premises** — each prints this today, run from the repo root:
 
@@ -266,6 +305,12 @@ the `ring-apps` rung it lands, or `new`.
 - U19 `git grep -n -E 'RingJournal|commonwealth[-_]rail' -- 'corpus-engine*' sovereign/crates/sovereign-core sovereign-recipes ':!corpus-engine/xtask'` → nothing
 - U21 `git grep -n commonwealth-rail-core -- sovereign/apps/ring-runtime/Cargo.toml` → nothing
 - U22 `git grep -n 'const VIEWER_NAME' -- sovereign/crates/sovereign-cli-mesh/src/mesh_media/viewer.rs` → `:52`
+- U24 `git grep -n -i x-mesh-rings -- '*.rs'` → nothing
+- U25 `git grep -n -i -E 'sharing_table|ShareTable|LendTable' -- '*.rs'` → nothing
+- U26 `git grep -n -i -E 'per_ring_key|ring_signing_key' -- '*.rs'` → nothing
+- U27 `git grep -n -E 'Carry *\{|enum CarryAct' -- '*.rs'` → nothing
+- U28 `git ls-files commonwealth/crates/commonwealth-rail-core/fixtures` → only `view_golden.json`
+- U29 `git ls-files | grep -E '\.claude/skills/(ring-app|bridge-adapter|provisioner)'` → nothing
 
 ## 6. Bars
 
@@ -303,8 +348,19 @@ campaigns, each watched failing first on the named input.
 | entry-gesture-needs-person | an unconfirmed gesture act is refused | a planted auto-confirmed vouch |
 | entry-flip-rate | at least a quarter of bridged rings move the register home within six months; kill under 5% | — (a strategic count, by hand) |
 
+**`ring-protocol`** — the narrow waist, many rings, the edges:
+
+| Bar | Claim | Watched failing with |
+|---|---|---|
+| proto-ring-header | an app lent to two rings sees which ring the caller came through; a client-sent `X-Mesh-Rings` never reaches it | the strip removed |
+| proto-nothing-by-default | a person joining a new ring shares nothing with it until they choose | a lend defaulting to every ring |
+| proto-records-unlinkable | two rings' journals under per-ring keys share no signing key for one person | one key reused |
+| proto-carry-consent | carrying another author's act without consent or a ring rule is refused | the check disabled |
+| proto-second-implementation | an implementation from the published spec alone, sharing no code with ours, verifies and orders the golden journals identically | a canonical-form change without a version bump |
+| proto-thirty-minute-brick | per edge: a fresh agent session holding only the kit's skill ships a brick that passes conformance in under 30 minutes, reading no platform source (`LEGO_KIT.md`) | — (a timed run per kit) |
+
 The two `elder-` bars in §5 (an Elder answer resolves to a signed act; every
-node folds one recorded answer) belong to a third campaign when U19 starts.
+node folds one recorded answer) belong to a fourth campaign when U19 starts.
 
 ## 7. Defects found by this inventory
 
@@ -351,6 +407,8 @@ Each is a ralph row as it stands.
 - **O5.** Removal under contention — seniority, an arbiter, or mutual
   destruction with "a cut party may not cut back" (LIB §19 step 3). U1 makes the
   cut sound; this decides who may make it.
+- **O6.** Carrying another member's act into a different ring: the author's
+  consent per act, a rule each ring sets, or both. U27 waits on it.
 
 ## 9. Not in this spec
 
@@ -359,3 +417,42 @@ superseded HTTPS door and keeper node (LIB §17); the strategy, entry, forms and
 seed budget (`docs/internal/rings/`); the media, studio, call, feed and map apps
 and the blob, gossip, stream and realtime primitives (`ring-apps` rungs `ra-3`,
 `ra-6`, `ra-13`–`ra-21`). Each app rung adds its units here when it starts.
+
+## 10. Protocols and extension points
+
+A protocol goes wherever two implementations by different people must agree;
+everywhere else an extension point — a registry with a conformance suite — is
+enough. Open what varies by group; keep closed what must be identical for
+anyone to trust anyone (ARCH principle 9).
+
+**The narrow waist** — frozen, versioned, small, with golden vectors, so a
+second implementation (a phone, a browser signer, another language) can exist:
+
+- the journal wire: signing bytes, canonical form, sync digest, gaps
+  (`RAIL_PROTOCOL_SKETCH.md`; v1 is U28, forced by U21's wasm signer);
+- membership: one fold with the permutation property (after U1);
+- the link: `<gateway>/#ring=…&via=…&relay=…` (`docs/THE_LINK.md`);
+- what an app receives: the `X-Mesh-*` headers, `X-Mesh-Rings` included;
+- the `[app]` manifest (§3.3) and the deed acts (§3.4).
+
+**The wide edges** — open sets, each shipping `LEGO_KIT.md`'s kit:
+
+| Edge | Who extends it | Conformance |
+|---|---|---|
+| apps, by manifest | anyone who can write a web server | town-app-generality |
+| bridge adapters | whoever lives on a chat platform | entry-bridge-seam |
+| provisioners | operators of self-hosted services | entry-revocation |
+| civic-book reducers | agents writing from a sentence | town-five-laws |
+| recipes and acquirers | anyone with a source | the recipe test and the profile's bank |
+| model providers | anyone serving the OpenAI-compatible wire | the OICP manifest |
+| relays, gateways, keepers, discovery | anyone with a box | I11, proven by turning it off |
+
+**Closed:** admission, order and void (I1); the membership rule; origin labels
+(I7); the two gates (I5, I6). An extension that reaches these can break what
+every other extension trusts.
+
+**When to open an edge:** after two in-house instances prove its seam, never
+before. In order: the manifest (after two unlike apps are insured by it), then
+bridge adapters (after Discord and one more), then provisioners (after Jellyfin
+and one more), then the infrastructure roles. U29 builds the kits in that
+order.
