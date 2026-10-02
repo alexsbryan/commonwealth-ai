@@ -1,13 +1,14 @@
 <!-- ledger -->
 
-**phase-c-5 · 2026-10-01 · pc-onprem-followups · worker** — this commit
+**phase-c-6 · 2026-10-01 · pc-onprem-followups · worker** — this commit
 - Needed: a keyed daemon's OCR cleanup admitted without a loopback exemption, and a sealed turn's offers derived from the registry.
 - Chose: a per-process self credential in the one key store (not an in-process call), and a corpus-only `search` that reports `Scope::Persistent`.
 - Because: the cleanup already speaks HTTP to `/v1/chat/completions`, so one store row reuses the one admission decision; and `Scope::External` on a tool that cannot leave the machine was itself the false claim the decider reads.
+- Minted as `phase-c-5` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-5`.
 
 <!-- appendix -->
 
-## phase-c-5 · 2026-10-01 — the daemon admits itself by key; a corpus-only search says so in its scope
+## phase-c-6 · 2026-10-01 — the daemon admits itself by key; a corpus-only search says so in its scope
 
 <details><summary>reasoning, evidence, package</summary>
 
