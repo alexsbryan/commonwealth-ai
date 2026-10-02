@@ -4603,3 +4603,80 @@ ModWalk). `Caller` has two production definitions, finding 4.
   --verify` fail as at auto-11 (p0-root-junk 323069 > 113934).
   `size-gate` reports 75 keys grown (77 at auto-11). concept-gate and
   domains-census-self-test are could-not-judge, as before.
+
+## REVIEW-audit-pc-auto-1 (2026-10-02, range 06f79dad6..75d8daefa, since phase-c's first unit commit 448f845e9)
+
+No earlier `REVIEW-audit-pc-` row, so the range opens at the parent of
+pc-pool-ready's first commit. Ten units plus ralph's own pool commits.
+
+### (1) Net-line ledger, `.rs/.py/.sh` outside ralph/, merges excluded
+
+| unit | src +/- (net) | tests +/- (net) |
+|---|---|---|
+| pc-pool-ready | +370/-99 (+271) | +325/-7 (+318) |
+| pc-removed-env-warn | +314/-60 (+254) | 0 |
+| pc-bare-404s | +170/-23 (+147) | +144/-0 (+144) |
+| pc-onprem-followups | +516/-70 (+446) | +57/-3 (+54) |
+| pc-rpc-probe-identity | +293/-21 (+272) | +62/-3 (+59) |
+| pc-split-deploy-honesty | +264/-34 (+230) | 0 |
+| pc-cmnwlth-lift-flake | +30/-1 (+29) | 0 |
+| pc-cmnwlth-lift-flake-selfheal | +16/-6 (+10) | +32/-0 (+32) |
+| pc-corpus-registry-live | +159/-111 (+48) | +202/-0 (+202) |
+| pc-rails-reseal-loop | +177/-88 (+89) | +91/-3 (+88) |
+| pc-chat-ask-audit-calls | +1/-1 (0) | 0 |
+| ralph pool commits (`ralph:` subjects) | +94/-11 (+83) | +78/-1 (+77) |
+
+Tests are counted by path (`tests/`, `tests.rs`, `*_tests.rs`); inline
+`#[cfg(test)]` modules count as src, so removed-env-warn and
+split-deploy-honesty show their tests under src.
+
+### (2) dry-report over the 18 touched crate dirs
+
+No exact group and no near cluster has a member among the 70 product
+symbols the range added (matched by name). That is could-not-judge, not
+clean: the `commonwealth-ai` code index predates the range. Of the first 25
+added symbols probed with `symbols`, one resolved at its range file
+(`principal_scope`, a pre-existing fn the range edited);
+`reconcile_corpus_registry` resolves only at its pre-move path and
+`member_client_absence` not at all. `converge noun` likewise reports zero
+definitions for all three new nouns. The added absence, credential and
+slot helpers were read by hand against their neighbours: findings 1-3.
+
+### (3) converge noun over the 3 nouns the range added
+
+DirectBind (serving-host rpc_discovery/endpoint.rs:19) and RemovedEnv
+(kernel-types env_bridge.rs:64) have one definition each by `git grep` at
+HEAD. Bridge (endpoint.rs:218) is a test-local unit struct, as is its
+namesake at sovereign-serve guest_route.rs:103; neither is production. No
+noun has more than one production definition.
+
+### Findings
+
+- **ARCH 8, fixed in 727d41054** · sovereign-contracts/src/setup_config.rs:1598
+  `client_credential` (pc-onprem-followups) re-spelled the find_map body of
+  `daemon_url_override` (setup_config.rs:1573); its doc said "by the same
+  rule". Both now read through `first_set_env` (setup_config.rs:1581).
+  Copies 2 -> 1.
+- **ARCH 11, fixed in 727d41054** · sovereign-daemon/src/hosted_code.rs:96
+  (rewritten by aee8ca125) hand-built a 503 `{"error": ...}` body that
+  `http_response::Absence::unavailable` (http_response.rs:83) renders with
+  the same bytes.
+- **ARCH 1, fixed in 727d41054** · sovereign-daemon/src/serve_client.rs:566
+  `unmet_slots` (pc-split-deploy-honesty) answered "nothing unmet" on a
+  config with no populated `[models]` with no trace; now debug-traced.
+- **ARCH 11, recorded, cleanup** · the same hand-built 503 sits in two
+  pre-range sites: sovereign-daemon/src/hosted_ingest.rs:201 (`absent`) and
+  sovereign-daemon/src/posture.rs:73 (`mcp_withheld`). Both could return
+  `Absence::unavailable`; outside the range, so not touched here.
+- **instrument, recorded** · dry-report and converge cannot judge a range
+  the code index has not seen. An audit that wants step (2) and (3) as
+  claims needs the index refreshed at the range head first.
+- **ARCH 5 (drift), fixed in this section's commit** · TESTALL was 13718
+  pass / 1 fail: `conformance_tags_are_fresh`, because
+  quality/conformance/sovereign-daemon.toml:31 pinned FE-99's test at
+  routes_status.rs:773 and 81ea5deef (pc-rpc-probe-identity) moved it to
+  780. Tags regenerated (`UPDATE_CONFORMANCE_TAGS=1`); the test passes.
+- **advisory lanes, recorded** · PREPUSH exit 0. `hakari-verify` and
+  `deletion-manifest --verify` fail as at pb-auto-12 (p0-root-junk
+  323069 > 113934); `size-gate` reports 77 keys grown (75 at pb-auto-12);
+  concept-gate and domains-census-self-test are could-not-judge, as before.
