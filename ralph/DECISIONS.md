@@ -2157,6 +2157,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: commit that closure (22d0bb9e1), complete the merge by hand (b25bcfac8; clean, no conflicting hunk), mark the row `[x]`, and make the pool check its done commit: a failure now halts naming the unit and git's first line, instead of surfacing at the next merge as a conflict.
 - Because: with the index committed, `git merge --no-ff ralph/pc-rails-journal-linear` applied cleanly (9 files, 737+/194-), so the only thing stopping it was the dirty index; `scripts/ralph.py` ran the done commit unchecked after each merge. The new test fails without the check on exactly the observed package ("merge conflict merging ralph/dm-b") and passes with it; the 164-test suite is green.
 
+**phase-c-20 · 2026-10-02 · pc-partial-decline-verdict-measure-2 · operator, closing on the second re-read** — this commit
+- Needed: measure-2 (b43e0e20f) read a narrower MISS: on-prem check 4 pooled 35B 8/8 (was 4/8 at 6ce67adbc, 1/3 before the row) and 4B 12/13 (10/13, 0/25); every fixture phase-c-17 named reads correctly live and the q2 trailing-caveat false positive is gone (0/40, 0/16). Two shapes remain, one each way: a hedge-then-answer full answer reads cannot_know_from_here (4B chat-ask q1, 1 of 40), and a decline whose general-knowledge caveat sits mid-text reads unverified (4B absent-paralegal-bare 3/3, unchanged from before the row). The row's rule says a miss reopens it.
+- Chose (operator, asked by the seat with both options priced: "Close, file residue"): pc-partial-decline-verdict stays [x]; measure-2 closes at b43e0e20f as the reading it is; the two shapes and the 35B decline-plus-GK Grounded label go below the cut as pc-partial-decline-residue with their transcripts as fixtures.
+- Because: a third round costs ~2.5 h (code plus a 2 h reading alone) for one false label in 40 turns and one miss that predates the row; the operator ruled the residue a cleanup, not a blocker. The seat stopped the director's resolution session (an operator STOP, 18:11Z) so it would not reopen the row against the ruling; it had already merged the readings (379e56f1e).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13796,5 +13801,13 @@ REVIEW-AFTER: whether the multiquote should carry which part was the question's 
 Evidence: `git status` at session start showed only `M  ralph/DECISIONS.md` and `M  ralph/next/phase-c/STATE.md`, both staged, matching what `_regenerate_decisions` and `queue.set_status` + `git add` leave before the `ralph: <unit> done` commit; `0838218d1 merge pc-partial-decline-verdict` was HEAD and no `ralph: pc-partial-decline-verdict done` followed it (the earlier 0b2a7bb26 is the row's first close, before it was reopened). The merge of the rails lane after committing the index went through with no conflict. Why the done commit itself failed was not recovered: no pool log on this host records git's stderr, and `scripts/commit-msg.sh` accepts the subject (rc=0, tried by hand). A concurrent git operation on the main tree (an index.lock) is the likely cause; the halt now prints it.
 
 Falsified if: a pool halt with "merge conflict" recurs while the merge applies cleanly on a clean index; then something else dirties the index between merges.
+
+</details>
+
+## phase-c-20 · 2026-10-02 — the decline verdict closes on its second re-read; the residue is cleanup
+
+<details><summary>reasoning, evidence, package</summary>
+
+Causes, from b43e0e20f's findings: `pivot_answers`' value test (a fresh number or a capitalised mid-sentence word) misses a lowercase or code-span answer after " but " (sovereign-core runtime/grounding/decline.rs); `strip_gk_caveat` (repair.rs:58) keeps only the text after a mid-text "from general knowledge:", so `declines_asked_fact` (decline.rs:155) never sees the opening decline. Fixtures, kept in the main tree: target/ralph/phase-c/pc-partial-decline-verdict-measure-2/phase-c/pdm/runs/4b-chatask-r3-q1-warmup.txt (answers) and .../runs/4b-firm-r1.transcripts.jsonl (declines). The 4B gk_rescue "1945-06-23" release to a conference-room question (1 of 3) is pd-anchor-unenriched's case.
 
 </details>
