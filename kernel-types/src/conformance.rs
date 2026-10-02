@@ -11,7 +11,7 @@
 //! # This is a registry, not a snapshot
 //!
 //! `quality/requirements.toml` is GENERATED from the specification by
-//! `corpus-engine/xtask/tests/requirements_registry.rs` and byte-gated against it.
+//! `quality/xtask/tests/requirements_registry.rs` and byte-gated against it.
 //! Editing the prose without regenerating fails a gate; editing the generated
 //! file by hand fails the same gate. The registry carries [`Registry::spec_hash`]
 //! so a consumer can refuse to render a verdict against a spec it has not read
@@ -193,7 +193,7 @@ pub struct AcceptanceScenario {
 /// The whole registry: one specification, parsed once.
 ///
 /// Named apart from the five existing `Registry` types — including
-/// `corpus-engine/xtask/src/env_gate.rs:187`, whose crate also reads this one —
+/// `quality/xtask/src/env_gate.rs:187`, whose crate also reads this one —
 /// so no reader has to work out which `Registry` is meant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

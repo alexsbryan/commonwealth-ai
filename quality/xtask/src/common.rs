@@ -10,7 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-/// Repo root = grandparent of `corpus-engine/xtask/`.
+/// Repo root = grandparent of `quality/xtask/`.
 ///
 /// RESOLVED AT COMPILE TIME, not from the cwd. A prebuilt `target/debug/xtask`
 /// therefore scans the checkout it was BUILT in, whatever directory you run it

@@ -64,7 +64,7 @@ wire-fixture = ["dep:serde_json"]
 # and the workspace-wide `covers:` tag scanner, which read the REPO ROOT and
 # therefore could not survive a lift of this crate — it is a GLOBAL
 # `[[package_leaf]]`, so every declared package carries it and its tests. Both
-# moved to `corpus-engine/xtask/tests/` on 2026-09-04 after the commonwealth
+# moved to `quality/xtask/tests/` on 2026-09-04 after the commonwealth
 # lift failed on exactly those two (`490 passed, 2 failed`, both leaf-side).
 # The dev surface of a liftable leaf is part of its contract: keep it to what
 # a third party with only this directory can actually run.

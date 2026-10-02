@@ -17,8 +17,8 @@
 2	corpus-engine/src/enrichment/pipeline/section_classifier.rs
 1	corpus-engine/src/sharding.rs
 1	corpus-engine/src/update/newsworthy_watcher.rs
-6	corpus-engine/xtask/src/clock_gate.rs
-1	corpus-engine/xtask/src/target_arch.rs
+6	quality/xtask/src/clock_gate.rs
+1	quality/xtask/src/target_arch.rs
 2	kernel-types/src/judgement.rs
 1	oicp-conformance/src/main.rs
 1	sovereign-mobile/src-tauri/src/commands/host.rs

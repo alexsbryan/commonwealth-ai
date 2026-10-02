@@ -87,7 +87,7 @@ Split only when two outcomes need different proofs.
 ## Always
 
 - The gate's raw count goes in every commit body (`cargo xtask
-  boundary-gate`, EXIT=1 with the count, from `corpus-engine/`).
+  boundary-gate`, EXIT=1 with the count).
 - Builds and gate runs go through the toolbox on this host:
   `toolbox run -c sovereign-vulkan bash -lc '...'`.
 - Record the decision with `scripts/ralph-decisions.py new phase-b`: ONE

@@ -322,8 +322,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `cli-contract-live-verify` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
 - `cli-journey-sandbox` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
 - `cli-journey-verify` — sovereign/docs/cli-contract.toml (journeys) · runs in: by-hand
-- `clippy-json` — corpus-engine/xtask/src/lint_gate.rs · runs in: by-hand
-- `clone-gate` — corpus-engine/xtask/src/clone_gate.rs (module header) · runs in: prepush
+- `clippy-json` — quality/xtask/src/lint_gate.rs · runs in: by-hand
+- `clone-gate` — quality/xtask/src/clone_gate.rs (module header) · runs in: prepush
 - `co-drift` — scripts/co-drift.py (module header — the per-commit claim/scope audit) · runs in: by-hand
 - `co-lineage` — quality/campaigns/ (the campaign files this loads and measures) · runs in: by-hand
 - `co-liveness` — scripts/co_liveness.py (module header — does a backlog item still reproduce at HEAD?) · runs in: by-hand
@@ -411,7 +411,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `twin-census` — quality/twin-plants.toml (the families and their plants) · runs in: by-hand
 - `windows-crosscheck` — .github/workflows/desktop-release.yml · runs in: by-hand
 - `wizard-verify` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: smoke:6, by-hand
-- `xtask-quality` — corpus-engine/xtask/src/quality_cmd.rs · runs in: by-hand
+- `xtask-quality` — quality/xtask/src/quality_cmd.rs · runs in: by-hand
 
 ### What nothing runs (0)
 

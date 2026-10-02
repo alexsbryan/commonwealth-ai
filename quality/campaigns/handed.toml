@@ -15,7 +15,7 @@ status    = "staged"   # next up after domains; `scripts/ralph.py promote handed
 # second is the load-bearing one.
 [predicate]
 statement = "Every [[ability]] below is structural — the planted violation its rung names goes red, and the tree is green — and the bench serves one grounded and one generative turn in-process, pasting both verdicts and the commission trace line"
-check     = "./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human --full && (cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) && ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human"
+check     = "./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human --full && ./scripts/with-cargo-lock.sh cargo xtask layer-gate && ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human"
 
 # ── THE SCOREBOARD ───────────────────────────────────────────────────────────
 # A row is structural in the commit that lands its enforced_by AND deletes the

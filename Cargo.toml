@@ -50,7 +50,7 @@ members = [
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
-    "corpus-engine/xtask",
+    "quality/xtask",
     # SCIP call graph + per-language exporter dispatch. Carved out of
     # corpus-engine 2026-05-23 to cut the rebuild blast radius for scip
     # changes from 20 crates to ~6.

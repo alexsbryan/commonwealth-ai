@@ -28,7 +28,7 @@
 //! `corpus_list`, `corpus_search` (cited chunks), `atoms_lookup` (declared
 //! atlas atoms) and `corpus_ontology` (what the corpus declared). No sovereign
 //! daemon, no local model, no mesh — the dep tree carries no llama.cpp, ort or
-//! iroh, and `corpus-engine/xtask/tests/no_inference_stack.rs` fails if it ever does.
+//! iroh, and `quality/xtask/tests/no_inference_stack.rs` fails if it ever does.
 //!
 //! What it does NOT do, stated rather than implied: the atom-grounded RANKING
 //! (`atom_enum`, `atlas_grounding`) lives in `sovereign-core` and is not here.

@@ -50,7 +50,7 @@ use crate::tool::{Idempotency, ToolExample};
 ///
 /// The tree had **no versioned-id type** when this was written: four call
 /// sites `split_once('@')` a `name@version` fragment and every one of them
-/// discards the version (`corpus-engine/xtask/src/lint_gate.rs:208`,
+/// discards the version (`quality/xtask/src/lint_gate.rs:208`,
 /// `sovereign-cli-dev/src/refactor_cmd/discover.rs:414`,
 /// `sovereign-work-atlas/src/repo_id.rs:187`,
 /// `commonwealth-transport/examples/tunnel_bench.rs:238`). This is the first

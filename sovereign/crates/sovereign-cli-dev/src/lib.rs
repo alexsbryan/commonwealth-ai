@@ -116,7 +116,7 @@ mod refactor_cmd;
 #[cfg(feature = "workbench")]
 mod refactor_wire;
 // The register resolver and the wire differ, for the monorepo's checks on its
-// OWN `quality/` data (corpus-engine/xtask/tests/refactor_register.rs), which
+// OWN `quality/` data (quality/xtask/tests/refactor_register.rs), which
 // a lifted code program does not carry (pb-code-clean-lift).
 #[cfg(feature = "workbench")]
 pub use refactor_cmd::destination::{RegisterHealth, Resolution, Workspace};

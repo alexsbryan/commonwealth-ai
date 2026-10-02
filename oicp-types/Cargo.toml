@@ -37,7 +37,7 @@ toml = { workspace = true }
 # `quality-registry` because `kernel_types::quality` is feature-gated
 # (`kernel-types/src/lib.rs:107`); the feature's only cost is `toml`, which
 # this crate already links two lines above. Same spelling as
-# `corpus-engine/xtask/Cargo.toml:23`, the other consumer of that module.
+# `quality/xtask/Cargo.toml:23`, the other consumer of that module.
 kernel-types = { workspace = true, features = ["quality-registry"] }
 # `JobContext::progress` traces every progress note at debug (work/exec.rs,
 # moved here by pb-work-donor). Third-party and already in every closure that

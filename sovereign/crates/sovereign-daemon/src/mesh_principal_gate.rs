@@ -19,7 +19,7 @@
 //! "don't read the header" is exactly what `admission.rs:306` used to say
 //! ("the verified node id") while the code below it did the opposite. This
 //! module fails the normal test run instead (the test is
-//! `corpus-engine/xtask/tests/mesh_principal_gate.rs`, which a lifted svrn
+//! `quality/xtask/tests/mesh_principal_gate.rs`, which a lifted svrn
 //! does not carry: it scans the monorepo), and it greps for the LITERAL
 //! header as well as the parser's name, so moving the read behind a fresh
 //! helper does not satisfy it (bar `mp-no-decider-reads-the-header`'s named

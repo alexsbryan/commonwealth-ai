@@ -73,7 +73,7 @@ OCR_EXPECT_PHRASE="${OCR_EXPECT_PHRASE:-}"
 
 # The routes a lawyer's laptop may reach through nginx: "<methods> <path>",
 # `{}` one path segment. nginx/firm-rag.conf proxies exactly these and
-# nothing more (pinned by corpus-engine/xtask/tests/
+# nothing more (pinned by quality/xtask/tests/
 # onprem_kit_allowlist.rs), and check 0b exercises every one.
 CLIENT_ROUTES=(
     "GET /health"

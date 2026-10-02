@@ -100,6 +100,11 @@ rustflags = [
 # script regardless, so cc's step 1 returns 10.15. Ignored on non-Apple
 # targets; arm64's own baseline (11.0) is higher so 10.15 is harmless there.
 # NB this is a COMPILE-time floor — a rustflags link-arg cannot fix it.
+# `cargo xtask <gate>` from anywhere in the workspace. It lived in
+# corpus-engine/.cargo/config.toml, so it resolved only from inside that crate.
+[alias]
+xtask = "run -p xtask --"
+
 [env]
 MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # The bench tree, absolute, resolved from this file's directory. Lets

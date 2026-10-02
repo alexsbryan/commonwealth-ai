@@ -434,7 +434,7 @@ already declare invariants that no longer hold, and none of them knew.
 1. **Every falsifier becomes a test or an `xtask` gate.** A falsifier that is
    not executable marks its row a target.
 2. **`cargo xtask target-arch` joins the `quality` gate list.** It exists
-   (`corpus-engine/xtask/src/target_arch.rs`, `STALE = 1`) and is absent from
+   (`quality/xtask/src/target_arch.rs`, `STALE = 1`) and is absent from
    `quality_cmd.rs`'s gate table — which is precisely how §5's profiles reached
    zero adoption unnoticed.
 3. **The differential is the human-facing proof.** `svrn topology states`

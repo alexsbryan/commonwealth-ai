@@ -917,7 +917,7 @@ if command -v cargo >/dev/null; then
   [[ -z "$bad" ]] || fail "dep tree carries: $bad"
   echo "acceptance: cargo tree -p corpus-mcp: no llama.cpp / ort / iroh / mesh transport / runtime"
 else
-  echo "acceptance: cargo not on PATH here — closure checked by corpus-engine/xtask/tests/no_inference_stack.rs instead"
+  echo "acceptance: cargo not on PATH here — closure checked by quality/xtask/tests/no_inference_stack.rs instead"
 fi
 if command -v ldd >/dev/null; then
   ldd "$CORPUS_MCP" | grep -iE 'llama|ggml|onnx' && fail "binary links an inference shared library" || true

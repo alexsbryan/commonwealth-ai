@@ -8,7 +8,7 @@
 1	corpus-engine/src/enrichment/code_intel/pass.rs
 3	corpus-engine/src/sharding.rs
 1	corpus-engine/src/snapshot.rs
-6	corpus-engine/xtask/src/layout_gate.rs
+6	quality/xtask/src/layout_gate.rs
 4	sovereign/crates/sovereign-grants/src/auto_recover.rs
 2	sovereign/crates/sovereign-daemon/src/routes_internal/corpus_queue.rs
 4	sovereign/crates/sovereign-daemon/src/routes_internal/corpus_sync.rs

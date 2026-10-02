@@ -182,7 +182,7 @@ json.dump(d, sys.stdout)" \
 # the cargo lock, so it goes through the one wrapper that serialises on it.
 leg_docsgate() {
   # Beside $D, never in it: the bring-up empties $D.
-  ( cd "$REPO/corpus-engine" && "$REPO/scripts/with-cargo-lock.sh" cargo xtask docs-gate ) \
+  ( cd "$REPO" && "$REPO/scripts/with-cargo-lock.sh" cargo xtask docs-gate ) \
     > "$D-docs-gate.log" 2>&1
   echo $? > "$D-docs-gate.rc"
 }

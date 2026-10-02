@@ -31,7 +31,7 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # cfg switches) so iroh resolves with ONE feature set in every build scope.
 # With two, cargo-hakari lists iroh in workspace-hack, which links it into
 # every member — including corpus-mcp, whose closure test
-# (corpus-engine/xtask/tests/no_inference_stack.rs) forbids it; excluding it from the
+# (quality/xtask/tests/no_inference_stack.rs) forbids it; excluding it from the
 # hack instead (`final-excludes`) drops its feature contributions to
 # ed25519-dalek/noq-udp/signature and re-opens the scoped-build drift the
 # hack exists to close (scope-drift.py 92 -> 180, `cargo hakari verify` red).

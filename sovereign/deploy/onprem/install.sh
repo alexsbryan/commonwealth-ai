@@ -284,7 +284,7 @@ echo "    $UNIT"
 # Main's two units: firm-rag-server.service retired with sovereign-server,
 # firm-rag-daemon.service is firm-rag.service now. Left enabled, either
 # binds the daemon's port beside the new unit. Run alone by
-# corpus-engine/xtask/tests/onprem_kit_upgrade_unit.rs.
+# quality/xtask/tests/onprem_kit_upgrade_unit.rs.
 # retire-main-units: begin
 for old in firm-rag-server.service firm-rag-daemon.service; do
     [ -f "$UNIT_DIR/$old" ] || continue

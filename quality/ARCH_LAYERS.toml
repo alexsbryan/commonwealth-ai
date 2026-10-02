@@ -764,7 +764,7 @@ reason = "must stay consumable without the agent runtime — it names NO soverei
 # entry (the edge is gone) fails the gate until it is deleted — removals are
 # the celebration, same as the layer exceptions below.
 #
-# Moved here from Rust consts in `corpus-engine/xtask/src/boundary_gate.rs`
+# Moved here from Rust consts in `quality/xtask/src/boundary_gate.rs`
 # (2026-09-03). One policy file, one parser (`quality/arch-layers`), same as
 # layer-gate and arch-report — ARCH §10.6, and "say it in TOML".
 

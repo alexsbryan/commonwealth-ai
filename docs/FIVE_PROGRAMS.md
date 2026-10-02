@@ -435,7 +435,7 @@ there (`studio`, `code-intel`, `corpus-mcp`, `commonwealth`, `serving`,
 could not nest inside the five. Every `[[exception]]` scoped to a package was
 deleted with them, eleven rows, and none was written in their place. Each red
 line is one task: a trait in a shared leaf or a wire call, done when green.
-Step done when `cd corpus-engine && cargo xtask boundary-gate` exits 0.
+Step done when `cargo xtask boundary-gate` exits 0.
 
 **Why it moved to the front.** Operator direction 2026-09-21, correcting nine
 commits of incremental cutting on this branch: "I don't want the fuzzy grep and
@@ -535,7 +535,7 @@ the fuzzy plan-and-chase this initiative replaced. The loop below is what has
 actually been moving the number; the worklist after it is evidence, not a
 schedule.
 
-1. **Measure.** `cd corpus-engine && cargo xtask boundary-gate` (inside the
+1. **Measure.** `cargo xtask boundary-gate` (inside the
    toolbox). Group the output BY TARGET, not by source — per-source it reads as
    N problems when it is often one.
 2. **Fan out three cutters on disjoint crate paths.** Each is told: never run
@@ -1515,7 +1515,7 @@ machinery is one such feature, `guest` (phase-b-35).
 
 ### Done is three conditions, not one
 
-- [ ] `cd corpus-engine && cargo xtask boundary-gate` exits 0.
+- [ ] `cargo xtask boundary-gate` exits 0.
 - [ ] `EmbeddedDaemon::new` is called in non-test code only by svrn's own
       process entry (boot and the `admin join` one-shot) and the stock
       `[[distribution]]` binary, pinned by a workspace construction census

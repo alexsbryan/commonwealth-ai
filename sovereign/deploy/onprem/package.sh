@@ -129,7 +129,7 @@ install -m 0755 "$BIN/svrn-ingest"          "$KIT/bin/svrn-ingest"
 #     A hit means the binary links one of them. They are the list
 #     sovereign-onprem/tests/sealed_composition_e2e.rs's NOT_COMPOSED
 #     watches absent on-prem and present in stock (pinned equal by
-#     corpus-engine/xtask/tests/onprem_kit_allowlist.rs).
+#     quality/xtask/tests/onprem_kit_allowlist.rs).
 #
 #   * TOOL IDS are not checkable here. sovereign-contracts names
 #     `web_fetch`, `wikipedia_fetch` and `probe_url` as routing data in

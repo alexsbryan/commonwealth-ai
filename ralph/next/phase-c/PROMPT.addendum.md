@@ -33,7 +33,7 @@ the count that went down in the commit body.
 
 - Branch `cut`. NOTHING IS EVER PUSHED. Never amend and never rewrite
   history: other loops share this repo.
-- `cargo xtask boundary-gate` (from `corpus-engine/`) exits 0 since Phase B
+- `cargo xtask boundary-gate` exits 0 since Phase B
   and stays 0. BOUNDARY's line goes in EVERY commit body; a change that adds
   an edge is rolled back. `layer-gate` stays ✓.
 - clone-gate rides on BOUNDARY (phase-b-99) and never rises. A row that

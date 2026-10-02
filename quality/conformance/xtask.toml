@@ -13,27 +13,27 @@
 [[claim]]
 requirement = "EV-30"
 test = "xtask::cli_contract_journeys::every_live_journey_asserts_output_somewhere"
-file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+file = "quality/xtask/tests/cli_contract_journeys.rs"
 line = 803
 asserts = 1
 
 [[claim]]
 requirement = "EV-30"
 test = "xtask::cli_contract_journeys::live_read_steps_assert_output"
-file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+file = "quality/xtask/tests/cli_contract_journeys.rs"
 line = 762
 asserts = 1
 
 [[claim]]
 requirement = "EV-30"
 test = "xtask::cli_contract_journeys::live_steps_all_assert_something"
-file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+file = "quality/xtask/tests/cli_contract_journeys.rs"
 line = 732
 asserts = 1
 
 [[claim]]
 requirement = "EV-30"
 test = "xtask::cli_contract_journeys::steps_no_lane_runs_do_not_grow"
-file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+file = "quality/xtask/tests/cli_contract_journeys.rs"
 line = 845
 asserts = 1

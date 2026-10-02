@@ -113,7 +113,7 @@ weight = 93
 test   = "admits_when_unrestricted"
 
 [[probe]]
-file   = "corpus-engine/xtask/src/main.rs"
+file   = "quality/xtask/src/main.rs"
 crate  = "xtask"
 weight = 63
 test   = "walk_counts_source_and_ignores_vendored_copies_of_the_same_file"

@@ -11,7 +11,7 @@
 
 use std::path::PathBuf;
 
-/// Repo root — the grandparent of `corpus-engine/xtask/`.
+/// Repo root — the grandparent of `quality/xtask/`.
 ///
 /// PANICS when the resolved directory does not look like this workspace.
 /// A generator that cannot find the repo must say so in one line, not fail

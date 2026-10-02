@@ -179,7 +179,7 @@ crates are pure functions and a SQLite file, and the rail is a directory of
 text.
 
 Before pushing anything that touches this package, run `cargo xtask
-boundary-gate` from `corpus-engine/` — it is one of the eight blocking
+boundary-gate` — it is one of the eight blocking
 pre-push ratchets and it is what keeps the package liftable.
 
 ## License

@@ -40,8 +40,8 @@
 1329	corpus-engine-watchers::tests
 102	corpus-engine-yield
 60	corpus-engine-yield::tests
-5224	corpus-engine/xtask
-3416	corpus-engine/xtask::tests
+5224	quality/xtask
+3416	quality/xtask::tests
 46637	corpus-engine::tests
 4698	corpus-index
 1652	corpus-index::tests

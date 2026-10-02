@@ -48,7 +48,7 @@ statement = "sovereign-desktop REACHES no crate that can assemble or host a daem
 # [[exception]] rows holding the door — a check green while the statement is
 # false (§5). The grep is the row count the operator named as the whole
 # scoreboard; it runs first and costs nothing. Watched red the day it landed.
-check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (cd corpus-engine && cargo xtask layer-gate && cargo xtask lifecycle-gate)"
+check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (cargo xtask layer-gate && cargo xtask lifecycle-gate)"
 
 
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
@@ -1765,7 +1765,6 @@ direction    = "lower_is_better"
 # principle 6).
 instrument   = '''
 rows=$(grep -c 'from = "sovereign-desktop"' quality/ARCH_LAYERS.toml || true)
-cd corpus-engine || exit 1
 cargo xtask layer-gate >/dev/null 2>&1; layer_red=$?
 bd=$(cargo xtask lifecycle-gate 2>&1 | sed -n 's/.*ledger: \([0-9][0-9]*\) site(s) BURNING-DOWN.*/\1/p')
 [ -n "$bd" ] || exit 1

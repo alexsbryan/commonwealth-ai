@@ -7321,133 +7321,133 @@ lines = 48
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/api_gate.rs"
+path = "quality/xtask/src/api_gate.rs"
 context = "back-of-house"
 lines = 195
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/arch_gate.rs"
+path = "quality/xtask/src/arch_gate.rs"
 context = "back-of-house"
 lines = 470
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/boundary_gate.rs"
+path = "quality/xtask/src/boundary_gate.rs"
 context = "back-of-house"
 lines = 861
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/clock_gate.rs"
+path = "quality/xtask/src/clock_gate.rs"
 context = "back-of-house"
 lines = 277
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/common.rs"
+path = "quality/xtask/src/common.rs"
 context = "back-of-house"
 lines = 327
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/concept_gate.rs"
+path = "quality/xtask/src/concept_gate.rs"
 context = "back-of-house"
 lines = 344
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/docs_gate.rs"
+path = "quality/xtask/src/docs_gate.rs"
 context = "back-of-house"
 lines = 463
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/env_gate.rs"
+path = "quality/xtask/src/env_gate.rs"
 context = "back-of-house"
 lines = 431
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/instrument_gate.rs"
+path = "quality/xtask/src/instrument_gate.rs"
 context = "back-of-house"
 lines = 816
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/judge_funnel_gate.rs"
+path = "quality/xtask/src/judge_funnel_gate.rs"
 context = "back-of-house"
 lines = 432
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/layer_gate.rs"
+path = "quality/xtask/src/layer_gate.rs"
 context = "back-of-house"
 lines = 276
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/layout_gate.rs"
+path = "quality/xtask/src/layout_gate.rs"
 context = "back-of-house"
 lines = 266
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/lifecycle_gate.rs"
+path = "quality/xtask/src/lifecycle_gate.rs"
 context = "back-of-house"
 lines = 559
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/lint_gate.rs"
+path = "quality/xtask/src/lint_gate.rs"
 context = "back-of-house"
 lines = 286
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/lock_gate.rs"
+path = "quality/xtask/src/lock_gate.rs"
 context = "back-of-house"
 lines = 180
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/main.rs"
+path = "quality/xtask/src/main.rs"
 context = "back-of-house"
 lines = 140
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/manifests.rs"
+path = "quality/xtask/src/manifests.rs"
 context = "back-of-house"
 lines = 541
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/quality_cmd.rs"
+path = "quality/xtask/src/quality_cmd.rs"
 context = "back-of-house"
 lines = 161
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/refactor_apply.rs"
+path = "quality/xtask/src/refactor_apply.rs"
 context = "back-of-house"
 lines = 356
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/refactor_land.rs"
+path = "quality/xtask/src/refactor_land.rs"
 context = "back-of-house"
 lines = 84
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/size_gate.rs"
+path = "quality/xtask/src/size_gate.rs"
 context = "back-of-house"
 lines = 498
 note = ""
 
 [[module]]
-path = "corpus-engine/xtask/src/target_arch.rs"
+path = "quality/xtask/src/target_arch.rs"
 context = "back-of-house"
 lines = 1087
 note = ""

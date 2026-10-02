@@ -23,7 +23,7 @@ set -u
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
 HOOK="$PWD/.claude/hooks/size-warn.py"
-GATE="$PWD/corpus-engine/xtask/src/arch_gate.rs"
+GATE="$PWD/quality/xtask/src/arch_gate.rs"
 ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT
 export SOVEREIGN_SESSIONS_DIR="$ROOT/sessions"

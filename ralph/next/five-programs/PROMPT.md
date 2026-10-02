@@ -15,7 +15,7 @@ you never improvise around it.
 
 - Branch `cut`, tag `pre-cut` = 6bda3417a. NOTHING IS EVER PUSHED — push is
   the operator's call.
-- `cargo xtask boundary-gate` (from `corpus-engine/`) is the only scoreboard:
+- `cargo xtask boundary-gate` is the only scoreboard:
   EXIT=1 with `N violation(s)`. The raw count goes in EVERY commit body.
   `layer-gate` stays ✓.
 - The atlas carve (Phase A) has LANDED: the `corpus-engine-atlas-reader` leaf

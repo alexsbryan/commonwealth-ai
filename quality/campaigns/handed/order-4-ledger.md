@@ -32,7 +32,7 @@ say refuses by name instead of pretending to record.
 - `Error::NotImplemented(String)` — sovereign/crates/sovereign-contracts/src/error.rs:97; `Error` is imported in core_tests.rs:9.
 - core_tests.rs is declared `#[path = "main/core_tests.rs"] mod core_tests;` (sovereign-core/tests/main.rs:27-28); a `#[path]` on a nested non-inline module resolves relative to the directory of core_tests.rs.
 - SYSTEM_OVERVIEW.md:2358-2360 repeats the defaults claim ("its methods default to no-ops so non-durable mocks are unaffected").
-- Oversized baselines: core_tests.rs 2,541 (tree 2,580), traits.rs 2,036 (tree 2,077); slack 50 (corpus-engine/xtask/src/arch_gate.rs:38).
+- Oversized baselines: core_tests.rs 2,541 (tree 2,580), traits.rs 2,036 (tree 2,077); slack 50 (quality/xtask/src/arch_gate.rs:38).
 
 ## Steps
 

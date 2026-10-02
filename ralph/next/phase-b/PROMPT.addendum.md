@@ -47,7 +47,7 @@ has not been measured (principle 8).
 ## 0. Standing facts (do not re-derive)
 
 - Branch `cut`. NOTHING IS EVER PUSHED; pushing is the operator's call.
-- `cargo xtask boundary-gate` (from `corpus-engine/`) is the burn-down: EXIT=1
+- `cargo xtask boundary-gate` is the burn-down: EXIT=1
   with `N violation(s)`. The raw count goes in EVERY commit body, and every
   row is net-decreasing or delta 0. A move that adds a red edge elsewhere is
   rolled back. `layer-gate` stays ✓.

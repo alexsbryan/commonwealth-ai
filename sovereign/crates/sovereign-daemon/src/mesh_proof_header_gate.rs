@@ -13,7 +13,7 @@
 //! A grep and not a lint for the reason that module gives: a comment saying
 //! "mint it through the one function" is exactly what a drifting call site
 //! ignores. This fails the normal test run instead, naming the file
-//! (`corpus-engine/xtask/tests/mesh_proof_header_gate.rs`: it scans the
+//! (`quality/xtask/tests/mesh_proof_header_gate.rs`: it scans the
 //! monorepo, which a lifted svrn does not carry).
 //!
 //! Both trees are walked, because the minting side is in `commonwealth/` and

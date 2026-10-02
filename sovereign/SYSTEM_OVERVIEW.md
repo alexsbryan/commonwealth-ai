@@ -64,7 +64,7 @@ commonwealth-ai/
 ```
 
 Outside the map: `vendor/` (pinned `llama-cpp-4`), `scripts/`, `docs/`,
-`landing/`, `gym/`, `baselines/`, and `corpus-engine/xtask` — the gate
+`landing/`, `gym/`, `baselines/`, and `quality/xtask` — the gate
 binaries plus the workspace-hygiene generators in `xtask/tests/`, which live
 there because they read the repo root and so cannot sit in a liftable crate.
 `models/` holds downloaded GGUF weights, gitignored.

@@ -284,7 +284,7 @@ nine acts on a `work` rail it created itself: a `Submit`, an `Offer`, three
 lift failed `490 passed, 2 failed` on two leaf-side tests that read the repo
 root — `requirements_registry.rs:94` through `CARGO_MANIFEST_DIR.parent()` and
 `conformance_tags.rs:80` shelling `git ls-files`. Both generators moved to
-`corpus-engine/xtask/tests/` on 2026-09-04, and the 5f sandbox scan finds no
+`quality/xtask/tests/` on 2026-09-04, and the 5f sandbox scan finds no
 `CARGO_MANIFEST_DIR` read, no `git ls-files` and no `include_str!` escaping a
 crate root anywhere in the lifted closure. `oicp-types`' embed of
 `default_aliases.toml` is crate-local, which is what rule 4 asks for. The

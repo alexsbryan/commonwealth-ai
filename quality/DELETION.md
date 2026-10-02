@@ -257,7 +257,7 @@ refills unless something stops it. `--verify` is that thing: it fails when a
 lane grows, so committed output cannot silently return while the campaign
 runs.
 
-After P2 lands, promote it. `corpus-engine/xtask/src/arch_gate.rs` already has
+After P2 lands, promote it. `quality/xtask/src/arch_gate.rs` already has
 the shape — a frozen `name → count` baseline, `--tighten` that banks
 improvements and never raises, registered in `quality_cmd.rs`'s gate table
 with `Enforcement::Hard`. An `artifact-gate` over tracked-output line classes

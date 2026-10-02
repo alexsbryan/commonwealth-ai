@@ -321,7 +321,7 @@ declared) cross the seam; the ranking is a separate extraction. Say that to
 anyone who asks whether this is "the same retrieval".
 
 The dep tree carries no llama.cpp, ort, iroh, mesh transport or agent runtime.
-`corpus-engine/xtask/tests/no_inference_stack.rs` asserts it against `cargo tree`;
+`quality/xtask/tests/no_inference_stack.rs` asserts it against `cargo tree`;
 `quality/ARCH_LAYERS.toml` declares the in-repo closure as a `[[package]]` that
 boundary-gate enforces. `acceptance.sh` is the end-to-end proof: a real
 `llama-server`, a real query over stdio, cited chunks and Claim atoms back.

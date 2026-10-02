@@ -131,7 +131,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   re-export precedent. `kernel-types` is also in `thin_surfaces.may_reach` (quality/ARCH_LAYERS.toml:1196-1204),
   so neither the re-export nor a direct dep is layer-blocked; the row uses the re-export (one accessor).
 - **Size.** arch-gate: `LINE_LIMIT = 1200`, `GROWTH_SLACK = 50` for oversized files, and the 800-1200
-  approach band is a COUNTER ratchet with **no slack** (corpus-engine/xtask/src/arch_gate.rs:14, :34, :38,
+  approach band is a COUNTER ratchet with **no slack** (quality/xtask/src/arch_gate.rs:14, :34, :38,
   :291-313); baseline `quality/baselines/approach_band.txt` = 207 files / 202,703 lines. `arch-gate` is
   `enforcement = "hard"`, `runs_in = ["prepush", …]` (quality/instruments.toml:200-211) and the `prepush`
   trigger is `on_fail = "block"` (:2473). With step 3 cut, **no file the two surviving rows touch is inside
@@ -282,7 +282,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
 - These FIND their subject (a required field is proven by its presence, not its absence):
   `git grep -n 'judgement: Judgement' -- sovereign/crates/sovereign-contracts/src/types/turn.rs sovereign/crates/sovereign-contracts/src/types/mod.rs`
   and `git grep -n '"judgement"' -- sovereign/crates/sovereign-core/src/runtime/grounding/gate.rs`.
-- `cd corpus-engine && cargo xtask arch-gate` exits 0. With step 3 cut, no surviving row touches
+- `cargo xtask arch-gate` exits 0. With step 3 cut, no surviving row touches
   `collaboration.rs` and no file these rows touch is inside the no-slack 800-1200 band (Premises, Size);
   what this gate still judges is the growth of the already-oversized files against
   `quality/baselines/oversized.txt`.

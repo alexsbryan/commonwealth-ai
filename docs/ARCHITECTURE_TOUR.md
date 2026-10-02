@@ -171,7 +171,7 @@ answer-quality regression.**
 
 *Deep dive: SYSTEM_OVERVIEW §4 (gate) and §7 (build/test); benches under
 [`sovereign/bench/`](../sovereign/bench/README.md); CI gates in
-`corpus-engine/xtask/`.*
+`quality/xtask/`.*
 
 ## 6. Surfaces and ports: who can reach what
 

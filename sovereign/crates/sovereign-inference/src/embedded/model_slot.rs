@@ -2044,7 +2044,7 @@ impl ModelSlot {
         // fall back to 3 — a named substitution, never silent
         // (§18.3). The env literal stays at this `std::env::var`
         // call site: the env-gate census regex scans for it there
-        // (corpus-engine/xtask/src/env_gate.rs).
+        // (quality/xtask/src/env_gate.rs).
         let (n_draft_max, draft_max_fallback) =
             mtp_draft_max_decide(std::env::var("SOVEREIGN_MTP_DRAFT_MAX").ok(), mtp_n_rs_seq);
         if let Some(reason) = draft_max_fallback {

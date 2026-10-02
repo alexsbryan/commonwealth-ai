@@ -105,7 +105,7 @@ On Linux every check runs inside the `sovereign-vulkan` toolbox; if
 | CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit) |
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0 |
-| LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
+| LAYER | `./scripts/with-cargo-lock.sh cargo xtask layer-gate > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
 | TOML | `python3 -c "import tomllib; [tomllib.load(open(p,'rb')) for p in ('quality/campaigns/handed.toml','quality/ARCH_LAYERS.toml','quality/TOPOLOGY.toml')]" && python3 scripts/co-lineage.py list >/dev/null && echo exit=0` | exit=0 |
 | PLANT(x) | make the one-line violation `x` names, run the gate the row names (LINT or LAYER or TEST(c)), paste its red line, `git checkout --` the plant, run the gate again | red with the plant, exit=0 without it |
 | TESTALL | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human > target/ralph/testall.log 2>&1; echo exit=$?; tail -12 target/ralph/testall.log` | exit=0 (audits only) |

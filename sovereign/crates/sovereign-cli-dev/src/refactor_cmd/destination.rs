@@ -493,7 +493,7 @@ mod tests {
     /// A two-crate workspace in a TempDir: the resolver's mechanism on a
     /// tree the test builds, so it holds wherever the crate is built. The
     /// checks on THIS repo's register live in the monorepo
-    /// (corpus-engine/xtask/tests/refactor_register.rs).
+    /// (quality/xtask/tests/refactor_register.rs).
     fn workspace() -> (tempfile::TempDir, Workspace) {
         let tmp = tempfile::tempdir().expect("tempdir");
         for (rel, text) in [

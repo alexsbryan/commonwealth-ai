@@ -29,7 +29,7 @@ status    = "active"
 # ledger line, not a constant edit.
 #
 # boundary-gate's own doc says what it cannot see: "Its unit is the CRATE"
-# (corpus-engine/xtask/src/boundary_gate.rs:40). Serving is 35,000 lines of
+# (quality/xtask/src/boundary_gate.rs:40). Serving is 35,000 lines of
 # package-shaped code INSIDE two crates, invisible to the gate until it has a
 # crate — which is why Phase C exists and why the predicate cannot be green by
 # accident before it.
@@ -40,7 +40,7 @@ status    = "active"
 # empty — never-ran is not passed (§18.2).
 [predicate]
 statement = "Every context kept in quality/DOMAINS.toml names a [[package]] in quality/ARCH_LAYERS.toml that cargo xtask boundary-gate passes, and no crate outside the commonwealth package defines a pub type named Peer*"
-check     = "python3 scripts/domains-census.py predicate && (cd corpus-engine && cargo xtask boundary-gate)"
+check     = "python3 scripts/domains-census.py predicate && cargo xtask boundary-gate"
 
 # ── WHAT THE INVENTORY SAID BEFORE THIS WAS WRITTEN (ARCH principle 11) ─────
 #

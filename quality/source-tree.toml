@@ -1,6 +1,6 @@
 # Which directories the quality gates' filesystem walks treat as NOT this
 # repo's authored source. Read by `SourceTree::discover`
-# (corpus-engine/xtask/src/common.rs) — the ONE decider every whole-tree gate
+# (quality/xtask/src/common.rs) — the ONE decider every whole-tree gate
 # walk goes through (arch-gate, docs-gate, env-gate).
 #
 # The PRIMARY decider is git, not this file. Any directory git would ignore

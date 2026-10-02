@@ -63,12 +63,12 @@ case "$check" in
     # (2 s): a unit that grows a file past its arch-gate ceiling fails ITS OWN
     # check, not an audit nine rows later. The ceiling is the invariant; rows and
     # prompts carry no "this file is nearly full" text (2026-09-20).
-    lint)    run lint 8 ./scripts/with-cargo-lock.sh bash -c './scripts/sovereign-lint.sh --human && cd corpus-engine && cargo xtask arch-gate' ;;
+    lint)    run lint 8 ./scripts/with-cargo-lock.sh bash -c './scripts/sovereign-lint.sh --human && cargo xtask arch-gate' ;;
     test)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh test <crate>" >&2; exit 2; }
              run test 8 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package "$1" ;;
-    layer)   run layer 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate' ;;
-    arch)    run arch 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask arch-gate' ;;
-    docs)    run docs 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask docs-gate' ;;
+    layer)   run layer 5 bash -c './scripts/with-cargo-lock.sh cargo xtask layer-gate' ;;
+    arch)    run arch 5 bash -c './scripts/with-cargo-lock.sh cargo xtask arch-gate' ;;
+    docs)    run docs 5 bash -c './scripts/with-cargo-lock.sh cargo xtask docs-gate' ;;
     toml)    python3 scripts/co-lineage.py list >/dev/null; rc=$?; echo "exit=$rc"; exit "$rc" ;;   # the registry loader is the one decider; it refuses every campaign when any one is malformed
     node)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh node <dir>" >&2; exit 2; }
              run node 8 node --test "$1" ;;
@@ -106,7 +106,7 @@ case "$check" in
     # ring-doc's files; a queue that is not ring-doc uses `campaign <id>` instead.
     testfn)  [ -n "${2:-}" ] || { echo "usage: ralph-check.sh testfn <crate> <whole-test-fn-name>" >&2; exit 2; }
              run testfn 8 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package "$1" --filter "$2" ;;
-    env)     run env 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask env-gate' ;;
+    env)     run env 5 bash -c './scripts/with-cargo-lock.sh cargo xtask env-gate' ;;
     py)      [ -n "${1:-}" ] || { echo "usage: ralph-check.sh py <script.py> (runs its --self-test)" >&2; exit 2; }
              run py 12 python3 "$1" --self-test ;;
     campaign) [ -n "${1:-}" ] || { echo "usage: ralph-check.sh campaign <id>" >&2; exit 2; }
@@ -117,7 +117,7 @@ case "$check" in
     decisions) run decisions 5 python3 scripts/ralph-decisions.py --check ;;
     conformance) # regenerate quality/conformance/*.toml from the `covers:` tags; a row that
              # adds a line above a tag owes this in its own commit, and LINT does not run it
-             run conformance 12 bash -c 'cd corpus-engine && UPDATE_CONFORMANCE_TAGS=1 ../scripts/with-cargo-lock.sh cargo test -p xtask --test conformance_tags' ;;
+             run conformance 12 bash -c 'UPDATE_CONFORMANCE_TAGS=1 ./scripts/with-cargo-lock.sh cargo test -p xtask --test conformance_tags' ;;
     prepush) run prepush 20 ./scripts/pre-push.sh ;;
     *) { echo "usage: scripts/ralph-check.sh <check> [args]"
           # One verb per line, deliberately: the single-line form was itself a

@@ -107,11 +107,11 @@
 20	corpus-engine/src/sharding.rs <-> corpus-index/src/index/mod.rs
 18	corpus-engine/src/snapshot.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs
 16	corpus-engine/src/testing.rs <-> sovereign/crates/sovereign-contracts/src/recipe/testing.rs
-18	corpus-engine/xtask/src/arch_gate.rs <-> corpus-engine/xtask/src/docs_gate.rs
-18	corpus-engine/xtask/src/boundary_gate.rs <-> corpus-engine/xtask/src/distribution_gate.rs
-18	corpus-engine/xtask/src/boundary_gate.rs <-> corpus-engine/xtask/src/layer_gate.rs
-54	corpus-engine/xtask/src/clock_gate.rs <-> corpus-engine/xtask/src/layout_gate.rs
-54	corpus-engine/xtask/src/judge_funnel_gate.rs <-> corpus-engine/xtask/src/lifecycle_gate.rs
+18	quality/xtask/src/arch_gate.rs <-> quality/xtask/src/docs_gate.rs
+18	quality/xtask/src/boundary_gate.rs <-> quality/xtask/src/distribution_gate.rs
+18	quality/xtask/src/boundary_gate.rs <-> quality/xtask/src/layer_gate.rs
+54	quality/xtask/src/clock_gate.rs <-> quality/xtask/src/layout_gate.rs
+54	quality/xtask/src/judge_funnel_gate.rs <-> quality/xtask/src/lifecycle_gate.rs
 221	corpus-index/src/index/enrichment.rs <-> corpus-index/src/index/read.rs
 62	corpus-index/src/index/enrichment.rs <-> corpus-index/src/index/read.rs <-> corpus-index/src/index/write.rs
 52	corpus-index/src/index/enrichment.rs <-> corpus-index/src/index/write.rs

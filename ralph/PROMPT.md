@@ -160,7 +160,7 @@ does not exist on a Linux host, you are outside it: stop (§6) before building.
 | CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit; disk gate only, it does not build) |
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0; exit=4 (zero tests) only for a crate created in this unit, said in the commit |
-| LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
+| LAYER | `./scripts/with-cargo-lock.sh cargo xtask layer-gate > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
 | BOUNDARY | same, `boundary-gate`, log `target/ralph/boundary.log` | exit=0, unless the row says red is expected |
 | DOCS | same, `docs-gate`, log `target/ralph/docs.log` | exit=0 |
 | INSTR | same, `instrument-gate`, log `target/ralph/instr.log` | exit=0 |
