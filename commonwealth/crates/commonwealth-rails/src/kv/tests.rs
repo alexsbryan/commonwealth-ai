@@ -431,7 +431,9 @@ async fn a_live_set_over_the_bar_seals_once_not_on_every_write() {
     let me = NodeId::from_u128(ME);
     let live = SEAL_AFTER_OWN_OPS + 5;
     for i in 0..live {
-        host.store.set(NS, &format!("live/{i}"), "x".into(), me).unwrap();
+        host.store
+            .set(NS, &format!("live/{i}"), "x".into(), me)
+            .unwrap();
     }
     let first = drain(&host).await;
     assert_eq!(first.sealed, 1, "{first:?}");
@@ -447,7 +449,11 @@ async fn a_live_set_over_the_bar_seals_once_not_on_every_write() {
     again.project_all_on_disk().await;
     again.store.set(NS, "live/1", "y".into(), me).unwrap();
     let after_restart = drain(&again).await;
-    assert_eq!((after_restart.appended, after_restart.sealed), (1, 0), "{after_restart:?}");
+    assert_eq!(
+        (after_restart.appended, after_restart.sealed),
+        (1, 0),
+        "{after_restart:?}"
+    );
 
     // The bar still holds for real writes, at exactly SEAL_AFTER_OWN_OPS
     // since the mark. The padding goes straight onto the journal in one

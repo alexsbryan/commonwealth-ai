@@ -69,10 +69,11 @@ pub struct KvHost {
     /// [`KvHost::project_dirty`] folds each once (fp-109).
     dirty: Mutex<BTreeSet<String>>,
     /// Per namespace, the seq of this node's admitted snapshot mark for its
-    /// current floor, which the seal bar counts above (see
-    /// [`own_floor_and_mark`]). Learnt from an admission or from the mark
-    /// this pump just wrote, so the cheap line count can start there too and
-    /// stay an upper bound; absent, the cheap count takes every own line.
+    /// current floor, which the seal bar counts above, as
+    /// [`own_floor_and_mark`] last read it off an admission — never from the
+    /// mark this pump wrote, so that function stays the one reader. The cheap
+    /// line count starts there too and stays an upper bound; absent, it takes
+    /// every own line.
     snapshot_base: Mutex<HashMap<String, u64>>,
 }
 
@@ -460,7 +461,7 @@ impl KvHost {
             return;
         }
         // The seal moves the floor, so the base above is stale whatever
-        // happens next; the snapshot's mark, if it lands, is the new one.
+        // happens next; the next admission reads the new one.
         self.set_snapshot_base(namespace, None);
         let sealed = match journal.seal(self.rail.signer(), roster, &Ed25519Verifier) {
             Ok(s) => s,
@@ -474,9 +475,7 @@ impl KvHost {
             info!(target: "rails", namespace, own_since_snapshot, snapshot_mark = ?mark,
                   removed = done.removed, kept = done.kept, "kv pump: sealed a store namespace");
         }
-        let (rows, new_mark) = self.snapshot(journal, roster, sealed.op.kind.seq);
-        out.snapshot_rows += rows;
-        self.set_snapshot_base(namespace, new_mark);
+        out.snapshot_rows += self.snapshot(journal, roster, sealed.op.kind.seq);
     }
 
     fn snapshot_base(&self, namespace: &str) -> Option<u64> {
@@ -496,16 +495,15 @@ impl KvHost {
     /// then the mark that closes the snapshot — without it a seal is a delete.
     /// Only rows this node ORIGINATED; the mark is written last, and one that
     /// could not be written claims nothing (the failure direction is "do not
-    /// retire"). Returns the rows re-appended and the mark's seq, `None` when
-    /// the mark could not be written.
-    fn snapshot(&self, journal: &RingJournal, roster: &Roster, floor: u64) -> (usize, Option<u64>) {
+    /// retire").
+    fn snapshot(&self, journal: &RingJournal, roster: &Roster, floor: u64) -> usize {
         let namespace = journal.namespace();
         let rows = match self.store.scan(namespace, "") {
             Ok(r) => r,
             Err(e) => {
                 warn!(target: "rails", namespace, error = %e,
                       "kv pump: the live set could not be read, so the seal retired rows nothing replaced");
-                return (0, None);
+                return 0;
             }
         };
         // One batch, so the log is read once for the whole snapshot rather
@@ -549,15 +547,14 @@ impl KvHost {
                 info!(target: "rails", namespace, appended, peers_rows_skipped = skipped, floor,
                       mark_seq = op.kind.seq,
                       "kv pump: snapshotted this node's live rows above the new floor, and closed it");
-                (appended, Some(op.kind.seq))
             }
             Err(e) => {
                 warn!(target: "rails", namespace, appended, floor, error = %e,
                       "kv pump: the snapshot could not be closed, so peers will keep \
                        whatever of ours they already hold");
-                (appended, None)
             }
         }
+        appended
     }
 }
 
