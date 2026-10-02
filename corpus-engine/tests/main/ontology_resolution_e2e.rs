@@ -202,6 +202,40 @@ async fn endpoint_mismatch_dropped_and_recorded() {
     );
 }
 
+/// The schema's escape value for a relation the recipe did not declare
+/// resolves exactly as an absent type always has: kept, unchecked, typed
+/// `unclassified` — never refused for ends a declared type would reject.
+#[tokio::test]
+async fn an_unclassified_relation_is_kept_and_its_ends_are_unchecked() {
+    let policies = numismatics();
+    let mut section = section(
+        "sec_0001",
+        vec![
+            typed("Series R sceatta", "coin"),
+            typed("Aldfrith", "ruler"),
+        ],
+        vec![],
+    );
+    section.relations_introduced = vec![relation(
+        &["Series R sceatta", "Aldfrith"],
+        corpus_engine::enrichment::pipeline::pipelines::ontology_schema::UNCLASSIFIED_RELATION,
+    )];
+    let (_, step_3b) = resolve(&policies, vec![section]).await;
+
+    assert_eq!(step_3b.relations.len(), 1, "an undeclared relation is kept");
+    assert_eq!(
+        step_3b.relations[0].relation_type,
+        corpus_engine::enrichment::pipeline::atlas::RelationType::Other("unclassified".into()),
+    );
+    assert!(
+        !step_3b
+            .failures
+            .iter()
+            .any(|f| f.kind == PhaseFailureKind::EndpointTypeMismatch),
+        "no declared ends, so nothing to mismatch"
+    );
+}
+
 #[tokio::test]
 async fn subject_resolves_like_attribution() {
     let policies = numismatics();
@@ -299,6 +333,62 @@ async fn ref_attribute_snaps_to_id() {
         .collect();
     assert_eq!(unresolved.len(), 1);
     assert!(unresolved[0].reason.contains("Nowhere At All"));
+}
+
+/// A ref that resolves onto a DIFFERENT declared type is refused; one that
+/// resolves onto a generic type still snaps. On the ei7-ans atlas 33 refs
+/// had landed on the wrong declared type (a coin's `mint` on a hoard, a
+/// `ruler` on a mint) and the guard costs no K1 recall (feature-fidelity
+/// O0, 2026-10-02); the generic case is the one the module comment protects.
+#[tokio::test]
+async fn a_ref_onto_another_declared_type_is_refused_and_a_generic_one_snaps() {
+    let policies = numismatics();
+    let mut wrong = typed("Series R sceatta", "coin");
+    wrong
+        .attributes
+        .insert("mint".into(), "Beonna penny".into());
+    let mut generic = typed("Offa denier", "coin");
+    generic.attributes.insert("mint".into(), "Hamwic".into());
+    let section = section(
+        "sec_0001",
+        vec![
+            wrong,
+            generic,
+            typed("Beonna penny", "coin"),
+            typed("Hamwic", "place"),
+        ],
+        vec![],
+    );
+    let (step_3a, step_3b) = resolve(&policies, vec![section]).await;
+
+    let wrong_id = id_of(&step_3a, "Series R sceatta");
+    assert!(
+        !step_3b
+            .entity_attribute_updates
+            .contains_key(wrong_id.as_str()),
+        "a coin is not a mint: the ref keeps its name instead of pointing at the coin"
+    );
+    let refused: Vec<_> = step_3b
+        .failures
+        .iter()
+        .filter(|f| {
+            f.kind == PhaseFailureKind::UnresolvedAttributeRef && f.reason.contains("Beonna penny")
+        })
+        .collect();
+    assert_eq!(refused.len(), 1, "and the refusal is on the record");
+    assert!(
+        refused[0].reason.contains("`coin`"),
+        "{}",
+        refused[0].reason
+    );
+
+    let generic_id = id_of(&step_3a, "Offa denier");
+    let hamwic = id_of(&step_3a, "Hamwic");
+    assert_eq!(
+        step_3b.entity_attribute_updates[generic_id.as_str()]["mint"].as_str(),
+        Some(hamwic.as_str()),
+        "a generic `place` is not another declared type, so it snaps"
+    );
 }
 
 #[tokio::test]

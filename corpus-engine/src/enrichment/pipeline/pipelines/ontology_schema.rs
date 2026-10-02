@@ -30,6 +30,12 @@ use crate::enrichment::ontology::{
 /// refuses over 6,000 characters, so this is a budget with teeth.
 pub const MAX_ADDED_PROMPT_CHARS: usize = 3_000;
 
+/// The `relation_type` a sketch gives for a relation the recipe did not
+/// declare. Offered beside the declared names because the slot is required,
+/// and it is the same spelling resolution has always written for an
+/// undeclared relation, so the two cannot disagree about what it means.
+pub const UNCLASSIFIED_RELATION: &str = "unclassified";
+
 /// Free-text attribute value ceiling, matching the generic sketch strings.
 const TEXT_MAX_LEN: usize = 200;
 /// A time attribute is a short expression (`"c. 720–750"`), not prose.
@@ -99,7 +105,20 @@ pub fn phase1_schema_for(policies: &OntologyPolicies) -> Value {
         }
         attach_attributes(defs, "entity_sketch", &index, &entities);
 
-        add_type_slot(defs, "relation_sketch", "relation_type", &relations);
+        // The declared relation slot is REQUIRED, with one escape value.
+        // Optional, the strict grammar let the model skip it and put the
+        // declared noun in `label`: 6 of 6 `holds_coins_of` sketches on the
+        // ANS dev fixture, all resolved `unclassified` (feature-fidelity
+        // O-T1, 2026-10-02). The escape keeps a relation the recipe never
+        // declared from being forced into one; resolution reads it as
+        // undeclared.
+        if !relations.is_empty() {
+            add_type_slot(defs, "relation_sketch", "relation_type", &relations);
+            if let Some(Value::Array(names)) = enum_slot(defs, "relation_sketch", "relation_type") {
+                names.push(Value::String(UNCLASSIFIED_RELATION.to_string()));
+            }
+            require_key(defs, "relation_sketch", "relation_type");
+        }
         attach_attributes(defs, "relation_sketch", &index, &relations);
 
         add_type_slot(defs, "event_sketch", "event_type", &events);
@@ -327,9 +346,15 @@ fn set_required(defs: &mut Defs, sketch: &str, keys: &[&str]) {
 /// no-op when the sketch carries no bag.
 fn require_attributes(defs: &mut Defs, sketch: &str) {
     let has_bag = properties_of(defs, sketch).is_some_and(|p| p.contains_key("attributes"));
-    if !has_bag {
-        return;
+    if has_bag {
+        require_key(defs, sketch, "attributes");
     }
+}
+
+/// Append `key` to a sketch's own `required` list, keeping what is there.
+/// Idempotent. The strict grammar enforces only `required`, so this is the
+/// one way to make the model fill a slot.
+fn require_key(defs: &mut Defs, sketch: &str, key: &str) {
     let Some(obj) = defs.get_mut(sketch).and_then(Value::as_object_mut) else {
         return;
     };
@@ -337,8 +362,8 @@ fn require_attributes(defs: &mut Defs, sketch: &str) {
         .entry("required".to_string())
         .or_insert_with(|| Value::Array(Vec::new()));
     if let Some(list) = required.as_array_mut() {
-        if !list.iter().any(|k| k == "attributes") {
-            list.push(Value::String("attributes".to_string()));
+        if !list.iter().any(|k| k == key) {
+            list.push(Value::String(key.to_string()));
         }
     }
 }
@@ -484,6 +509,49 @@ mod tests {
             vec!["bond_state"],
             "a state `of` a relation is offered on relations_developed — the pair"
         );
+    }
+
+    /// Optional, the declared relation slot was skipped: on the ANS dev
+    /// fixture all 6 `holds_coins_of` sketches came back with the noun in
+    /// `label` and no `relation_type`, so all 6 resolved `unclassified`
+    /// (feature-fidelity O-T1, 2026-10-02). Required, with one escape value
+    /// so a relation the recipe never declared is not forced into one.
+    #[test]
+    fn a_declared_relation_type_is_required_with_an_unclassified_escape() {
+        let mut policies = OntologyPolicies::default();
+        for (name, kind) in [("hoard", TypeKind::Entity), ("mint", TypeKind::Entity)] {
+            policies.shape.types.push(OntologyTypeDecl {
+                name: name.into(),
+                kind,
+                ..Default::default()
+            });
+        }
+        policies.shape.types.push(OntologyTypeDecl {
+            name: "holds_coins_of".into(),
+            kind: TypeKind::Relation,
+            from: Some("hoard".into()),
+            to: Some("mint".into()),
+            ..Default::default()
+        });
+
+        let schema = phase1_schema_for(&policies);
+        let rel = sketch(&schema, "relation_sketch");
+        assert!(
+            strings(&rel["required"]).contains(&"relation_type".to_string()),
+            "a declared relation type must be required, or the grammar lets it be skipped"
+        );
+        assert_eq!(
+            strings(&rel["properties"]["relation_type"]["enum"]),
+            ["holds_coins_of", UNCLASSIFIED_RELATION]
+        );
+        // The base keys are still required beside it.
+        let base = phase1_section_extraction_schema();
+        for key in strings(&base["$defs"]["relation_sketch"]["required"]) {
+            assert!(
+                strings(&rel["required"]).contains(&key),
+                "lost base key {key}"
+            );
+        }
     }
 
     /// A corpus that declares no state type gets the shipped schema back:

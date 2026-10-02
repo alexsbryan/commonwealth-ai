@@ -39,6 +39,7 @@ use tracing::{debug, info};
 use crate::enrichment::pipeline::atlas::{
     EntitySketch, EventSketch, EventType, SectionExtraction, StateType,
 };
+use crate::enrichment::pipeline::pipelines::ontology_schema::UNCLASSIFIED_RELATION;
 use crate::error::Result;
 use crate::types::EmbedFn;
 
@@ -1422,7 +1423,12 @@ pub fn resolve_step_3b_with(
             // that resolved there are not those types, the relation is not
             // the one the recipe declared — drop it and say why, rather than
             // writing a link the author's own declaration contradicts.
-            let declared_type = sketch.relation_type.as_deref().filter(|t| !t.is_empty());
+            // `unclassified` is the schema's escape for a relation the recipe
+            // did not declare: no endpoints to check, Phase 5 types it.
+            let declared_type = sketch
+                .relation_type
+                .as_deref()
+                .filter(|t| !t.is_empty() && *t != UNCLASSIFIED_RELATION);
             if let Some(rel_type) = declared_type {
                 if let Err(reason) =
                     check_relation_endpoints(policy, rel_type, &participant_ids, entities)
@@ -1459,7 +1465,7 @@ pub fn resolve_step_3b_with(
                 // The author's noun when the recipe declared one; Phase 5's
                 // job otherwise.
                 relation_type: crate::enrichment::pipeline::atlas::RelationType::Other(
-                    declared_type.unwrap_or("unclassified").to_string(),
+                    declared_type.unwrap_or(UNCLASSIFIED_RELATION).to_string(),
                 ),
                 evidence: sketch_anchor_evidence(&section.section_id, &sketch.anchor),
                 section_range: super::atoms::SectionRange::point(section.section_id.clone()),
