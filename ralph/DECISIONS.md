@@ -2070,6 +2070,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Because: the cleanup already speaks HTTP to `/v1/chat/completions`, so one store row reuses the one admission decision; and `Scope::External` on a tool that cannot leave the machine was itself the false claim the decider reads.
 - Minted as `phase-c-5` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-5`.
 
+**phase-c-8 · 2026-10-01 · pc-split-deploy-honesty · worker** — this commit
+- Needed: the row's third bullet (was pc-mesh-status-serve-down) asks that `/v1/mesh/status` tell "serve down" from "serve slow"; the census found no route that answers about serve's health at all.
+- Chose: build the first two bullets (c09c05eb8 reload refuses by name, a0a241d45 svrn follows serve's self-report), and correct the third bullet's premise in the row instead of inventing a new status field on another route; a serve-reach field on svrn's `/status` is left as a finding.
+- Because: `/v1/mesh/status` is cw-rails' since pb-mesh-exit-transport (sovereign-daemon mesh_http.rs:34 `MOVED_TO_RAILS`, 410 with a pointer; commonwealth-rails api.rs:194 `status` reads the roster only), and the one reader that kept the two absences apart (`sovereign_turn_client::serve_self::read_engine_state` / `EngineStateRead`: `Unreachable` vs `DidNotAnswerInTime`) has no production caller. No answer collapses down and slow, so the defect as filed has no site; putting serve's reach on `/status` would be a behaviour delta the row does not state (§7 "a delta the row does not state is §6").
+
 **phase-b-113 · 2026-10-02 · pb-distribution-ship-gate · operator, escalating only the e2e latency; supersedes phase-b-111** — this commit
 - Needed: after F13 the gate read three alarms (095a15c09): chat-ask 18/19 (q2's audit 14 calls > 12 on run 3 of 3), knowledge-gym 05_noresults_honesty 0/3 (2 lookups > 1, 1/3 at the flip), and the e2e plain turn at 24,620 / 29,238 ms vs the 13,397 ms main-era baseline. The method escalates each to ABAB n=3 against B (main 18f783f44). A director session ruled all three escalated with the deployed daemon stopped (phase-b-111) before the operator answered; its window never opened (the seed copy was refused, the node was restarted, ce03d5135).
 - Chose (operator: "Only the e2e latency"): the e2e is escalated, C vs B, n=3 ABAB, run by the seat on a minimal seed (the deployed config.toml alone, sanitized as seed.sh does and with [watched_folders] dropped, so neither side indexes during the reading), one sandbox daemon at a time on sandbox ports, the deployed node up and idle. chat-ask's overrun and knowledge-gym's fixture are ruled on their readings and filed above phase-c's cut line: pc-chat-ask-audit-calls, pc-knowledge-gym-noresults. phase-b-111 is superseded where they differ.
@@ -13401,6 +13406,27 @@ definition is "effect reaches outside this machine"; it now reports
 the change moves no behaviour beyond the turn's prompt. Falsified if an
 open host's `search` stops reporting `External` (test
 `a_corpus_only_search_describes_no_web`).
+
+</details>
+
+## phase-c-8 · 2026-10-01 — pc-mesh-status-serve-down has no site after the flip
+
+<details><summary>reasoning, evidence, package</summary>
+
+The review that filed it (ralph/PHASE_B_SHIP_GATE.md "Not blocking") predates the flip that moved
+`/v1/mesh/status` to cw-rails. Evidence, at a0a241d45:
+
+- `git grep -n '"/v1/mesh/status"' -- '*.rs'`: served only by commonwealth-rails api.rs:72; svrn's
+  mesh_http.rs:34 lists it in `MOVED_TO_RAILS`.
+- `git grep -n "read_engine_state\|EngineStateRead" -- '*.rs'`: defined and tested in
+  sovereign-turn-client/src/serve_self.rs only; the f26 egress census comments name it.
+- `svrn mesh status` (sovereign-cli-mesh mesh_cmd.rs `cmd_status`) reads cw-rails and prints no serve line.
+- svrn's `/status` `serving` (routes_status.rs:292) is the boot-decided path name (`serve` /
+  `serve (this process)`), not a health claim.
+
+What would falsify this: a route or verb found that answers serve's health and collapses an
+unreachable serve with a slow one; or the operator ruling that svrn's `/status` should carry serve's
+reach, which is a new row (the follow loop of a0a241d45 already reads serve every 10 s and could feed it).
 
 </details>
 
