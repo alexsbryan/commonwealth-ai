@@ -245,7 +245,29 @@ fn the_onprem_binary_composes_no_shell_web_or_mcp_surface() {
             body.contains(names),
             "{path} does not name the absence: {body}"
         );
+        // ...and names what this box does, never a program it does not ship
+        // (pc-onprem-followups).
+        assert!(
+            body.contains("/v1/conversations") && !body.contains("svrn code"),
+            "{path} does not point at what the box can do: {body}"
+        );
     }
+
+    // `/v1/mcp/servers` agrees with `/mcp`: not mounted, for the same reason.
+    let resp = client()
+        .get(format!("http://127.0.0.1:{svrn}/v1/mcp/servers"))
+        .bearer_auth(ADMIN)
+        .send()
+        .expect("/v1/mcp/servers answers");
+    assert_eq!(resp.status(), 200);
+    let servers: serde_json::Value = resp.json().expect("json");
+    assert_eq!(servers["mount"]["mounted"], false, "{servers}");
+    assert!(
+        servers["mount"]["reason"]
+            .as_str()
+            .is_some_and(|r| r.contains("does not serve MCP")),
+        "{servers}"
+    );
 
     // The granted reads (pb-distribution-onprem-routes): each answers under a
     // key and refuses without one; `/health` alone needs none.
