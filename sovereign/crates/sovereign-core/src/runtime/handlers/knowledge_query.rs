@@ -1839,6 +1839,7 @@ impl Runtime {
             hoisted_probe_verdict,
             plan.gate_entity_anchored,
             &plan.unavailable_corpora,
+            message,
         ) {
             if let Some(rescued) =
                 crate::runtime::gk_rescue::rescue_ood_answer(self.inference.as_ref(), message).await

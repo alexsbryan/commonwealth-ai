@@ -5,7 +5,8 @@
 //! and the grounding-gate predicates (`compute_entity_anchored`,
 //! `retrieval_is_catalog_only`, `question_anchors_retrieved_title`,
 //! `question_is_corpus_deictic`) that knowledge_query / streaming / the
-//! handlers read via `crate::runtime::anchoring::*`.
+//! handlers read via `crate::runtime::anchoring::*`, plus
+//! `question_is_situation_deictic`, which `gk_rescue` reads.
 //!
 //! Split out of `evidence_loop.rs` (2026-07-13) for legibility and the
 //! ARCH §3.1 file-size ceiling — a pure move, no behaviour change.
@@ -316,6 +317,63 @@ pub(crate) fn question_is_corpus_deictic(message: &str) -> bool {
     ];
     let q = message.to_lowercase();
     DEICTIC.iter().any(|d| q.contains(d))
+}
+
+/// SITUATION-deictic question: it names its referent by the asker's own
+/// situation — the organization's possessive ("our paralegal rate") or a
+/// scheduled event of theirs ("the Thursday partners' meeting") — so no
+/// public fact can answer it and any specific a model offers is invented.
+/// Measured 2026-10-01 (pb-distribution-onprem-kit, 4B primary): "Which
+/// conference room is booked for the Thursday partners' meeting?" was
+/// rescued as "from general knowledge: 204" ("2018" on the rerun). The
+/// world-scale "our" ("our solar system") stays answerable.
+pub(crate) fn question_is_situation_deictic(message: &str) -> bool {
+    const WORLD_SCALE: &[&str] = &[
+        "planet",
+        "solar",
+        "galaxy",
+        "universe",
+        "species",
+        "ancestors",
+        "sun",
+        "moon",
+        "world",
+        "civilization",
+        "body",
+        "bodies",
+        "brain",
+        "brains",
+        "immune",
+        "genes",
+        "dna",
+    ];
+    const SCHEDULE_DET: &[&str] = &["the", "this", "next", "last", "coming"];
+    const WEEKDAYS: &[&str] = &[
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ];
+    const ORG_DEFINITE: &[&str] = &["the firm", "the office", "the partners"];
+    let q = message.to_lowercase();
+    if ORG_DEFINITE.iter().any(|d| q.contains(d)) {
+        return true;
+    }
+    let words: Vec<&str> = q
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    words.iter().enumerate().any(|(i, w)| {
+        let next = words.get(i + 1).copied().unwrap_or("");
+        match *w {
+            "our" | "ours" => !WORLD_SCALE.contains(&next),
+            w if SCHEDULE_DET.contains(&w) => WEEKDAYS.contains(&next),
+            _ => false,
+        }
+    })
 }
 
 /// Minimal suffix-stripping stem so "abandons"/"abandoned"/"abandon"

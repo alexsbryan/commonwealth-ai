@@ -43,17 +43,31 @@ use crate::types::{CompletionRequest, GapCoverage, Speed};
 /// `NoVectorIndex`) shipped that prefix in front of an unavailability notice,
 /// so the user was told a general-knowledge answer was coming and got a
 /// rebuild instruction instead.
+///
+/// `question` carries the last clause: a situation-deictic question (the
+/// asker's own organization or schedule, `anchoring::question_is_situation_deictic`)
+/// has no general-knowledge answer, so the probe's `TopicUncovered` there is
+/// the corpus lacking a private fact, not an out-of-domain topic.
 pub(crate) fn rescue_precondition_met(
     gate_abstained: bool,
     probe_verdict: Option<GapCoverage>,
     entity_anchored: bool,
     unavailable: &[CorpusUnavailable],
+    question: &str,
 ) -> bool {
-    gk_rescue_enabled()
+    let met = gk_rescue_enabled()
         && gate_abstained
         && probe_verdict == Some(GapCoverage::TopicUncovered)
         && !entity_anchored
-        && unavailable.is_empty()
+        && unavailable.is_empty();
+    if met && crate::runtime::anchoring::question_is_situation_deictic(question) {
+        tracing::info!(
+            target: "epistemic.ledger",
+            "gk rescue withheld: situation-deictic question has no general-knowledge answer"
+        );
+        return false;
+    }
+    met
 }
 
 /// `SOVEREIGN_GK_RESCUE=0|false|off|no` disables the rescue (the
@@ -95,7 +109,10 @@ pub(crate) async fn rescue_ood_answer(
         system_message: Some(format!(
             "Current date: {today}. Answer concisely from general knowledge. \
              If the answer is time-sensitive and may have changed, say so. If \
-             you genuinely do not know, reply with exactly: UNKNOWN"
+             the question asks about a particular organization's or person's \
+             own records (its rooms, meetings, rates, schedules, staff, files), \
+             general knowledge cannot know them: reply with exactly: UNKNOWN. \
+             If you genuinely do not know, reply with exactly: UNKNOWN"
         )),
         preferred_speed: Speed::Slow,
         max_tokens: Some(RESCUE_MAX_TOKENS as usize),
@@ -150,6 +167,44 @@ mod tests {
     use super::*;
     use crate::traits::UnavailabilityReason;
 
+    /// A world-general question: the shape the rescue exists for.
+    const OOD: &str = "What is the capital of Mongolia?";
+
+    #[test]
+    fn a_situation_deictic_question_is_never_rescued() {
+        // The 2026-10-01 on-prem kit's 4B failing inputs: every other clause
+        // held and the rescue shipped "from general knowledge: 204".
+        for q in [
+            "Which conference room is booked for the Thursday partners' meeting?",
+            "What is our paralegal rate?",
+            "What hourly rate does the firm bill for paralegals?",
+            "Who is presenting at next Monday's review?",
+        ] {
+            assert!(
+                !rescue_precondition_met(true, Some(GapCoverage::TopicUncovered), false, &[], q),
+                "rescued a situation-deictic question: {q}"
+            );
+        }
+    }
+
+    #[test]
+    fn world_general_questions_still_rescue() {
+        // The other direction: public facts, including the world-scale
+        // "our" and a plain definite description, keep the caveated answer.
+        for q in [
+            OOD,
+            "How many planets are in our solar system?",
+            "What is the boiling point of water at sea level?",
+            "Why is the sky blue?",
+            "What happened on Black Thursday in 1929?",
+        ] {
+            assert!(
+                rescue_precondition_met(true, Some(GapCoverage::TopicUncovered), false, &[], q),
+                "withheld the rescue from a world-general question: {q}"
+            );
+        }
+    }
+
     #[test]
     fn kill_switch_parses() {
         // Default (unset in the test env) is ON.
@@ -173,6 +228,7 @@ mod tests {
             Some(GapCoverage::TopicUncovered),
             false,
             &lost(),
+            OOD,
         ));
     }
 
@@ -186,6 +242,7 @@ mod tests {
             Some(GapCoverage::TopicUncovered),
             false,
             &[],
+            OOD,
         ));
     }
 
@@ -195,20 +252,23 @@ mod tests {
             false,
             Some(GapCoverage::TopicUncovered),
             false,
-            &[]
+            &[],
+            OOD
         ));
         assert!(!rescue_precondition_met(
             true,
             Some(GapCoverage::ClaimUncovered),
             false,
-            &[]
+            &[],
+            OOD
         ));
-        assert!(!rescue_precondition_met(true, None, false, &[]));
+        assert!(!rescue_precondition_met(true, None, false, &[], OOD));
         assert!(!rescue_precondition_met(
             true,
             Some(GapCoverage::TopicUncovered),
             true,
-            &[]
+            &[],
+            OOD
         ));
     }
 }

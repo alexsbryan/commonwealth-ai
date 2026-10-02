@@ -1901,6 +1901,7 @@ impl Runtime {
                 hoisted_probe_verdict,
                 gate_entity_anchored,
                 &unavailable_corpora,
+                &gate_question,
             ) {
                 if let Some(rescued) =
                     crate::runtime::gk_rescue::rescue_ood_answer(inference.as_ref(), &gate_question)
