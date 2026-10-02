@@ -613,6 +613,36 @@ fn principal_scope_from_resolver_has_three_distinct_arms() {
     );
 }
 
+/// A resolved caller over an empty registry gets an empty ceiling, and the
+/// reason `build_context` names for it is the registry, not the caller
+/// (pc-corpus-registry-live). Each arm has the input that would fail if two
+/// reasons collapsed into one.
+#[tokio::test]
+async fn an_empty_ceiling_names_why() {
+    use sovereign_core::context::empty_ceiling_reason;
+    let resolved = PrincipalScope::resolved("local-owner");
+    let ctx = build_context(&MockStore::new(), "c", "", resolved.clone())
+        .await
+        .unwrap();
+    assert_eq!(ctx.corpus_ceiling, Some(Vec::new()));
+    assert_eq!(
+        empty_ceiling_reason(&resolved, Some(0)),
+        "the corpus registry holds no corpus"
+    );
+    assert_eq!(
+        empty_ceiling_reason(&resolved, None),
+        "the corpus registry could not be read"
+    );
+    assert_eq!(
+        empty_ceiling_reason(&resolved, Some(3)),
+        "no registered corpus is visible to this caller"
+    );
+    assert_eq!(
+        empty_ceiling_reason(&PrincipalScope::Unresolved, None),
+        "the caller could not be attributed"
+    );
+}
+
 #[test]
 fn format_history_empty() {
     let ctx = ConversationContext {

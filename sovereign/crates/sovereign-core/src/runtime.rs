@@ -671,7 +671,16 @@ impl Runtime {
 
     /// Resolve this turn's caller into the scope [`build_context`] consumes;
     /// [`PrincipalScope`] carries why an unattributable caller refuses.
-    pub(crate) fn principal_scope(&self, conversation_id: &str) -> PrincipalScope {
+    ///
+    /// Where a resolver is wired the ceiling is read from the corpus registry,
+    /// so the registry is first brought up to the engine: a corpus ingested
+    /// while this host runs is in the very next turn's ceiling, not the next
+    /// boot's (pc-corpus-registry-live).
+    pub(crate) async fn principal_scope(&self, conversation_id: &str) -> PrincipalScope {
+        if let (Some(_), Some(engine)) = (&self.corpus_principal, &self.corpus_engine) {
+            crate::corpus_registry::reconcile_corpus_registry(engine.as_ref(), self.store.as_ref())
+                .await;
+        }
         PrincipalScope::from_resolver(self.corpus_principal.as_deref(), conversation_id)
     }
 

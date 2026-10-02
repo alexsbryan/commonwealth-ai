@@ -86,6 +86,18 @@ impl PrincipalScope {
     }
 }
 
+/// Why a resolved ceiling holds no corpus, for the turn that would otherwise
+/// search nothing in silence. `registered` is the registry's row count, `None`
+/// when it was not read (an unresolved caller) or could not be.
+pub fn empty_ceiling_reason(scope: &PrincipalScope, registered: Option<usize>) -> &'static str {
+    match (scope, registered) {
+        (PrincipalScope::Unresolved, _) => "the caller could not be attributed",
+        (_, None) => "the corpus registry could not be read",
+        (_, Some(0)) => "the corpus registry holds no corpus",
+        (_, Some(_)) => "no registered corpus is visible to this caller",
+    }
+}
+
 /// Build a ConversationContext from the store, creating the conversation if it doesn't exist.
 /// The `query` parameter is used for memory retrieval (FTS5 matching).
 pub async fn build_context(
@@ -142,12 +154,22 @@ pub async fn build_context(
     // refuses rather than defaulting to all-corpora-eligible. This is the
     // in-process twin of the server's read-surface deny-set
     // (`TenantRuntime::forbidden_corpora`).
-    let all_installed: Vec<String> = match scope {
-        PrincipalScope::Unresolved => Vec::new(),
-        _ => store
-            .list_corpus_states()
-            .await
-            .unwrap_or_default()
+    let registry = match scope {
+        PrincipalScope::Unresolved => None,
+        _ => Some(store.list_corpus_states().await),
+    };
+    // `None` when the registry was not read or could not be: the reason a
+    // resolved ceiling comes out empty is named below, never defaulted.
+    let registered = match &registry {
+        Some(Ok(rows)) => Some(rows.len()),
+        Some(Err(e)) => {
+            tracing::warn!(error = %e, "build_context: the corpus registry could not be read");
+            None
+        }
+        None => None,
+    };
+    let all_installed: Vec<String> = match registry {
+        Some(Ok(rows)) => rows
             .into_iter()
             .filter(|s| s.deleted_at.is_none())
             .filter(|s| match (&s.visibility, scope.principal()) {
@@ -157,6 +179,7 @@ pub async fn build_context(
             .filter(|s| scope.admits(&s.corpus_id))
             .map(|s| s.corpus_id)
             .collect(),
+        Some(Err(_)) | None => Vec::new(),
     };
     // The PURE principal ceiling — the corpora this caller may ever retrieve
     // from, independent of the per-conversation `enabled_corpora` selection.
@@ -182,6 +205,13 @@ pub async fn build_context(
         PrincipalScope::Unscoped => None,
         _ => Some(all_installed.clone()),
     };
+    if corpus_ceiling.as_ref().is_some_and(Vec::is_empty) {
+        tracing::info!(
+            conversation_id,
+            reason = empty_ceiling_reason(&scope, registered),
+            "build_context: this turn searches no local corpus"
+        );
+    }
     let installed_corpora: Vec<String> = match &conversation.enabled_corpora {
         Some(allow) => {
             let allow_set: std::collections::HashSet<&str> =

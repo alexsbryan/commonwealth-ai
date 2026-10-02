@@ -10,6 +10,7 @@ pub mod conv_briefing;
 pub mod conv_entity_graph;
 pub mod conv_frame;
 pub mod conv_tiered;
+pub mod corpus_registry;
 pub mod dossier;
 // `embed_fn` — the one InferenceProvider->EmbedFn adapter — lives in
 // `corpus-index` beside `types::EmbedFn` (fp-5); re-exported at its
