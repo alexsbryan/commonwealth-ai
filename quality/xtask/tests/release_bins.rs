@@ -35,9 +35,6 @@ const DEV_ONLY: &[(&str, &str)] = &[(
     "`agent-bench` is in DEV_VERBS (main.rs) and its arm is cfg(dev-tools)",
 )];
 
-/// Where cargo puts the packages that own the binaries.
-const CRATE_ROOTS: &[&str] = &["sovereign/crates", "commonwealth/crates"];
-
 fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())) {
         let path = entry.unwrap().path();
@@ -118,36 +115,33 @@ fn shell_list(path: &Path, prefix: &str, close: char) -> BTreeSet<String> {
 
 /// The package that builds `bin`: a `[[bin]] name`, or the package's own
 /// name when it has a `src/main.rs`.
-fn owning_package(root: &Path, bin: &str) -> String {
-    for crates in CRATE_ROOTS {
-        for entry in std::fs::read_dir(root.join(crates)).unwrap() {
-            let dir = entry.unwrap().path();
-            let Ok(manifest) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
+fn owning_package(bin: &str) -> String {
+    for dir in repo_root::member_dirs() {
+        let Ok(manifest) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
+            continue;
+        };
+        let mut package = None;
+        let mut section = "";
+        for line in manifest.lines().map(str::trim) {
+            if line.starts_with('[') {
+                section = line;
+                continue;
+            }
+            let Some(value) = line.strip_prefix("name = \"") else {
                 continue;
             };
-            let mut package = None;
-            let mut section = "";
-            for line in manifest.lines().map(str::trim) {
-                if line.starts_with('[') {
-                    section = line;
-                    continue;
-                }
-                let Some(value) = line.strip_prefix("name = \"") else {
-                    continue;
-                };
-                let value = &value[..value.find('"').unwrap()];
-                match section {
-                    "[package]" => package = Some(value.to_string()),
-                    "[[bin]]" if value == bin => return package.unwrap(),
-                    _ => {}
-                }
-            }
-            if package.as_deref() == Some(bin) && dir.join("src/main.rs").is_file() {
-                return bin.to_string();
+            let value = &value[..value.find('"').unwrap()];
+            match section {
+                "[package]" => package = Some(value.to_string()),
+                "[[bin]]" if value == bin => return package.unwrap(),
+                _ => {}
             }
         }
+        if package.as_deref() == Some(bin) && dir.join("src/main.rs").is_file() {
+            return bin.to_string();
+        }
     }
-    panic!("no package under {CRATE_ROOTS:?} builds a binary named {bin}")
+    panic!("no workspace member builds a binary named {bin}")
 }
 
 /// The text of the CI workflow step named `name`, up to the next step.
@@ -251,7 +245,7 @@ fn release_lists_carry_every_exec_d_binary() {
         if !release_bins.contains(bin) {
             missing.push(format!("{bin}: not in scripts/release-cli-local.sh BINS"));
         }
-        let package = owning_package(&root, bin);
+        let package = owning_package(bin);
         if !release_pkgs.contains(&package) {
             missing.push(format!(
                 "{bin}: its package {package} is not in scripts/release-cli-local.sh PKGS"

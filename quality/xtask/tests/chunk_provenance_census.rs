@@ -123,15 +123,10 @@ use repo_root::repo_root;
 
 /// Every `ChunkProvenance::manufactured("…")` / `Manufactured { producer: "…" }`
 /// in first-party source, minus test modules.
-fn producers(root: &Path) -> BTreeSet<String> {
+fn producers() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    for area in [
-        "corpus-engine/src",
-        "corpus-engine-atlas-reader/src",
-        "sovereign/crates",
-        "studio/crates",
-    ] {
-        walk(&root.join(area), &mut out);
+    for dir in repo_root::member_dirs() {
+        walk(&dir, &mut out);
     }
     out
 }
@@ -193,7 +188,7 @@ fn the_scan_finds_the_producers_it_is_meant_to_count() {
     // Instrument first (ARCH §18.4). A scan that finds nothing would report a
     // closed hazard, which is the failure mode this whole phase exists to
     // treat.
-    let found = producers(&repo_root());
+    let found = producers();
     assert!(
         found.len() >= 4,
         "found only {} manufactured producers — the scan is broken, not the tree. \
@@ -204,7 +199,7 @@ fn the_scan_finds_the_producers_it_is_meant_to_count() {
 
 #[test]
 fn no_new_pool_content_bypasses_an_acquisition_door() {
-    let found = producers(&repo_root());
+    let found = producers();
     let known: BTreeSet<String> = MANUFACTURED.iter().map(|(n, _)| n.to_string()).collect();
 
     let new: Vec<&String> = found.difference(&known).collect();
@@ -228,18 +223,22 @@ fn no_new_pool_content_bypasses_an_acquisition_door() {
 #[test]
 fn sovereign_cannot_stamp_an_acquisition() {
     // The compiler holds this — `Acquisition::stamped` is `pub(crate)` to
-    // corpus-engine — so what this guards is the SPELLING of the invariant
-    // surviving a refactor that makes it public "just for a test".
+    // corpus-index, where `Acquisition` lives since the read-port carve
+    // (`corpus-index/src/index/provenance.rs`) — so what this guards is the
+    // SPELLING of the invariant surviving a refactor that makes it public
+    // "just for a test". It named corpus-engine until the walk covered every
+    // member and found the stamp's real home.
     let root = repo_root();
     let mut offenders = Vec::new();
-    for area in ["sovereign/crates", "studio/crates", "commonwealth/crates"] {
+    let owner = root.join("corpus-index");
+    for dir in repo_root::member_dirs().into_iter().filter(|d| *d != owner) {
         let mut hits = BTreeSet::new();
-        collect_literal(&root.join(area), "Acquisition::stamped(", &mut hits);
+        collect_literal(&dir, "Acquisition::stamped(", &mut hits);
         offenders.extend(hits);
     }
     assert!(
         offenders.is_empty(),
-        "a crate outside corpus-engine stamped an acquisition. Only an index knows what it \
+        "a crate outside corpus-index stamped an acquisition. Only an index knows what it \
          acquired; a caller that can stamp one can also stamp a fabricated one (ARCH §7).\n\
          {offenders:#?}"
     );

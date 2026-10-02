@@ -29,7 +29,3 @@ pub const PROOF_HEADER_ALLOWED: &[&str] =
 
 /// The wire form, in both spellings a Rust file could hold it in.
 pub const PROOF_WIRE_FORM: &[&str] = &["x-mesh-proof", "X-Mesh-Proof"];
-
-/// The trees walked. `commonwealth/` because the stamp lives there,
-/// `sovereign/` because a reader would.
-pub const PROOF_SCANNED_TREES: &[&str] = &["commonwealth/crates", "sovereign/crates"];

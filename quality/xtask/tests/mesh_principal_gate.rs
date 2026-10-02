@@ -48,7 +48,9 @@ fn production_sources(root: &Path, out: &mut Vec<PathBuf>) {
 fn no_production_file_outside_the_one_allowed_path_reads_the_peer_header() {
     let root = repo_root();
     let mut files = Vec::new();
-    production_sources(&root.join("sovereign/crates"), &mut files);
+    for dir in repo_root::member_dirs() {
+        production_sources(&dir, &mut files);
+    }
     assert!(
         files.len() > 500,
         "the walk found only {} files — it is not scanning the tree it \

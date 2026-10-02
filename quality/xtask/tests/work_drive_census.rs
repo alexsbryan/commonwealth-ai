@@ -76,15 +76,8 @@ const OWNERS: &[(&str, &str)] = &[
 fn only_cw_rails_donor_takes_a_unit() {
     let root = repo_root();
     let mut files = Vec::new();
-    for dir in [
-        "commonwealth/crates",
-        "sovereign/crates",
-        "oicp-types",
-        "kernel-types",
-        "corpus-engine",
-        "oicp-client",
-    ] {
-        shipped(&root.join(dir), &mut files);
+    for dir in repo_root::member_dirs() {
+        shipped(&dir, &mut files);
     }
     let leasing: Vec<String> = files
         .iter()

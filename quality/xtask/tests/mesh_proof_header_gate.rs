@@ -40,8 +40,8 @@ fn production_sources(root: &Path, out: &mut Vec<PathBuf>) {
 fn only_the_minter_and_the_resolver_spell_the_mesh_proof_header() {
     let root = repo_root();
     let mut files = Vec::new();
-    for tree in PROOF_SCANNED_TREES {
-        production_sources(&root.join(tree), &mut files);
+    for dir in repo_root::member_dirs() {
+        production_sources(&dir, &mut files);
     }
     assert!(
         files.len() > 500,

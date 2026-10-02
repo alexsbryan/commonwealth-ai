@@ -42,18 +42,11 @@ mod repo_root;
 use repo_root::repo_root;
 
 fn roots() -> Vec<PathBuf> {
-    let ws = repo_root();
-    let mut roots = vec![
-        ws.join("corpus-engine/src"),
-        ws.join("understanding-vocab/src"),
-    ];
-    for entry in std::fs::read_dir(ws.join("sovereign/crates")).unwrap() {
-        let src = entry.unwrap().path().join("src");
-        if src.is_dir() {
-            roots.push(src);
-        }
-    }
-    roots
+    repo_root::member_dirs()
+        .into_iter()
+        .map(|dir| dir.join("src"))
+        .filter(|src| src.is_dir())
+        .collect()
 }
 
 fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {

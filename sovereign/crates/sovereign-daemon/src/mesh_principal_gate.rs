@@ -63,10 +63,12 @@ pub const RESOLVERS: &[&str] = &[
     "sovereign/crates/sovereign-server/src/auth.rs",
 ];
 
-/// The four sites that STAMP the header outbound. Unchanged by this work and
+/// The five sites that STAMP the header outbound. Unchanged by this work and
 /// kept for one release — see the module docs for the failure a silent stop
-/// reproduces.
+/// reproduces. `oicp-client` was always one; the list said four while the
+/// walk covered only `sovereign/crates/`.
 pub const SENDERS: &[&str] = &[
+    "oicp-client/src/lib.rs",
     "sovereign/crates/sovereign-grants/src/shard_manager.rs",
     "sovereign/crates/sovereign-daemon/src/routes_knowledge.rs",
     "sovereign/crates/sovereign-daemon/src/server.rs",

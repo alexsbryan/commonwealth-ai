@@ -43,18 +43,14 @@ use std::path::{Path, PathBuf};
 #[path = "shared/repo_root.rs"]
 mod repo_root;
 
-/// `sovereign/crates/` in the checkout this census is run against.
-fn crates_dir() -> PathBuf {
-    repo_root::repo_root().join("sovereign/crates")
-}
-
 fn daemon_cmd_source() -> String {
-    let path = crates_dir().join("sovereign-daemon/src/daemon_cmd/boot.rs");
+    let path =
+        repo_root::repo_root().join("sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
 fn contracts_skills_source() -> String {
-    let path = crates_dir().join("sovereign-contracts/src/skills.rs");
+    let path = repo_root::repo_root().join("sovereign/crates/sovereign-contracts/src/skills.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
@@ -66,7 +62,7 @@ fn contracts_skills_source() -> String {
 /// delegate, so the pin below is on the whole crate: no registration
 /// call, no embed, anywhere.
 fn desktop_rust_source() -> String {
-    let root = crates_dir().join("sovereign-desktop/src-tauri/src");
+    let root = repo_root::repo_root().join("sovereign/crates/sovereign-desktop/src-tauri/src");
     let mut files = Vec::new();
     walk(&root, &mut files);
     files.sort();

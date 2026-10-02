@@ -31,3 +31,33 @@ pub fn repo_root() -> PathBuf {
     );
     root
 }
+
+/// Every workspace member's directory, read from the root `Cargo.toml`
+/// `members` — the one list of where crates live, at any depth.
+///
+/// Census walks scan these rather than a parent like `sovereign/crates/`:
+/// a parent held only some crates, and stopped meaning anything when the
+/// top level moved to one dir per program (a walk over a parent that lost
+/// half its children narrows without failing). `quality/` members — xtask
+/// itself and arch-layers — are left out: they are the census code, and
+/// hold the literals the walks search for.
+#[allow(dead_code)] // each test binary mounts this file; not all walk members
+pub fn member_dirs() -> Vec<PathBuf> {
+    let root = repo_root();
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("root Cargo.toml");
+    let doc: toml::Value = manifest.parse().expect("root Cargo.toml parses");
+    let dirs: Vec<PathBuf> = doc["workspace"]["members"]
+        .as_array()
+        .expect("[workspace] members")
+        .iter()
+        .filter_map(|m| m.as_str())
+        .filter(|m| !m.starts_with("quality/"))
+        .map(|m| root.join(m))
+        .collect();
+    assert!(
+        dirs.len() > 50,
+        "only {} workspace members outside quality/ — not this workspace's Cargo.toml",
+        dirs.len()
+    );
+    dirs
+}

@@ -26,7 +26,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
-RUST_ROOTS = ["sovereign/crates", "commonwealth/crates"]
+# Every workspace member, from the root manifest (crates no longer share a parent).
+RUST_ROOTS = [m for m in __import__("tomllib").load(open(REPO / "Cargo.toml", "rb"))["workspace"]["members"]
+              if not m.startswith("quality/")]
 TS_ROOTS = ["packages/chat-ui/src", "sovereign/crates/sovereign-desktop/src"]
 PY_ROOTS = ["scripts", "gym"]
 

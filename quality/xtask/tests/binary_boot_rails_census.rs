@@ -84,8 +84,8 @@ fn in_private_netns(text: &str) -> bool {
 fn every_test_that_boots_a_daemon_pins_its_cw_rails() {
     let root = repo_root();
     let mut files = Vec::new();
-    for dir in ["sovereign/crates", "commonwealth/crates"] {
-        test_sources(&root.join(dir), &mut files);
+    for dir in repo_root::member_dirs() {
+        test_sources(&dir, &mut files);
     }
     let booting: Vec<(String, String)> = files
         .iter()
@@ -189,8 +189,8 @@ fn group_clause(root: &Path, file: &Path) -> String {
 fn every_test_that_boots_a_daemon_runs_in_the_daemon_boot_group() {
     let root = repo_root();
     let mut files = Vec::new();
-    for dir in ["sovereign/crates", "commonwealth/crates"] {
-        test_sources(&root.join(dir), &mut files);
+    for dir in repo_root::member_dirs() {
+        test_sources(&dir, &mut files);
     }
     let booting: BTreeSet<String> = files
         .iter()

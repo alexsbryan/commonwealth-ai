@@ -88,19 +88,18 @@ const HELP_GAP_BASELINE: usize = 11;
 /// to distrust the gate.
 fn cli_crate_sources() -> String {
     let root = sovereign_cli_shared::repo::find_checkout_root()
-        .expect("this census runs inside the checkout whose CLI crates it reads")
-        .join("sovereign/crates");
+        .expect("this census runs inside the checkout whose CLI crates it reads");
     let mut all = String::new();
-    for crate_name in [
-        "sovereign-cli",
-        "sovereign-cli-dev",
-        "sovereign-cli-llm",
-        "sovereign-cli-bench",
-        "sovereign-cli-daemon",
+    for crate_dir in [
+        "sovereign/crates/sovereign-cli",
+        "sovereign/crates/sovereign-cli-dev",
+        "sovereign/crates/sovereign-cli-llm",
+        "sovereign/crates/sovereign-cli-bench",
+        "sovereign/crates/sovereign-cli-daemon",
         // ingest's CLI (`svrn-ingest`), since pb-cli-llm-ingest-move.
-        "sovereign-pipeline",
+        "sovereign/crates/sovereign-pipeline",
     ] {
-        let src = root.join(crate_name).join("src");
+        let src = root.join(crate_dir).join("src");
         let mut stack = vec![src];
         while let Some(dir) = stack.pop() {
             let Ok(entries) = std::fs::read_dir(&dir) else {

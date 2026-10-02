@@ -257,10 +257,7 @@ fn the_desktop_variant_has_no_first_party_host() {
     // variant looks like, and `sovereign-mesh` is where the census itself
     // lives.
     let mut hosts: Vec<String> = Vec::new();
-    let mut stack = vec![
-        root.join("sovereign/crates"),
-        root.join("commonwealth/crates"),
-    ];
+    let mut stack = repo_root::member_dirs();
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;

@@ -28,18 +28,19 @@ use std::path::{Path, PathBuf};
 fn roots() -> Vec<PathBuf> {
     // Workspace-wide by nature; the root is a knob, not a climb (boundary 3c).
     let ws = crate::source_tree::workspace_root();
-    let mut roots = Vec::new();
-    for level in [ws.clone(), ws.join("sovereign/crates")] {
-        let Ok(entries) = std::fs::read_dir(&level) else {
-            continue;
-        };
-        for entry in entries {
-            let src = entry.unwrap().path().join("src");
-            if src.is_dir() {
-                roots.push(src);
-            }
-        }
-    }
+    // Every workspace member, from the root manifest: the one list of where
+    // crates live. A walk over `sovereign/crates/` narrowed silently when
+    // the top level moved to one dir per program.
+    let manifest = std::fs::read_to_string(ws.join("Cargo.toml")).expect("root Cargo.toml");
+    let doc: toml::Value = manifest.parse().expect("root Cargo.toml parses");
+    let roots: Vec<PathBuf> = doc["workspace"]["members"]
+        .as_array()
+        .expect("[workspace] members")
+        .iter()
+        .filter_map(|m| m.as_str())
+        .map(|m| ws.join(m).join("src"))
+        .filter(|src| src.is_dir())
+        .collect();
     // A tree without the registry's own crate is the wrong tree, not a clean one.
     assert!(
         roots.contains(&ws.join("corpus-engine/src")),

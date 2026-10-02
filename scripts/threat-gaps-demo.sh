@@ -326,7 +326,9 @@ BAR = "tg-token-revoked-alone"
 node_state = src("sovereign/crates/sovereign-daemon/src/state/node.rs") or ""
 one_token = re.search(r"client_token:\s*Option<Arc<str>>", node_state) is not None
 token_verb = []
-for root, _dirs, files in os.walk(os.path.join(REPO, "sovereign/crates")):
+import tomllib
+members = tomllib.load(open(os.path.join(REPO, "Cargo.toml"), "rb"))["workspace"]["members"]
+for root, _dirs, files in (w for m in members for w in os.walk(os.path.join(REPO, m))):
     for f in files:
         if f.endswith(".rs") and "mesh token" in (src(os.path.relpath(os.path.join(root, f), REPO)) or ""):
             token_verb.append(os.path.relpath(os.path.join(root, f), REPO))
@@ -345,7 +347,7 @@ e2e = src(e2e_rel) or ""
 clauses = {k: (bool(token_verb) and re.search(rf"async fn {name}\b", e2e) is not None)
            for k, name in clause_tests.items()}
 row(BAR, score(clauses),
-    f"`mesh token` appears in {len(token_verb)} .rs file(s) under sovereign/crates "
+    f"`mesh token` appears in {len(token_verb)} .rs file(s) in the workspace members "
     f"({token_verb}); the shared `client_token: Option<Arc<str>>` is still in state/node.rs "
     f"({one_token}) and is the default posture, beside the named set. {said(clauses)} — each "
     f"read from the test in {e2e_rel} that proves it.",
