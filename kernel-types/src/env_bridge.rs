@@ -15,6 +15,12 @@
 /// overwritten, so re-running (e.g. the dispatcher exec'ing a sibling that
 /// re-runs the shim) is a no-op.
 pub fn promote_legacy_env() {
+    promote_legacy_env_as("svrnmesh");
+}
+
+/// [`promote_legacy_env`], its stderr lines prefixed with `program` — so a
+/// program that is not svrn (cw-rails) never speaks as svrn.
+pub fn promote_legacy_env_as(program: &str) {
     // Snapshot first: we mutate the environment inside the loop, and iterating
     // `vars()` while calling `set_var` would otherwise be unsound.
     let snapshot: Vec<(String, String)> = std::env::vars().collect();
@@ -35,13 +41,13 @@ pub fn promote_legacy_env() {
     }
     if promoted > 0 {
         eprintln!(
-            "svrnmesh: bridged {promoted} legacy SOVEREIGN_* env var(s) to SVRNMESH_* \
+            "{program}: bridged {promoted} legacy SOVEREIGN_* env var(s) to SVRNMESH_* \
              (the SOVEREIGN_* prefix is deprecated — update your scripts)"
         );
     }
     for removed in removed_set(snapshot.iter().map(|(k, _)| k.as_str())) {
         eprintln!(
-            "svrnmesh: {} is set but no longer read, so it has no effect — {}",
+            "{program}: {} is set but no longer read, so it has no effect — {}",
             removed.name, removed.instead
         );
         // Nothing reads it, so dropping it costs no child anything — and a

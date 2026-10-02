@@ -10,8 +10,8 @@ fn main() -> ExitCode {
     // The SOVEREIGN_* <-> SVRNMESH_* mirror every sibling runs first: rails'
     // closure reads SOVEREIGN_ADVERTISE_ADDR, _MESH_STRICT_AUTH and
     // _IROH_RELAY_ONLY, which a directly launched rails otherwise misses
-    // under the SVRNMESH_ spelling.
-    kernel_types::env_bridge::promote_legacy_env();
+    // under the SVRNMESH_ spelling. Its lines speak as cw-rails, never svrn.
+    kernel_types::env_bridge::promote_legacy_env_as("cw-rails");
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
