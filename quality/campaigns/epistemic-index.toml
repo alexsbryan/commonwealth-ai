@@ -207,7 +207,7 @@ kill         = "a second walk kept behind a flag is still a second walk -- ARCH 
 # a run cannot tell you how many walks exist, only which one it took. Four
 # conditions, all cited at main 084e11fb6:
 #   1. `pub async fn ground(` defined exactly ONCE in corpus-engine
-#      (corpus-engine/src/enrichment/atlas/ground.rs:530)
+#      (ingest/crates/corpus-engine/src/enrichment/atlas/ground.rs:530)
 #   2. sovereign-core calls it
 #      (sovereign/crates/sovereign-core/src/runtime/retrieval/atlas_grounding.rs:296)
 #   3. corpus-mcp calls it (corpus-mcp/src/tools.rs:429)
@@ -243,7 +243,7 @@ def files(*roots):
         for p in (ROOT / r).rglob("*.rs"):
             yield p
 
-CE = ["corpus-engine/src"]
+CE = ["ingest/crates/corpus-engine/src"]
 OUTSIDE = ["sovereign/crates/sovereign-core/src", "corpus-mcp/src"]
 WALK = "ground::ground("
 # The pinned second-walk symbols. A DEFINITION of either outside corpus-engine
@@ -283,7 +283,7 @@ for r in reasons:
     print("ei5:", r, file=sys.stderr)
 sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
 print(json.dumps({"value": 0.0 if reasons else 1.0, "commit": sha or None,
-                  "artifact": "corpus-engine/src/enrichment/atlas/ground.rs",
+                  "artifact": "ingest/crates/corpus-engine/src/enrichment/atlas/ground.rs",
                   "reasons": reasons, "callers": notes}))
 PY'''
 

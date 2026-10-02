@@ -16,7 +16,7 @@ retrieval-side blend the briefing eventually feeds.
 
 ## Why this exists
 
-The `conversations-anthropic` import (Anthropic chat-export recipe, single-user dataset) wedged in five days of restart cycles trying to complete the legacy atlas enrichment pipeline. T1 (chunks + 1024-dim embeddings + FTS) landed cleanly on the first run — **16,404 chunks across 576 conversations, ~109 MB on disk**. What loops forever is Phase 1b: per-chunk entity extraction calling Slow LLM with free-form JSON parsing (`corpus-engine/src/enrichment/entity_extraction.rs:505`). Empirical parse-fail rate ~30%. Each failure triggers retry. With 16k chunks the loop never converges within a daemon session, and every restart auto-resumes the same loop (`sovereign-daemon/src/auto_resume.rs:198`).
+The `conversations-anthropic` import (Anthropic chat-export recipe, single-user dataset) wedged in five days of restart cycles trying to complete the legacy atlas enrichment pipeline. T1 (chunks + 1024-dim embeddings + FTS) landed cleanly on the first run — **16,404 chunks across 576 conversations, ~109 MB on disk**. What loops forever is Phase 1b: per-chunk entity extraction calling Slow LLM with free-form JSON parsing (`ingest/crates/corpus-engine/src/enrichment/entity_extraction.rs:505`). Empirical parse-fail rate ~30%. Each failure triggers retry. With 16k chunks the loop never converges within a daemon session, and every restart auto-resumes the same loop (`sovereign-daemon/src/auto_resume.rs:198`).
 
 The attached-document tiered surface (Phase A, shipped 2026-05-22) replaces that monolithic enrichment with three explicit milestones: T1 cosine retrieval, T2 entity-graph PPR multi-hop, T3 RAPTOR signposts + motifs + verbatim quote spans. The user can query after T1; quality climbs as T2 and T3 land.
 
@@ -81,7 +81,7 @@ Cons:
 
 Two valid triggers; both can coexist on the same code path.
 
-**Trigger A — batch on ingest completion.** When `corpus-engine/src/engine/ingest.rs` finishes T1 (post `mark_indexes_built`, around line 1506), if the recipe carries `[enrichment] type = "tiered"`, dispatch one tiered enrichment job per distinct `source_doc_id` in `chunks.lance`. Runs sequentially through `futures::stream::iter(...).buffered(SUMMARIZE_BUFFER)` for fan-out where mesh allows.
+**Trigger A — batch on ingest completion.** When `ingest/crates/corpus-engine/src/engine/ingest.rs` finishes T1 (post `mark_indexes_built`, around line 1506), if the recipe carries `[enrichment] type = "tiered"`, dispatch one tiered enrichment job per distinct `source_doc_id` in `chunks.lance`. Runs sequentially through `futures::stream::iter(...).buffered(SUMMARIZE_BUFFER)` for fan-out where mesh allows.
 
 **Trigger B — on conversation seal.** A conversation becomes "sealed" when it's been inactive past a threshold (default: 24 hours). Sealed conversations are eligible for tiered enrichment; one tree per seal event. Lives outside the corpus ingest path — runs as a background sweeper job that wakes on a cron-ish schedule (~hourly) and processes any newly-sealed conversations.
 
@@ -156,14 +156,14 @@ type = "tiered"           # new — was "atlas" / "personal" / etc
 domain = "conversational" # informs DocumentTypeTag passed to build_raptor_atlas
 ```
 
-At `corpus-engine/src/engine/ingest.rs:1510`, branch on `enrichment_config.enrichment_type`:
+At `ingest/crates/corpus-engine/src/engine/ingest.rs:1510`, branch on `enrichment_config.enrichment_type`:
 
 - `"atlas"` → existing FieldModelEngine path (unchanged; old corpora still work)
 - `"tiered"` → new `TieredEnrichmentRunner::run(corpus_id, chunks, embeddings, store)` path
 
 The runner per-iterates `source_doc_id` over the corpus's Lance chunks, batches each conv's chunks + embeddings, and calls into the corpus-free builders. Writes go to the new SQLite sidecar tables.
 
-Update the conv recipe at `sovereign-recipes/conversations-anthropic/recipe.toml` to set `type = "tiered"`. The duplicate at `corpus-engine/recipes/conversations-anthropic/recipe.toml` likely needs the same edit — check during impl.
+Update the conv recipe at `ingest/crates/sovereign-recipes/conversations-anthropic/recipe.toml` to set `type = "tiered"`. The duplicate at `corpus-engine/recipes/conversations-anthropic/recipe.toml` likely needs the same edit — check during impl.
 
 ## Decision 5: briefing generalisation
 
@@ -392,8 +392,8 @@ After today's session, the spec's remaining v0 must-land items are:
 - Phase A architecture: `sovereign/docs/TIERED_RETRIEVAL.md`
 - Retrieval-side blend the briefing eventually feeds: `sovereign/docs/specs/CLUSTER_SCORE_BLEND.md`
 - RAPTOR builder (corpus-free): `sovereign/crates/sovereign-tools/src/raptor_atlas.rs:80`
-- Recipe gate to extend: `corpus-engine/src/engine/ingest.rs:1510-1511`
+- Recipe gate to extend: `ingest/crates/corpus-engine/src/engine/ingest.rs:1510-1511`
 - Briefing builder to refactor: `sovereign/crates/sovereign-core/src/runtime.rs:13046`
 - Existing schema to mirror: `sovereign/crates/sovereign-store/src/migrations.rs:381` (`run_raptor_atlas_migration`)
-- Threaded-turns chunker (already producing the conv-keyed Lance rows this design depends on): `corpus-engine/src/chunking/threaded_turns.rs` (per memory `project_conversation_ingest.md`)
+- Threaded-turns chunker (already producing the conv-keyed Lance rows this design depends on): `ingest/crates/corpus-engine/src/chunking/threaded_turns.rs` (per memory `project_conversation_ingest.md`)
 - Memory entries to consult before implementing: `invariant_balanced_envelope_needs_grammar_gate`, `invariant_corpus_id_chunk_id_unique`, `invariant_lint_db_path_canonical`, `project_conversation_ingest`, `project_conversation_bench_v0`, `project_conversation_march_unit4`

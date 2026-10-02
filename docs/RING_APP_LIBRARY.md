@@ -816,7 +816,7 @@ never the turns.
 - *The ring's memory is held.* A corpus built from the journal is a cache of a
   fold — a function of the journal, a recipe and an embedding model — so any
   member with a model can rebuild it and nobody owns it. It needs the journal
-  acquirer `STRATEGY_RINGS.md` names; nothing under `corpus-engine/src` reads a
+  acquirer `STRATEGY_RINGS.md` names; nothing under `ingest/crates/corpus-engine/src` reads a
   `RingJournal` (checked 2026-10-01). The acquirer indexes what the fold shows:
   a corrected act appears corrected, and the struck-through original is reached
   only when someone asks what happened. Acts are typed records already (§4), so
@@ -898,7 +898,7 @@ introduction, congratulation — say so in their one declaration (§4), and an a
 of a gesture kind carries a person's confirmation in its provenance. An act a
 model proposed and no person confirmed is refused, not flagged, beside
 `GovernanceIssue::UnattendedAct`
-(`corpus-engine/src/enrichment/governance_view.rs:611`). Watched failing first
+(`ingest/crates/corpus-engine/src/enrichment/governance_view.rs:611`). Watched failing first
 with a planted auto-confirmed vouch. Guest grade passes, because the bridge
 signs what a person tapped (`RING_ENTRY.md`, decision 2). `Admit` is not an app
 kind and is not covered here: §9's one rule already makes it a member's act,

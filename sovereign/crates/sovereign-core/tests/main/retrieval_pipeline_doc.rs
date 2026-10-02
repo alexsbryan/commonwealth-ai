@@ -2,7 +2,7 @@
 //! `sovereign-core/docs/retrieval-pipeline.md` is GENERATED from the live
 //! pipeline definitions (`kq_pipeline` / `deep_pipeline` /
 //! `retrieval_pipeline_flags`) so the doc cannot drift from the code —
-//! same contract as sovereign-recipes/SCHEMA.md (`recipe_schema` test).
+//! same contract as ingest/crates/sovereign-recipes/SCHEMA.md (`recipe_schema` test).
 //!
 //! Regenerate after changing the pipelines or the flag registry:
 //!

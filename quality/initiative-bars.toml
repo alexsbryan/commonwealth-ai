@@ -3458,7 +3458,7 @@ the repo — F2's verdicts are not reproducible without it."""
   id = "F3-installable"
   one_line = "A user installs a company corpus without cloning the repo or running a bash script"
   derives_from = "FINANCIAL_CORPORA.md §4 F3, §3.3"
-  bar = "present in sovereign-recipes/registry.toml; install by ticker from the catalog surface with no repo script invocation"
+  bar = "present in ingest/crates/sovereign-recipes/registry.toml; install by ticker from the catalog surface with no repo script invocation"
   declared = "2026-08-14"
 
     [[initiative.bar.transition]]

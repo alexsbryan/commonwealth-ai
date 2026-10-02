@@ -93,7 +93,7 @@ Each is named by the question it answers and by the word it owns exclusively.
 
 **Understanding** — *what is this material about?*
 Owns **atom**, tension, gap, ontology, seed, domain, field.
-~99,900 lines: `corpus-engine/src/enrichment/` (93,427, of which `atlas/`
+~99,900 lines: `ingest/crates/corpus-engine/src/enrichment/` (93,427, of which `atlas/`
 39,740 and `pipeline/` 27,135), `meta_atlas/`, `atlas_traversal/`.
 Eight design documents of its own under `corpus-engine/` (`ATLAS.md`,
 `ENRICHMENT_V2.md`, `INCREMENTAL_ATLAS.md`, …). `Tension*` is 9 of its 10
@@ -223,7 +223,7 @@ So the two calls:
 answers *what may depend on what*. It cannot answer *where does one word mean
 one thing*, and no amount of tiering will make it.
 
-`corpus-engine/DECOMPOSITION.md` is the clearest case. Its ten-crate target is
+`ingest/crates/corpus-engine/DECOMPOSITION.md` is the clearest case. Its ten-crate target is
 a tier ordering — "dep arrows go up the tier numbers, never down" — and four of
 its tiers are different CONTEXTS wearing tier numbers: Tier 3 is Workspace
 (and its own parenthetical says so), Tier 4 is Workbench, Tier 5 is Build
@@ -337,7 +337,7 @@ floors as the baseline:
 - Row 2 would read green today while the defect stands. All 20 `atoms.json`
   readers already use `understanding-vocab`'s `AtomsFile`; none declares its
   own struct. The leak is the DOOR: `read_atlas_atoms` is at
-  `corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
+  `ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
   `corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
   bar becomes "pub `Atom*` outside vocab and `enrichment/`, minus three named
   axum binders": **12 → 0**, and the door invariant is made structural rather

@@ -457,9 +457,9 @@ misprices where a crate can live, which is load-bearing during boundary work.)
 commonwealth-ai/
 ├── cmnwlth/      # Mesh coordination daemon (runs at localhost:9741)
 ├── sovereign/      # Local AI + code intelligence server
-├── corpus-engine/  # Knowledge base engine
+├── ingest/crates/corpus-engine/  # Knowledge base engine
 ├── shared/crates/oicp-types/    # Shared protocol types (used by both)
-├── sovereign-recipes/  # Data recipes
+├── ingest/crates/sovereign-recipes/  # Data recipes
 └── scripts/       # Build/test wrappers
 ```
 

@@ -85,7 +85,7 @@ the whole field.
 their trait (`unimplemented!()`/`todo!()`/panicking trait methods) would
 render as plugs with missing pins. Cut from this workspace's page on
 measurement (2026-08-06): zero such sites exist outside test code — a
-codified norm forbids stubs (`corpus-engine/src/enrichment/domain_registry.rs`).
+codified norm forbids stubs (`ingest/crates/corpus-engine/src/enrichment/domain_registry.rs`).
 Other repos pointing Fieldglass at themselves may want it; the projection is
 specified here so it isn't reinvented.
 
@@ -304,7 +304,7 @@ Audited 2026-08-06:
 Leads, to be measured from use: the first render surfacing a nameable
 finding the operator didn't already know (the funding test — the first
 render of this repo surfaced a 139-line near-clone family between
-`corpus-engine/src/extractors/` and `sovereign-tools/src/corpus/`, a
+`ingest/crates/corpus-engine/src/extractors/` and `sovereign-tools/src/corpus/`, a
 25-method × 11-crate `InferenceProvider` matrix, and a 35-method `Pipeline`
 trait with two consumers); "where are the dragons in subsystem Y" as a
 thirty-second glance instead of a day of archaeology; duplicate-work caught

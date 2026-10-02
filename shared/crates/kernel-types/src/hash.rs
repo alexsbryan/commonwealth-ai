@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn matches_the_encoding_corpus_engine_already_writes() {
-        // corpus-engine/src/engine/mod.rs:2732 is
+        // ingest/crates/corpus-engine/src/engine/mod.rs:2732 is
         //   `blake3::hash(s.as_bytes()).to_hex().to_string()`
         // Pinning it here means adopting ContentHash on an existing
         // `content_hash: String` column is a type change, not a data

@@ -232,7 +232,7 @@ is resolved, and resolving it breaks the 117 sites already using `NodeId`.
   is O(items), not O(sites) — the whole point of the design.
 - **Ensembles, only on residue:** propose rules for unknown type pairs; classify
   ambiguous sites (`is this corpus_id really a corpus id?`) as a closed set with
-  a mandatory `unsure`. Substrate exists — `corpus-engine/src/enrichment/code_intel/mod.rs`
+  a mandatory `unsure`. Substrate exists — `ingest/crates/corpus-engine/src/enrichment/code_intel/mod.rs`
   is an incremental, body-hash-cached, concurrent batch driver over every symbol,
   with `PHASE_ID` routing bulk work to the daemon's `fast` model. **Generalise
   its prompt/parse/output triple; do not copy it into a sibling module.**

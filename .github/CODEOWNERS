@@ -23,7 +23,7 @@
 /rust-toolchain.toml            @alexsbryan
 
 # Knowledge layer — LanceDB + Tantivy + extractors + chunkers.
-/corpus-engine/                 @alexsbryan
+/ingest/crates/corpus-engine/                 @alexsbryan
 /shared/crates/corpus-engine-scip/            @alexsbryan
 /corpus-engine-atos/            @alexsbryan
 /corpus-engine-notes/           @alexsbryan
@@ -52,5 +52,5 @@
 # mechanical (`svrn recipe validate` / `svrn recipe test`), with one thing that
 # is not: `license`, `mesh_sharing`, and `query_sharing` must match what the
 # source actually permits. That judgement is the reason this is still owned.
-/sovereign-recipes/             @alexsbryan
-/sovereign-recipes/registry.toml @alexsbryan
+/ingest/crates/sovereign-recipes/             @alexsbryan
+/ingest/crates/sovereign-recipes/registry.toml @alexsbryan

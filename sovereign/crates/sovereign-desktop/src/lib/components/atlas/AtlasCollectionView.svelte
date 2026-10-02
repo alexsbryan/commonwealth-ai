@@ -8,7 +8,7 @@
   // atlases, one per encyclopedia entry — so `sep/atlas/atoms.json` is
   // a 44-byte `{"atoms":[]}` and the ordinary atom browser had nothing
   // to show ("No atoms match the current filter", with nothing to
-  // match). See `sovereign-recipes/sep/recipe.toml` `[enrichment]`.
+  // match). See `ingest/crates/sovereign-recipes/sep/recipe.toml` `[enrichment]`.
   //
   // Rather than union 1,769 atlases into one view — which would erase
   // the per-article boundary the philosophy_atlas pipeline is built

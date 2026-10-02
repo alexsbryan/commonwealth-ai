@@ -13,7 +13,7 @@
 //! `tests/ui/harness_positive_control.rs` names no kernel type and cannot
 //! compile under any feature resolution, so it must always be reported as
 //! failing. If it is ever reported as compiling, this suite is judging
-//! nothing (ARCH §18.4). The sibling suite `corpus-engine/tests/evidence_reds.rs`
+//! nothing (ARCH §18.4). The sibling suite `ingest/crates/corpus-engine/tests/evidence_reds.rs`
 //! records the hour that control was written for: five fixtures once reported
 //! "expected to fail, but SUCCEEDED" because the dependency crate itself did
 //! not build, and nothing in trybuild's output said so.

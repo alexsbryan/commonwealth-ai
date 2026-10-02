@@ -17,7 +17,7 @@ sidecar and the freshness gate. Read every "wire-in" section here as history —
 the table, the codec and the query primitive are current; the call sites named
 in them are not.
 
-**Status.** Phase 1 **SHIPPED 2026-06-08**. Built per this contract: `corpus-engine/src/index/raptor.rs` (pure-LanceDB `RaptorSummaryRow`/`RaptorHit`/`build_raptor_index`/`search_raptor_summaries` + `raptor_summaries.meta.json` sidecar), `CorpusEngine::search_raptor_summaries`/`raptor_index_meta` accessors, `sovereign-tools/src/raptor_index.rs::build_corpus_raptor_index` (the `conv_raptor_nodes` read→map→build glue), the `apply_raptor_grounding` index-fast-path + scan fallback + `max(created_at)` freshness gate (`corpus_raptor_version` on `ConvTieredReader`), and the `enrich raptor` auto-hook + standalone `enrich raptor-index <corpus>` verb. Parity / unit / freshness tests green. **One deviation** — see [decision 4](#decisions): the injected score is the EXACT cosine recomputed from the stored embedding, not `1 − _distance`. Still a **scaling prerequisite, not a current blocker** — it changes throughput, not answers — see [When is this needed](#when-is-this-needed).
+**Status.** Phase 1 **SHIPPED 2026-06-08**. Built per this contract: `ingest/crates/corpus-engine/src/index/raptor.rs` (pure-LanceDB `RaptorSummaryRow`/`RaptorHit`/`build_raptor_index`/`search_raptor_summaries` + `raptor_summaries.meta.json` sidecar), `CorpusEngine::search_raptor_summaries`/`raptor_index_meta` accessors, `sovereign-tools/src/raptor_index.rs::build_corpus_raptor_index` (the `conv_raptor_nodes` read→map→build glue), the `apply_raptor_grounding` index-fast-path + scan fallback + `max(created_at)` freshness gate (`corpus_raptor_version` on `ConvTieredReader`), and the `enrich raptor` auto-hook + standalone `enrich raptor-index <corpus>` verb. Parity / unit / freshness tests green. **One deviation** — see [decision 4](#decisions): the injected score is the EXACT cosine recomputed from the stored embedding, not `1 − _distance`. Still a **scaling prerequisite, not a current blocker** — it changes throughput, not answers — see [When is this needed](#when-is-this-needed).
 
 ---
 
@@ -58,8 +58,8 @@ This is `O(N_nodes · 1024)` per query, **no index**. Measured cost (SEP, 11k no
 | row struct | `ConvRaptorNodeRow`, `sovereign/crates/sovereign-core/src/conv_tiered.rs:53` | `summary_embedding: Vec<f32>` (1024-dim, Qwen3-Embedding-0.6B) |
 | BLOB codec | `encode_f32_vec` / `decode_f32_vec`, `sovereign/crates/sovereign-store/src/sqlite.rs` | LE f32 bytes |
 | build/insert path | `build_raptor_rows`, `sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs:519`; persisted via `save_conv_raptor_nodes` (`sqlite.rs:2766`) called at `conv_tiered_provider.rs:379` | **hook point for index build is right after this save / as a post-ingest batch pass** |
-| **reuse: leaf ANN search** | `CorpusIndex::search`, `corpus-engine/src/index/search.rs:98` | `table.query().nearest_to(q_emb).nprobes(50).limit(k)`; **flat-scan fallback for <10k rows** at `:112` |
-| **reuse: ANN index build** | `build_vector_index_with_progress`, `corpus-engine/src/index/create.rs:57` | `table.create_index(&["embedding"], Index::IvfPq(IvfPqIndexBuilder::default().num_partitions(p).distance_type(Cosine))).replace(true)` |
+| **reuse: leaf ANN search** | `CorpusIndex::search`, `ingest/crates/corpus-engine/src/index/search.rs:98` | `table.query().nearest_to(q_emb).nprobes(50).limit(k)`; **flat-scan fallback for <10k rows** at `:112` |
+| **reuse: ANN index build** | `build_vector_index_with_progress`, `ingest/crates/corpus-engine/src/index/create.rs:57` | `table.create_index(&["embedding"], Index::IvfPq(IvfPqIndexBuilder::default().num_partitions(p).distance_type(Cosine))).replace(true)` |
 | precedent: same problem, unsolved | `apply_atlas_grounding`, `retrieval/atlas_grounding.rs:75` | also brute-force in-memory cosine over `AtlasContext.entries` (`atlas_context.rs:34`), loaded per-corpus at startup by `AtlasContextManager` (`sovereign-tools/src/atlas_context_manager.rs`), disk-cached `atlas/atoms.embeddings.bin`. **See [decision 2](#decisions).** |
 
 **No HNSW/FAISS/Annoy anywhere in the workspace** — LanceDB IVF is the only vector-index tool, and it's already proven for leaf chunks. Reuse it; do not add a dependency.
@@ -188,5 +188,5 @@ Per house practice (E2E tests prove correctness):
 
 - Late-injection + default-on commit: `feat(retrieval): late RAPTOR injection, on by default` (2026-06-08).
 - Throughput finding + the brute-force-scan caveat: doc-comment at `apply_raptor_grounding` (`retrieval/raptor_grounding.rs:99`).
-- Leaf-chunk ANN reference impl: `corpus-engine/src/index/search.rs:98`, `create.rs:57`.
+- Leaf-chunk ANN reference impl: `ingest/crates/corpus-engine/src/index/search.rs:98`, `create.rs:57`.
 - Atlas precedent (same unsolved scan): `apply_atlas_grounding` `retrieval/atlas_grounding.rs:75`, `atlas_context.rs:34`.

@@ -134,7 +134,7 @@ fn the_daemon_pushes_the_recipe_authoring_bundle() {
         1,
         "the daemon's tool list must carry the recipe-authoring bundle ingest composed"
     );
-    let path = repo_root::repo_root().join("studio/crates/sovereign-recipe-author/src/port.rs");
+    let path = repo_root::repo_root().join("ingest/crates/sovereign-recipe-author/src/port.rs");
     let port =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     assert_eq!(

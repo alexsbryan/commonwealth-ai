@@ -100,7 +100,7 @@ Five concrete moves. Each can be done independently — they layer.
 
 ### 1. **Ingest** — write to `chunk_entities`
 
-Wire the corpus's tiered ingest path to fire `ChunkEntityExtractor::extract_for_conversation` (or the per-source equivalent) ahead of the LLM-heavy `TieredEnrichmentProvider`. The daemon hook in `corpus-engine/src/enrichment/tiered.rs::run_tiered_enrichment` already does this — any corpus using the tiered runner gets entity extraction for free if `with_chunk_entity_extractor` is attached at daemon startup.
+Wire the corpus's tiered ingest path to fire `ChunkEntityExtractor::extract_for_conversation` (or the per-source equivalent) ahead of the LLM-heavy `TieredEnrichmentProvider`. The daemon hook in `ingest/crates/corpus-engine/src/enrichment/tiered.rs::run_tiered_enrichment` already does this — any corpus using the tiered runner gets entity extraction for free if `with_chunk_entity_extractor` is attached at daemon startup.
 
 For corpora NOT using the tiered runner (attached docs, vault syncs):
 - Add a similar hook at the end of T1.
@@ -286,7 +286,7 @@ These apply to the conv port as shipped and to any future ports.
 | SQLite schema | `sovereign-store/src/migrations.rs::run_chunk_entities_migration` |
 | SQLite read/write methods | `sovereign-store/src/sqlite.rs` |
 | GliNER extractor | `sovereign-tools/src/gliner_ner.rs` |
-| Ingest hook trait | `corpus-engine/src/enrichment/tiered.rs::ChunkEntityExtractor` |
+| Ingest hook trait | `ingest/crates/corpus-engine/src/enrichment/tiered.rs::ChunkEntityExtractor` |
 | Daemon wiring | `sovereign-cli-daemon/src/daemon_cmd.rs` (around `with_chunk_entity_extractor`) |
 | Retrieval rerank | `sovereign-core/src/runtime.rs::rerank_conv_chunks_via_ppr` |
 | CLI surface | `sovereign-cli-llm/src/corpus_extract_entities_cmd.rs` |

@@ -133,14 +133,14 @@ hourly all-corpora scan is a textbook LRU-flusher.
 `index_cache_len()` is the new observability surface for "how many handles are resident",
 and is what the test asserts on.
 
-**Red-first evidence.** `corpus-engine/tests/index_cache_residency.rs`. Two tiny real
+**Red-first evidence.** `ingest/crates/corpus-engine/tests/index_cache_residency.rs`. Two tiny real
 LanceDB corpora are ingested with a mock 8-dim embedder, then a sweep tick is simulated
 over all of them. Run with `open_index_transient` wired to `CacheOnOpen::Yes` — i.e.
 byte-for-byte what the pre-fix sweep did:
 
 ```
 thread 'a_full_sweep_admits_no_handles_to_the_query_cache' panicked at
-  corpus-engine/tests/index_cache_residency.rs:140:5:
+  ingest/crates/corpus-engine/tests/index_cache_residency.rs:140:5:
   assertion `left == right` failed: a background sweep may read through the query
     cache but must never populate it
     left: 3   right: 0

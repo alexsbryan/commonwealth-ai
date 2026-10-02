@@ -51,7 +51,7 @@ timeit warm - build-ws 1 $LOCK cargo build --workspace --features "$BUILDF" --ti
 PROBES=(
 "sovereign/crates/sovereign-mesh/src/daemon.rs|sovereign-mesh|partition_round_robin_balances"
 "sovereign/crates/sovereign-core/src/deep_research/mod.rs|sovereign-core|gates_require_both_absolute_and_margin"
-"corpus-engine/src/engine/mod.rs|corpus-engine|stamp_then_load_round_trips"
+"ingest/crates/corpus-engine/src/engine/mod.rs|corpus-engine|stamp_then_load_round_trips"
 "sovereign/crates/sovereign-cli-llm/src/lib.rs|sovereign-cli-llm|shard_index_and_count_read_the_convention"
 "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs|sovereign-desktop|deterministic_with_seed"
 "sovereign/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools|is_pathological_all_zero"

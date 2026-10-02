@@ -124,7 +124,7 @@ fn write_atlas_fixture(
             atoms_json.push(',');
         }
         // EnrichmentDepth is `snake_case` serde — see
-        // corpus-engine/src/enrichment/pipeline/atlas.rs:62. EntityType
+        // ingest/crates/corpus-engine/src/enrichment/pipeline/atlas.rs:62. EntityType
         // is a string_enum_with_other! ("concept" / "person" / ...).
         atoms_json.push_str(&format!(
             r#"{{"atom_type":"Entity","data":{{"id":"{id}","canonical_name":"{name}","entity_type":"concept","first_appearance":{{"chunk_id":"c{i}"}},"description":"test","salience":0.5,"enrichment_depth":"extracted"}}}}"#

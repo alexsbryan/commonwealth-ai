@@ -231,7 +231,7 @@ Predicted per-axis F1 vs literary_atlas baseline (aggregate 86.7% on 2026-05-24 
 | `sovereign-tools/src/typed_extension/grammar.rs` | Lark/llguidance grammars + JSON schema definitions for Pass A and Pass B envelopes | ~150 |
 | `sovereign-tools/src/typed_extension/atoms_writer.rs` | Project typed atoms onto literary_atlas atoms.json shape + write to `{index_dir}/atlas/atoms.json` + `atoms.meta.json` sidecar | ~100 |
 | `sovereign-tools/src/conv_tiered_provider.rs` | Extend `FolderTieredProvider::finalize_corpus` with Pass A + Pass B invocations | ~80 |
-| `corpus-engine/src/enrichment/tiered.rs` | (no changes — `finalize_corpus` hook already exists) | 0 |
+| `ingest/crates/corpus-engine/src/enrichment/tiered.rs` | (no changes — `finalize_corpus` hook already exists) | 0 |
 | Tests | per-axis grammar correctness, idempotency via manifest hash, write-then-read round-trip | ~200 |
 
 ## Verification
@@ -264,4 +264,4 @@ Wall-clock target: typed extraction ≤ 50% of the vault's per-note enrichment t
 - Vault port memory: `~/.claude/projects/.../memory/project_vault_tiered_port_2026_05_24.md`
 - v1 baseline scores: `sovereign/bench/obsidian/baselines/vault-port/{retrieval,synth}-post-vault-port.json`
 - HippoRAG vocab-fidelity discussion: `sovereign/docs/TIERED_RETRIEVAL.md` §"On HippoRAG 1 vs 2"
-- Literary atoms.json shape (reference): `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` writers
+- Literary atoms.json shape (reference): `ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` writers

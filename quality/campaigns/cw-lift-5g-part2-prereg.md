@@ -98,7 +98,7 @@ B2 does not imply it.
 
 **B4 — the merge is idempotent under at-least-once.** Run the collector twice
 against the same terminal handoff. `merge_shards` dedupes on `content_hash`
-and `(unit_id, source_doc_id)` (`corpus-engine/src/sharding.rs:780-784`), so
+and `(unit_id, source_doc_id)` (`ingest/crates/corpus-engine/src/sharding.rs:780-784`), so
 the claim is already load-bearing in `IngestExecutor`'s
 `Idempotency::Idempotent` declaration. It has never been exercised at the
 MERGE level, only asserted. Second run must not change the chunk count.
@@ -118,7 +118,7 @@ live hazard wider than this rung.
 (`sovereign-mesh/src/auto_ingest.rs:297`) and merges only the partitions under
 one node's index dir. Its guard against publishing a partial canonical —
 `RecoveryOutcome::IncompleteCoverage` — arms only when a partition meta stamps
-`total_shards`, and `corpus-engine/src/engine/ingest.rs:718` stamps it for
+`total_shards`, and `ingest/crates/corpus-engine/src/engine/ingest.rs:718` stamps it for
 `ExtractorConfig::WikipediaJsonl` and nothing else, scoped with the comment
 "the only multi-shard extractor today; trivial to extend when more arrive."
 
@@ -175,7 +175,7 @@ queue-mode path was NOT, and has the identical gap: `coordinate_merge` returns
 to `corpus_queue.rs:210`, which logs and returns, and to `:550`, which goes
 straight to `verify_merge_sample`. Neither finalizes. Verified at the code
 level that an unfinalized canonical is skipped by `installed_indexes`
-(`corpus-engine/src/engine/mod.rs:~1621`, "skip indexes where ingestion was
+(`ingest/crates/corpus-engine/src/engine/mod.rs:~1621`, "skip indexes where ingestion was
 interrupted"), so it is neither searchable nor advertised.
 
 The operator directed the finalize into the shared function rather than a
@@ -487,7 +487,7 @@ disagreed.
 
 *What the corpus actually was.* `merge_from_fold_coverage` →
 `ShardManager::merge_participants` → `CorpusEngine::merge_partitions`
-(`corpus-engine/src/engine/mod.rs:2771`) writes the merged chunks and stops. It
+(`ingest/crates/corpus-engine/src/engine/mod.rs:2771`) writes the merged chunks and stops. It
 never called `build_indexes`, `mark_indexes_built`, `mark_ingestion_complete`
 or `compute_and_stamp_fingerprint` — all four of which the disk-derived sibling
 does (`sharding.rs`, and the fingerprint stamp after them). So the canonical
@@ -656,7 +656,7 @@ still reachable. **Met.**
 and leaves the canonical exactly as it was. `merge_shards` builds its output
 with `CorpusIndex::create` → `create_empty_table`, which refuses a directory
 already holding a `chunks` table, so the merge never reaches the dedupe at all.
-This falsifies `corpus-engine/src/sharding.rs`'s own comment on the
+This falsifies `ingest/crates/corpus-engine/src/sharding.rs`'s own comment on the
 single-shard fast path — "callers that actually do want to fold a partition
 into an existing canonical fall through to the full merge below (which dedupes
 via `content_hash`)". The fall-through errors first.
@@ -862,7 +862,7 @@ the bug verbatim, in order, in one tick:
 *3. The `total_shards` premise.*
 `the_older_disk_guard_is_dark_without_a_total_shards_stamp`. Confirmed at HEAD:
 the only production caller of `CorpusIndex::set_total_shards` outside
-`sharding.rs`'s merge-replay is `corpus-engine/src/engine/ingest.rs:718`, inside
+`sharding.rs`'s merge-replay is `ingest/crates/corpus-engine/src/engine/ingest.rs:718`, inside
 `if let ExtractorConfig::WikipediaJsonl { .. }`. Measured rather than cited: a
 partition written the way a fold unit writes one carries no `total_shards`, and
 `try_recover_stranded_partitions` merges a 1-of-2 canonical without returning

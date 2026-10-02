@@ -3,7 +3,7 @@ name = "corpus-engine-atlas-reader"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Resolved-atlas READ surface, carved read-only out of corpus-engine/src/enrichment/atlas (FIVE_PROGRAMS §12 decision 1)."
+description = "Resolved-atlas READ surface, carved read-only out of ingest/crates/corpus-engine/src/enrichment/atlas (FIVE_PROGRAMS §12 decision 1)."
 
 # Why this crate is its own thing:
 #

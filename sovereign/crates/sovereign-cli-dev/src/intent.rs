@@ -153,7 +153,7 @@ fn terms_of(text: &str) -> BTreeSet<String> {
 }
 
 /// Which crate owns this path. `sovereign/crates/sovereign-core/src/x.rs` is
-/// `sovereign-core`; `corpus-engine/src/x.rs` is `corpus-engine`. A path with
+/// `sovereign-core`; `ingest/crates/corpus-engine/src/x.rs` is `corpus-engine`. A path with
 /// no `/src/` keeps its first component, which is right for `xtask` and
 /// friends and never merges two real crates.
 pub fn crate_of(file: &str) -> String {
@@ -473,7 +473,7 @@ mod tests {
         let syms = vec![
             sym(
                 "cosine_sim",
-                "corpus-engine/src/a.rs",
+                "ingest/crates/corpus-engine/src/a.rs",
                 "Computes the cosine similarity between two embedding vectors.",
             ),
             sym(
@@ -494,7 +494,7 @@ mod tests {
         let syms = vec![
             sym(
                 "cosine_sim",
-                "corpus-engine/src/a.rs",
+                "ingest/crates/corpus-engine/src/a.rs",
                 "Computes the cosine similarity between two embedding vectors.",
             ),
             sym(
@@ -513,12 +513,12 @@ mod tests {
         let syms = vec![
             sym(
                 "cosine_sim",
-                "corpus-engine/src/a.rs",
+                "ingest/crates/corpus-engine/src/a.rs",
                 "Computes the cosine similarity between two embedding vectors.",
             ),
             sym(
                 "probe_cosine",
-                "corpus-engine/src/b.rs",
+                "ingest/crates/corpus-engine/src/b.rs",
                 "Computes the cosine similarity between two embedding vectors.",
             ),
         ];
@@ -617,7 +617,7 @@ mod tests {
     fn vendored_and_research_paths_are_excluded() {
         assert!(!is_ours("research/verifier-v0/data/llama.cpp/x.py"));
         assert!(!is_ours("corpus-engine/target/debug/build/x.rs"));
-        assert!(is_ours("corpus-engine/src/lib.rs"));
+        assert!(is_ours("ingest/crates/corpus-engine/src/lib.rs"));
     }
 }
 

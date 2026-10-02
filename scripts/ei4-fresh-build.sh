@@ -20,7 +20,7 @@
 set -uo pipefail
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${SOVEREIGN_CLI:-$REPO/target/debug/sovereign-cli}"
-SRC="$REPO/sovereign-recipes/wessex-hoard"
+SRC="$REPO/ingest/crates/sovereign-recipes/wessex-hoard"
 ID="wessex-hoard-ei4-$(date -u +%Y%m%dT%H%M%SZ)"
 IDX="${SOVEREIGN_DATA_DIR:-$HOME/.svrnmesh}/indexes/$ID/atlas"
 export SOVEREIGN_NO_STALE_WARN=1

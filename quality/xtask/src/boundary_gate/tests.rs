@@ -174,12 +174,14 @@ fn include_scan_no_longer_carves_out_sovereign_recipes() {
     let recipe_embed = r#"
 pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../sovereign-recipes/registry.toml"
+    "/../../../ingest/crates/sovereign-recipes/registry.toml"
 ));
 "#;
     let hits = scan_include_escapes(recipe_embed, Path::new("src"));
     assert_eq!(hits.len(), 1, "a sovereign-recipes embed must now be seen");
-    assert!(hits[0].evidence.contains("sovereign-recipes/registry.toml"));
+    assert!(hits[0]
+        .evidence
+        .contains("ingest/crates/sovereign-recipes/registry.toml"));
 }
 
 #[test]
@@ -204,7 +206,7 @@ fn include_scan_leaves_what_stays_inside() {
 
 /// The false positive this rule carried until 2026-09-21: a climb that
 /// LANDS inside the crate root. corpus-engine's tree-sitter queries live
-/// at `corpus-engine/queries/` and are embedded from
+/// at `ingest/crates/corpus-engine/queries/` and are embedded from
 /// `src/extractors/code/mod.rs`, so the literal reads `../../../queries/…`
 /// and resolves to the crate root — six red lines, and a burn-down item on
 /// the `corpus-mcp -> corpus-engine` exception, for work already done.
@@ -250,7 +252,7 @@ fn roots() -> Vec<PathBuf> {
         .parent()
         .unwrap()
         .to_path_buf();
-    vec![ws.join("corpus-engine/src")]
+    vec![ws.join("ingest/crates/corpus-engine/src")]
 }
 "#;
     let hits = scan_runtime_escapes(vocab);
@@ -448,7 +450,7 @@ fn runtime_scan_leaves_what_actually_lifts() {
     let embed = r#"
 pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../sovereign-recipes/registry.toml"
+    "/../../../ingest/crates/sovereign-recipes/registry.toml"
 ));
 "#;
     assert!(scan_runtime_escapes(embed).is_empty());

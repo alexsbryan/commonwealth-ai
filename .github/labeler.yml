@@ -34,7 +34,7 @@
 "area: recipes":
   - changed-files:
       - any-glob-to-any-file:
-          - "sovereign-recipes/**"
+          - "ingest/crates/sovereign-recipes/**"
 
 "area: ci":
   - changed-files:

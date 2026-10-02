@@ -254,7 +254,7 @@ pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]
         "threaded_turns",
         // v2 atlas enrichment via the `conversational` domain →
         // `conversation_atlas` pipeline (see
-        // `corpus-engine/src/enrichment/pipeline/pipelines/conversation_atlas.rs`).
+        // `ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/conversation_atlas.rs`).
         // Replaces the v1 `field_model` skeleton; KnowledgeView's
         // splice path now reads the digest from `atlas/atoms.json`
         // via `atlas_digest::render_atlas_digest`.

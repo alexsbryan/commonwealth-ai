@@ -10,7 +10,7 @@
 //! shares that merge and got nothing: `:210` logs and returns, `:550` goes
 //! straight to `verify_merge_sample`. Neither finalizes, so a queue-mode merge
 //! wrote chunks that `installed_indexes()` skips on `is_ingestion_complete`
-//! (`corpus-engine/src/engine/mod.rs`, "Skipping partial index"), which means
+//! (`ingest/crates/corpus-engine/src/engine/mod.rs`, "Skipping partial index"), which means
 //! `usable_indexes()` never sees them and `hosted_corpora` gossip — built from
 //! `installed_indexes()` in `sovereign-mesh/src/capabilities.rs` — advertises
 //! nothing.

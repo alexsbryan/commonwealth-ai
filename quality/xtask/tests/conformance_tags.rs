@@ -159,7 +159,7 @@ fn owning_crate(file: &Path) -> Option<(String, PathBuf)> {
 // ─── Reading the tag ────────────────────────────────────────────────────────
 
 /// Concatenated `///` doc lines. Same reader as
-/// `corpus-engine/tests/main/recipe_schema.rs:129` — one doc reader, not two.
+/// `ingest/crates/corpus-engine/tests/main/recipe_schema.rs:129` — one doc reader, not two.
 fn doc_lines(attrs: &[Attribute]) -> Vec<String> {
     let mut parts = Vec::new();
     for a in attrs {

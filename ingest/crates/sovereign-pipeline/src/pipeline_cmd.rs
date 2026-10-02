@@ -1,0 +1,710 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `svrn pipeline …` — generic ingestion-pipeline driver.
+//!
+//! Surface:
+//!
+//! ```text
+//! svrn pipeline run    <recipe.toml> [--db <path>] [--seed-only]
+//! svrn pipeline status <recipe-id>   [--db <path>]
+//! svrn pipeline list   [--db <path>]
+//! svrn pipeline pause  <recipe-id>   [--force]
+//! ```
+//!
+//! State lives in `--db` (defaults to `~/.svrnmesh/pipeline.db`).
+//! Multiple recipes can share one DB; rows are keyed by `recipe_id`.
+//! See `sovereign_pipeline` crate docs for the worklist semantics.
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use crate::driver::{DriverConfig, Shutdown};
+use crate::{recipe::Recipe, run_recipe, status, worklist::Worklist};
+use tokio::sync::Mutex;
+
+use sovereign_cli_base::help::{self, Help, HelpSection};
+
+const HELP: Help = Help {
+    command: "svrn pipeline",
+    summary: "Generic ingestion-pipeline driver — durable worklist + retry + pause-resume.",
+    sections: &[
+        HelpSection::Usage("svrn pipeline <run | status | list> [flags]"),
+        HelpSection::Subcommands(&[
+            (
+                "run <recipe.toml>",
+                "Seed + sweep + drive the recipe to completion. \
+                 SIGINT/SIGTERM drains in-flight units, then exits cleanly. \
+                 Re-running picks up where the previous run left off.",
+            ),
+            (
+                "status <recipe-id>",
+                "Print pending/done/failed counts, last-hour throughput, ETA, failure buckets.",
+            ),
+            ("list", "List every recipe-id known to the worklist DB."),
+            (
+                "pause <recipe-id>",
+                "Gracefully stop active drivers for this recipe across the mesh \
+                 (SIGTERM → drain → exit). Worklist state persists; \
+                 `svrn pipeline run` resumes from where it left off. \
+                 Use --force for SIGKILL. Use --local-only to skip the mesh \
+                 fanout and only signal local PIDs.",
+            ),
+            (
+                "pod …",
+                "Moved to `svrn mesh pod` (up / pool / list / down).",
+            ),
+        ]),
+        HelpSection::Flags(&[
+            (
+                "--db <path>",
+                "Override the worklist DB path. Default: ~/.svrnmesh/pipeline.db.",
+            ),
+            (
+                "--seed-only",
+                "(run) Seed the worklist from the recipe's source and exit without dispatching.",
+            ),
+            (
+                "--slugs <path>",
+                "(run) Use this newline-separated file as the key source, overriding the \
+                 recipe's `[source]` block. Use for curated/partial runs.",
+            ),
+            (
+                "--key <slug>",
+                "(run) Enqueue just this one key (repeatable). Overrides `[source]`. \
+                 Handy for retrying a single failed slug.",
+            ),
+            (
+                "--concurrency <N>",
+                "(run) Override `[dispatch].concurrency` for this invocation. Use to fan out a \
+                 single-laptop recipe across mesh peers — pass `<peers_online>` and let the \
+                 daemon's load balancer distribute units. Adaptive backoff still applies if \
+                 capacity isn't really there.",
+            ),
+        ]),
+        HelpSection::Examples(&[
+            (
+                "svrn pipeline run ingest/crates/sovereign-recipes/sep/pipelines/sep-core-v1.toml",
+                "Drive the SEP ingest. Safe to Ctrl-C; resumes on next run.",
+            ),
+            (
+                "svrn pipeline status sep-core-v1",
+                "Read-only summary — useful while a driver is running or after it paused.",
+            ),
+            (
+                "svrn pipeline pause sep-core-v1",
+                "Pause the SEP ingest mid-run. In-flight slugs drain, then the driver exits; \
+                 resume with the same `run` invocation.",
+            ),
+        ]),
+        HelpSection::Notes(
+            "The driver shells out to the recipe's `[enrich].command` for each work unit, \
+             treating `{key}` as the work-unit slug. Failures are bucketed (timeout / \
+             refused / vram_thrash / gpu_vulkan / gpu_rocm / inference_json_parse / \
+             inference_5xx / daemon_down / stale_cache / mismatch / model_missing / \
+             phase_failed / build_step_failed / unknown) and retried up to \
+             `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` \
+             block with `active_hours = \"HH:MM-HH:MM\"` to auto-pause outside that window.",
+        ),
+    ],
+};
+
+pub async fn run_pipeline(args: &[String]) -> i32 {
+    if help::wants_help(args) || args.is_empty() {
+        help::print(&HELP);
+        return if args.is_empty() { 2 } else { 0 };
+    }
+
+    match args[0].as_str() {
+        "run" => cmd_run(&args[1..]).await,
+        "status" => cmd_status(&args[1..]).await,
+        "list" => cmd_list(&args[1..]).await,
+        "pause" => cmd_pause(&args[1..]).await,
+        // The pod verbs are cmnwlth's now (phase-b-1 (10)): a named
+        // pointer, never a silent unknown-subcommand.
+        "pod" => {
+            eprintln!(
+                "svrn pipeline pod: moved to `svrn mesh pod`. Run `svrn mesh pod {}`.",
+                args[1..].join(" ")
+            );
+            2
+        }
+        other => {
+            eprintln!("unknown subcommand: {other}");
+            help::print(&HELP);
+            2
+        }
+    }
+}
+
+async fn cmd_run(args: &[String]) -> i32 {
+    let Some(recipe_path) = args.first().map(PathBuf::from) else {
+        eprintln!(
+            "usage: svrn pipeline run <recipe.toml> \
+             [--db <path>] [--seed-only] [--slugs <path>] [--key <slug>] \
+             [--concurrency <N>]"
+        );
+        return 2;
+    };
+    let mut db_path: Option<PathBuf> = None;
+    let mut seed_only = false;
+    let mut slugs_path: Option<PathBuf> = None;
+    let mut keys_override: Vec<String> = Vec::new();
+    let mut concurrency_override: Option<u32> = None;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--db" => {
+                i += 1;
+                db_path = Some(PathBuf::from(&args[i]));
+            }
+            "--seed-only" => seed_only = true,
+            "--slugs" => {
+                i += 1;
+                slugs_path = Some(PathBuf::from(&args[i]));
+            }
+            "--key" => {
+                i += 1;
+                keys_override.push(args[i].clone());
+            }
+            "--concurrency" => {
+                i += 1;
+                match args[i].parse::<u32>() {
+                    Ok(n) if n >= 1 => concurrency_override = Some(n),
+                    Ok(_) => {
+                        eprintln!("--concurrency must be >= 1");
+                        return 2;
+                    }
+                    Err(_) => {
+                        eprintln!("--concurrency: '{}' is not an integer", args[i]);
+                        return 2;
+                    }
+                }
+            }
+            other => {
+                eprintln!("unknown flag: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let mut recipe = match Recipe::load(&recipe_path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("failed to load recipe `{}`: {e}", recipe_path.display());
+            return 1;
+        }
+    };
+
+    // Apply source overrides. --key wins over --slugs wins over recipe.
+    if !keys_override.is_empty() {
+        recipe.source = crate::recipe::Source::Inline {
+            keys: keys_override,
+        };
+    } else if let Some(path) = slugs_path {
+        recipe.source = crate::recipe::Source::SlugList { path };
+        // Override paths from the CLI are relative to the user's cwd,
+        // not the recipe dir — clear base_dir so absolute resolution
+        // applies. Absolute paths work either way.
+        recipe.base_dir = None;
+    }
+
+    // Concurrency override — runtime knob for fanning a single-laptop
+    // recipe across mesh peers without editing the recipe file. The
+    // adaptive layer still backs off on failure signals, so an
+    // optimistic value is safe.
+    if let Some(n) = concurrency_override {
+        let prior = recipe.dispatch.concurrency;
+        if prior != n {
+            eprintln!("concurrency override: recipe {prior} → CLI {n}");
+        }
+        recipe.dispatch.concurrency = n;
+    }
+    let db_path = db_path.unwrap_or_else(default_db_path);
+    if let Some(parent) = db_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!("cannot create db parent `{}`: {e}", parent.display());
+            return 1;
+        }
+    }
+    let worklist = match Worklist::open(&db_path) {
+        Ok(w) => Arc::new(Mutex::new(w)),
+        Err(e) => {
+            eprintln!("cannot open worklist db `{}`: {e}", db_path.display());
+            return 1;
+        }
+    };
+
+    if seed_only {
+        let keys = match recipe.load_keys() {
+            Ok(k) => k,
+            Err(e) => {
+                eprintln!("cannot load keys: {e}");
+                return 1;
+            }
+        };
+        let mut wl = worklist.lock().await;
+        match wl.seed(&recipe.recipe.id, keys) {
+            Ok(n) => {
+                println!(
+                    "seeded {n} new work unit(s) for recipe `{}`",
+                    recipe.recipe.id
+                );
+                return 0;
+            }
+            Err(e) => {
+                eprintln!("seed failed: {e}");
+                return 1;
+            }
+        }
+    }
+
+    // Wire SIGINT/SIGTERM → Shutdown. We do not abort in-flight tasks;
+    // the driver drains them and exits cleanly. This is what makes
+    // the day-pause workflow safe — Ctrl-C never loses a unit.
+    let shutdown = Shutdown::default();
+    spawn_signal_handler(shutdown.clone());
+
+    let cfg = DriverConfig::default();
+    let recipe_id = recipe.recipe.id.clone();
+    let summary = match run_recipe(recipe, worklist.clone(), cfg, shutdown).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("driver error: {e}");
+            return 1;
+        }
+    };
+
+    let elapsed = (summary.finished_at_unix - summary.started_at_unix).max(1);
+    let rate = summary.succeeded as f64 * 3600.0 / elapsed as f64;
+    println!();
+    println!("recipe:    {recipe_id}");
+    println!("succeeded: {}", summary.succeeded);
+    println!("failed:    {}", summary.failed);
+    println!("remaining: {}", summary.pending_remaining);
+    println!("elapsed:   {}s", elapsed);
+    println!("rate:      {rate:.1} / hr");
+    println!(
+        "exit:      {}",
+        if summary.paused {
+            "paused (shutdown requested)"
+        } else {
+            "complete"
+        }
+    );
+    0
+}
+
+async fn cmd_status(args: &[String]) -> i32 {
+    let Some(recipe_id) = args.first().cloned() else {
+        eprintln!("usage: svrn pipeline status <recipe-id> [--db <path>]");
+        return 2;
+    };
+    let mut db_path: Option<PathBuf> = None;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--db" => {
+                i += 1;
+                db_path = Some(PathBuf::from(&args[i]));
+            }
+            other => {
+                eprintln!("unknown flag: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let db_path = db_path.unwrap_or_else(default_db_path);
+    let worklist = match Worklist::open(&db_path) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("cannot open worklist db `{}`: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let report = match status::report(&worklist, &recipe_id) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("status read failed: {e}");
+            return 1;
+        }
+    };
+    print!("{}", report.render());
+    0
+}
+
+async fn cmd_list(args: &[String]) -> i32 {
+    let mut db_path: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--db" => {
+                i += 1;
+                db_path = Some(PathBuf::from(&args[i]));
+            }
+            other => {
+                eprintln!("unknown flag: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let db_path = db_path.unwrap_or_else(default_db_path);
+    if !Path::new(&db_path).exists() {
+        println!("no worklist db at {} — nothing to list", db_path.display());
+        return 0;
+    }
+    // Open read-only.
+    let worklist = match Worklist::open(&db_path) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("cannot open worklist db `{}`: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let ids = match worklist.list_recipe_ids() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("query failed: {e}");
+            return 1;
+        }
+    };
+    if ids.is_empty() {
+        println!("(no recipes in {})", db_path.display());
+    } else {
+        for id in ids {
+            println!("{id}");
+        }
+    }
+    0
+}
+
+/// Identify the live driver(s) for a given recipe-id by walking
+/// `/proc/<pid>/cmdline`. Robust to driver invocation shape: we
+/// recognize either the explicit recipe-id form (rare) or the
+/// recipe-toml-path form (common, since `pipeline run` takes a
+/// path). For the latter we parse the recipe's `[recipe].id` and
+/// match.
+///
+/// Returns every PID running that recipe so multiple drivers
+/// (operator misuse — but it happens) all get the signal.
+fn find_driver_pids(recipe_id: &str) -> Vec<u32> {
+    let proc_dir = match std::fs::read_dir("/proc") {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+    let mut pids = Vec::new();
+    for entry in proc_dir.flatten() {
+        let Some(name) = entry.file_name().to_str().map(|s| s.to_string()) else {
+            continue;
+        };
+        let Ok(pid) = name.parse::<u32>() else {
+            continue;
+        };
+        let cmdline_path = format!("/proc/{pid}/cmdline");
+        let Ok(raw) = std::fs::read(&cmdline_path) else {
+            continue;
+        };
+        // /proc/<pid>/cmdline is NUL-separated argv.
+        let argv: Vec<String> = raw
+            .split(|b| *b == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| String::from_utf8_lossy(s).to_string())
+            .collect();
+        // Match shape: `... svrn pipeline run <recipe-path>`.
+        // Anything else isn't a pipeline driver we care about.
+        let is_driver = argv.windows(3).any(|w| {
+            (w[0].ends_with("svrn")
+                || w[0].ends_with("sovereign")
+                || w[0].ends_with("sovereign-cli"))
+                && w[1] == "pipeline"
+                && w[2] == "run"
+        });
+        if !is_driver {
+            continue;
+        }
+        // The argument after `run` is the recipe path. Read it
+        // and check the `[recipe].id` matches.
+        let recipe_arg_idx = argv.iter().position(|s| s == "run").map(|i| i + 1);
+        let Some(idx) = recipe_arg_idx else {
+            continue;
+        };
+        let Some(recipe_arg) = argv.get(idx) else {
+            continue;
+        };
+        let candidate = PathBuf::from(recipe_arg);
+        if !candidate.exists() {
+            continue;
+        }
+        match Recipe::load(&candidate) {
+            Ok(r) if r.recipe.id == recipe_id => pids.push(pid),
+            _ => {}
+        }
+    }
+    pids
+}
+
+async fn cmd_pause(args: &[String]) -> i32 {
+    let Some(recipe_id) = args.first().cloned() else {
+        eprintln!("usage: svrn pipeline pause <recipe-id> [--force] [--local-only]");
+        return 2;
+    };
+    let mut force = false;
+    let mut local_only = false;
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--force" => force = true,
+            "--local-only" => local_only = true,
+            other => {
+                eprintln!("unknown flag: {other}");
+                return 2;
+            }
+        }
+    }
+
+    // Default path: ask the local daemon to fan the pause out over the
+    // mesh. The pipeline driver runs locally on each peer against its
+    // own worklist DB, so a local /proc walk on this host stops only
+    // the driver on this host — peer drivers keep claiming work. The
+    // daemon's handler hits its own /proc + forwards the same request
+    // to every online peer with fanout=false.
+    //
+    // `--local-only` (and the daemon-down fallback) keeps today's
+    // behavior for the rare case where the operator deliberately only
+    // wants to stop this host.
+    if !local_only {
+        match mesh_pause_via_daemon(&recipe_id, force).await {
+            Ok(rendered) => {
+                print!("{rendered}");
+                return 0;
+            }
+            Err(MeshPauseError::DaemonDown) => {
+                eprintln!(
+                    "local daemon unreachable on :9742 — falling back to local-only pause; \
+                     peer drivers will keep running until you restart the daemon or run \
+                     `pipeline pause --local-only` on each peer."
+                );
+                // Fall through to the local-only path below.
+            }
+            Err(MeshPauseError::Other(msg)) => {
+                eprintln!("{msg}");
+                return 1;
+            }
+        }
+    }
+
+    // ── Local-only path (legacy / fallback) ─────────────────────────
+    let pids = find_driver_pids(&recipe_id);
+    if pids.is_empty() {
+        println!("no active driver for recipe `{recipe_id}` on this host — nothing to pause");
+        return 0;
+    }
+
+    let signum = if force { libc::SIGKILL } else { libc::SIGTERM };
+    let signame = if force { "SIGKILL" } else { "SIGTERM" };
+    for pid in &pids {
+        println!("{signame} driver pid {pid} for recipe `{recipe_id}`");
+        // Safety: libc::kill is just a syscall — no Rust invariants
+        // to uphold. A bad pid returns -1 and sets errno; we read
+        // errno separately rather than unwrap.
+        let rc = unsafe { libc::kill(*pid as libc::pid_t, signum) };
+        if rc != 0 {
+            let err = std::io::Error::last_os_error();
+            eprintln!("  ✗ kill({pid}, {signame}) failed: {err}");
+            // Carry on — other pids may still be killable.
+        }
+    }
+
+    if force {
+        // SIGKILL is immediate; in-flight enrich subprocesses
+        // become orphans (their parent shell `/bin/sh -c …` dies
+        // with the driver). We don't wait — caller knows what they
+        // asked for.
+        return 0;
+    }
+
+    // SIGTERM path: wait for the driver(s) to drain. The driver's
+    // shutdown handler finishes any in-flight unit before exiting
+    // — that's the whole point of `pause` vs `--force`. Poll
+    // /proc once a second; cap the wait at 10 minutes so a wedged
+    // driver doesn't hang the operator's terminal forever (any
+    // longer than that and they'll want --force anyway).
+    println!("waiting for drain (Ctrl-C if you'd rather --force) …");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
+    loop {
+        let alive: Vec<u32> = pids
+            .iter()
+            .copied()
+            .filter(|pid| std::path::Path::new(&format!("/proc/{pid}")).exists())
+            .collect();
+        if alive.is_empty() {
+            println!("✓ paused cleanly");
+            return 0;
+        }
+        if std::time::Instant::now() >= deadline {
+            eprintln!(
+                "drain timed out after 10m; still alive: {alive:?}. Retry with --force \
+                 or send SIGKILL manually."
+            );
+            return 1;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+/// Failures from the mesh-pause path that the caller routes
+/// differently. `DaemonDown` falls through to local-only; `Other`
+/// surfaces and exits non-zero.
+enum MeshPauseError {
+    DaemonDown,
+    Other(String),
+}
+
+/// Per-node pause result returned by the daemon's
+/// `/internal/pipeline/pause` aggregate response.
+#[derive(serde::Deserialize)]
+struct PausePerNode {
+    node: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    pids_signaled: Vec<u32>,
+    #[serde(default)]
+    drained: bool,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+/// Aggregate response from the daemon — local result plus per-peer.
+#[derive(serde::Deserialize)]
+struct PauseAggregate {
+    local: PausePerNode,
+    #[serde(default)]
+    peers: Vec<PausePerNode>,
+}
+
+/// POST `/internal/pipeline/pause` on the local daemon (:9742, the
+/// peer-accessible internal router, also reachable from localhost).
+/// The daemon does the local /proc walk + concurrently forwards to
+/// every online peer with `fanout: false`, returning an aggregate.
+/// Render the result for the operator.
+async fn mesh_pause_via_daemon(
+    recipe_id: &str,
+    force: bool,
+) -> std::result::Result<String, MeshPauseError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| MeshPauseError::Other(format!("build http client: {e}")))?;
+
+    let body = serde_json::json!({
+        "recipe_id": recipe_id,
+        "force": force,
+        "fanout": true,
+    });
+
+    let url = format!(
+        "{}/internal/pipeline/pause",
+        sovereign_contracts::setup_config::internal_daemon_base().map_err(MeshPauseError::Other)?
+    );
+    let resp = match client.post(&url).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) if e.is_connect() || e.is_timeout() => {
+            return Err(MeshPauseError::DaemonDown);
+        }
+        Err(e) => return Err(MeshPauseError::Other(format!("POST {url}: {e}"))),
+    };
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Err(MeshPauseError::Other(
+            "local daemon doesn't expose /internal/pipeline/pause — rebuild + restart it to \
+             enable mesh-aware pause, or pass --local-only to use the legacy path"
+                .to_string(),
+        ));
+    }
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(MeshPauseError::Other(format!(
+            "{url} returned {status}: {body}"
+        )));
+    }
+
+    let agg: PauseAggregate = resp
+        .json()
+        .await
+        .map_err(|e| MeshPauseError::Other(format!("parse response: {e}")))?;
+
+    let mut out = String::new();
+    out.push_str(&render_pause_node(&agg.local, recipe_id, force));
+    if agg.peers.is_empty() {
+        out.push_str("(no other peers online — local pause only)\n");
+    } else {
+        for peer in &agg.peers {
+            out.push_str(&render_pause_node(peer, recipe_id, force));
+        }
+    }
+    Ok(out)
+}
+
+fn render_pause_node(n: &PausePerNode, recipe_id: &str, force: bool) -> String {
+    let label = match n.name.as_deref() {
+        Some(name) => format!("{name} ({})", n.node),
+        None => n.node.clone(),
+    };
+    if let Some(err) = n.error.as_deref() {
+        return format!("✗ {label}: {err}\n");
+    }
+    if n.pids_signaled.is_empty() {
+        return format!("· {label}: no active `{recipe_id}` driver — nothing to pause\n");
+    }
+    let signame = if force { "SIGKILL" } else { "SIGTERM" };
+    let drained_note = if n.drained {
+        "drained cleanly"
+    } else {
+        "drain timed out — driver may be wedged; retry with --force"
+    };
+    format!(
+        "✓ {label}: {signame} pids {:?} ({drained_note})\n",
+        n.pids_signaled
+    )
+}
+
+fn default_db_path() -> PathBuf {
+    sovereign_contracts::rebrand::svrnmesh_root().join("pipeline.db")
+}
+
+#[cfg(unix)]
+fn spawn_signal_handler(shutdown: Shutdown) {
+    use tokio::signal::unix::{signal, SignalKind};
+    tokio::spawn(async move {
+        let mut sigint = match signal(SignalKind::interrupt()) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        tokio::select! {
+            _ = sigint.recv() => {
+                eprintln!("\nshutdown requested (SIGINT) — draining in-flight units, please wait…");
+                shutdown.request();
+            }
+            _ = sigterm.recv() => {
+                eprintln!("\nshutdown requested (SIGTERM) — draining in-flight units, please wait…");
+                shutdown.request();
+            }
+        }
+    });
+}
+
+#[cfg(not(unix))]
+fn spawn_signal_handler(shutdown: Shutdown) {
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            eprintln!("\nshutdown requested — draining in-flight units, please wait…");
+            shutdown.request();
+        }
+    });
+}

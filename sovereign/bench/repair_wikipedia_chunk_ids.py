@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Repair duplicate chunk-ids in the wikipedia corpus index.
 
-Root cause (fixed in corpus-engine/src/index/write.rs): the chunk-id
+Root cause (fixed in ingest/crates/corpus-engine/src/index/write.rs): the chunk-id
 allocator derived new ids from `chunk_count()` (the row count) instead of
 `max(id) + 1`. After delta appends the row count fell below the max id, so
 the next ingest REUSED existing ids. `neighbors(id)` (the citation

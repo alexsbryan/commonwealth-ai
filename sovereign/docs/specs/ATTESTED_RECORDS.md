@@ -88,7 +88,7 @@ implementation detail *inside* these four rules.
 
 ```rust
 /// sha256 of the source document's raw bytes. Minted by the existing
-/// content-addressed asset store (`corpus-engine/src/asset_store/`),
+/// content-addressed asset store (`ingest/crates/corpus-engine/src/asset_store/`),
 /// which already keeps the bytes and an append-only ledger.
 pub struct DocId([u8; 32]);
 
@@ -325,7 +325,7 @@ Nine of the twelve components exist. This spec is mostly consolidation.
 
 | Need | Existing component |
 |---|---|
-| `DocId` + raw-byte retention | `corpus-engine/src/asset_store/` — sha256-addressed, append-only ledger |
+| `DocId` + raw-byte retention | `ingest/crates/corpus-engine/src/asset_store/` — sha256-addressed, append-only ledger |
 | Stratum 1 | `sovereign-core/src/quote_verification.rs` |
 | Stratum 2 (money/percent) | `sovereign-core/src/runtime/numeric_audit.rs` |
 | Stratum 4 | `x_forced_choice` → `forced_choice_probs` |

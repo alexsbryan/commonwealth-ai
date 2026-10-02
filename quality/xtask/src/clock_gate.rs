@@ -270,7 +270,10 @@ mod tests {
 
     #[test]
     fn each_island_is_pointed_at_its_own_decider() {
-        assert!(decider_for("corpus-engine/src/facts_store.rs").starts_with("corpus_engine_yield"));
+        assert!(
+            decider_for("ingest/crates/corpus-engine/src/facts_store.rs")
+                .starts_with("corpus_engine_yield")
+        );
         assert!(decider_for("cmnwlth/crates/commonwealth-api/src/x.rs")
             .starts_with("commonwealth_core"));
         assert!(

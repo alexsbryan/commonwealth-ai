@@ -95,7 +95,7 @@ surface it reuses (cited per §19 — the inventory outranks the plan).
   key + spend cap. One typed struct; the run is reproducible from it.
 - **In:** operator request. **Out:** `ResearchCharter` (serialized into
   the corpus dir — it is provenance for the whole estate).
-- **Class C.** Reuse: recipe shapes (`corpus-engine/src/recipe.rs`) —
+- **Class C.** Reuse: recipe shapes (`ingest/crates/corpus-engine/src/recipe.rs`) —
   a research corpus is a recipe-described corpus like any other.
 
 ### R1 — Director (decomposition and planning)
@@ -183,7 +183,7 @@ surface it reuses (cited per §19 — the inventory outranks the plan).
   dropped (stance item 2).
 - **Reuse:** `WebFetchTool` (`sovereign_tools::web`), `CorpusEngine`
   ingest — `InsertChunk` already carries `url`, `source_doc_id`,
-  `content_hash` (`corpus-engine/src/index/mod.rs`), and corpus-level
+  `content_hash` (`ingest/crates/corpus-engine/src/index/mod.rs`), and corpus-level
   `CorpusProvenance` exists. **New:** the chunk-level custody class —
   small, and a prerequisite for everything frontier-related.
 

@@ -32,7 +32,7 @@ fn ctx() -> ToolContext {
 
 /// The store step — the workflow-ingest write path — must leave the corpus
 /// retrieval-visible: `indexes_built` stamped, exactly as the bespoke
-/// ingest path does (`mark_indexes_built`, corpus-engine/src/engine/
+/// ingest path does (`mark_indexes_built`, ingest/crates/corpus-engine/src/engine/
 /// ingest.rs). `build_indexes: false` is deliberate: a small corpus is
 /// served by flat scan, so the stamp must NOT be hidden inside the build
 /// branch — it is readiness, not a build receipt.

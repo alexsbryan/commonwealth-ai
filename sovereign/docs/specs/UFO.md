@@ -285,7 +285,7 @@ The multi-origin reconciliation primitive ports here — **but to facilities and
 
 **New (build):**
 
-- `sovereign-recipes/uap-blue-book/recipe.toml` + `registry.toml` entry — acquirer (`bulk_download`/`http_api` over NARA + AWS ODR), dual extractor (`described_asset` PDF + `jsonl`/`column_aware` metadata), `[[enrichment.entity_types]]` + `[[relationship_types]]` matching this ERD, one descriptive `threshold` `[[patterns]]`.
+- `ingest/crates/sovereign-recipes/uap-blue-book/recipe.toml` + `registry.toml` entry — acquirer (`bulk_download`/`http_api` over NARA + AWS ODR), dual extractor (`described_asset` PDF + `jsonl`/`column_aware` metadata), `[[enrichment.entity_types]]` + `[[relationship_types]]` matching this ERD, one descriptive `threshold` `[[patterns]]`.
 - Disposition taxonomy + era-aware label map (data file in the recipe dir + small module).
 - Salience ranker — composite scorer feeding tiered promotion; reads `is_fresh` from `freshness.rs`, `is_unidentified` from the adjudication, `is_notable` from a curated list, `in_eval_split` from gold. Lives where `pageview_rank` does.
 - `sovereign-eval/src/disposition_score.rs` — accuracy / macro-F1 / confusion matrix (analog of `entity_resolution_score.rs`).
@@ -295,11 +295,11 @@ The multi-origin reconciliation primitive ports here — **but to facilities and
 
 **Reuse (wire):**
 
-- `corpus-engine/src/asset_store/` (AD-1) — `SOURCE_ASSET` ledger + raw + parsed cache.
+- `ingest/crates/corpus-engine/src/asset_store/` (AD-1) — `SOURCE_ASSET` ledger + raw + parsed cache.
 - Atlas storage `atoms.json` / `asset_atoms.jsonl` / `asset_edges.jsonl` (SCHEMA 2.2) — Entity / Event / Claim / Asset atoms + `Attaches` edges.
-- `corpus-engine/src/enrichment/investigation/` — recipe-declared types → JSON-Schema → grammar → the atoms/edges in this ERD.
+- `ingest/crates/corpus-engine/src/enrichment/investigation/` — recipe-declared types → JSON-Schema → grammar → the atoms/edges in this ERD.
 - `index/` (LanceDB IVF-PQ + Tantivy) — `CHUNK`.
 - `enrichment/tiered.rs` + `sovereign-tools/src/raptor_atlas.rs` — T1/T2/T3.
 - `enrichment/reconciliation/` — `INSTALLATION` / `INVESTIGATING_BODY` merges + oplog.
-- `corpus-engine/src/freshness.rs` — `is_fresh` / fresh-first surfacing.
+- `ingest/crates/corpus-engine/src/freshness.rs` — `is_fresh` / fresh-first surfacing.
 - `sovereign-eval` split + peek-budget harness — TRAIN/TEST discipline.

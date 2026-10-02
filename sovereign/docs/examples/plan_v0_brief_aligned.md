@@ -47,7 +47,7 @@ Replace `inject-notes.sh`** (one canonical injection).
 Critical paths to read before writing:
 - `.claude/hooks/inject-notes.sh` — the seam we're replacing.
 - `crates/sovereign-tools/src/knowledge_view/digest.rs:38-125` — fork target.
-- `corpus-engine/src/git_archaeology.rs` — pattern for the new module's tests + git subprocess idiom.
+- `ingest/crates/corpus-engine/src/git_archaeology.rs` — pattern for the new module's tests + git subprocess idiom.
 
 ## What this removes
 

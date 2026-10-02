@@ -302,7 +302,7 @@ NOT built and its bar is unchanged.
 
 **The crate-graph decision M3 flagged, resolved.** `commonwealth-api`
 takes a DIRECT dep on `corpus-engine-scip`. That is the carve-out's own
-rule, not an exception to it: `corpus-engine/src/lib.rs` states
+rule, not an exception to it: `ingest/crates/corpus-engine/src/lib.rs` states
 "external consumers import directly from `corpus_engine_scip::*`. No
 re-export shim from this crate", precisely so two crates cannot land on
 different versions of one logical type (ARCH §8.3). It is not a

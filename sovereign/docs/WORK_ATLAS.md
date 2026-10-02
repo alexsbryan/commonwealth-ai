@@ -18,12 +18,12 @@ sovereign daemon start
 ```
 (Wait for `sovereign daemon: work-atlas observer wired on <repo>` and `work_atlas: real broadcaster wired (peer fan-out active)` in the logs.)
 
-**On mac-peer:** edit any file in the repo — e.g. touch a comment in `corpus-engine/src/engine/ingest.rs`.
+**On mac-peer:** edit any file in the repo — e.g. touch a comment in `ingest/crates/corpus-engine/src/engine/ingest.rs`.
 
 **On linux-peer**, immediately after:
 ```
 sovereign tools call work_in_flight \
-  --scope=corpus-engine/src/engine/ingest.rs \
+  --scope=ingest/crates/corpus-engine/src/engine/ingest.rs \
   --match_mode=file
 ```
 Expected output: a `claims: []` array and an `observations: [...]` array with one entry, `node_id` = mac-peer's, `confidence` = `active`. Within 30 s of the last edit it's still `active`; within 30 min it drops to `recent`; after that, the observation is no longer surfaced (the record may persist briefly before GC sweeps it).

@@ -31,7 +31,7 @@
 //!
 //! `shared/crates/corpus-index/src/corpus.rs` is exempt: it is where the spelling lives
 //! (the read-port carve moved the decider there at
-//! `REVIEW-build-index-read-port`; `corpus-engine/src/corpus.rs` is a shim).
+//! `REVIEW-build-index-read-port`; `ingest/crates/corpus-engine/src/corpus.rs` is a shim).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -271,7 +271,7 @@ mod tests {
             "sovereign"
         );
         assert_eq!(domain_of("cmnwlth/crates/a/src/x.rs"), "cmnwlth");
-        assert_eq!(domain_of("corpus-engine/src/x.rs"), "corpus-engine");
+        assert_eq!(domain_of("ingest/crates/corpus-engine/src/x.rs"), "ingest");
         assert_eq!(
             domain_of("shared/crates/corpus-engine-scip/src/x.rs"),
             "shared"

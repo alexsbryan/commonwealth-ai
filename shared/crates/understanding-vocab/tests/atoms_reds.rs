@@ -32,7 +32,7 @@
 //! compile under any feature resolution, so a working harness must always
 //! report it failing. If it is ever reported as compiling, this suite is not
 //! evaluating fixtures at all and every other verdict in it is worthless —
-//! the hour recorded in `corpus-engine/tests/evidence_reds.rs` (2026-08-20),
+//! the hour recorded in `ingest/crates/corpus-engine/tests/evidence_reds.rs` (2026-08-20),
 //! when five fixtures reported "expected to fail, but SUCCEEDED" because the
 //! dependency crate itself did not build and nothing in trybuild's output
 //! said so. Validate the instrument before the result (ARCH principle 7).

@@ -710,7 +710,7 @@ def load_vocabulary(path):
     """`(names, note)` from a truth JSON — `(None, note)` when there is none.
 
     The shape is the pre-reg's ("A2. Typed reach ... in the
-    `sovereign-recipes/wessex-hoard/truth.json` shape"): `entities` maps each
+    `ingest/crates/sovereign-recipes/wessex-hoard/truth.json` shape"): `entities` maps each
     declared type to a list of members carrying `name`. A bare JSON list of
     names is read too, because that is the literal of the scorer's own
     `vocabulary: list[str]` parameter.
@@ -758,7 +758,7 @@ def snippet_policy(recipe):
     """Whether the side-by-side may print chunk text, and why.
 
     `[corpus].query_sharing` is the recipe's answer to "may a peer search this
-    and receive cited snippets back?" (`corpus-engine/src/recipe.rs:785-799`),
+    and receive cited snippets back?" (`ingest/crates/corpus-engine/src/recipe.rs:785-799`),
     and the pre-reg hands the renderer that same flag: "when it is false, the
     renderer withholds snippets and says so". `None` there falls back to
     `mesh_sharing`, which is the field's own documented back-compat rule.

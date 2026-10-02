@@ -15,7 +15,7 @@ public Enron organisational record.
 - Bench answer model: a *predicted* clustering of mention-ids →
   cluster-ids; the runner computes B³ + pairwise-F1 against ground
   truth via `sovereign_eval::entity_resolution_score`.
-- Calibrated judge: `corpus-engine/assets/judges/business_entity_v1/`
+- Calibrated judge: `ingest/crates/corpus-engine/assets/judges/business_entity_v1/`
   with the pinned `JUDGE_TEMPERATURE=0.0` / `JUDGE_SEED=0xA705`
   consistent with `sovereign-eval::judge`. Used by Phase 4
   reconciliation when two surface forms hit the

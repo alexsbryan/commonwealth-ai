@@ -16,7 +16,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-4-wire_options_bounded_sample_passes_limit"
 requirement = "GR-4"
-target = "studio/crates/sovereign-recipe-author/src/http_tester.rs"
+target = "ingest/crates/sovereign-recipe-author/src/http_tester.rs"
 find = "    fn wire_options(params: &RecipeTestParams) -> RecipeTestOptions {\n        let validate_only = params.sample_size == 0;\n        RecipeTestOptions {\n            offline: params.offline || validate_only,\n            sample_limit: if validate_only {\n                None\n            } else {\n                Some(params.sample_size as u32)\n            },\n        }\n    }"
 replace = "    fn wire_options(_params: &RecipeTestParams) -> RecipeTestOptions {\n        // Violation of GR-4: Using a constant instead of deriving from retrieved set/params.\n        const FIXED_LIMIT: u32 = 100;\n        RecipeTestOptions {\n            offline: false,\n            sample_limit: Some(FIXED_LIMIT),\n        }\n    }"
 mustFail = ["wire_options_bounded_sample_passes_limit"]
@@ -156,7 +156,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-13-grounding_matches_canonical_exact"
 requirement = "GR-13"
-target = "corpus-engine/src/enrichment/atlas/cross_corpus.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/cross_corpus.rs"
 find = "            GroundingSignal::CanonicalExact {\n                peer,\n                local_form,\n                peer_form,\n            } => {\n                accepted.push(build_edge(\n                    next_edge_ordinal,\n                    input.local_corpus_id,\n                    input.peer_corpus_id,\n                    local,\n                    peer,\n                    \"canonical_exact\",\n                    local_form,\n                    peer_form,\n                    1.0,\n                    Vec::new(),\n                ));\n                next_edge_ordinal += 1;\n            }\n            GroundingSignal::AliasExact {"
 replace = "            GroundingSignal::CanonicalExact {\n                peer,\n                local_form,\n                peer_form,\n            } => {\n                let reason = \"no_location_available\";\n                *rejections_by_reason.entry(reason).or_insert(0) += 1;\n                if sample_rejections.len() < MAX_SAMPLE_REJECTIONS {\n                    sample_rejections.push(RejectionSample {\n                        local_atom_id: local.id.clone(),\n                        peer_atom_id: peer.id.clone(),\n                        local_form,\n                        peer_form,\n                        reason: reason.to_string(),\n                    });\n                }\n            }\n            GroundingSignal::AliasExact {"
 mustFail = ["grounding_matches_canonical_exact"]
@@ -426,7 +426,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-31-discovery_keys_on_declared_authority_not"
 requirement = "GR-31"
-target = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/discovery.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/discovery.rs"
 find = "    let mut out: Vec<(String, SecFactStore)> = Vec::new();\n    for e in entries.flatten() {\n        let corpus_id = e.file_name().to_string_lossy().to_string();\n        if let Some(store) = authoritative_store(index_dir, recipes_dir, &corpus_id) {\n            out.push((corpus_id, store));\n        }\n    }"
 replace = "    let mut out: Vec<(String, SecFactStore)> = Vec::new();\n    for e in entries.flatten() {\n        let corpus_id = e.file_name().to_string_lossy().to_string();\n        // BUG: Discovery now relies on the corpus ID/name rather than declared authority.\n        // This violates GR-31 which requires arming based on registry registration (authority).\n        if corpus_id.starts_with(\"sec-cik\") || corpus_id == \"acme-filings\" {\n             if let Some(store) = authoritative_store(index_dir, recipes_dir, &corpus_id) {\n                out.push((corpus_id, store));\n            }\n        } else if let Some(store) = authoritative_store(index_dir, recipes_dir, &corpus_id) {\n            out.push((corpus_id, store));\n        }\n    }"
 mustFail = ["discovery_keys_on_declared_authority_not_the_corpus_name"]
@@ -466,7 +466,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-34-discovery_keys_on_declared_authority_not"
 requirement = "GR-34"
-target = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/discovery.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/discovery.rs"
 find = "    for e in entries.flatten() {\n        let corpus_id = e.file_name().to_string_lossy().to_string();\n        if let Some(store) = authoritative_store(index_dir, recipes_dir, &corpus_id) {\n            out.push((corpus_id, store));\n        }\n    }"
 replace = "    for e in entries.flatten() {\n        let corpus_id = e.file_name().to_string_lossy().to_string();\n        // MUTATION: Keying on the identifier's spelling (filename) rather than\n        // resolving through declared authority violates GR-34/X-SD-3.\n        // This makes 'sec-cik0000320193' appear as an authoritative store because\n        // it matches a filename pattern or sidecar presence incorrectly assumed to be sufficient,\n        // whereas the test expects only 'acme-filings' which declares sec_facts.\n        if let Some(store) = authoritative_store(index_dir, recipes_dir, &corpus_id) {\n            out.push((corpus_id.clone(), store));\n        }\n    }"
 mustFail = ["discovery_keys_on_declared_authority_not_the_corpus_name"]
@@ -476,7 +476,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-36-card_carries_no_percentage_and_no_tag_ra"
 requirement = "GR-36"
-target = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
 find = "    for l in &card.limits {\n        tracing::debug!(target: \"sec_facts\",\n            limit = ?l.kind, statement = %l.statement,\n            \"sec_facts: card limit \u2014 derived from store.coverage/as_of\");\n    }"
 replace = "    for l in &card.limits {\n        tracing::debug!(target: \"sec_facts\",\n            limit = ?l.kind, severity = \"warning\", statement = %l.statement,\n            \"sec_facts: card limit \u2014 derived from store.coverage/as_of\");\n    }"
 mustFail = ["card_carries_no_percentage_and_no_tag_ratio"]
@@ -486,7 +486,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-36-limits_are_facts_with_no_severity_and_no"
 requirement = "GR-36"
-target = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
 find = "pub fn coverage_card(store: &SecFactStore) -> CoverageCard {\n    let answers: Vec<AnsweredConcept> = store\n        .concepts\n        .iter()\n        .filter(|(_, cf)| !cf.facts.is_empty())\n        .map(|(id, cf)| {\n            let fiscal_years = concept_fiscal_years(cf);\n            AnsweredConcept {\n                id: id.clone(),\n                label: cf.label.clone(),\n                kind: cf.kind,\n                period_label: fy_span(&fiscal_years),\n                fiscal_years,\n            }\n        })\n        .collect();"
 replace = "pub fn coverage_card(store: &SecFactStore) -> CoverageCard {\n    // MUTATION: Inject severity into limits to violate GR-36\n    let answers: Vec<AnsweredConcept> = store\n        .concepts\n        .iter()\n        .filter(|(_, cf)| !cf.facts.is_empty())\n        .map(|(id, cf)| {\n            let fiscal_years = concept_fiscal_years(cf);\n            AnsweredConcept {\n                id: id.clone(),\n                label: cf.label.clone(),\n                kind: cf.kind,\n                period_label: fy_span(&fiscal_years),\n                fiscal_years,\n            }\n        })\n        .collect();\n    // Mutate limits to include severity field which should be absent per GR-36\n    let mut card_limits = coverage_limits(store);\n    for limit in &mut card_limits {\n        if !limit.statement.contains(\"severity\") {\n             limit.statement.push_str(\" [severity: high]\");\n        }\n    }"
 mustFail = ["limits_are_facts_with_no_severity_and_no_apology"]
@@ -496,7 +496,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-37-a_second_corpus_gets_a_truthful_card_wit"
 requirement = "GR-37"
-target = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
 find = "    let card = CoverageCard {\n        entity: store.entity.clone(),\n        ticker: store.ticker.clone(),\n        cik: store.cik.clone(),\n        period_label: fy_span(&all_years),\n        answers,\n        limits: coverage_limits(store),\n        as_of: store.as_of.clone(),\n    };"
 replace = "    let card = CoverageCard {\n        entity: \"Apple\".to_string(),\n        ticker: \"AAPL\".to_string(),\n        cik: \"0000320193\".to_string(),\n        period_label: fy_span(&all_years),\n        answers,\n        limits: coverage_limits(store),\n        as_of: store.as_of.clone(),\n    };"
 mustFail = ["a_second_corpus_gets_a_truthful_card_with_no_new_copy"]
@@ -576,7 +576,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-50-attribution_slug_round_trips"
 requirement = "GR-50"
-target = "corpus-engine/src/chunkers/threaded_turns.rs"
+target = "ingest/crates/corpus-engine/src/chunkers/threaded_turns.rs"
 find = "    pub fn slug(self) -> &'static str {\n        match self {\n            TurnAuthor::User => \"user\",\n            TurnAuthor::Assistant => \"assistant\",\n            TurnAuthor::Unattributed => \"unattributed\",\n            TurnAuthor::Pasted => \"pasted\",\n        }\n    }"
 replace = "    pub fn slug(self) -> &'static str {\n        match self {\n            TurnAuthor::User => \"USER\",\n            TurnAuthor::Assistant => \"ASSISTANT\",\n            TurnAuthor::Unattributed => \"UNATTRIBUTED\",\n            TurnAuthor::Pasted => \"PASTED\",\n        }\n    }"
 mustFail = ["attribution_slug_round_trips"]

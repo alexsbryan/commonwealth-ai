@@ -490,7 +490,7 @@ Run and curate corpus ingestion recipes.
 | `test <path>` | Run the full test harness against a recipe file. Flags: `--sample-size N`, `--output <path>`, `--params k=v[,...]`, `--params-file <json>` |
 | `validate <path>` | Validate recipe fields without downloading data. `--offline` skips registry fetch |
 | `publish <path>` | Add a recipe to `~/.svrnmesh/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
-| `new --ontology <name> [--id <corpus-id>] [--out <path>]` | Scaffold a complete recipe from a built-in ontology-v1 template; `--ontology list` prints the names (they come from the engine's template registry, `corpus-engine/src/recipe_templates.rs`, not from this page). Stdout unless `--out`; never overwrites |
+| `new --ontology <name> [--id <corpus-id>] [--out <path>]` | Scaffold a complete recipe from a built-in ontology-v1 template; `--ontology list` prints the names (they come from the engine's template registry, `ingest/crates/corpus-engine/src/recipe_templates.rs`, not from this page). Stdout unless `--out`; never overwrites |
 | `migrate <path> --ontology-version N [--dry-run]` | Add or raise the `version = N` line under `[enrichment.ontology]` and change nothing else; `--dry-run` prints the diff instead of writing |
 
 ### `svrn pipeline`
@@ -641,7 +641,7 @@ Output is plain text by default, shaped for LLM consumption (fenced code blocks,
 
 Terminal mirror of the desktop chat flow. Streams through the same `Runtime::handle_message_stream` path the Tauri app uses — same intent classification, same multi-source retrieval (conversation-history + folder corpora + `sep` + web), same conversation persistence — so a flailing chat case in the GUI can be reproduced and diagnosed at the command line. Talks to the daemon over HTTP (no in-process model load).
 
-Code corpora (`sovereign`, `commonwealth-ai`, `corpus-engine`, …) are filtered out of chat retrieval by default — they're served by the dedicated MCP code-intelligence tools. See `CorpusKind` in `corpus-engine/src/types.rs` for the classification.
+Code corpora (`sovereign`, `commonwealth-ai`, `corpus-engine`, …) are filtered out of chat retrieval by default — they're served by the dedicated MCP code-intelligence tools. See `CorpusKind` in `ingest/crates/corpus-engine/src/types.rs` for the classification.
 
 | Subcommand | Description |
 |---|---|
@@ -709,7 +709,7 @@ The same engine is exposed to agents as the `solve` / `solve_status` / `solve_ca
 
 Build, query, and audit v2 atlas enrichments of a corpus. Writes state under `~/.svrnmesh/enrichment/<corpus>/` (phase caches + run outputs) and `~/.svrnmesh/indexes/<corpus>/atlas/` (resolved atoms + edges + trajectories + configurations + schema-validation + cross-corpus edges).
 
-The full architecture — seven atom types, seven edge types, deterministic resolver, LLM-driven Phase 8 configurations, cross-corpus bridges, §12 schema-revision protocol — lives in [`corpus-engine/ENRICHMENT_V2.md`](../../corpus-engine/ENRICHMENT_V2.md). This section documents only the command-line surface.
+The full architecture — seven atom types, seven edge types, deterministic resolver, LLM-driven Phase 8 configurations, cross-corpus bridges, §12 schema-revision protocol — lives in [`ingest/crates/corpus-engine/ENRICHMENT_V2.md`](../../ingest/crates/corpus-engine/ENRICHMENT_V2.md). This section documents only the command-line surface.
 
 #### Primary flow
 

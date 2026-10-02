@@ -18,7 +18,7 @@
 #   3. enrich init          — the ontology reaches the enrichment config
 #   4. enrich build --full  — a live model extracts, resolves and backfills
 #   5. atoms.json           — THE PAYLOAD, scored against
-#                             sovereign-recipes/wessex-hoard/truth.json: every
+#                             ingest/crates/sovereign-recipes/wessex-hoard/truth.json: every
 #                             catalogued coin present under its declared
 #                             identity key, the enumeration probe's count over
 #                             the declared family, every named mint and ruler,

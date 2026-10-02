@@ -23,7 +23,7 @@ case where the user asks "what did I discuss with the CFO about runway
 in Q3", "how has my view on X shifted", "have I ever talked about Y".
 Corresponds to the `conversations-anthropic` recipe; questions are
 authored against the user's own claude.ai export (local-only, never
-published — see `sovereign-recipes/conversations-anthropic/README.md`).
+published — see `ingest/crates/sovereign-recipes/conversations-anthropic/README.md`).
 
 ## Privacy contract
 
@@ -52,7 +52,7 @@ ln -sf ~/Downloads/data-*/conversations.json \
        ~/.svrnmesh/conversations/conversations.json
 
 # 2. Install + ingest (recipe has obsidian_atlas enrichment enabled)
-sovereign recipe install sovereign-recipes/conversations-anthropic
+sovereign recipe install ingest/crates/sovereign-recipes/conversations-anthropic
 sovereign corpus install conversations-anthropic
 # Wait for enrichment to complete (LLM extraction over every conv).
 
@@ -64,7 +64,7 @@ sovereign corpus scrub conversations-anthropic --min-salience 0.3
 # 4. (Manual review) Curate candidates into entity-map.json. The
 #    candidates file is the input; entity-map.json is the curated
 #    output that survives into apply mode. EntityMap JSON shape is
-#    documented at corpus-engine/src/pii.rs.
+#    documented at ingest/crates/corpus-engine/src/pii.rs.
 
 # 5. Sanitize this bench file against your curated map
 sovereign corpus scrub --apply-to sovereign/bench/conversation/questions.toml \
@@ -90,7 +90,7 @@ sovereign bench all --filter conversation/questions --synth
 ## Attribution-aware question classes
 
 Conversation chunks carry per-span authorship (see
-`corpus-engine/src/chunkers/threaded_turns.rs::AttributedChunk`). Three
+`ingest/crates/corpus-engine/src/chunkers/threaded_turns.rs::AttributedChunk`). Three
 attribution modes are valid for any archetype above:
 
 - **user** — retrieval restricted to spans the user authored

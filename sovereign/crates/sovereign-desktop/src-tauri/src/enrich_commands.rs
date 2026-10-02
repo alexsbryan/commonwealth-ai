@@ -16,7 +16,7 @@
 //!   - `install_starter_corpus` — `POST /internal/corpus/install` for the
 //!     bundled `federalist-starter` recipe, then wait for the catalog to
 //!     say `installed`. The HF repo, filename and sha256 live in
-//!     `sovereign-recipes/federalist-starter/recipe.toml`'s `[prebuilt]`
+//!     `ingest/crates/sovereign-recipes/federalist-starter/recipe.toml`'s `[prebuilt]`
 //!     block — ONE copy, restored by `CorpusEngine::try_restore_prebuilt`
 //!     like every other prebuilt corpus, instead of a second restore path
 //!     in this process with the same three constants.
@@ -65,7 +65,7 @@ pub struct StarterInstallResult {
 }
 
 /// The bundled starter recipe's `[corpus] id`
-/// (`sovereign-recipes/federalist-starter/recipe.toml`, registered
+/// (`ingest/crates/sovereign-recipes/federalist-starter/recipe.toml`, registered
 /// `catalog_status = "hidden"` so it is not a row in Settings → Knowledge).
 const STARTER_ID: &str = "federalist-starter";
 /// How long a first-run install may take before this command gives up

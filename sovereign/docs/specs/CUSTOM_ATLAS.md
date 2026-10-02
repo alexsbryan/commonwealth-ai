@@ -106,7 +106,7 @@ Precedence when resolving the pipeline: `[enrichment.ontology].guidance` present
 ## Increments
 
 - **CA1** — recipe schema: `OntologyConfig` + `[enrichment.ontology]` on
-  `EnrichmentConfig` (`corpus-engine/src/recipe.rs`); `Recipe::custom_ontology()` accessor;
+  `EnrichmentConfig` (`ingest/crates/corpus-engine/src/recipe.rs`); `Recipe::custom_ontology()` accessor;
   `produces_enriched_atoms()` already true for `type="atlas"`. Tests parse.
 - **CA2** — `CustomAtlasSpec` + `ConfigurableAtlasPipeline` (corpus-engine) mirroring
   `literary_atlas` Phase-1, delegating the rest. Unit tests (phase1_system contains
@@ -142,7 +142,7 @@ the Phase-1 response schema and the `## Declared types` prompt block, and drive
 a `ParsePolicy` that keeps declared `Other` types, validates attributes by
 family, enforces `voices`, and takes a claim's discourse act from its declared
 `force`. See `ONTOLOGY_PRIMITIVES.md` (the declaration language),
-`ONTOLOGY_MIGRATION.md` (the phase plan) and `corpus-engine/ENRICHMENT.md`
+`ONTOLOGY_MIGRATION.md` (the phase plan) and `ingest/crates/corpus-engine/ENRICHMENT.md`
 §"Custom ontology (version 1)".
 
 ## Verification

@@ -93,10 +93,10 @@ vector = true
 ```
 
 Two files change: `sovereign-recipes/<id>/recipe.toml`, and a matching
-`[[recipes]]` entry in `sovereign-recipes/registry.toml` — the canonical catalog
+`[[recipes]]` entry in `ingest/crates/sovereign-recipes/registry.toml` — the canonical catalog
 that `corpus-engine` vendors at build time. Start by copying the closest
-existing recipe; [`GETTING_STARTED.md`](./sovereign-recipes/GETTING_STARTED.md)
-walks the first one, and [`SCHEMA.md`](./sovereign-recipes/SCHEMA.md) is the
+existing recipe; [`GETTING_STARTED.md`](./ingest/crates/sovereign-recipes/GETTING_STARTED.md)
+walks the first one, and [`SCHEMA.md`](./ingest/crates/sovereign-recipes/SCHEMA.md) is the
 field reference — it's generated from the code and test-gated, so it can't drift
 from what the loader accepts.
 

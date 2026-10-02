@@ -43,7 +43,7 @@ or a `corpus status <id>` showing `ready`.
 
 ## How it works
 
-Corpora are defined as recipes in `sovereign-recipes/registry.toml`. The corpus manager downloads source files (Parquet, XML, JSONL), parses them with streaming parsers (never loading full corpora into memory), and indexes chunks via SQLite FTS5 full-text search.
+Corpora are defined as recipes in `ingest/crates/sovereign-recipes/registry.toml`. The corpus manager downloads source files (Parquet, XML, JSONL), parses them with streaming parsers (never loading full corpora into memory), and indexes chunks via SQLite FTS5 full-text search.
 
 Every query — regardless of how the router classifies it — searches the local knowledge base. Results are injected as context before the model generates a response. Provenance metadata records which corpora were consulted and how many chunks matched.
 

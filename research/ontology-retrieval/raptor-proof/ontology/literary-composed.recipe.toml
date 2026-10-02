@@ -3,7 +3,7 @@
 # file, same [chunk] and [index], a NEW corpus id so both atlases can coexist.
 #
 # Why: the built-in `literary_atlas` gives Summary atoms to `thematic` questions only
-# (corpus-engine/src/enrichment/pipeline/pipelines/ontologies/literary_atlas.toml:52-88:
+# (ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/ontologies/literary_atlas.toml:52-88:
 # `tension` has summary_sources = [], `trajectory` has none), so plot-arc and
 # character-change essay questions never received a summary. Here every row an essay
 # question can land on seeds `Summary` and composes both summary sources.

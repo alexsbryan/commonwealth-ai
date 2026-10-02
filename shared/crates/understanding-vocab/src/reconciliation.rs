@@ -83,7 +83,7 @@ pub struct ReconciliationPolicy {
     #[serde(default = "default_cross_origin_required_signals")]
     pub cross_origin_required_signals: u8,
     /// When `true`, the policy escalates uncertain candidates to the
-    /// calibrated judge (`corpus-engine/assets/judges/business_entity_v1/`).
+    /// calibrated judge (`ingest/crates/corpus-engine/assets/judges/business_entity_v1/`).
     /// The judge is owned by the runner — this primitive captures the
     /// outcome via `judge_callback`.
     #[serde(default = "default_true")]

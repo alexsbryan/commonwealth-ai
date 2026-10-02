@@ -69,7 +69,7 @@
 //!
 //! [`Idempotency::Idempotent`] is declared because the merge step dedupes:
 //! `merge_shards` keys on `content_hash` and on `(unit_id, source_doc_id)`
-//! (`corpus-engine/src/sharding.rs:780-784`), which is exactly why the
+//! (`ingest/crates/corpus-engine/src/sharding.rs:780-784`), which is exactly why the
 //! `unit_id` is threaded through `ingest_with_overrides` at all. Two donors
 //! that both ran one unit after a lease lapse cost disk and time; they do not
 //! corrupt the merged corpus.
@@ -335,7 +335,7 @@ impl IngestExecutor {
                 // `chunks_created` is NOT this unit's delta and must not be
                 // published as one. `ingest_inner` seeds its counter from
                 // `index.chunk_count()` before it writes anything
-                // (`corpus-engine/src/engine/ingest.rs:989`), so on the second
+                // (`ingest/crates/corpus-engine/src/engine/ingest.rs:989`), so on the second
                 // unit into one partition it is the partition's running total
                 // — measured here as 813 after a unit that added 391. Every
                 // unit on a node shares one `partition_path`, so this is the
@@ -500,7 +500,7 @@ impl IngestExecutor {
             ],
             // Not a promise about somebody else's command — a fact about this
             // one. `merge_shards` dedupes on `content_hash` and on
-            // `(unit_id, source_doc_id)` (`corpus-engine/src/sharding.rs:780`),
+            // `(unit_id, source_doc_id)` (`ingest/crates/corpus-engine/src/sharding.rs:780`),
             // which is the entire reason `unit_id` is threaded through
             // `ingest_with_overrides`. Re-running a unit after a lapsed lease
             // costs disk and time; it does not double a chunk.

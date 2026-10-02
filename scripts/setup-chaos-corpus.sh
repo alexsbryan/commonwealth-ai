@@ -8,7 +8,7 @@
 # corpus_id from the *path hash* (→ a per-machine `watched-<hash>` id), which
 # made the CI gate non-reproducible. A recipe pins `[corpus].id`, so every box
 # gets the same `chaos-secret-agent` id. The canonical recipe is committed at
-# sovereign-recipes/chaos-secret-agent/recipe.toml; this script mirrors it into
+# ingest/crates/sovereign-recipes/chaos-secret-agent/recipe.toml; this script mirrors it into
 # the daemon's live override dir (~/.svrnmesh/recipes/) with a $HOME-correct
 # source path, so the *running* daemon resolves it (registry resolution step 1)
 # without a rebuild or restart.

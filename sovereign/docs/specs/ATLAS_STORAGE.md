@@ -358,8 +358,8 @@ online-delta scale demands it; reuse the `corpus-engine-scip` lean-read pattern.
 
 ## Critical files
 
-- Data model + write: `corpus-engine/src/enrichment/atlas/atoms.rs`, the atlas
-  pipeline persist, `corpus-engine/src/snapshot.rs` (bundle), `recipe.rs`
+- Data model + write: `ingest/crates/corpus-engine/src/enrichment/atlas/atoms.rs`, the atlas
+  pipeline persist, `ingest/crates/corpus-engine/src/snapshot.rs` (bundle), `recipe.rs`
   (`declared_artifact_rel_path → atlas/atoms.json`).
 - Read/parse (the 38s): `sovereign-core/src/atlas_context.rs:74`
   (`AtlasGraph::load_from_disk`), `:49` (`AtlasGraph` struct), `graph()` +

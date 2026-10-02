@@ -20,7 +20,7 @@ extracts the typed atom graph (entities, relations, events, claims) and reconcil
 identities.
 
 1. **Author the recipe.** Start from an existing one (e.g.
-   `sovereign-recipes/enron-sample-multi-wide/recipe.toml`) and adapt it. The key
+   `ingest/crates/sovereign-recipes/enron-sample-multi-wide/recipe.toml`) and adapt it. The key
    sections:
 
    ```toml
@@ -167,7 +167,7 @@ dependency-free ES modules). You almost never write DOM — you compose componen
 
 9. **Submit to the curated registry** so others get it (and one-click data):
    upload the tar to a URL / HuggingFace, then add the `[[apps]]` entry that
-   `publish` printed to `sovereign-recipes/meshapp-registry.toml` via a PR. Being
+   `publish` printed to `ingest/crates/sovereign-recipes/meshapp-registry.toml` via a PR. Being
    in that reviewed file is what marks an app **curated**.
 
 ### Trust & the security model

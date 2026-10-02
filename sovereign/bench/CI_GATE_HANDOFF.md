@@ -11,7 +11,7 @@ Drive the `sovereign bench gate` CI suite to a **full baseline on the corrected 
 
 - **CI gate infra** (`sovereign bench gate <lane>` + `bench_cmd/{gate,lane_baseline,baselines}.rs`): baseline-relative gate for 6 lanes — `chaos-monkey`, `mechanism-fidelity`, `multiturn`, `search-gym`, `knowledge-gym`, `agent-coding`. Self-describing metric/direction/tolerance primitive; reads each lane's artifact, diffs vs `sovereign/bench/<group>/baselines/<id>/latest.json`, exits 0/1 (first-run passes).
 - **CI suite** `scripts/sovereign-ci-bench.sh`: HARD deterministic lanes + SOFT synth + the 6 absolute-verdict lanes as TRACKED-run + HARD-`*-gate`. Gym lanes 8-10 wired (sample hardest fixtures). The flywheel lane 7 is opt-in (peer's).
-- **Stable chaos corpus**: `sovereign-recipes/chaos-secret-agent/recipe.toml` → fixed corpus_id (was a path-hash `corpus watch`). `scripts/setup-chaos-corpus.sh` installs it.
+- **Stable chaos corpus**: `ingest/crates/sovereign-recipes/chaos-secret-agent/recipe.toml` → fixed corpus_id (was a path-hash `corpus watch`). `scripts/setup-chaos-corpus.sh` installs it.
 - **chaos v2**: 4 provenance_trap + 3 distractor questions in `chaos_monkey/secret_agent.toml`; gate surfaces `citation_fidelity` + `distractor_evasion` (guarded `.is_finite()`).
 
 ### THREE production P0s found + fixed this session (all via the new coverage)

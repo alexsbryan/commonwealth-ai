@@ -416,7 +416,7 @@ The atoms are computed but not **persisted**. Follow the loop:
    composition. (General; effect `Write`.)
 2. **Full fidelity to the real `enrich extract`** — make the composed atoms match
    what the downstream phases consume. The real Phase 1 is
-   `corpus-engine/src/enrichment/pipeline/runner.rs:673 phase_1_extract_questions`
+   `ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs:673 phase_1_extract_questions`
    (corpus-free: `&[ChapterInput]` → atoms via injected `embed`/`chat`); it writes
    `cache/questions.json` (`Phase1Output`, keyed by chapter id, with anchors); the
    domain prompt + few-shot exemplars come from the `Pipeline` trait
@@ -496,5 +496,5 @@ pipeline needs it.
 | `ResourceNeed::Inference` type | `shared/crates/oicp-types/src/lib.rs:389` (`InferenceRequirements`) |
 | Durable worklist | `sovereign-pipeline/src/worklist.rs:48,122` + `driver.rs:105` |
 | Bucketed retry / adaptive | `sovereign-pipeline/src/classifier.rs`, `adaptive.rs:80` |
-| Content-addressed store | `corpus-engine/src/asset_store/` |
-| Existing stage traits | `corpus-engine/src/{extractors,chunkers,acquirers}/mod.rs` |
+| Content-addressed store | `ingest/crates/corpus-engine/src/asset_store/` |
+| Existing stage traits | `ingest/crates/corpus-engine/src/{extractors,chunkers,acquirers}/mod.rs` |

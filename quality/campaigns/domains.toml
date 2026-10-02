@@ -73,7 +73,7 @@ check     = "python3 scripts/domains-census.py predicate && cargo xtask boundary
 #   26 OUTSIDE — sovereign-mesh 11, sovereign-api 5, sovereign-contracts 3,
 #      sovereign-tools 2, desktop 1, cli-llm 1, oicp-types 1, kernel-types 1,
 #      corpus-engine 1
-#   Atom* pub definitions: 10 inside corpus-engine/src/enrichment/, 13 outside
+#   Atom* pub definitions: 10 inside ingest/crates/corpus-engine/src/enrichment/, 13 outside
 #      (sovereign-mesh 6, sovereign-tools 5, sovereign-turn-client 1,
 #      corpus-engine/atlas_traversal 1); `AtomSpan` is defined twice.
 #   sovereign-mesh: 88,255 lines (DOMAINS.md §3 said 82,241 on 09-11; +6,014
@@ -94,7 +94,7 @@ check     = "python3 scripts/domains-census.py predicate && cargo xtask boundary
 #      vocab's AtomsFile (17) or serde_json::Value (3). The Atom* count as
 #      DOMAINS §8 row 2 states it would read GREEN today on a tree where
 #      corpus-mcp/src/tools.rs:873 hand-rolls the reader because the door,
-#      read_atlas_atoms, is at corpus-engine/src/enrichment/atlas/writer.rs:595
+#      read_atlas_atoms, is at ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:595
 #      and not in vocab. Nine sites outside the context bypass it. Six of the
 #      seven sibling atlas files have a write_atlas_* and no reader at all.
 #

@@ -564,7 +564,7 @@ fn diag_matches_path(diag_file: &str, query_path: &Path, workspace_root: Option<
         }
     }
     // Suffix fallback — handles edge cases like cargo emitting
-    // `corpus-engine/src/recipe.rs` without a leading
+    // `ingest/crates/corpus-engine/src/recipe.rs` without a leading
     // `commonwealth-ai/`.
     query_path.to_string_lossy().ends_with(diag_file)
 }
@@ -678,9 +678,10 @@ mod tests {
     fn diag_matches_path_suffix_fallback() {
         // Crate-name-prefixed diagnostic when the canonical workspace
         // join doesn't resolve. Suffix-match is the safety net.
-        let query = PathBuf::from("/tmp/some/synthetic/path/corpus-engine/src/recipe.rs");
+        let query =
+            PathBuf::from("/tmp/some/synthetic/path/ingest/crates/corpus-engine/src/recipe.rs");
         assert!(diag_matches_path(
-            "corpus-engine/src/recipe.rs",
+            "ingest/crates/corpus-engine/src/recipe.rs",
             &query,
             None
         ));

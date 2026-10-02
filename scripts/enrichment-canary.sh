@@ -50,7 +50,7 @@ set -uo pipefail
 CORPUS_ID="brothers_karamazov"
 BENCH_FILTER="literary/bk-book-1"
 BASELINE="sovereign/bench/literary/baselines/bk-book-1/latest.json"
-RESOLUTION_RS="corpus-engine/src/enrichment/atlas/resolution.rs"
+RESOLUTION_RS="ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs"
 CANARY_TARGET="target/canary"
 ORIGINAL="0.85"
 PERTURBED="0.35"

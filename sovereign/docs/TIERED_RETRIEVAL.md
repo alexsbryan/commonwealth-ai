@@ -164,7 +164,7 @@ Existing `inference.embed_batch` loop in `document_asset.rs::ingest`
 > distinctiveness + raw NER). The hybrid retrieval scorer
 > (`0.6·cosine + 0.4·jaccard`, MMR, `topic_context`) in
 > `runtime/retrieval/history.rs` is **default-on** since this landing. See
-> [`../../corpus-engine/ENRICHMENT.md`](../../corpus-engine/ENRICHMENT.md)
+> [`ingest/crates/corpus-engine/ENRICHMENT.md`](../../ingest/crates/corpus-engine/ENRICHMENT.md)
 > for how this fits the three-system picture.
 
 ### T3 — RAPTOR atlas + motifs + segments + overview

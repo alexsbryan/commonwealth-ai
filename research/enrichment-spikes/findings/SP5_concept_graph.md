@@ -24,7 +24,7 @@ swap trivial.
 
 ## Method actually run
 
-Harness: `corpus-engine/examples/concept_graph_probe.rs` (committed; leiden-rs
+Harness: `ingest/crates/corpus-engine/examples/concept_graph_probe.rs` (committed; leiden-rs
 added to corpus-engine dev-dependencies only — no production code touched).
 Fixture: 10,000 CONTIGUOUS chunks (337 whole articles) from
 `~/.svrnmesh/indexes/wikipedia/chunks.lance`, offset 500000

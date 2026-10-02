@@ -1084,7 +1084,7 @@ async fn pull_loop(
         // lease is gone is a 410 on heartbeat — and a partition is exactly the
         // case where no 410 can reach us, while the coordinator's reaper
         // requeues and another peer takes the unit. Merge dedupes by unit_id
-        // (`corpus-engine/src/sharding.rs:780`), so working a stale lease
+        // (`ingest/crates/corpus-engine/src/sharding.rs:780`), so working a stale lease
         // corrupts nothing; it burns one full ingest and its disk. Cheap to
         // refuse, so refuse.
         if !payload.is_live_at(now_ms()) {

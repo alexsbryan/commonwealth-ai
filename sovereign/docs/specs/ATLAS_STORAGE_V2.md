@@ -92,7 +92,7 @@ single store — it wants a catalog + a bridge, not a merge.
 
 ## Phase 0 results (2026-06-27) — `atoms.lance` spike, CONFIRMED
 
-Built `corpus-engine/examples/atoms_lance_proto.rs` and converted the **real**
+Built `ingest/crates/corpus-engine/examples/atoms_lance_proto.rs` and converted the **real**
 wikipedia `atoms.json` (723 MB, 1,671,594 atoms) to a columnar `atoms.lance`
 (representative scalar/text columns; no embedding column — wikipedia has no atom
 vectors). Release, fresh reader process for clean RSS:
@@ -457,9 +457,9 @@ gated after Stage 1, but scope it as the larger of the two.
   `sovereign-core/src/atlas_context.rs` (reader),
   `runtime/retrieval/atlas_grounding.rs` (consumers; `runtime/retrieval.rs`
   was later split into the `runtime/retrieval/` directory).
-- Federation: `corpus-engine/src/meta_atlas/{builder.rs,index.rs,bridge/}`,
+- Federation: `ingest/crates/corpus-engine/src/meta_atlas/{builder.rs,index.rs,bridge/}`,
   `cross_corpus.rs`.
-- Distribution: `corpus-engine/src/snapshot.rs` (`SnapshotManifest`,
+- Distribution: `ingest/crates/corpus-engine/src/snapshot.rs` (`SnapshotManifest`,
   `bundled_corpora`), `snapshot_restore.rs` (compat gate),
   `engine/ingest_prebuilt.rs`, `acquirers/bulk_download.rs`.
 - Embedding cache to retire: `atlas/atoms.embeddings.bin` +

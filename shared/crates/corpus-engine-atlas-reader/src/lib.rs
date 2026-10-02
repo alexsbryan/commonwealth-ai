@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The resolved-atlas READ surface, carved read-only out of
-//! `corpus-engine/src/enrichment/atlas` (FIVE_PROGRAMS §12 decision 1).
+//! `ingest/crates/corpus-engine/src/enrichment/atlas` (FIVE_PROGRAMS §12 decision 1).
 //!
 //! The atlas is WRITTEN by the ingest program's enrichment pipeline and READ
 //! by svrn (grounding, `svrn code`), cmnwlth (mesh status) and the MCP

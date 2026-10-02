@@ -18,8 +18,8 @@
 //!
 //! The corpus-engine side (domain implementations, custom-acquirer
 //! registry, `AcquirerConfig::Custom`) lives in
-//! `corpus-engine/src/enrichment/domains/{personal,conversational,
-//! institutional}.rs` and `corpus-engine/src/recipe.rs`.
+//! `ingest/crates/corpus-engine/src/enrichment/domains/{personal,conversational,
+//! institutional}.rs` and `ingest/crates/corpus-engine/src/recipe.rs`.
 
 pub mod acquirers;
 pub mod atlas_digest;

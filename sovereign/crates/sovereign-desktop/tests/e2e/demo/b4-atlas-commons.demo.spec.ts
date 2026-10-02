@@ -8,7 +8,7 @@
 //
 // ── Which enrichment system this beat films ──
 //
-// Canonical map: `corpus-engine/ENRICHMENT.md`. "Enrichment" denotes
+// Canonical map: `ingest/crates/corpus-engine/ENRICHMENT.md`. "Enrichment" denotes
 // FOUR systems, selected per-corpus by `[enrichment] type`. Two of them
 // both answer to the word "atlas", and that collision is what an earlier
 // version of this beat died on (ENRICHMENT.md §"The 'atlas' name

@@ -123,14 +123,14 @@ ENV CMAKE_HIP_COMPILER_LAUNCHER=sccache
 
 # Build context = commonwealth-ai/ workspace root. Post-monorepo (May
 # 2026) the single workspace Cargo.toml + Cargo.lock live here; each
-# of corpus-engine/, shared/crates/oicp-types/, cmnwlth/, sovereign/ contains
+# of ingest/crates/corpus-engine/, shared/crates/oicp-types/, cmnwlth/, sovereign/ contains
 # workspace-member crates referenced by path from the root manifest.
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY cmnwlth/        ./cmnwlth/
-COPY corpus-engine/       ./corpus-engine/
+COPY ingest/crates/corpus-engine/       ./ingest/crates/corpus-engine/
 # The corpus-engine decomposition (DECOMPOSITION.md) split these out of
-# corpus-engine/ into sibling top-level crates. They are workspace members
+# ingest/crates/corpus-engine/ into sibling top-level crates. They are workspace members
 # named by the root manifest, so cargo fails to load the workspace without
 # them — this is not an optional trim.
 COPY shared/crates/corpus-engine-scip/        ./shared/crates/corpus-engine-scip/
@@ -160,7 +160,7 @@ COPY vendor/              ./vendor/
 # gyms lived under sovereign-recipes/; those moved to sovereign/bench in
 # the recipes single-source-of-truth refactor, so the subset is now both
 # unnecessary and insufficient. Matches Containerfile.cuda.
-COPY sovereign-recipes/      ./sovereign-recipes/
+COPY ingest/crates/sovereign-recipes/      ./ingest/crates/sovereign-recipes/
 # Only copy the parts of sovereign/ that cargo actually needs. Skipping
 # container/, scripts/, docs/, bench/, etc. means edits to those don't
 # invalidate the cargo-build layer (which is the slow one). Workspace

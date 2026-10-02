@@ -16,7 +16,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-1-atlas_resolve_synthesis_resolves_later_m"
 requirement = "CI-1"
-target = "corpus-engine/src/enrichment/atlas/resolution.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs"
 find = "    let token_index = build_token_index(&entity_result.entities);\n    let event_result =\n        resolve_events(sections, embed_fn, &entity_result.name_index, &token_index).await?;"
 replace = "    // MUTATION: Remove the fuzzy match index to break synthesis resolution\n    let _token_index = build_token_index(&entity_result.entities);\n    let event_result =\n        resolve_events(sections, embed_fn, &entity_result.name_index, None).await?;"
 mustFail = ["atlas_resolve_synthesis_resolves_later_mentions_via_fuzzy_match"]
@@ -26,7 +26,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-2-find_question_by_text_matches"
 requirement = "CI-2"
-target = "corpus-engine/src/enrichment/skeleton.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/skeleton.rs"
 find = "    pub fn find_question_by_text(&self, topic: &str) -> Option<&CanonicalQuestion> {\n        // Simple text matching \u2014 for embedding-based search, use LanceDB.\n        let topic_lower = topic.to_lowercase();\n        self.canonical_questions\n            .iter()\n            .find(|q| q.question.to_lowercase().contains(&topic_lower))\n    }"
 replace = "    pub fn find_question_by_text(&self, topic: &str) -> Option<&CanonicalQuestion> {\n        // Simple text matching \u2014 for embedding-based search, use LanceDB.\n        let topic_lower = topic.to_lowercase();\n        self.canonical_questions\n            .iter()\n            .find(|q| q.question.contains(topic))\n    }"
 mustFail = ["find_question_by_text_matches"]
@@ -86,7 +86,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-8-single_shard_merge_refuses_when_output_e"
 requirement = "CI-8"
-target = "corpus-engine/src/sharding.rs"
+target = "ingest/crates/corpus-engine/src/sharding.rs"
 find = "    if crate::corpus::Corpus::meta_in(&output).exists() {\n        return Err(Error::Database(format!(\n            \"promote_single_shard: refusing to overwrite existing canonical at {}\",\n            output.display()\n        )));\n    }"
 replace = ""
 mustFail = ["single_shard_merge_refuses_when_output_exists"]
@@ -206,7 +206,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-17-deterministic_ordering_across_runs"
 requirement = "CI-17"
-target = "corpus-engine/src/meta_atlas/builder.rs"
+target = "ingest/crates/corpus-engine/src/meta_atlas/builder.rs"
 find = "    let mut atoms: Vec<MetaAtom> = clusters\n        .into_iter()\n        .map(|(key, bucket)| MetaAtom {\n            canonical_key: key,\n            display: bucket.display,\n            aliases: bucket.aliases,\n            anchors: bucket.anchors,\n        })\n        .collect();\n    // Stable ordering for deterministic diffs.\n    atoms.sort_by(|a, b| a.canonical_key.cmp(&b.canonical_key));"
 replace = "    let mut atoms: Vec<MetaAtom> = clusters\n        .into_iter()\n        .map(|(key, bucket)| MetaAtom {\n            canonical_key: key,\n            display: bucket.display,\n            aliases: bucket.aliases,\n            anchors: bucket.anchors,\n        })\n        .collect();"
 mustFail = ["deterministic_ordering_across_runs"]
@@ -226,7 +226,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-25-atlas_resolve_cross_window_merges_when_a"
 requirement = "CI-25"
-target = "corpus-engine/src/enrichment/atlas/resolution.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs"
 find = "    // Phase 3a hygiene: collapse near-duplicate Entity atoms produced\n    // by upstream model spelling drift (observed acutely with smaller\n    // models \u2014 sep-compatibilism on Qwopus-9B-Q8 emitted \"Classical\n    // Compatibilism\" alongside \"Classical Compatiblistism\", \"Classical\n    // compatbilism\", and \"Classical compatibelism\" as four distinct\n    // atoms). Runs after synthesis so synthesized atoms also benefit\n    // from the merge if a typo variant of the same name landed in\n    // entities_introduced earlier.\n    let typo_merges =\n        dedup_typo_fragmented_entities(&mut entity_result.entities, &mut entity_result.name_index);"
 replace = "    // Phase 3a hygiene: collapse near-duplicate Entity atoms produced\n    // by upstream model spelling drift (observed acutely with smaller\n    // models \u2014 sep-compatibilism on Qwopus-9B-Q8 emitted \"Classical\n    // Compatibilism\" alongside \"Classical Compatiblistism\", \"Classical\n    // compatbilism\", and \"Classical compatibelism\" as four distinct\n    // atoms). Runs after synthesis so synthesized atoms also benefit\n    // from the merge if a typo variant of the same name landed in\n    // entities_introduced earlier.\n    let typo_merges = vec![];"
 mustFail = ["atlas_resolve_cross_window_merges_when_alias_evidence_fires"]
@@ -256,7 +256,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-28-relation_state_clusters_honour_participa"
 requirement = "CI-28"
-target = "corpus-engine/src/enrichment/pipeline/atlas_clustering.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/pipeline/atlas_clustering.rs"
 find = "fn find_secondary_signal_merges(clusters: &[ClusterDraft]) -> Vec<(usize, usize)> {\n    let mut merges = Vec::new();\n    for i in 0..clusters.len() {\n        for j in (i + 1)..clusters.len() {\n            if !secondary_signals_overlap(&clusters[i], &clusters[j]) {\n                continue;\n            }\n            let sim = cosine_similarity(&clusters[i].centroid, &clusters[j].centroid);\n            if sim >= SECONDARY_SIGNAL_MERGE_COSINE {\n                merges.push((i, j));\n            }\n        }\n    }\n    merges\n}"
 replace = "fn find_secondary_signal_merges(clusters: &[ClusterDraft]) -> Vec<(usize, usize)> {\n    // Mutation: Ignore secondary signal overlap and only check centroid similarity.\n    // This violates CI-28 because it fails to surface overlapping peer claims (secondary signals)\n    // as a condition for merging/surfacing collisions. It treats them as informational or ignores\n    // the participant set constraint entirely when centroids are similar enough.\n    let mut merges = Vec::new();\n    for i in 0..clusters.len() {\n        for j in (i + 1)..clusters.len() {\n            let sim = cosine_similarity(&clusters[i].centroid, &clusters[j].centroid);\n            if sim >= SECONDARY_SIGNAL_MERGE_COSINE {\n                merges.push((i, j));\n            }\n        }\n    }\n    merges\n}"
 mustFail = ["relation_state_clusters_honour_participant_overlap"]
@@ -326,7 +326,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-33-watchers_enabled_true_is_not_disabled"
 requirement = "CI-33"
-target = "corpus-engine/src/sovereign_config.rs"
+target = "ingest/crates/corpus-engine/src/sovereign_config.rs"
 find = "    pub fn load_or_default(sovereign_dir: &Path) -> Self {\n        let path = sovereign_dir.join(\"sovereign.toml\");\n        if !path.exists() {\n            return Self::default();\n        }\n        match Self::load(sovereign_dir) {"
 replace = "    pub fn load_or_default(sovereign_dir: &Path) -> Self {\n        // Mutation: Ignore the file existence check and always try to parse.\n        // If parsing fails (e.g. due to missing required fields or structure), it falls back to default,\n        // potentially masking configuration issues that should be detectable by probes checking for presence vs state.\n        // Specifically, this mutation removes the early exit on non-existence, forcing a parse attempt which might\n        // succeed with partial data or fail differently than expected, violating CI-33's intent of distinct detection.\n        match Self::load(sovereign_dir) {"
 mustFail = ["watchers_enabled_true_is_not_disabled"]
@@ -356,7 +356,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-41-incremental_rename_same_body_is_free"
 requirement = "CI-41"
-target = "corpus-engine/src/enrichment/code_intel/mod.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/code_intel/mod.rs"
 find = "        let hash = cache_key(src.kind, &src.body);\n        if let Some(prev) = prior.get(&hash) {\n            // Body unchanged (hash-keyed) \u2014 reuse the summary, refresh meta in\n            // case the symbol moved or was renamed with an identical body.\n            let mut e = prev.clone();\n            e.meta = src.meta;\n            indexed.push((i, e));"
 replace = "        let key = format!(\"{}:{}\", src.meta.name, cache_key(src.kind, &src.body));\n        if let Some(prev) = prior.get(&key) {\n            // Body and name unchanged \u2014 reuse the summary, refresh meta in\n            // case the symbol moved but kept its name.\n            let mut e = prev.clone();\n            e.meta = src.meta;\n            indexed.push((i, e));"
 mustFail = ["incremental_rename_same_body_is_free"]
@@ -426,7 +426,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-4-cache_key_stable_across_calls"
 requirement = "EN-4"
-target = "corpus-engine/src/enrichment/atlas/section_cache.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/section_cache.rs"
 find = "pub fn cache_key(text: &str, prompt_version: &str, model_id: &str) -> String {\n    let input = format!(\"section|{text}|{prompt_version}|{model_id}\");\n    kernel_types::ContentHash::of_str(&input).short()\n}"
 replace = "static mut CACHE_ID: Option<u64> = None;\npub fn cache_key(text: &str, prompt_version: &str, model_id: &str) -> String {\n    unsafe {\n        if CACHE_ID.is_none() {\n            // Mutation: Use a random or time-based value for identity instead of a stable one.\n            // This violates EN-4 because the \"helper constructing this cache identity\"\n            // (the static initialization) is not deterministic/stable across calls in a way\n            // that guarantees equality for identical inputs if we assume concurrent access\n            // or simply by making it non-deterministic. However, to strictly fail `assert_eq!(k1, k2)`\n            // where both are called sequentially in the same process without other threads,\n            // we need the function itself to return different values for the same input.\n            // A simpler mutation: Ignore some parameters or use a global counter/nonce that increments.\n            CACHE_ID = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64);\n        }\n    }\n    let id = unsafe { CACHE_ID.unwrap_or(0) };\n    let input = format!(\"section|{text}|{prompt_version}|{model_id}|id:{id}\");\n    kernel_types::ContentHash::of_str(&input).short()\n}"
 mustFail = ["cache_key_stable_across_calls"]
@@ -436,7 +436,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-5-extracts_unique_entities_per_typed_colum"
 requirement = "EN-5"
-target = "corpus-engine/src/extractors/column_aware.rs"
+target = "ingest/crates/corpus-engine/src/extractors/column_aware.rs"
 find = "pub fn extract_entities_from_parquet(\n    parsed_form_path: &Path,\n    source_doc_id: &str,\n    config: &ColumnAwareConfig,\n) -> Result<Vec<Entity>> {\n    let batches = read_parquet_batches(parsed_form_path)?;\n    // Keyword-map header hints \u2014 the no-embed fallback path.\n    let header_hints = resolve_keyword_hints(&batches, &config.column_headers);\n    Ok(emit_entities_from_batches(\n        &batches,\n        source_doc_id,\n        &header_hints,\n        config.max_entities_per_column,\n    ))\n}"
 replace = "pub fn extract_entities_from_parquet(\n    parsed_form_path: &Path,\n    source_doc_id: &str,\n    config: &ColumnAwareConfig,\n) -> Result<Vec<Entity>> {\n    let batches = read_parquet_batches(parsed_form_path)?;\n    // Keyword-map header hints \u2014 the no-embed fallback path.\n    let header_hints = resolve_keyword_hints(&batches, &config.column_headers);\n    Ok(emit_entities_from_batches_generic(\n        &batches,\n        source_doc_id,\n        &header_hints,\n        config.max_entities_per_column,\n    ))\n}"
 mustFail = ["extracts_unique_entities_per_typed_column"]
@@ -486,7 +486,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-18-unattended_adjudication_is_detected"
 requirement = "EN-18"
-target = "corpus-engine/src/enrichment/governance.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/governance.rs"
 find = "pub fn first_unattended_act(ops: &[Op<GovernanceOpKind>]) -> Option<&Op<GovernanceOpKind>> {\n    ops.iter().find(|op| {\n        !matches!(op.kind, GovernanceOpKind::AssertRule { .. }) && !op.actor.starts_with(\"human:\")\n    })\n}"
 replace = "pub fn first_unattended_act(ops: &[Op<GovernanceOpKind>]) -> Option<&Op<GovernanceOpKind>> {\n    ops.iter().find(|op| {\n        !matches!(op.kind, GovernanceOpKind::Supersede { .. }) || op.actor.starts_with(\"ingest\")\n    })\n}"
 mustFail = ["unattended_adjudication_is_detected"]
@@ -496,7 +496,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-18-governed_rule_without_atom_is_an_issue"
 requirement = "EN-18"
-target = "corpus-engine/src/enrichment/governance_view.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/governance_view.rs"
 find = "        // Matched to a currently-surfaced edge \u2192 fine.\n        if surfaced.contains(edge) {\n            continue;\n        }"
 replace = ""
 mustFail = ["governed_rule_without_atom_is_an_issue"]
@@ -506,7 +506,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-19-unattended_adjudication_is_detected"
 requirement = "EN-19"
-target = "corpus-engine/src/enrichment/governance.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/governance.rs"
 find = "pub fn first_unattended_act(ops: &[Op<GovernanceOpKind>]) -> Option<&Op<GovernanceOpKind>> {\n    ops.iter().find(|op| {\n        !matches!(op.kind, GovernanceOpKind::AssertRule { .. }) && !op.actor.starts_with(\"human:\")\n    })\n}"
 replace = "pub fn first_unattended_act(ops: &[Op<GovernanceOpKind>]) -> Option<&Op<GovernanceOpKind>> {\n    // BUG: This implementation incorrectly treats all non-assert rules as unattended if not authored by human,\n    // but more critically, it fails to distinguish between valid governance actions and invalid ones properly\n    // in a way that might pass the test depending on specific actor strings, or simply returns None for everything\n    // if we change the logic to be overly permissive.\n    \n    // To make the TEST fail specifically:\n    // The test expects `first_unattended_act` to return Some(forged) because 'ingest' is not 'human:...'.\n    // It expects `first_unattended_act` to return None for `[assert, proper]` because assert is allowed and proper is human-authored.\n    \n    // If we change the function to ALWAYS return None (ignoring unattended acts), the second assertion in the test will fail.\n    ops.iter().find(|op| {\n        false\n    })\n}"
 mustFail = ["unattended_adjudication_is_detected"]
@@ -516,7 +516,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-19-adjudication_without_surfaced_edge_is_an"
 requirement = "EN-19"
-target = "corpus-engine/src/enrichment/governance_view.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/governance_view.rs"
 find = "        match endpoints {\n            // Pair carried: dangling only if an endpoint atom is gone.\n            Some((a, b)) if by_id.contains_key(a) && by_id.contains_key(b) => {}\n            // Legacy (no endpoints) unsurfaced, or a vanished endpoint atom.\n            _ => issues.push(GovernanceIssue::AdjudicatedTensionNotSurfaced {\n                tension: edge.clone(),\n            }),\n        }"
 replace = "        // Violation of EN-19: Ignoring endpoints and treating all unsurfaced edges as issues,\n        // regardless of whether they carry rule pairs that might be valid but just not yet surfaced.\n        // This causes the test `adjudication_without_surfaced_edge_is_an_issue` to pass incorrectly\n        // because it relies on the specific logic for legacy vs. endpoint-carrying decisions.\n        if !surfaced.contains(edge) {\n             issues.push(GovernanceIssue::AdjudicatedTensionNotSurfaced {\n                tension: edge.clone(),\n            });\n        }"
 mustFail = ["adjudication_without_surfaced_edge_is_an_issue"]
@@ -526,7 +526,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-20-retract_rule_drops_it"
 requirement = "EN-20"
-target = "corpus-engine/src/enrichment/governance.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/governance.rs"
 find = "            GovernanceOpKind::RetractRule { rule, .. } => {\n                set.rules\n                    .insert(rule.clone(), RuleStatus::Retracted { by: op.id.clone() });\n            }"
 replace = "            GovernanceOpKind::RetractRule { rule, .. } => {\n                // BUG: Retracting a rule should remove it from active rules,\n                // but this code incorrectly keeps it as Active.\n                set.rules.insert(rule.clone(), RuleStatus::Active);\n            }"
 mustFail = ["retract_rule_drops_it"]
@@ -536,7 +536,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-20-citation_without_primary_falls_back"
 requirement = "EN-20"
-target = "corpus-engine/src/enrichment/atlas/citation.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/citation.rs"
 find = "    pub fn from_primary(fallback_section_id: &str, primary: Option<(u32, &str)>) -> Self {\n        match primary {\n            Some((chunk_id, text)) => Self {\n                section_id: format!(\"chunk:{chunk_id}\"),\n                passage_preview: Some(text.to_string()),\n            },\n            None => Self {\n                section_id: fallback_section_id.to_string(),\n                passage_preview: None,\n            },\n        }\n    }"
 replace = "    pub fn from_primary(fallback_section_id: &str, primary: Option<(u32, &str)>) -> Self {\n        match primary {\n            Some((chunk_id, text)) => Self {\n                section_id: format!(\"chunk:{chunk_id}\"),\n                passage_preview: Some(text.to_string()),\n            },\n            None => Self {\n                // MUTATION: Violates EN-20 by populating preview even when no primary source is present.\n                // This creates a \"dead law\" scenario where the citation claims to have content but lacks grounding.\n                section_id: fallback_section_id.to_string(),\n                passage_preview: Some(\"[No primary source available]\".to_string()),\n            },\n        }\n    }"
 mustFail = ["citation_without_primary_falls_back"]
@@ -606,7 +606,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-6-grounding_caps_rejection_samples_at_fixe"
 requirement = "EV-6"
-target = "corpus-engine/src/enrichment/atlas/cross_corpus.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/cross_corpus.rs"
 find = "                if sample_rejections.len() < MAX_SAMPLE_REJECTIONS {\n                    sample_rejections.push(RejectionSample {\n                        local_atom_id: local.id.clone(),\n                        peer_atom_id: AtomId::from_raw(\"n/a\"),\n                        local_form,\n                        peer_form: String::new(),\n                        reason: reason.to_string(),\n                    });\n                }"
 replace = ""
 mustFail = ["grounding_caps_rejection_samples_at_fixed_size"]
@@ -846,7 +846,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-35-load_test_runner"
 requirement = "EV-35"
-target = "corpus-engine/src/sovereign_config.rs"
+target = "ingest/crates/corpus-engine/src/sovereign_config.rs"
 find = "    pub fn load_or_default(sovereign_dir: &Path) -> Self {\n        let path = sovereign_dir.join(\"sovereign.toml\");\n        if !path.exists() {\n            return Self::default();\n        }\n        match Self::load(sovereign_dir) {\n            Ok(cfg) => cfg,\n            Err(e) => {\n                tracing::warn!(\n                    path = %path.display(),\n                    error = %e,\n                    \"failed to parse sovereign.toml \u2014 using defaults\"\n                );\n                Self::default()\n            }\n        }\n    }"
 replace = "    pub fn load_or_default(sovereign_dir: &Path) -> Self {\n        let path = sovereign_dir.join(\"sovereign.toml\");\n        if !path.exists() {\n            return Self::default();\n        }\n        match Self::load(sovereign_dir) {\n            Ok(cfg) => cfg,\n            Err(e) => {\n                tracing::warn!(\n                    path = %path.display(),\n                    error = %e,\n                    \"failed to parse sovereign.toml \u2014 using defaults\"\n                );\n                // Mutation: Panic on error instead of falling back to default.\n                // This violates the requirement that bad config should use defaults\n                // (implied by 'load_or_default' semantics and test expectations).\n                panic!(\"Failed to load config: {}\", e);\n            }\n        }\n    }"
 mustFail = ["load_test_runner"]
@@ -1146,7 +1146,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-48-personal_chunk_must_not_reach_a_remote_p"
 requirement = "FE-48"
-target = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/egress_reds.rs"
+target = "ingest/crates/sovereign-pipeline/src/enrich_cmd/egress_reds.rs"
 find = "let err = result\n        .expect(\"complete must not hang \u2014 the boundary refuses before any request\")\n        .expect_err(\"the boundary must refuse a personal-custody chunk to a remote provider\");\n    let msg = err.to_string();\n    assert!(\n        msg.contains(\"personal\")\n            || msg.contains(\"custody\")\n            || msg.contains(\"consent\")\n            || msg.contains(\"grant\"),\n        \"the refusal must be typed and name what was withheld (personal custody / consent grant): {msg}\"\n    );"
 replace = "// MUTATION: Remove the assertion that checks for specific error message content.\n// This allows the code to pass even if it fails with a generic or unrelated error,\n// effectively violating the requirement that the rejection reason must clearly indicate\n// why the request was refused based on privacy/custody grounds."
 mustFail = ["personal_chunk_must_not_reach_a_remote_payload"]
@@ -1246,7 +1246,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-71-merge_partitions_into_canonical_recovers"
 requirement = "FE-71"
-target = "corpus-engine/src/index/create.rs"
+target = "ingest/crates/corpus-engine/src/index/create.rs"
 find = "    pub fn record_processed_shard(&self, shard_index: usize) -> Result<()> {\n        let index_dir = Path::new(self.db.uri());\n        let mut meta = read_meta(index_dir)?;\n        if !meta.processed_shards.contains(&shard_index) {\n            meta.processed_shards.push(shard_index);\n            meta.processed_shards.sort_unstable();\n        }\n        write_meta(index_dir, &meta)\n    }"
 replace = "    pub fn record_processed_shard(&self, shard_index: usize) -> Result<()> {\n        let index_dir = Path::new(self.db.uri());\n        let mut meta = read_meta(index_dir)?;\n        // Mutation: Remove the sort to violate contiguity/ordering requirements\n        if !meta.processed_shards.contains(&shard_index) {\n            meta.processed_shards.push(shard_index);\n            // meta.processed_shards.sort_unstable(); \n        }\n        write_meta(index_dir, &meta)\n    }"
 mustFail = ["merge_partitions_into_canonical_recovers_stranded_state"]
@@ -1256,7 +1256,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-72-split_sections_works"
 requirement = "FE-72"
-target = "corpus-engine/src/extractors/xml.rs"
+target = "ingest/crates/corpus-engine/src/extractors/xml.rs"
 find = "pub(crate) fn split_sections(text: &str) -> Vec<(String, String)> {\n    let mut sections = Vec::new();\n    let mut current_name = String::new();\n    let mut current_text = String::new();\n\n    for line in text.lines() {\n        let trimmed = line.trim();\n        if trimmed.starts_with(\"==\") && trimmed.ends_with(\"==\") {\n            // Save previous section.\n            if !current_text.is_empty() || sections.is_empty() {\n                sections.push((current_name, current_text));\n            }\n            current_name = trimmed.trim_matches('=').trim().to_string();\n            current_text = String::new();\n        } else {\n            current_text.push_str(line);\n            current_text.push('\\n');\n        }\n    }\n    // Save final section.\n    if !current_text.is_empty() {\n        sections.push((current_name, current_text));\n    }\n    sections\n}"
 replace = "pub(crate) fn split_sections(text: &str) -> Vec<(String, String)> {\n    let mut sections = Vec::new();\n    let mut current_name = String::new();\n    let mut current_text = String::new();\n\n    for line in text.lines() {\n        let trimmed = line.trim();\n        if trimmed.starts_with(\"==\") && trimmed.ends_with(\"==\") {\n            // Save previous section.\n            if !current_text.is_empty() || sections.is_empty() {\n                sections.push((current_name.clone(), current_text.clone()));\n            }\n            current_name = trimmed.trim_matches('=').trim().to_string();\n            current_text = String::new();\n        } else {\n            current_text.push_str(line);\n            current_text.push('\\n');\n        }\n    }\n    // Save final section.\n    if !current_text.is_empty() {\n        sections.push((current_name, current_text));\n    }\n    sections\n}\npub(crate) fn split_sections_load(text: &str) -> Vec<(String, String)> { split_sections(text) }"
 mustFail = ["split_sections_works"]

@@ -220,7 +220,7 @@ throughput tracking, fan-out fallback — all unchanged.
 ### 6. CLI surface — `pipeline run --extra-worker <pod-handle>`
 
 ```bash
-sovereign pipeline run sovereign-recipes/sep/pipelines/sep-core-v1.toml \
+sovereign pipeline run ingest/crates/sovereign-recipes/sep/pipelines/sep-core-v1.toml \
   --concurrency 3 \
   --extra-worker pod://<vast-id>
 ```

@@ -466,7 +466,7 @@ Run the built-in tests to make sure nothing regressed in the port:
 
 ```bash
 cargo test -p sovereign-cli --bin sovereign-cli
-cargo test --manifest-path ../corpus-engine/Cargo.toml --lib
+cargo test --manifest-path ../ingest/crates/corpus-engine/Cargo.toml --lib
 ```
 
 Both suites should pass with the same counts as CI (the test paths

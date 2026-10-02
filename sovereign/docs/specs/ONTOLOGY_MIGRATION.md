@@ -52,8 +52,8 @@ lands:
 **One decider for the recipe shape.** `recipe.rs` is the AST;
 `SCHEMA.md` regenerates from it under a CI gate. Two more hand copies
 exist today and drift: the recipe-author tool schema
-(`studio/crates/sovereign-recipe-author/src/recipe_schema.rs:395-430`)
-and the descriptor menu (`corpus-engine/schema/recipe_schema_descriptor.json`,
+(`ingest/crates/sovereign-recipe-author/src/recipe_schema.rs:395-430`)
+and the descriptor menu (`ingest/crates/corpus-engine/schema/recipe_schema_descriptor.json`,
 which has no enrichment section at all). Phase 1 adds a test that both
 agree with the AST, because a June note records the tool grammar
 silently blocking the agent from emitting `ontology` when it lagged.
@@ -76,7 +76,7 @@ are what make the claim checkable.
 **Names are converged before they are minted** (`sovereign code
 converge noun TypeDecl`, then the concept gate). **Docs land in the
 same commit** as each phase: `SYSTEM_OVERVIEW.md` §Enrichment,
-`corpus-engine/ENRICHMENT.md`, `SCHEMA.md`. **Each phase is one work
+`ingest/crates/corpus-engine/ENRICHMENT.md`, `SCHEMA.md`. **Each phase is one work
 order** under `.sovereign/features/`, with the gate as its definition
 of done; the gate is the two scripts plus `pre-push.sh`, then the
 benches named below, bars pre-registered in the order before the run.
@@ -188,7 +188,7 @@ probe test was written for.*
   gate exists for a reason).
 - Gate: the probe becomes the pinned test (`coin` survives on the
   custom path); `atoms_schema_back_compat`; I1 and I2 snapshots
-  byte-identical; the numismatics fixture (`sovereign-recipes/_templates/numismatics/`,
+  byte-identical; the numismatics fixture (`ingest/crates/sovereign-recipes/_templates/numismatics/`,
   three sections, a truth file) produces atoms whose `subtype` is
   `coin` and `sceatta`, with `weight` and `struck` populated;
   `bench/literary` golden (bk-book, 10/10 person atoms) unchanged.
@@ -329,7 +329,7 @@ depends only on P1.*
   gain declarations; their `guidance` paragraphs stay as the
   explanation.
 - `GOVERNANCE_ONTOLOGY_GUIDANCE` moves to
-  `sovereign-recipes/_templates/governance/recipe.toml` and the desktop
+  `ingest/crates/sovereign-recipes/_templates/governance/recipe.toml` and the desktop
   "Rules & decisions" template reads it; recipes take it by
   `ontology = "governance"` (as-built M3). The numismatics template
   from P2 ships beside it.

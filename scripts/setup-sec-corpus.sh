@@ -32,7 +32,7 @@ set -euo pipefail
 CONTACT_UA="commonwealth-ai/0.1 (sec-filings-corpus; alexbryan01@gmail.com)"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CANONICAL_RECIPE="${REPO_ROOT}/sovereign-recipes/sec-filings-company/recipe.toml"
+CANONICAL_RECIPE="${REPO_ROOT}/ingest/crates/sovereign-recipes/sec-filings-company/recipe.toml"
 CONCEPT_MAP="${REPO_ROOT}/sovereign/crates/sovereign-tools/data/sec-filings-company/concept-map.toml"
 # THE one decider's I/O shell. An example, not a product CLI verb: the
 # decider's real consumer is the ticker-driven install (which calls

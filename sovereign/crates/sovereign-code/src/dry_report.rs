@@ -803,7 +803,7 @@ mod tests {
             "vendor/llama-cpp-sys-4/llama.cpp/tools/server/tests/unit/test_chat.py",
             "research/deep-research/drb/vendor/pkg/mod.rs",
             ".claude/worktrees/agent-a99/sovereign/crates/sovereign-tools/src/code/dry_report.rs",
-            "corpus-engine/tests/extractor_smoke.rs",
+            "ingest/crates/corpus-engine/tests/extractor_smoke.rs",
             "sovereign/crates/sovereign-core/benches/embed.rs",
         ] {
             assert!(!s.admits(excluded), "should be out of scope: {excluded}");
@@ -814,7 +814,7 @@ mod tests {
         for included in [
             "sovereign/crates/sovereign-tools/src/code/dry_report.rs",
             "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
-            "corpus-engine/src/extractors/mod.rs",
+            "ingest/crates/corpus-engine/src/extractors/mod.rs",
         ] {
             assert!(s.admits(included), "should be in scope: {included}");
         }

@@ -107,7 +107,7 @@ code paths:
 SEP ships `query_sharing = true, mesh_sharing = false`: queryable,
 never copied.
 
-*Deep dive: SYSTEM_OVERVIEW §3. Schema SSOT: `corpus-engine/src/recipe.rs`.
+*Deep dive: SYSTEM_OVERVIEW §3. Schema SSOT: `ingest/crates/corpus-engine/src/recipe.rs`.
 Try it: `svrn corpus install sep` — or put your own inbox in:
 export from Gmail (Google Takeout) or Apple Mail (File → Export Mailbox),
 then `svrn corpus install email-archive --params path=~/inbox.mbox`.

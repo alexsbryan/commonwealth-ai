@@ -1,5 +1,5 @@
 <!-- A SECOND, SMALLER invented hoard, deliberately NOT the one in
-     `sovereign-recipes/wessex-hoard/`. It carries its own catalogue ids
+     `ingest/crates/sovereign-recipes/wessex-hoard/`. It carries its own catalogue ids
      (`Marlow Field N`) because until 2026-09-03 it used `Wessex Down N`
      for different rulers and mints than the canonical hoard does, and the
      two read as one corpus contradicting itself. Five coins, sized for the

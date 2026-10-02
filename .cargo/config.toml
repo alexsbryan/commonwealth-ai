@@ -119,4 +119,4 @@ SOVEREIGN_CLI_CONTRACT = { value = "sovereign/docs/cli-contract.toml", relative 
 SOVEREIGN_WORKSPACE_ROOT = { value = ".", relative = true }
 # The canonical recipes tree, read at runtime by the recipe gates
 # (corpus-engine tests/main/source_tree.rs, sovereign-pipeline shipped_recipes).
-CORPUS_ENGINE_RECIPES_DIR = { value = "sovereign-recipes", relative = true }
+CORPUS_ENGINE_RECIPES_DIR = { value = "ingest/crates/sovereign-recipes", relative = true }

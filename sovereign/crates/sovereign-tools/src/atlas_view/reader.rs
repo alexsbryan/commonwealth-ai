@@ -128,7 +128,7 @@ pub struct AtlasBuildReport {
 /// Some corpora are ingested as one index but enriched per *article*:
 /// SEP's 182k paragraphs live in the `sep` index, while its atlas is
 /// 1,769 sibling `sep-<slug>` indexes, one per encyclopedia entry (see
-/// `sovereign-recipes/sep/recipe.toml`, `[enrichment]`). The parent's
+/// `ingest/crates/sovereign-recipes/sep/recipe.toml`, `[enrichment]`). The parent's
 /// own `atoms.json` is empty, so the ordinary atom browser has nothing
 /// to show; the map lives in the members. This row is what the picker
 /// renders so the user can choose an article and explore *its* atlas.

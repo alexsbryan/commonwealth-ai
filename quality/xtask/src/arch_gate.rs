@@ -393,7 +393,7 @@ mod tests {
         let oversized = "// line\n".repeat(LINE_LIMIT + 1);
 
         for dir in [
-            "corpus-engine/src",                 // source
+            "ingest/crates/corpus-engine/src",   // source
             ".cargo-container/registry/foo-1.0", // vendored dependency
             ".claude/worktrees/agent-abc/src",   // agent copy of this repo
             "vendor/llama-cpp-4/src",            // tracked, not authored here
@@ -420,7 +420,7 @@ mod tests {
         let found: Vec<&str> = out.iter().map(|(p, _)| p.as_str()).collect();
         assert_eq!(
             found,
-            vec!["corpus-engine/src/big.rs"],
+            vec!["ingest/crates/corpus-engine/src/big.rs"],
             "the walk must count this repo's source and nothing else"
         );
         assert_eq!(out[0].1, LINE_LIMIT + 1);

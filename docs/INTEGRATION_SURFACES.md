@@ -39,11 +39,11 @@ standalone certifier you
 can lift wholesale to test your own implementation.
 
 **Recipes** — the corpus-ingestion TOML format. The schema reference
-([sovereign-recipes/SCHEMA.md](../sovereign-recipes/SCHEMA.md)) is
+([ingest/crates/sovereign-recipes/SCHEMA.md](../ingest/crates/sovereign-recipes/SCHEMA.md)) is
 generated from the code and test-gated, and the loader keeps old
 recipes working by convention (serde defaults, aliases, versioned
 opt-ins). Start from
-[sovereign-recipes/GETTING_STARTED.md](../sovereign-recipes/GETTING_STARTED.md).
+[ingest/crates/sovereign-recipes/GETTING_STARTED.md](../ingest/crates/sovereign-recipes/GETTING_STARTED.md).
 
 **Corpus snapshots** — `.tar.zst` archives with a versioned manifest
 (`_snapshot_manifest.json`); restore refuses on embedding-model

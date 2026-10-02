@@ -445,7 +445,7 @@ engine handle.
 when it needs nothing but A's language and the published kernel. It lives with B only when B's
 target dependencies already include A — the plugin case, as `sovereign-gliner` implements the
 tiered pipeline's `ChunkEntityExtractor`, or Understanding's host implements the engine's
-enrichment-pass port (`corpus-engine/DECOMPOSITION.md`, Step 7 redrawn). Otherwise it lives in the
+enrichment-pass port (`ingest/crates/corpus-engine/DECOMPOSITION.md`, Step 7 redrawn). Otherwise it lives in the
 composition root, and never in a third context's crate for tier convenience, whose own-context
 share would fall.
 

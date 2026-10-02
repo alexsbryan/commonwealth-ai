@@ -676,16 +676,16 @@ mod tests {
         let symbols = vec![
             sym(
                 "rust-analyzer cargo ce 0.1.0 registry/RegistrySnapshot#generated_at.",
-                "corpus-engine/src/registry.rs",
+                "ingest/crates/corpus-engine/src/registry.rs",
             ),
             sym(
                 "rust-analyzer cargo ce 0.1.0 registry/RegistrySnapshot#entries.",
-                "corpus-engine/src/registry.rs",
+                "ingest/crates/corpus-engine/src/registry.rs",
             ),
             // Colocated test module — excluded by the descriptor clause.
             sym(
                 "rust-analyzer cargo ce 0.1.0 registry/tests/Fixture#generated_at.",
-                "corpus-engine/src/registry.rs",
+                "ingest/crates/corpus-engine/src/registry.rs",
             ),
             // Out of scope by path segment.
             sym(

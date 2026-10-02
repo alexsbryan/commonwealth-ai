@@ -11,7 +11,7 @@
 //! all four said "resume"; this pins the tier-2 one.
 //!
 //! The predicate itself (`EnrichmentState::declared_dead`) is unit-tested
-//! in `corpus-engine/src/enrichment/state.rs`. What this file adds is that
+//! in `ingest/crates/corpus-engine/src/enrichment/state.rs`. What this file adds is that
 //! `resume_inflight_tier2` actually CONSULTS it — a gate nobody calls is
 //! not a gate.
 

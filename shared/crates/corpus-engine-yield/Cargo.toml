@@ -7,7 +7,7 @@ description = "YieldHook — the cooperative foreground-yield contract shared by
 
 # Extracted from corpus-engine/src/yield_hook.rs during the
 # corpus-engine-watchers carve-out (R4 Step 1, see
-# corpus-engine/DECOMPOSITION.md). The trait must live in a crate that
+# ingest/crates/corpus-engine/DECOMPOSITION.md). The trait must live in a crate that
 # BOTH corpus-engine and corpus-engine-watchers depend on so the
 # `Arc<dyn YieldHook>` the daemon builds has one trait identity when it
 # is installed on the CorpusEngine AND on the lint/test watchers.

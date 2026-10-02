@@ -133,7 +133,7 @@ arena's high-water mark is set by the largest batch it ever served).
 
 ### GLiNER input bound — `MAX_CHUNK_CHARS` 2,048 / `MAX_BATCH_CHUNKS` 16, shipped ON (enrich-bounded-1, 2026-09-12)
 
-**What ships.** `corpus-engine/src/enrichment/chunk_ner_bound.rs` bounds every input
+**What ships.** `ingest/crates/corpus-engine/src/enrichment/chunk_ner_bound.rs` bounds every input
 reaching the per-chunk NER seam: a text over `MAX_CHUNK_CHARS` is REFUSED
 (never truncated) and counted, and no single `extract_mentions_batch` call
 carries more than `MAX_BATCH_CHUNKS` texts. Both `GlinerChunkExtractor`
@@ -520,7 +520,7 @@ collector in `sovereign-mesh`, which does know the count.
 
 **Why it needs to exist at all.** `auto_recover`'s existing coverage guard
 arms only when a partition meta stamps `total_shards`, and
-`corpus-engine/src/engine/ingest.rs:718` stamps that for
+`ingest/crates/corpus-engine/src/engine/ingest.rs:718` stamps that for
 `ExtractorConfig::WikipediaJsonl` alone ("the only multi-shard extractor
 today"). With the guard dark, linux-peer merged a 17/38 canonical and
 re-advertised it: "every peer ends up with a different 'complete' canonical
@@ -1088,7 +1088,7 @@ transport invariant (one trailing newline, `invariants.ts:111`), with the
 KO filer and two-filer assertion SKIPPED rather than passed.
 
 **The three known gaps a user can hit, stated so nobody has to rediscover
-them** (also carried in `sovereign-recipes/registry.toml` above the entry,
+them** (also carried in `ingest/crates/sovereign-recipes/registry.toml` above the entry,
 and in notes `9be87107` / `45b04cf5`):
 
 1. **Segment questions with no structural word answer CONSOLIDATED, and
@@ -1098,7 +1098,7 @@ and in notes `9be87107` / `45b04cf5`):
    on structural vocabulary, never on a filer's product names, which
    companyfacts does not carry.
    - Frozen-set item `segment-services`
-     (`sovereign-recipes/sec-filings-company/prereg/aapl-fabrication-set.toml:62`,
+     (`ingest/crates/sovereign-recipes/sec-filings-company/prereg/aapl-fabrication-set.toml:62`,
      `question = "What was Apple's Services revenue in fiscal 2025?"`,
      `expect = "refusal"`) **passed on 2026-08-16** (`aapl-fabrication-
      n3run1_20260816.jsonl`, 9/9) and **does not now**: the planner sends
@@ -1348,7 +1348,7 @@ _Historical record below — the reasoning while this row was `preview`._
 - **Shipped dark:** 2026-09-02, order `ontology-v1-p5` item 5. A declared
   atom's `attributes` map is appended to its embed text as
   `\nattr: metal=silver; mint=Eoforwic; weight=1.21`, in
-  `atom_attributes_suffix` (`corpus-engine/src/enrichment/atlas/context.rs`),
+  `atom_attributes_suffix` (`ingest/crates/corpus-engine/src/enrichment/atlas/context.rs`),
   called from both renderers — `render_atom_entry` (the ANN backfill) and the
   daemon bag loader (`atlas_context_loader.rs`), which forks the same
   rendering. One decider, so the two paths cannot drift.

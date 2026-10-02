@@ -124,7 +124,7 @@ tools.register(Box::new(MyTool::new()));
 
 ## Adding a corpus
 
-A corpus is a recipe — a TOML file declaring `acquire → extract → chunk → embed → index`, no code required. Author one with `sovereign recipe`, and to ship it add an entry to `sovereign-recipes/registry.toml`. The walkthrough is [sovereign-recipes/GETTING_STARTED.md](../../sovereign-recipes/GETTING_STARTED.md); every field is in [SCHEMA.md](../../sovereign-recipes/SCHEMA.md). The built-in extractors (Parquet, JSONL, HTML, email, Markdown, CSV, …) live in `corpus-engine/src/extractors/`; for a format they don't cover, add one there — or a `CorpusParser` in `sovereign-tools/src/corpus/` for the legacy built-in path.
+A corpus is a recipe — a TOML file declaring `acquire → extract → chunk → embed → index`, no code required. Author one with `sovereign recipe`, and to ship it add an entry to `ingest/crates/sovereign-recipes/registry.toml`. The walkthrough is [ingest/crates/sovereign-recipes/GETTING_STARTED.md](../../ingest/crates/sovereign-recipes/GETTING_STARTED.md); every field is in [SCHEMA.md](../../ingest/crates/sovereign-recipes/SCHEMA.md). The built-in extractors (Parquet, JSONL, HTML, email, Markdown, CSV, …) live in `ingest/crates/corpus-engine/src/extractors/`; for a format they don't cover, add one there — or a `CorpusParser` in `sovereign-tools/src/corpus/` for the legacy built-in path.
 
 ## Adding a skill
 

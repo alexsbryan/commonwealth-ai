@@ -267,7 +267,7 @@ title matches the anchor. `SOVEREIGN_DEMO_ATLAS_CORPUS` /
 remediation — they have different fixes.
 
 > **What this beat films, and does not.** An Obsidian vault is a **System 3**
-> corpus *by design* (`corpus-engine/ENRICHMENT.md`: the System-2 `obsidian_atlas`
+> corpus *by design* (`ingest/crates/corpus-engine/ENRICHMENT.md`: the System-2 `obsidian_atlas`
 > pipeline was removed when vaults moved onto the tiered path, and System 3 is
 > called the gold standard for user-facing corpora). So the surface here is the
 > RAPTOR note map, not the typed atom graph — those two things share the word

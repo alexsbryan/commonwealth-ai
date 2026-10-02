@@ -16,7 +16,7 @@
 
 ## Context
 
-Commonwealth AI has **four enrichment systems** (`corpus-engine/ENRICHMENT.md`):
+Commonwealth AI has **four enrichment systems** (`ingest/crates/corpus-engine/ENRICHMENT.md`):
 System 1 `field_model` (`field_skeleton.json`), System 2 `atlas`
 (`atoms.json`), System 3 `tiered`/RAPTOR (SQLite), System 4 code-intel
 (SCIP). The **benches validate chat over the full variety** — `bench` builds

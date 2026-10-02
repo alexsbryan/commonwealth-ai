@@ -305,7 +305,7 @@ mod tests {
     fn keeps_this_repos_own_source() {
         let s = scope();
         for rel in [
-            "corpus-engine/src",
+            "ingest/crates/corpus-engine/src",
             "sovereign/crates/sovereign-core/src/runtime",
             "commonwealth/crates/commonwealth-api/src",
             "scripts",
@@ -323,7 +323,7 @@ mod tests {
     fn declared_names_match_at_depth_but_ignored_paths_are_exact() {
         let s = scope();
         assert!(s.excludes_dir("some/crate/vendor"));
-        assert!(!s.excludes_dir("corpus-engine/src/target-container-linux-notes"));
+        assert!(!s.excludes_dir("ingest/crates/corpus-engine/src/target-container-linux-notes"));
         // `target` is a declared-by-git path here, not a name rule…
         assert!(s.excludes_dir("target"));
         // …so an unrelated dir that merely CONTAINS the word is walked.

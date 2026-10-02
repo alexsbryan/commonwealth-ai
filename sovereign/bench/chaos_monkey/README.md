@@ -99,7 +99,7 @@ never completes (the script warns if it's misconfigured).
 **Why a recipe, not `corpus watch`:** `watch` derives the id from the *path
 hash* (a per-machine `watched-<hash>`), which made the CI gate
 non-reproducible. The committed recipe
-(`sovereign-recipes/chaos-secret-agent/recipe.toml`) pins `[corpus].id`, so
+(`ingest/crates/sovereign-recipes/chaos-secret-agent/recipe.toml`) pins `[corpus].id`, so
 every box gets the same `chaos-secret-agent`. The bank's `[meta].corpus` and
 the manifest's `[meta].default_corpus` both default to it, so `--corpus` is
 optional. The bench is still corpus-parameterized — a new bank can target any
@@ -207,7 +207,7 @@ gate's own (`bench_cmd/h4/transcript.rs:74-81`) rather than a second copy.
   `sovereign-cli-bench/src/bench_cmd/gate.rs` + `lane_baseline.rs` (the shared
   self-describing metric/direction/tolerance primitive, reused by all three
   absolute-verdict lanes).
-- The stable corpus recipe: `sovereign-recipes/chaos-secret-agent/recipe.toml`.
+- The stable corpus recipe: `ingest/crates/sovereign-recipes/chaos-secret-agent/recipe.toml`.
 
 ## Judge-replay harness (order judge-calibration-replay)
 

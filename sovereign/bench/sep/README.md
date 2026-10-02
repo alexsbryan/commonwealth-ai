@@ -35,8 +35,8 @@ Synced 2026-05-15 from `commonwealth-ai.pre-monorepo/sovereign/bench/sep_eval/`.
 ## Provenance
 
 - Driver: `sovereign/bench/sep_atlas/run_batch.sh` (per-article parallel ingest across mesh peers).
-- Recipe: `sovereign-recipes/sep/recipe.toml`.
-- Pipeline: `philosophy_atlas` (per `corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs`).
+- Recipe: `ingest/crates/sovereign-recipes/sep/recipe.toml`.
+- Pipeline: `philosophy_atlas` (per `ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs`).
 - Historical findings: `sovereign/bench/HISTORY.md` §sep_atlas + memory `project_sep_atlas_phase0.md` + `project_sep_atlas_gemma_ab.md`.
 
 The full 57-article SEP corpus is **mesh-syncable** (`mesh_sharing=false` on the base index per Stanford license, but per-article atlas outputs `sep-<slug>/atlas/` are independent and gossip-able). When fedora is online, `sovereign mesh sync sep-*` pulls every per-slug atlas the peer has built.

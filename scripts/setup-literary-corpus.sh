@@ -10,7 +10,7 @@
 #
 # YOU DO NOT NEED THIS SCRIPT TO INSTALL. Unlike setup-chaos-corpus.sh, the
 # recipe's `[acquire]` points at an https URL rather than a $HOME path, and the
-# recipe is registered in sovereign-recipes/registry.toml, so the plain
+# recipe is registered in ingest/crates/sovereign-recipes/registry.toml, so the plain
 #
 #     svrn corpus install brothers-karamazov-book-1
 #

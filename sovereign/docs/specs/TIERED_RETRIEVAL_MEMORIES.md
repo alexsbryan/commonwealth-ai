@@ -339,7 +339,7 @@ more summary tuning.
   corpus-agnostic builders, storage shape.
 - [`TIERED_RETRIEVAL_PHASE_B.md`](./TIERED_RETRIEVAL_PHASE_B.md) — the
   port matrix this row belongs in.
-- [`../../../corpus-engine/ENRICHMENT.md`](../../../corpus-engine/ENRICHMENT.md)
+- [`ingest/crates/corpus-engine/ENRICHMENT.md`](../../../ingest/crates/corpus-engine/ENRICHMENT.md)
   — three enrichment systems; System 3 (tiered) is the one ported here.
 - [`../../bench/inner_work/CHAOS_HARNESS.md`](../../bench/inner_work/CHAOS_HARNESS.md)
   §7 — the recall bench + the synthesis-side grounding verifier this

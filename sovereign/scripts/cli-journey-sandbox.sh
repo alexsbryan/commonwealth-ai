@@ -279,13 +279,13 @@ echo
 # that asserts it, because pre-installing the corpus would make
 # `corpus-lifecycle` step 1 a no-op that passes without proving anything.
 # ── the ontology-author fixture ──────────────────────────────────────────
-# The repo's OWN declaration, not a copy: `sovereign-recipes/wessex-hoard/`
+# The repo's OWN declaration, not a copy: `ingest/crates/sovereign-recipes/wessex-hoard/`
 # ships an ontology block, the markdown it acquires (by a path relative to the
 # recipe, so nothing needs rewriting) and an exhaustive `truth.json`. Left
 # UNINSTALLED here — `ontology-author` step [0] is the install, and
 # pre-installing would make its own first step a no-op that passes without
 # proving anything, the same rule the journey-corpus recipe follows below.
-ONTOLOGY_RECIPE="${SOVEREIGN_JOURNEY_ONTOLOGY_RECIPE:-$REPO_ROOT/sovereign-recipes/wessex-hoard/recipe.toml}"
+ONTOLOGY_RECIPE="${SOVEREIGN_JOURNEY_ONTOLOGY_RECIPE:-$REPO_ROOT/ingest/crates/sovereign-recipes/wessex-hoard/recipe.toml}"
 if [ ! -f "$ONTOLOGY_RECIPE" ]; then
   echo "sandbox: ontology fixture recipe missing ($ONTOLOGY_RECIPE) — ontology-author cannot run" >&2
   ONTOLOGY_RECIPE=""

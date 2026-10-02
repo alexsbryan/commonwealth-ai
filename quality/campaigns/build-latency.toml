@@ -53,7 +53,7 @@ test   = "gates_require_both_absolute_and_margin"
 shapes = ["test"]
 
 [[probe]]
-file   = "corpus-engine/src/engine/mod.rs"
+file   = "ingest/crates/corpus-engine/src/engine/mod.rs"
 crate  = "corpus-engine"
 weight = 137
 test   = "stamp_then_load_round_trips"
@@ -149,7 +149,7 @@ weight = 53
 test   = "the_default_ready_path_is_v1_models"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-enrichment-build/src/atlas_resolve.rs"
+file   = "ingest/crates/sovereign-enrichment-build/src/atlas_resolve.rs"
 crate  = "sovereign-enrichment-build"
 weight = 52
 test   = "parse_args_accepts_bare_corpus_id"

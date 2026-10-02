@@ -74,7 +74,7 @@ whose GEOMETRY is incompatible — a vector width the loaded model does not
 produce — MUST fail loudly, never coerce. A difference in the recorded model
 NAME alone MUST NOT refuse the open: the same model appears under different
 file names and quantisations, and those vectors are comparable.'''
-target = '''corpus-engine/src/engine/mod.rs::geometry_verdict'''
+target = '''ingest/crates/corpus-engine/src/engine/mod.rs::geometry_verdict'''
 asserts = '''open_index (on the cache-MISS and cache-HIT paths alike) returns Err
 when the corpus's recorded embedding width differs from the width the loaded
 model produces, naming the corpus and both widths; and returns Ok with a warning
@@ -218,7 +218,7 @@ id = "ST-15"
 family = "ST"
 status = "landed"
 clause = '''Compaction is non-destructive, so storage grows until pruning. Pruning is destructive and irreversible: the operator surface MUST have no default and MUST refuse a zero-retention prune; the automatic sweep MUST use a retention window far outside any plausible in-flight reader.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs:80::run_optimize'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs:80::run_optimize'''
 asserts = '''`corpus optimize <id> --prune-days 0` (or a non-integer) writes an error naming the constraint to stderr and exits 2 without ever calling CorpusIndex::prune.'''
 catches = '''letting a zero or unparsed retention through to the destructive prune path, deleting every superseded version regardless of what an in-flight reader still holds.'''
 destination = '''sovereign/docs/cli-contract.toml (journey) + optimize.rs mod tests'''
@@ -230,11 +230,11 @@ id = "ST-41"
 family = "ST"
 status = "landed"
 clause = '''Per-document recency MUST be **source-agnostic and emergent from indexing**: one sidecar mapping document identity → last-indexed time, stamped at the single point where every re-index path converges. Any source that re-indexes content — a freshness updater, a watched-folder edit, an incremental delta — MUST therefore make that content "fresh" with **no per-source code**.'''
-target = '''corpus-engine/src/engine/reindex.rs:323::reindex_by_source_doc_id'''
-existing = '''partial: corpus-engine/src/freshness.rs:79::stamp_then_load_round_trips'''
+target = '''ingest/crates/corpus-engine/src/engine/reindex.rs:323::reindex_by_source_doc_id'''
+existing = '''partial: ingest/crates/corpus-engine/src/freshness.rs:79::stamp_then_load_round_trips'''
 asserts = '''after reindex_by_source_doc_id, freshness::load_doc_freshness(index_dir) contains that source_doc_id with a timestamp >= the call start.'''
 catches = '''a new content source's reindex path inserting chunks but never calling the shared stamp, so its documents never sort fresh-first. The existing freshness test covers stamp/load in isolation, not that the reindex path calls them.'''
-destination = '''corpus-engine/tests/main/'''
+destination = '''ingest/crates/corpus-engine/tests/main/'''
 kind = '''rust-integration; needs a real index dir'''
 landed = '''corpus-engine::main::reindex_stamps_freshness::reindexing_a_document_stamps_its_recency_at_the_shared_convergence_point'''
 
@@ -292,10 +292,10 @@ id = "EN-16"
 family = "EN"
 status = "landed"
 clause = '''A reversible operation MUST actually be reversible. Where an operation log claims to support undo, the log envelope MUST carry the identity, version, actor, and timestamp needed to find the matching forward operation.'''
-target = '''corpus-engine/src/enrichment/reconciliation/multi_origin.rs:258::split_atom'''
+target = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/multi_origin.rs:258::split_atom'''
 asserts = '''given a Merge op id, a reversal reads that op's recorded inputs from the log and produces a Split whose outputs equal them — with no operator-supplied `into` list.'''
-catches = '''DUE DILIGENCE 2026-09-02 — CONFIRMED ABSENT for reconciliation, and there is a working pattern to copy. governance.rs:296 (derive_active) already does exactly this for the governance tenant: it matches Revert{targets: Vec<OpId>} against op.id to find and tombstone the forward op. Reconciliation never got that wiring: split_atom(canonical_id, into, rationale) takes a caller-supplied output list, never looks up the Merge by OpId to read its recorded inputs, and its ONLY call site is its own test (multi_origin.rs:471) — no production path calls it. corpus-engine/src/oplog.rs:24-26 documents the reversibility this code does not implement.'''
-destination = '''corpus-engine/src/enrichment/reconciliation/multi_origin.rs (mod tests)'''
+catches = '''DUE DILIGENCE 2026-09-02 — CONFIRMED ABSENT for reconciliation, and there is a working pattern to copy. governance.rs:296 (derive_active) already does exactly this for the governance tenant: it matches Revert{targets: Vec<OpId>} against op.id to find and tombstone the forward op. Reconciliation never got that wiring: split_atom(canonical_id, into, rationale) takes a caller-supplied output list, never looks up the Merge by OpId to read its recorded inputs, and its ONLY call site is its own test (multi_origin.rs:471) — no production path calls it. ingest/crates/corpus-engine/src/oplog.rs:24-26 documents the reversibility this code does not implement.'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/multi_origin.rs (mod tests)'''
 kind = '''rust-unit; BUILD THE REVERSAL FIRST — see catches'''
 landed = '''corpus-engine::enrichment::reconciliation::oplog::tests::a_merge_is_reversed_from_the_log_with_no_operator_supplied_output_list (+ a_reversal_the_log_cannot_support_is_refused_not_guessed)'''
 
@@ -316,10 +316,10 @@ id = "EN-4"
 family = "EN"
 status = "landed"
 clause = '''There MUST be exactly one helper constructing this cache identity, so every read and write carries the same notion of identity.'''
-target = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs:72::with_model_identity'''
+target = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs:72::with_model_identity'''
 asserts = '''CacheModelIdentity is constructed in exactly one place in phase_cache.rs production code (source-scan test, like the existing call_census pattern).'''
 catches = '''a second construction site built from different fields that silently disagrees with with_model_identity and defeats the model-swap guard.'''
-destination = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs (mod tests)'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs (mod tests)'''
 kind = '''rust-unit; source-scan, mirror call_census'''
 landed = '''corpus-engine::enrichment::pipeline::phase_cache::tests::exactly_one_place_constructs_the_cache_model_identity'''
 
@@ -328,10 +328,10 @@ id = "EN-5"
 family = "EN"
 status = "landed"
 clause = '''A dedicated span-typed entity extractor MUST be available, generation-agnostic behind a seam so alternative implementations share one persistence, deduplication, and provenance path.'''
-target = '''corpus-engine/src/enrichment/tiered.rs:64::ChunkEntityExtractor'''
+target = '''ingest/crates/corpus-engine/src/enrichment/tiered.rs:64::ChunkEntityExtractor'''
 asserts = '''a mock ChunkEntityExtractor injected into run_tiered_enrichment has extract_for_conversation invoked once per non-empty conversation group with the right corpus_id/conv_uuid/chunks, and its count flows into the outcome.'''
 catches = '''a dispatch-loop change that stops calling the injected extractor, silently reverting to RAPTOR-derived entities only. Nothing exercises this seam today.'''
-destination = '''corpus-engine/src/enrichment/tiered.rs (mod tests)'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/tiered.rs (mod tests)'''
 kind = '''rust-unit; mock ChunkEntityExtractor impl'''
 landed = '''corpus-engine::main::tiered_entity_extractor_seam::* '''
 
@@ -340,11 +340,11 @@ id = "EN-9"
 family = "EN"
 status = "landed"
 clause = '''Clustering thresholds MUST be **corpus-shape aware**. A threshold tuned for one content shape MUST NOT be applied to another.'''
-target = '''corpus-engine/src/enrichment/domains/philosophy.rs:222::clustering_config'''
-existing = '''partial: corpus-engine/src/enrichment/domains/personal.rs:392::clustering_config_values'''
+target = '''ingest/crates/corpus-engine/src/enrichment/domains/philosophy.rs:222::clustering_config'''
+existing = '''partial: ingest/crates/corpus-engine/src/enrichment/domains/personal.rs:392::clustering_config_values'''
 asserts = '''PhilosophyDomain.clustering_config() has max_cluster_points 30000 and reduced_dims 128 while PersonalDomain's are 0/0 — the configs actually differ by corpus shape.'''
 catches = '''a copy-paste giving every domain the same caps, applying a large-corpus projection to a small personal corpus. The existing test asserts only the shared constants.'''
-destination = '''corpus-engine/src/enrichment/domains/ (mod tests)'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/domains/ (mod tests)'''
 kind = '''rust-unit; compare two domains' configs'''
 landed = '''corpus-engine::enrichment::domains::tests::a_large_corpus_domain_and_a_small_one_do_not_share_clustering_caps'''
 
@@ -818,16 +818,16 @@ id = "ST-24"
 family = "ST"
 status = "exists-untagged"
 clause = '''The join MUST be computed by locating each stored passage within its source document. Because stored passage text is rarely a verbatim slice of the source (ingestion prepends titles and reflows whitespace), the locator MUST attempt several normalisations and MUST **reject ambiguity rather than resolve it by taking the first match**. Unlocatable passages MUST be reported, not dropped (X-EH-1).'''
-target = '''corpus-engine/src/enrichment/pipeline/section_join.rs:120::assign_chunks_to_sections'''
-existing = '''corpus-engine/src/enrichment/pipeline/section_join.rs:434::an_ambiguous_chunk_is_unmapped_not_guessed'''
+target = '''ingest/crates/corpus-engine/src/enrichment/pipeline/section_join.rs:120::assign_chunks_to_sections'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/pipeline/section_join.rs:434::an_ambiguous_chunk_is_unmapped_not_guessed'''
 
 [[spec]]
 id = "ST-25"
 family = "ST"
 status = "landed"
 clause = '''Join status MUST be three-valued: **no structure declared**, **structure declared but join missing**, **join present**. Conflating the first two is what allows this to rot invisibly — no caller can distinguish a broken corpus from a flat one.'''
-target = '''corpus-engine/src/enrichment/governance_view.rs:293::chunk_to_section_map_status'''
-existing = '''corpus-engine/src/enrichment/governance_view.rs:1198'''
+target = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:293::chunk_to_section_map_status'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:1198'''
 landed = '''corpus-engine::enrichment::governance_view::tests::sections_with_no_chunk_ids_are_a_missing_join_and_say_so (+ ::an_absent_manifest_is_no_structure_not_a_missing_join + ::an_empty_chapter_list_is_no_structure_not_a_fault + ::a_populated_join_is_present_and_silent)'''
 
 [[spec]]
@@ -835,24 +835,24 @@ id = "ST-27"
 family = "ST"
 status = "exists-untagged"
 clause = '''Publishing a corpus bundle MUST refuse an unjoined bundle (X-CO-3). A corpus that declares structure and joins none MUST fail publication, naming the offending corpora and the repair. A partial join is legitimate; an override MUST print the same facts rather than taking a quieter path.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:711::audit_section_joins'''
-existing = '''sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:1282::a_sibling_with_sections_and_no_join_fails_the_gate'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:711::audit_section_joins'''
+existing = '''ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:1282::a_sibling_with_sections_and_no_join_fails_the_gate'''
 
 [[spec]]
 id = "ST-4"
 family = "ST"
 status = "exists-untagged"
 clause = '''A **shard** — an index holding a contiguous identifier range — MUST be structurally identical to a whole index. Search MUST NOT be able to tell the difference. Three shard operations MUST exist: report statistics, extract a range into a new index, merge N indexes into one.'''
-target = '''corpus-engine/src/sharding.rs:523::extract_shard'''
-existing = '''corpus-engine/tests/main/sharding_round_trip_e2e.rs:233::merged_search_finds_term_unique_to_one_shard'''
+target = '''ingest/crates/corpus-engine/src/sharding.rs:523::extract_shard'''
+existing = '''ingest/crates/corpus-engine/tests/main/sharding_round_trip_e2e.rs:233::merged_search_finds_term_unique_to_one_shard'''
 
 [[spec]]
 id = "ST-5"
 family = "ST"
 status = "landed"
 clause = '''The pair *(corpus identifier, passage identifier)* is the citation handle and MUST be globally unique. Enumeration of installed corpora MUST deduplicate deterministically and MUST exclude out-of-band directories.'''
-target = '''corpus-engine/src/engine/mod.rs:1676::dedupe_by_corpus_id'''
-existing = '''corpus-engine/src/engine/mod.rs:3263::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
+target = '''ingest/crates/corpus-engine/src/engine/mod.rs:1676::dedupe_by_corpus_id'''
+existing = '''ingest/crates/corpus-engine/src/engine/mod.rs:3263::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
 landed = '''corpus-engine::engine::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
 
 [[spec]]
@@ -860,8 +860,8 @@ id = "ST-6"
 family = "ST"
 status = "landed"
 clause = '''**A directory is not an installed corpus.** Readiness MUST be decided by a positive completion signal from the index itself, at the canonical location, by one decider shared by every reader (X-SD-1). In-flight ingests MUST write to a distinct location that no reader mistakes for an installed corpus.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:844::corpus_readiness'''
-existing = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1173::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:844::corpus_readiness'''
+existing = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1173::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
 landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
 
 [[spec]]
@@ -869,8 +869,8 @@ id = "ST-7"
 family = "ST"
 status = "landed"
 clause = '''Readiness MUST be a three-or-more-valued answer (**ready**, **building**, **absent**, and any further distinguishable states), never a boolean.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:809::CorpusReadiness'''
-existing = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1155::readiness_labels_are_stable_api'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:809::CorpusReadiness'''
+existing = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1155::readiness_labels_are_stable_api'''
 landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::readiness_labels_are_stable_api'''
 
 [[spec]]
@@ -878,8 +878,8 @@ id = "ST-9"
 family = "ST"
 status = "landed"
 clause = '''Nodes sharing a corpus MUST produce bit-compatible vectors. Any operation that mixes vectors from two models MUST be impossible.'''
-target = '''corpus-engine/src/sharding.rs:598::merge_shards'''
-existing = '''corpus-engine/src/sharding.rs:1903::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
+target = '''ingest/crates/corpus-engine/src/sharding.rs:598::merge_shards'''
+existing = '''ingest/crates/corpus-engine/src/sharding.rs:1903::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
 landed = '''corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
 
 [[spec]]
@@ -929,16 +929,16 @@ id = "EN-13"
 family = "EN"
 status = "exists-untagged"
 clause = '''Merge signals MUST be **identity-grade only** — exact name folding, nickname and initial-surname forms, exact shared contact identifiers or aliases, organisation-plus-role. Fuzzy cross-attribute matching and bare-name aliasing MUST NOT be used.'''
-target = '''corpus-engine/src/enrichment/reconciliation/signals.rs:80::NameSimilaritySignal::check'''
-existing = '''corpus-engine/src/enrichment/reconciliation/signals.rs:505::name_similarity_ignores_shared_bare_given_name_alias'''
+target = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/signals.rs:80::NameSimilaritySignal::check'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/signals.rs:505::name_similarity_ignores_shared_bare_given_name_alias'''
 
 [[spec]]
 id = "EN-19"
 family = "EN"
 status = "landed"
 clause = '''Adjudications MUST survive a rebuild that renumbers graph identifiers. They MUST therefore record their endpoint *rule pair*, not only an edge identifier, and MUST resolve **mootness** — a conflict whose rule has been superseded is not open. Only a genuinely dangling decision (whose rule text was edited away) MUST surface as an issue.'''
-target = '''corpus-engine/src/enrichment/governance_view.rs:411::tension_disposition'''
-existing = '''corpus-engine/src/enrichment/governance_view.rs:949::tension_with_superseded_endpoint_is_moot_not_open'''
+target = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:411::tension_disposition'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:949::tension_with_superseded_endpoint_is_moot_not_open'''
 landed = '''corpus-engine::enrichment::governance_view::tests::tension_with_superseded_endpoint_is_moot_not_open (+ ::pair_matched_disposition_survives_rebuild_edge_ids + ::vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is)'''
 
 [[spec]]
@@ -946,8 +946,8 @@ id = "EN-3"
 family = "EN"
 status = "exists-untagged"
 clause = '''Each cached enrichment phase MUST record the model that produced it, and MUST decline to reuse a phase produced by a different model. A model swap MUST force recomputation rather than silently mixing outputs from two models in one graph.'''
-target = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs:130::PhaseCache::read'''
-existing = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs:373::different_model_is_cache_miss'''
+target = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs:130::PhaseCache::read'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs:373::different_model_is_cache_miss'''
 
 [[spec]]
 id = "EV-10"
@@ -978,8 +978,8 @@ id = "EV-24"
 family = "EV"
 status = "exists-untagged"
 clause = '''A test suite MUST prove it **can fail**. Every other measure (spec counts, coverage, fixture liveness) describes what tests *reached*. Negative controls break the product on purpose and require the tests claiming that coverage to go red.'''
-target = '''corpus-engine/tests/ui/harness_positive_control.rs'''
-existing = '''corpus-engine/tests/evidence_reds.rs:41::evidence_has_exactly_one_door'''
+target = '''ingest/crates/corpus-engine/tests/ui/harness_positive_control.rs'''
+existing = '''ingest/crates/corpus-engine/tests/evidence_reds.rs:41::evidence_has_exactly_one_door'''
 
 [[spec]]
 id = "EV-28"
@@ -1039,8 +1039,8 @@ id = "GR-35"
 family = "GR"
 status = "landed"
 clause = '''A user-facing **coverage card** MUST derive, from the same source the tool answers from: what the corpus answers, over what period, as of which version, and its named structural limits.'''
-target = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:179::coverage_card'''
-existing = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:376::every_period_the_card_advertises_is_answerable_by_the_tool'''
+target = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:179::coverage_card'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:376::every_period_the_card_advertises_is_answerable_by_the_tool'''
 landed = '''corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool'''
 
 [[spec]]
@@ -1048,8 +1048,8 @@ id = "GR-36"
 family = "GR"
 status = "landed"
 clause = '''Three properties MUST be structural rather than remembered: - the card type MUST carry no coverage ratio, and MUST NOT carry the counts from which one could be computed; - a declared limit MUST carry no severity field, so no renderer can style a refusal as a fault; - capability and boundary MUST share one presentation rule, so neither can be demoted to fine print without visibly demoting the other.'''
-target = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:81::CoverageCard'''
-existing = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:306::card_carries_no_percentage_and_no_tag_ratio'''
+target = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:81::CoverageCard'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:306::card_carries_no_percentage_and_no_tag_ratio'''
 landed = '''corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio'''
 
 [[spec]]

@@ -30,7 +30,7 @@ pub type ChunkEntityExtractorHandle = Arc<dyn ChunkEntityExtractor>;
 /// The refusal count travels in the return type rather than in a log
 /// line because a caller cannot drop a field it has to destructure
 /// (ARCH 6, ARCH 10). An implementor that bounds its input (the GLiNER
-/// one does — `corpus-engine/src/enrichment/chunk_ner_bound.rs`) reports the
+/// one does — `ingest/crates/corpus-engine/src/enrichment/chunk_ner_bound.rs`) reports the
 /// chunks it declined to send here; the runners accumulate it and stamp
 /// it on `_enrichment_state.json` via
 /// [`crate::enrichment_state::EnrichmentStateFile::record_refused_over_cap`], so "this corpus's

@@ -172,7 +172,7 @@ deliberate; neither is a placeholder.
   has `license`, `mesh_sharing` (byte-level redistribution allowed?),
   `query_sharing` (may federated queries read it?), and `scope = "local"`
   to pin a corpus off-mesh entirely
-  (`corpus-engine/src/recipe.rs`). Shipped recipes set these per source
+  (`ingest/crates/corpus-engine/src/recipe.rs`). Shipped recipes set these per source
   (e.g. SEP is `mesh_sharing = false`).
 - **Work-atlas privacy is structural.** Private claims/observations are
   written to a separate store that never gossips, enforced at the store,

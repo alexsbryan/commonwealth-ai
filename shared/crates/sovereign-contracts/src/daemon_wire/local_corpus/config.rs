@@ -43,7 +43,7 @@ pub enum CorpusScope {
 
 impl CorpusScope {
     /// Render to the string that `corpus_engine::CorpusMeta::scope`
-    /// accepts. Keep in sync with `corpus-engine/src/recipe.rs`.
+    /// accepts. Keep in sync with `ingest/crates/corpus-engine/src/recipe.rs`.
     pub fn as_recipe_str(&self) -> &'static str {
         match self {
             CorpusScope::Local => "local",

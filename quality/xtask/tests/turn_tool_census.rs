@@ -354,7 +354,7 @@ fn read(root: &Path, rel: &str) -> String {
 const BUNDLE_DEFINITIONS: &[&str] = &[
     "sovereign/crates/sovereign-tools/src/bundles.rs",
     "studio/crates/sovereign-workflow-host/src/author.rs",
-    "studio/crates/sovereign-recipe-author/src/bundle.rs",
+    "ingest/crates/sovereign-recipe-author/src/bundle.rs",
 ];
 
 /// The `ToolBundle` impls across `BUNDLE_DEFINITIONS`, as one text.

@@ -50,7 +50,7 @@ members = [
     "shared/crates/mesh-reach",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
-    "corpus-engine",
+    "ingest/crates/corpus-engine",
     "quality/xtask",
     # SCIP call graph + per-language exporter dispatch. Carved out of
     # corpus-engine 2026-05-23 to cut the rebuild blast radius for scip
@@ -93,8 +93,8 @@ members = [
     # into sovereign-contracts (noun-convergence rung 2).
     "shared/crates/corpus-engine-sections",
     # The bundled recipe definitions as data (five-programs-52): the package is
-    # rooted at the sovereign-recipes/ directory, which keeps its name.
-    "sovereign-recipes",
+    # rooted at the ingest/crates/sovereign-recipes/ directory, which keeps its name.
+    "ingest/crates/sovereign-recipes",
     # The atlas vocabulary (AtomsFile/AtomEnvelope, Edge, the kind taxonomy,
     # lookup_key) — a serde + kernel-types leaf carved out 2026-09-03 so a thin
     # host can READ atlas/atoms.json without linking corpus-engine (Step 2 of
@@ -111,8 +111,8 @@ members = [
     # published language and `understanding-host` the ports and the knot; both
     # are stubs until REVIEW-mint-understanding-tiers classifies the 170-file
     # cluster and mints the move rows.
-    "understanding-atlas",
-    "understanding-host",
+    "ingest/crates/understanding-atlas",
+    "ingest/crates/understanding-host",
     # The thin knowledge host — cited search + atlas atom lookup over MCP/stdio
     # against any OpenAI-compatible endpoint; links corpus-engine + the vocab
     # leaf and nothing that carries llama.cpp, ort or iroh (enrichment-as-plugin
@@ -136,12 +136,12 @@ members = [
     # schema and its inventory, below every host that touches it. Minted
     # 2026-08-20 (noun-convergence rung nc-16-shared-capability) after the
     # schema was found implemented three times because it lived in a binary.
-    "sovereign/crates/sovereign-enrichment-catalog",
+    "ingest/crates/sovereign-enrichment-catalog",
     # The atlas `enrich build` orchestrator + its phase drivers. Minted
     # 2026-09-01 (ontology-v1 P0.5) so the daemon and the desktop reach the
     # orchestrator without linking `sovereign-cli-llm` — and with it
     # `bench_cmd`'s grandfathered `sovereign-eval` edge — as a library.
-    "sovereign/crates/sovereign-enrichment-build",
+    "ingest/crates/sovereign-enrichment-build",
     # THE recipe that commissions a `Runtime` — the router stack, the turn
     # tool registry and the enrichment lane, below every host. Minted
     # 2026-08-25 (TOPOLOGY.md §10 phase 5c) after the same recipe was found
@@ -151,7 +151,7 @@ members = [
     "sovereign/crates/sovereign-runtime-recipe",
     "shared/crates/sovereign-turn-client",
     "studio/crates/sovereign-tools-base",
-    "studio/crates/sovereign-recipe-author",
+    "ingest/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
     # local-model steps; the general form of corpus-ingest/enrichment/agent).
     "shared/crates/sovereign-workflow",
@@ -225,8 +225,8 @@ members = [
     "sovereign/crates/sovereign-cli-bench",
     "cmnwlth/crates/sovereign-cli-mesh",
     "sovereign/crates/sovereign-eval",
-    "sovereign/crates/sovereign-authoring-harness",
-    "sovereign/crates/sovereign-pipeline",
+    "ingest/crates/sovereign-authoring-harness",
+    "ingest/crates/sovereign-pipeline",
     "sovereign/crates/sovereign-work-atlas",
     "sovereign/crates/sovereign-agent-bench",
     "sovereign/crates/sovereign-agent-tools",
@@ -361,7 +361,7 @@ oplog-types = { path = "shared/crates/oplog-types" }
 mesh-join-vocab = { path = "shared/crates/mesh-join-vocab" }
 host-kit = { path = "shared/crates/host-kit" }
 mesh-reach = { path = "shared/crates/mesh-reach" }
-corpus-engine = { path = "corpus-engine" }
+corpus-engine = { path = "ingest/crates/corpus-engine" }
 corpus-engine-scip = { path = "shared/crates/corpus-engine-scip" }
 corpus-engine-atlas-reader = { path = "shared/crates/corpus-engine-atlas-reader" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
@@ -369,9 +369,9 @@ corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "shared/crates/corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
 corpus-engine-sections = { path = "shared/crates/corpus-engine-sections" }
-corpus-engine-recipes = { path = "sovereign-recipes" }
+corpus-engine-recipes = { path = "ingest/crates/sovereign-recipes" }
 understanding-vocab = { path = "shared/crates/understanding-vocab", default-features = false }
-understanding-atlas = { path = "understanding-atlas" }
+understanding-atlas = { path = "ingest/crates/understanding-atlas" }
 corpus-index = { path = "shared/crates/corpus-index" }
 code-facts = { path = "code-facts" }
 code-next-edit = { path = "code-next-edit" }
@@ -386,12 +386,12 @@ sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-code = { path = "sovereign/crates/sovereign-code" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-gliner = { path = "serve/crates/sovereign-gliner" }
-sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
-sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }
+sovereign-enrichment-catalog = { path = "ingest/crates/sovereign-enrichment-catalog" }
+sovereign-enrichment-build = { path = "ingest/crates/sovereign-enrichment-build" }
 sovereign-runtime-recipe = { path = "sovereign/crates/sovereign-runtime-recipe" }
 sovereign-turn-client = { path = "shared/crates/sovereign-turn-client" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
-sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
+sovereign-recipe-author = { path = "ingest/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "shared/crates/sovereign-workflow" }
 sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
@@ -403,11 +403,11 @@ sovereign-serve = { path = "serve/crates/sovereign-serve" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-cli-base = { path = "shared/crates/sovereign-cli-base" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
-sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
+sovereign-pipeline = { path = "ingest/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
 sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
-sovereign-authoring-harness = { path = "sovereign/crates/sovereign-authoring-harness" }
+sovereign-authoring-harness = { path = "ingest/crates/sovereign-authoring-harness" }
 sovereign-hosted-ingest = { path = "sovereign/crates/sovereign-hosted-ingest" }
 sovereign-agent-tools = { path = "sovereign/crates/sovereign-agent-tools" }
 sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }

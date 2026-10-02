@@ -414,7 +414,9 @@ fn enumeration_failures(root: &Path, doc: &str, allow: &BTreeSet<String>) -> Vec
     let mut fails = Vec::new();
 
     // 1. Recipe extractors — every `ExtractorConfig` serde rename.
-    if let Ok(recipe) = std::fs::read_to_string(root.join("corpus-engine/src/recipe.rs")) {
+    if let Ok(recipe) =
+        std::fs::read_to_string(root.join("ingest/crates/corpus-engine/src/recipe.rs"))
+    {
         if let Some(start) = recipe.find("pub enum ExtractorConfig") {
             let body = &recipe[start..];
             let body = &body[..body.find("\n}").unwrap_or(body.len())];

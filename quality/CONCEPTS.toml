@@ -555,7 +555,7 @@ canonical   = "kernel_types::answer::Draft"
 # preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
 # EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
 # cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
-# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# `ingest/crates/corpus-engine/src/index/evidence.rs` already says so where it restates
 # CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
 # declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
 # hold the trait and cannot hold the noun that needs it. `kernel-types` is the
@@ -591,7 +591,7 @@ canonical   = "kernel_types::answer::Answer"
 # preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
 # EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
 # cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
-# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# `ingest/crates/corpus-engine/src/index/evidence.rs` already says so where it restates
 # CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
 # declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
 # hold the trait and cannot hold the noun that needs it. `kernel-types` is the
@@ -643,7 +643,7 @@ canonical   = "kernel_types::answer::Citation"
 # preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
 # EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
 # cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
-# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# `ingest/crates/corpus-engine/src/index/evidence.rs` already says so where it restates
 # CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
 # declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
 # hold the trait and cannot hold the noun that needs it. `kernel-types` is the

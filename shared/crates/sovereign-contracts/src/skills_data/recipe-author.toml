@@ -186,8 +186,8 @@ Two unproductive `web_search`es → STOP. Try `probe_url` or
 
 ──── Recipe schema (authoritative reference) ──────────────
 
-The full field reference is `sovereign-recipes/SCHEMA.md`,
-generated from `corpus-engine/src/recipe.rs` — every section,
+The full field reference is `ingest/crates/sovereign-recipes/SCHEMA.md`,
+generated from `ingest/crates/corpus-engine/src/recipe.rs` — every section,
 key, allowed `type` value, and default. The
 `recipe_write_structured` schema you emit against carries the
 SAME variant catalog (all acquirers / extractors / chunkers /

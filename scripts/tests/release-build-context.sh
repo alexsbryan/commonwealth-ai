@@ -171,7 +171,7 @@ done
 #
 # A COPY of a DIRECTORY is fine even when descendants are filtered — podman
 # only fails when the named path itself resolves to nothing. That is why
-# `COPY corpus-engine/ …` coexists happily with `**/target/`.
+# `COPY ingest/crates/corpus-engine/ …` coexists happily with `**/target/`.
 mapfile -t containerfiles < <(git ls-files | grep -iE '(^|/)(Containerfile|Dockerfile)([.-][A-Za-z0-9._-]+)?$')
 if (( ${#containerfiles[@]} == 0 )); then
     fail "found no Containerfiles to check — the COPY-path control cannot run"

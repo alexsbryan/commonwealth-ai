@@ -14,7 +14,7 @@ column without saying they differ.
 
 ## §2 What already exists (commit 174bdd33, order sec-filings-template slice 1)
 
-`sovereign-recipes/sec-filings-company/` — a template recipe materialized per
+`ingest/crates/sovereign-recipes/sec-filings-company/` — a template recipe materialized per
 issuer as `sec-cik<10-digit>`, AAPL proven: 10-K prose (95 parts) + XBRL
 companyfacts figures (20 fact files, 24 tags across 20 canonical concepts).
 `scripts/check-sec-corpus.py` judges from retrieval only. B2 10/10 and B4 3/3,
@@ -117,7 +117,7 @@ Survey done 2026-08-14, before designing:
   `handlers/complex_task.rs` harvests any tool step whose `StepOutput::Json`
   carries `cited_figures`, `derivation`, `reproduce`; `json_numeric_leaves`
   collects the raw side. The precedent tool is
-  `corpus-engine/src/enrichment/atlas/analysis/parcel_analytics.rs`, routed from
+  `ingest/crates/corpus-engine/src/enrichment/atlas/analysis/parcel_analytics.rs`, routed from
   `sovereign/crates/sovereign-core/src/router.rs:2066`.
 
 So F2 is: **emit the existing contract from a sec-facts tool.** It is not a new
@@ -372,7 +372,7 @@ by construction; amended filings (10-K/A) beyond F6's detection.
 Found 2026-08-14 by reading §7's scenes against the tree, not by reading bar
 text:
 
-1. **Scene 2 does not work.** `sovereign-recipes/sec-filings-company/recipe.toml`
+1. **Scene 2 does not work.** `ingest/crates/sovereign-recipes/sec-filings-company/recipe.toml`
    declares NO `[parameters]` block, so no user can install by ticker from the
    desktop. Four recipes already declare one (`scotus-opinions`, `olc-opinions`,
    `email-archive`, `federal-register-presidential`) — the precedent exists and

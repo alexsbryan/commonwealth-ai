@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The recipe registry catalog — a read-only view over the checked-in
-//! `sovereign-recipes/registry.toml`.
+//! `ingest/crates/sovereign-recipes/registry.toml`.
 //!
 //! `RegistryBrowseTool` lists recipes so the authoring agent can pattern off an
 //! existing one. It did this through `corpus_engine::RecipeRegistry` — a runtime
@@ -90,7 +90,7 @@ pub struct CatalogRow {
 /// `RecipeRegistry::is_local_entry`. `live` (network refresh) is never consulted
 /// — the browse tool never refreshes.
 ///
-/// `bundled_toml` is the injected `sovereign-recipes/registry.toml` snapshot.
+/// `bundled_toml` is the injected `ingest/crates/sovereign-recipes/registry.toml` snapshot.
 pub fn merged_catalog(bundled_toml: &str) -> Vec<CatalogRow> {
     let bundled = parse_registry(bundled_toml);
     let local = default_local_registry_path()

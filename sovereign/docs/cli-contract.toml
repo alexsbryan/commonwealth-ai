@@ -2537,7 +2537,7 @@ title = "Author a recipe, test it, install it as a corpus, publish it"
 persona = "author"
 experience = "publish-to-others"
 tier = 3
-doc = "sovereign-recipes/GETTING_STARTED.md"
+doc = "ingest/crates/sovereign-recipes/GETTING_STARTED.md"
 [[journey.step]]
 run = "recipe new --ontology numismatics"
 note = """the scaffold is the payload, so it goes to stdout; the assertion is the \
@@ -2612,7 +2612,7 @@ doc = "sovereign/docs/ENRICH_A_CORPUS.md#declare-your-own-nouns"
 # with no `--pipeline` resolving to the custom atlas is itself part of the
 # claim, and a regression that lost the derivation would turn step [1] red.
 #
-# The recipe is the repo's own `sovereign-recipes/wessex-hoard/` — a real
+# The recipe is the repo's own `ingest/crates/sovereign-recipes/wessex-hoard/` — a real
 # declaration over a real corpus, with an exhaustive `truth.json` beside it —
 # rather than a second invented fixture. Its `acquire.path` is relative to the
 # recipe's own directory, so unlike the journey-corpus fixture it needs no
@@ -2656,7 +2656,7 @@ prompt this pipeline ships — it can only be in this output because the \
 declaration reached the extractor, the resolver and the classifier. Asserting \
 the JSON field rather than the headline: a headline is prose and gets \
 rephrased, `entity_type` is the wire. The exhaustive scoring against \
-`sovereign-recipes/wessex-hoard/truth.json` — every catalogued coin under its \
+`ingest/crates/sovereign-recipes/wessex-hoard/truth.json` — every catalogued coin under its \
 declared identity key, every named mint and ruler — stays in \
 `scripts/setup-numismatics-corpus.sh`, which is where a recall bar belongs; \
 this step is the contract-visible floor under it."""

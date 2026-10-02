@@ -1024,7 +1024,7 @@ new):**
 
 - The corpus RETRIEVAL surface: `CorpusIndex::open` +
   `CorpusIndex::search(&embedding, query, limit)` — vector + FTS hybrid
-  (corpus-engine/src/index/search.rs, flat-scan fallback under 10k rows) —
+  (ingest/crates/corpus-engine/src/index/search.rs, flat-scan fallback under 10k rows) —
   already wired into the loop's estate survey leg:
   `CliResearchPort::estate_search` (sovereign-cli/src/deep_research_cmd.rs)
   and `svrn corpus search` (corpus_cmd/search.rs). The rung-2 acquisition

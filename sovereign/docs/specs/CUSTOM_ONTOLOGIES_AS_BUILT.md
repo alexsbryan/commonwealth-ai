@@ -2,7 +2,7 @@
 
 Status: **analysis + proposal** (2026-09-01). Companion to
 [`CUSTOM_ATLAS.md`](CUSTOM_ATLAS.md) (the June design, all seven
-increments shipped), [`../../../corpus-engine/ENRICHMENT.md`](../../../corpus-engine/ENRICHMENT.md)
+increments shipped), [`ingest/crates/corpus-engine/ENRICHMENT.md`](../../../ingest/crates/corpus-engine/ENRICHMENT.md)
 (the canonical map of the enrichment systems) and
 [`AUTHORING_HARNESS.md`](AUTHORING_HARNESS.md) (which scopes ontology
 quality out). Nothing in section 3 is built.
@@ -70,7 +70,7 @@ runtime reads:
 | Tiered — RAPTOR tree + GLiNER entities, SQLite sidecars | `type = "tiered"` (and every attached document, vault, watched folder, no recipe) | `conv_raptor_nodes`, `chunk_entities`, `vault_themes`; for folder corpora a typed-extension `atlas/atoms.json` | RAPTOR grounding (default on); the PPR entity rerank is off since 2026-08-04; the typed-extension atoms are "bench-side only — no chat-side surface reads typed atoms in v2" (`sovereign-tools/src/typed_extension/mod.rs:17-19`) |
 | Field model (v1) — Rust `Domain` modules | `type = "field_model"` | concerns, positions, fault lines, open questions | KnowledgeView digests; zero enabled recipes today |
 
-Recipes by system, from every `sovereign-recipes/*/recipe.toml` (39
+Recipes by system, from every `ingest/crates/sovereign-recipes/*/recipe.toml` (39
 checked): atlas 16 (of which 4 legal recipes are `enabled = false`),
 tiered 2, investigation 2, field model 2 (both disabled, both naming
 domains deleted 2026-07-13), and 17 with no enrichment block.
@@ -78,7 +78,7 @@ domains deleted 2026-07-13), and 17 with no enrichment block.
 ### 0.2 The atlas genres are the ontologies that exist
 
 Since 2026-08-31 an atlas genre is a twelve-method trait, `AtlasGenre`
-(`corpus-engine/src/enrichment/pipeline/pipelines/genre.rs:47-125`),
+(`ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/genre.rs:47-125`),
 whose module note states the design: "a genre is a Phase-1 ontology plus
 a handful of strategy choices — not a pipeline." Literary, conversation,
 engineering and the recipe custom ontology implement it. Philosophy and
@@ -103,7 +103,7 @@ naming, classification and configuration; the custom path reaches two.
 
 ### 0.3 Two more ontology substrates, both typed, neither feeding chat
 
-**Investigation** (`corpus-engine/src/enrichment/investigation/`). A
+**Investigation** (`ingest/crates/corpus-engine/src/enrichment/investigation/`). A
 recipe declares `[[enrichment.entity_types]]` with attribute keys,
 `[[enrichment.relationship_types]]` with a `directional` flag, and
 `[[enrichment.patterns]]` (circular flow, role overlap, threshold —
@@ -117,7 +117,7 @@ Its output never reaches chat. Two recipes use it (`uap-blue-book`,
 atoms.
 
 **Discourse-mode typed schemas**
-(`corpus-engine/src/enrichment/pipeline/typed_schemas/`). Seven
+(`ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/`). Seven
 per-mode schema + prompt + parser triples (argumentative, descriptive,
 lyric, narrative, procedural, reflective, source recovery), a "MECE
 axis" orthogonal to domain. The argumentative one is the only live
@@ -184,7 +184,7 @@ recipe ontology (free-text guidance, the same eleven kinds):
 
 | Consumer | Reads | Default | Custom corpus |
 |---|---|---|---|
-| `apply_atlas_grounding` (`sovereign-core/src/runtime/retrieval/atlas_grounding.rs:68-382`) via `atlas_navigate_ann` (`corpus-engine/src/enrichment/atlas/context.rs:1013`) | the embedded atom bag; BFS over edge **types** (Tension 1.0, Concedes 1.0, Grounds 0.8, EvidenceFor 0.8, Configures 0.6, Involves 0.5, Causes 0.3) | on | works — keys on kinds and edge types, not vocabulary. **But see the hazard below** |
+| `apply_atlas_grounding` (`sovereign-core/src/runtime/retrieval/atlas_grounding.rs:68-382`) via `atlas_navigate_ann` (`ingest/crates/corpus-engine/src/enrichment/atlas/context.rs:1013`) | the embedded atom bag; BFS over edge **types** (Tension 1.0, Concedes 1.0, Grounds 0.8, EvidenceFor 0.8, Configures 0.6, Involves 0.5, Causes 0.3) | on | works — keys on kinds and edge types, not vocabulary. **But see the hazard below** |
 | `render_atom_entry` (`context.rs:1346-1408`) — the one embed-text shape | Entity `canonical_name + aliases + description`; Claim `[act, status] content`; Configuration; ArgumentReconstruction. `None` for Event, State, Relation, Question, Position, Opposition, Asset | Entity only under the shipped backfill filter (`include_claims=false`) | works unchanged |
 | `atom_verbatim_excerpt` → `[Atlas highlights]` (`context.rs:889-988`) | ArgumentReconstruction premises/objections; `Entity.defining_quote`; `Claim.quotable_excerpt` with a ` — contested` tag | on, "most atoms have neither field set" | assumes philosophy; the only place `EpistemicStatus::Contested` reaches an answer |
 | `enumerate_typed_atom_chunks` (`runtime/retrieval/atom_enum.rs:69-718`) | classifier prompt enumerates exactly `person, institution, initiative, concept, work, place`; string-equal on subtype; edge degree | **off** (`SOVEREIGN_ATOM_ENUM`) | inert — a domain type is unreachable by construction |
@@ -397,12 +397,12 @@ Use this corpus. Three caveats: it depends on the agent following its
 script, and the script documents a mode where the fast model answers in
 prose and writes no recipe; the PDF extractor is registered at daemon
 start (`recipe.rs:1811-1821`) but absent from
-`corpus-engine/schema/recipe_schema_descriptor.json`, the menu the
+`ingest/crates/corpus-engine/schema/recipe_schema_descriptor.json`, the menu the
 author and agent see; and the quick "add a folder" route accepts only
 the three prebuilt atlases (`sovereign-tools/src/local_corpus/manager.rs:544-549`).
 And after Build & enrich, §0.5: no backfill, no grounding.
 
-**CLI.** Documented and misleading. `sovereign-recipes/GETTING_STARTED.md:113`
+**CLI.** Documented and misleading. `ingest/crates/sovereign-recipes/GETTING_STARTED.md:113`
 says "leave it off for your first recipe"; the annotated template
 teaches `domain = "multi"` (`_templates/annotated/recipe.toml:85`),
 deleted in July; `recipe validate` (`testing.rs:896-1020`) never looks
@@ -419,9 +419,9 @@ is no `new`. "Ontology" appears nowhere in `svrn enrich --help`.
 `sovereign/SYSTEM_OVERVIEW.md` §Enrichment (line 1152) lists six atlas
 pipelines and describes the investigation path under "Recipe-authoring
 platform" (line 1249). It contains zero occurrences of `custom_atlas`,
-`enrichment.ontology`, or "custom ontology." `corpus-engine/ENRICHMENT.md`,
+`enrichment.ontology`, or "custom ontology." `ingest/crates/corpus-engine/ENRICHMENT.md`,
 "the canonical umbrella that reconciles all three," likewise contains
-none. `corpus-engine/ATLAS.md:115` lists three selectable pipelines.
+none. `ingest/crates/corpus-engine/ATLAS.md:115` lists three selectable pipelines.
 `ARCH_PRINCIPLES.md §1.1` makes the overview entry a contract landed in
 the same commit as the code; for this feature it was not.
 
@@ -441,7 +441,7 @@ the same commit as the code; for this feature it was not.
 
 Atom, facet, sketch, atlas, tension, gap, configuration, trajectory,
 seed, resolve, Phase 1–8, field model, investigation, governance view,
-edge. `corpus-engine/ATLAS.md:20-41` is the glossary and
+edge. `ingest/crates/corpus-engine/ATLAS.md:20-41` is the glossary and
 `ENRICH_A_CORPUS.md:75-78` shelves it as "engineering material." The
 governance ontology exists as `maple-house/recipe.toml`, as a compiled
 string constant (`governance_commands.rs:695-713`; smell §6.2), and as
@@ -527,7 +527,7 @@ trajectories.
 *Smell §6.2; write for the next reader (§1). Size: small.*
 
 Move `GOVERNANCE_ONTOLOGY_GUIDANCE` to
-`sovereign-recipes/_templates/governance/recipe.toml`, have the
+`ingest/crates/sovereign-recipes/_templates/governance/recipe.toml`, have the
 desktop's "Rules & decisions" template read it, and give recipes an
 `ontology = "governance"` reference so `maple-house` and
 `proxy-company` share it. Every future shipped ontology lands the same
@@ -593,7 +593,7 @@ parallel ontologies that a reader has to reconcile (`ENRICHMENT.md`
    "Teach it your field's vocabulary." What you declare, what you get
    back, what stays fixed, what to run after enrichment, a worked
    numismatics example, and the interview questions.
-3. A glossary lifted from `corpus-engine/ATLAS.md:20-41`, linked from
+3. A glossary lifted from `ingest/crates/corpus-engine/ATLAS.md:20-41`, linked from
    every user doc that says atom, tension, or phase.
 4. Fix the cheap contradictions in §2.4: the template's deleted domain,
    the skill prompt's deleted domain list, the enrichment guide's
@@ -624,13 +624,13 @@ parallel ontologies that a reader has to reconcile (`ENRICHMENT.md`
 
 ## Sources
 
-- Mechanism: `corpus-engine/src/enrichment/pipeline/pipelines/configurable_atlas.rs`
+- Mechanism: `ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/configurable_atlas.rs`
   (spec, defaults, `AtlasGenre` impl at 211), `genre.rs` (trait, module
   note), `literary_atlas.rs:1975` (schema enum), `:1449` (parser drop),
   `:2694` (pinning test), `:744` and `:778` (Phase 8),
   `philosophy_atlas.rs`, `referential_atlas.rs`, `engineering_atlas.rs`,
   `conversation_atlas.rs`, prompt asset dirs beside each.
-- Recipe schema: `corpus-engine/src/recipe.rs:627` (`OntologyConfig`),
+- Recipe schema: `ingest/crates/corpus-engine/src/recipe.rs:627` (`OntologyConfig`),
   `:646` (vocabulary), `:790` (investigation declarations), `:2142`
   (precedence); `investigation/extract.rs:182` (`response_schema`).
 - Atom model: `atlas/atoms.rs:950` (kinds), `:658` (ArgumentReconstruction),
@@ -641,18 +641,18 @@ parallel ontologies that a reader has to reconcile (`ENRICHMENT.md`
   `init.rs:180`; `pipeline/registry.rs:29`; `enrichment/domain_registry.rs:24,80`.
 - Retrieval consumers: `sovereign-core/src/runtime/retrieval/{atlas_grounding,atom_enum,boosts,raptor_grounding}.rs`,
   `runtime/evidence_loop/anchoring.rs`, `runtime/retrieval_pipeline.rs:719`,
-  `corpus-engine/src/enrichment/atlas/context.rs:889,1013,1264,1346,1484`,
+  `ingest/crates/corpus-engine/src/enrichment/atlas/context.rs:889,1013,1264,1346,1484`,
   `sovereign-tools/src/atlas_context_manager.rs:355`,
   `sovereign-cli-llm/src/atlas_cmd/{backfill_ann,migrate_all}.rs`,
   `sovereign-desktop/src-tauri/src/state.rs:834`.
 - Governance: `governance_commands.rs:689`, `governance_view.rs:598-629`,
   `sovereign-tools/src/local_corpus/manager.rs:544`.
 - Narrative contracts: `sovereign/SYSTEM_OVERVIEW.md:1152,1249`,
-  `corpus-engine/ENRICHMENT.md`, `corpus-engine/ENRICHMENT_V2.md:68-87`,
-  `corpus-engine/ATLAS.md:115`.
+  `ingest/crates/corpus-engine/ENRICHMENT.md`, `ingest/crates/corpus-engine/ENRICHMENT_V2.md:68-87`,
+  `ingest/crates/corpus-engine/ATLAS.md:115`.
 - Docs audited: `sovereign/docs/GETTING_STARTED.md:21`, `ENRICH_A_CORPUS.md:20`,
   `GOVERN_A_CORPUS.md`, `sovereign-recipes/{GETTING_STARTED,SCHEMA,README}.md`,
-  `_templates/annotated/recipe.toml:85`, `corpus-engine/schema/recipe_schema_descriptor.json`,
+  `_templates/annotated/recipe.toml:85`, `ingest/crates/corpus-engine/schema/recipe_schema_descriptor.json`,
   `sovereign/modes/recipe-author/skill.toml:282,419`,
   `recipe_author/tutorial/federalistTutorial.ts`.
 - Benches and baselines: `sovereign/bench/sep/baselines/questions/{pre-enrichment-v1_1,canonical-57-articles,latest}.json`,

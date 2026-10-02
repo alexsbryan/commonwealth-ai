@@ -4,7 +4,7 @@
 //!
 //! B7 was minted after B1 ran, because B1's red found a hazard wider than the
 //! rung: `auto_recover`'s older coverage guard arms only when a partition meta
-//! stamps `total_shards`, and `corpus-engine/src/engine/ingest.rs:718` stamps
+//! stamps `total_shards`, and `ingest/crates/corpus-engine/src/engine/ingest.rs:718` stamps
 //! that for `ExtractorConfig::WikipediaJsonl` and nothing else. A fold unit
 //! slices ANY recipe across donors, so every recipe is multi-shard the moment
 //! the fold is used, and `df2ffecb8` is what puts the fold on the main road.
@@ -248,7 +248,7 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
 ///
 /// The premise B7 rests on, measured instead of recalled (ARCH §11.1). At HEAD
 /// the only production caller of `CorpusIndex::set_total_shards` outside
-/// `sharding.rs`'s merge-replay is `corpus-engine/src/engine/ingest.rs:718`,
+/// `sharding.rs`'s merge-replay is `ingest/crates/corpus-engine/src/engine/ingest.rs:718`,
 /// inside `if let ExtractorConfig::WikipediaJsonl { .. } = recipe.extract`.
 ///
 /// The two halves are the failing input and its control, in one test because

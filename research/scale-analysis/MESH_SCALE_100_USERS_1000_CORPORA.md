@@ -911,7 +911,7 @@ scorer, the loop.
 
 `svrn corpus ingest` — the documented folder-ingest, and the path this rig uses
 — never stamps `indexes_built`. `mark_indexes_built()` is called only from the
-BESPOKE ingest path (`corpus-engine/src/engine/ingest.rs:1709`) and from shard
+BESPOKE ingest path (`ingest/crates/corpus-engine/src/engine/ingest.rs:1709`) and from shard
 promotion (`sharding.rs:1407`); the workflow's `tool:corpus_store` has no
 equivalent call. `corpus_search.rs` Filter 2 then drops every such corpus
 before the fan-out — "skip it on EVERY path so the model can't fabricate over

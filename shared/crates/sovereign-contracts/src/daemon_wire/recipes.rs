@@ -66,7 +66,7 @@ pub struct RecipeParameter {
 //    is deliberately weaker than `TestReport::passed()`, which also demands an
 //    extraction rate over 80% and no over-limit chunks. The lossiness is
 //    documented as a behaviour change at
-//    `studio/crates/sovereign-recipe-author/src/http_tester.rs:9-30`.
+//    `ingest/crates/sovereign-recipe-author/src/http_tester.rs:9-30`.
 // 2. Its `offline` flag is overloaded to mean sample size 0
 //    (`routes_oicp_ingest.rs:105-110`), so "sample 100 documents without
 //    touching the network" — the panel's own iterate-offline mode — cannot be

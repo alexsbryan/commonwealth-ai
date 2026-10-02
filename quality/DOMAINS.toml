@@ -81,11 +81,11 @@ package = "understanding"   # declared 2026-09-18 by REVIEW-build-understanding-
 crates = ["understanding-vocab", "understanding-atlas", "understanding-host"]   # understanding-atlas/-host created as stubs 2026-09-18; enrichment/ is still misfiled in corpus-engine until the classification and move rows land
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
-roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "shared/crates/understanding-vocab"]
+roots = ["ingest/crates/corpus-engine/src/enrichment", "ingest/crates/corpus-engine/src/meta_atlas", "ingest/crates/corpus-engine/src/atlas_traversal", "shared/crates/understanding-vocab"]
 # The two roots where the ATOM vocabulary is authored — the atom-outside axis's
 # scope (campaigns/domains.toml dm-atom-outside). A subset of `roots`: the atom
 # read model is authored here, not in meta_atlas/ or atlas_traversal/.
-vocab_roots = ["shared/crates/understanding-vocab", "corpus-engine/src/enrichment"]
+vocab_roots = ["shared/crates/understanding-vocab", "ingest/crates/corpus-engine/src/enrichment"]
 status = "kept"
 
 [[context]]
@@ -120,7 +120,7 @@ package = ""
 crates = ["corpus-engine"]
 lift = ""
 applicable_as = "a recipe-driven document pipeline"
-roots = ["corpus-engine/src/extractors", "corpus-engine/src/chunkers", "corpus-engine/src/acquirers", "corpus-engine/src/filters", "corpus-engine/src/pii.rs"]
+roots = ["ingest/crates/corpus-engine/src/extractors", "ingest/crates/corpus-engine/src/chunkers", "ingest/crates/corpus-engine/src/acquirers", "ingest/crates/corpus-engine/src/filters", "ingest/crates/corpus-engine/src/pii.rs"]
 status = "kept"
 
 [[context]]
@@ -132,7 +132,7 @@ package = ""
 crates = ["corpus-engine"]
 lift = ""
 applicable_as = "a searchable local index — the closest of the ten to generic (DOMAINS §4), which is a reason to invest less, not to fuse it"
-roots = ["corpus-engine/src/index", "corpus-engine/src/sharding.rs"]   # registry.rs is the RECIPE registry (registry.rs:25-27, zero index refs) — Ingest's; corrected 2026-09-14 by the corpus-engine census
+roots = ["ingest/crates/corpus-engine/src/index", "ingest/crates/corpus-engine/src/sharding.rs"]   # registry.rs is the RECIPE registry (registry.rs:25-27, zero index refs) — Ingest's; corrected 2026-09-14 by the corpus-engine census
 status = "kept"
 
 [[context]]
@@ -198,7 +198,7 @@ package = "code-intel"
 crates = ["corpus-engine-scip", "corpus-engine-sections", "code-next-edit", "code-facts"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created; `code-next-edit` is the TENTH and §2's table does not name it (REVIEW-build-next-edit-crate); `code-facts` is §2's Phase 2 (REVIEW-build-code-facts)
 lift = ""             # no lift script yet; the package row is gated, not lifted
 applicable_as = "a code-intelligence MCP server; next-edit is its clearest lost child (sovereign/docs/NEXT_EDIT.md)"
-roots = ["shared/crates/corpus-engine-scip", "shared/crates/corpus-engine-sections", "corpus-engine/src/enrichment/code_intel", "code-next-edit"]
+roots = ["shared/crates/corpus-engine-scip", "shared/crates/corpus-engine-sections", "ingest/crates/corpus-engine/src/enrichment/code_intel", "code-next-edit"]
 status = "kept"
 
 [[context]]
@@ -1843,7 +1843,7 @@ why = "7 refs / 1 file. image: Option<String> at :134 - absent means this host o
 [[noun]]
 name = "PeerAtomRef"
 crate = "corpus-engine"
-file = "corpus-engine/src/enrichment/atlas/cross_corpus.rs:71"
+file = "ingest/crates/corpus-engine/src/enrichment/atlas/cross_corpus.rs:71"
 visibility = "pub"
 concept = "C6"
 context = "understanding"
@@ -2754,7 +2754,7 @@ family = "decision_log"
 context = "serving"
 definitions = [
     "sovereign/crates/sovereign-mesh/src/decision_log.rs - routing decision records: RoutingDecision :216, RoutingOutcome :577, DecisionSink :617, DecisionBuilder :962, DecisionEvent :84, FleetSnapshot :161. OWNS the schema tag oicp-decision/v1 (:64) and the env var SOVEREIGN_DECISION_LOG (:68)",
-    "studio/crates/sovereign-recipe-author/src/decision_log.rs - recipe-authoring decisions: DecisionLogTool :113, DecisionKind :36, DecisionPayload :104, DecisionAttribution :83. OWNS the tool id \"decision_log\" (:134), registered at sovereign-contracts/src/intent_policy.rs:367 and :479, exposed at sovereign-tools/src/mcp_surface.rs:91, asserted at sovereign-core/tests/main/mode_declarations.rs:84",
+    "ingest/crates/sovereign-recipe-author/src/decision_log.rs - recipe-authoring decisions: DecisionLogTool :113, DecisionKind :36, DecisionPayload :104, DecisionAttribution :83. OWNS the tool id \"decision_log\" (:134), registered at sovereign-contracts/src/intent_policy.rs:367 and :479, exposed at sovereign-tools/src/mcp_surface.rs:91, asserted at sovereign-core/tests/main/mode_declarations.rs:84",
 ]
 verdict = "split"
 survivor = "decision_log (the tool id) @ sovereign-recipe-author - UNCHANGED, 0 renames"
@@ -2874,7 +2874,7 @@ honesty_notes = [
 family = "Gap"
 context = "understanding, answering, research"
 definitions = [
-  "corpus-engine/src/enrichment/atlas/analysis/gaps.rs:56 Gap — a hole in one corpus's atom graph (kind: GapKind, referenced_atoms: Vec<AtomId>, evidence: Vec<ChunkRef>, significance: f32); GapKind at :35 is the closed set TransitionWithoutTrigger|UngroundedClaim|OpenQuestion",
+  "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/gaps.rs:56 Gap — a hole in one corpus's atom graph (kind: GapKind, referenced_atoms: Vec<AtomId>, evidence: Vec<ChunkRef>, significance: f32); GapKind at :35 is the closed set TransitionWithoutTrigger|UngroundedClaim|OpenQuestion",
   "shared/crates/sovereign-contracts/src/types/epistemic.rs:294 Gap — a demand for evidence the installed corpora cannot meet (demand_idx, statement, coverage: GapCoverage, routes: Vec<AcquisitionRoute>)",
   "sovereign/crates/sovereign-core/src/deep_research/icd.rs:407 Gap — the same demand serialised into gap-list-<round>.json (id, text, actionable_query, from_claim_id, corroboration)",
   "sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs:1829 Gap (private) — a reviewer-JSON wire row",
@@ -2924,14 +2924,14 @@ non-pub definitions by a rule rather than by a name.
 family = "Domain"
 context = "understanding"
 definitions = [
-  "corpus-engine/src/enrichment/domain.rs:27 trait Domain — 'Encodes the epistemic conventions of a field of knowledge'; object-safe, Arc<dyn Domain>, five impls (PhilosophyDomain, PersonalDomain, ConversationalDomain, BusinessEmailDomain, InstitutionalDomain)",
-  "corpus-engine/src/enrichment/domain_registry.rs:14 DomainRegistry — HashMap<String, fn() -> Arc<dyn Domain>>, 'replaces the match statement in FieldModelEngine::from_recipe()'",
+  "ingest/crates/corpus-engine/src/enrichment/domain.rs:27 trait Domain — 'Encodes the epistemic conventions of a field of knowledge'; object-safe, Arc<dyn Domain>, five impls (PhilosophyDomain, PersonalDomain, ConversationalDomain, BusinessEmailDomain, InstitutionalDomain)",
+  "ingest/crates/corpus-engine/src/enrichment/domain_registry.rs:14 DomainRegistry — HashMap<String, fn() -> Arc<dyn Domain>>, 'replaces the match statement in FieldModelEngine::from_recipe()'",
 ]
 verdict = "split"
 survivor = "none — Understanding does NOT take the word"
 renames = [
-  "corpus-engine/src/enrichment/domain.rs:27 trait Domain -> FieldModel (45/2 crates)",
-  "corpus-engine/src/enrichment/domain_registry.rs:14 DomainRegistry -> FieldModelRegistry",
+  "ingest/crates/corpus-engine/src/enrichment/domain.rs:27 trait Domain -> FieldModel (45/2 crates)",
+  "ingest/crates/corpus-engine/src/enrichment/domain_registry.rs:14 DomainRegistry -> FieldModelRegistry",
   "the five impls: PhilosophyDomain -> PhilosophyFieldModel, and so on (4 more)",
 ]
 rung = "domains-4 (decide) / domains-11 (execute)"
@@ -2951,7 +2951,7 @@ FieldModelPass, FieldModelSource, FieldModelStats, FieldSkeleton, \
 field_skeleton.json). converge noun FieldModel -> zero definitions. \
 `Pass` is REFUSED as the target: DECOMPOSITION.md:129 is right that \
 [enrichment] type resolves through EnrichmentPassRegistry \
-(corpus-engine/src/engine/pass.rs:115), and that is exactly why — an \
+(ingest/crates/corpus-engine/src/engine/pass.rs:115), and that is exactly why — an \
 EnrichmentPass is a pipeline STEP and a Domain is a GENRE of material; a \
 recipe selects both independently, so merging them merges two extension points.
 """
@@ -2963,8 +2963,8 @@ recipe selects both independently, so merging them merges two extension points.
 family = "Seed"
 context = "understanding"
 definitions = [
-  "NAVIGATION SEED (where a walk starts): shared/crates/understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-bench/src/eval_cmd/atlas_ann.rs:21 SeedMode",
-  "EXTRACTION SEED (the Stage 1a entity list -> cache/seed.json): corpus-engine/src/enrichment/pipeline/atlas.rs:285 SeedEntity, :300 SeedEntities, :322 SeedOrigin, :348 SeedStrategy; sovereign-enrichment-build/src/seed_cmd.rs:31 SeedError, :61 SeedReport",
+  "NAVIGATION SEED (where a walk starts): shared/crates/understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; ingest/crates/corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-bench/src/eval_cmd/atlas_ann.rs:21 SeedMode",
+  "EXTRACTION SEED (the Stage 1a entity list -> cache/seed.json): ingest/crates/corpus-engine/src/enrichment/pipeline/atlas.rs:285 SeedEntity, :300 SeedEntities, :322 SeedOrigin, :348 SeedStrategy; sovereign-enrichment-build/src/seed_cmd.rs:31 SeedError, :61 SeedReport",
   "HOMONYMS: sovereign-cli-dev/src/refactor_cmd/spec.rs:42 SeedEdit; .../refactor_cmd/discover.rs:127 SeededFile; sovereign-cli-llm/src/voice_eval/scenarios.rs:78 SeedMemory; sovereign-mesh/src/governance_http.rs:181 SeededResponse; sovereign-turn-client/src/lib.rs:3758 SeededWire; sovereign-cli-llm/src/awareness_cmd/seed.rs:159 SeedPlan",
 ]
 verdict = "split"
@@ -3004,7 +3004,7 @@ under one word, a later converge, not Phase B's.
 family = "AtomSpan"
 context = "understanding"
 definitions = [
-  "corpus-engine/src/atlas_traversal/spans.rs:43 AtomSpan — atom_id: String, atom_type: &'static str, span_start, span_end, surface_form (the detector's output; atom_type is AtomType::label() flattened to a borrow)",
+  "ingest/crates/corpus-engine/src/atlas_traversal/spans.rs:43 AtomSpan — atom_id: String, atom_type: &'static str, span_start, span_end, surface_form (the detector's output; atom_type is AtomType::label() flattened to a borrow)",
   "sovereign/crates/sovereign-mesh/src/reading_http.rs:123 AtomSpan — the same five fields with atom_type: String; own doc 'Wire shape mirrors corpus_engine::atlas_traversal::AtomSpan'; impl From<DetectorAtomSpan> at :131",
 ]
 verdict = "converge"
@@ -3035,11 +3035,11 @@ family = "Cluster"
 context = "understanding (struck)"
 definitions = [
   "39 definitions, six families. UNDERSTANDING/atlas (11): enrichment/clustering.rs:389 ClusterResult, :396 ClusterInfo; enrichment/domain.rs:263 ClusteringConfig, :318 ClusterLabel; pipeline/atlas_clustering.rs:57 FacetClusterResult, :355 ClusterDraft; pipeline/types.rs:1279 QuestionCluster, :1420 AtlasCluster, :1459 NamedCluster, :1516 ChunkCluster; pipeline/vector_clustering.rs:21 VectorClusterResult",
-  "UNDERSTANDING/meta_atlas (1): corpus-engine/src/meta_atlas/builder.rs:271 Cluster (private)",
+  "UNDERSTANDING/meta_atlas (1): ingest/crates/corpus-engine/src/meta_atlas/builder.rs:271 Cluster (private)",
   "DESKTOP local-corpus ingest preview (13): sovereign-contracts/src/daemon_wire/local_corpus.rs:73 ClusterProgressView, .../local_corpus/clusterer.rs:14 ClusterConfig, :41 MultiClusterStrategy, :66 LabeledCluster, .../preview.rs:32 ClusterSummary, :80 ClusterConfidence, .../progress.rs:94 ClusterStage; sovereign-tools/src/local_corpus/clusterer.rs:45 LabeledClusterResult, :69 Clusterer; sovereign-mesh/src/lc_http.rs:172 ClusterRequest, :181 ClusterProgressQuery, :192 ClusterProgress (alias), :687 ClusterJob",
   "WORKBENCH (3): sovereign-tools/src/code/suggest_seams.rs:74 Cluster, .../code/dry_report.rs:99 NearCluster, sovereign-cli-dev/src/code_fieldglass/model.rs:142 DupClusterSummary",
   "RAPTOR rollup (3): sovereign-tools/src/raptor_atlas.rs:890 ClusterSummarizationInput, .../raptor_checkpoint.rs:79 LevelClustering, sovereign-eval/src/entity_resolution_score.rs:41 type Clustering",
-  "OTHER (8): corpus-engine/src/recipe.rs:730 ClusteringToml; sovereign-core/src/conv_briefing.rs:122 ClusterSignpost; sovereign-cli-dev/src/intent.rs:111 IntentCluster; sovereign-eval/src/flywheel/generators/adversarial.rs:84 EntityCluster; sovereign-enrichment-build/src/atlas_phase_cmd.rs:31 ParsedCluster, :37 ClusterReport, :634 AtlasClusterTool; sovereign-pipeline/src/enrich_cmd/workflow_primitives.rs:146 AtlasClustersTool, :187 AtlasClusterExcerptsTool",
+  "OTHER (8): ingest/crates/corpus-engine/src/recipe.rs:730 ClusteringToml; sovereign-core/src/conv_briefing.rs:122 ClusterSignpost; sovereign-cli-dev/src/intent.rs:111 IntentCluster; sovereign-eval/src/flywheel/generators/adversarial.rs:84 EntityCluster; sovereign-enrichment-build/src/atlas_phase_cmd.rs:31 ParsedCluster, :37 ClusterReport, :634 AtlasClusterTool; sovereign-pipeline/src/enrich_cmd/workflow_primitives.rs:146 AtlasClustersTool, :187 AtlasClusterExcerptsTool",
 ]
 verdict = "delete"
 survivor = ""
@@ -3047,7 +3047,7 @@ renames = []
 rung = "domains-4 (struck; already absent from DOMAINS.toml owns) — DOMAINS.md §5 loses the clause"
 why = """
 CONFIRMED as asked: `git grep -c -i 'cluster' \
-corpus-engine/src/enrichment/atlas/writer.rs` prints nothing and exits 1 — ZERO \
+ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs` prints nothing and exits 1 — ZERO \
 occurrences of the word in the atlas writer. Understanding's clusters are never \
 persisted under atlas/, so there is no read model to publish and nothing for \
 Phase B to converge. Four converge candidates recorded for later rungs, none of \
@@ -3081,7 +3081,7 @@ renames = [
   "CorpusAtomsPage + AtomListPage + AtomsPage<T> -> AtlasPage<T>, with aliases AtomPage = AtlasPage<AtomEnvelope> and AtomSummaryPage = AtlasPage<AtomSummary>. total/total_matching were one number under two names and two widths (usize, u64) -> one name, u64. The browse surface gains corpus_id, schema_version, offset, limit — all four already in scope at atom_browse.rs:258",
   "RelatedAtom x2 -> one, typed (AtomId/AtomType, not String)",
   "CrossCorpusLink x2 -> one (six fields, already identical)",
-  "SectionRef + EvidenceExcerpt -> ResolvedEvidence { section_id, chunk_id: Option<u64>, passage_preview: Option<String> } — two names, one concept, the AtomQueryError/AtomDetailError collapse of 2026-08-20 repeated. NOT named EvidenceRef: that is taken by corpus-engine/src/enrichment/atlas/context.rs:972, a BORROWED view EvidenceRef<'a>(&'a ChunkRef) from nc-6-atom, whose chunk_id is a section-id String while this one is a LanceDB row u64",
+  "SectionRef + EvidenceExcerpt -> ResolvedEvidence { section_id, chunk_id: Option<u64>, passage_preview: Option<String> } — two names, one concept, the AtomQueryError/AtomDetailError collapse of 2026-08-20 repeated. NOT named EvidenceRef: that is taken by ingest/crates/corpus-engine/src/enrichment/atlas/context.rs:972, a BORROWED view EvidenceRef<'a>(&'a ChunkRef) from nc-6-atom, whose chunk_id is a section-id String while this one is a LanceDB row u64",
   "atom_id + atom_type + display_name/canonical_name + salience + subtype, duplicated across AtomSummary, AtomDetail, AtomCard and (weakened) RelatedAtom -> one AtomHead, #[serde(flatten)]-ed. Four producers -> one",
   "curation_status + overlay_supports, the same forward-compat pair in three producers -> one CurationState; CurationStatus moves to vocab",
   "enrichment_depth: String (AtomCard) -> EnrichmentDepth (vocab taxonomy.rs:40), as AtomSummary already has it",
@@ -3103,11 +3103,11 @@ sovereign-*, so [dependencies] stays kernel-types, serde, serde_json, blake3.
 family = "read_atlas_* (the door)"
 context = "understanding"
 definitions = [
-  "corpus-engine/src/enrichment/atlas/writer.rs:595 read_atlas_atoms -> io::Result<AtomsFile>",
-  "corpus-engine/src/enrichment/atlas/writer.rs:604 read_atlas_edges -> io::Result<EdgesFile>",
-  "corpus-engine/src/enrichment/atlas/writer.rs:562 read_atlas_cross_corpus_edges -> io::Result<CrossCorpusEdgesFile>",
-  "corpus-engine/src/enrichment/atlas/writer.rs:43 ATLAS_DIRNAME",
-  "read_atlas_ontology DOES NOT EXIST — the only site that reads the file is corpus-engine/src/enrichment/atlas/context_loader.rs:711 (atlas.join(\"ontology.json\")), inline inside the loader",
+  "ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:595 read_atlas_atoms -> io::Result<AtomsFile>",
+  "ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:604 read_atlas_edges -> io::Result<EdgesFile>",
+  "ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:562 read_atlas_cross_corpus_edges -> io::Result<CrossCorpusEdgesFile>",
+  "ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:43 ATLAS_DIRNAME",
+  "read_atlas_ontology DOES NOT EXIST — the only site that reads the file is ingest/crates/corpus-engine/src/enrichment/atlas/context_loader.rs:711 (atlas.join(\"ontology.json\")), inline inside the loader",
 ]
 verdict = "converge"
 survivor = "understanding_vocab::read — four fns + ATLAS_DIRNAME, all returning Result<_, AtomQueryError>"
@@ -3147,7 +3147,7 @@ it does. AtomsFile derives Deserialize and that impl is PUBLIC: a hand-rolled \
 parser outside vocab can still write serde_json::from_str::<AtomsFile>(&s) and \
 then call .atoms(). Field visibility only blocks the struct LITERAL. The fix is \
 the pattern this repo already proved for Evidence \
-(corpus-engine/src/index/evidence.rs: 'the load-bearing property is the door, \
+(ingest/crates/corpus-engine/src/index/evidence.rs: 'the load-bearing property is the door, \
 not the struct … every field is private, there is no pub fn new, and \
 Evidence::acquired — the only constructor — is pub(crate)'): make AtomsFile \
 !Deserialize and parse a private twin. The compile-fail test then pins \
@@ -3201,7 +3201,7 @@ family = "Source"
 context = "ingest, kernel"
 definitions = [
   "shared/crates/kernel-types/src/origin.rs:82 Source — seven variants (Corpus { corpus, document: ContentHash, locator }, Web { url, fetched_at }, Attachment, ToolOutput, Server, Grain, …); where a piece of grounded content came from. Its doc explicitly REFUSES system prompts, persona text, compiled lessons, the tool dossier and the epistemic contract. 38 refs",
-  "sovereign/crates/sovereign-pipeline/src/recipe.rs:98 Source — SlugList | Command | Inline; where a work-unit pipeline's KEYS come from. 6 refs / 2 files",
+  "ingest/crates/sovereign-pipeline/src/recipe.rs:98 Source — SlugList | Command | Inline; where a work-unit pipeline's KEYS come from. 6 refs / 2 files",
   "shared/crates/sovereign-workflow/src/model.rs:264 Source — Folder | List | Inline; 'where the per-item driver gets its items'. 12 refs / 5 files",
   "sovereign/crates/sovereign-cli-llm/src/meshapp_registry.rs:324 Source (private) — Path | Url; where a meshapp bundle is fetched from. 10 refs / 1 file",
 ]
@@ -3216,7 +3216,7 @@ rung = "domains-4 (decide) / domains-11 (execute) — 28 refs / 8 files"
 why = """
 THE FINDING: none of the four is Ingest's recipe source, because Ingest defines \
 no Source at all. `git grep 'pub (enum|struct) Source' corpus-engine/` returns \
-nothing; corpus-engine/src/recipe.rs carries source_path, source_id, \
+nothing; ingest/crates/corpus-engine/src/recipe.rs carries source_path, source_id, \
 source_doc_id and dedup_by_source as FIELDS, and its extension points are \
 Acquirer and Extractor. Ingest's owns row names a word with no type behind it — \
 the same defect as Understanding's Domain. \
@@ -3411,7 +3411,7 @@ note = "the enrichment hand-off"
 # cosine over a FixedSizeListArray<Float32> plus RRF fusion over LanceDB IVF-PQ
 # and Tantivy — a thin wrapper any vector store would have. Everything else is
 # custody, portability and merge semantics a vector store has no reason to
-# carry. merge_shards (corpus-engine/src/sharding.rs:780ff) dedupes on TWO
+# carry. merge_shards (ingest/crates/corpus-engine/src/sharding.rs:780ff) dedupes on TWO
 # keys: primary content_hash, secondary (unit_id, source_doc_id) for NULL-hash
 # rows, with a per-RecordBatch keep-mask; and at :760-768 a
 # MutableMergePolicy::SourceDocIdNewestMtime branch reconciles divergent rows
@@ -3442,8 +3442,8 @@ note = "the enrichment hand-off"
 # Generated 2026-09-14 by the corpus-engine census worker. Append to quality/DOMAINS.toml.
 #
 # COVERAGE ASSERTED (the mesh-census method):
-#   - every .rs under corpus-engine/src is covered by exactly one row (295 files)
-#   - sum(lines) == `find corpus-engine/src -name '*.rs' | xargs wc -l` == 172204
+#   - every .rs under ingest/crates/corpus-engine/src is covered by exactly one row (295 files)
+#   - sum(lines) == `find ingest/crates/corpus-engine/src -name '*.rs' | xargs wc -l` == 172204
 #   - context ids are the registry's closed set (quality/DOMAINS.toml [[context]])
 #   - a directory row means EVERY .rs beneath it shares that context; a directory that
 #     does not is split (enrichment/ splits at code_intel/, src/ splits at the leaves)
@@ -3459,322 +3459,322 @@ note = "the enrichment hand-off"
 #   build-feedback       260 lines     1 files  (  0.2%)
 
 [[module]]
-path = "corpus-engine/src/acquirers/"
+path = "ingest/crates/corpus-engine/src/acquirers/"
 context = "ingest"
 lines = 2102
 files = 9
 note = "registry roots: ingest"
 
 [[module]]
-path = "corpus-engine/src/asset_store/"
+path = "ingest/crates/corpus-engine/src/asset_store/"
 context = "ingest"
 lines = 599
 files = 3
 note = "content-addressed store for binary-bearing extractors (asset_store/mod.rs:1-8)"
 
 [[module]]
-path = "corpus-engine/src/atlas_traversal/"
+path = "ingest/crates/corpus-engine/src/atlas_traversal/"
 context = "understanding"
 lines = 4115
 files = 6
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/chunkers/"
+path = "ingest/crates/corpus-engine/src/chunkers/"
 context = "ingest"
 lines = 2746
 files = 9
 note = "registry roots: ingest"
 
 [[module]]
-path = "corpus-engine/src/engine/"
+path = "ingest/crates/corpus-engine/src/engine/"
 context = "ingest"
 lines = 10166
 files = 12
 note = "CorpusEngine orchestrates acquire->extract->chunk->embed->index (engine/mod.rs:2-3)"
 
 [[module]]
-path = "corpus-engine/src/enrichment/atlas/"
+path = "ingest/crates/corpus-engine/src/enrichment/atlas/"
 context = "understanding"
 lines = 39921
 files = 59
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/code_intel/"
+path = "ingest/crates/corpus-engine/src/enrichment/code_intel/"
 context = "workbench"
 lines = 2274
 files = 4
 note = "registry roots: workbench owns enrichment/code_intel"
 
 [[module]]
-path = "corpus-engine/src/enrichment/domains/"
+path = "ingest/crates/corpus-engine/src/enrichment/domains/"
 context = "understanding"
 lines = 2464
 files = 6
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/investigation/"
+path = "ingest/crates/corpus-engine/src/enrichment/investigation/"
 context = "understanding"
 lines = 3693
 files = 8
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/ontology/"
+path = "ingest/crates/corpus-engine/src/enrichment/ontology/"
 context = "understanding"
 lines = 503
 files = 2
 note = "registry roots: understanding; clock.rs + type_index.rs left for understanding-atlas at REVIEW-build-understanding-crate-tree"
 
 [[module]]
-path = "corpus-engine/src/enrichment/pipeline/"
+path = "ingest/crates/corpus-engine/src/enrichment/pipeline/"
 context = "understanding"
 lines = 27135
 files = 45
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/reconciliation/"
+path = "ingest/crates/corpus-engine/src/enrichment/reconciliation/"
 context = "understanding"
 lines = 2358
 files = 6
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/alignment.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/alignment.rs"
 context = "understanding"
 lines = 145
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/checkpoint.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/checkpoint.rs"
 context = "understanding"
 lines = 187
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/clustering.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/clustering.rs"
 context = "understanding"
 lines = 579
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/domain.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/domain.rs"
 context = "understanding"
 lines = 617
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/domain_registry.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/domain_registry.rs"
 context = "understanding"
 lines = 116
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/entity_extraction.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/entity_extraction.rs"
 context = "understanding"
 lines = 2957
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/fault_lines.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/fault_lines.rs"
 context = "understanding"
 lines = 422
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/field_atoms.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/field_atoms.rs"
 context = "understanding"
 lines = 924
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/field_engine.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/field_engine.rs"
 context = "understanding"
 lines = 1196
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/filter.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/filter.rs"
 context = "understanding"
 lines = 212
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/governance.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/governance.rs"
 context = "understanding"
 lines = 915
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/governance_change.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/governance_change.rs"
 context = "understanding"
 lines = 500
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/governance_view.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/governance_view.rs"
 context = "understanding"
 lines = 1407
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/mod.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/mod.rs"
 context = "understanding"
 lines = 66
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/open_questions.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/open_questions.rs"
 context = "understanding"
 lines = 83
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/pass.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/pass.rs"
 context = "understanding"
 lines = 547
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/sep.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/sep.rs"
 context = "understanding"
 lines = 298
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/skeleton_parse.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/skeleton_parse.rs"
 context = "understanding"
 lines = 1060
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/state.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/state.rs"
 context = "understanding"
 lines = 1078
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/tiered.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/tiered.rs"
 context = "understanding"
 lines = 958
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/tokens.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/tokens.rs"
 context = "understanding"
 lines = 51
 files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/extractors/"
+path = "ingest/crates/corpus-engine/src/extractors/"
 context = "ingest"
 lines = 16292
 files = 29
 note = "registry roots: ingest"
 
 [[module]]
-path = "corpus-engine/src/filters/"
+path = "ingest/crates/corpus-engine/src/filters/"
 context = "ingest"
 lines = 1934
 files = 7
 note = "registry roots: ingest"
 
 [[module]]
-path = "corpus-engine/src/harness/"
+path = "ingest/crates/corpus-engine/src/harness/"
 context = "back-of-house"
 lines = 1542
 files = 7
 note = "authoring-harness MECHANISM; policy/verdicts in sovereign-eval::authoring_harness (harness/mod.rs:1-7)"
 
 [[module]]
-path = "corpus-engine/src/index/"
+path = "ingest/crates/corpus-engine/src/index/"
 context = "retrieval"
 lines = 9253
 files = 11
 note = "registry roots: retrieval"
 
 [[module]]
-path = "corpus-engine/src/meta_atlas/"
+path = "ingest/crates/corpus-engine/src/meta_atlas/"
 context = "understanding"
 lines = 4645
 files = 11
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/recipe_ontology/"
+path = "ingest/crates/corpus-engine/src/recipe_ontology/"
 context = "ingest"
 lines = 432
 files = 2
 note = "[enrichment.ontology] TOML shapes, split out of recipe.rs; re-exported from crate::recipe"
 
 [[module]]
-path = "corpus-engine/src/update/"
+path = "ingest/crates/corpus-engine/src/update/"
 context = "ingest"
 lines = 3155
 files = 5
 note = "re-ingest: delta apply, fs-watch -> reindex_file, newsworthy freshness daemon"
 
 [[module]]
-path = "corpus-engine/src/wikipedia_columnar/"
+path = "ingest/crates/corpus-engine/src/wikipedia_columnar/"
 context = "understanding"
 lines = 410
 files = 1
 note = "wiki link graph over the v2 columnar store WRITTEN by enrichment::atlas::wiki_store; read by meta_atlas/bridge/build.rs:29"
 
 [[module]]
-path = "corpus-engine/src/alignment_projector.rs"
+path = "ingest/crates/corpus-engine/src/alignment_projector.rs"
 context = "workspace"
 lines = 645
 files = 1
 note = "materializes the alignment corpus back to ~/.claude/ (alignment_projector.rs:2-8)"
 
 [[module]]
-path = "corpus-engine/src/canonical_sync.rs"
+path = "ingest/crates/corpus-engine/src/canonical_sync.rs"
 context = "retrieval"
 lines = 303
 files = 1
 note = "canonical-index pack/unpack for cross-peer transfer (canonical_sync.rs:2-9)"
 
 [[module]]
-path = "corpus-engine/src/corpus.rs"
+path = "ingest/crates/corpus-engine/src/corpus.rs"
 context = "kernel"
 lines = 218
 files = 1
 note = "Corpus - the published noun and the ONE decider of on-disk layout (corpus.rs:2-3)"
 
 [[module]]
-path = "corpus-engine/src/embed_http.rs"
+path = "ingest/crates/corpus-engine/src/embed_http.rs"
 context = "retrieval"
 lines = 69
 files = 1
 note = "EmbedFn over POST /v1/embeddings; Embedding is Retrieval's owned noun"
 
 [[module]]
-path = "corpus-engine/src/error.rs"
+path = "ingest/crates/corpus-engine/src/error.rs"
 context = "kernel"
 lines = 365
 files = 1
@@ -3809,154 +3809,154 @@ files = 1
 note = "the code-intel package's fact-base crate root; the three modules landed here at REVIEW-build-code-facts and corpus-engine re-exports them at their historical paths"
 
 [[module]]
-path = "corpus-engine/src/freshness.rs"
+path = "ingest/crates/corpus-engine/src/freshness.rs"
 context = "retrieval"
 lines = 99
 files = 1
 note = "_doc_freshness.json index sidecar; Atlas READS it (freshness.rs:2-8)"
 
 [[module]]
-path = "corpus-engine/src/lib.rs"
+path = "ingest/crates/corpus-engine/src/lib.rs"
 context = "kernel"
 lines = 228
 files = 1
 note = "crate root + the re-export surface; every carve-out's shim lands here"
 
 [[module]]
-path = "corpus-engine/src/notes_sync.rs"
+path = "ingest/crates/corpus-engine/src/notes_sync.rs"
 context = "workspace"
 lines = 459
 files = 1
 note = "NoteStore <-> alignment-corpus sync; Note is Workspace's owned noun (notes_sync.rs:2-9)"
 
 [[module]]
-path = "corpus-engine/src/pii.rs"
+path = "ingest/crates/corpus-engine/src/pii.rs"
 context = "ingest"
 lines = 509
 files = 1
 note = "registry roots: ingest"
 
 [[module]]
-path = "corpus-engine/src/progress.rs"
+path = "ingest/crates/corpus-engine/src/progress.rs"
 context = "ingest"
 lines = 134
 files = 1
 note = "_source_manifest.json written during ingestion (progress.rs:3-9)"
 
 [[module]]
-path = "corpus-engine/src/recipe.rs"
+path = "ingest/crates/corpus-engine/src/recipe.rs"
 context = "ingest"
 lines = 4017
 files = 1
 note = "Recipe is Ingest's owned noun (DOMAINS.toml ingest.owns)"
 
 [[module]]
-path = "corpus-engine/src/recipe_builtin.rs"
+path = "ingest/crates/corpus-engine/src/recipe_builtin.rs"
 context = "ingest"
 lines = 422
 files = 1
 note = "include_str!s the build.rs-vendored recipes (recipe_builtin.rs:205-279)"
 
 [[module]]
-path = "corpus-engine/src/recipe_install.rs"
+path = "ingest/crates/corpus-engine/src/recipe_install.rs"
 context = "ingest"
 lines = 571
 files = 1
 note = "recipe install"
 
 [[module]]
-path = "corpus-engine/src/recipe_parsing.rs"
+path = "ingest/crates/corpus-engine/src/recipe_parsing.rs"
 context = "ingest"
 lines = 518
 files = 1
 note = "recipe TOML parsing"
 
 [[module]]
-path = "corpus-engine/src/recipe_schema.rs"
+path = "ingest/crates/corpus-engine/src/recipe_schema.rs"
 context = "ingest"
 lines = 22
 files = 1
 note = "recipe schema"
 
 [[module]]
-path = "corpus-engine/src/recipe_templates.rs"
+path = "ingest/crates/corpus-engine/src/recipe_templates.rs"
 context = "ingest"
 lines = 107
 files = 1
 note = "recipe templates"
 
 [[module]]
-path = "corpus-engine/src/registry.rs"
+path = "ingest/crates/corpus-engine/src/registry.rs"
 context = "ingest"
 lines = 984
 files = 1
 note = "DEVIATION from registry roots (retrieval): RecipeRegistry, imports only crate::recipe::Recipe + crate::types (registry.rs:25-27), zero index refs. Proposed correction to DOMAINS.toml retrieval.roots"
 
 [[module]]
-path = "corpus-engine/src/safety.rs"
+path = "ingest/crates/corpus-engine/src/safety.rs"
 context = "ingest"
 lines = 181
 files = 1
 note = "robots.txt/rate-limit rules for acquisition (safety.rs:2-8)"
 
 [[module]]
-path = "corpus-engine/src/sharding.rs"
+path = "ingest/crates/corpus-engine/src/sharding.rs"
 context = "retrieval"
 lines = 2710
 files = 1
 note = "registry roots: retrieval"
 
 [[module]]
-path = "corpus-engine/src/snapshot.rs"
+path = "ingest/crates/corpus-engine/src/snapshot.rs"
 context = "retrieval"
 lines = 1595
 files = 1
 note = "prebuilt-index .tar.zst transport (snapshot.rs:2-6)"
 
 [[module]]
-path = "corpus-engine/src/snapshot_compat.rs"
+path = "ingest/crates/corpus-engine/src/snapshot_compat.rs"
 context = "retrieval"
 lines = 745
 files = 1
 note = "the ONE restored-snapshot acceptance decision (snapshot_compat.rs:2-9)"
 
 [[module]]
-path = "corpus-engine/src/snapshot_restore.rs"
+path = "ingest/crates/corpus-engine/src/snapshot_restore.rs"
 context = "retrieval"
 lines = 312
 files = 1
 note = "snapshot restorer, extracted from crate::snapshot"
 
 [[module]]
-path = "corpus-engine/src/sovereign_config.rs"
+path = "ingest/crates/corpus-engine/src/sovereign_config.rs"
 context = "build-feedback"
 lines = 260
 files = 1
 note = "parser for .sovereign/sovereign.toml PER-PROJECT WATCHER config; RunnerConfig (sovereign_config.rs:2-3)"
 
 [[module]]
-path = "corpus-engine/src/stream_axes.rs"
+path = "ingest/crates/corpus-engine/src/stream_axes.rs"
 context = "understanding"
 lines = 310
 files = 1
 note = "meta-atom stability taxonomy and derivation; the per-atom articulation types moved to shared/crates/understanding-vocab/src/articulation.rs by domains REVIEW-build-articulation-vocab. Only consumers are meta_atlas/* and types.rs:432"
 
 [[module]]
-path = "corpus-engine/src/testing.rs"
+path = "ingest/crates/corpus-engine/src/testing.rs"
 context = "ingest"
 lines = 1758
 files = 1
 note = "recipe test harness: extract->chunk->embed->search for a recipe PR (testing.rs:2-7)"
 
 [[module]]
-path = "corpus-engine/src/types.rs"
+path = "ingest/crates/corpus-engine/src/types.rs"
 context = "kernel"
 lines = 712
 files = 1
 note = "DECOMPOSITION Tier 0 corpus-engine-types: CorpusKind, ChunkRange, ShardInfo, IndexInfo, IndexStats, EmbedFn"
 
 [[module]]
-path = "corpus-engine/src/wikipedia_columnar.rs"
+path = "ingest/crates/corpus-engine/src/wikipedia_columnar.rs"
 context = "understanding"
 lines = 947
 files = 1
@@ -4031,102 +4031,102 @@ dest = "understanding-atlas"
 files = 96
 lines = 43982
 paths = [
-    "understanding-atlas/src/atlas_traversal/brief.rs",
-    "understanding-atlas/src/atlas_traversal/classifier.rs",
-    "understanding-atlas/src/atlas_traversal/engine.rs",
-    "corpus-engine/src/atlas_traversal/mod.rs",
-    "understanding-atlas/src/atlas_traversal/spans.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/configuration.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/gaps.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/holistic_classifier.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/mod.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/parcel_analytics.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/patterns_adapter.rs",
+    "ingest/crates/understanding-atlas/src/atlas_traversal/brief.rs",
+    "ingest/crates/understanding-atlas/src/atlas_traversal/classifier.rs",
+    "ingest/crates/understanding-atlas/src/atlas_traversal/engine.rs",
+    "ingest/crates/corpus-engine/src/atlas_traversal/mod.rs",
+    "ingest/crates/understanding-atlas/src/atlas_traversal/spans.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/configuration.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/gaps.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/holistic_classifier.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/parcel_analytics.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/patterns_adapter.rs",
     "shared/crates/corpus-engine-atlas-reader/src/sec_facts/coverage.rs",
     "shared/crates/corpus-engine-atlas-reader/src/sec_facts/fixtures.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/starter_questions.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/tension_fields.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/tension_policy.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/tension_shape.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/tensions.rs",
-    "corpus-engine/src/enrichment/atlas/axis_catalog.rs",
-    "corpus-engine/src/enrichment/atlas/citation.rs",
-    "corpus-engine/src/enrichment/atlas/context_filter.rs",
-    "corpus-engine/src/enrichment/atlas/cross_corpus.rs",
-    "corpus-engine/src/enrichment/atlas/evidence_site.rs",
-    "corpus-engine/src/enrichment/atlas/ground.rs",
-    "corpus-engine/src/enrichment/atlas/ground/report.rs",
-    "corpus-engine/src/enrichment/atlas/inventory.rs",
-    "corpus-engine/src/enrichment/atlas/ontology_coverage.rs",
-    "corpus-engine/src/enrichment/atlas/projection.rs",
-    "corpus-engine/src/enrichment/atlas/registry.rs",
-    "corpus-engine/src/enrichment/atlas/resolution_identity.rs",
-    "corpus-engine/src/enrichment/atlas/resolution_ontology.rs",
-    "corpus-engine/src/enrichment/atlas/resolve.rs",
-    "corpus-engine/src/enrichment/atlas/schema_validation.rs",
-    "corpus-engine/src/enrichment/atlas/store/configures.rs",
-    "corpus-engine/src/enrichment/atlas/strategies/mod.rs",
-    "corpus-engine/src/enrichment/domain_registry.rs",
-    "corpus-engine/src/enrichment/domains/business_email.rs",
-    "corpus-engine/src/enrichment/domains/conversational.rs",
-    "corpus-engine/src/enrichment/domains/institutional.rs",
-    "corpus-engine/src/enrichment/domains/mod.rs",
-    "corpus-engine/src/enrichment/domains/personal.rs",
-    "corpus-engine/src/enrichment/domains/philosophy.rs",
-    "corpus-engine/src/enrichment/filter.rs",
-    "corpus-engine/src/enrichment/governance.rs",
-    "corpus-engine/src/enrichment/investigation/aggregate.rs",
-    "corpus-engine/src/enrichment/mod.rs",
-    "understanding-atlas/src/enrichment/ontology/clock.rs",
-    "understanding-atlas/src/enrichment/ontology/type_index.rs",
-    "corpus-engine/src/enrichment/pipeline/assemble.rs",
-    "corpus-engine/src/enrichment/pipeline/atlas.rs",
-    "corpus-engine/src/enrichment/pipeline/atlas_extensions.rs",
-    "corpus-engine/src/enrichment/pipeline/atom_normalizer.rs",
-    "corpus-engine/src/enrichment/pipeline/mod.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/conversation_atlas.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/declaration.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/engineering_atlas.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/genre.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/literary.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/mod.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/ontology_parse.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/ontology_prompt.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/ontology_schema.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/parse_policy.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/sketch_parse.rs",
-    "corpus-engine/src/enrichment/pipeline/progress.rs",
-    "corpus-engine/src/enrichment/pipeline/registry.rs",
-    "corpus-engine/src/enrichment/pipeline/section_classifier.rs",
-    "corpus-engine/src/enrichment/pipeline/text_helpers.rs",
-    "corpus-engine/src/enrichment/pipeline/trait_def.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/argumentative.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/descriptive.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/lyric.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/mod.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/modulators.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/narrative.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/reflective.rs",
-    "corpus-engine/src/enrichment/pipeline/typed_schemas/source_recovery.rs",
-    "corpus-engine/src/enrichment/pipeline/types.rs",
-    "corpus-engine/src/enrichment/pipeline/vector_clustering.rs",
-    "corpus-engine/src/enrichment/reconciliation/identity_signals.rs",
-    "corpus-engine/src/enrichment/reconciliation/mod.rs",
-    "corpus-engine/src/enrichment/reconciliation/multi_origin.rs",
-    "corpus-engine/src/enrichment/reconciliation/oplog.rs",
-    "corpus-engine/src/enrichment/reconciliation/reified.rs",
-    "corpus-engine/src/enrichment/reconciliation/signals.rs",
-    "understanding-atlas/src/meta_atlas/bridge/adjudicate.rs",
-    "corpus-engine/src/meta_atlas/bridge/mod.rs",
-    "understanding-atlas/src/meta_atlas/bridge/signals.rs",
-    "understanding-atlas/src/meta_atlas/bridge/topic_node.rs",
-    "understanding-atlas/src/meta_atlas/classifier.rs",
-    "corpus-engine/src/meta_atlas/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/starter_questions.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tension_fields.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tension_policy.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tension_shape.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tensions.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/axis_catalog.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/citation.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/context_filter.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/cross_corpus.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/evidence_site.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ground.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ground/report.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/inventory.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ontology_coverage.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/projection.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/registry.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_identity.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_ontology.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/resolve.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/schema_validation.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/store/configures.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/strategies/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domain_registry.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domains/business_email.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domains/conversational.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domains/institutional.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domains/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domains/personal.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domains/philosophy.rs",
+    "ingest/crates/corpus-engine/src/enrichment/filter.rs",
+    "ingest/crates/corpus-engine/src/enrichment/governance.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/aggregate.rs",
+    "ingest/crates/corpus-engine/src/enrichment/mod.rs",
+    "ingest/crates/understanding-atlas/src/enrichment/ontology/clock.rs",
+    "ingest/crates/understanding-atlas/src/enrichment/ontology/type_index.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/assemble.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/atlas.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/atlas_extensions.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/atom_normalizer.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/conversation_atlas.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/declaration.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/engineering_atlas.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/genre.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/ontology_parse.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/ontology_prompt.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/ontology_schema.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/parse_policy.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/sketch_parse.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/progress.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/registry.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/section_classifier.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/text_helpers.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/trait_def.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/argumentative.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/descriptive.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/lyric.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/modulators.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/narrative.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/reflective.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/source_recovery.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/types.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/vector_clustering.rs",
+    "ingest/crates/corpus-engine/src/enrichment/reconciliation/identity_signals.rs",
+    "ingest/crates/corpus-engine/src/enrichment/reconciliation/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/reconciliation/multi_origin.rs",
+    "ingest/crates/corpus-engine/src/enrichment/reconciliation/oplog.rs",
+    "ingest/crates/corpus-engine/src/enrichment/reconciliation/reified.rs",
+    "ingest/crates/corpus-engine/src/enrichment/reconciliation/signals.rs",
+    "ingest/crates/understanding-atlas/src/meta_atlas/bridge/adjudicate.rs",
+    "ingest/crates/corpus-engine/src/meta_atlas/bridge/mod.rs",
+    "ingest/crates/understanding-atlas/src/meta_atlas/bridge/signals.rs",
+    "ingest/crates/understanding-atlas/src/meta_atlas/bridge/topic_node.rs",
+    "ingest/crates/understanding-atlas/src/meta_atlas/classifier.rs",
+    "ingest/crates/corpus-engine/src/meta_atlas/mod.rs",
 ]
 
 [[tier]]
@@ -4136,79 +4136,79 @@ dest = "understanding-host"
 files = 73
 lines = 57342
 paths = [
-    "corpus-engine/src/atlas_traversal/question_kind.rs",
-    "corpus-engine/src/enrichment/alignment.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/discovery.rs",
-    "corpus-engine/src/enrichment/atlas/ann_store.rs",
-    "corpus-engine/src/enrichment/atlas/atoms_delta.rs",
-    "corpus-engine/src/enrichment/atlas/context.rs",
-    "corpus-engine/src/enrichment/atlas/context_loader.rs",
-    "corpus-engine/src/enrichment/atlas/doc_to_atoms.rs",
-    "corpus-engine/src/enrichment/atlas/embeddings.rs",
-    "corpus-engine/src/enrichment/atlas/ground/select.rs",
-    "corpus-engine/src/enrichment/atlas/ground/summaries.rs",
-    "corpus-engine/src/enrichment/atlas/ground/tests.rs",
-    "corpus-engine/src/enrichment/atlas/ingestion.rs",
-    "corpus-engine/src/enrichment/atlas/migrate_ids.rs",
-    "corpus-engine/src/enrichment/atlas/mod.rs",
-    "corpus-engine/src/enrichment/atlas/provider.rs",
-    "corpus-engine/src/enrichment/atlas/resolution.rs",
-    "corpus-engine/src/enrichment/atlas/section_cache.rs",
-    "corpus-engine/src/enrichment/atlas/seed_population.rs",
-    "corpus-engine/src/enrichment/atlas/store.rs",
-    "corpus-engine/src/enrichment/atlas/store/derivation.rs",
-    "corpus-engine/src/enrichment/atlas/strategies/code_walk.rs",
-    "corpus-engine/src/enrichment/atlas/strategies/newsworthy_events.rs",
-    "corpus-engine/src/enrichment/atlas/strategies/structure_first.rs",
-    "corpus-engine/src/enrichment/atlas/summary.rs",
-    "corpus-engine/src/enrichment/atlas/vital_tier.rs",
-    "corpus-engine/src/enrichment/atlas/wiki_store.rs",
-    "corpus-engine/src/enrichment/atlas/wiki_store/tests.rs",
-    "corpus-engine/src/enrichment/atlas/writer.rs",
-    "corpus-engine/src/enrichment/checkpoint.rs",
-    "corpus-engine/src/enrichment/clustering.rs",
-    "corpus-engine/src/enrichment/domain.rs",
-    "corpus-engine/src/enrichment/entity_extraction.rs",
-    "corpus-engine/src/enrichment/fault_lines.rs",
-    "corpus-engine/src/enrichment/field_atoms.rs",
-    "corpus-engine/src/enrichment/field_engine.rs",
-    "corpus-engine/src/enrichment/governance_change.rs",
-    "corpus-engine/src/enrichment/governance_view.rs",
-    "corpus-engine/src/enrichment/investigation/checkpoint.rs",
-    "corpus-engine/src/enrichment/investigation/extract.rs",
-    "corpus-engine/src/enrichment/investigation/graph.rs",
-    "corpus-engine/src/enrichment/investigation/mod.rs",
-    "corpus-engine/src/enrichment/investigation/normalize.rs",
-    "corpus-engine/src/enrichment/investigation/patterns.rs",
-    "corpus-engine/src/enrichment/investigation/recoalesce.rs",
-    "corpus-engine/src/enrichment/ontology/mod.rs",
-    "corpus-engine/src/enrichment/ontology/validate.rs",
-    "corpus-engine/src/enrichment/open_questions.rs",
-    "corpus-engine/src/enrichment/pass.rs",
-    "corpus-engine/src/enrichment/pipeline/atlas_clustering.rs",
-    "corpus-engine/src/enrichment/pipeline/chapter_manifest.rs",
-    "corpus-engine/src/enrichment/pipeline/exemplar_bank.rs",
-    "corpus-engine/src/enrichment/pipeline/phase_cache.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/configurable_atlas.rs",
-    "corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs",
-    "corpus-engine/src/enrichment/pipeline/prompts.rs",
-    "corpus-engine/src/enrichment/pipeline/run_output.rs",
-    "corpus-engine/src/enrichment/pipeline/runner.rs",
-    "corpus-engine/src/enrichment/pipeline/section_join.rs",
-    "corpus-engine/src/enrichment/pipeline/validation.rs",
-    "corpus-engine/src/enrichment/sep.rs",
-    "corpus-engine/src/enrichment/skeleton_parse.rs",
-    "corpus-engine/src/enrichment/state.rs",
-    "corpus-engine/src/enrichment/tiered.rs",
-    "corpus-engine/src/enrichment/tokens.rs",
-    "corpus-engine/src/meta_atlas/bridge/build.rs",
-    "corpus-engine/src/meta_atlas/bridge/edges.rs",
-    "corpus-engine/src/meta_atlas/bridge/lookup.rs",
-    "corpus-engine/src/meta_atlas/builder.rs",
-    "corpus-engine/src/meta_atlas/index.rs",
-    "corpus-engine/src/stream_axes.rs",
-    "corpus-engine/src/wikipedia_columnar.rs",
-    "corpus-engine/src/wikipedia_columnar/tests.rs",
+    "ingest/crates/corpus-engine/src/atlas_traversal/question_kind.rs",
+    "ingest/crates/corpus-engine/src/enrichment/alignment.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/discovery.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ann_store.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/atoms_delta.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/context.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/context_loader.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/doc_to_atoms.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/embeddings.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ground/select.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ground/summaries.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ground/tests.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/ingestion.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/migrate_ids.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/provider.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/section_cache.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/seed_population.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/store.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/store/derivation.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/strategies/code_walk.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/strategies/newsworthy_events.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/strategies/structure_first.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/summary.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/vital_tier.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/wiki_store.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/wiki_store/tests.rs",
+    "ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs",
+    "ingest/crates/corpus-engine/src/enrichment/checkpoint.rs",
+    "ingest/crates/corpus-engine/src/enrichment/clustering.rs",
+    "ingest/crates/corpus-engine/src/enrichment/domain.rs",
+    "ingest/crates/corpus-engine/src/enrichment/entity_extraction.rs",
+    "ingest/crates/corpus-engine/src/enrichment/fault_lines.rs",
+    "ingest/crates/corpus-engine/src/enrichment/field_atoms.rs",
+    "ingest/crates/corpus-engine/src/enrichment/field_engine.rs",
+    "ingest/crates/corpus-engine/src/enrichment/governance_change.rs",
+    "ingest/crates/corpus-engine/src/enrichment/governance_view.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/checkpoint.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/extract.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/graph.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/normalize.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/patterns.rs",
+    "ingest/crates/corpus-engine/src/enrichment/investigation/recoalesce.rs",
+    "ingest/crates/corpus-engine/src/enrichment/ontology/mod.rs",
+    "ingest/crates/corpus-engine/src/enrichment/ontology/validate.rs",
+    "ingest/crates/corpus-engine/src/enrichment/open_questions.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pass.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/atlas_clustering.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/chapter_manifest.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/configurable_atlas.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/prompts.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/run_output.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/section_join.rs",
+    "ingest/crates/corpus-engine/src/enrichment/pipeline/validation.rs",
+    "ingest/crates/corpus-engine/src/enrichment/sep.rs",
+    "ingest/crates/corpus-engine/src/enrichment/skeleton_parse.rs",
+    "ingest/crates/corpus-engine/src/enrichment/state.rs",
+    "ingest/crates/corpus-engine/src/enrichment/tiered.rs",
+    "ingest/crates/corpus-engine/src/enrichment/tokens.rs",
+    "ingest/crates/corpus-engine/src/meta_atlas/bridge/build.rs",
+    "ingest/crates/corpus-engine/src/meta_atlas/bridge/edges.rs",
+    "ingest/crates/corpus-engine/src/meta_atlas/bridge/lookup.rs",
+    "ingest/crates/corpus-engine/src/meta_atlas/builder.rs",
+    "ingest/crates/corpus-engine/src/meta_atlas/index.rs",
+    "ingest/crates/corpus-engine/src/stream_axes.rs",
+    "ingest/crates/corpus-engine/src/wikipedia_columnar.rs",
+    "ingest/crates/corpus-engine/src/wikipedia_columnar/tests.rs",
 ]
 
 # ───────────────────────────────────────────────────────────── ingest
@@ -4335,7 +4335,7 @@ dest_tier = 1
 shim_sites = 1
 renames_riding = "none"
 order = 3
-note = "It cannot go INTO corpus-engine-notes: alignment_projector.rs:37-38 names CorpusIndex and recipe::MutableMergePolicy, so notes would have to depend on corpus-engine, which is the cycle lib.rs:102-109 already refuses. DEFECT FOUND: that same lib.rs comment says corpus-engine-notes is 'reachable inside corpus-engine via the `stores` feature for the three internal users (alignment_projector, alignment_workspace, project_index_watcher)'. There are ZERO `corpus_engine_notes::` or `NoteStore` USE sites in corpus-engine/src — the dep at Cargo.toml:225 is dead, and notes_sync.rs:5 links `[crate::notes::NoteStore]`, a module that left the crate on 2026-05-23. Dropping the optional dep is a free cut."
+note = "It cannot go INTO corpus-engine-notes: alignment_projector.rs:37-38 names CorpusIndex and recipe::MutableMergePolicy, so notes would have to depend on corpus-engine, which is the cycle lib.rs:102-109 already refuses. DEFECT FOUND: that same lib.rs comment says corpus-engine-notes is 'reachable inside corpus-engine via the `stores` feature for the three internal users (alignment_projector, alignment_workspace, project_index_watcher)'. There are ZERO `corpus_engine_notes::` or `NoteStore` USE sites in ingest/crates/corpus-engine/src — the dep at Cargo.toml:225 is dead, and notes_sync.rs:5 links `[crate::notes::NoteStore]`, a module that left the crate on 2026-05-23. Dropping the optional dep is a free cut."
 
 # ───────────────────────────────────────────────────────────── build-feedback
 [[cluster]]
@@ -7204,7 +7204,7 @@ note = "The read door (read_atlas_atoms/read_atlas_edges) and the layout constan
 path = "shared/crates/understanding-vocab/src/skeleton.rs"
 context = "understanding"
 lines = 510
-note = "The field skeleton (FieldSkeleton, PartialSkeleton and the question/position/fault-line/open-question closure) and FieldModelStats, moved from corpus-engine's enrichment/skeleton.rs and enrichment/clustering.rs by domains REVIEW-build-field-skeleton-vocab (DE \"The read-port leaf, measured again\"); its JSON IO stayed host at corpus-engine/src/index/field_skeleton.rs."
+note = "The field skeleton (FieldSkeleton, PartialSkeleton and the question/position/fault-line/open-question closure) and FieldModelStats, moved from corpus-engine's enrichment/skeleton.rs and enrichment/clustering.rs by domains REVIEW-build-field-skeleton-vocab (DE \"The read-port leaf, measured again\"); its JSON IO stayed host at ingest/crates/corpus-engine/src/index/field_skeleton.rs."
 
 [[module]]
 path = "shared/crates/understanding-vocab/src/stable_key.rs"
@@ -7219,43 +7219,43 @@ lines = 282
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/lib.rs"
+path = "ingest/crates/understanding-atlas/src/lib.rs"
 context = "understanding"
 lines = 59
 note = "Understanding's pure tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). REVIEW-build-understanding-crate-tree landed the module tree: the four engine-leaf shims (error/types/oplog/atlas_canonical), the articulation re-export, and the `enrichment` surface."
 
 [[module]]
-path = "understanding-atlas/src/enrichment.rs"
+path = "ingest/crates/understanding-atlas/src/enrichment.rs"
 context = "understanding"
 lines = 14
 note = "The pure enrichment surface; REVIEW-build-understanding-crate-tree."
 
 [[module]]
-path = "understanding-atlas/src/enrichment/atlas.rs"
+path = "ingest/crates/understanding-atlas/src/enrichment/atlas.rs"
 context = "understanding"
 lines = 22
 note = "The pure half of corpus-engine's host enrichment/atlas/mod.rs — the atoms/edges/stable_key language re-exports; REVIEW-build-understanding-crate-tree."
 
 [[module]]
-path = "understanding-atlas/src/enrichment/ontology.rs"
+path = "ingest/crates/understanding-atlas/src/enrichment/ontology.rs"
 context = "understanding"
 lines = 27
 note = "The pure half of corpus-engine's host enrichment/ontology/mod.rs — clock, type_index and the language re-exports; REVIEW-build-understanding-crate-tree."
 
 [[module]]
-path = "understanding-atlas/src/enrichment/ontology/clock.rs"
+path = "ingest/crates/understanding-atlas/src/enrichment/ontology/clock.rs"
 context = "understanding"
 lines = 127
 note = "Axis-4 section clock, moved from corpus-engine by REVIEW-build-understanding-crate-tree."
 
 [[module]]
-path = "understanding-atlas/src/enrichment/ontology/type_index.rs"
+path = "ingest/crates/understanding-atlas/src/enrichment/ontology/type_index.rs"
 context = "understanding"
 lines = 492
 note = "Name -> declaration lookup, moved from corpus-engine by REVIEW-build-understanding-crate-tree."
 
 [[module]]
-path = "understanding-host/src/lib.rs"
+path = "ingest/crates/understanding-host/src/lib.rs"
 context = "understanding"
 lines = 26
 note = "Understanding's host tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). REVIEW-build-understanding-crate-tree wired its Cargo.toml, naming corpus-engine so the package's grandfathered exception is LIVE."
@@ -8269,31 +8269,31 @@ lines = 405
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-authoring-harness/src/checks.rs"
+path = "ingest/crates/sovereign-authoring-harness/src/checks.rs"
 context = "unknown"
 lines = 452
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-authoring-harness/src/declaration.rs"
+path = "ingest/crates/sovereign-authoring-harness/src/declaration.rs"
 context = "unknown"
 lines = 20
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-authoring-harness/src/drive.rs"
+path = "ingest/crates/sovereign-authoring-harness/src/drive.rs"
 context = "unknown"
 lines = 129
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-authoring-harness/src/lib.rs"
+path = "ingest/crates/sovereign-authoring-harness/src/lib.rs"
 context = "unknown"
 lines = 107
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-authoring-harness/src/render.rs"
+path = "ingest/crates/sovereign-authoring-harness/src/render.rs"
 context = "unknown"
 lines = 150
 note = ""
@@ -9037,13 +9037,13 @@ lines = 608
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/alignment_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/alignment_cmd.rs"
 context = "host"
 lines = 779
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/backfill_ann.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/backfill_ann.rs"
 context = "host"
 lines = 349
 note = ""
@@ -9055,13 +9055,13 @@ lines = 384
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs"
 context = "host"
 lines = 109
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs"
 context = "host"
 lines = 169
 note = ""
@@ -9073,37 +9073,37 @@ lines = 429
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/kind.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/kind.rs"
 context = "host"
 lines = 738
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/map_check.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/map_check.rs"
 context = "host"
 lines = 150
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_all.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_all.rs"
 context = "host"
 lines = 534
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs"
 context = "host"
 lines = 167
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/mod.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/mod.rs"
 context = "host"
 lines = 144
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/stats.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/stats.rs"
 context = "host"
 lines = 163
 note = ""
@@ -9121,7 +9121,7 @@ lines = 294
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/wikipedia.rs"
+path = "ingest/crates/sovereign-pipeline/src/atlas_cmd/wikipedia.rs"
 context = "host"
 lines = 623
 note = ""
@@ -9289,7 +9289,7 @@ lines = 1781
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/bench_atlas.rs"
+path = "ingest/crates/sovereign-pipeline/src/bench_atlas.rs"
 context = "host"
 lines = 824
 note = ""
@@ -9649,13 +9649,13 @@ lines = 446
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs"
 context = "host"
 lines = 1140
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/fmt.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/fmt.rs"
 context = "host"
 lines = 53
 note = ""
@@ -9667,43 +9667,43 @@ lines = 139
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs"
 context = "host"
 lines = 704
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/mod.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/mod.rs"
 context = "host"
 lines = 132
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs"
 context = "host"
 lines = 425
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs"
 context = "host"
 lines = 1057
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/recipe_source.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/recipe_source.rs"
 context = "host"
 lines = 23
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/search.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/search.rs"
 context = "host"
 lines = 125
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/status.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_cmd/status.rs"
 context = "host"
 lines = 110
 note = ""
@@ -9721,13 +9721,13 @@ lines = 181
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_scrub_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_scrub_cmd.rs"
 context = "host"
 lines = 460
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs"
 context = "host"
 lines = 1471
 note = ""
@@ -9739,265 +9739,265 @@ lines = 974
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs"
 context = "host"
 lines = 56
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_cross_corpus.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_cross_corpus.rs"
 context = "host"
 lines = 372
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_drift_report.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_drift_report.rs"
 context = "host"
 lines = 1765
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs"
 context = "host"
 lines = 562
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_gaps.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_gaps.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_patch_code.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_patch_code.rs"
 context = "host"
 lines = 529
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_phase_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_phase_cmd.rs"
 context = "host"
 lines = 87
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_query.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_query.rs"
 context = "host"
 lines = 558
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_reconcile.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_reconcile.rs"
 context = "host"
 lines = 263
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs"
 context = "host"
 lines = 78
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs"
 context = "host"
 lines = 76
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/backfill_sections.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/backfill_sections.rs"
 context = "host"
 lines = 683
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/build.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/build.rs"
 context = "host"
 lines = 284
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs"
 context = "host"
 lines = 560
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs"
 context = "host"
 lines = 790
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs"
 context = "host"
 lines = 239
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/classify.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/classify.rs"
 context = "host"
 lines = 388
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs"
 context = "host"
 lines = 146
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs"
 context = "host"
 lines = 1247
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs"
 context = "host"
 lines = 656
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/diff.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/diff.rs"
 context = "host"
 lines = 266
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/egress_reds.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/egress_reds.rs"
 context = "host"
 lines = 142
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/errors.rs"
 context = "host"
 lines = 714
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/adjudicate.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/adjudicate.rs"
 context = "host"
 lines = 389
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/args.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/args.rs"
 context = "host"
 lines = 96
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/axis_driver.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/axis_driver.rs"
 context = "host"
 lines = 575
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/golden.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/golden.rs"
 context = "host"
 lines = 430
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/matching.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/matching.rs"
 context = "host"
 lines = 256
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/mod.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/mod.rs"
 context = "host"
 lines = 806
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/scorers.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/scorers.rs"
 context = "host"
 lines = 1155
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/snapshot.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/snapshot.rs"
 context = "host"
 lines = 233
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs"
 context = "host"
 lines = 652
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/exemplars.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/exemplars.rs"
 context = "host"
 lines = 106
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/extract.rs"
 context = "host"
 lines = 108
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs"
 context = "host"
 lines = 636
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/field_atoms.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/field_atoms.rs"
 context = "host"
 lines = 183
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/ingest.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/ingest.rs"
 context = "host"
 lines = 383
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/init.rs"
 context = "host"
 lines = 1310
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/investigation.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/investigation.rs"
 context = "host"
 lines = 600
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/mod.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/mod.rs"
 context = "host"
 lines = 305
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs"
 context = "host"
 lines = 211
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/promote.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/promote.rs"
 context = "host"
 lines = 527
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/query.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/query.rs"
 context = "host"
 lines = 255
 note = ""
@@ -10015,55 +10015,55 @@ lines = 76
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/reset.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/reset.rs"
 context = "host"
 lines = 579
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/schema_review.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/schema_review.rs"
 context = "host"
 lines = 104
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs"
 context = "host"
 lines = 68
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/sep_ingest.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/sep_ingest.rs"
 context = "host"
 lines = 431
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/sheets_ingest.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/sheets_ingest.rs"
 context = "host"
 lines = 237
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/show.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/show.rs"
 context = "host"
 lines = 420
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs"
 context = "host"
 lines = 502
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs"
 context = "host"
 lines = 1171
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/status.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/status.rs"
 context = "host"
 lines = 61
 note = ""
@@ -10075,25 +10075,25 @@ lines = 83
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/templates/mod.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/templates/mod.rs"
 context = "host"
 lines = 221
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/triage.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/triage.rs"
 context = "host"
 lines = 367
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs"
 context = "host"
 lines = 241
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/workflow_primitives.rs"
+path = "ingest/crates/sovereign-pipeline/src/enrich_cmd/workflow_primitives.rs"
 context = "host"
 lines = 792
 note = ""
@@ -10423,7 +10423,7 @@ lines = 468
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/meta_atlas_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/meta_atlas_cmd.rs"
 context = "host"
 lines = 630
 note = ""
@@ -10441,7 +10441,7 @@ lines = 165
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/pipeline_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/pipeline_cmd.rs"
 context = "host"
 lines = 1745
 note = ""
@@ -10519,19 +10519,19 @@ lines = 1848
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/recipe_cmd.rs"
+path = "ingest/crates/sovereign-pipeline/src/recipe_cmd.rs"
 context = "host"
 lines = 680
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/recipe_cmd/authoring.rs"
+path = "ingest/crates/sovereign-pipeline/src/recipe_cmd/authoring.rs"
 context = "host"
 lines = 195
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/recipe_cmd/publish.rs"
+path = "ingest/crates/sovereign-pipeline/src/recipe_cmd/publish.rs"
 context = "host"
 lines = 222
 note = ""
@@ -13021,193 +13021,193 @@ lines = 363
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/atlas_configuration.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/atlas_configuration.rs"
 context = "unknown"
 lines = 433
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/atlas_gaps.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/atlas_gaps.rs"
 context = "unknown"
 lines = 352
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/atlas_phase_cmd.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/atlas_phase_cmd.rs"
 context = "unknown"
 lines = 706
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/atlas_resolve.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/atlas_resolve.rs"
 context = "unknown"
 lines = 688
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/atlas_tensions.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/atlas_tensions.rs"
 context = "unknown"
 lines = 375
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs"
 context = "unknown"
 lines = 539
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_holistic.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/atlas_tensions_holistic.rs"
 context = "unknown"
 lines = 339
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/build/extract_step.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/build/extract_step.rs"
 context = "unknown"
 lines = 367
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/build/mod.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/build/mod.rs"
 context = "unknown"
 lines = 183
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/build/plan.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/build/plan.rs"
 context = "unknown"
 lines = 608
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/build/steps.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/build/steps.rs"
 context = "unknown"
 lines = 753
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/corpus_io.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/corpus_io.rs"
 context = "unknown"
 lines = 578
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/extract/args.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/extract/args.rs"
 context = "unknown"
 lines = 481
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/extract/mod.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/extract/mod.rs"
 context = "unknown"
 lines = 653
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/extract/tokens.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/extract/tokens.rs"
 context = "unknown"
 lines = 45
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/inference_client/discovery.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/inference_client/discovery.rs"
 context = "unknown"
 lines = 207
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/inference_client/mod.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/inference_client/mod.rs"
 context = "unknown"
 lines = 627
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/inference_client/wire.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/inference_client/wire.rs"
 context = "unknown"
 lines = 731
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/integration_tests.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/integration_tests.rs"
 context = "unknown"
 lines = 233
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/lib.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/lib.rs"
 context = "unknown"
 lines = 81
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/pipeline_map.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/pipeline_map.rs"
 context = "unknown"
 lines = 235
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/pipeline_resolve.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/pipeline_resolve.rs"
 context = "unknown"
 lines = 37
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/providers.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/providers.rs"
 context = "unknown"
 lines = 530
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/schema_review.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/schema_review.rs"
 context = "unknown"
 lines = 635
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/seed_cmd.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/seed_cmd.rs"
 context = "unknown"
 lines = 257
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/source_loader.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/source_loader.rs"
 context = "unknown"
 lines = 495
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-build/src/test_env.rs"
+path = "ingest/crates/sovereign-enrichment-build/src/test_env.rs"
 context = "unknown"
 lines = 37
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-catalog/src/catalog.rs"
+path = "ingest/crates/sovereign-enrichment-catalog/src/catalog.rs"
 context = "unknown"
 lines = 257
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-catalog/src/config.rs"
+path = "ingest/crates/sovereign-enrichment-catalog/src/config.rs"
 context = "unknown"
 lines = 453
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-catalog/src/corpus_state.rs"
+path = "ingest/crates/sovereign-enrichment-catalog/src/corpus_state.rs"
 context = "unknown"
 lines = 92
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-catalog/src/lib.rs"
+path = "ingest/crates/sovereign-enrichment-catalog/src/lib.rs"
 context = "unknown"
 lines = 33
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-enrichment-catalog/src/paths.rs"
+path = "ingest/crates/sovereign-enrichment-catalog/src/paths.rs"
 context = "unknown"
 lines = 172
 note = ""
@@ -13519,13 +13519,13 @@ lines = 78
 note = ""
 
 [[module]]
-path = "corpus-engine/src/enrichment/chunk_ner_bound.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/chunk_ner_bound.rs"
 context = "unknown"
 lines = 368
 note = ""
 
 [[module]]
-path = "corpus-engine/src/enrichment/chunk_ner.rs"
+path = "ingest/crates/corpus-engine/src/enrichment/chunk_ner.rs"
 context = "unknown"
 lines = 336
 note = ""
@@ -13951,55 +13951,55 @@ lines = 702
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/adaptive.rs"
+path = "ingest/crates/sovereign-pipeline/src/adaptive.rs"
 context = "unknown"
 lines = 287
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/classifier.rs"
+path = "ingest/crates/sovereign-pipeline/src/classifier.rs"
 context = "unknown"
 lines = 456
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/driver.rs"
+path = "ingest/crates/sovereign-pipeline/src/driver.rs"
 context = "unknown"
 lines = 612
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/ledger.rs"
+path = "ingest/crates/sovereign-pipeline/src/ledger.rs"
 context = "unknown"
 lines = 282
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/lib.rs"
+path = "ingest/crates/sovereign-pipeline/src/lib.rs"
 context = "unknown"
 lines = 21
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/pod.rs"
+path = "ingest/crates/sovereign-pipeline/src/pod.rs"
 context = "unknown"
 lines = 340
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/recipe.rs"
+path = "ingest/crates/sovereign-pipeline/src/recipe.rs"
 context = "unknown"
 lines = 461
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/status.rs"
+path = "ingest/crates/sovereign-pipeline/src/status.rs"
 context = "unknown"
 lines = 114
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pipeline/src/worklist.rs"
+path = "ingest/crates/sovereign-pipeline/src/worklist.rs"
 context = "unknown"
 lines = 492
 note = ""
@@ -15493,7 +15493,7 @@ lines = 101
 note = ""
 
 [[module]]
-path = "corpus-engine/src/recipe_tester.rs"
+path = "ingest/crates/corpus-engine/src/recipe_tester.rs"
 context = "ingest"
 lines = 91
 note = ""
@@ -15697,109 +15697,109 @@ lines = 318
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/capability_request.rs"
+path = "ingest/crates/sovereign-recipe-author/src/capability_request.rs"
 context = "unknown"
 lines = 547
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/checkpoint.rs"
+path = "ingest/crates/sovereign-recipe-author/src/checkpoint.rs"
 context = "unknown"
 lines = 723
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/decision_log.rs"
+path = "ingest/crates/sovereign-recipe-author/src/decision_log.rs"
 context = "unknown"
 lines = 418
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/http_tester.rs"
+path = "ingest/crates/sovereign-recipe-author/src/http_tester.rs"
 context = "unknown"
 lines = 268
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/lib.rs"
+path = "ingest/crates/sovereign-recipe-author/src/lib.rs"
 context = "unknown"
 lines = 223
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/probe_url.rs"
+path = "ingest/crates/sovereign-recipe-author/src/probe_url.rs"
 context = "unknown"
 lines = 600
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/project.rs"
+path = "ingest/crates/sovereign-recipe-author/src/project.rs"
 context = "unknown"
 lines = 506
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/read.rs"
+path = "ingest/crates/sovereign-recipe-author/src/read.rs"
 context = "unknown"
 lines = 182
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/recipe_project_store.rs"
+path = "ingest/crates/sovereign-recipe-author/src/recipe_project_store.rs"
 context = "unknown"
 lines = 248
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/recipe_schema.rs"
+path = "ingest/crates/sovereign-recipe-author/src/recipe_schema.rs"
 context = "unknown"
 lines = 631
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/registry_browse.rs"
+path = "ingest/crates/sovereign-recipe-author/src/registry_browse.rs"
 context = "unknown"
 lines = 217
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/research_finding.rs"
+path = "ingest/crates/sovereign-recipe-author/src/research_finding.rs"
 context = "unknown"
 lines = 369
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/situated_context.rs"
+path = "ingest/crates/sovereign-recipe-author/src/situated_context.rs"
 context = "unknown"
 lines = 384
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/test_support.rs"
+path = "ingest/crates/sovereign-recipe-author/src/test_support.rs"
 context = "unknown"
 lines = 111
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/test_tool.rs"
+path = "ingest/crates/sovereign-recipe-author/src/test_tool.rs"
 context = "unknown"
 lines = 333
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/validate.rs"
+path = "ingest/crates/sovereign-recipe-author/src/validate.rs"
 context = "unknown"
 lines = 125
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/write.rs"
+path = "ingest/crates/sovereign-recipe-author/src/write.rs"
 context = "unknown"
 lines = 175
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-recipe-author/src/write_structured.rs"
+path = "ingest/crates/sovereign-recipe-author/src/write_structured.rs"
 context = "unknown"
 lines = 325
 note = ""
@@ -16201,79 +16201,79 @@ lines = 78
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/atlas_traversal.rs"
+path = "ingest/crates/understanding-atlas/src/atlas_traversal.rs"
 context = "understanding"
 lines = 24
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/atlas_traversal/brief.rs"
+path = "ingest/crates/understanding-atlas/src/atlas_traversal/brief.rs"
 context = "understanding"
 lines = 708
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/atlas_traversal/classifier.rs"
+path = "ingest/crates/understanding-atlas/src/atlas_traversal/classifier.rs"
 context = "understanding"
 lines = 1009
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/atlas_traversal/engine.rs"
+path = "ingest/crates/understanding-atlas/src/atlas_traversal/engine.rs"
 context = "understanding"
 lines = 1096
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/atlas_traversal/spans.rs"
+path = "ingest/crates/understanding-atlas/src/atlas_traversal/spans.rs"
 context = "understanding"
 lines = 436
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/atlas_traversal/test_fixtures.rs"
+path = "ingest/crates/understanding-atlas/src/atlas_traversal/test_fixtures.rs"
 context = "understanding"
 lines = 121
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/enrichment/atlas/fold.rs"
+path = "ingest/crates/understanding-atlas/src/enrichment/atlas/fold.rs"
 context = "understanding"
 lines = 138
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/meta_atlas.rs"
+path = "ingest/crates/understanding-atlas/src/meta_atlas.rs"
 context = "understanding"
 lines = 14
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/meta_atlas/bridge.rs"
+path = "ingest/crates/understanding-atlas/src/meta_atlas/bridge.rs"
 context = "understanding"
 lines = 98
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/meta_atlas/bridge/adjudicate.rs"
+path = "ingest/crates/understanding-atlas/src/meta_atlas/bridge/adjudicate.rs"
 context = "understanding"
 lines = 205
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/meta_atlas/bridge/signals.rs"
+path = "ingest/crates/understanding-atlas/src/meta_atlas/bridge/signals.rs"
 context = "understanding"
 lines = 557
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/meta_atlas/bridge/topic_node.rs"
+path = "ingest/crates/understanding-atlas/src/meta_atlas/bridge/topic_node.rs"
 context = "understanding"
 lines = 442
 note = ""
 
 [[module]]
-path = "understanding-atlas/src/meta_atlas/classifier.rs"
+path = "ingest/crates/understanding-atlas/src/meta_atlas/classifier.rs"
 context = "understanding"
 lines = 874
 note = ""

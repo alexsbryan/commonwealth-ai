@@ -59,7 +59,7 @@ several articles, several stances, or several sections of one article:
 ## 2. Two integrity findings (measured 2026-07-16)
 
 **F1 — the ANN leg runs at ~60% recall.** IVF-PQ queries used
-`nprobes(50)` with **no refine_factor** (`corpus-engine/src/index/search.rs`).
+`nprobes(50)` with **no refine_factor** (`ingest/crates/corpus-engine/src/index/search.rs`).
 Measured with stored-vector queries against a near-exact reference
 (nprobes=400, refine=30):
 
@@ -469,7 +469,7 @@ demand_plan entirely (router already classifies) — their path gets
     `convert_ms`, `select_ms`, and a `coverage_select` line with
     pool→out distinct-title counts.
   - *S1 coverage_select:* greedy facility-location set composition in
-    `corpus-engine/src/index/search.rs` (`facility_location_select`),
+    `ingest/crates/corpus-engine/src/index/search.rs` (`facility_location_select`),
     gated `SOVEREIGN_COVERAGE_SELECT=1`, pool = `limit ×
     SOVEREIGN_COVERAGE_POOL_FACTOR` (default 4, cap 200). Applies at the
     shared leaf, so the raw bench lane, the parity lane, and live chat

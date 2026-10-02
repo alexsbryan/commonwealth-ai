@@ -38,7 +38,7 @@ svrn corpus install email-archive --params path=~/Takeout/Mail/inbox.mbox
 svrn workflow run my-pipeline.toml
 ```
 
-[Build your first recipe](./sovereign-recipes/GETTING_STARTED.md) and [write a workflow](./docs/WRITE_A_WORKFLOW.md) each start from a copyable starter.
+[Build your first recipe](./ingest/crates/sovereign-recipes/GETTING_STARTED.md) and [write a workflow](./docs/WRITE_A_WORKFLOW.md) each start from a copyable starter.
 
 ## Run a model bigger than your machine
 

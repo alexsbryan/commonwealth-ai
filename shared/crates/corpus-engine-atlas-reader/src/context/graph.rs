@@ -26,7 +26,7 @@ use super::views::{
 
 /// Sibling to [`AtlasContext`](super::AtlasContext) — the structural graph layer that
 /// cosine-only retrieval ignores. The atlas is a typed knowledge
-/// graph (see `corpus-engine/ATLAS.md`); cosine/ANN matching over atom
+/// graph (see `ingest/crates/corpus-engine/ATLAS.md`); cosine/ANN matching over atom
 /// embeddings ("bag-of-atoms") finds seeds, but the substantive
 /// structure — dialectical tensions, grounding chains, configuration
 /// constituents — lives on the edges. [`atlas_navigate_ann`](super::atlas_navigate_ann) walks that

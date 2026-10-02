@@ -705,7 +705,7 @@ async fn read_atlas_summary(
         .count() as u64;
     // A "theme" is a Concept entity: the literary atlas's ontology declares
     // `concept` under the label `theme`
-    // (corpus-engine/tests/main/pipeline_ontology.rs:48-64), and no atom
+    // (ingest/crates/corpus-engine/tests/main/pipeline_ontology.rs:48-64), and no atom
     // carries a `theme` type of its own.
     let themes = atoms
         .atoms()

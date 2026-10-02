@@ -171,7 +171,7 @@ pub async fn run(args: &[String]) -> i32 {
     if !report.atoms_per_kind.is_empty() {
         println!("  atoms per kind:");
         // Stable render order matches the AXIS_CATALOG argumentative
-        // entries (see corpus-engine/src/enrichment/atlas/axis_catalog.rs).
+        // entries (see ingest/crates/corpus-engine/src/enrichment/atlas/axis_catalog.rs).
         for key in [
             "mechanism",
             "named_position",

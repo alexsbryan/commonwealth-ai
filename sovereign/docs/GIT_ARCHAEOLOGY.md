@@ -212,7 +212,7 @@ Locus atoms.
 - [`docs/ARCHAEOLOGY_EVAL.md`](./ARCHAEOLOGY_EVAL.md) — how to
   measure that archaeology output is actually correct + how to
   run a regression suite of inquiries.
-- `corpus-engine/src/git_archaeology.rs` — walker + enrichment +
+- `ingest/crates/corpus-engine/src/git_archaeology.rs` — walker + enrichment +
   co-evolution core.
 - `crates/sovereign-cli/src/git_archaeology_cmd.rs` — CLI
   wrapper, atom↔chunk↔path join.

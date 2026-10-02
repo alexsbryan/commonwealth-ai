@@ -4,7 +4,7 @@ One-time reconciliation of every CLI command/flag **claimed** in documentation a
 
 ## Method
 
-- **Docs scanned (claims):** `CLI_REFERENCE.md` (canonical — 24 `### sovereign <verb>` headers), `README.md`, `RUNBOOK.md`, `ATOS.md`, `CODE_INTELLIGENCE.md`, `KNOWLEDGE_BASES.md`, `GETTING_STARTED.md`, `TROUBLESHOOTING.md`, `DEVELOPMENT.md`, `FEATURES.md`, `.claude/CLAUDE.md`, `sovereign-recipes/GETTING_STARTED.md`.
+- **Docs scanned (claims):** `CLI_REFERENCE.md` (canonical — 24 `### sovereign <verb>` headers), `README.md`, `RUNBOOK.md`, `ATOS.md`, `CODE_INTELLIGENCE.md`, `KNOWLEDGE_BASES.md`, `GETTING_STARTED.md`, `TROUBLESHOOTING.md`, `DEVELOPMENT.md`, `FEATURES.md`, `.claude/CLAUDE.md`, `ingest/crates/sovereign-recipes/GETTING_STARTED.md`.
 - **Code scanned (reality):** dispatcher `sovereign-cli/src/main.rs` + siblings `sovereign-cli-dev`/`-llm`/`-daemon` `main.rs` + every `*_cmd` module's dispatch arms. Roughly **50 top-level verbs / 200+ subcommands**; CLI_REFERENCE documents **24 verbs / ~90 commands**.
 - No daemon required (static read of `match` arms + `--help` semantics).
 

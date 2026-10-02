@@ -97,7 +97,7 @@ fn cli_crate_sources() -> String {
         "sovereign/crates/sovereign-cli-bench",
         "sovereign/crates/sovereign-cli-daemon",
         // ingest's CLI (`svrn-ingest`), since pb-cli-llm-ingest-move.
-        "sovereign/crates/sovereign-pipeline",
+        "ingest/crates/sovereign-pipeline",
     ] {
         let src = root.join(crate_dir).join("src");
         let mut stack = vec![src];

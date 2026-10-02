@@ -6,7 +6,7 @@ license.workspace = true
 description = "Background reactive layer: lint/test/project-index watchers + their SQLite result stores + the coordinator. Carved out of corpus-engine for blast-radius control (R4 Step 1)."
 
 # Step 1 of the corpus-engine decomposition (see
-# corpus-engine/DECOMPOSITION.md). These watchers spawn `cargo`
+# ingest/crates/corpus-engine/DECOMPOSITION.md). These watchers spawn `cargo`
 # subprocesses and persist their results to SQLite; the `lint_status`
 # / `test_status` tools read those stores. Pre-carve-out they lived in
 # corpus-engine, so editing a watcher rebuilt ~18 crates. corpus-engine

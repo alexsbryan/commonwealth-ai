@@ -489,7 +489,7 @@ unreadable-file refusal, so do **not** set it in an air-gapped install.
 
 ### Corpus snapshots
 `svrn corpus snapshot publish <id>` / `restore --archive <path> --as <id> --into <dir>` is the supported
-relocation path (`corpus-engine/src/snapshot.rs`). Restore **hard-errors** on an embedding-dimension mismatch,
+relocation path (`ingest/crates/corpus-engine/src/snapshot.rs`). Restore **hard-errors** on an embedding-dimension mismatch,
 so the box must run the same embed model that built the snapshot (Qwen3-Embedding-0.6B, 1024 dims, on every
 profile).
 

@@ -660,7 +660,7 @@ found = "2026-08-31"
 class = "resource-ceiling"
 tier = 1
 surface = "rust-functional"
-target = "corpus-engine/src/engine/mod.rs"
+target = "ingest/crates/corpus-engine/src/engine/mod.rs"
 failure = """THE CODE-INTEL ENRICHMENT IS NOT WHAT EXHAUSTS THE DAEMON'S FILE
 DESCRIPTORS — one corpus's resident Lance index is. Measured with the enrichment
 STOPPED: 244 of 256 descriptors held by the daemon alone. The wrong subsystem
@@ -669,7 +669,7 @@ observable = """A resident index's descriptor count is bounded and reported, so
 the holder is identifiable without a `lsof` session."""
 mutation = """Remove the bound. The test must redden on the count, and the
 report must still name which corpus holds them."""
-blocked = "the record prescribes a mechanism that was considered and DROPPED, and the fix that actually landed is already covered. Neither half of the observable exists. (1) No bound: open_index_inner has no eviction by design; research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md R4 reads \"Index-handle LRU: do not — the hourly sweep is a textbook LRU-flushing scan that would evict the hot set hourly\", and line 346 lists it under \"Dropped: index-handle LRU (counterproductive under the sweep)\". The mutation \"remove the bound\" has nothing to remove. (2) No holder report: index_cache_len() returns a COUNT, and nothing names which corpora hold resident handles. The descriptor exhaustion this record witnesses was fixed instead by open_index_transient (suppress the sweep insert, keep cache hits), and THAT fix has coverage in corpus-engine/tests/main/index_cache_residency.rs — five tests including the source census no_walker_in_this_crate_opens_a_corpus_through_the_caching_wrapper. Reopen only if the operator wants the holder report; the bound is a settled no."
+blocked = "the record prescribes a mechanism that was considered and DROPPED, and the fix that actually landed is already covered. Neither half of the observable exists. (1) No bound: open_index_inner has no eviction by design; research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md R4 reads \"Index-handle LRU: do not — the hourly sweep is a textbook LRU-flushing scan that would evict the hot set hourly\", and line 346 lists it under \"Dropped: index-handle LRU (counterproductive under the sweep)\". The mutation \"remove the bound\" has nothing to remove. (2) No holder report: index_cache_len() returns a COUNT, and nothing names which corpora hold resident handles. The descriptor exhaustion this record witnesses was fixed instead by open_index_transient (suppress the sweep insert, keep cache hits), and THAT fix has coverage in ingest/crates/corpus-engine/tests/main/index_cache_residency.rs — five tests including the source census no_walker_in_this_crate_opens_a_corpus_through_the_caching_wrapper. Reopen only if the operator wants the holder report; the bound is a settled no."
 
 [[test]]
 id = "ME-12"
@@ -679,7 +679,7 @@ class = "config-lie"
 tier = 1
 surface = "playwright"
 target = "sovereign-desktop/tests/e2e/real/global-setup.ts::ingestFixtureCorpus"
-failure = """The livelock itself is FIXED and covered — `corpus-engine/src/engine/ingest.rs`
+failure = """The livelock itself is FIXED and covered — `ingest/crates/corpus-engine/src/engine/ingest.rs`
 now calls `yield_gate::defer_to_foreground` with a `DeferralBudget`, and
 `cap_fires_against_a_foreground_that_never_goes_idle` asserts the cap, the
 announcement, a real non-zero `deferred_secs`, the named bound, and that a
@@ -801,7 +801,7 @@ found = "2026-08-30"
 class = "silent-substitute"
 tier = 2
 surface = "rust-unit"
-target = "corpus-engine/src/index/create.rs"
+target = "ingest/crates/corpus-engine/src/index/create.rs"
 failure = """`_corpus_meta.json` for commonwealth-ai records NO filter or scope
 keys at all — only `personal_scope`. A consumer reading scope from that file
 gets absence, and absence here reads as 'unscoped' rather than 'unknown'."""
@@ -1193,7 +1193,7 @@ found = "2026-08-31"
 class = "resource-ceiling"
 tier = 1
 surface = "rust-unit"
-target = "corpus-engine/src/enrichment"
+target = "ingest/crates/corpus-engine/src/enrichment"
 failure = """AN AGE CANNOT BOUND A STORE WHOSE WRITE RATE OUTRUNS IT, and a
 reclaimer must never share a gate with the producer it cleans up after. Measured
 on wikipedia; both halves were wrong at once and each hid the other."""
@@ -1211,7 +1211,7 @@ found = "2026-08-14"
 class = "inert-guard"
 tier = 1
 surface = "rust-unit"
-target = "corpus-engine/src/engine/ingest_helpers.rs::chunk_doc"
+target = "ingest/crates/corpus-engine/src/engine/ingest_helpers.rs::chunk_doc"
 failure = """`recipe test`'s chunk-size gate is STRUCTURALLY RED for any titled
 document whose chunks fill to `max_chars`: `chunk_doc` prepends the title, so
 the emitted chunk exceeds the bound the gate checks. The gate cannot pass for a
@@ -1282,7 +1282,7 @@ found = "2026-09-02"
 class = "command-seam"
 tier = 2
 surface = "rust-unit"
-target = "corpus-engine/src/enrichment/atlas/writer.rs"
+target = "ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs"
 failure = """A PARALLEL-WORKER MERGE FINDS DEFECTS NEITHER BRANCH CAN SEE, AND
 THE MERGE IS THE ONLY PLACE THEY EXIST. Four phases built concurrently in three
 worktrees off one base; three classes of defect each caught only at the merge,
@@ -1300,7 +1300,7 @@ found = "2026-08-30"
 class = "silent-substitute"
 tier = 2
 surface = "rust-unit"
-target = "corpus-engine/src/index/create.rs"
+target = "ingest/crates/corpus-engine/src/index/create.rs"
 failure = """A corpus meta file that records no filter or scope keys is read as
 carrying an empty scope rather than as carrying none. The distinction decides
 whether a retrieval is scoped or global, and the file cannot tell them apart."""

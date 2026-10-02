@@ -264,7 +264,7 @@ GitHub Action or local pre-commit and your ratchet stays bound.
   evaluates.
 - [`docs/DRIFT_DETECTION.md`](./DRIFT_DETECTION.md) — eval is the
   upstream check before the drift report is trusted.
-- `corpus-engine/src/archaeology_eval.rs` — types, witness
+- `ingest/crates/corpus-engine/src/archaeology_eval.rs` — types, witness
   checks, baseline diff, glob matcher, tests.
 - `crates/sovereign-cli/src/archaeology_eval_cmd.rs` — CLI
   surface, markdown rendering, CSV append.

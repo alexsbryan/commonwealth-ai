@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Generates `quality/requirements.toml` from `research/clean-room/REQUIREMENTS.md`
-//! and gates it against drift, on the `corpus-engine/tests/main/recipe_schema.rs`
+//! and gates it against drift, on the `ingest/crates/corpus-engine/tests/main/recipe_schema.rs`
 //! pattern: parse → render → compare, with an env var to regenerate.
 //!
 //! ```text

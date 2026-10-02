@@ -36,7 +36,7 @@ SOVEREIGN_ROOT = Path.home() / ".sovereign"
 DAEMON_URL = "http://127.0.0.1:9741"
 DEFAULT_EMBED_MODEL = "qwen-embedding-0.6b"
 
-# Paragraph chunker defaults — deliberately matching corpus-engine/src/chunkers/paragraph.rs
+# Paragraph chunker defaults — deliberately matching ingest/crates/corpus-engine/src/chunkers/paragraph.rs
 # so retrieval numbers translate to production. If those defaults drift we'll
 # need to re-sync, but that's a one-constant change.
 MAX_CHARS = 1024

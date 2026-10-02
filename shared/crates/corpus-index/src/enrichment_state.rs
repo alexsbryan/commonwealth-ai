@@ -177,7 +177,7 @@ pub struct EnrichmentState {
     pub error: Option<String>,
     /// Chunks the per-chunk NER pass REFUSED because they exceeded the
     /// inference seam's per-chunk input bound
-    /// (`corpus-engine/src/enrichment/chunk_ner_bound.rs::MAX_CHUNK_CHARS`). Refused
+    /// (`ingest/crates/corpus-engine/src/enrichment/chunk_ner_bound.rs::MAX_CHUNK_CHARS`). Refused
     /// whole — never truncated — so this is the honest reason a corpus's
     /// `chunk_entities` are thinner than its chunk count implies, rather
     /// than a silent half-answer (ARCH 6). Written by

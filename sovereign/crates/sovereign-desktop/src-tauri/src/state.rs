@@ -598,7 +598,7 @@ pub async fn bootstrap_with_progress(
     //
     // `validate_corpus_readiness` went with it, and it is the one thing here
     // that is a DELETE rather than a duplicate: `state.rs` was its only
-    // caller in the workspace (`corpus-engine/src/engine/mod.rs:2141` is the
+    // caller in the workspace (`ingest/crates/corpus-engine/src/engine/mod.rs:2141` is the
     // definition), and its whole effect was a `tracing::warn!` in a client's
     // log that no surface read. The geometry it warned about is refused at
     // `open_index` by the gate the daemon arms above.

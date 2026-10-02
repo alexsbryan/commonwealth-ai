@@ -84,7 +84,7 @@ error: failed to run custom build command for \`llama-cpp-sys-4 v0.1.0\`"
 # 4. An ordinary compile error from our tree, alone.
 check "an ordinary first-party error is a judgement" judge \
 "error[E0425]: cannot find value \`x\` in this scope
-  --> corpus-engine/src/facts.rs:12:5"
+  --> ingest/crates/corpus-engine/src/facts.rs:12:5"
 
 # 5. A diagnostic from a REGISTRY crate is not ours — a dependency's own
 #    warning pointing into ~/.cargo must not make us claim we judged this tree.

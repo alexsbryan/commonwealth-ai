@@ -10,7 +10,7 @@ description = "NoteStore + project_docs index + notes ↔ alignment-corpus sync.
 # finding. Pre-carve-out (2026-05-23), it lived in corpus-engine
 # alongside the corpus pipeline; 11 workspace crates depended on
 # corpus-engine for it. Step 3 of the decomposition (see
-# corpus-engine/DECOMPOSITION.md) gives it its own home.
+# ingest/crates/corpus-engine/DECOMPOSITION.md) gives it its own home.
 #
 # notes.rs at 2781 lines was a §3.1 violation in corpus-engine; the
 # carve-out clears that listing. The file stays intact here — the

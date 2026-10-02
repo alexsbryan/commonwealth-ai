@@ -49,7 +49,7 @@ artifact a turn produces is prose plus ad-hoc metadata. The receipts:
 | Memory verification outcome (verified vs fail-open) | `runtime/memory_grounding.rs:124-136` (deliberately fail-open) | invisible — "I remember you said X" ships with a weaker guarantee than "your sources say X" and the user cannot tell |
 | What's missing + where it might live | gap-check judge (`gap.rs`) → `satisfying_source` / `search_hints` | an isolated card, decoupled from the abstention that fires on the same turn |
 | Abstention | `grounded_abstention` (`grounding/mod.rs:241`) | a static template whose only advice is "try rephrasing" |
-| "Does ANY corpus cover this topic?" | `nearest_vector_distance` (`corpus-engine/src/index/search.rs:276`), validated 2026-07-13 | trapped in the default-off retrieval prefilter; prunes fan-out, never becomes a user-facing coverage verdict |
+| "Does ANY corpus cover this topic?" | `nearest_vector_distance` (`ingest/crates/corpus-engine/src/index/search.rs:276`), validated 2026-07-13 | trapped in the default-off retrieval prefilter; prunes fan-out, never becomes a user-facing coverage verdict |
 | "Install corpus X?" conjecture | Curator `Sufficiency::Insufficient` (`pipeline/runner.rs:302`) | dark — the team pipeline was experimentally rejected (2026-05-03), default OFF |
 | Which sources were used | prose — the UI **regex-parses the `Sources:` block out of the answer text** (`SourceAttribution.svelte:4-10`) | fragile, provenance-blind |
 | Open questions per corpus | `detect_open_questions` (`field_engine.rs:298`) | **return value dropped unbound** — inference spent, result discarded |
@@ -159,7 +159,7 @@ pub enum TurnVerdict {
 - **D4 — the acquisition resolver is data, not a role.** `Gap →
   routes` is a deterministic resolver: gap text embedded against an
   **acquisition catalog** (the 26 recipe descriptions from
-  `sovereign-recipes/registry.toml` + the connector affordances + web),
+  `ingest/crates/sovereign-recipes/registry.toml` + the connector affordances + web),
   disambiguated by the coverage verdict — `nearest_vector_distance`
   fan-out distinguishes *TopicUncovered* ("no corpus is near this
   topic → here's where it would live") from *ClaimUncovered* ("your

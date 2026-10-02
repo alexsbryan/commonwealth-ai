@@ -15,7 +15,7 @@ judgment, and judgment is out of scope here.
 **Status:** the deterministic ladder + enrich rung are implemented (Increments 0–6).
 `sovereign recipe test` runs the frozen-sample ladder **Acquire → Extract → Filter →
 Chunk → Index** model-free, plus an opt-in `--enrich` rung. The mechanism lives in
-`corpus-engine/src/harness/`, the verdict policy + renderer in
+`ingest/crates/corpus-engine/src/harness/`, the verdict policy + renderer in
 `sovereign-eval/src/authoring_harness/`. Remaining: the Desktop seam (Increment 7).
 
 **Enrich-rung design note (SSOT):** the harness *verifies the atoms the real
@@ -173,7 +173,7 @@ by `check` id — and is deferred until wanted.
 
 ## 6. Where it lives
 
-- **Mechanism (facts)** — `corpus-engine/src/harness/`: the bounded staged runner + typed,
+- **Mechanism (facts)** — `ingest/crates/corpus-engine/src/harness/`: the bounded staged runner + typed,
   judgment-free `StageOutput`s. Forced here because `make_extractor`/`make_chunker`/
   `acquire_source` are `pub(crate)` on `CorpusEngine`.
 - **Policy + presentation** — `sovereign-eval/src/authoring_harness/`: the `Verdict` /

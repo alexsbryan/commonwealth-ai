@@ -110,7 +110,7 @@ impl BuildObserver {
     /// A phase ends at **its own last event**, not at the next phase's
     /// first event. The difference matters: the engine only emits embed
     /// progress once per full 256-chunk batch
-    /// (`corpus-engine/src/engine/ingest.rs:1461`), so a corpus smaller
+    /// (`ingest/crates/corpus-engine/src/engine/ingest.rs:1461`), so a corpus smaller
     /// than one batch — and the tail of any corpus — embeds with no
     /// progress at all. Ending the previous span at the next label would
     /// file every one of those seconds under whatever phase happened to

@@ -326,7 +326,7 @@ The dep tree carries no llama.cpp, ort, iroh, mesh transport or agent runtime.
 boundary-gate enforces. `acceptance.sh` is the end-to-end proof: a real
 `llama-server`, a real query over stdio, cited chunks and Claim atoms back.
 Its slow leg (`ACCEPT_INGEST=1 CHAT_GGUF=…`) runs `ingest` on the committed
-`sovereign-recipes/wessex-hoard` fixture against two bare processes and scores
+`ingest/crates/sovereign-recipes/wessex-hoard` fixture against two bare processes and scores
 the atlas it produces against that fixture's `truth.json`, beside the
 daemon-built corpus of the same name — the control it must not fall below.
 Without those variables the leg reports NEVER-RAN by name; it is not skipped.

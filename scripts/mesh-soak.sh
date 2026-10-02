@@ -478,7 +478,7 @@ for a in (d.get("founder_degraded") or []): print("    ~ founder self-heal degra
 #                        ingest runs (the advisory foreground-yield lets chat win
 #                        the slot). Asserted on outcome CLASS, not absolute ms.
 setup_ingest_recipe() {  # mirror the committed recipe to the live override dir
-  local canonical="$ROOT/sovereign-recipes/chaos-secret-agent/recipe.toml"
+  local canonical="$ROOT/ingest/crates/sovereign-recipes/chaos-secret-agent/recipe.toml"
   local override="$HOME/.svrnmesh/recipes/chaos-secret-agent/recipe.toml"
   local src="$HOME/.svrnmesh/bench-corpora/chaos-secret-agent/secret-agent.txt"
   [ -f "$canonical" ] || { echo "  canonical recipe missing: $canonical"; return 1; }

@@ -136,7 +136,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // question). No row: the file's construction sites are zero.
     // sec_edgar: the SEC filings acquirer's client (order
     // sec-filings-last-mile). InboundOnly on the same reading as every
-    // other acquirer (corpus-engine/src/acquirers/*): it FETCHES from
+    // other acquirer (ingest/crates/corpus-engine/src/acquirers/*): it FETCHES from
     // data.sec.gov and www.sec.gov — company_tickers.json, submissions,
     // the 10-K primary document, companyfacts — and no estate content
     // travels out. The only outbound datum is the ticker the user typed
@@ -248,14 +248,14 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // (`update/newsworthy_event_stream.rs`) was the fourth row here
     // until cw-lift 2b deleted it — its `EventStreamHost` trait had
     // no implementor in the workspace, so the SSE loop never ran.
-    ("corpus-engine/src/testing.rs", Class::TestOnly, 2),
-    ("corpus-engine/src/acquirers/huggingface.rs", Class::InboundOnly, 1),
-    ("corpus-engine/src/acquirers/http_api/mod.rs", Class::InboundOnly, 1),
-    ("corpus-engine/src/acquirers/bulk_download.rs", Class::InboundOnly, 1),
+    ("ingest/crates/corpus-engine/src/testing.rs", Class::TestOnly, 2),
+    ("ingest/crates/corpus-engine/src/acquirers/huggingface.rs", Class::InboundOnly, 1),
+    ("ingest/crates/corpus-engine/src/acquirers/http_api/mod.rs", Class::InboundOnly, 1),
+    ("ingest/crates/corpus-engine/src/acquirers/bulk_download.rs", Class::InboundOnly, 1),
     // The newsworthy watcher's MediaWiki recent-changes poll, moved here
     // from sovereign-daemon/src/daemon.rs by d413b052b: it fetches
     // Wikipedia content in, the acquirers' reading.
-    ("corpus-engine/src/engine/daemon_port.rs", Class::InboundOnly, 1),
+    ("ingest/crates/corpus-engine/src/engine/daemon_port.rs", Class::InboundOnly, 1),
 
     // ---- studio/sovereign-tools-base ----
     // orchestrator: constructions are `#[cfg(test)]` (TestOnly).
@@ -288,8 +288,8 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("studio/crates/sovereign-workflow-host/src/workflow_http.rs", Class::TestOnly, 2),
 
     // ---- studio/sovereign-recipe-author ----
-    ("studio/crates/sovereign-recipe-author/src/probe_url.rs", Class::InboundOnly, 1),
-    ("studio/crates/sovereign-recipe-author/src/http_tester.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-recipe-author/src/probe_url.rs", Class::InboundOnly, 1),
+    ("ingest/crates/sovereign-recipe-author/src/http_tester.rs", Class::LocalDaemon, 1),
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
     // 3 -> 2 at 783cf0fcb: the uncalled `stream_index` went with its client.
@@ -319,7 +319,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     //
     // The HF pull `corpus serve` performs when a named corpus is absent adds
     // NO row: it goes through `CorpusEngine::ingest` to
-    // corpus-engine/src/acquirers/bulk_download.rs, registered InboundOnly
+    // ingest/crates/corpus-engine/src/acquirers/bulk_download.rs, registered InboundOnly
     // above since this census was written.
     ("shared/crates/corpus-index/src/host.rs", Class::OperatorSurface, 1),
     // 2 -> 1 at cw-lift rung 2c: the queue-handoff unicast to

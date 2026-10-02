@@ -254,7 +254,7 @@ fn finalize_chunk(chunks: &mut Vec<TextChunk>, current: &mut String, chunk_index
 /// preference order, same overlap rule — but the sizes are fixed here at
 /// `MAX_CHUNK_CHARS`/`OVERLAP_CHARS` (700/120), while ingest takes them from
 /// the recipe's `ChunkerConfig::Paragraph` and defaults to 2048/256
-/// (`corpus-engine/src/recipe.rs`, `default_max_chunk_chars`). A workflow that
+/// (`ingest/crates/corpus-engine/src/recipe.rs`, `default_max_chunk_chars`). A workflow that
 /// chunks here and a corpus that ingests there produce DIFFERENT chunk
 /// boundaries; do not treat one as a preview of the other.
 ///

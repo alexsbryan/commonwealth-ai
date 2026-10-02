@@ -143,5 +143,5 @@ enrichment; the corpus itself is untouched.
 
 The full architecture — atom and edge types, the deterministic resolver,
 cross-corpus bridges — is engineering material:
-[`corpus-engine/ENRICHMENT.md`](../../corpus-engine/ENRICHMENT.md). This
+[`ingest/crates/corpus-engine/ENRICHMENT.md`](../../ingest/crates/corpus-engine/ENRICHMENT.md). This
 page is deliberately only the journey.

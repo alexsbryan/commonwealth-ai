@@ -749,7 +749,7 @@ situation = "About to refactor `open_index_for_corpus`. Check whether the archit
 call = { query = "open_index_for_corpus" }
 
 [[tool.examples]]
-situation = "Editing the file `corpus-engine/src/recipe.rs`. Find every drift finding tied to that file's narrative sections."
+situation = "Editing the file `ingest/crates/corpus-engine/src/recipe.rs`. Find every drift finding tied to that file's narrative sections."
 call = { query = "recipe.rs", kind = "any" }
 
 [[tool.examples]]
@@ -1229,7 +1229,7 @@ call = { changed = true }
 
 [[tool.examples]]
 situation = "Scripting / explicit query against a known file set (e.g. a pre-commit hook with a precomputed list)."
-call = { files = ["corpus-engine/src/recipe.rs", "sovereign/crates/sovereign-cli/src/drift_cmd_orchestrator.rs"] }
+call = { files = ["ingest/crates/corpus-engine/src/recipe.rs", "sovereign/crates/sovereign-cli/src/drift_cmd_orchestrator.rs"] }
 
 [[tool]]
 id = "note"
@@ -1522,7 +1522,7 @@ type = "string"
 
 [[tool.examples]]
 situation = "At feature teardown, a decision about extending SourceKind turned out to be the general pattern for all new source types. Promote it to global with a codebase-wide framing."
-call = { id = "note-abc-123", to_scope = "global", new_content = "New source types extend SourceKind in corpus-engine/src/recipe.rs and add a match arm in engine/ingest.rs — do not create plugin registries for source type dispatch." }
+call = { id = "note-abc-123", to_scope = "global", new_content = "New source types extend SourceKind in ingest/crates/corpus-engine/src/recipe.rs and add a match arm in engine/ingest.rs — do not create plugin registries for source type dispatch." }
 
 [[tool]]
 id = "read_note_by_id"
@@ -2147,4 +2147,4 @@ type = "string"
 
 [[tool.examples]]
 situation = "You found that ZoteroLibrary's factory method relies on a default for `scope=Local` when the charter said the field must be set explicitly. Medium confidence — the default currently happens to be correct but a refactor could silently flip it."
-call = { feature_id = "zotero-acquirer", invariant = "LocalCorpusConfig::zotero_library MUST set scope=Local explicitly, not via default.", status = "violated", evidence = "corpus-engine/src/acquirers/zotero.rs::factory() line 42 omits the field.", confidence = "medium", files = ["corpus-engine/src/acquirers/zotero.rs"] }
+call = { feature_id = "zotero-acquirer", invariant = "LocalCorpusConfig::zotero_library MUST set scope=Local explicitly, not via default.", status = "violated", evidence = "ingest/crates/corpus-engine/src/acquirers/zotero.rs::factory() line 42 omits the field.", confidence = "medium", files = ["ingest/crates/corpus-engine/src/acquirers/zotero.rs"] }

@@ -68,9 +68,9 @@ behind named seams, not a greenfield project.
 
 | Substrate piece | Software domain | Data / Enron domain |
 |---|---|---|
-| **Gate / verifier** | `sovereign-tools/src/code/lint_status.rs`, `test_status.rs`; `sovereign-agent-bench/src/judge.rs` (dims a/b/c) **[built]** | `sovereign-eval/src/entity_resolution_score.rs` `b_cubed()` + pairwise-F1; `corpus-engine/assets/judges/business_entity_v1/{prompt.md,exemplars.jsonl}` calibrated judge **[built]** |
+| **Gate / verifier** | `sovereign-tools/src/code/lint_status.rs`, `test_status.rs`; `sovereign-agent-bench/src/judge.rs` (dims a/b/c) **[built]** | `sovereign-eval/src/entity_resolution_score.rs` `b_cubed()` + pairwise-F1; `ingest/crates/corpus-engine/assets/judges/business_entity_v1/{prompt.md,exemplars.jsonl}` calibrated judge **[built]** |
 | **Capability bench** (task-class × measured ability + split discipline) | `sovereign-agent-bench` (8 problems, scored 0..3, `--judge-trials N`) **[built]** | `sovereign-eval/src/entity_resolution_bench.rs` `Split{Train,Test,Holdout}` + peek-budget — *more* disciplined than the software bench **[built]** |
-| **Substrate-once pattern** (build invariant, verticals inherit) | *(this document)* | `corpus-engine/src/enrichment/reconciliation/{multi_origin,oplog,signals}.rs` + asset-store / described-asset dispatcher (architecture-over-Enron) **[built]** |
+| **Substrate-once pattern** (build invariant, verticals inherit) | *(this document)* | `ingest/crates/corpus-engine/src/enrichment/reconciliation/{multi_origin,oplog,signals}.rs` + asset-store / described-asset dispatcher (architecture-over-Enron) **[built]** |
 | **Coaching flywheel** | `corpus-engine-notes` (open `kind` String, `notes.rs:84`) + `lessons` aggregator **[planned]** | same notes DB **[built infra / unused for this]** |
 | **Coordination** | `sovereign-work-atlas` `put_claim`/`release_claim` **[built]** | same |
 | **Glassbox** | `tracing`, `ResponseProvenance` **[built]** | same |

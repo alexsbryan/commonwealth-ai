@@ -35,7 +35,7 @@
 //! At HEAD (the red, before the boundary exists) the census counts
 //! five egress-class construction sites outside the boundary, the
 //! enrich providers path named first:
-//!   - sovereign/crates/sovereign-enrichment-build/src/inference_client/
+//!   - ingest/crates/sovereign-enrichment-build/src/inference_client/
 //!     (RemotePayload — the `--provider` chat client; at
 //!     sovereign-cli-llm/src/enrich_cmd/inference_client.rs until P0's
 //!     crate split, 2026-09-02)

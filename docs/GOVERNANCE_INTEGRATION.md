@@ -31,7 +31,7 @@ edges. Producing them is extraction — it costs model calls.
 retract, resolve, accept, dismiss, revert. The fold that turns that log
 into the current active rule set is
 `derive_active(&[Op<GovernanceOpKind>]) -> ActiveSet`
-(`corpus-engine/src/enrichment/governance.rs:280`). It does no IO and
+(`ingest/crates/corpus-engine/src/enrichment/governance.rs:280`). It does no IO and
 never calls inference.
 
 So the governance semantics — what is in force, what was superseded and
@@ -282,7 +282,7 @@ dropped section are lost with it. The precise fix is sub-chunk
 
 ## A worked corpus to test against
 
-`sovereign-recipes/maple-house/` is a seeded charter-plus-amendments
+`ingest/crates/sovereign-recipes/maple-house/` is a seeded charter-plus-amendments
 corpus with planted ground truth: a founding Charter of numbered Articles
 and dated house-meeting Decisions that amend it, including three genuine
 cross-section conflicts and one decoy that shares vocabulary without

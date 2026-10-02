@@ -20,7 +20,7 @@
 #      EPISTEMIC_INDEX.md §4: a recipe, two bare llama-server processes
 #      (chat + embed), acquire -> chunk -> embed -> index -> the atlas
 #      enrichment, with no daemon anywhere. Scored against
-#      sovereign-recipes/wessex-hoard/truth.json by `scripts/truth-recall.py`
+#      ingest/crates/sovereign-recipes/wessex-hoard/truth.json by `scripts/truth-recall.py`
 #      (expected facts hit over expected facts, one scorer over both atlases),
 #      beside the daemon-built wessex-hoard control, and then asked a question
 #      through `ask`.
@@ -118,7 +118,7 @@ INGEST_CORPUS="${INGEST_CORPUS:-wessex-hoard-bare}"
 # endpoint — so this mode reports the recall leg COULD-NOT-JUDGE by name
 # (ARCH §18.2/§18.3) rather than printing a number that would read as the bar.
 INGEST_CHAPTERS="${INGEST_CHAPTERS:-}"
-FIXTURE_DIR="$repo/sovereign-recipes/wessex-hoard"
+FIXTURE_DIR="$repo/ingest/crates/sovereign-recipes/wessex-hoard"
 # A THEMATIC question, deliberately: it is the row `ask` must classify onto
 # (Configuration + concept Entity seeds, Involves -> Tension -> Grounds), and
 # it is the kind the EI1 lane measures. Phrased the way a reader asks, not
@@ -495,7 +495,7 @@ else
   else  # the real bar: the whole manifest, comparable to the control
   # The daemon-built atlas this run is judged against. Named once, from the
   # fixture's own id, because `setup-numismatics-corpus.sh` reads
-  # `sovereign-recipes/wessex-hoard/truth.json` and nothing else: there is one
+  # `ingest/crates/sovereign-recipes/wessex-hoard/truth.json` and nothing else: there is one
   # control, and a second spelling of it would be a second decision.
   control_atoms="$DATA_ROOT/indexes/wessex-hoard/atlas/atoms.json"
 

@@ -4,7 +4,7 @@
 //! stores, and the coordinator that supervises them.
 //!
 //! Carved out of `corpus-engine` (R4 Step 1, see
-//! `corpus-engine/DECOMPOSITION.md`). The point of the carve is
+//! `ingest/crates/corpus-engine/DECOMPOSITION.md`). The point of the carve is
 //! blast-radius control: editing watcher code used to force a recheck
 //! of ~18 crates because the watchers lived inside the corpus-engine
 //! god-crate; now it rebuilds this crate + its handful of consumers.

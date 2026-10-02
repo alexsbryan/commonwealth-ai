@@ -17,25 +17,25 @@
 48	cmnwlth/crates/commonwealth-state/src/backend.rs <-> cmnwlth/crates/commonwealth-state/src/backend/memory.rs
 26	cmnwlth/crates/commonwealth-transport/src/iroh_identity_forward.rs <-> cmnwlth/crates/commonwealth-transport/src/iroh_routed_forward.rs
 16	cmnwlth/crates/commonwealth-work/src/process.rs <-> sovereign/crates/sovereign-daemon/src/ingest_executor.rs
-32	corpus-engine-archaeology/src/rough_edges.rs <-> corpus-engine/src/enrichment/atlas/strategies/code_walk.rs
-50	corpus-engine-archaeology/src/rough_edges.rs <-> corpus-engine/src/enrichment/atlas/strategies/code_walk.rs <-> corpus-engine/src/extractors/code/mod.rs
-32	corpus-engine-archaeology/src/rough_edges.rs <-> corpus-engine/src/extractors/code/mod.rs
+32	corpus-engine-archaeology/src/rough_edges.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/strategies/code_walk.rs
+50	corpus-engine-archaeology/src/rough_edges.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/strategies/code_walk.rs <-> ingest/crates/corpus-engine/src/extractors/code/mod.rs
+32	corpus-engine-archaeology/src/rough_edges.rs <-> ingest/crates/corpus-engine/src/extractors/code/mod.rs
 16	shared/crates/corpus-engine-atlas-reader/src/context.rs <-> shared/crates/corpus-engine-atlas-reader/src/context_loader.rs
-40	shared/crates/corpus-engine-atlas-reader/src/context.rs <-> corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> corpus-engine/src/enrichment/pipeline/runner.rs <-> corpus-engine/src/enrichment/pipeline/validation.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs
-56	shared/crates/corpus-engine-atlas-reader/src/context.rs <-> corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> corpus-engine/src/enrichment/pipeline/runner.rs <-> corpus-engine/src/enrichment/pipeline/validation.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs <-> sovereign/crates/sovereign-tools/src/document_asset/motifs.rs <-> sovereign/crates/sovereign-tools/src/raptor_atlas.rs
+40	shared/crates/corpus-engine-atlas-reader/src/context.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/validation.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs
+56	shared/crates/corpus-engine-atlas-reader/src/context.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/validation.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs <-> sovereign/crates/sovereign-tools/src/document_asset/motifs.rs <-> sovereign/crates/sovereign-tools/src/raptor_atlas.rs
 18	shared/crates/corpus-engine-atlas-reader/src/parcel_analytics.rs <-> shared/crates/sovereign-contracts/src/daemon_wire/meshapp.rs
-30	shared/crates/corpus-engine-atlas-reader/src/raptor_read.rs <-> corpus-engine/src/index/raptor.rs
+30	shared/crates/corpus-engine-atlas-reader/src/raptor_read.rs <-> ingest/crates/corpus-engine/src/index/raptor.rs
 20	shared/crates/corpus-engine-atlas-reader/src/sec_facts/mod.rs <-> sovereign/crates/sovereign-core/src/runtime/numeric_audit.rs
 20	corpus-engine-notes/src/note.rs <-> shared/crates/sovereign-contracts/src/daemon_wire.rs
 51	corpus-engine-notes/src/note.rs <-> shared/crates/sovereign-contracts/src/daemon_wire.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs
 100	corpus-engine-notes/src/note.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs
 76	corpus-engine-notes/src/notes.rs <-> sovereign/crates/sovereign-code/src/write_note.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs
 81	corpus-engine-notes/src/notes.rs <-> shared/crates/sovereign-contracts/src/notes.rs
-236	corpus-engine-notes/src/notes.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> studio/crates/sovereign-recipe-author/src/test_support.rs
+236	corpus-engine-notes/src/notes.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> ingest/crates/sovereign-recipe-author/src/test_support.rs
 144	corpus-engine-notes/src/notes.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs
-64	corpus-engine-notes/src/notes.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> studio/crates/sovereign-recipe-author/src/test_support.rs
+64	corpus-engine-notes/src/notes.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> ingest/crates/sovereign-recipe-author/src/test_support.rs
 60	corpus-engine-notes/src/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs
-40	corpus-engine-notes/src/port.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> studio/crates/sovereign-recipe-author/src/test_support.rs
+40	corpus-engine-notes/src/port.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> ingest/crates/sovereign-recipe-author/src/test_support.rs
 32	corpus-engine-notes/src/port.rs <-> shared/crates/sovereign-contracts/src/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs
 20	shared/crates/corpus-engine-scip/src/converge.rs <-> sovereign/crates/sovereign-cli-dev/src/refactor_cmd/census.rs
 51	shared/crates/corpus-engine-scip/src/scip_graph.rs <-> shared/crates/corpus-engine-scip/src/scip_graph_edges.rs
@@ -45,68 +45,68 @@
 18	corpus-engine-watchers/src/projects.rs <-> sovereign/crates/sovereign-daemon/src/supervised_task.rs
 20	corpus-engine-watchers/src/reindexer.rs <-> sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs
 26	shared/crates/corpus-engine-yield/src/time.rs <-> shared/crates/sovereign-time/src/lib.rs
-18	corpus-engine/src/acquirers/bulk_download.rs <-> sovereign/crates/sovereign-tools/src/corpus/manager.rs
-24	corpus-engine/src/chunkers/fixed.rs <-> corpus-engine/src/chunkers/semantic.rs <-> corpus-engine/src/chunkers/sentence.rs
-16	corpus-engine/src/chunkers/mod.rs <-> studio/crates/sovereign-tools-base/src/rag/chunk.rs
-92	corpus-engine/src/chunkers/paragraph.rs <-> studio/crates/sovereign-tools-base/src/rag/chunk.rs
-16	corpus-engine/src/chunkers/semantic.rs <-> corpus-engine/src/chunkers/sentence.rs
-16	corpus-engine/src/engine/daemon_port.rs <-> shared/crates/corpus-index/src/ingest_port/daemon.rs
-22	corpus-engine/src/enrichment/alignment.rs <-> corpus-engine/src/enrichment/clustering.rs
-16	corpus-engine/src/enrichment/alignment.rs <-> corpus-engine/src/enrichment/fault_lines.rs
-22	corpus-engine/src/enrichment/atlas/resolution.rs <-> corpus-engine/src/enrichment/pipeline/atlas_clustering.rs
-40	corpus-engine/src/enrichment/atlas/resolution.rs <-> corpus-engine/src/enrichment/pipeline/atlas_clustering.rs <-> corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> corpus-engine/src/enrichment/pipeline/runner.rs <-> corpus-engine/src/enrichment/pipeline/validation.rs
-32	corpus-engine/src/enrichment/atlas/resolution.rs <-> understanding-atlas/src/atlas_traversal/classifier.rs
-53	corpus-engine/src/enrichment/atlas/resolution/tests_matching.rs <-> corpus-engine/src/enrichment/atlas/resolution/tests_trajectory.rs
-20	corpus-engine/src/enrichment/atlas/store.rs <-> corpus-engine/src/enrichment/atlas/wiki_store.rs
-30	corpus-engine/src/enrichment/atlas/strategies/code_walk.rs <-> corpus-engine/src/enrichment/atlas/strategies/newsworthy_events.rs <-> corpus-engine/src/enrichment/atlas/strategies/structure_first.rs
-58	corpus-engine/src/enrichment/atlas/strategies/code_walk.rs <-> corpus-engine/src/enrichment/atlas/strategies/structure_first.rs
-54	corpus-engine/src/enrichment/atlas/strategies/newsworthy_events.rs <-> corpus-engine/src/enrichment/atlas/strategies/structure_first.rs
-24	corpus-engine/src/enrichment/atlas/strategies/structure_first.rs <-> corpus-engine/src/enrichment/atlas/wiki_store.rs
-16	corpus-engine/src/enrichment/domains/business_email.rs <-> corpus-engine/src/enrichment/domains/conversational.rs
-32	corpus-engine/src/enrichment/domains/conversational.rs <-> corpus-engine/src/enrichment/domains/institutional.rs
-24	corpus-engine/src/enrichment/domains/conversational.rs <-> corpus-engine/src/enrichment/domains/institutional.rs <-> corpus-engine/src/enrichment/domains/personal.rs
-180	corpus-engine/src/enrichment/domains/conversational.rs <-> corpus-engine/src/enrichment/domains/institutional.rs <-> corpus-engine/src/enrichment/domains/personal.rs <-> corpus-engine/src/enrichment/domains/philosophy.rs
-42	corpus-engine/src/enrichment/domains/conversational.rs <-> corpus-engine/src/enrichment/domains/personal.rs
-24	corpus-engine/src/enrichment/domains/conversational.rs <-> corpus-engine/src/enrichment/domains/philosophy.rs
-32	corpus-engine/src/enrichment/domains/institutional.rs <-> corpus-engine/src/enrichment/domains/personal.rs
-27	corpus-engine/src/enrichment/domains/institutional.rs <-> corpus-engine/src/enrichment/domains/personal.rs <-> corpus-engine/src/enrichment/domains/philosophy.rs
-16	corpus-engine/src/enrichment/investigation/mod.rs <-> corpus-engine/src/enrichment/investigation/recoalesce.rs
-27	corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> corpus-engine/src/enrichment/pipeline/runner.rs <-> corpus-engine/src/enrichment/pipeline/validation.rs
-32	corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> corpus-engine/src/enrichment/pipeline/runner.rs <-> corpus-engine/src/enrichment/pipeline/validation.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs
-24	corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> corpus-engine/src/enrichment/pipeline/runner.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs
-71	corpus-engine/src/enrichment/pipeline/pipelines/literary.rs <-> corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs
-180	corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs <-> corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs
-318	corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs <-> corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs <-> corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs
-20	corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs <-> corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs
-224	corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs <-> corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs
-48	corpus-engine/src/enrichment/pipeline/typed_schemas/descriptive.rs <-> corpus-engine/src/enrichment/pipeline/typed_schemas/lyric.rs <-> corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs <-> corpus-engine/src/enrichment/pipeline/typed_schemas/reflective.rs
-68	corpus-engine/src/enrichment/pipeline/typed_schemas/descriptive.rs <-> corpus-engine/src/enrichment/pipeline/typed_schemas/narrative.rs
-16	corpus-engine/src/enrichment/pipeline/typed_schemas/lyric.rs <-> corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs
-16	corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs <-> corpus-engine/src/enrichment/pipeline/typed_schemas/reflective.rs
-20	corpus-engine/src/extractors/anthropic_export.rs <-> corpus-engine/src/extractors/chatgpt_export.rs
-16	corpus-engine/src/extractors/custom_file.rs <-> corpus-engine/src/extractors/xml_sections.rs
-30	corpus-engine/src/extractors/described_asset.rs <-> corpus-engine/src/extractors/email_rfc5322.rs
-27	corpus-engine/src/extractors/html.rs <-> corpus-engine/src/extractors/html_sections.rs <-> sovereign/crates/sovereign-tools/src/corpus/html_crawl.rs
-30	corpus-engine/src/extractors/html.rs <-> corpus-engine/src/extractors/plaintext.rs
-32	corpus-engine/src/extractors/html.rs <-> corpus-engine/src/extractors/plaintext.rs <-> sovereign/crates/sovereign-tools/src/corpus/gutenberg.rs <-> sovereign/crates/sovereign-tools/src/corpus/html_crawl.rs
-32	corpus-engine/src/extractors/html.rs <-> sovereign/crates/sovereign-tools/src/corpus/html_crawl.rs
-70	corpus-engine/src/extractors/json.rs <-> sovereign/crates/sovereign-tools/src/corpus/openalex.rs
-24	corpus-engine/src/extractors/mod.rs <-> sovereign/crates/sovereign-tools/src/corpus/openalex.rs
-16	corpus-engine/src/extractors/mod.rs <-> sovereign/crates/sovereign-tools/src/corpus/parquet_reader.rs
-40	corpus-engine/src/extractors/parquet.rs <-> corpus-engine/src/extractors/wikipedia_structured.rs
-24	corpus-engine/src/extractors/parquet.rs <-> sovereign/crates/sovereign-tools/src/corpus/parquet_reader.rs
-70	corpus-engine/src/extractors/plaintext.rs <-> sovereign/crates/sovereign-tools/src/corpus/gutenberg.rs
-18	corpus-engine/src/extractors/wikipedia_api_article.rs <-> corpus-engine/src/extractors/wikipedia_jsonl.rs
-24	corpus-engine/src/extractors/wikipedia_api_article.rs <-> corpus-engine/src/extractors/wikipedia_jsonl.rs <-> corpus-engine/src/extractors/wikipedia_structured.rs
-36	corpus-engine/src/extractors/wikipedia_jsonl.rs <-> corpus-engine/src/extractors/wikipedia_structured.rs
-120	corpus-engine/src/extractors/xml.rs <-> sovereign/crates/sovereign-tools/src/corpus/stackexchange.rs
-136	corpus-engine/src/extractors/xml.rs <-> sovereign/crates/sovereign-tools/src/corpus/wikipedia.rs
-16	corpus-engine/src/index/raptor.rs <-> shared/crates/corpus-index/src/index/create.rs
-18	corpus-engine/src/recipe.rs <-> shared/crates/understanding-vocab/src/reconciliation.rs
-20	corpus-engine/src/registry.rs <-> shared/crates/sovereign-contracts/src/recipe/registry.rs
-20	corpus-engine/src/sharding.rs <-> shared/crates/corpus-index/src/index/mod.rs
-18	corpus-engine/src/snapshot.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs
-16	corpus-engine/src/testing.rs <-> shared/crates/sovereign-contracts/src/recipe/testing.rs
+18	ingest/crates/corpus-engine/src/acquirers/bulk_download.rs <-> sovereign/crates/sovereign-tools/src/corpus/manager.rs
+24	ingest/crates/corpus-engine/src/chunkers/fixed.rs <-> ingest/crates/corpus-engine/src/chunkers/semantic.rs <-> ingest/crates/corpus-engine/src/chunkers/sentence.rs
+16	ingest/crates/corpus-engine/src/chunkers/mod.rs <-> studio/crates/sovereign-tools-base/src/rag/chunk.rs
+92	ingest/crates/corpus-engine/src/chunkers/paragraph.rs <-> studio/crates/sovereign-tools-base/src/rag/chunk.rs
+16	ingest/crates/corpus-engine/src/chunkers/semantic.rs <-> ingest/crates/corpus-engine/src/chunkers/sentence.rs
+16	ingest/crates/corpus-engine/src/engine/daemon_port.rs <-> shared/crates/corpus-index/src/ingest_port/daemon.rs
+22	ingest/crates/corpus-engine/src/enrichment/alignment.rs <-> ingest/crates/corpus-engine/src/enrichment/clustering.rs
+16	ingest/crates/corpus-engine/src/enrichment/alignment.rs <-> ingest/crates/corpus-engine/src/enrichment/fault_lines.rs
+22	ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/atlas_clustering.rs
+40	ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/atlas_clustering.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/validation.rs
+32	ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs <-> ingest/crates/understanding-atlas/src/atlas_traversal/classifier.rs
+53	ingest/crates/corpus-engine/src/enrichment/atlas/resolution/tests_matching.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/resolution/tests_trajectory.rs
+20	ingest/crates/corpus-engine/src/enrichment/atlas/store.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/wiki_store.rs
+30	ingest/crates/corpus-engine/src/enrichment/atlas/strategies/code_walk.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/strategies/newsworthy_events.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/strategies/structure_first.rs
+58	ingest/crates/corpus-engine/src/enrichment/atlas/strategies/code_walk.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/strategies/structure_first.rs
+54	ingest/crates/corpus-engine/src/enrichment/atlas/strategies/newsworthy_events.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/strategies/structure_first.rs
+24	ingest/crates/corpus-engine/src/enrichment/atlas/strategies/structure_first.rs <-> ingest/crates/corpus-engine/src/enrichment/atlas/wiki_store.rs
+16	ingest/crates/corpus-engine/src/enrichment/domains/business_email.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/conversational.rs
+32	ingest/crates/corpus-engine/src/enrichment/domains/conversational.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/institutional.rs
+24	ingest/crates/corpus-engine/src/enrichment/domains/conversational.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/institutional.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/personal.rs
+180	ingest/crates/corpus-engine/src/enrichment/domains/conversational.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/institutional.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/personal.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/philosophy.rs
+42	ingest/crates/corpus-engine/src/enrichment/domains/conversational.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/personal.rs
+24	ingest/crates/corpus-engine/src/enrichment/domains/conversational.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/philosophy.rs
+32	ingest/crates/corpus-engine/src/enrichment/domains/institutional.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/personal.rs
+27	ingest/crates/corpus-engine/src/enrichment/domains/institutional.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/personal.rs <-> ingest/crates/corpus-engine/src/enrichment/domains/philosophy.rs
+16	ingest/crates/corpus-engine/src/enrichment/investigation/mod.rs <-> ingest/crates/corpus-engine/src/enrichment/investigation/recoalesce.rs
+27	ingest/crates/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/validation.rs
+32	ingest/crates/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/validation.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs
+24	ingest/crates/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/runner.rs <-> sovereign/crates/sovereign-tools/src/attached_document_search.rs
+71	ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs
+180	ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs
+318	ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs
+20	ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs
+224	ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs
+48	ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/descriptive.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/lyric.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/reflective.rs
+68	ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/descriptive.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/narrative.rs
+16	ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/lyric.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs
+16	ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs <-> ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/reflective.rs
+20	ingest/crates/corpus-engine/src/extractors/anthropic_export.rs <-> ingest/crates/corpus-engine/src/extractors/chatgpt_export.rs
+16	ingest/crates/corpus-engine/src/extractors/custom_file.rs <-> ingest/crates/corpus-engine/src/extractors/xml_sections.rs
+30	ingest/crates/corpus-engine/src/extractors/described_asset.rs <-> ingest/crates/corpus-engine/src/extractors/email_rfc5322.rs
+27	ingest/crates/corpus-engine/src/extractors/html.rs <-> ingest/crates/corpus-engine/src/extractors/html_sections.rs <-> sovereign/crates/sovereign-tools/src/corpus/html_crawl.rs
+30	ingest/crates/corpus-engine/src/extractors/html.rs <-> ingest/crates/corpus-engine/src/extractors/plaintext.rs
+32	ingest/crates/corpus-engine/src/extractors/html.rs <-> ingest/crates/corpus-engine/src/extractors/plaintext.rs <-> sovereign/crates/sovereign-tools/src/corpus/gutenberg.rs <-> sovereign/crates/sovereign-tools/src/corpus/html_crawl.rs
+32	ingest/crates/corpus-engine/src/extractors/html.rs <-> sovereign/crates/sovereign-tools/src/corpus/html_crawl.rs
+70	ingest/crates/corpus-engine/src/extractors/json.rs <-> sovereign/crates/sovereign-tools/src/corpus/openalex.rs
+24	ingest/crates/corpus-engine/src/extractors/mod.rs <-> sovereign/crates/sovereign-tools/src/corpus/openalex.rs
+16	ingest/crates/corpus-engine/src/extractors/mod.rs <-> sovereign/crates/sovereign-tools/src/corpus/parquet_reader.rs
+40	ingest/crates/corpus-engine/src/extractors/parquet.rs <-> ingest/crates/corpus-engine/src/extractors/wikipedia_structured.rs
+24	ingest/crates/corpus-engine/src/extractors/parquet.rs <-> sovereign/crates/sovereign-tools/src/corpus/parquet_reader.rs
+70	ingest/crates/corpus-engine/src/extractors/plaintext.rs <-> sovereign/crates/sovereign-tools/src/corpus/gutenberg.rs
+18	ingest/crates/corpus-engine/src/extractors/wikipedia_api_article.rs <-> ingest/crates/corpus-engine/src/extractors/wikipedia_jsonl.rs
+24	ingest/crates/corpus-engine/src/extractors/wikipedia_api_article.rs <-> ingest/crates/corpus-engine/src/extractors/wikipedia_jsonl.rs <-> ingest/crates/corpus-engine/src/extractors/wikipedia_structured.rs
+36	ingest/crates/corpus-engine/src/extractors/wikipedia_jsonl.rs <-> ingest/crates/corpus-engine/src/extractors/wikipedia_structured.rs
+120	ingest/crates/corpus-engine/src/extractors/xml.rs <-> sovereign/crates/sovereign-tools/src/corpus/stackexchange.rs
+136	ingest/crates/corpus-engine/src/extractors/xml.rs <-> sovereign/crates/sovereign-tools/src/corpus/wikipedia.rs
+16	ingest/crates/corpus-engine/src/index/raptor.rs <-> shared/crates/corpus-index/src/index/create.rs
+18	ingest/crates/corpus-engine/src/recipe.rs <-> shared/crates/understanding-vocab/src/reconciliation.rs
+20	ingest/crates/corpus-engine/src/registry.rs <-> shared/crates/sovereign-contracts/src/recipe/registry.rs
+20	ingest/crates/corpus-engine/src/sharding.rs <-> shared/crates/corpus-index/src/index/mod.rs
+18	ingest/crates/corpus-engine/src/snapshot.rs <-> ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs
+16	ingest/crates/corpus-engine/src/testing.rs <-> shared/crates/sovereign-contracts/src/recipe/testing.rs
 18	quality/xtask/src/arch_gate.rs <-> quality/xtask/src/docs_gate.rs
 18	quality/xtask/src/boundary_gate.rs <-> quality/xtask/src/distribution_gate.rs
 18	quality/xtask/src/boundary_gate.rs <-> quality/xtask/src/layer_gate.rs
@@ -115,7 +115,7 @@
 221	shared/crates/corpus-index/src/index/enrichment.rs <-> shared/crates/corpus-index/src/index/read.rs
 62	shared/crates/corpus-index/src/index/enrichment.rs <-> shared/crates/corpus-index/src/index/read.rs <-> shared/crates/corpus-index/src/index/write.rs
 52	shared/crates/corpus-index/src/index/enrichment.rs <-> shared/crates/corpus-index/src/index/write.rs
-16	shared/crates/corpus-index/src/ingest_port/daemon.rs <-> sovereign/crates/sovereign-authoring-harness/src/port.rs
+16	shared/crates/corpus-index/src/ingest_port/daemon.rs <-> ingest/crates/sovereign-authoring-harness/src/port.rs
 20	shared/crates/corpus-index/src/types.rs <-> shared/crates/oicp-types/src/knowledge.rs
 20	shared/crates/host-kit/src/shell/guard.rs <-> studio/crates/sovereign-workflow-host/src/workflow_http.rs
 18	shared/crates/kernel-types/src/quality/instruments.rs <-> shared/crates/kernel-types/src/quality/triggers.rs
@@ -147,16 +147,16 @@
 34	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/parity_compare.rs
 84	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs
 68	sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs
-32	sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_reconcile.rs
+32	sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_reconcile.rs
 16	sovereign/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/gate.rs
 62	sovereign/crates/sovereign-cli-bench/src/bench_cmd/flywheel.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/promote.rs
 16	sovereign/crates/sovereign-cli-bench/src/bench_cmd/governance.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/proxy_bench.rs
-40	sovereign/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/mod.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/mod.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/mod.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/wikipedia.rs
+40	sovereign/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/mod.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/mod.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/mod.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/wikipedia.rs
 70	sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/mod.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/mod.rs
 24	sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/scenarios.rs <-> sovereign/crates/sovereign-cli-llm/src/voice_eval/scenarios.rs
-20	sovereign/crates/sovereign-cli-bench/src/bench_cmd/obsidian.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs
-24	sovereign/crates/sovereign-cli-bench/src/bench_cmd/subject.rs <-> sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs <-> sovereign/crates/sovereign-pipeline/src/daemon_inference.rs
-84	sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs <-> sovereign/crates/sovereign-pipeline/src/bench_atlas.rs
+20	sovereign/crates/sovereign-cli-bench/src/bench_cmd/obsidian.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/init.rs
+24	sovereign/crates/sovereign-cli-bench/src/bench_cmd/subject.rs <-> sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs <-> ingest/crates/sovereign-pipeline/src/daemon_inference.rs
+84	sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs <-> ingest/crates/sovereign-pipeline/src/bench_atlas.rs
 26	sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs <-> shared/crates/sovereign-contracts/src/probe/vault.rs
 52	sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs
 26	sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs
@@ -197,23 +197,23 @@
 40	sovereign/crates/sovereign-cli-dev/src/refactor_cmd/mod.rs <-> sovereign/crates/sovereign-cli-dev/src/refactor_cmd/schedule.rs
 26	sovereign/crates/sovereign-cli-dev/src/tools_cmd/format.rs <-> sovereign/crates/sovereign-core/src/executor.rs
 34	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/budget.rs <-> sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs
-280	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/budget.rs <-> sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_cross_corpus.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_drift_report.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_gaps.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_patch_code.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/build.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/mod.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/ingest.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/reset.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/sep_ingest.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/show.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/triage.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
-64	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_resolve.rs <-> sovereign/crates/sovereign-enrichment-build/src/extract/args.rs <-> sovereign/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs
-64	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> sovereign/crates/sovereign-enrichment-build/src/extract/args.rs <-> sovereign/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/reset.rs
-20	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs
+280	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/budget.rs <-> sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_cross_corpus.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_drift_report.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_gaps.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_patch_code.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/build.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/mod.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/ingest.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/reset.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/sep_ingest.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/show.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/triage.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
+64	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_resolve.rs <-> ingest/crates/sovereign-enrichment-build/src/extract/args.rs <-> ingest/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/init.rs
+64	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> ingest/crates/sovereign-enrichment-build/src/extract/args.rs <-> ingest/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/init.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/reset.rs
+20	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/errors.rs
 16	sovereign/crates/sovereign-cli-llm/src/atlas_cmd/typed_extension.rs <-> sovereign/crates/sovereign-cli-llm/src/corpus_extract_entities_cmd.rs
 18	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/entities.rs <-> sovereign/crates/sovereign-tools/src/knowledge_view/timeline.rs
 42	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/filter.rs <-> sovereign/crates/sovereign-cli-llm/src/awareness_cmd/inference.rs
 22	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/golden.rs <-> sovereign/crates/sovereign-cli-llm/src/awareness_cmd/templates/mod.rs
 16	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/mod.rs <-> sovereign/crates/sovereign-cli/src/memory_cmd.rs
 96	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/scenario.rs <-> sovereign/crates/sovereign-cli-llm/src/awareness_cmd/suggest.rs
-18	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/templates/mod.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/templates/mod.rs
+18	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/templates/mod.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/templates/mod.rs
 34	sovereign/crates/sovereign-cli-llm/src/awareness_cmd/timeline.rs <-> sovereign/crates/sovereign-cli-llm/src/awareness_cmd/trace.rs
 66	sovereign/crates/sovereign-cli-llm/src/chat_cmd/ask.rs <-> sovereign/crates/sovereign-cli-llm/src/chat_cmd/session.rs
-20	sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs <-> sovereign/crates/sovereign-pipeline/src/daemon_inference.rs
+20	sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs <-> ingest/crates/sovereign-pipeline/src/daemon_inference.rs
 16	sovereign/crates/sovereign-cli-llm/src/chat_cmd/inspect.rs <-> sovereign/crates/sovereign-cli-llm/src/chat_cmd/show.rs
-18	sovereign/crates/sovereign-cli-llm/src/chat_cmd/mod.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/mod.rs
-48	sovereign/crates/sovereign-cli-llm/src/corpus_cmd/pull.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
+18	sovereign/crates/sovereign-cli-llm/src/chat_cmd/mod.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/mod.rs
+48	sovereign/crates/sovereign-cli-llm/src/corpus_cmd/pull.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
 24	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/raptor.rs <-> sovereign/crates/sovereign-cli-llm/src/enrich_cmd/raptor_index.rs
 18	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/raptor_index.rs <-> sovereign/crates/sovereign-cli-llm/src/enrich_cmd/summary_atoms.rs
 26	sovereign/crates/sovereign-cli-llm/src/govern_cmd/ask.rs <-> sovereign/crates/sovereign-cli-llm/src/portfolio_cmd/ask.rs
@@ -254,18 +254,18 @@
 27	sovereign/crates/sovereign-code/src/read_note_by_id.rs <-> sovereign/crates/sovereign-code/src/read_notes.rs
 32	sovereign/crates/sovereign-code/src/read_notes.rs <-> sovereign/crates/sovereign-code/src/write_note.rs
 18	shared/crates/sovereign-contracts/src/daemon_wire.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/commands/mcp_servers.rs
-36	shared/crates/sovereign-contracts/src/daemon_wire/enrich_catalog.rs <-> sovereign/crates/sovereign-enrichment-catalog/src/catalog.rs
-20	shared/crates/sovereign-contracts/src/daemon_wire/enrich_progress.rs <-> sovereign/crates/sovereign-enrichment-build/src/build/plan.rs
+36	shared/crates/sovereign-contracts/src/daemon_wire/enrich_catalog.rs <-> ingest/crates/sovereign-enrichment-catalog/src/catalog.rs
+20	shared/crates/sovereign-contracts/src/daemon_wire/enrich_progress.rs <-> ingest/crates/sovereign-enrichment-build/src/build/plan.rs
 38	shared/crates/sovereign-contracts/src/daemon_wire/recipe_projects.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/recipe_author_commands.rs
 30	shared/crates/sovereign-contracts/src/daemon_wire/setup_plan.rs <-> shared/crates/sovereign-contracts/src/models_manifest.rs
 22	shared/crates/sovereign-contracts/src/daemon_wire/workflows.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/workflow_commands.rs
 66	shared/crates/sovereign-contracts/src/daemon_wire/workflows.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/workflow_commands.rs <-> shared/crates/sovereign-workflow/src/progress.rs
 34	shared/crates/sovereign-contracts/src/double.rs <-> shared/crates/sovereign-contracts/src/traits.rs
 40	shared/crates/sovereign-contracts/src/middleware.rs <-> sovereign/crates/sovereign-daemon/src/frontdoor.rs <-> sovereign/crates/sovereign-daemon/src/routes_responses.rs
-32	shared/crates/sovereign-contracts/src/notes.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> studio/crates/sovereign-recipe-author/src/test_support.rs
+32	shared/crates/sovereign-contracts/src/notes.rs <-> shared/crates/sovereign-contracts/src/recipe/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs <-> ingest/crates/sovereign-recipe-author/src/test_support.rs
 66	shared/crates/sovereign-contracts/src/notes.rs <-> sovereign/crates/sovereign-store/src/sqlite/memory_notes.rs
-38	shared/crates/sovereign-contracts/src/notes.rs <-> studio/crates/sovereign-recipe-author/src/test_support.rs
-32	shared/crates/sovereign-contracts/src/recipe/notes.rs <-> studio/crates/sovereign-recipe-author/src/test_support.rs
+38	shared/crates/sovereign-contracts/src/notes.rs <-> ingest/crates/sovereign-recipe-author/src/test_support.rs
+32	shared/crates/sovereign-contracts/src/recipe/notes.rs <-> ingest/crates/sovereign-recipe-author/src/test_support.rs
 30	shared/crates/sovereign-contracts/src/tokens.rs <-> shared/crates/understanding-vocab/src/skeleton.rs
 24	shared/crates/sovereign-contracts/src/traits.rs <-> sovereign/crates/sovereign-store/src/sqlite/conv_tiered.rs <-> sovereign/crates/sovereign-store/src/sqlite/corpus_state.rs
 16	shared/crates/sovereign-contracts/src/traits.rs <-> sovereign/crates/sovereign-store/src/sqlite/corpus_state.rs
@@ -301,7 +301,7 @@
 36	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/streaming.rs
 45	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs
 18	sovereign/crates/sovereign-core/src/runtime/handlers/recipe_author.rs <-> serve/crates/sovereign-serving-host/src/inference_adapter.rs
-16	sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs <-> understanding-atlas/src/meta_atlas/bridge/signals.rs
+16	sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs <-> ingest/crates/understanding-atlas/src/meta_atlas/bridge/signals.rs
 341	sovereign/crates/sovereign-core/src/runtime/streaming.rs <-> sovereign/crates/sovereign-core/src/runtime/turn.rs
 18	sovereign/crates/sovereign-daemon/src/admission/layers.rs <-> serve/crates/sovereign-serving-host/src/admission.rs
 20	sovereign/crates/sovereign-daemon/src/client_tokens.rs <-> studio/crates/sovereign-tools-base/src/mcp/secret_store.rs
@@ -311,25 +311,25 @@
 76	sovereign/crates/sovereign-daemon/src/daemon_cmd/memory_watch.rs <-> sovereign/crates/sovereign-daemon/src/routes_status.rs
 36	sovereign/crates/sovereign-daemon/src/openai_http.rs <-> serve/crates/sovereign-serving-host/src/fim_http.rs
 40	sovereign/crates/sovereign-daemon/src/routes_internal/knowledge.rs <-> sovereign/crates/sovereign-daemon/src/routes_knowledge.rs
-60	sovereign/crates/sovereign-daemon/src/routes_internal/pipeline_pause.rs <-> sovereign/crates/sovereign-pipeline/src/pipeline_cmd.rs
+60	sovereign/crates/sovereign-daemon/src/routes_internal/pipeline_pause.rs <-> ingest/crates/sovereign-pipeline/src/pipeline_cmd.rs
 22	sovereign/crates/sovereign-daemon/src/routes_oicp.rs <-> serve/crates/sovereign-serving-host/src/oicp_synthesis.rs
 24	sovereign/crates/sovereign-daemon/src/state.rs <-> sovereign/crates/sovereign-daemon/src/state/store.rs
 28	sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/state/config.rs
 16	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs
 18	sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs <-> serve/crates/sovereign-inference/src/setup_planner.rs
 18	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs
-33	sovereign/crates/sovereign-enrichment-build/src/atlas_configuration.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_tensions.rs
-18	sovereign/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_tensions.rs
-20	sovereign/crates/sovereign-enrichment-build/src/atlas_phase_cmd.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_resolve.rs
-56	sovereign/crates/sovereign-enrichment-build/src/atlas_resolve.rs <-> sovereign/crates/sovereign-enrichment-build/src/extract/args.rs <-> sovereign/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs
-32	sovereign/crates/sovereign-enrichment-build/src/atlas_resolve.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
-24	sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_holistic.rs
-24	sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> sovereign/crates/sovereign-enrichment-build/src/extract/args.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
-16	sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
-16	sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs
-20	sovereign/crates/sovereign-enrichment-build/src/build/plan.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
-16	sovereign/crates/sovereign-enrichment-build/src/extract/args.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
-18	sovereign/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs
+33	ingest/crates/sovereign-enrichment-build/src/atlas_configuration.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_tensions.rs
+18	ingest/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_tensions.rs
+20	ingest/crates/sovereign-enrichment-build/src/atlas_phase_cmd.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_resolve.rs
+56	ingest/crates/sovereign-enrichment-build/src/atlas_resolve.rs <-> ingest/crates/sovereign-enrichment-build/src/extract/args.rs <-> ingest/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/init.rs
+32	ingest/crates/sovereign-enrichment-build/src/atlas_resolve.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
+24	ingest/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_tensions_holistic.rs
+24	ingest/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> ingest/crates/sovereign-enrichment-build/src/extract/args.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
+16	ingest/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
+16	ingest/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs
+20	ingest/crates/sovereign-enrichment-build/src/build/plan.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
+16	ingest/crates/sovereign-enrichment-build/src/extract/args.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
+18	ingest/crates/sovereign-enrichment-build/src/seed_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/init.rs
 36	sovereign/crates/sovereign-eval/src/cognitive/runner.rs <-> sovereign/crates/sovereign-eval/src/judge.rs
 18	sovereign/crates/sovereign-eval/src/disposition_bench.rs <-> sovereign/crates/sovereign-eval/src/entity_resolution_bench.rs
 24	sovereign/crates/sovereign-eval/src/mechanism_fidelity/case.rs <-> sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/aggregation.rs
@@ -340,50 +340,50 @@
 24	serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
 30	sovereign/crates/sovereign-meshapp/src/parcels.rs <-> sovereign/crates/sovereign-tools/src/parcel_analytics.rs
 44	sovereign/crates/sovereign-onprem/src/main.rs <-> sovereign/crates/sovereign-stock/src/main.rs
-24	sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs
-40	sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
-34	sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs
-78	sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
-32	sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/stats.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs
-36	sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
-24	sovereign/crates/sovereign-pipeline/src/atlas_cmd/kind.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/map_check.rs
-16	sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
-36	sovereign/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
-28	sovereign/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs
-18	sovereign/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
-18	sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs <-> sovereign/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
-40	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs
-24	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs
-30	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/ingest.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/triage.rs
-82	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/triage.rs
-24	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_patch_code.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs
-34	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs
-81	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
-56	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
-60	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
-68	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
-24	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs
-32	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
-16	sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs
-58	sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs
-36	sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/reset.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
-16	sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/reset.rs
-16	sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/status.rs
-50	sovereign/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
-114	sovereign/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs
-44	sovereign/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
-50	sovereign/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/reset.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/show.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/args.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/mod.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/exemplars.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/status.rs
-16	sovereign/crates/sovereign-pipeline/src/enrich_cmd/investigation.rs <-> sovereign/crates/sovereign-pipeline/src/recipe_cmd.rs
-38	sovereign/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
-20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs <-> sovereign/crates/sovereign-tools/src/knowledge_view/cross_view.rs
-16	sovereign/crates/sovereign-pipeline/src/recipe_cmd.rs <-> studio/crates/sovereign-recipe-author/src/test_tool.rs
+24	ingest/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs
+40	ingest/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
+34	ingest/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs
+78	ingest/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
+32	ingest/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/stats.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs
+36	ingest/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
+24	ingest/crates/sovereign-pipeline/src/atlas_cmd/kind.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/map_check.rs
+16	ingest/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs <-> ingest/crates/sovereign-pipeline/src/atlas_cmd/stats.rs
+36	ingest/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
+28	ingest/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs
+18	ingest/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
+18	ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs <-> ingest/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs
+40	ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs
+24	ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs
+30	ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/ingest.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/triage.rs
+82	ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/triage.rs
+24	ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_patch_code.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs
+34	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs
+81	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
+56	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
+60	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
+68	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
+24	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs
+32	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
+16	ingest/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs
+58	ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs
+36	ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/reset.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
+16	ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/reset.rs
+16	ingest/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/status.rs
+50	ingest/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
+114	ingest/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs
+44	ingest/crates/sovereign-pipeline/src/enrich_cmd/classify.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
+50	ingest/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/errors.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/promote.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/reset.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/show.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/args.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/eval/mod.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/exemplars.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/status.rs
+16	ingest/crates/sovereign-pipeline/src/enrich_cmd/investigation.rs <-> ingest/crates/sovereign-pipeline/src/recipe_cmd.rs
+38	ingest/crates/sovereign-pipeline/src/enrich_cmd/query.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/validate.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
+20	ingest/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs <-> sovereign/crates/sovereign-tools/src/knowledge_view/cross_view.rs
+16	ingest/crates/sovereign-pipeline/src/recipe_cmd.rs <-> ingest/crates/sovereign-recipe-author/src/test_tool.rs
 16	serve/crates/sovereign-serve/src/mesh_plan.rs <-> serve/crates/sovereign-serve/src/mesh_plan/report.rs
 16	serve/crates/sovereign-serving-host/src/peer_inference.rs <-> serve/crates/sovereign-serving-host/src/peer_inference/provider_impl.rs
 16	sovereign/crates/sovereign-store/src/memory.rs <-> sovereign/crates/sovereign-store/src/postgres.rs
@@ -399,10 +399,10 @@
 16	sovereign/crates/sovereign-tools/src/local_corpus/pre_scanner.rs <-> sovereign/crates/sovereign-tools/src/local_corpus/writeback.rs
 40	sovereign/crates/sovereign-tools/src/rag/section.rs <-> studio/crates/sovereign-tools-base/src/rag/chunk.rs
 20	sovereign/crates/sovereign-work-atlas/src/observer.rs <-> sovereign/crates/sovereign-work-atlas/src/tools/declare_scope.rs
-20	studio/crates/sovereign-recipe-author/src/decision_log.rs <-> studio/crates/sovereign-recipe-author/src/research_finding.rs
-34	studio/crates/sovereign-recipe-author/src/test_tool.rs <-> studio/crates/sovereign-recipe-author/src/validate.rs
-22	studio/crates/sovereign-recipe-author/src/write.rs <-> studio/crates/sovereign-workflow-host/src/author.rs
-78	studio/crates/sovereign-recipe-author/src/write_structured.rs <-> studio/crates/sovereign-workflow-host/src/author.rs
+20	ingest/crates/sovereign-recipe-author/src/decision_log.rs <-> ingest/crates/sovereign-recipe-author/src/research_finding.rs
+34	ingest/crates/sovereign-recipe-author/src/test_tool.rs <-> ingest/crates/sovereign-recipe-author/src/validate.rs
+22	ingest/crates/sovereign-recipe-author/src/write.rs <-> studio/crates/sovereign-workflow-host/src/author.rs
+78	ingest/crates/sovereign-recipe-author/src/write_structured.rs <-> studio/crates/sovereign-workflow-host/src/author.rs
 26	studio/crates/sovereign-tools-base/src/read_file.rs <-> studio/crates/sovereign-tools-base/src/read_json.rs
 27	studio/crates/sovereign-tools-base/src/read_file.rs <-> studio/crates/sovereign-tools-base/src/read_json.rs <-> studio/crates/sovereign-tools-base/src/zip.rs
 38	studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs

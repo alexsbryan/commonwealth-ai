@@ -108,7 +108,7 @@ runs/
 # The mobile tree is not a COPY source for the CLI or desktop images.
 sovereign-mobile/
 
-# sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
+# ingest/crates/sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
 # build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts
 # include_str!s registry.toml + schema/. The tree used to be excluded
 # here when multi-GB bench gyms lived in it — those were evicted to

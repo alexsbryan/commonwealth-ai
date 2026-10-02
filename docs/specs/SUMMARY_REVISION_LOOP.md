@@ -89,7 +89,7 @@ flowchart TD
 
 `.md` file → `source_doc_id` (root-relative path, set in
 `sovereign-tools/src/local_corpus/extract_stage.rs:85-98`) → `conv_uuid`
-(they are equal for folder/vault corpora — `corpus-engine/src/enrichment/tiered.rs:8`,
+(they are equal for folder/vault corpora — `ingest/crates/corpus-engine/src/enrichment/tiered.rs:8`,
 `sovereign-store/src/migrations.rs:751-752`) → `conv_raptor_nodes` rows keyed
 `(corpus_id, conv_uuid)`. The `convUuid` already in scope at the UI render site
 **is** the `source_doc_id` the engine consumes.
@@ -205,7 +205,7 @@ append-only audit table; v1 keeps live state only, matching the work-atlas
 
 Both features are the same decision with opposite polarity — **"should I
 rebuild this note?"** — and both need it in the same place: the runner loop
-(`run_folder_tiered_enrichment`, `corpus-engine/src/enrichment/tiered.rs:536-583`),
+(`run_folder_tiered_enrichment`, `ingest/crates/corpus-engine/src/enrichment/tiered.rs:536-583`),
 which today rebuilds **every** note with no `state`/hash check.
 
 Introduce one gate, consulted by the runner and by the targeted path:

@@ -54,7 +54,7 @@ id = "n3"
 kind = "invariant"
 content = "wiki corpus must skip dedup pass — character ngram overlap on Wikipedia article titles regresses fact_recall by 8pt"
 symbols = ["dedup"]
-files = ["corpus-engine/src/enrichment/dedup.rs"]
+files = ["ingest/crates/corpus-engine/src/enrichment/dedup.rs"]
 session_id = "audit-2026-05-25"
 
 [[notes]]

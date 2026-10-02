@@ -34,7 +34,7 @@
 set -uo pipefail
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_ROOT="${SOVEREIGN_DATA_DIR:-$HOME/.svrnmesh}"
-TRUTH="$REPO/sovereign-recipes/wessex-hoard/truth.json"
+TRUTH="$REPO/ingest/crates/sovereign-recipes/wessex-hoard/truth.json"
 CONTROL="$DATA_ROOT/indexes/wessex-hoard/atlas/atoms.json"
 # The corpus id acceptance.sh's ingest leg writes into (its own default), and
 # every dated variant a lane run may have left. Newest wins; the age is printed.

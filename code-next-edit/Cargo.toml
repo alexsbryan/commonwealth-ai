@@ -8,7 +8,7 @@ description = "The code-intel package's next-edit crate: the pure rule/model/sym
 [dependencies]
 # The SCIP call graph the symbol lane navigates (next_edit_symbols.rs).
 # A DIRECT dep by the carve-out's own rule: corpus-engine ships no re-export
-# shim for it (corpus-engine/src/lib.rs), precisely so two crates cannot end
+# shim for it (ingest/crates/corpus-engine/src/lib.rs), precisely so two crates cannot end
 # up on different versions of one logical type (ARCH §8.3).
 corpus-engine-scip = { workspace = true }
 # `JournalLine` / `NextEditEpisode` / the journal layout, one schema shared

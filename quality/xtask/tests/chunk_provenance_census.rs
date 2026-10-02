@@ -250,7 +250,10 @@ fn sovereign_cannot_stamp_an_acquisition() {
 /// follows them there; `corpus-engine` keeps its `pub use` shims.
 fn doors(root: &Path) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    for crate_dir in ["shared/crates/corpus-index/src", "corpus-engine/src"] {
+    for crate_dir in [
+        "shared/crates/corpus-index/src",
+        "ingest/crates/corpus-engine/src",
+    ] {
         walk_doors(&root.join(crate_dir), &mut out);
     }
     out

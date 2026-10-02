@@ -455,7 +455,7 @@ Required, or the contradiction stands (ARCH §1.1):
 - `TARGET_ARCHITECTURE.md §5` profiles are unimplemented. Mark `target`; they
   currently read as description. **They are also the correct design** — §3 of
   this document is their implementation plan, not a replacement.
-- `corpus-engine/DECOMPOSITION.md` steps 5–8 never shipped, which is why 73.8k
+- `ingest/crates/corpus-engine/DECOMPOSITION.md` steps 5–8 never shipped, which is why 73.8k
   lines of `enrichment/` remain inside `corpus-engine`. Record the stall.
 - `corpus-engine-notes/src/notes.rs` was flagged in that plan at 2,781 lines.
   It is now 7,794 — a store, a vector index and a replication log in one file.
@@ -545,7 +545,7 @@ Phase 4 has two halves and they are ordered: **4a** kills the enrichment reach-t
 
 ### Phase 9, designed (2026-08-26)
 
-**The finding that sizes this phase: every type it needs is already minted, with the right doors.** `Evidence` has private fields, a `pub(crate)` constructor and deliberately no `Deserialize` (`corpus-engine/src/index/evidence.rs`). `Draft::release` cannot produce an `Answer` without `&[Judgement]`, and `shared/crates/kernel-types/tests/ui/answer_without_a_judgement.rs` is a compile-fail test proving it. `Citation` points into a sealed `EvidenceSet`. What is missing is **adoption** — which is exactly §6's point that `home = minted` is worth nothing while nine other doors are open. So Phase 9 is a door-closing program, and its unit of done is §6's `adopted` column reaching zero, not a new design.
+**The finding that sizes this phase: every type it needs is already minted, with the right doors.** `Evidence` has private fields, a `pub(crate)` constructor and deliberately no `Deserialize` (`ingest/crates/corpus-engine/src/index/evidence.rs`). `Draft::release` cannot produce an `Answer` without `&[Judgement]`, and `shared/crates/kernel-types/tests/ui/answer_without_a_judgement.rs` is a compile-fail test proving it. `Citation` points into a sealed `EvidenceSet`. What is missing is **adoption** — which is exactly §6's point that `home = minted` is worth nothing while nine other doors are open. So Phase 9 is a door-closing program, and its unit of done is §6's `adopted` column reaching zero, not a new design.
 
 Three rungs, ordered **9.2 -> 9.1 -> 9.3** and re-measured 2026-08-26 before starting. An earlier revision of this paragraph ordered them 9.3 -> 9.1 -> 9.2 on two claims that do not survive measurement, and both are recorded because a stated reason that is wrong is worse than none (§11.1). **(1) 9.3 is not the small one.** It reads that way because `EnrichProgressFn` already exists on both sides of the seam — but the in-process entry point (`enrich_cmd/build.rs:128 build_with_progress`) is 1,373 lines pulling twelve sibling modules out of a 34,122-line `enrich_cmd`, and making it reachable from the desktop means moving that subtree below `sovereign-tools`. That is a crate migration, so it goes last. **(2) 9.1 does not gate 9.2.** The claim was that re-typing the gate over `ScoredChunk` inputs means doing it twice; 9.2 changes the gate's OUTPUT type, and the one exit that already releases builds its `Draft` from `kernel_types::Citation` values (`grounding/mod.rs:1506`), not from the pool. They are independent, and 9.2 is the cheapest rung that forces a real invariant.
 

@@ -5,7 +5,7 @@
 # see README.md for semantics.
 #
 # Every entity here is a role token, not a real name. See
-# sovereign-recipes/conversations-anthropic/README.md for the
+# ingest/crates/sovereign-recipes/conversations-anthropic/README.md for the
 # pii::scrub_pii contract. The corresponding real-name mapping
 # lives at ~/.svrnmesh/conversations/entity-map.json (gitignored).
 #

@@ -2,7 +2,7 @@
 #
 # NOT LOADED. This file is not listed in `tool_manifest::FAMILIES`, so nothing
 # parses it — it is here to be COPIED FROM, the same way
-# `sovereign-recipes/_templates/` works for corpora.
+# `ingest/crates/sovereign-recipes/_templates/` works for corpora.
 #
 # Why a template rather than a doc paragraph: minting a bespoke struct costs
 # seconds, and reaching for a shared surface costs discovery + reading + judging

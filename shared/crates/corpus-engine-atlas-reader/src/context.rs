@@ -14,7 +14,7 @@
 //! private to this crate rather than crossing 569 times.
 //!
 //! The atlas is a typed knowledge graph computed offline (see
-//! `corpus-engine/ATLAS.md`). At query time, retrieval can fuse atlas
+//! `ingest/crates/corpus-engine/ATLAS.md`). At query time, retrieval can fuse atlas
 //! Entity matches into the chunk hit set as virtual `ScoredChunk`s:
 //! cosine the question embedding against pre-embedded Entity
 //! descriptions, take top-K, surface them as additional candidates.

@@ -389,7 +389,7 @@ To set up a typed-extension bench for, say, a recipe corpus:
    the corpus's value delivery.** v1 of the catalog ships the five
    argumentative axes (mechanism / named_position / evidence /
    opposition / concession). When procedural / descriptive / lyric
-   axes land (each one is `corpus-engine/src/enrichment/atlas/
+   axes land (each one is `ingest/crates/corpus-engine/src/enrichment/atlas/
    axis_catalog.rs::AXIS_CATALOG` + a `resolve_type_extensions`
    arm), pick the relevant subset. Lyric / opposition / concession
    aren't relevant to recipes.
@@ -483,7 +483,7 @@ follow-up campaigns:
   loaded at first read; otherwise the compile-time-baked copy is
   used unchanged. Pattern: `export
   SOVEREIGN_PROMPT_DIR=~/dev/prompt-overlays && mkdir -p
-  $SOVEREIGN_PROMPT_DIR/literary_atlas && cp corpus-engine/src/
+  $SOVEREIGN_PROMPT_DIR/literary_atlas && cp ingest/crates/corpus-engine/src/
   enrichment/pipeline/pipelines/literary_atlas_prompts/phase1_system.md
   $SOVEREIGN_PROMPT_DIR/literary_atlas/` then edit the overlay
   copy. Next `sovereign enrich build` picks it up without a
@@ -510,7 +510,7 @@ follow-up campaigns:
 - **Meta-atlas substrate — Move 5.** **Landed 2026-05-15.**
   Replaces Move 4's priority-dial registry with a derived
   two-axis stream taxonomy. **Articulation** is per-atom — a
-  rule-based classifier (`corpus-engine/src/meta_atlas/classifier.rs`)
+  rule-based classifier (`ingest/crates/corpus-engine/src/meta_atlas/classifier.rs`)
   reads atom shape (`entity_type`, `defining_quote`, `discourse_act`,
   `event_type`, etc.) + chunk-preview markers and emits an
   `ArticulationVector { inventory, argument, trace }` per atom.
@@ -573,8 +573,8 @@ follow-up campaigns:
 
 - `sovereign/bench/HISTORY.md` — pre-MECE bench findings.
 - `sovereign/bench/obsidian/README.md` — worked-example bench.
-- `corpus-engine/src/enrichment/pipeline/section_classifier_axes_prompt.md` — Phase 0 vector prompt.
-- `corpus-engine/src/enrichment/pipeline/typed_schemas/argumentative_phase1_system.md` — argumentative typed-extension prompt (carries the three iteration patterns from §5).
-- `corpus-engine/src/enrichment/atlas/axis_catalog.rs::AXIS_CATALOG` — typed-axis registry the bench dispatches on.
+- `ingest/crates/corpus-engine/src/enrichment/pipeline/section_classifier_axes_prompt.md` — Phase 0 vector prompt.
+- `ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/argumentative_phase1_system.md` — argumentative typed-extension prompt (carries the three iteration patterns from §5).
+- `ingest/crates/corpus-engine/src/enrichment/atlas/axis_catalog.rs::AXIS_CATALOG` — typed-axis registry the bench dispatches on.
 - `sovereign/crates/sovereign-cli/src/enrich_cmd/eval.rs::score_axis` — catalog-driven scorer.
 - `sovereign/crates/sovereign-cli/src/enrich_cmd/extract_typed.rs` — fan-out dispatcher with budget + retry.

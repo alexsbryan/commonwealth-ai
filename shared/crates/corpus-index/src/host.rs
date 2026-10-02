@@ -86,7 +86,7 @@ impl HostProfile {
     /// the atlas seed table (`atoms_ann.lance`) is BUILT with — see
     /// `sovereign_enrichment_build::build_with_progress_with_embedder`, whose
     /// `embedder` parameter is documented as the query side
-    /// (`sovereign/crates/sovereign-enrichment-build/src/build/mod.rs:41-48`)
+    /// (`ingest/crates/sovereign-enrichment-build/src/build/mod.rs:41-48`)
     /// because `atlas_navigate_ann` searches that table with a query vector.
     pub fn embed_query_fn(&self) -> EmbedFn {
         self.embed_fn(Side::Query)
@@ -615,7 +615,7 @@ pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostPr
 
 /// The endpoint's model id, reduced to the stem `CorpusEngine` asks for.
 ///
-/// `corpus-engine/src/engine/ingest.rs:91` states the contract: "The stem
+/// `ingest/crates/corpus-engine/src/engine/ingest.rs:91` states the contract: "The stem
 /// should match the filename of the embedding GGUF (e.g. `qwen-embedding-0.6b`
 /// for `qwen-embedding-0.6b.gguf`)". A llama-server reports the filename
 /// itself (`Qwen3-Embedding-0.6B-Q8_0.gguf`), so the `.gguf` comes off. An
@@ -627,7 +627,7 @@ pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostPr
 /// ## What this name does and does NOT decide (ARCH §11.1 — cited, not recalled)
 ///
 /// It does NOT gate the snapshot restore. `SnapshotManifest::check_embedding_compatibility`
-/// (`corpus-engine/src/snapshot.rs:223-235`) returns one of three verdicts
+/// (`ingest/crates/corpus-engine/src/snapshot.rs:223-235`) returns one of three verdicts
 /// (`EmbeddingCompat`, snapshot.rs:72-79): `DimsMismatch` when the widths
 /// differ — the only hard refusal; `Exact` when name AND width match; and
 /// otherwise `NameMismatch`, whose doc comment reads "Dimensions match, model

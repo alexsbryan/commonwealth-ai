@@ -1313,7 +1313,7 @@ mod tests {
         }
     }
 
-    /// Test fixtures are not production sites. `corpus-engine/src/index/
+    /// Test fixtures are not production sites. `ingest/crates/corpus-engine/src/index/
     /// evidence.rs` is the case that makes this load-bearing: its test module
     /// builds `metadata` maps carrying `"custody"` precisely BECAUSE the
     /// production type has already converged off that channel. Counting them

@@ -4,7 +4,7 @@
 corrected design in `README.md` calls for: it sizes both investment options
 *before* anyone writes 40 questions, and it needs no authored questions to do it.
 
-Probe: `corpus-engine/examples/bridge_rank_probe.rs` (production hybrid search
+Probe: `ingest/crates/corpus-engine/examples/bridge_rank_probe.rs` (production hybrid search
 via `CorpusIndex::search`). Candidate miner + sample: SQL over `chunk_entities`,
 reproducible (md5-ordered, no RNG). Raw output stays in scratchpad — it carries
 entity surface forms and conversation UUIDs from a personal archive. Only

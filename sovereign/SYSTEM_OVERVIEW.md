@@ -39,7 +39,7 @@ commonwealth-ai/
 ├── serve/crates/serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── shared/crates/serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── shared/crates/mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
-├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
+├── ingest/crates/corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── shared/crates/corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
 ├── shared/crates/corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── shared/crates/corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
@@ -51,10 +51,10 @@ commonwealth-ai/
 ├── code-next-edit/            # Code-intel package's next-edit crate
 ├── code-facts/                # Code-intel package's tree-sitter fact base
 ├── shared/crates/understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
-├── understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
-├── understanding-host/        # Understanding's host tier — the ports and the knot
+├── ingest/crates/understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
+├── ingest/crates/understanding-host/        # Understanding's host tier — the ports and the knot
 ├── corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
-├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
+├── ingest/crates/sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / daemon)
 ├── cmnwlth/              # Mesh coordination daemon
 ├── studio/                    # Liftable authoring package
@@ -124,12 +124,12 @@ holds the subsystem deep dives.
 ### corpus-engine
 
 Between "raw source on the internet" and "ranked search hits with provenance."
-See [`corpus-engine/README.md`](../corpus-engine/README.md),
-[`ENRICHMENT.md`](../corpus-engine/ENRICHMENT.md) (the umbrella reconciling
+See [`ingest/crates/corpus-engine/README.md`](../ingest/crates/corpus-engine/README.md),
+[`ENRICHMENT.md`](../ingest/crates/corpus-engine/ENRICHMENT.md) (the umbrella reconciling
 all three enrichment systems — read it before assuming "enrichment" means one
-thing), [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md),
-[`ATLAS.md`](../corpus-engine/ATLAS.md),
-[`DECOMPOSITION.md`](../corpus-engine/DECOMPOSITION.md).
+thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
+[`ATLAS.md`](../ingest/crates/corpus-engine/ATLAS.md),
+[`DECOMPOSITION.md`](../ingest/crates/corpus-engine/DECOMPOSITION.md).
 
 - `corpus.rs` — `Corpus`: which corpus, where it lives. The ONE decider of
   on-disk layout; ratchet `cargo xtask layout-gate`.
@@ -538,7 +538,7 @@ Recipes live outside the repo, so a TOML written six months ago must keep
 loading: new fields carry `#[serde(default)]`, renamed fields keep the old
 name as an alias, removed variants get a deprecation arm in
 `translate_parse_error`, and `[corpus] schema_version` bumps only when readers
-must opt in. Enforced by `corpus-engine/tests/main/recipe_back_compat.rs`.
+must opt in. Enforced by `ingest/crates/corpus-engine/tests/main/recipe_back_compat.rs`.
 
 Delta updates are `update/delta.rs`: per-document revision ids,
 `ManifestDiff::compute`, three-phase apply, `_update_progress.json` for
@@ -1436,8 +1436,8 @@ the shared report.
 | See how plans are executed | `sovereign-core/src/executor.rs` |
 | Add a tool | `sovereign-contracts/src/traits.rs`, a file under `sovereign-tools/src/`, a `[[tool]]` block in `sovereign-contracts/tool-manifests/` |
 | Run a workflow | CLI `svrn workflow run` → `workflow-host::run_workflow_in_process`; desktop `workflow_commands.rs` → `run_workflow_with_provider` |
-| Add a corpus extractor / filter | `corpus-engine/src/extractors/` then register in `engine/ingest.rs`; `src/filters/` + `recipe.rs::FilterConfig` + `filters/loader.rs` |
-| Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, a `pub const` `include_bytes!` line in `sovereign-recipes/src/lib.rs`, a key row in `corpus-engine/src/recipe_source/bundled.rs::ASSETS` |
+| Add a corpus extractor / filter | `ingest/crates/corpus-engine/src/extractors/` then register in `engine/ingest.rs`; `src/filters/` + `recipe.rs::FilterConfig` + `filters/loader.rs` |
+| Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, a `pub const` `include_bytes!` line in `ingest/crates/sovereign-recipes/src/lib.rs`, a key row in `ingest/crates/corpus-engine/src/recipe_source/bundled.rs::ASSETS` |
 | Write a recipe | `sovereign-recipes/<id>/recipe.toml`, then `registry.toml` |
 | Add an investigation recipe | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]` |
 | Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `shared/crates/sovereign-contracts/data/models.toml` |
@@ -1445,9 +1445,9 @@ the shared report.
 | Classify a symbol / detect trait dispatch | `shared/crates/corpus-engine-scip/src/descriptor.rs` — the ONE decider. Do NOT read `symbols.kind` (88.7% `unknown`) or `refs.ref_kind` (100% `direct`) |
 | Find a duplicated concept | IDENTITY `svrn code converge census` / `noun <Name>`; ROLE `converge roles`; SHAPE `converge shape`. Duplicated BEHAVIOUR is `code dry-report`; oversized FILES are `code suggest-seams` |
 | Understand index storage on disk | `shared/crates/corpus-index/src/index/mod.rs` |
-| Understand the v2 atlas pipeline | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `enrichment/pipeline/mod.rs` |
+| Understand the v2 atlas pipeline | [`ingest/crates/corpus-engine/ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md) + `enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment / build inside the daemon | `sovereign-pipeline/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
-| Understand delta updates / scope expansion | `corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
+| Understand delta updates / scope expansion | `ingest/crates/corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
 | Understand KnowledgeView | `sovereign-tools/src/knowledge_view/`; injected at `LandscapeDigestProvider::splice_landscape_digests` |
 | Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
@@ -1503,7 +1503,7 @@ printed by `promote_legacy_env`).
 | `quality/instruments.toml` | every instrument and every trigger venue | humans |
 | `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans |
 | `models.toml` | model selection per hardware | humans |
-| `../sovereign-recipes/registry.toml` | recipe registry | humans |
+| `ingest/crates/sovereign-recipes/registry.toml` | recipe registry | humans |
 | `../clippy.toml` | lint budgets + the path-SSOT ban | humans |
 
 **Repo-local `.sovereign/`:** `project.toml` + `project.json`, `sovereign.toml`
@@ -1548,7 +1548,7 @@ two-step, used only by `create_mesh` and `join_mesh`.
   against claims. **CapabilityHint** is a validated tag: `general`, `code`,
   open vocabulary via `x:<tag>`.
 - **Recipe** — a TOML describing how to ingest one corpus end-to-end.
-  **Registry** is the catalog at `sovereign-recipes/registry.toml`.
+  **Registry** is the catalog at `ingest/crates/sovereign-recipes/registry.toml`.
 - **DocumentFilter** — trait between extract and chunk that drops
   `ExtractedDoc`s by predicate. **FilterPipeline / ScopeMeta** is a recipe's
   filter set plus its hash, which lets a corpus expand in place.
@@ -1601,7 +1601,7 @@ and not a map's. `quality/` is where the gate baselines already live.
 When `cargo xtask arch-gate` reports a NEW oversized file, add a row there and
 re-baseline, or split the file. Three standing classes live in that ledger:
 **Sovereign deferrals** (per-file split debt), **corpus-engine deferrals**
-(files that shrink by carve-out under `corpus-engine/DECOMPOSITION.md` rather
+(files that shrink by carve-out under `ingest/crates/corpus-engine/DECOMPOSITION.md` rather
 than by a local split), and the dated **size / fan-in acceptance** rows, each
 naming what the lines bought.
 

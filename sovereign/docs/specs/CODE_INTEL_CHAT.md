@@ -107,7 +107,7 @@ no other computers are available?"* — this is what won.
 ### 3.3 The reuse — **Atlas (System 2), code ontology**
 
 This is **not net-new infrastructure.** The Atlas — System 2 in
-`corpus-engine/ENRICHMENT.md` (see also `ENRICHMENT_V2.md`) —
+`ingest/crates/corpus-engine/ENRICHMENT.md` (see also `ENRICHMENT_V2.md`) —
 already does LLM-driven typed atoms (Entity/Claim/**Question**/…) with
 **custom-ontology** support (see the custom-atlas work). The `Question` atom
 type **is** the intent-bridge validated above. A **code ontology** would emit,
@@ -174,7 +174,7 @@ summarization). The ontology must **patch at the symbol grain.** Grounded audit 
 what the repo already provides:
 
 - **The patch backbone EXISTS — in the chunk index.**
-  `corpus-engine/src/engine/reindex.rs::reindex_file` is "the hot path the
+  `ingest/crates/corpus-engine/src/engine/reindex.rs::reindex_file` is "the hot path the
   `CodeWatcher` [drives]": it diffs a changed file's chunks by **BLAKE3
   `content_hash`** and re-embeds only the delta — `reindex_file.noop` (every chunk
   hash-matched → skip), `delete_only`, `delta_applied`. Per-id eviction exists
@@ -363,7 +363,7 @@ remaining work is the production build (Inc 1–3), not more proof.
 ### Build log
 
 - **2026-06-25 — Inc 1 slice 1 (storage-agnostic generation core): landed, green.**
-  `corpus-engine/src/enrichment/code_intel/` — `SymbolMeta`/`SymbolEnrichment`, the
+  `ingest/crates/corpus-engine/src/enrichment/code_intel/` — `SymbolMeta`/`SymbolEnrichment`, the
   injected-`ChatCompletionFn` generator (`enrich_symbol`), the patchable
   `enrich_symbols_incremental` driver (glassbox `IncrementalReport`), and the
   on-disk-overridable intent prompt (`prompts/symbol_enrichment_system.md`, faithful

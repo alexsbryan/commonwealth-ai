@@ -35,7 +35,7 @@ const API_CRATES: &[&str] = &[
     "oicp-types",
     "oicp-client",
     "sovereign-contracts",
-    // "corpus-engine",
+    // "ingest/crates/corpus-engine",
     // "sovereign-core",
     // "sovereign-tools",
     // "commonwealth-core",

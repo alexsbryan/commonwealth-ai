@@ -27,7 +27,7 @@
 //!
 //! Matching *behaviour* needs a description of what each symbol DOES, not what
 //! it is spelled. That substrate exists —
-//! `corpus-engine/src/enrichment/code_intel/` generates a plain-English intent
+//! `ingest/crates/corpus-engine/src/enrichment/code_intel/` generates a plain-English intent
 //! summary plus "the questions this answers" for every symbol, body-hash
 //! cached so a re-run costs only changed bodies. Its stated purpose is exactly
 //! this bridge: ask in user vocabulary, match the summary, then walk the SCIP

@@ -4,7 +4,7 @@
 //! **Why this file exists.** From the day it was written until 2026-08-07 this
 //! checker could not report a single issue for any input. Its opening guard
 //! read `IndexMeta.enrichment_enabled`, a field written in exactly one place
-//! (`corpus-engine/src/index/create.rs`) and always written `false`, with no
+//! (`ingest/crates/corpus-engine/src/index/create.rs`) and always written `false`, with no
 //! setter anywhere in the workspace. So `continue` fired for every corpus,
 //! always, and `LowEnrichmentCoverage` / `StaleEnrichment` were dead code —
 //! §18.1's "a check with no failing input you can name". Full trace:

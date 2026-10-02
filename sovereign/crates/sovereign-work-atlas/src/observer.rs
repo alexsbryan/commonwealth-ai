@@ -16,7 +16,7 @@
 //! excluded from gossip (`commonwealth-state::GOSSIP_EXCLUDED_APP_IDS`).
 //!
 //! Cross-mesh demo this enables:
-//!   Workstation A edits `corpus-engine/src/engine/ingest.rs`.
+//!   Workstation A edits `ingest/crates/corpus-engine/src/engine/ingest.rs`.
 //!   Workstation B's `work_in_flight --scope=… --match_mode=file`
 //!   returns a `confidence=active` row stamped with A's node_id
 //!   within one broadcast round (no 10s gossip wait).

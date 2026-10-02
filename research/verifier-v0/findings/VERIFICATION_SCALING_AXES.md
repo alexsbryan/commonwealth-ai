@@ -1000,7 +1000,7 @@ small high-value window. This bounds what ANY selector could win, before pricing
 one.
 
 **Inventory first (§19), and it changes the question.** Two things already
-exist. `corpus-engine/src/index/search.rs:659` composes the final set by greedy
+exist. `ingest/crates/corpus-engine/src/index/search.rs:659` composes the final set by greedy
 **facility-location** over the pool instead of top-k truncation, behind a
 `coverage_factor` flag with a no-lose fallback. And the cross-encoder reranker
 was REJECTED 2026-08-04 on cost, not quality — `quality/env-flags.toml:1152`

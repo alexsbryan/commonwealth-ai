@@ -452,7 +452,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // is what a per-file count is for. `discovery.rs` then moved, whole, to
     // `shared/crates/corpus-index/src/v1_models.rs` (pb-code-clean): same two sites.
     ("shared/crates/corpus-index/src/v1_models.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-enrichment-build/src/inference_client/mod.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-enrichment-build/src/inference_client/mod.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-llm ----
     // 7 -> 10 (2026-08-27): `mesh rotate`, `mesh leave` and `mesh switch` each
@@ -577,15 +577,15 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // traffic, class unchanged.
     ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/solve_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-pipeline/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-pipeline/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
+    ("ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
     // The install client moved to the CLI leaf (pb-cli-llm-ingest-move).
     ("shared/crates/sovereign-cli-base/src/corpus_install.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-pipeline/src/bench_atlas.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-pipeline/src/alignment_cmd.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-pipeline/src/bench_atlas.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-pipeline/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 
 ];

@@ -150,12 +150,12 @@ ENV CMAKE_CUDA_COMPILER_LAUNCHER=sccache
 
 # Build context = commonwealth-ai/ workspace root. Post-monorepo (May
 # 2026) the single workspace Cargo.toml + Cargo.lock live here; each
-# of corpus-engine/, shared/crates/oicp-types/, cmnwlth/, sovereign/ contains
+# of ingest/crates/corpus-engine/, shared/crates/oicp-types/, cmnwlth/, sovereign/ contains
 # workspace-member crates referenced by path from the root manifest.
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY cmnwlth/        ./cmnwlth/
-COPY corpus-engine/       ./corpus-engine/
+COPY ingest/crates/corpus-engine/       ./ingest/crates/corpus-engine/
 # corpus-engine decomposition carve-outs — top-level sibling workspace
 # members since mid-2026; cargo refuses the workspace if any is absent.
 #
@@ -205,7 +205,7 @@ COPY quality/arch-layers/ ./quality/arch-layers/
 COPY vendor/              ./vendor/
 # Whole recipes tree (~1.4 MB): corpus-engine/build.rs vendors it into
 # OUT_DIR and sovereign-contracts include_str!s registry.toml + schema/.
-COPY sovereign-recipes/      ./sovereign-recipes/
+COPY ingest/crates/sovereign-recipes/      ./ingest/crates/sovereign-recipes/
 # Only copy the parts of sovereign/ that cargo actually needs. Skipping
 # container/, scripts/, docs/, bench/, etc. means edits to those don't
 # invalidate the cargo-build layer (which is the slow one). Workspace

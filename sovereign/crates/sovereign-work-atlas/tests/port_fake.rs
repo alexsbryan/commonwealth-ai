@@ -224,7 +224,7 @@ fn observation_written_by_one_instance_is_visible_through_another() {
     a.put_session(&session).unwrap();
     let obs = ObservationRecord {
         session_id: session.session_id,
-        file_path: PathBuf::from("corpus-engine/src/engine/ingest.rs"),
+        file_path: PathBuf::from("ingest/crates/corpus-engine/src/engine/ingest.rs"),
         source: ObservationSource::CodeWatcherEdit,
         first_observed_at: unix_now_u64(),
         last_observed_at: unix_now_u64(),
@@ -234,7 +234,10 @@ fn observation_written_by_one_instance_is_visible_through_another() {
     a.put_observation(Privacy::Public, &obs).unwrap();
 
     let hits = b
-        .list_observations_for_scope("corpus-engine/src/engine/ingest.rs", ScopeMatch::File)
+        .list_observations_for_scope(
+            "ingest/crates/corpus-engine/src/engine/ingest.rs",
+            ScopeMatch::File,
+        )
         .unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].event_count, 4);

@@ -998,7 +998,7 @@ mod tests {
     fn counted_extensions_come_from_the_graph_not_a_constant() {
         let defs = [
             def("sovereign/crates/a/src/x.rs"),
-            def("corpus-engine/src/y.rs"),
+            def("ingest/crates/corpus-engine/src/y.rs"),
             def("commonwealth/tools/z.go"),
             def("scripts/w.py"),
         ];

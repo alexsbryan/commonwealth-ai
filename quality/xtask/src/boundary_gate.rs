@@ -399,9 +399,9 @@ fn scan_include_escapes(text: &str, rel_dir: &Path) -> Vec<IncludeEscape> {
         examined_through = Some(hi.saturating_sub(1));
 
         // RESOLVE, do not pattern-match. `../..` in the text is not an escape:
-        // `corpus-engine/src/extractors/code/mod.rs` embeds
+        // `ingest/crates/corpus-engine/src/extractors/code/mod.rs` embeds
         // `../../../queries/rust/symbols.scm`, which lands on
-        // `corpus-engine/queries/` — INSIDE the crate root. That false positive
+        // `ingest/crates/corpus-engine/queries/` — INSIDE the crate root. That false positive
         // stood as six red lines and as burn-down item (2) on the
         // `corpus-mcp -> corpus-engine` exception, for work already done.
         let base: &Path = if window.iter().any(|l| l.contains("CARGO_MANIFEST_DIR")) {

@@ -5,7 +5,7 @@
 # its throwaway HOME and publishes it to that HOME's recipe registry. The
 # committed file keeps the placeholder on purpose: a recipe carrying an
 # absolute path from whichever machine last touched it is how
-# sovereign-recipes/arch-principles/recipe.toml ended up pointing at
+# ingest/crates/sovereign-recipes/arch-principles/recipe.toml ended up pointing at
 # /Users/user/… and working nowhere.
 #
 # WHY A RECIPE AND NOT `corpus ingest`. `corpus install` is the command the

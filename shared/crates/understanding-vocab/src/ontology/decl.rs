@@ -11,7 +11,7 @@
 //! here for the same reason — it is what [`super::ProsePolicy`] carries.
 //!
 //! `corpus-engine`'s `recipe_schema` test renders this file into
-//! `sovereign-recipes/SCHEMA.md`, so every `pub` item here is author-facing
+//! `ingest/crates/sovereign-recipes/SCHEMA.md`, so every `pub` item here is author-facing
 //! documentation as well as code.
 
 use std::collections::BTreeMap;

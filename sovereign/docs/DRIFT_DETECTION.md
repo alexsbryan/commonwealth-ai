@@ -401,14 +401,14 @@ without thinking about cost.
 - [`docs/PLAN_ALIGNMENT.md`](./PLAN_ALIGNMENT.md) — plan-time
   alignment-questions discipline that produces the inquiries the
   drift detector checks.
-- `corpus-engine/src/extractors/markdown.rs` — section-aware markdown
+- `ingest/crates/corpus-engine/src/extractors/markdown.rs` — section-aware markdown
   extractor.
 - `sovereign-cli/src/enrich_cmd/atlas_drift_report.rs` — digest
   renderer + classifier.
 - `sovereign-cli/src/drift_cmd_orchestrator.rs` — single-command
   orchestrator with resilience patterns.
-- `sovereign-recipes/_templates/narrative-markdown/` — recipe
+- `ingest/crates/sovereign-recipes/_templates/narrative-markdown/` — recipe
   template + `README.md` on which docs to ingest.
-- `corpus-engine/src/rough_edges.rs` — marker scanner core.
+- `ingest/crates/corpus-engine/src/rough_edges.rs` — marker scanner core.
 - `sovereign-cli/src/rough_edges_cmd.rs` — `sovereign rough-edges`
   CLI wrapper.

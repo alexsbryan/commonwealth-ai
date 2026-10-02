@@ -14,7 +14,7 @@ documented sibling-table pattern.**
 
 Measured 2026-07-31, M2 Max, release build (timing is the measurand — the SP4
 exception; `[profile.dev] debug=0` compiles lance unoptimized). Harness:
-`corpus-engine/examples/maxsim_probe.rs` (committed). Raw logs:
+`ingest/crates/corpus-engine/examples/maxsim_probe.rs` (committed). Raw logs:
 `runs/p52b/probe-{20k,20k-clustered,20k-rf,60k}.log`.
 
 ## Question (gate G10)

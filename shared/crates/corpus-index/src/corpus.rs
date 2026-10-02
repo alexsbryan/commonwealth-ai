@@ -8,7 +8,7 @@
 //! dependency that is actually widest, because that one is carried by string
 //! literals. Counted on this tree, 2026-08-20:
 //!
-//! | convention | corpus-engine/src | sovereign | commonwealth |
+//! | convention | ingest/crates/corpus-engine/src | sovereign | commonwealth |
 //! |---|---|---|---|
 //! | `.join("_corpus_meta.json")` | 62 | 63 | 22 |
 //! | `format!("{id}-partition-{node}")` | 6 | 16 | 13 |

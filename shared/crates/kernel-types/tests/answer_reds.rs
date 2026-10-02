@@ -39,7 +39,7 @@
 //! `judgement_reds`'s control validates `judgement_reds`, and this suite needs
 //! its own or it is an uncontrolled instrument that happens to sit next to a
 //! controlled one. The hour that earned this rule is recorded in
-//! `corpus-engine/tests/evidence_reds.rs`, where five fixtures reported
+//! `ingest/crates/corpus-engine/tests/evidence_reds.rs`, where five fixtures reported
 //! "expected to fail, but SUCCEEDED" because the dependency crate itself did
 //! not build and nothing in trybuild's output said so.
 //!

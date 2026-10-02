@@ -18,7 +18,7 @@
 //! ```
 //!
 //! `id` and `title` are picked up by `JsonlExtractor`; everything else
-//! becomes chunk metadata (see `corpus-engine/src/extractors/json.rs`).
+//! becomes chunk metadata (see `ingest/crates/corpus-engine/src/extractors/json.rs`).
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
