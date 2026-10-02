@@ -2080,6 +2080,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: A. `AnchorProfile.rpc_direct` (skipped when false), set by serve only for a non-loopback bind the operator allowed; the direct probe and the record-port probe-host fallback run only for a worker that declares it; a record without the field is bridge-only; a pre-cut `/status` port keeps main's path, traced as unproven. C (an identity on the direct path, the tunnel-proxy sidecar of transport lib.rs:73) is phase-d's new pd-rpc-direct-identity. B is not taken.
 - Because: A is the only option that closes the hole for every default member and costs none of them anything (their direct path never reached the worker), and it is not a charter fork: no leaf, exception, ratchet raise or user-visible change. The lane's open sub-question (legacy records) is answered by `git grep rpc_iroh 18f783f44 -- oicp-types` = nothing: main's AnchorProfile has neither field, so every record lacking `rpc_direct` is a cut build carrying `rpc_iroh`, and bridge-only loses no peer. B makes a deliberately LAN-bound worker pay QUIC on every tensor transfer, a throughput change users see.
 
+**phase-c-5 · 2026-10-02 · pc-pool-ready's owed dry wave · seat, reading it live and moving the lanes out of the tree** — this commit
+- Needed: pc-pool-ready landed with its two-lane dry wave never-ran, owed to the seat. Read live on phase-c's waves 1 and 2: the merge landed with no conflict, the clashing decision was renumbered (868dc0b3a, phase-c-2 → phase-c-4) and `ralph-decisions.py --check` stayed current, and each lane's jobs line shows its share (4 of 14). The claim the row rests on did not hold: a lane's first lint recompiled crates.io dependencies (pc-cmnwlth-lift-flake: proc-macro2, quote, unicode-ident and 196 more in its first 1,534 log lines).
+- Chose: lanes live beside the main tree, `<workdir>-lanes/<unit>` (`lane_root_for`, one accessor for every lane path), not under `.ralph/wt/`. The lanes already running finish where they are; any left at the next pool start are moved with `git worktree move`.
+- Because: cargo reads every ancestor's `.cargo/config.toml` and concatenates arrays, so a lane under the main tree ran `target.x86_64-unknown-linux-gnu.rustflags` twice (`cargo config get` from a lane prints the mold/`-L native` pair twice; from the main tree and from a sibling directory, once). Rustflags are part of every unit's identity, so the lane's fingerprints (proc-macro2 6179e4c45d78eccd and three more) are hashes the cloned target never held. The 2026-09-01 recipe the row cited used worktrees beside the repo. A RUSTFLAGS override would be a second copy of the config's list (principle 8).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13464,5 +13469,15 @@ No build, test or PLANT ran: the census stops before code (§3 step 2, §6).
 
 Edit or mark the row in ralph/next/phase-c/STATE.md, then
 `rm ralph/next/phase-c/ctl/STOP ralph/next/phase-c/ctl/NEEDS_HUMAN.md`.
+
+</details>
+
+## phase-c-5 · 2026-10-02 — pool lanes live beside the main tree, so cargo reads one config
+
+<details><summary>reasoning, evidence, package</summary>
+
+Fingerprint comparison, lane `.ralph/wt/pc-cmnwlth-lift-flake/target/debug/.fingerprint/proc-macro2-6179e4c45d78eccd/lib-proc_macro2.json` against main's `proc-macro2-954eb3cf8ea8a8d7`: rustc, features, target, profile, path and config hashes are equal (config 9185878174080762935 on both); rustflags differ, the lane's list being main's twice.
+
+The `.ralph/` code-watcher skip (b0004ed0e) and the `.gitignore` line now guard a path the pool no longer writes once the running lanes are moved; they are left as they are, being harmless, and the watcher skip would cost a Rust rebuild and a daemon restart to remove mid-campaign.
 
 </details>

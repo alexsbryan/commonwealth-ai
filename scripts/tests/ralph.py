@@ -1766,6 +1766,29 @@ class WatchTests(unittest.TestCase):
             self.assertEqual(state.read_text(), "")
 
 
+def in_tree_lanes(paths):
+    """The pool tests keep lane worktrees inside their temporary directory, so
+    nothing outlives it; production's default sits beside the main tree
+    (`lane_root_for`, LaneRootTests)."""
+    return paths.workdir / ".ralph" / "wt"
+
+
+class LaneRootTests(unittest.TestCase):
+    def test_lanes_live_beside_the_main_tree_not_under_it(self):
+        # Under the main tree cargo merges the main tree's .cargo/config.toml
+        # into every lane's, doubling target.rustflags, and every crates.io
+        # unit's identity changes with it.
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = pathlib.Path(tmp) / "repo"
+            workdir.mkdir()
+            root = ralph.lane_root_for(workdir)
+            self.assertEqual(root, workdir.resolve().parent / "repo-lanes")
+            self.assertNotIn(workdir.resolve(), root.parents)
+            pool = ralph.Pool(ralph.Paths(workdir), session_for=lambda cwd, env=None: None,
+                              notify_enabled=False)
+            self.assertEqual(pool.lane_root, root)
+
+
 class FakeLane:
     """A lane session: writes its unit's file, commits, and marks done."""
 
@@ -1842,6 +1865,7 @@ class PoolTests(unittest.TestCase):
     def make(self, root, session_for, **kwargs):
         paths = ralph.Paths(root)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", sleep=lambda s: None, **kwargs)
 
     def test_pick_wave_excludes_reviews_deps_and_conflicts(self):
@@ -1973,6 +1997,7 @@ class PoolWaitingTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_waiting_end_does_not_count_as_a_failure(self):
@@ -2050,6 +2075,7 @@ class RosterProbeTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_dead_first_roster_falls_through_to_the_healthy_model(self):
@@ -2217,6 +2243,7 @@ class HaltTailTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_lane_strikeout_halt_carries_the_last_error_line(self):
@@ -2493,7 +2520,8 @@ class PoolQueueTests(unittest.TestCase):
     def make(self, root, session_for, **kwargs):
         args = ralph.build_parser().parse_args(["pool", "--workdir", str(root), "--queue", "q"])
         paths = ralph.paths_for(args)
-        return ralph.Pool(paths, session_for=session_for, notify_enabled=False, lanes=2,
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths), lanes=2,
                           base_branch="main", sleep=lambda s: None, **kwargs)
 
     def test_the_pool_runs_the_queue_it_names(self):

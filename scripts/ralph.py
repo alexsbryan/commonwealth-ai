@@ -1801,6 +1801,18 @@ DECISIONS_RENDERED = "ralph/DECISIONS.md"
 DECISIONS_SCRIPT = "scripts/ralph-decisions.py"
 
 
+def lane_root_for(workdir):
+    """Where the pool keeps lane worktrees: beside the main tree, never inside
+    it. Cargo reads every ancestor's .cargo/config.toml and concatenates their
+    arrays, so a lane under the main tree ran with the main tree's
+    target.rustflags twice; rustflags are part of every unit's identity, so
+    each lane rebuilt every crates.io dependency its reflink-cloned target
+    already held (2026-10-02, phase-c wave 2: proc-macro2 and 198 more on one
+    lane's first lint, under .ralph/wt/)."""
+    workdir = pathlib.Path(workdir).resolve()
+    return workdir.parent / f"{workdir.name}-lanes"
+
+
 class Pool:
     """The parallel driver: waves of ready units in git worktrees, serial
     merges, a conflict halts (never auto-resolved). REVIEW rows run serially
@@ -1810,8 +1822,9 @@ class Pool:
                  lanes=2, base_branch="",
                  marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
-                 max_lane_failures=3, probe=None, jobs_share=None):
+                 max_lane_failures=3, probe=None, jobs_share=None, lane_root=None):
         self.paths = paths
+        self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
         self.notifier = notifier
         self.notify_enabled = notify_enabled
@@ -1902,7 +1915,7 @@ class Pool:
         the units still waiting). The filesystem is the state — a restart or a
         previous pool generation loses nothing."""
         still = set()
-        wt_root = self.paths.workdir / ".ralph" / "wt"
+        wt_root = self.lane_root
         if not wt_root.exists():
             return None, still
         for wt in sorted(wt_root.iterdir()):
@@ -1936,10 +1949,11 @@ class Pool:
         # (macOS) the lane-marker directory and `ralph/DONE` are one path, and
         # the completion marker could never be written.
         (self.paths.workdir / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
-        (self.paths.workdir / ".ralph" / "wt").mkdir(parents=True, exist_ok=True)
+        self.lane_root.mkdir(parents=True, exist_ok=True)
         self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
         say(f"pool: lanes={self.lanes} base={self.base_branch}"
-            + (f" queue={self.paths.queue}" if self.paths.queue else ""))
+            + (f" queue={self.paths.queue}" if self.paths.queue else "")
+            + f" lane_root={self.lane_root}")
         while True:
             if self.paths.p(self.paths.stop).exists():
                 say("pool: STOP")
@@ -2142,7 +2156,7 @@ class Pool:
             "— the workspace crates rebuild once, external deps stay warm")
 
     def run_lane(self, unit, model=None):
-        wt = self.paths.workdir / ".ralph" / "wt" / unit
+        wt = self.lane_root / unit
         branch = f"ralph/{unit}"
         if not wt.exists():
             r = self._git("worktree", "add", "-q", "-b", branch, str(wt), self.base_branch)
@@ -2312,7 +2326,7 @@ class Pool:
             say("pool: operator STOP — leaving the lanes unmerged (their worktrees resume)")
             return 0
         for unit in wave:
-            wt = self.paths.workdir / ".ralph" / "wt" / unit
+            wt = self.lane_root / unit
             branch = f"ralph/{unit}"
             if not wt.exists():
                 continue
