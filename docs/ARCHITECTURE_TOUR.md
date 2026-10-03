@@ -15,7 +15,7 @@ measured by adversarial benches — *gates, not vibes*.
 
 | | |
 |---|---|
-| Workspace | 4 projects, one Rust workspace |
+| Workspace | 6 programs, one Rust workspace, one top-level directory each |
 | Tests | thousands — none require GPU, network, or model weights |
 | Knowledge pipeline | 24 extractors · 7 chunkers, all recipe-declared |
 | CLI | 55 verbs behind one `svrm` dispatcher |
@@ -56,7 +56,7 @@ and check every claim yourself.
 
 <sub>Surfaces: `sovereign-cli` (+ 3 sibling binaries), `sovereign-desktop` (Tauri 2 + Svelte), `sovereign-server` (`:8080`, multi-tenant, the phone's host), `sovereign-mobile` (thin client). The runtime is `router → policy → retrieval → synthesis → grounding gate` over `sovereign-core · -inference (llama.cpp) · -tools · -store · -mesh · -eval`; the wire types live in `oicp-types`.</sub>
 
-*Deep dive: SYSTEM_OVERVIEW §1–§2 (project map, per-crate table).*
+*Deep dive: SYSTEM_OVERVIEW §1–§2 (the programs, and every crate under its program's directory).*
 
 ## 2. One message's journey: nothing ships unverified
 

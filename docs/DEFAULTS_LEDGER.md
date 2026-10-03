@@ -1603,7 +1603,7 @@ _Historical record below — the reasoning while this row was `preview`._
   recall flat while cutting off-topic share. Flipping it on today's
   evidence would be tuning against a bank that can only see one side.
 - **Settled by:** the personal-corpus bench bank (see
-  `docs/RETRIEVAL_AUDIT_2026-08-04.md` §D1-residual) — unowned. If no
+  `svrn/docs/RETRIEVAL_AUDIT_2026-08-04.md` §D1-residual) — unowned. If no
   tranche claims that bank by the review date, kill this row rather than
   re-dating it a third time.
 - **Review by:** 2026-09-05.

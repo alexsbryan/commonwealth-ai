@@ -436,11 +436,11 @@ trigger column is when to open it — the doc section holds the full text.
 ## Architecture
 
 **ONE Cargo workspace, declared at the repo root.** `./Cargo.toml` carries a
-`[workspace]` with 54 members — `corpus-engine`, 25 `sovereign/crates/*`, the
-`cmnwlth/crates/*`, `oicp-types`, `oicp-client`, `kernel-types`,
-`quality/arch-layers`. No subdirectory declares its own `[workspace]`, and
-there is no `sovereign/Cargo.toml` at all: a `cargo` invoked from `sovereign/`
-walks UP to the root and resolves the same workspace.
+`[workspace]` with 86 members, each under its program's dir or `shared/`,
+`clients/`, `distributions/`, `quality/`. The one other `[workspace]` is
+`cmnwlth/apps/ring-runtime`, a wasm-only crate kept out on purpose; a `cargo`
+invoked from any other subdirectory walks UP to the root and resolves the same
+workspace.
 
 (This paragraph said the opposite until 2026-08-20 — "three workspaces, no
 single root `Cargo.toml`" — and used it to explain why the `scripts/` wrappers
@@ -455,15 +455,14 @@ misprices where a crate can live, which is load-bearing during boundary work.)
 
 ```
 commonwealth-ai/
-├── cmnwlth/      # Mesh coordination daemon (runs at localhost:9741)
-├── sovereign/      # Local AI + code intelligence server
-├── ingest/crates/corpus-engine/  # Knowledge base engine
-├── shared/crates/oicp-types/    # Shared protocol types (used by both)
-├── ingest/crates/sovereign-recipes/  # Data recipes
-└── scripts/       # Build/test wrappers
+├── svrn/ serve/ cmnwlth/ ingest/ code/ bench/  # the six programs
+├── shared/crates/  # leaves any program may link
+├── clients/        # desktop, mobile, studio, chat-ui, vscode
+├── distributions/  # composition roots (stock, onprem)
+└── quality/ scripts/ docs/  # gates, wrappers, compass
 ```
 
-** commonwealth ≠ sovereign**. They are peer projects, not parent/child. The Commonwealth mesh daemon serves a local API that sovereign uses for inference routing.
+**cmnwlth ≠ svrn.** Peer programs, not parent/child; `[crate_dirs]` in ARCH_LAYERS.toml keeps each crate in its program's dir.
 
 
 <!-- portable:start working style: prose, commits -->

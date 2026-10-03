@@ -26,77 +26,60 @@ file or the subsystem's own doc.
 
 ---
 
-## 1. The projects
+## 1. The programs
 
 ```
 commonwealth-ai/
-├── shared/crates/oicp-types/                # OICP wire types — no other deps
-├── shared/crates/kernel-types/              # The neutral kernel — identity, provenance, trust, the released turn
-├── shared/crates/oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
-├── cmnwlth/crates/oicp-conformance/          # Standalone OICP v0.4 host conformance tester
-├── shared/crates/oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
-├── shared/crates/oplog-types/               # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
-├── serve/crates/serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
-├── shared/crates/serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
-├── shared/crates/mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
-├── ingest/crates/corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
-├── shared/crates/corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
-├── shared/crates/corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
-├── shared/crates/corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
-├── code/crates/corpus-engine-notes/       # NoteStore + project_docs index
-├── code/crates/corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
-├── shared/crates/corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
-├── shared/crates/corpus-engine-sections/    # Section detectors as a regex-only leaf
-├── code/crates/corpus-engine-watchers/    # Lint/test/project-index watchers + result stores
-├── code/crates/code-next-edit/            # Code-intel package's next-edit crate
-├── code/crates/code-facts/                # Code-intel package's tree-sitter fact base
-├── shared/crates/understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
-├── ingest/crates/understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
-├── ingest/crates/understanding-host/        # Understanding's host tier — the ports and the knot
-├── svrn/crates/corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
-├── ingest/crates/sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
-├── svrn/                      # Local AI assistant (CLI / daemon); the desktop is clients/desktop/
-├── cmnwlth/              # Mesh coordination daemon
-├── clients/studio/            # Headless studio CLI (the authoring package's other crates sit with their programs)
-├── quality/                   # Quality program — layer map, gate baselines, arch-layers crate
-├── clients/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
-├── clients/vscode/ # First-party VSCode FIM extension
-└── clients/mobile/          # Thin Tauri 2 mobile client (iOS + Android)
+├── svrn/             # The assistant and knowledge server: daemon, turn, tools, CLI; its docs and modes
+├── serve/            # The model server: inference, the compute child, scheduler, serving host; container images
+├── cmnwlth/          # The endpoint router with a roster: the mesh crates and cw-rails; the OICP spec and its conformance tester
+├── ingest/           # The recipe pipeline: corpus-engine (LanceDB + Tantivy), recipes, enrichment, the understanding atlas
+├── code/             # Code intelligence for agents: SCIP tools, notes, archaeology, watchers, next-edit, the TDD solver
+├── bench/            # The evaluator: its crates, and the lanes under bench/lanes/
+├── shared/crates/    # The leaves every program may link: oicp-types, kernel-types, sovereign-contracts, corpus-index, …
+├── clients/          # Not programs: desktop, mobile, studio, chat-ui, vscode, landing
+├── distributions/    # Composition roots — stock, onprem, hosted-ingest — and the on-prem deploy kit
+├── quality/          # The layer map, gate baselines, xtask and arch-layers
+└── docs/             # This file, ARCH_PRINCIPLES and the other repo-wide docs
 ```
 
-Outside the map: `vendor/` (pinned `llama-cpp-4`), `scripts/`, `docs/`,
-`clients/landing/`, `gym/`, `baselines/`, and `quality/xtask` — the gate
-binaries plus the workspace-hygiene generators in `xtask/tests/`, which live
-there because they read the repo root and so cannot sit in a liftable crate.
-`models/` holds downloaded GGUF weights, gitignored.
+Also at the top: `scripts/` (the build and test wrappers), `vendor/` (pinned
+`llama-cpp-4`), `research/` (cross-program spikes and captured runs), `gym/`
+(the next-edit and FIM case banks, the comaintainer seat's charter) and
+`ralph/` (the work loop's queue and decisions). Downloaded GGUF weights sit
+in a gitignored models directory under sovereign/, the one thing left there.
+`quality/xtask` holds the gate binaries plus the workspace-hygiene
+generators in `xtask/tests/`, which live there because they read the repo
+root and so cannot sit in a liftable crate.
 
-| Project | Role | Depends on |
+Where a crate lives is a gate, not a convention. `[crate_dirs]` in
+`quality/ARCH_LAYERS.toml` puts a `[[package]]` row's crates under its
+program's directory, leaves under `shared/`, distributions under
+`distributions/`, clients under `clients/` and tooling under `quality/`;
+`cargo xtask boundary-gate` fails a member outside its row's directory, and a
+member no row claims.
+
+| Program or leaf | Role | Depends on |
 |---|---|---|
+| `svrn`, `serve`, `cmnwlth`, `ingest`, `code`, `bench` | The six programs (§2) | Each its own crates and the shared leaves: the `[[package]]` closure boundary-gate checks |
 | `oicp-types` | OICP wire types + scoring helpers, and the mesh records two programs exchange (node capabilities, the ingest work queue, the contribution/activity ledger, the model catalogue, the inference plan, peer preferences; pb-mesh-exit-core), and `SamplingOverrides`, the sampling pins svrn's turn wire and agent-tools' role profiles share (phase-b-56) | `kernel-types` |
 | `kernel-types` | The neutral kernel: identity and provenance (`ContentHash`, `CorpusId`, `NodeId`, `Origin`, `Custody`, `Attribution`), the trust vocabulary (`Verdict`, `Reason`, `Freshness`, `Judgement`), the released turn (`Seal`, `Citation`, `Draft`, `Answer`, `PeerAnswer`, `Refused`), the wire-form decider, the requirement registry. The SECOND layer-0 membrane beside `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. May name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
 | `workspace-hack` | cargo-hakari feature-unification crate, so a `-p` build resolves what `--workspace` resolves | — |
-| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-atlas-reader`, `corpus-engine-notes` |
-| `sovereign` | Local agent runtime | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
-| `commonwealth` | Symmetric mesh daemon | `corpus-engine`, `oicp-types`, `kernel-types` |
 
 Dependency direction is one-way. Sovereign and cmnwlth meet at the contracts
 seam (`sovereign-contracts`, a shared leaf) and over cw-rails' HTTP doors.
 `sovereign-mesh`, the in-process embed that was once the only place they met,
 is gone (pb-mesh-dissolve, phase-b-92); the stock distribution composes the
 programs in one process through their faces (docs/internal/FIVE_PROGRAMS.md §2c).
+No program links another: svrn reaches ingest's engine only as the stock and
+on-prem distributions hand it in, and cmnwlth links no knowledge crate.
 
 ```
-       oicp-types          sovereign-recipes
-            │                       │ include_str!/include_bytes!
-            │                ┌──────▼──────┐
-            │                │ corpus-engine│  (LanceDB + Tantivy)
-            │                └──────┬──────┘
-            │                       │  EmbedFn / InferenceFn
-            ├───────────┬───────────┼──────────────┐
-        Sovereign       │      both call          cmnwlth
-       (sovereign/)     │   identical APIs        (cmnwlth/)
-            │           │                              │
-            └─ contracts seam · cw-rails HTTP doors ───┘
+   svrn    serve    cmnwlth    ingest    code    bench     each links itself
+     │       │         │          │        │        │       and the leaves
+     └───────┴─────────┴────┬─────┴────────┴────────┘
+                      shared/crates
+   distributions/ compose programs in one process, through each one's face
 ```
 
 Two protocols cross that boundary. **OICP** is declared in
@@ -118,12 +101,100 @@ modules at their historical paths for the serving cluster's own consumers.
 
 ## 2. Workspace map
 
-One line per crate. For detail, read the crate's `lib.rs`; `svrn/docs/`
-holds the subsystem deep dives.
+One line per crate, under the top-level directory that owns it (§1;
+`[crate_dirs]`, boundary-gate). For detail, read the crate's `lib.rs`;
+`svrn/docs/` holds the subsystem deep dives.
 
-### corpus-engine
+### svrn — the assistant and knowledge server
 
-Between "raw source on the internet" and "ranked search hits with provenance."
+```
+svrn/crates/
+├── corpus-mcp                     # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
+├── sovereign-cli                  # User-facing dispatcher — execs into sibling binaries
+├── sovereign-cli-daemon           # Lifecycle verbs + setup; links no sovereign-inference: setup's probe/plan exec the stock binary (`--setup-probe`), which owns Windows GPU backend selection
+├── sovereign-cli-llm              # Model interaction + heavy retrieval (chat/workflow/govern; svrn's sub-verbs of atlas/enrich/corpus; svrn's white-box bench lanes)
+├── sovereign-cli-shared           # svrn CLI shared lib (cli-contract, args, flag surface, lane verdict; re-exports sovereign-cli-base at the historical paths)
+├── sovereign-core                 # Traits, runtime, planner, executor, router, memory
+├── sovereign-daemon               # The node's host crate — assembly, surface shells, edge, adapters
+├── sovereign-grants               # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
+├── sovereign-meshapp              # Mesh-app explorer ops — pure path-in/DTO-out lib
+├── sovereign-runtime-recipe       # THE recipe that commissions a `Runtime` — all four hosts are on it
+├── sovereign-service              # Service installation (launchd / systemd / Windows task)
+├── sovereign-store                # SQLite + Postgres + in-memory StateStore
+├── sovereign-tools                # Built-in tools (search, knowledge, docs, web, MCP)
+├── sovereign-tools-base           # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP)
+└── sovereign-workflow-host        # Daemon-runnable workflow host + the NL workflow-author bundle
+```
+
+Beside the crates: `svrn/modes/` (skills), `svrn/docs/`, `svrn/scripts/`,
+`svrn/tests/`, `svrn/sovereign-server.toml`. Baked data lives with the crate
+that bakes it: the model manifest in `shared/crates/sovereign-contracts/data/`,
+the router exemplar and calibration banks in `svrn/crates/sovereign-core/data/`;
+`sovereign-service/data/` ships the systemd unit, launchd plist and Windows
+task XML `install_service` embeds.
+
+### serve — the model server
+
+```
+serve/crates/
+├── serving-policy                 # Re-export shim for the serving-policy arithmetic (tier-0)
+├── sovereign-compute              # Supervised compute-child boundary — crash isolation, not parallelism
+├── sovereign-gliner               # GLiNER (ONNX) NER — the NER served kind's loader (sovereign-compute `ner`, once per process); port in sovereign-contracts `ner`, chunk adapter in corpus-engine
+├── sovereign-inference            # llama.cpp slots, remote OpenAI-compat, hybrid, idle residency
+├── sovereign-scheduler            # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
+├── sovereign-serve                # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
+└── sovereign-serving-host         # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
+```
+
+Beside the crates: `serve/container/` (the cloud-peer and worker
+Containerfiles), `serve/SERVING_BOUNDARY.md`, and `serve/.cargo/` (the HIP
+`-fPIC` env llama.cpp's ROCm build takes when cargo runs from there).
+
+### cmnwlth — the endpoint router with a roster
+
+```
+cmnwlth/crates/
+├── commonwealth-core              # The mesh roster, gossip auth, clock, ledger aggregation; its records re-exported from oicp-types
+├── commonwealth-discovery         # Founding + joining: join keys, mDNS, local hardware survey
+├── commonwealth-media             # Federated media — who offers a library, who may reach one
+├── commonwealth-rail              # The ring rail's JOURNAL — one JSONL log per namespace
+├── commonwealth-rails             # `cw-rails` — the minimal daemon a shim author installs
+├── commonwealth-state             # MeshStore — KV (pure-Rust in-memory; SQLite file store behind `sqlite`); a local PROJECTION of the ring rail
+├── commonwealth-transport         # PeerTransport seam — (peer, traffic class) → endpoints
+├── commonwealth-work              # The WORK PLANE on the rail — WorkAct codec, unit seal, lease predicate
+├── oicp-conformance               # Standalone OICP v0.4 host conformance tester
+├── sovereign-cli-mesh             # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
+└── sovereign-pods                 # Compute's remote isolation — leasing a rented machine; `sovereign-pod-worker`, the pod's worker-mode binary
+```
+
+The eight `commonwealth-*` crates are the substrate; `commonwealth-rail-core`,
+the rail's fold, is a shared leaf. Six left the family in 2026-09 because
+their names described a family they were not in: `commonwealth-api` and
+`-inference` became `sovereign-api` / `sovereign-serving` and were then
+deleted; `-knowledge` became `sovereign-grants`; `-app` became
+`sovereign-meshapp-registry` (deleted as dead code, pb-meshapp-apps);
+`-test-harness` became `sovereign-mesh-test-harness` (since deleted);
+`oicp-conformance` moved to a repo-root sibling, then back here and into
+cmnwlth's package with the top-level-programs move. Beside the crates:
+`cmnwlth/docs/` (OICP v0.2 to v0.4), `cmnwlth/apps/` (ring-doc,
+ring-runtime), `cmnwlth/deploy/mesh/`, `cmnwlth/BOUNDARY.md`.
+
+### ingest — the recipe pipeline
+
+```
+ingest/crates/
+├── corpus-engine                  # Knowledge layer (LanceDB + Tantivy)
+├── sovereign-authoring-harness    # Recipe-authoring verdict ladder over harness StageOutputs
+├── sovereign-enrichment-build     # The enrichment orchestrator, outside the inference stack
+├── sovereign-enrichment-catalog   # The enrichment store below every host that reads it
+├── sovereign-pipeline             # Pipeline driver (recipes, worklist); pods moved to cli-mesh; `svrn-ingest`, ingest's one CLI (enrich/corpus/atlas/meta-atlas/recipe/pipeline/alignment, `bench atlas`)
+├── sovereign-recipe-author        # Recipe-authoring tool bundle + RecipeProject model + project store (svrn reaches them through the contracts RecipeProjectPort)
+├── sovereign-recipes (corpus-engine-recipes) # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
+├── understanding-atlas            # Understanding's pure tier — arithmetic over the published language
+└── understanding-host             # Understanding's host tier — the ports and the knot
+```
+
+**corpus-engine.** Between "raw source on the internet" and "ranked search hits with provenance."
 See [`ingest/crates/corpus-engine/README.md`](../ingest/crates/corpus-engine/README.md),
 [`ENRICHMENT.md`](../ingest/crates/corpus-engine/ENRICHMENT.md) (the umbrella reconciling
 all three enrichment systems — read it before assuming "enrichment" means one
@@ -150,135 +221,7 @@ three-line body once each because they cannot import across one another
 without a cycle. Everything else asks. Ratchet `cargo xtask clock-gate`,
 shrink-only.
 
-### sovereign
-
-```
-crates/
-├── sovereign-contracts      # The vocabulary — traits, wire types, skills, setup config
-├── sovereign-core           # Traits, runtime, planner, executor, router, memory
-├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid, idle residency
-├── sovereign-store          # SQLite + Postgres + in-memory StateStore
-├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP)
-├── sovereign-code           # Code intelligence served over MCP — the `svrn code` program, lifted out of sovereign-tools
-├── sovereign-gliner         # GLiNER (ONNX) NER — the NER served kind's loader (sovereign-compute `ner`, once per process); port in sovereign-contracts `ner`, chunk adapter in corpus-engine
-├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
-├── sovereign-enrichment-catalog # The enrichment store below every host that reads it
-├── sovereign-enrichment-build   # The enrichment orchestrator, outside the inference stack
-├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime` — all four hosts are on it
-├── sovereign-turn-client    # THE client half of the turn protocol + reachability (`ServingHost`)
-├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters
-├── sovereign-peer-wire      # Wire types both ends of an internal exchange must spell alike
-├── sovereign-compute        # Supervised compute-child boundary — crash isolation, not parallelism
-├── sovereign-pods           # Compute's remote isolation — leasing a rented machine; `sovereign-pod-worker`, the pod's worker-mode binary
-├── sovereign-scheduler      # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
-├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
-├── sovereign-serve          # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
-├── sovereign-stock          # The stock distribution: svrn with serve, code and ingest hosted (ingest's engine built by `corpus_engine::face` in `sovereign-hosted-ingest` and handed in through `HostedIngest`; svrn links no corpus-engine), ONE process, what `svrn daemon run` execs (`[[distribution]] stock`); its second bin `sovereign-cli-llm-stock` hands cli-llm the same ingest composition and is what the dispatcher execs for the LLM verbs (bare `sovereign-cli-llm` names ingest absent)
-├── sovereign-onprem         # The on-prem distribution: svrn with serve and ingest hosted, ONE process; no code, no mesh, no recipe authoring, and `Posture::Sealed` withholds web reach, the wikipedia bundle and the `/mcp` route by name, each sealed absence pointing at `/v1/conversations` (`Posture::code_pointer`, `NO_MCP`), and a turn with no web-reaching tool drops the prompts' web offers (`runtime/web_reach.rs`) (`[[distribution]] onprem`; phase-b-86, -87)
-├── sovereign-hosted-ingest  # Ingest's hosting composition for svrn: the one `hosted()` both distributions call (stock hands in recipe authoring, on-prem none); a library listed in BOTH the `stock` and `onprem` `[[distribution]]` rows, so its edges and `src/` answer to each row's faces (phase-b-88)
-├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
-├── sovereign-desktop        # Tauri 2 + Svelte 5
-├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
-├── sovereign-cli-base       # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)
-├── sovereign-cli-shared     # svrn CLI shared lib (cli-contract, args, flag surface, lane verdict; re-exports sovereign-cli-base at the historical paths)
-├── sovereign-cli-daemon     # Lifecycle verbs + setup; links no sovereign-inference: setup's probe/plan exec the stock binary (`--setup-probe`), which owns Windows GPU backend selection
-├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
-├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/workflow/govern; svrn's sub-verbs of atlas/enrich/corpus; svrn's white-box bench lanes)
-├── sovereign-cli-bench      # bench's CLI — bench, eval, quality lane (dials svrn/ingest; links neither)
-├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
-├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
-├── sovereign-pipeline       # Pipeline driver (recipes, worklist); pods moved to cli-mesh; `svrn-ingest`, ingest's one CLI (enrich/corpus/atlas/meta-atlas/recipe/pipeline/alignment, `bench atlas`)
-├── sovereign-eval           # Pure scorers
-├── sovereign-authoring-harness # Recipe-authoring verdict ladder over harness StageOutputs
-├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib
-├── sovereign-mesh-test-harness # SimulatedMesh/SimulatedNode/MockLlamaServer, fault injection
-├── sovereign-service        # Service installation (launchd / systemd / Windows task)
-├── sovereign-agent-bench    # Eleven-problem agent-coding battery
-├── sovereign-agent-tools    # Canonical agent-tool primitives (cross-runner contract)
-└── sovereign-tdd            # Unified TDD solver loop (HTTP + MCP transports)
-```
-
-Top-level: `modes/` (skills), `models/`, `bench/`, `inquiries/`,
-`sovereign-server.toml`, `deploy/onprem/`. Baked data lives with the crate
-that bakes it: the model manifest in `crates/sovereign-contracts/data/`, the
-router exemplar and calibration banks in `crates/sovereign-core/data/`.
-
-### commonwealth
-
-```
-crates/
-├── commonwealth-core         # The mesh roster, gossip auth, clock, ledger aggregation; its records re-exported from oicp-types
-├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints
-├── commonwealth-discovery    # Founding + joining: join keys, mDNS, local hardware survey
-├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp. Zero I/O
-├── commonwealth-rail         # The ring rail's JOURNAL — one JSONL log per namespace
-├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec, unit seal, lease predicate
-├── commonwealth-state        # MeshStore — KV (pure-Rust in-memory; SQLite file store behind `sqlite`); a local PROJECTION of the ring rail
-├── commonwealth-media        # Federated media — who offers a library, who may reach one
-└── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs
-```
-
-Nine crates, and nine is the whole directory. Six left in 2026-09 because
-their names described a family they were not in: `commonwealth-api` and
-`-inference` became `sovereign-api` / `sovereign-serving` and were then
-deleted; `-knowledge` became `sovereign-grants`; `-app` became
-`sovereign-meshapp-registry` (deleted as dead code, pb-meshapp-apps); `-test-harness` became
-`sovereign-mesh-test-harness`; `oicp-conformance` moved to a repo-root
-sibling, then back to `cmnwlth/crates/` and into cmnwlth's package with the
-top-level-programs move. `sovereign-service/data/` ships the systemd unit, launchd plist and
-Windows task XML `install_service` embeds.
-
-### studio
-
-The liftable authoring package, buildable against only the OICP contract
-crates, enforced by `cargo xtask boundary-gate` (contract
-`clients/studio/BOUNDARY.md`). One of four declared packages — the others are
-`code-intel` (`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp`
-(`svrn/crates/corpus-mcp/README.md`) and `commonwealth` (`cmnwlth/BOUNDARY.md`).
-Crate sets and shared-leaf budgets are `[[package]]` / `[[package_leaf]]`
-blocks in `quality/ARCH_LAYERS.toml`, beside the layer map and behind the same
-parser, so layer-gate, boundary-gate and `arch_report` cannot drift on what a
-boundary means.
-
-```
-crates/
-├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps
-├── sovereign-workflow-host  # Daemon-runnable workflow host + the NL workflow-author bundle
-├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP)
-├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store (svrn reaches them through the contracts RecipeProjectPort)
-└── sovereign-studio         # Headless studio CLI — the proof the package is independently usable
-```
-
-### quality
-
-`ARCH_LAYERS.toml` is the declared layer map, enforced by `cargo xtask
-layer-gate` (Cargo-declared edges) and the code-intel arch report
-(SCIP-observed edges); `arch-layers/` is the shared evaluator both use.
-Its `[crate_dirs]` table says which top-level directory each member lives
-in: a `[[package]]` row's crates under the program's own directory, leaves
-under `shared/`, distributions under `distributions/`, clients under
-`clients/` and tooling under `quality/`. `cargo xtask boundary-gate` fails a
-member outside its row's directory, and a member no row claims.
-`baselines/` holds machine-written ratchet baselines, regenerated only via
-`--update-baseline`, banked via `--tighten`. `cargo xtask quality` runs every
-fast local gate with one table carrying FOUR verdicts: passed / failed /
-could-not-judge / never-ran.
-
-`twin-plants.toml` + `scripts/twin-census.py` are the sabotage runner for the
-one-decider censuses: prove the census green, apply a real second
-implementation, require a FAIL naming the expected substring, restore
-byte-for-byte. 19 families. They prove named censuses; `cargo xtask
-clone-gate` is the general detector, a ratchet on production lines covered by
-an 8-line normalized window found in two or more files (`baselines/clones.tsv`).
-
-Also here: `CONCEPTS.toml` (the concept register), `TARGET_ARCHITECTURE.md`,
-`env-flags.toml`, `requirements.toml` + `requirements-enforceability.toml`,
-`instruments.toml` (every instrument in the repo, one table), `DOMAINS.md`,
-`DELETION.md`, `CLEANUP.md`, `REFACTOR_FACTORY.md`, `REFACTOR_LEDGER.md`.
-
-### sovereign-recipes
-
-The single source of truth for corpus recipes; corpus-engine vendors the tree
+**Recipes.** The single source of truth for corpus recipes; corpus-engine vendors the tree
 at build time, so there is no second copy. Catalog is `registry.toml` (27
 recipes: the `wikipedia*` family, `sep`, `stackexchange*`, `openalex`,
 `gutenberg*`, `crs_reports`, `us-code`, `olc-opinions`, `scotus-opinions`,
@@ -289,7 +232,32 @@ and gated by the `recipe_schema` test. Outside the catalog: `codebase`,
 `arch-principles`, `system-overview`, `chaos-secret-agent`, `chaos-saltgrass`,
 `maple-house`, `proxy-company`, `search-gym`, `sf-assessor-roll`.
 
-### Bench harnesses
+### code — code intelligence for agents
+
+```
+code/crates/
+├── code-facts                     # Code-intel package's tree-sitter fact base
+├── code-next-edit                 # Code-intel package's next-edit crate
+├── corpus-engine-archaeology      # Git archaeology + rough-edges + atom-provenance
+├── corpus-engine-notes            # NoteStore + project_docs index
+├── corpus-engine-watchers         # Lint/test/project-index watchers + result stores
+├── sovereign-agent-bench          # Eleven-problem agent-coding battery
+├── sovereign-agent-tools          # Canonical agent-tool primitives (cross-runner contract)
+├── sovereign-cli-dev              # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
+├── sovereign-code                 # Code intelligence served over MCP — the `svrn code` program, lifted out of sovereign-tools
+├── sovereign-tdd                  # Unified TDD solver loop (HTTP + MCP transports)
+└── sovereign-work-atlas           # Coordination atlas for agents on the mesh
+```
+
+`code/inquiries/` holds the principle checks archaeology and `code brief` run.
+
+### bench — the evaluator
+
+```
+bench/crates/
+├── sovereign-cli-bench            # bench's CLI — bench, eval, quality lane (dials svrn/ingest; links neither)
+└── sovereign-eval                 # Pure scorers
+```
 
 Fixtures under `bench/lanes/`; orchestrators in `sovereign-cli-bench`'s `bench_cmd/`,
 whose turn lanes ask svrn over its turn route (`bench_cmd/subject.rs`) and whose scorers
@@ -316,7 +284,98 @@ apparatus with a calibration gate and Wilson-CI reporting; tenants `bench
 moral` and `bench situated`); **governance** (FR-9); **inner-work chaos**
 (`eval inner-chaos`, two-tier scored and never averaged).
 
----
+### shared — the leaves
+
+```
+shared/crates/
+├── commonwealth-rail-core         # The ring rail's FOLD — Person/Roster/RailAct/SignedOp. Zero I/O
+├── corpus-engine-atlas-reader     # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
+├── corpus-engine-scip             # SCIP call graph + per-language exporter dispatch
+├── corpus-engine-sections         # Section detectors as a regex-only leaf
+├── corpus-engine-yield            # YieldHook cooperative-yield contract (tier-0 leaf)
+├── corpus-index                   # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
+├── host-kit                       # What each program's binary owns about itself — the single-writer lock on its data root, its paths
+├── kernel-types                   # The neutral kernel — identity, provenance, trust, the released turn
+├── mesh-join-vocab                # Mesh join-key and deep-link FORMAT vocabulary both ends of a join must spell alike
+├── mesh-reach                     # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
+├── oicp-client                    # OICP pure-HTTP client (OpenAI-compat + manifest routing)
+├── oicp-types                     # OICP wire types — no other deps
+├── oplog                          # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
+├── oplog-types                    # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
+├── serving-policy-core            # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
+├── sovereign-cli-base             # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)
+├── sovereign-contracts            # The vocabulary — traits, wire types, skills, setup config
+├── sovereign-peer-wire            # Wire types both ends of an internal exchange must spell alike
+├── sovereign-time                 # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
+├── sovereign-turn-client          # THE client half of the turn protocol + reachability (`ServingHost`)
+├── sovereign-workflow             # Step·Artifact·Runner — typed dataflow over local-model steps
+├── understanding-vocab            # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
+└── workspace-hack                 # cargo-hakari feature unification — no source, third-party deps only
+```
+
+Every program may link these and nothing else outside itself. Each is a
+`[[package_leaf]]` with its own pinned budget of internal deps.
+
+### clients
+
+```
+clients/
+├── desktop/src-tauri (sovereign-desktop) # Tauri 2 + Svelte 5
+├── mobile/src-tauri (sovereign-mobile) # Thin Tauri 2 client (iOS + Android) for a svrn host: tailnet, tenant auth, streamed chat
+├── studio (sovereign-studio)      # Headless studio CLI (its package's other crates sit with their programs; clients/studio/BOUNDARY.md)
+├── chat-ui                        # Shared Svelte chat render surface (desktop + mobile import it as source)
+├── vscode                         # First-party VSCode FIM extension
+└── landing                        # svrnme.sh: the site, install.sh and the ring guest page
+```
+
+Clients are not programs: each is built and prioritised as a client of the
+programs' wires. The studio authoring package that `sovereign-studio` headed
+is spread across the programs that own its parts; `clients/studio/BOUNDARY.md`
+names where each went.
+
+### distributions — the composition roots
+
+```
+distributions/crates/
+├── sovereign-hosted-ingest        # Ingest's hosting composition for svrn: the one `hosted()` both distributions call (stock hands in recipe authoring, on-prem none); a library listed in BOTH the `stock` and `onprem` `[[distribution]]` rows, so its edges and `src/` answer to each row's faces (phase-b-88)
+├── sovereign-onprem               # The on-prem distribution: svrn with serve and ingest hosted, ONE process; no code, no mesh, no recipe authoring, and `Posture::Sealed` withholds web reach, the wikipedia bundle and the `/mcp` route by name, each sealed absence pointing at `/v1/conversations` (`Posture::code_pointer`, `NO_MCP`), and a turn with no web-reaching tool drops the prompts' web offers (`runtime/web_reach.rs`) (`[[distribution]] onprem`; phase-b-86, -87)
+└── sovereign-stock                # The stock distribution: svrn with serve, code and ingest hosted (ingest's engine built by `corpus_engine::face` in `sovereign-hosted-ingest` and handed in through `HostedIngest`; svrn links no corpus-engine), ONE process, what `svrn daemon run` execs (`[[distribution]] stock`); its second bin `sovereign-cli-llm-stock` hands cli-llm the same ingest composition and is what the dispatcher execs for the LLM verbs (bare `sovereign-cli-llm` names ingest absent)
+```
+
+Beside the crates: `distributions/deploy/onprem/`, the on-prem kit.
+
+### quality
+
+```
+quality/
+├── arch-layers                    # Schema + evaluator for ARCH_LAYERS.toml — one parser for layer-gate, boundary-gate and arch_report
+└── xtask                          # The gates (`cargo xtask <gate>`) and the workspace-hygiene generators
+```
+
+`ARCH_LAYERS.toml` is the declared layer map, enforced by `cargo xtask
+layer-gate` (Cargo-declared edges) and the code-intel arch report
+(SCIP-observed edges); `arch-layers/` is the shared evaluator both use.
+Its `[crate_dirs]` table says which top-level directory each member lives
+in: a `[[package]]` row's crates under the program's own directory, leaves
+under `shared/`, distributions under `distributions/`, clients under
+`clients/` and tooling under `quality/`. `cargo xtask boundary-gate` fails a
+member outside its row's directory, and a member no row claims.
+`baselines/` holds machine-written ratchet baselines, regenerated only via
+`--update-baseline`, banked via `--tighten`. `cargo xtask quality` runs every
+fast local gate with one table carrying FOUR verdicts: passed / failed /
+could-not-judge / never-ran.
+
+`twin-plants.toml` + `scripts/twin-census.py` are the sabotage runner for the
+one-decider censuses: prove the census green, apply a real second
+implementation, require a FAIL naming the expected substring, restore
+byte-for-byte. 19 families. They prove named censuses; `cargo xtask
+clone-gate` is the general detector, a ratchet on production lines covered by
+an 8-line normalized window found in two or more files (`baselines/clones.tsv`).
+
+Also here: `CONCEPTS.toml` (the concept register), `TARGET_ARCHITECTURE.md`,
+`env-flags.toml`, `requirements.toml` + `requirements-enforceability.toml`,
+`instruments.toml` (every instrument in the repo, one table), `DOMAINS.md`,
+`DELETION.md`, `CLEANUP.md`, `REFACTOR_FACTORY.md`, `REFACTOR_LEDGER.md`.
 
 ## 3. corpus-engine — the shared knowledge layer
 
@@ -346,7 +405,7 @@ numerals, so `sec_facts` declares an opt-in bare-numeral audit; on violation
 the narration is WITHHELD and replaced by the tool's own rendering.
 `runtime/authority_guard.rs` binds that audit to the ANSWER EXIT on every
 dispatch surface rather than to a routing decision. Detail
-`docs/specs/FINANCIAL_CORPORA.md`.
+`svrn/docs/specs/FINANCIAL_CORPORA.md`.
 
 ### Storage
 
@@ -691,7 +750,7 @@ from flag values.
 `sovereign-inference/src/embedded/` wraps `llama-cpp` with lazy-loaded slots
 (Quick / Main / Code / Embed). Hybrid and remote providers wrap
 OpenAI-compatible servers. Full detail
-[`docs/inference.md`](../svrn/docs/inference.md).
+[`svrn/docs/inference.md`](../svrn/docs/inference.md).
 
 **Which engine serves this node is config, not code.**
 `engine_factory::build_engine(&SetupConfig)` is the ONE place `[engine] kind`
@@ -839,21 +898,21 @@ LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
 
 | Subsystem | Doc |
 |---|---|
-| Slots, OICP, harness, cutoffs | [`docs/inference.md`](../svrn/docs/inference.md) |
-| Inline completion (FIM) / next-edit | [`docs/INLINE_COMPLETION.md`](../svrn/docs/INLINE_COMPLETION.md) |
-| Glassbox reading surface + Atlas Inspector | [`docs/knowledge-view.md`](../svrn/docs/knowledge-view.md) |
-| Knowledge bases + tiered retrieval | [`docs/KNOWLEDGE_BASES.md`](../svrn/docs/KNOWLEDGE_BASES.md), [`docs/TIERED_RETRIEVAL.md`](../svrn/docs/TIERED_RETRIEVAL.md) |
-| Retrieval redesign | [`docs/RETRIEVAL_REDESIGN.md`](../svrn/docs/RETRIEVAL_REDESIGN.md) |
-| Epistemic state / the epistemic index | [`docs/EPISTEMIC_STATE.md`](../svrn/docs/EPISTEMIC_STATE.md), [`docs/specs/EPISTEMIC_INDEX.md`](../svrn/docs/specs/EPISTEMIC_INDEX.md) |
-| Ontology primitives + migration | [`docs/specs/ONTOLOGY_PRIMITIVES.md`](../svrn/docs/specs/ONTOLOGY_PRIMITIVES.md), [`docs/specs/ONTOLOGY_MIGRATION.md`](../svrn/docs/specs/ONTOLOGY_MIGRATION.md) |
-| Drift / correctness tooling | [`docs/DRIFT_DETECTION.md`](../svrn/docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](../svrn/docs/CORRECTNESS_TOOLING.md) |
-| Work-atlas peer coordination | [`docs/WORK_ATLAS.md`](../svrn/docs/WORK_ATLAS.md) |
+| Slots, OICP, harness, cutoffs | [`svrn/docs/inference.md`](../svrn/docs/inference.md) |
+| Inline completion (FIM) / next-edit | [`svrn/docs/INLINE_COMPLETION.md`](../svrn/docs/INLINE_COMPLETION.md) |
+| Glassbox reading surface + Atlas Inspector | [`svrn/docs/knowledge-view.md`](../svrn/docs/knowledge-view.md) |
+| Knowledge bases + tiered retrieval | [`svrn/docs/KNOWLEDGE_BASES.md`](../svrn/docs/KNOWLEDGE_BASES.md), [`svrn/docs/TIERED_RETRIEVAL.md`](../svrn/docs/TIERED_RETRIEVAL.md) |
+| Retrieval redesign | [`svrn/docs/RETRIEVAL_REDESIGN.md`](../svrn/docs/RETRIEVAL_REDESIGN.md) |
+| Epistemic state / the epistemic index | [`svrn/docs/EPISTEMIC_STATE.md`](../svrn/docs/EPISTEMIC_STATE.md), [`svrn/docs/specs/EPISTEMIC_INDEX.md`](../svrn/docs/specs/EPISTEMIC_INDEX.md) |
+| Ontology primitives + migration | [`svrn/docs/specs/ONTOLOGY_PRIMITIVES.md`](../svrn/docs/specs/ONTOLOGY_PRIMITIVES.md), [`svrn/docs/specs/ONTOLOGY_MIGRATION.md`](../svrn/docs/specs/ONTOLOGY_MIGRATION.md) |
+| Drift / correctness tooling | [`svrn/docs/DRIFT_DETECTION.md`](../svrn/docs/DRIFT_DETECTION.md), [`svrn/docs/CORRECTNESS_TOOLING.md`](../svrn/docs/CORRECTNESS_TOOLING.md) |
+| Work-atlas peer coordination | [`svrn/docs/WORK_ATLAS.md`](../svrn/docs/WORK_ATLAS.md) |
 | Desktop quality surface — START HERE to verify the desktop | [`clients/desktop/QUALITY_SURFACE.md`](../clients/desktop/QUALITY_SURFACE.md) |
-| Browser actuation / TDD machine / Solver | [`docs/BROWSER_ACTUATOR.md`](../svrn/docs/BROWSER_ACTUATOR.md), [`docs/TDD_MACHINE.md`](../svrn/docs/TDD_MACHINE.md), [`docs/SOLVER_DESIGN.md`](../svrn/docs/SOLVER_DESIGN.md) |
-| Mobile / session continuity / memory model | [`docs/specs/MOBILE.md`](../svrn/docs/specs/MOBILE.md), [`docs/specs/SESSION_CONTINUITY.md`](../svrn/docs/specs/SESSION_CONTINUITY.md), [`../docs/specs/MEMORY_MODEL.md`](../docs/specs/MEMORY_MODEL.md) |
-| Worker pods / cloud peers | [`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](../svrn/docs/PINNED_WORKER_AS_INFERENCE_PEER.md), [`docs/CLOUD_PEER.md`](CLOUD_PEER.md) |
-| On-call runbook / threat model | [`docs/RUNBOOK.md`](../svrn/docs/RUNBOOK.md), [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) |
-| FAQ / troubleshooting | [`docs/FAQ.md`](../svrn/docs/FAQ.md), [`docs/HAVING_TROUBLE.md`](../svrn/docs/HAVING_TROUBLE.md), [`docs/TROUBLESHOOTING.md`](../svrn/docs/TROUBLESHOOTING.md) |
+| Browser actuation / TDD machine / Solver | [`svrn/docs/BROWSER_ACTUATOR.md`](../svrn/docs/BROWSER_ACTUATOR.md), [`svrn/docs/TDD_MACHINE.md`](../svrn/docs/TDD_MACHINE.md), [`svrn/docs/SOLVER_DESIGN.md`](../svrn/docs/SOLVER_DESIGN.md) |
+| Mobile / session continuity / memory model | [`svrn/docs/specs/MOBILE.md`](../svrn/docs/specs/MOBILE.md), [`svrn/docs/specs/SESSION_CONTINUITY.md`](../svrn/docs/specs/SESSION_CONTINUITY.md), [`../docs/specs/MEMORY_MODEL.md`](../docs/specs/MEMORY_MODEL.md) |
+| Worker pods / cloud peers | [`svrn/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](../svrn/docs/PINNED_WORKER_AS_INFERENCE_PEER.md), [`docs/CLOUD_PEER.md`](CLOUD_PEER.md) |
+| On-call runbook / threat model | [`svrn/docs/RUNBOOK.md`](../svrn/docs/RUNBOOK.md), [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) |
+| FAQ / troubleshooting | [`svrn/docs/FAQ.md`](../svrn/docs/FAQ.md), [`svrn/docs/HAVING_TROUBLE.md`](../svrn/docs/HAVING_TROUBLE.md), [`svrn/docs/TROUBLESHOOTING.md`](../svrn/docs/TROUBLESHOOTING.md) |
 
 Notable in-tree invariants: watched folders are read-only on source, and
 sensitive folders never leave the machine.
@@ -946,7 +1005,7 @@ Eight decision points, each with one home:
 | Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
-Slot policy is normative in [`docs/SLOT_POLICY.md`](../svrn/docs/SLOT_POLICY.md):
+Slot policy is normative in [`svrn/docs/SLOT_POLICY.md`](../svrn/docs/SLOT_POLICY.md):
 call sites declare a `slot_policy::Workload` requirement bundle rather than
 free-handing `Speed::` literals. The composed OICP scoring product lives ONCE
 in `oicp-types`.
@@ -961,7 +1020,7 @@ stamped with provenance and age, every excluded peer with its reason;
 `decision_replay.rs` re-runs the LIVE scorer and policy over a capture to
 check it reproduces its own verdict. The Tier-1 simulator is
 `sovereign-mesh-test-harness`'s `mesh_sim` module behind the `dst` feature.
-Findings are in `docs/specs/SCHEDULER_QUALITY.md`; **the standing one is F10 —
+Findings are in `svrn/docs/specs/SCHEDULER_QUALITY.md`; **the standing one is F10 —
 the scheduler has no speed signal in production**, so `throughput_factor` is
 neutral 1.0 for every peer, and `svrn mesh bench` deliberately does NOT write
 to `NodeCapabilities.benchmark` (`gossip_never_advertises_a_benchmark` fails
@@ -1458,14 +1517,16 @@ the shared report.
 | Understand KnowledgeView | `sovereign-tools/src/knowledge_view/`; injected at `LandscapeDigestProvider::splice_landscape_digests` |
 | Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
+| Find which program owns a crate, or where a new one goes | `[crate_dirs]` in `quality/ARCH_LAYERS.toml`; `cargo xtask boundary-gate` fails a member outside its row's directory |
+| Read a path spelled before the top-level-programs move | `quality/top-level-moves.toml` through `scripts/lib/top_level_moves.py` (`back` / `forward`) — the one table the history-reading instruments use |
 | Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |
 | Prove desktop and CLI answer one question alike | `clients/desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |
 | Trace a `/v1/chat/completions` end-to-end | `cmnwlth/docs/routing-field-guide.md` |
-| Understand OICP routing | `shared/crates/oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` + [`docs/inference.md`](../svrn/docs/inference.md) |
+| Understand OICP routing | `shared/crates/oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` + [`svrn/docs/inference.md`](../svrn/docs/inference.md) |
 | Point an outside tool at the daemon | [`docs/INTEROP.md`](INTEROP.md); [`docs/INTEGRATION_SURFACES.md`](INTEGRATION_SURFACES.md) for which surfaces are contracts |
 | Deploy to a shared air-gapped box | `distributions/deploy/onprem/` — **read `EGRESS.md` before claiming this system makes no outbound connections** |
 | Rent a GPU by the minute | [`docs/CLOUD_PEER.md`](CLOUD_PEER.md); `scripts/dev-pod.sh`. A `--mesh` flight puts the join link on third-party hardware — end it with `svrn mesh rotate` |
-| Know which CLI use cases are promised | `docs/cli-contract.toml` — `[[command]]` the verb surface, `[[journey]]` the sequenced use cases, `[[experience]]` the promises |
+| Know which CLI use cases are promised | `svrn/docs/cli-contract.toml` — `[[command]]` the verb surface, `[[journey]]` the sequenced use cases, `[[experience]]` the promises |
 | See what the CLI promises and how much can fail | **`svrn contract`** (`map` / `census` / `nightly`). `census` splits the manifest into steps a lane RUNS and steps nothing runs, because a step in a never-run journey is a written intention |
 | Judge architecture health at a glance | **`svrn code fieldglass [corpus] --open`** — one deterministic self-contained HTML, evidence only: no scores, no gates. [`docs/FIELDGLASS.md`](FIELDGLASS.md) |
 | Price or execute a refactor | `svrn code refactor plan` / `gate` / `status`; `code suggest-seams <file> --plan` → `cargo xtask refactor-apply`; `code wire-check`. Process [`quality/REFACTOR_FACTORY.md`](../quality/REFACTOR_FACTORY.md) |
@@ -1473,8 +1534,8 @@ the shared report.
 | Is any quality subsystem's posture stale? | **`svrn posture`** — one table: drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines, each row naming its refresh command |
 | Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>]`** — the curated ~30-minute check. Lanes are DATA in `quality/instruments.toml`; each states its verdict as a `kernel_types::Judgement` on its last stdout line. `--distribute` runs the same selection as work on the `work` ring |
 | Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh`** (~2-4h) — the FULL nightly, where drift against committed baselines is judged |
-| A bench says regressed — real or noise? | [`docs/RUNBOOK.md`](../svrn/docs/RUNBOOK.md) §6 — per-lane noise bands, baseline-age semantics, the legitimate re-mint path |
-| Pick the next daemon test to write | [`docs/TESTING_SURFACE.md`](../svrn/docs/TESTING_SURFACE.md) |
+| A bench says regressed — real or noise? | [`svrn/docs/RUNBOOK.md`](../svrn/docs/RUNBOOK.md) §6 — per-lane noise bands, baseline-age semantics, the legitimate re-mint path |
+| Pick the next daemon test to write | [`svrn/docs/TESTING_SURFACE.md`](../svrn/docs/TESTING_SURFACE.md) |
 
 The serial campaign runner is `scripts/ralph.py` (`run`, `supervise`, `watch`,
 `pool`): a typed queue parser over `ralph/STATE.md`, a session layer, and
@@ -1498,7 +1559,8 @@ printed by `promote_legacy_env`).
 
 | Surface | What it declares | Writer |
 |---|---|---|
-| `quality/ARCH_LAYERS.toml` | crate layer map, exceptions, package boundaries | humans |
+| `quality/ARCH_LAYERS.toml` | crate layer map, exceptions, package boundaries, where each crate lives | humans |
+| `quality/top-level-moves.toml` | the top-level-programs move, old path → new, for instruments that read history | generated once; humans |
 | `quality/env-flags.toml` | the env-knob registry | humans |
 | `quality/baselines/` | shrink-only ratchet baselines | **machine only** |
 | `quality/CONCEPTS.toml` | the concept register — one canonical owner per noun | humans |
@@ -1508,8 +1570,8 @@ printed by `promote_legacy_env`).
 | `quality/requirements-enforceability.toml` | the ONE hand-authored column: how each can be settled | humans |
 | `quality/conformance/<crate>.toml` | which test claims each requirement, from `covers:` tags | **machine only** |
 | `quality/instruments.toml` | every instrument and every trigger venue | humans |
-| `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans |
-| `models.toml` | model selection per hardware | humans |
+| `svrn/docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans |
+| `shared/crates/sovereign-contracts/data/models.toml` | model selection per hardware | humans |
 | `ingest/crates/sovereign-recipes/registry.toml` | recipe registry | humans |
 | `clippy.toml` | lint budgets + the path-SSOT ban | humans |
 
