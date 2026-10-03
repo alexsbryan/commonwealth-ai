@@ -30,6 +30,28 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `SOVEREIGN_SUMMARY_PLACEMENT` — collapsed-tree pool, shipped at `head` (feature-fidelity R0.1, 2026-10-02)
+
+**What changed.** `append_atlas_summaries` reads one switch. `head` (default,
+unchanged) reserves every late summary ahead of every leaf; `collapsed` seats
+each at its cosine rank among the leaves, leaf order untouched
+(`atlas_grounding/placement.rs`).
+
+**First measurement (pilot essay bank, 12 questions, `--prod-pipeline`).**
+Collapsed seats no summary: non-leaf share 0/120 (head 96/120), facts in pool
+18/32 (head 23/32). The best summary reads cosine 0.42-0.60 against pooled
+leaves at 0.57-0.77. Against the question vector alone, over all 244 leaves
+and 14 summaries, the best summary ranks 27th-124th, so the paper's own
+collapsed tree is leaf-only on this book with `qwen-embedding-0.6b`.
+
+**Flip condition.** Collapsed wins the R-T1 pairwise on the pilot and
+eagle-cliff essay banks (`book_judge.py`, both orders) with the non-leaf pool
+share inside the paper's 23-57%, and the 174-question lookup guard stays
+inside the bare band. Lose either and the switch is deleted, not kept.
+Settled by: campaign `feature-fidelity` R-T1 (`quality/campaigns/feature-fidelity.toml`).
+
+**Review-by 2026-10-31.**
+
 ### `SOVEREIGN_COVERAGE_FIRST` — tell the model what it has, and card the gap on an answered turn (2026-09-22)
 
 **What it does.** `runtime::coverage_first` reads the demand set that

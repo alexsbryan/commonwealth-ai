@@ -518,6 +518,13 @@ default = "1"
 status = "experiment"
 purpose = "Integer multiplier 1..=8 on BOTH retrieval pool limits at once — KQ_MERGED_LIMIT (20) and MAX_KNOWLEDGE_CHARS (24000). Exists only for the deep-pool arm of PRE-REG-custom-ontology-and-raptor-2026-09-17, which found `--limit 80` is dead under `--synth`. One decider, `runtime::prompts::kq_pool_scale`; the pair is computed in `pool_limits_at` so neither limit can move alone. Unset/unparsable/0/>8 all mean 1, and at 1 every call site is byte-identical. Ceiling is the synth model's context. Never a default: sovereign/DEFAULTS_LEDGER.md."
 
+[[flag]]
+name = "SOVEREIGN_SUMMARY_PLACEMENT"
+cluster = "retrieval"
+default = "head"
+status = "experiment"
+purpose = "Where late-appended walk summaries land in the evidence pool. head: every summary ahead of every leaf, so the row's Summary quota alone sets the non-leaf share (8 of a 10-slot pool). collapsed: each summary seated at its cosine rank among the leaves (RAPTOR's collapsed tree; leaves keep the pipeline's order), so a top-k or char-budget cut keeps it iff a cosine ranking of all nodes would. Any other value is named at warn and read as head. One reader: atlas_grounding/placement.rs::SummaryPlacement::from_env. Row: sovereign/DEFAULTS_LEDGER.md."
+
 # ── mesh ────────────────────────────────────────────────────────────
 
 [[flag]]
