@@ -264,6 +264,44 @@ host-kit or peer-wire.
 rust-analyzer's style: the crates, how a message flows from an iroh stream
 through the journal actor to a fold, and the invariants each crate owns.
 
+## D2b. Domains
+
+Four domains, each owning only what it knows about itself (ARCH 12).
+Dependencies point one way — apps → svrngs → commonwealth — and sovereign stands
+beside them, reached only through its own interfaces.
+
+| Domain | What it is | Knows | Never knows | Lives in |
+|---|---|---|---|---|
+| **commonwealth** — group infrastructure | the group's record and its rules: acts, the register and the keeper, sync, transport, the work plane, the member door | groups, acts, keys, persons, lends as data | any app, chat, provider or model by name | `commonwealth/crates/`: rail-core, rail, ring-node, transport, work, door |
+| **svrngs** — the product and its platform | what a person installs and a developer builds on: the app shell, the runtime and `Engine`, the SDK and sandbox, the chat and screen adapters, the bridge, the `svrngs` command | that apps exist, and the SDK contract | what any one app does | `svrngs/`, a new top-level peer of `commonwealth/` and `sovereign/` |
+| **apps** — app-specific code | the reference apps and every app after them, as bundles; a provider's specifics as a lending declaration, which is data | their own domain | anything below the SDK | `svrngs/apps/<app>/`, `svrngs/providers/<provider>/` |
+| **sovereign (svrn)** — local AI | the daemon, corpora and inference; to svrngs, a provider: the `infer:v1` execute origin, and services lent through the door | its own work | groups | `sovereign/`, unchanged |
+
+- **Dependencies are a gate, not a habit.** `quality/ARCH_LAYERS.toml` gains
+  `[[forbid]]` rows with the first svrngs crate: `commonwealth-*` → `svrngs-*`,
+  `svrngs-*` → `sovereign-*`, `sovereign-*` → `svrngs-*`, beside today's rows that
+  keep commonwealth free of `sovereign-*`. svrngs reaches the svrn daemon the way
+  cw-rails' donor loop reaches it for `ingest:v1` — as an execute origin over
+  loopback — or as a lent service through the door; never by linking it.
+- **App-specific code has one home.** Expenses' fold is in
+  `svrngs/apps/expenses/`, never in rail-core. Jellyfin's viewer account, secret
+  and refused paths are its provider declaration, never strings in the door.
+  Discord is an adapter module, never in the bridge's core. A model belongs to
+  the svrn daemon, never to commonwealth-work.
+- **"svrngs" names the product.** A person reads svrngs, their group's name and
+  apps' names; commonwealth's code says group, act, register and keeper, and
+  "ring" stays in these documents.
+- **Two commands, two domains.** `svrn` stays the AI tool — corpora, chat, the
+  daemon. Starting a group, refounding one and the app dev loop are `svrngs`
+  verbs. The Commonwealth mesh — one owner's machines and inference routing —
+  stays commonwealth infrastructure that sovereign uses, and is never a group's
+  membership (D4).
+- **Old code moves when it is touched.** Today's ring code in the sovereign
+  tree — `sovereign-mobile/`, `sovereign/apps/ring-doc`, `sovereign/apps/ring-runtime`,
+  `ring_shim.js`, and the `ring_cmd` and `mesh_media` modules of
+  `sovereign-cli-mesh` — moves to svrngs the first time a unit needs it, as its
+  own behaviour-preserving commit. New code lands in its domain from the start.
+
 ## D3. Packaging and reach
 
 **The node core** is one set of crates: rail-core, oplog, oplog-types,
@@ -644,7 +682,7 @@ app gets its own native web view.
 
 **C8 browser.** A static install page with no group data.
 
-**C11 setup.** `svrn group start`, five nominal steps:
+**C11 setup.** `svrngs start`, five nominal steps:
 1. install;
 2. create the Discord app and paste its token;
 3. run setup, which finds the application, prints the invite link, lists the
@@ -654,7 +692,7 @@ app gets its own native web view.
 
 The host-setup bar measures the real count.
 
-`svrn group refound <directory>` — or "Start this group again" in the app — makes
+`svrngs refound <directory>` — or "Start this group again" in the app — makes
 the continuing genesis from a copy, lists the people to carry over, and prints
 one invite link per person for the chat; the always-on node is set up as in the
 five steps above.
@@ -671,7 +709,7 @@ five steps above.
   who keeps a started group; install, update and consent; the sandbox; the dev
   loop; the test harness.
 - *The seeds* as worked examples.
-- *A dev loop that is the install path:* `svrn app dev` puts the bundle and
+- *A dev loop that is the install path:* `svrngs app dev` puts the bundle and
   writes an install act on save, in a dev group with the developer's phone, which
   reloads on sync.
 - *A harness:* the five laws, the update preview, and fold-parity.
@@ -721,11 +759,11 @@ no sandbox.
 
 | Unit | Builds | On | Bars |
 |---|---|---|---|
-| E0.1 bridge | discord.js on the gateway behind its five calls; the greeting; the guest book keyed by Discord user id; a ban removes from it | a new executable beside cw-rails; `SignedOp.on_behalf_of` (built) | removal-latency, bridge-holds-no-app |
+| E0.1 bridge | discord.js on the gateway behind its five calls; the greeting; the guest book keyed by Discord user id; a ban removes from it; the svrngs layer-gate rows | `svrngs/bridge`, beside cw-rails; `SignedOp.on_behalf_of` (built) | removal-latency, bridge-holds-no-app |
 | E0.2 bridge append | the loopback append with a capability token, signed by the Bridge-role key; Confirm taken once by interaction id | `commonwealth-rails/src/rail.rs` | double-confirm |
-| E0.3 one Expenses | one `expenses.js`, the other two copies deleted; its `propose`, `say` and `due` run by an embedded QuickJS on the host | today's copies: `sovereign/apps/ring-doc/expenses.js`, `ring_cmd/templates/expenses.js`, `My-doc/expenses.js` | five-laws, N+1 |
+| E0.3 one Expenses | one `expenses.js`, the other two copies deleted; its `propose`, `say` and `due` run by an embedded QuickJS on the host | `svrngs/apps/expenses/`, from today's copies in `sovereign/apps/ring-doc/`, `ring_cmd/templates/` and `My-doc/` | five-laws, N+1 |
 | E0.4 origin gate | the bridge renders only what the chat wrote | the bridge | origin-gate |
-| E0.5 setup | `svrn group start`, five steps | `sovereign-cli-mesh` | host-setup, plain-words |
+| E0.5 setup | `svrngs start`, five steps | the `svrngs` command, new in `svrngs/` | host-setup, plain-words |
 
 | Demo | After | What a person watches | Gate |
 |---|---|---|---|
@@ -740,7 +778,7 @@ earned. The keeper is the host.
 |---|---|---|---|
 | E1.0 reshape | rail-core as the sans-IO state machine and the journal actor (D2a), behaviour preserved; the layer-gate rows; `ARCHITECTURE.md` | `commonwealth-rail-core`, `commonwealth-rail` | the existing tests, unchanged |
 | E1.1 wire v1 | git-like acts — `prev`, the id and the signature over it, causal ingest, the digest by heads | `chain`, `ingest`, `sync` | converge, causal-ingest, forks-void-nothing, fresh-node-progress |
-| E1.2 continuation | a genesis that continues an earlier group, and the group directory; E0's groups move to wire v1 this way, so refounding is proven by its first use | `register`, `svrn group refound` | refound-from-a-copy, group-is-a-directory, genesis-certifies |
+| E1.2 continuation | a genesis that continues an earlier group, and the group directory; E0's groups move to wire v1 this way, so refounding is proven by its first use | `register`, `svrngs refound` | refound-from-a-copy, group-is-a-directory, genesis-certifies |
 | E1.3 register | `Invite`, the co-signed `Admit` and person ids, `RemoveRequest` and the keeper's `Remove`; one membership writer; the seq-cut and fork-marker code and docs retired | `register`, `admit` | removal-is-sequenced, refusal-not-absence, invite, person-id, admit-co-signed |
 | E1.4 doors by register | the acceptor and every group route admit by the register, not the mesh | `acceptor.rs`, `ring_sync`, `ring_routes` | one-decider, cross-group, first-contact |
 | E1.5 the app | the Tauri shell with the node core, a key per group in the keystore, two-way sync with the host, Expenses and the Library built in, the claim route from the bot's link | `sovereign-mobile` | same-core, phone-to-own-key, reinstall-keeps-person, rebuild-from-a-phone |
@@ -788,7 +826,7 @@ on people's phones, so only now is the platform machinery earned.
 | E3.1 SDK v1 | `window.group` published with the terms the seeds use by then; the manifest, capabilities and consent; install and update by signed manifest and bundle hash; the update preview | meshapp's pack and install | permissions, update-preview |
 | E3.2 sandbox | a frame per app, its CSP, the MessageChannel port | the app | frame-cannot-ipc |
 | E3.3 an engine for strangers' code | QuickJS in wasm under wasmtime as a second implementation of `Engine`, metering inside the hashed bytes, fold segments, the engine pinned by the SDK version (C4) | `fold-engine` | engine-parity, fold-speed |
-| E3.4 the developer surface | the dev loop, the reference with the seven reference apps as worked examples, the harness | `svrn app dev` | developers |
+| E3.4 the developer surface | the dev loop, the reference with the seven reference apps as worked examples, the harness | `svrngs app dev` | developers |
 
 | Demo | After | What a person watches | Gate |
 |---|---|---|---|
@@ -1020,6 +1058,8 @@ By this design, open to the operator's veto:
   co-signed by the key it admits;
 - no compaction in v1;
 - a signing key per person per group, and an endpoint key per device;
+- four domains — commonwealth, svrngs, apps, sovereign — with `svrngs/` a new
+  top-level peer and the group verbs in a `svrngs` command, not `svrn` (D2b);
 - the LAN guest door is cut;
 - `commands`, `propose`, `say` and `due` are provisional.
 
