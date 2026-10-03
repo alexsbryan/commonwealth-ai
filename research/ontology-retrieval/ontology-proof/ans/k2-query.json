@@ -1,0 +1,4946 @@
+{
+ "model": "primary",
+ "endpoint": "http://127.0.0.1:9741/v1/chat/completions",
+ "corpus": "ft-ans-dev-b",
+ "runs": 2,
+ "verdict_on_parse_agree": "build (>= 0.80)",
+ "constraint": {
+  "field": "response_format json_schema",
+  "enforced_at": [
+   "sovereign/crates/sovereign-serving-host/src/inference_adapter.rs:415",
+   "sovereign/crates/sovereign-serving-host/src/inference_adapter.rs:1000",
+   "sovereign/crates/sovereign-inference/src/embedded/sampler.rs:342"
+  ],
+  "thinking_off": [
+   "chat_template_kwargs.enable_thinking=false (inference_adapter.rs:544)",
+   "think_budget=0 (inference_adapter.rs:379)"
+  ],
+  "outputs_failing_validation": 0
+ },
+ "inexpressible": {
+  "co-occurrence": "two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint",
+  "superlative-region-mint": "a filter on the RELATED type (hoards found in R) while the target is mint"
+ },
+ "instrument_checks": {
+  "reference_reproduces_program": [],
+  "program_on_gold_records_vs_gold": []
+ },
+ "per_class": {
+  "intersection": {
+   "n": 8,
+   "parse_agree": 1.0,
+   "parse_agree_non_vacuous": 0.5,
+   "parse_agree_gold_records": 1.0,
+   "expressible": 8,
+   "query_correct": 1.0,
+   "query_correct_of_expressible": 1.0,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.395,
+   "made_up": 1,
+   "deterministic": 8,
+   "records_ceiling": 0.395,
+   "rag@20": 0.585
+  },
+  "constraint-date": {
+   "n": 7,
+   "parse_agree": 1.0,
+   "parse_agree_non_vacuous": 0.286,
+   "parse_agree_gold_records": 0.857,
+   "expressible": 7,
+   "query_correct": 0.857,
+   "query_correct_of_expressible": 0.857,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.229,
+   "made_up": 0,
+   "deterministic": 7,
+   "records_ceiling": 0.229,
+   "rag@20": 0.781
+  },
+  "constraint-region": {
+   "n": 6,
+   "parse_agree": 0.833,
+   "parse_agree_non_vacuous": 0.333,
+   "parse_agree_gold_records": 0.833,
+   "expressible": 6,
+   "query_correct": 0.833,
+   "query_correct_of_expressible": 0.833,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.244,
+   "made_up": 0,
+   "deterministic": 6,
+   "records_ceiling": 0.133,
+   "rag@20": 0.528
+  },
+  "count": {
+   "n": 5,
+   "parse_agree": 1.0,
+   "parse_agree_non_vacuous": 0.0,
+   "parse_agree_gold_records": 1.0,
+   "expressible": 5,
+   "query_correct": 1.0,
+   "query_correct_of_expressible": 1.0,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.0,
+   "made_up": 0,
+   "deterministic": 5,
+   "records_ceiling": 0.0,
+   "rag@20": 0.8
+  },
+  "superlative": {
+   "n": 6,
+   "parse_agree": 0.667,
+   "parse_agree_non_vacuous": 0.333,
+   "parse_agree_gold_records": 0.833,
+   "expressible": 5,
+   "query_correct": 0.667,
+   "query_correct_of_expressible": 0.8,
+   "coincidental_agreements": 1,
+   "end_to_end": 0.333,
+   "made_up": 0,
+   "deterministic": 6,
+   "records_ceiling": 0.5,
+   "rag@20": 0.0
+  },
+  "co-occurrence": {
+   "n": 8,
+   "parse_agree": 0.25,
+   "parse_agree_non_vacuous": 0.25,
+   "parse_agree_gold_records": 0.0,
+   "expressible": 0,
+   "query_correct": 0.0,
+   "query_correct_of_expressible": null,
+   "coincidental_agreements": 2,
+   "end_to_end": 0.422,
+   "made_up": 1,
+   "deterministic": 8,
+   "records_ceiling": 0.378,
+   "rag@20": 0.784
+  },
+  "negation": {
+   "n": 8,
+   "parse_agree": 1.0,
+   "parse_agree_non_vacuous": 0.875,
+   "parse_agree_gold_records": 1.0,
+   "expressible": 8,
+   "query_correct": 1.0,
+   "query_correct_of_expressible": 1.0,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.707,
+   "made_up": 1,
+   "deterministic": 8,
+   "records_ceiling": 0.707,
+   "rag@20": 0.371
+  },
+  "ALL": {
+   "n": 48,
+   "parse_agree": 0.812,
+   "parse_agree_non_vacuous": 0.396,
+   "parse_agree_gold_records": 0.771,
+   "expressible": 39,
+   "query_correct": 0.75,
+   "query_correct_of_expressible": 0.923,
+   "coincidental_agreements": 3,
+   "end_to_end": 0.359,
+   "made_up": 3,
+   "deterministic": 48,
+   "records_ceiling": 0.359,
+   "rag@20": 0.553
+  }
+ },
+ "schema": {
+  "anyOf": [
+   {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "target_type": {
+      "const": "hoard"
+     },
+     "filters": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "attribute",
+        "op",
+        "value"
+       ],
+       "properties": {
+        "attribute": {
+         "enum": [
+          "findspot",
+          "found",
+          "buried"
+         ]
+        },
+        "op": {
+         "enum": [
+          "eq",
+          "lt",
+          "gt",
+          "contains"
+         ]
+        },
+        "value": {
+         "type": [
+          "string",
+          "number"
+         ]
+        }
+       }
+      }
+     },
+     "relations": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+       "anyOf": [
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "coin.hoard"
+          },
+          "other_type": {
+           "const": "coin"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "holds_coins_of"
+          },
+          "other_type": {
+           "const": "mint"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregate": {
+      "enum": [
+       "none",
+       "count",
+       "argmax",
+       "argmin"
+      ]
+     },
+     "aggregate_over": {
+      "enum": [
+       null,
+       "found",
+       "buried",
+       "coin",
+       "mint"
+      ]
+     }
+    },
+    "required": [
+     "target_type",
+     "filters",
+     "relations",
+     "aggregate",
+     "aggregate_over"
+    ]
+   },
+   {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "target_type": {
+      "const": "coin"
+     },
+     "filters": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "attribute",
+        "op",
+        "value"
+       ],
+       "properties": {
+        "attribute": {
+         "enum": [
+          "denomination",
+          "metal",
+          "weight",
+          "struck"
+         ]
+        },
+        "op": {
+         "enum": [
+          "eq",
+          "lt",
+          "gt",
+          "contains"
+         ]
+        },
+        "value": {
+         "type": [
+          "string",
+          "number"
+         ]
+        }
+       }
+      }
+     },
+     "relations": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+       "anyOf": [
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "coin.ruler"
+          },
+          "other_type": {
+           "const": "ruler"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "coin.mint"
+          },
+          "other_type": {
+           "const": "mint"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "coin.hoard"
+          },
+          "other_type": {
+           "const": "hoard"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregate": {
+      "enum": [
+       "none",
+       "count",
+       "argmax",
+       "argmin"
+      ]
+     },
+     "aggregate_over": {
+      "enum": [
+       null,
+       "weight",
+       "struck",
+       "hoard",
+       "mint",
+       "ruler"
+      ]
+     }
+    },
+    "required": [
+     "target_type",
+     "filters",
+     "relations",
+     "aggregate",
+     "aggregate_over"
+    ]
+   },
+   {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "target_type": {
+      "const": "ruler"
+     },
+     "filters": {
+      "type": "array",
+      "maxItems": 0
+     },
+     "relations": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+       "anyOf": [
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "coin.ruler"
+          },
+          "other_type": {
+           "const": "coin"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregate": {
+      "enum": [
+       "none",
+       "count",
+       "argmax",
+       "argmin"
+      ]
+     },
+     "aggregate_over": {
+      "enum": [
+       null,
+       "coin"
+      ]
+     }
+    },
+    "required": [
+     "target_type",
+     "filters",
+     "relations",
+     "aggregate",
+     "aggregate_over"
+    ]
+   },
+   {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "target_type": {
+      "const": "mint"
+     },
+     "filters": {
+      "type": "array",
+      "maxItems": 0
+     },
+     "relations": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+       "anyOf": [
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "coin.mint"
+          },
+          "other_type": {
+           "const": "coin"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "relation",
+          "other_type",
+          "other_name",
+          "negate"
+         ],
+         "properties": {
+          "relation": {
+           "const": "holds_coins_of"
+          },
+          "other_type": {
+           "const": "hoard"
+          },
+          "other_name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "negate": {
+           "type": "boolean"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregate": {
+      "enum": [
+       "none",
+       "count",
+       "argmax",
+       "argmin"
+      ]
+     },
+     "aggregate_over": {
+      "enum": [
+       null,
+       "coin",
+       "hoard"
+      ]
+     }
+    },
+    "required": [
+     "target_type",
+     "filters",
+     "relations",
+     "aggregate",
+     "aggregate_over"
+    ]
+   }
+  ]
+ },
+ "system": "You translate a question about a knowledge base into one typed query over its schema. Use only the types, attributes and relations the schema declares. Output only the JSON query.",
+ "documentation": "KNOWLEDGE BASE SCHEMA\n\nThis corpus is numismatic scholarship on the coinage of Alexander the Great and the\nHellenistic kingdoms: hoard reports, mint studies and dating arguments. A hoard is a\ngroup of coins buried together and found together; the books name a hoard by where and\nwhen it was found (the Demanhur hoard, Asia Minor 1964, Armenak) and the later books add\nan IGCH number. A hoard report lists the coins the hoard held, mint by mint. Each coin or\ngroup of coins is a thing in its own right: the ruler in whose name it was struck, the\nmint that struck it, its denomination (stater, tetradrachm, drachm), metal, weight, when\nit was struck, and the hoard it came from when the text says so. A mint is a city where\ncoins were struck. A ruler is the king or dynast named on the coin. Attributions are\nclaims a scholar makes about a coin's mint or date, graded by the kind of evidence\noffered; a later book may dispute an earlier attribution, and the dispute is worth\nsurfacing.\n\nEntity types and their attributes:\n- hoard: A group of coins buried and found together, named by findspot and year of discovery: the Demanhur hoard, Asia Minor 1964.\n    findspot (text): the place where the hoard was found (a place name, region or country)\n    found (time): when the hoard was discovered (a year)\n    buried (time range): when the hoard was buried (a year, or a span of years)\n- coin: A coin type or group of coins: ruler, mint, denomination, metal, and the hoard it came from.\n    denomination (text): the coin's denomination (stater, tetradrachm, drachm ...)\n    metal (text, one of ['gold', 'silver', 'billon', 'copper']): the coin's metal\n    weight (quantity, unit g): the coin's weight\n    struck (time range): when the coin was struck (a year, or a span of years)\n- ruler:\n- mint: A city where coins were struck: Amphipolis, Babylon, Lampsacus.\n\nRelations (each usable from either end; `other_type` names the far end):\n- from a hoard: relation `coin.hoard`, other_type `coin` — that coin's hoard is this hoard\n- from a hoard: relation `holds_coins_of`, other_type `mint` — this hoard holds_coins_of that mint\n- from a coin: relation `coin.ruler`, other_type `ruler` — this coin's ruler is that ruler\n- from a coin: relation `coin.mint`, other_type `mint` — this coin's mint is that mint\n- from a coin: relation `coin.hoard`, other_type `hoard` — this coin's hoard is that hoard\n- from a ruler: relation `coin.ruler`, other_type `coin` — that coin's ruler is this ruler\n- from a mint: relation `coin.mint`, other_type `coin` — that coin's mint is this mint\n- from a mint: relation `holds_coins_of`, other_type `hoard` — that hoard holds_coins_of this mint\n  `holds_coins_of` means: The hoard contains coins struck at this mint. A hoard report lists its coins mint by mint; every mint named for a hoard is one of these, even when no single coin is described.\n\nQUERY GRAMMAR (answer with exactly one JSON object):\n- target_type: the kind of thing the question asks for.\n- filters: conditions on the target's OWN attributes. op `eq` = equals, `contains` = the attribute's\n  text mentions the value, `lt` / `gt` = earlier/smaller or later/larger than the value.\n  Times are years as signed numbers: years B.C. are negative (318 B.C. = -318), A.D. positive.\n- relations: the target must (negate=false) or must not (negate=true) be linked by `relation`\n  to an entity of `other_type` named `other_name` (null = to any such entity).\n- aggregate: none = list every target that matches; count = how many targets match;\n  argmax / argmin = the matching target with the largest / smallest `aggregate_over`, which is\n  one of the target's time or quantity attributes, or a related type (= how many distinct\n  linked entities of that type the target has).\n\nEXAMPLES (a different knowledge base: books, authors, libraries):\nQ: Which books printed before 1600 are held by the Bodleian?\nA: {\"target_type\": \"book\", \"filters\": [{\"attribute\": \"printed\", \"op\": \"lt\", \"value\": 1600}], \"relations\": [{\"relation\": \"held_by\", \"other_type\": \"library\", \"other_name\": \"Bodleian\", \"negate\": false}], \"aggregate\": \"none\", \"aggregate_over\": null}\nQ: Which author has written the most books?\nA: {\"target_type\": \"author\", \"filters\": [], \"relations\": [], \"aggregate\": \"argmax\", \"aggregate_over\": \"book\"}",
+ "prompt_sha256": "6db7be62453449e6cf95b4b67ea9df61362a1d878a1156c3193c866e3f0e6d3c",
+ "questions": [
+  {
+   "id": "k2-int-lampsacus-miletus",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Lampsacus and Miletus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 3.73,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0410",
+    "igch0774",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "program": [
+    "igch0410",
+    "igch0774",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0410",
+    "igch0774",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch0410",
+    "igch0774",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.9333333333333333,
+    "precision": 1.0,
+    "recall": 0.875,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-int-miletus-sardes",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Miletus and Sardes?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 3.66,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0410",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "program": [
+    "igch0410",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0410",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch0410",
+    "igch0866",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.923076923076923,
+    "precision": 1.0,
+    "recall": 0.8571428571428571,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-int-ake-sidon",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Ake and Sidon?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.36,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-int-lampsacus-tarsus",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Lampsacus and Tarsus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.39,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch0774",
+    "igch1664"
+   ],
+   "program_on_gold_records": [
+    "igch0774",
+    "igch1664"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-int-abydus-magnesia",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Abydus and Magnesia?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Magnesia",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Magnesia",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.32,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Magnesia",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0410",
+    "igch0866",
+    "igch1441"
+   ],
+   "program": [
+    "igch0410",
+    "igch0866",
+    "igch1441"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0410",
+    "igch0866",
+    "igch1444"
+   ],
+   "program_on_gold_records": [
+    "igch0410",
+    "igch0866",
+    "igch1444"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-int-abydus-colophon",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Abydus and Colophon?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Colophon",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Colophon",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.3,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Colophon",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0866",
+    "igch1441"
+   ],
+   "program": [
+    "igch0866",
+    "igch1441"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0866",
+    "igch1444"
+   ],
+   "program_on_gold_records": [
+    "igch0866",
+    "igch1444"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.5,
+    "precision": 0.5,
+    "recall": 0.5,
+    "made_up": [
+     "igch1441"
+    ]
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-int-abydus-cius",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Abydus and Cius?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 4.41,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1444"
+   ],
+   "program_on_gold_records": [
+    "igch1444"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-int-ake-tarsus",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Ake and Tarsus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.29,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1664"
+   ],
+   "program_on_gold_records": [
+    "igch1664"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-date-before310-tarsus",
+   "class": "constraint-date",
+   "question": "Which hoards buried before 310 B.C. contain coins of Tarsus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 3.56,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch0774",
+    "igch1664"
+   ],
+   "program_on_gold_records": [
+    "igch0774",
+    "igch1664"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-date-after310-abydus",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Abydus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.2,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0866",
+    "igch1472",
+    "igch1516"
+   ],
+   "program": [
+    "igch0866",
+    "igch1472",
+    "igch1516"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0866",
+    "igch1444",
+    "igch1472",
+    "igch1516"
+   ],
+   "program_on_gold_records": [
+    "igch0866",
+    "igch1444",
+    "igch1472",
+    "igch1516"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-date-after310-ake",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Ake?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.hoard",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.hoard",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 3.45,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.hoard",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.hoard",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [],
+   "program_on_gold_records": [
+    "igch1516",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "name dropped: holds_coins_of->mint with other_name null for 'ake'; extra relation (coin.hoard any); extra relation (coin.hoard any NOT)"
+  },
+  {
+   "id": "k2-date-after310-cius",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Cius?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.2,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1444"
+   ],
+   "program_on_gold_records": [
+    "igch1444"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-date-before310-myriandrus",
+   "class": "constraint-date",
+   "question": "Which hoards buried before 310 B.C. contain coins of Myriandrus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.22,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1664"
+   ],
+   "program_on_gold_records": [
+    "igch1664"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-date-before310-salamis",
+   "class": "constraint-date",
+   "question": "Which hoards buried before 310 B.C. contain coins of Salamis?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Salamis",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Salamis",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.22,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "lt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Salamis",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch0774"
+   ],
+   "program_on_gold_records": [
+    "igch0774"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-date-after310-miletus",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Miletus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.29,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "buried",
+      "op": "gt",
+      "value": -310
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0866",
+    "igch1472",
+    "igch1516"
+   ],
+   "program": [
+    "igch0866",
+    "igch1472",
+    "igch1516"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0866",
+    "igch1472",
+    "igch1516",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch0866",
+    "igch1472",
+    "igch1516",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-region-egypt-lampsacus",
+   "class": "constraint-region",
+   "question": "Which hoards found in Egypt contain coins of Lampsacus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.18,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch1664",
+    "igch1668"
+   ],
+   "program": [
+    "igch1664",
+    "igch1668"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch1664",
+    "igch1668",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch1664",
+    "igch1668",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-region-egypt-ake",
+   "class": "constraint-region",
+   "question": "Which hoards found in Egypt contain coins of Ake?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.hoard",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.96,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.hoard",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch1664",
+    "igch1668"
+   ],
+   "program": [],
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch1664",
+    "igch1668",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch1664",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "name dropped: holds_coins_of->mint with other_name null for 'ake'; extra relation (coin.hoard any NOT)"
+  },
+  {
+   "id": "k2-region-asia-minor-cius",
+   "class": "constraint-region",
+   "question": "Which hoards found in Asia Minor contain coins of Cius?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.21,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1444"
+   ],
+   "program_on_gold_records": [
+    "igch1444"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-region-egypt-myriandrus",
+   "class": "constraint-region",
+   "question": "Which hoards found in Egypt contain coins of Myriandrus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.25,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1664"
+   ],
+   "program_on_gold_records": [
+    "igch1664"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-region-peloponnese-lampsacus",
+   "class": "constraint-region",
+   "question": "Which hoards found in the Peloponnese contain coins of Lampsacus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Peloponnese"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Peloponnese"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 4.15,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Peloponnese"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch0176"
+   ],
+   "program_on_gold_records": [
+    "igch0176"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-region-asia-minor-abydus",
+   "class": "constraint-region",
+   "question": "Which hoards found in Asia Minor contain coins of Abydus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.2,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch1441"
+   ],
+   "program": [
+    "igch1441"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch1437",
+    "igch1438",
+    "igch1441",
+    "igch1444"
+   ],
+   "program_on_gold_records": [
+    "igch1437",
+    "igch1438",
+    "igch1441",
+    "igch1444"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-count-tarsus",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Tarsus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.67,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Tarsus",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "executed": 0,
+   "program": 0,
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": 2,
+   "program_on_gold_records": 2,
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-count-cius",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Cius?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 1.79,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Cius",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "executed": 0,
+   "program": 0,
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": 1,
+   "program_on_gold_records": 1,
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-count-myriandrus",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Myriandrus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 1.35,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Myriandrus",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "executed": 0,
+   "program": 0,
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": 1,
+   "program_on_gold_records": 1,
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-count-salamis",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Salamis?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Salamis",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Salamis",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 1.74,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Salamis",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "executed": 0,
+   "program": 0,
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": 1,
+   "program_on_gold_records": 1,
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-count-ake-sidon",
+   "class": "count",
+   "question": "In how many hoards do coins of Ake and Sidon occur together?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.4,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Ake",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "count",
+    "aggregate_over": null
+   },
+   "executed": 0,
+   "program": 0,
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": 4,
+   "program_on_gold_records": 4,
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-sup-earliest-egypt",
+   "class": "superlative",
+   "question": "Which hoard found in Egypt was buried earliest?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmin",
+    "aggregate_over": "buried"
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmin",
+    "aggregate_over": "buried"
+   },
+   "attempts": 1,
+   "seconds": 1.46,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmin",
+    "aggregate_over": "buried"
+   },
+   "executed": null,
+   "program": null,
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": "igch1664",
+   "program_on_gold_records": "igch1664",
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-sup-earliest-sidon",
+   "class": "superlative",
+   "question": "Which is the earliest-buried hoard containing coins of Sidon?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "argmin",
+    "aggregate_over": "buried"
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "argmin",
+    "aggregate_over": "buried"
+   },
+   "attempts": 1,
+   "seconds": 1.72,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sidon",
+      "negate": false
+     }
+    ],
+    "aggregate": "argmin",
+    "aggregate_over": "buried"
+   },
+   "executed": null,
+   "program": null,
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": "igch1664",
+   "program_on_gold_records": "igch1664",
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-sup-hoard-most-mints-egypt",
+   "class": "superlative",
+   "question": "Which hoard found in Egypt contains coins from the most mints?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmax",
+    "aggregate_over": "mint"
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmax",
+    "aggregate_over": "mint"
+   },
+   "attempts": 1,
+   "seconds": 1.5,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmax",
+    "aggregate_over": "mint"
+   },
+   "executed": "igch1664",
+   "program": "igch1664",
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": "igch1664",
+   "program_on_gold_records": "igch1664",
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 1.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-sup-latest-egypt",
+   "class": "superlative",
+   "question": "Which hoard found in Egypt was buried latest?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmax",
+    "aggregate_over": "found"
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmax",
+    "aggregate_over": "buried"
+   },
+   "attempts": 1,
+   "seconds": 1.51,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [],
+    "aggregate": "argmax",
+    "aggregate_over": "found"
+   },
+   "executed": "igch1668",
+   "program": null,
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": null,
+   "program_on_gold_records": "igch1678",
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "aggregate argmax/found for argmax/buried"
+  },
+  {
+   "id": "k2-sup-mint-most-hoards",
+   "class": "superlative",
+   "question": "Which mint is represented in the most hoards?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     }
+    ],
+    "aggregate": "argmax",
+    "aggregate_over": "hoard"
+   },
+   "reference": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [],
+    "aggregate": "argmax",
+    "aggregate_over": "hoard"
+   },
+   "attempts": 1,
+   "seconds": 1.7,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     }
+    ],
+    "aggregate": "argmax",
+    "aggregate_over": "hoard"
+   },
+   "executed": "Lampsacus",
+   "program": "Lampsacus",
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": "Lampsacus",
+   "program_on_gold_records": "Lampsacus",
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 1.0
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-sup-mint-most-hoards-egypt",
+   "class": "superlative",
+   "question": "Which mint is represented in the most hoards found in Egypt?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "argmax",
+    "aggregate_over": "hoard"
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.38,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "argmax",
+    "aggregate_over": "hoard"
+   },
+   "executed": [
+    "Colophon",
+    "Magnesia ad Maeandrum"
+   ],
+   "program": "Lampsacus",
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": "Lampsacus",
+   "program_on_gold_records": "Lampsacus",
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "exact": 0.0
+   },
+   "expressible": false,
+   "coincidental": true,
+   "query_correct": false,
+   "diagnosis": "inexpressible: a filter on the RELATED type (hoards found in R) while the target is mint"
+  },
+  {
+   "id": "k2-cooc-tarsus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Tarsus?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.48,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Sidon"
+   ],
+   "program": [],
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": [],
+   "program_on_gold_records": [
+    "Lampsacus",
+    "Miletus",
+    "Myriandrus",
+    "Ptolemais-Ake",
+    "Salamis",
+    "Sardis",
+    "Sidon"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.25,
+    "precision": 1.0,
+    "recall": 0.14285714285714285,
+    "made_up": []
+   },
+   "expressible": false,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-cooc-myriandrus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Myriandrus?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Myriandrus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 4.73,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Myriandrus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Abydus",
+    "Amphipolis",
+    "Lampsacus",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Sidon"
+   ],
+   "program": [],
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": [],
+   "program_on_gold_records": [
+    "Lampsacus",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Sidon",
+    "Tarsus"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.9090909090909091,
+    "precision": 1.0,
+    "recall": 0.8333333333333334,
+    "made_up": []
+   },
+   "expressible": false,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-cooc-miletus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Miletus?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.37,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Abydus",
+    "Amphipolis",
+    "Lampsacus",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Sidon"
+   ],
+   "program": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": [],
+   "program_on_gold_records": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Myriandrus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Salamis",
+    "Sardis",
+    "Sidon",
+    "Tarsus"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "made_up": []
+   },
+   "expressible": false,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-cooc-sidon",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Sidon?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.39,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Sidon"
+   ],
+   "program": [],
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": [],
+   "program_on_gold_records": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Lampsacus",
+    "Miletus",
+    "Myriandrus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Tarsus"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "made_up": [
+     "Sidon"
+    ]
+   },
+   "expressible": false,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-cooc-ake",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Ake?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.37,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Colophon",
+    "Magnesia ad Maeandrum"
+   ],
+   "program": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Sardis"
+   ],
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Cius",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Myriandrus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Salamis",
+    "Sardis",
+    "Sidon",
+    "Tarsus",
+    "Teos"
+   ],
+   "program_on_gold_records": [
+    "Abydus",
+    "Lampsacus",
+    "Miletus",
+    "Myriandrus",
+    "Sardis",
+    "Sidon",
+    "Tarsus"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": false,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-cooc-lampsacus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Lampsacus?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Lampsacus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.36,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Lampsacus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "program": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Cius",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Myriandrus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Salamis",
+    "Sardis",
+    "Sidon",
+    "Tarsus",
+    "Teos"
+   ],
+   "program_on_gold_records": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Colophon",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Myriandrus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Salamis",
+    "Sardis",
+    "Sidon",
+    "Tarsus"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.7499999999999999,
+    "precision": 1.0,
+    "recall": 0.6,
+    "made_up": []
+   },
+   "expressible": false,
+   "coincidental": true,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-cooc-salamis",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Salamis?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.37,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Colophon",
+    "Magnesia ad Maeandrum"
+   ],
+   "program": [],
+   "parse_agree": false,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Cius",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Myriandrus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Salamis",
+    "Sardis",
+    "Sidon",
+    "Tarsus",
+    "Teos"
+   ],
+   "program_on_gold_records": [
+    "Lampsacus",
+    "Miletus",
+    "Tarsus"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": false,
+   "coincidental": false,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-cooc-abydus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Abydus?",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": null,
+   "attempts": 1,
+   "seconds": 2.38,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "program": [
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Cius",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Myriandrus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Salamis",
+    "Sardis",
+    "Sidon",
+    "Tarsus",
+    "Teos"
+   ],
+   "program_on_gold_records": [
+    "Amphipolis",
+    "Babylon",
+    "Cius",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Sidon",
+    "Teos"
+   ],
+   "parse_agree_gold_records": false,
+   "end_to_end": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "made_up": []
+   },
+   "expressible": false,
+   "coincidental": true,
+   "query_correct": false,
+   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+  },
+  {
+   "id": "k2-neg-egypt-abydus",
+   "class": "negation",
+   "question": "Which hoards found in Egypt contain no coins of Abydus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.26,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch1668"
+   ],
+   "program": [
+    "igch1668"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch1664",
+    "igch1668",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch1664",
+    "igch1668",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-neg-egypt-miletus",
+   "class": "negation",
+   "question": "Which hoards found in Egypt contain no coins of Miletus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.27,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Egypt"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch1668"
+   ],
+   "program": [
+    "igch1668"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch1668"
+   ],
+   "program_on_gold_records": [
+    "igch1668"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-neg-asia-minor-miletus",
+   "class": "negation",
+   "question": "Which hoards found in Asia Minor contain no coins of Miletus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.26,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [
+     {
+      "attribute": "findspot",
+      "op": "contains",
+      "value": "Asia Minor"
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [],
+   "program": [],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [
+    "igch1437",
+    "igch1438",
+    "igch1444",
+    "sec_00012"
+   ],
+   "program_on_gold_records": [
+    "igch1437",
+    "igch1438",
+    "igch1444",
+    "sec_00012"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-neg-lampsacus-not-sardes",
+   "class": "negation",
+   "question": "Which hoards contain coins of Lampsacus but none of Sardes?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.4,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0176",
+    "igch0774",
+    "igch0958",
+    "igch1668",
+    "igch1678"
+   ],
+   "program": [
+    "igch0176",
+    "igch0774",
+    "igch0958",
+    "igch1668",
+    "igch1678"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0176",
+    "igch0774",
+    "igch0958",
+    "igch1438",
+    "igch1668"
+   ],
+   "program_on_gold_records": [
+    "igch0176",
+    "igch0774",
+    "igch0958",
+    "igch1438",
+    "igch1668"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.8000000000000002,
+    "precision": 0.8,
+    "recall": 0.8,
+    "made_up": [
+     "igch1678"
+    ]
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-neg-lampsacus-not-abydus",
+   "class": "negation",
+   "question": "Which hoards contain coins of Lampsacus but none of Abydus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.4,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Lampsacus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0176",
+    "igch0774",
+    "igch1668",
+    "igch1678"
+   ],
+   "program": [
+    "igch0176",
+    "igch0774",
+    "igch1668",
+    "igch1678"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0176",
+    "igch0774",
+    "igch1664",
+    "igch1668",
+    "igch1670",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch0176",
+    "igch0774",
+    "igch1664",
+    "igch1668",
+    "igch1670",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-neg-abydus-not-sardes",
+   "class": "negation",
+   "question": "Which hoards contain coins of Abydus but none of Sardes?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.4,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Sardes",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0958"
+   ],
+   "program": [
+    "igch0958"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0958",
+    "igch1437",
+    "igch1438",
+    "igch1444"
+   ],
+   "program_on_gold_records": [
+    "igch0958",
+    "igch1437",
+    "igch1438",
+    "igch1444"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-neg-miletus-not-abydus",
+   "class": "negation",
+   "question": "Which hoards contain coins of Miletus but none of Abydus?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.4,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Abydus",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0774"
+   ],
+   "program": [
+    "igch0774"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0774",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch0774",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  },
+  {
+   "id": "k2-neg-miletus-not-colophon",
+   "class": "negation",
+   "question": "Which hoards contain coins of Miletus but none of Colophon?",
+   "query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Colophon",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "reference": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Colophon",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "attempts": 1,
+   "seconds": 2.34,
+   "deterministic": true,
+   "run2_query": {
+    "target_type": "hoard",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Miletus",
+      "negate": false
+     },
+     {
+      "relation": "holds_coins_of",
+      "other_type": "mint",
+      "other_name": "Colophon",
+      "negate": true
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "executed": [
+    "igch0410",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "program": [
+    "igch0410",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "parse_agree": true,
+   "vacuous": false,
+   "executed_on_gold_records": [
+    "igch0410",
+    "igch0774",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "program_on_gold_records": [
+    "igch0410",
+    "igch0774",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "igch1678"
+   ],
+   "parse_agree_gold_records": true,
+   "end_to_end": {
+    "f1": 0.8571428571428571,
+    "precision": 1.0,
+    "recall": 0.75,
+    "made_up": []
+   },
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
+  }
+ ]
+}
