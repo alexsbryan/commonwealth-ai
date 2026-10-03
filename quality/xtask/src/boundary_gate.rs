@@ -86,6 +86,16 @@ pub fn run() -> i32 {
 
     let mut fails: Vec<String> = Vec::new();
 
+    // Rule 0 — every member lives in the top-level directory its row names
+    // (`[crate_dirs]`). First, because a crate filed under the wrong program
+    // makes every closure message about it point at the wrong row.
+    let homes: Vec<(String, String)> = members
+        .iter()
+        .map(|m| (m.name.clone(), m.dir.clone()))
+        .collect();
+    let misfiled = arch_layers::evaluate_crate_dirs(&map, &homes);
+    fails.extend(misfiled.iter().map(|v| v.describe()));
+
     // Rules 1/2 — the dependency closure. Evaluated by the shared parser so
     // this gate and arch-report cannot drift on what a package MEANS.
     let dep_fails: Vec<String> = arch_layers::evaluate_packages(&map, &edges)
@@ -178,6 +188,14 @@ pub fn run() -> i32 {
         arch_layers::SHARED_LEAVES_SCOPE,
         map.package_leaves.len()
     );
+    if map.crate_dirs.is_some() {
+        eprintln!(
+            "  {:<14} {}/{} members in their row's directory",
+            "crate_dirs",
+            homes.len() - misfiled.len(),
+            homes.len()
+        );
+    }
 
     for (scope, name) in &missing {
         eprintln!("  ! [{scope}] {name}: declared but not a workspace member (yet?)");
@@ -219,6 +237,17 @@ pub fn run() -> i32 {
         0
     } else {
         eprintln!();
+        // A placement failure is fixed by moving a crate or a row, and the
+        // closure advice below would send its reader to the wrong file.
+        if misfiled.len() == fails.len() {
+            eprintln!(
+                "boundary-gate FAILED ({} crate(s) outside the directory their row \
+                 names). Each line above says where the crate belongs; the rows are \
+                 in quality/ARCH_LAYERS.toml ([crate_dirs]).",
+                fails.len()
+            );
+            return 1;
+        }
         eprintln!(
             "boundary-gate FAILED ({} violation(s)). A package must stay liftable against \
              only the shared leaves. Either move the code that needs the offending \

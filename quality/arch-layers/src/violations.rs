@@ -94,6 +94,16 @@ pub enum Violation {
         to: String,
         kind: DepKind,
     },
+    /// A workspace member no row claims, so nothing says which program owns
+    /// it or where it lives (`[crate_dirs]`).
+    UnhomedCrate { name: String, dir: String },
+    /// A member outside the top-level directory its row names.
+    MisplacedCrate {
+        name: String,
+        dir: String,
+        want: String,
+        row: String,
+    },
 }
 
 impl Violation {
@@ -252,6 +262,22 @@ impl Violation {
                     DepKind::Build => "a build",
                     DepKind::Dev => "a dev",
                 }
+            ),
+            Violation::UnhomedCrate { name, dir } => format!(
+                "{name} ({dir}): no row in quality/ARCH_LAYERS.toml claims it, so \
+                 nothing says which program owns it. Add it to its program's \
+                 [[package]] row, the [[package_leaf]] set or a [[distribution]], \
+                 or to [crate_dirs] client_crates / tooling_crates."
+            ),
+            Violation::MisplacedCrate {
+                name,
+                dir,
+                want,
+                row,
+            } => format!(
+                "{name} lives at {dir}, but its {row} row puts it under {want}/. \
+                 Move the crate there, or move it to the row of the program whose \
+                 directory it is in."
             ),
         }
     }

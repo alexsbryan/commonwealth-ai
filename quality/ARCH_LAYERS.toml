@@ -16,7 +16,7 @@
 #   cargo run -p xtask -- layer-gate     Cargo-DECLARED edges (CI, <1s)
 #   sovereign code arch-report           SCIP-OBSERVED symbol references
 
-schema_version = 5
+schema_version = 6
 
 # ── Back-of-house: the quality controls ──────────────────────────────────────
 # eval, benches, judges, gates, harnesses, archaeology, ATOS. These sit OUTSIDE
@@ -1392,6 +1392,9 @@ crates = [
     "sovereign-pods",
     # cmnwlth's CLI, lifted out of sovereign-cli-llm 2026-09-21.
     "sovereign-cli-mesh",
+    # The OICP host conformance tester, beside the spec it executes
+    # (cmnwlth/docs). Its internal surface is oicp-types alone.
+    "oicp-conformance",
 ]
 
 [[package]]
@@ -1878,3 +1881,23 @@ from = "sovereign-mobile"
 to = "commonwealth-transport"
 reason = "REACHED via sovereign-mobile → commonwealth-transport. The phone dials the mesh over iroh directly and commonwealth-transport is the client of that wire — but it drags commonwealth-core (the mesh's own model), which is the leak. The client half of the transport belongs beside sovereign-turn-client in the contract layer; until that split lands this row stands."
 tracking = "sv-surface mobile-transport seam (2026-09-11)"
+
+# ── Where each crate lives (schema v6) ───────────────────────────────────────
+# The top level is one directory per program, and a crate's directory says
+# which program owns it. boundary-gate fails a member no row claims, and a
+# member outside the top-level directory its row names: a [[package]] row's
+# crates live under its own `name`, and the other kinds under the directories
+# below. When two claim one crate the first of tooling, client, distribution,
+# package and leaf decides (quality/arch-layers/src/crate_dirs.rs).
+[crate_dirs]
+package_leaf = "shared"
+distribution = "distributions"
+clients = "clients"
+tooling = "quality"
+# Apps over the programs, in no package. Two of them are also the
+# [thin_surfaces], which is a different rule (what they may link).
+client_crates = ["sovereign-desktop", "sovereign-mobile", "sovereign-studio"]
+# The quality program's own crates: the gates, and the parser of this file.
+# arch-layers is also a [[package_leaf]] (its closure is a leaf's); its home
+# is here.
+tooling_crates = ["xtask", "arch-layers"]

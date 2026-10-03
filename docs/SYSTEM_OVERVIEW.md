@@ -224,7 +224,8 @@ their names described a family they were not in: `commonwealth-api` and
 deleted; `-knowledge` became `sovereign-grants`; `-app` became
 `sovereign-meshapp-registry` (deleted as dead code, pb-meshapp-apps); `-test-harness` became
 `sovereign-mesh-test-harness`; `oicp-conformance` moved to a repo-root
-sibling. `sovereign-service/data/` ships the systemd unit, launchd plist and
+sibling, then back to `cmnwlth/crates/` and into cmnwlth's package with the
+top-level-programs move. `sovereign-service/data/` ships the systemd unit, launchd plist and
 Windows task XML `install_service` embeds.
 
 ### studio
@@ -253,6 +254,11 @@ crates/
 `ARCH_LAYERS.toml` is the declared layer map, enforced by `cargo xtask
 layer-gate` (Cargo-declared edges) and the code-intel arch report
 (SCIP-observed edges); `arch-layers/` is the shared evaluator both use.
+Its `[crate_dirs]` table says which top-level directory each member lives
+in: a `[[package]]` row's crates under the program's own directory, leaves
+under `shared/`, distributions under `distributions/`, clients under
+`clients/` and tooling under `quality/`. `cargo xtask boundary-gate` fails a
+member outside its row's directory, and a member no row claims.
 `baselines/` holds machine-written ratchet baselines, regenerated only via
 `--update-baseline`, banked via `--tighten`. `cargo xtask quality` runs every
 fast local gate with one table carrying FOUR verdicts: passed / failed /

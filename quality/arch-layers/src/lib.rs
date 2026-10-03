@@ -32,10 +32,12 @@
 //! They call [`evaluate`] and [`evaluate_packages`]; the meaning of the
 //! policy file lives here and only here.
 
+mod crate_dirs;
 mod distributions;
 mod packages;
 mod surfaces;
 mod violations;
+pub use crate_dirs::{evaluate_crate_dirs, home_of, CrateDirs};
 pub use distributions::{evaluate_distributions, missing_distribution_crates, Distribution, Face};
 pub use packages::{
     evaluate_packages, missing_package_crates, Package, PackageLeaf, SHARED_LEAVES_SCOPE,
@@ -73,7 +75,12 @@ use std::collections::{BTreeMap, BTreeSet};
 /// distribution crate is in no package, so the stock binary could then link
 /// any crate while boundary-gate printed its usual verdict (trial T1,
 /// 2026-09-27). See `distributions.rs`.
-pub const MAX_SCHEMA_VERSION: u32 = 5;
+///
+/// v6 added `[crate_dirs]` — every member in its program's top-level
+/// directory, after the top-level-programs move. A pre-v6 build ignores the
+/// table, and a crate filed under the wrong program would pass the gate that
+/// exists to catch it. See `crate_dirs.rs`.
+pub const MAX_SCHEMA_VERSION: u32 = 6;
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -130,6 +137,9 @@ pub struct LayerMap {
     /// The composition roots, outside every package. See [`Distribution`].
     #[serde(default, rename = "distribution")]
     pub distributions: Vec<Distribution>,
+    /// Which top-level directory each row's crates live in. See [`CrateDirs`].
+    #[serde(default)]
+    pub crate_dirs: Option<CrateDirs>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -247,6 +257,7 @@ pub fn parse(toml_text: &str) -> Result<LayerMap, String> {
     packages::validate(&map)?;
     surfaces::validate(&map)?;
     distributions::validate(&map)?;
+    crate_dirs::validate(&map)?;
 
     Ok(map)
 }
