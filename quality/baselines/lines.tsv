@@ -97,7 +97,7 @@
 1042	quality/arch-layers::tests
 6624	quality/xtask
 7301	quality/xtask::tests
-60842	scripts
+60982	scripts
 2	serve/crates/serving-policy
 7336	serve/crates/sovereign-compute
 2011	serve/crates/sovereign-compute::tests
