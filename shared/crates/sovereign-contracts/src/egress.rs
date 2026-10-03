@@ -141,9 +141,50 @@ impl fmt::Display for EgressRefusal {
     }
 }
 
+/// Why a payload was released by its custody clauses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Release {
+    /// Public-web custody: the bar's unconditional release.
+    PublicWeb,
+    /// The run's consent grant covers the custody.
+    Grant,
+}
+
+/// Why a payload's custody clauses withheld it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Withheld {
+    /// Unknown provenance, which no grant releases.
+    UnknownProvenance,
+    /// Not public-web, and no grant.
+    NoGrant,
+    /// The grant's floor sits below this custody.
+    GrantBelow {
+        /// The most restrictive class the grant releases.
+        floor: Custody,
+    },
+}
+
+/// The custody clauses of the release rule, pure and in [`verify`]'s order:
+/// unknown provenance refuses, public-web releases, a covering grant
+/// releases, anything else refuses. A client that only needs the answer (an
+/// enrich run deciding what its envelope may declare) asks this, not
+/// `verify`, which also traces a payload and weighs the user-formed clause.
+pub fn release(custody: Custody, grant: Option<&ConsentGrant>) -> Result<Release, Withheld> {
+    match (custody, grant) {
+        (Custody::Unknown, _) => Err(Withheld::UnknownProvenance),
+        (Custody::PublicWeb, _) => Ok(Release::PublicWeb),
+        (_, Some(g)) if g.covers(custody) => Ok(Release::Grant),
+        (_, Some(g)) => Err(Withheld::GrantBelow {
+            floor: g.release_floor,
+        }),
+        (_, None) => Err(Withheld::NoGrant),
+    }
+}
+
 /// The release rule — one decider, one name. Returns the typed
 /// refusal when the payload may not leave; every path traces at
-/// `tracing=debug`.
+/// `tracing=debug`. The custody clauses are [`release`]'s; this adds the
+/// privacy short circuit and the user-formed-query clause.
 pub fn verify(
     payload: &EgressPayload<'_>,
     grant: Option<&ConsentGrant>,
@@ -174,72 +215,59 @@ pub fn verify(
         SearchPrivacy::External { provider } => provider,
     };
 
-    // Unknown provenance never egresses — refuses before any clause.
-    if payload.custody == Custody::Unknown {
-        return Err(refusal(
-            payload,
-            grant,
-            "unknown provenance never egresses".to_string(),
-        ));
-    }
-
-    // The bar's unconditional release: public-web custody.
-    if payload.custody == Custody::PublicWeb {
-        debug!(
-            target: "sovereign_core::egress",
-            provider = %provider,
-            what = payload.what,
-            custody = %payload.custody,
-            payload_chars = payload.detail.len(),
-            detail = %truncate(payload.detail, 200),
-            "egress released — public-web custody"
-        );
-        return Ok(());
-    }
-
-    // The operator's run-scoped grant.
-    if let Some(g) = grant {
-        if g.covers(payload.custody) {
+    let reason = match release(payload.custody, grant) {
+        Ok(Release::PublicWeb) => {
             debug!(
                 target: "sovereign_core::egress",
                 provider = %provider,
                 what = payload.what,
                 custody = %payload.custody,
                 payload_chars = payload.detail.len(),
-                run = %g.run_id,
-                release_floor = %g.release_floor,
+                detail = %truncate(payload.detail, 200),
+                "egress released — public-web custody"
+            );
+            return Ok(());
+        }
+        Ok(Release::Grant) => {
+            debug!(
+                target: "sovereign_core::egress",
+                provider = %provider,
+                what = payload.what,
+                custody = %payload.custody,
+                payload_chars = payload.detail.len(),
+                run = %grant.map_or("", |g| g.run_id.as_str()),
+                release_floor = ?grant.map(|g| g.release_floor),
                 detail = %truncate(payload.detail, 200),
                 "egress released — run consent grant"
             );
             return Ok(());
         }
-    }
-
-    // The user's own words, formed verbatim by the user — the chat
-    // tool path's release. Machine-formed payloads never hit this
-    // clause.
-    if payload.what == "query" && payload.user_formed {
-        debug!(
-            target: "sovereign_core::egress",
-            provider = %provider,
-            what = payload.what,
-            custody = %payload.custody,
-            payload_chars = payload.detail.len(),
-            detail = %truncate(payload.detail, 200),
-            "egress released — user-formed query"
-        );
-        return Ok(());
-    }
-
-    let reason = match (payload.what, grant) {
-        (_, None) => {
+        // Unknown provenance never egresses, whoever formed it.
+        Err(Withheld::UnknownProvenance) => "unknown provenance never egresses".to_string(),
+        // The user's own words, formed verbatim by the user — the chat
+        // tool path's release. Machine-formed payloads never hit this
+        // clause.
+        Err(Withheld::NoGrant | Withheld::GrantBelow { .. })
+            if payload.what == "query" && payload.user_formed =>
+        {
+            debug!(
+                target: "sovereign_core::egress",
+                provider = %provider,
+                what = payload.what,
+                custody = %payload.custody,
+                payload_chars = payload.detail.len(),
+                detail = %truncate(payload.detail, 200),
+                "egress released — user-formed query"
+            );
+            return Ok(());
+        }
+        Err(Withheld::NoGrant) => {
             "no run consent grant — the boundary is default-deny for non-public-web payloads"
                 .to_string()
         }
-        (_, Some(g)) => format!(
+        Err(Withheld::GrantBelow { floor }) => format!(
             "grant {run} covers up to {floor}, not {custody}",
-            run = g.run_id,
-            floor = g.release_floor,
+            run = grant.map_or("", |g| g.run_id.as_str()),
             custody = payload.custody,
         ),
     };
@@ -321,6 +349,65 @@ mod tests {
             target: "duckduckgo",
             detail: "the exact payload",
             user_formed,
+        }
+    }
+
+    /// The custody clauses alone, every class against no grant and each floor.
+    #[test]
+    fn release_is_a_table_over_custody_and_grant() {
+        let grant = |floor| ConsentGrant {
+            run_id: "run".into(),
+            granted_at_unix: 0,
+            release_floor: floor,
+        };
+        let (web, peer, personal) = (
+            grant(Custody::PublicWeb),
+            grant(Custody::Peer),
+            grant(Custody::Personal),
+        );
+        let below = |floor| Err(Withheld::GrantBelow { floor });
+        for (custody, none, at_web, at_peer, at_personal) in [
+            (
+                Custody::Unknown,
+                Err(Withheld::UnknownProvenance),
+                Err(Withheld::UnknownProvenance),
+                Err(Withheld::UnknownProvenance),
+                Err(Withheld::UnknownProvenance),
+            ),
+            (
+                Custody::PublicWeb,
+                Ok(Release::PublicWeb),
+                Ok(Release::PublicWeb),
+                Ok(Release::PublicWeb),
+                Ok(Release::PublicWeb),
+            ),
+            (
+                Custody::Peer,
+                Err(Withheld::NoGrant),
+                below(Custody::PublicWeb),
+                Ok(Release::Grant),
+                Ok(Release::Grant),
+            ),
+            (
+                Custody::Personal,
+                Err(Withheld::NoGrant),
+                below(Custody::PublicWeb),
+                below(Custody::Peer),
+                Ok(Release::Grant),
+            ),
+        ] {
+            assert_eq!(release(custody, None), none, "{custody} with no grant");
+            assert_eq!(
+                release(custody, Some(&web)),
+                at_web,
+                "{custody} at public-web"
+            );
+            assert_eq!(release(custody, Some(&peer)), at_peer, "{custody} at peer");
+            assert_eq!(
+                release(custody, Some(&personal)),
+                at_personal,
+                "{custody} at personal"
+            );
         }
     }
 
