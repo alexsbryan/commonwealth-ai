@@ -78,7 +78,13 @@ attributes = [
   { name = "findspot", type = "text" },
   { name = "found",    type = "time" },
   { name = "buried",   type = "time", range = true },
+  { name = "igch",     type = "text", description = "the hoard's IGCH catalogue number, digits only: 1441 for \"IGCH 1441\"" },
 ]
+# IGCH is the catalogue that identifies a hoard. Without the key, name shape
+# decided: "Asia Minor 1964 (IGCH 1441)" absorbed three other Asia Minor hoards
+# (IGCH 1437, 1444, the 1970 find) by shared tokens (resolution rule 3), 14 K2
+# misses on ft-ans-dev-b.
+identity = ["igch"]
 
 [[enrichment.ontology.types]]
 name = "coin"

@@ -12,8 +12,8 @@
   "intersection": {
    "n": 8,
    "metric": "set F1",
-   "records": 0.395,
-   "records_made_up": 1,
+   "records": 0.423,
+   "records_made_up": 2,
    "records_exact_without_support": 0,
    "rag@5": 0.283,
    "rag@10": 0.436,
@@ -23,7 +23,7 @@
   "constraint-date": {
    "n": 7,
    "metric": "set F1",
-   "records": 0.229,
+   "records": 0.143,
    "records_made_up": 0,
    "records_exact_without_support": 0,
    "rag@5": 0.567,
@@ -34,8 +34,8 @@
   "constraint-region": {
    "n": 6,
    "metric": "set F1",
-   "records": 0.133,
-   "records_made_up": 0,
+   "records": 0.267,
+   "records_made_up": 1,
    "records_exact_without_support": 0,
    "rag@5": 0.333,
    "rag@10": 0.417,
@@ -67,7 +67,7 @@
   "co-occurrence": {
    "n": 8,
    "metric": "set F1",
-   "records": 0.378,
+   "records": 0.497,
    "records_made_up": 0,
    "records_exact_without_support": 0,
    "rag@5": 0.119,
@@ -78,8 +78,8 @@
   "negation": {
    "n": 8,
    "metric": "set F1",
-   "records": 0.707,
-   "records_made_up": 1,
+   "records": 0.733,
+   "records_made_up": 10,
    "records_exact_without_support": 0,
    "rag@5": 0.0,
    "rag@10": 0.125,
@@ -89,50 +89,46 @@
  },
  "record_stage_split": {
   "intersection": {
-   "link: mint not linked to the hoard": 9,
-   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 3
+   "program: facts present, item not produced": 3,
+   "link: mint not linked to the hoard": 11
   },
   "constraint-date": {
-   "attribute: burial date on a Claim with no hoard subject": 2,
+   "link: mint not linked to the hoard": 2,
    "attribute: burial date only in Claim prose": 4,
-   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 2,
-   "link: mint not linked to the hoard": 1
+   "attribute: burial date on a Claim with no hoard subject": 3,
+   "attribute: no burial date in the records": 2
   },
   "constraint-region": {
    "attribute: findspot does not name the region": 3,
-   "link: mint not linked to the hoard": 2,
-   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 2,
-   "hoard: no hoard entity": 1
+   "link: mint not linked to the hoard": 3
   },
   "count": {
-   "link: mint not linked to the hoard": 12,
-   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 1
+   "link: mint not linked to the hoard": 13
   },
   "superlative": {
    "attribute: findspot does not name the region": 2,
-   "attribute: burial date on a Claim with no hoard subject": 3,
-   "attribute: burial date only in Claim prose": 3,
-   "link: mint not linked to the hoard": 3
+   "attribute: no burial date in the records": 3,
+   "link: mint not linked to the hoard": 3,
+   "attribute: burial date on a Claim with no hoard subject": 1
   },
   "co-occurrence": {
-   "link: mint not linked to the hoard": 35,
-   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 2
+   "link: mint not linked to the hoard": 30
   },
   "negation": {
    "attribute: findspot does not name the region": 1,
-   "hoard: no hoard entity": 3,
    "link: mint not linked to the hoard": 2
   }
  },
  "records_vs_rag20": {
   "intersection": {
    "records_beat_rag20": [
-    "k2-int-lampsacus-miletus"
+    "k2-int-lampsacus-miletus",
+    "k2-int-abydus-magnesia",
+    "k2-int-abydus-colophon"
    ],
    "rag20_beat_records": [
     "k2-int-miletus-sardes",
     "k2-int-ake-sidon",
-    "k2-int-abydus-colophon",
     "k2-int-abydus-cius"
    ]
   },
@@ -140,6 +136,7 @@
    "records_beat_rag20": [],
    "rag20_beat_records": [
     "k2-date-before310-tarsus",
+    "k2-date-after310-abydus",
     "k2-date-after310-ake",
     "k2-date-after310-cius",
     "k2-date-before310-salamis",
@@ -183,8 +180,7 @@
     "k2-cooc-myriandrus",
     "k2-cooc-miletus",
     "k2-cooc-sidon",
-    "k2-cooc-salamis",
-    "k2-cooc-abydus"
+    "k2-cooc-salamis"
    ]
   },
   "negation": {
@@ -197,7 +193,6 @@
     "k2-neg-miletus-not-colophon"
    ],
    "rag20_beat_records": [
-    "k2-neg-asia-minor-miletus",
     "k2-neg-abydus-not-sardes"
    ]
   }
@@ -209,14 +204,12 @@
     "resolves_to": "igch1664",
     "mints": [
      "Abydus",
-     "Lampsacus",
-     "Miletus",
-     "Sardis"
+     "Lampsacus"
     ],
     "findspot": "Egypt (vicinity of Demanhur)",
     "burial": null
    },
-   "entity-0013": {
+   "entity-0011": {
     "name": "Olympia Hoard",
     "resolves_to": "igch0176",
     "mints": [],
@@ -235,28 +228,19 @@
      "Sardis"
     ],
     "findspot": "Anadol",
-    "burial": [
-     228,
-     220
-    ]
+    "burial": null
    },
    "igch1441": {
     "name": "Asia Minor 1964 (IGCH 1441)",
     "resolves_to": "igch1441",
     "mints": [
-     "Abydus",
-     "Amphipolis",
-     "Colophon",
-     "Lampsacus",
-     "Magnesia ad Maeandrum",
      "Miletus",
-     "Ptolemais-Ake",
      "Sardis"
     ],
     "findspot": "Asia Minor",
     "burial": null
    },
-   "entity-0032": {
+   "entity-0033": {
     "name": "Gîldău hoard",
     "resolves_to": "igch0774",
     "mints": [
@@ -267,7 +251,7 @@
     "findspot": "Gîldău",
     "burial": null
    },
-   "entity-0036": {
+   "entity-0037": {
     "name": "Larnaca hoard",
     "resolves_to": "igch1472",
     "mints": [
@@ -282,22 +266,22 @@
      300
     ]
    },
-   "entity-0039": {
+   "entity-0040": {
     "name": "No. Greece Hoard",
     "resolves_to": "igch0801",
     "mints": [],
     "findspot": "northern Greece",
     "burial": null
    },
-   "entity-0041": {
+   "entity-0042": {
     "name": "Maeander Valley interment",
     "resolves_to": "unresolved:Maeander Valley interment",
     "mints": [],
-    "findspot": "Maeander Valley",
+    "findspot": "",
     "burial": null
    },
-   "igch0410": {
-    "name": "Paeonia hoard (IGCH 410)",
+   "entity-0049": {
+    "name": "Paeonia hoard",
     "resolves_to": "igch0410",
     "mints": [
      "Abydus",
@@ -309,52 +293,96 @@
     "findspot": "Paeonia",
     "burial": null
    },
-   "igch0777": {
-    "name": "Jasna Poljana hoard (IGCH 777)",
+   "entity-0050": {
+    "name": "Jasna Poljana hoard",
     "resolves_to": "igch0777",
     "mints": [],
     "findspot": "Jasna Poljana",
     "burial": null
    },
-   "igch1516": {
-    "name": "Aleppo Hoard (IGCH 1516)",
+   "entity-0055": {
+    "name": "Aleppo Hoard",
     "resolves_to": "igch1516",
     "mints": [
-     "Abydus",
-     "Lampsacus",
      "Miletus",
      "Sardis"
     ],
-    "findspot": "Aleppo ; Aleppo",
-    "burial": [
-     300,
-     300
-    ]
+    "findspot": "Aleppo",
+    "burial": null
    },
-   "entity-0074": {
-    "name": "Sinan Pascha Hoard",
-    "resolves_to": "unresolved:Sinan Pascha Hoard",
+   "igch1444": {
+    "name": "Asia Minor 1961 (IGCH 1444)",
+    "resolves_to": "igch1444",
+    "mints": [
+     "Abydus",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Sardis"
+    ],
+    "findspot": "Asia Minor ; Sardes and Miletus",
+    "burial": null
+   },
+   "igch1437": {
+    "name": "Asia Minor 1964 (IGCH 1437)",
+    "resolves_to": "igch1437",
+    "mints": [
+     "Abydus",
+     "Amphipolis",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Ptolemais-Ake",
+     "Sardis"
+    ],
+    "findspot": "Asia Minor",
+    "burial": null
+   },
+   "entity-0070": {
+    "name": "Asia Minor 1970 hoard",
+    "resolves_to": "sec_00012",
     "mints": [],
     "findspot": "",
     "burial": null
    },
-   "entity-0077": {
+   "igch1664": {
+    "name": "Demanhur (IGCH 1664)",
+    "resolves_to": "igch1664",
+    "mints": [
+     "Miletus"
+    ],
+    "findspot": "Demanhur",
+    "burial": [
+     318,
+     318
+    ]
+   },
+   "entity-0076": {
+    "name": "Sinan Pascha Hoard",
+    "resolves_to": "unresolved:Sinan Pascha Hoard",
+    "mints": [
+     "Sardis"
+    ],
+    "findspot": "unknown (closer to Sardes)",
+    "burial": [
+     317,
+     317
+    ]
+   },
+   "entity-0078": {
     "name": "Kuft Hoard",
     "resolves_to": "igch1670",
     "mints": [
-     "Abydus",
-     "Lampsacus",
      "Miletus",
      "Sardis"
     ],
     "findspot": "Kuft",
-    "burial": [
-     310,
-     305
-    ]
+    "burial": null
    },
-   "igch1678": {
-    "name": "Phacous hoard (IGCH 1678)",
+   "entity-0080": {
+    "name": "Phacous hoard",
     "resolves_to": "igch1678",
     "mints": [
      "Lampsacus"
@@ -362,14 +390,7 @@
     "findspot": "Phacous",
     "burial": null
    },
-   "entity-0083": {
-    "name": "Cavalla Hoard",
-    "resolves_to": "unresolved:Cavalla Hoard",
-    "mints": [],
-    "findspot": "unknown",
-    "burial": null
-   },
-   "entity-0092": {
+   "entity-0091": {
     "name": "Mărăşeşti hoard",
     "resolves_to": "igch0958",
     "mints": [
@@ -377,6 +398,41 @@
      "Lampsacus"
     ],
     "findspot": "Mărăşeşti",
+    "burial": null
+   },
+   "igch1516": {
+    "name": "Aleppo: IGCH 1516; Sardes and Miletus hoard",
+    "resolves_to": "igch1516",
+    "mints": [
+     "Abydus",
+     "Lampsacus"
+    ],
+    "findspot": "Aleppo",
+    "burial": null
+   },
+   "entity-0100": {
+    "name": "Asia Minor 1964",
+    "resolves_to": "unresolved:Asia Minor 1964",
+    "mints": [
+     "Abydus",
+     "Amphipolis",
+     "Lampsacus",
+     "Miletus",
+     "Pella",
+     "Sardis",
+     "Sidon"
+    ],
+    "findspot": "Asia Minor",
+    "burial": null
+   },
+   "igch1438": {
+    "name": "Asia Minor 1964: IGCH 1438",
+    "resolves_to": "igch1438",
+    "mints": [
+     "Abydus",
+     "Lampsacus"
+    ],
+    "findspot": "Asia Minor",
     "burial": null
    },
    "igch1668": {
@@ -388,8 +444,17 @@
     "findspot": "Egypt",
     "burial": null
    },
+   "igch1670": {
+    "name": "Kuft: IGCH 1670",
+    "resolves_to": "igch1670",
+    "mints": [
+     "Lampsacus"
+    ],
+    "findspot": "Kuft",
+    "burial": null
+   },
    "igch0176": {
-    "name": "Olympia: IGCH 176; Sardes and Miletus, p. 97",
+    "name": "IGCH 176",
     "resolves_to": "igch0176",
     "mints": [
      "Lampsacus"
@@ -407,23 +472,38 @@
    "answer_type": "hoards",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.9333333333333333,
-    "precision": 1.0,
-    "recall": 0.875,
+    "f1": 0.6153846153846154,
+    "precision": 0.8,
+    "recall": 0.5,
     "found": [
      "igch0410",
      "igch0774",
      "igch0866",
-     "igch1472",
-     "igch1516",
-     "igch1664",
-     "igch1670"
+     "igch1472"
     ],
-    "made_up": [],
+    "made_up": [
+     "unresolved:Asia Minor 1964"
+    ],
     "neutral_hits": [
-     "igch1441"
+     "igch1437",
+     "igch1444"
     ],
     "missed": [
+     {
+      "id": "igch1516",
+      "stage": "program",
+      "why": "facts present, item not produced"
+     },
+     {
+      "id": "igch1664",
+      "stage": "program",
+      "why": "facts present, item not produced"
+     },
+     {
+      "id": "igch1670",
+      "stage": "program",
+      "why": "facts present, item not produced"
+     },
      {
       "id": "igch1678",
       "stage": "link",
@@ -434,11 +514,10 @@
      "igch0410",
      "igch0774",
      "igch0866",
-     "igch1441",
+     "igch1437",
+     "igch1444",
      "igch1472",
-     "igch1516",
-     "igch1664",
-     "igch1670"
+     "unresolved:Asia Minor 1964"
     ]
    },
    "rag": {
@@ -506,22 +585,30 @@
    "answer_type": "hoards",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.923076923076923,
-    "precision": 1.0,
-    "recall": 0.8571428571428571,
+    "f1": 0.7692307692307692,
+    "precision": 0.8333333333333334,
+    "recall": 0.7142857142857143,
     "found": [
      "igch0410",
      "igch0866",
      "igch1472",
      "igch1516",
-     "igch1664",
      "igch1670"
     ],
-    "made_up": [],
+    "made_up": [
+     "unresolved:Asia Minor 1964"
+    ],
     "neutral_hits": [
-     "igch1441"
+     "igch1437",
+     "igch1441",
+     "igch1444"
     ],
     "missed": [
+     {
+      "id": "igch1664",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
      {
       "id": "igch1678",
       "stage": "link",
@@ -531,11 +618,13 @@
     "answer": [
      "igch0410",
      "igch0866",
+     "igch1437",
      "igch1441",
+     "igch1444",
      "igch1472",
      "igch1516",
-     "igch1664",
-     "igch1670"
+     "igch1670",
+     "unresolved:Asia Minor 1964"
     ]
    },
    "rag": {
@@ -784,28 +873,24 @@
    "answer_type": "hoards",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.8,
+    "f1": 1.0,
     "precision": 1.0,
-    "recall": 0.6666666666666666,
+    "recall": 1.0,
     "found": [
      "igch0410",
-     "igch0866"
+     "igch0866",
+     "igch1444"
     ],
     "made_up": [],
     "neutral_hits": [
-     "igch1441"
+     "igch1437"
     ],
-    "missed": [
-     {
-      "id": "igch1444",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
-     }
-    ],
+    "missed": [],
     "answer": [
      "igch0410",
      "igch0866",
-     "igch1441"
+     "igch1437",
+     "igch1444"
     ]
    },
    "rag": {
@@ -869,26 +954,22 @@
    "answer_type": "hoards",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.5,
-    "precision": 0.5,
-    "recall": 0.5,
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
     "found": [
-     "igch0866"
+     "igch0866",
+     "igch1444"
     ],
-    "made_up": [
-     "igch1441"
+    "made_up": [],
+    "neutral_hits": [
+     "igch1437"
     ],
-    "neutral_hits": [],
-    "missed": [
-     {
-      "id": "igch1444",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
-     }
-    ],
+    "missed": [],
     "answer": [
      "igch0866",
-     "igch1441"
+     "igch1437",
+     "igch1444"
     ]
    },
    "rag": {
@@ -961,8 +1042,8 @@
     "missed": [
      {
       "id": "igch1444",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+      "stage": "link",
+      "why": "mint not linked to the hoard"
      }
     ],
     "answer": []
@@ -1105,8 +1186,8 @@
     "missed": [
      {
       "id": "igch1664",
-      "stage": "attribute",
-      "why": "burial date on a Claim with no hoard subject"
+      "stage": "link",
+      "why": "mint not linked to the hoard"
      },
      {
       "id": "igch0774",
@@ -1177,28 +1258,28 @@
    "answer_type": "hoards",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.8,
+    "f1": 0.5,
     "precision": 1.0,
-    "recall": 0.6666666666666666,
+    "recall": 0.3333333333333333,
     "found": [
-     "igch1472",
-     "igch1516"
+     "igch1472"
     ],
     "made_up": [],
-    "neutral_hits": [
-     "igch0866"
-    ],
+    "neutral_hits": [],
     "missed": [
      {
       "id": "igch1444",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     },
+     {
+      "id": "igch1516",
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
      }
     ],
     "answer": [
-     "igch0866",
-     "igch1472",
-     "igch1516"
+     "igch1472"
     ]
    },
    "rag": {
@@ -1275,13 +1356,13 @@
     "missed": [
      {
       "id": "igch1516",
-      "stage": "link",
-      "why": "mint not linked to the hoard"
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
      },
      {
       "id": "igch1678",
       "stage": "attribute",
-      "why": "burial date only in Claim prose"
+      "why": "no burial date in the records"
      }
     ],
     "answer": []
@@ -1353,8 +1434,8 @@
     "missed": [
      {
       "id": "igch1444",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
      }
     ],
     "answer": []
@@ -1428,8 +1509,8 @@
     "missed": [
      {
       "id": "igch1664",
-      "stage": "attribute",
-      "why": "burial date on a Claim with no hoard subject"
+      "stage": "link",
+      "why": "mint not linked to the hoard"
      }
     ],
     "answer": []
@@ -1563,28 +1644,28 @@
    "answer_type": "hoards",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.8,
+    "f1": 0.5,
     "precision": 1.0,
-    "recall": 0.6666666666666666,
+    "recall": 0.3333333333333333,
     "found": [
-     "igch1472",
-     "igch1516"
+     "igch1472"
     ],
     "made_up": [],
-    "neutral_hits": [
-     "igch0866"
-    ],
+    "neutral_hits": [],
     "missed": [
+     {
+      "id": "igch1516",
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
+     },
      {
       "id": "igch1678",
       "stage": "attribute",
-      "why": "burial date only in Claim prose"
+      "why": "no burial date in the records"
      }
     ],
     "answer": [
-     "igch0866",
-     "igch1472",
-     "igch1516"
+     "igch1472"
     ]
    },
    "rag": {
@@ -1819,8 +1900,8 @@
     "missed": [
      {
       "id": "igch1444",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+      "stage": "link",
+      "why": "mint not linked to the hoard"
      }
     ],
     "answer": []
@@ -2023,28 +2104,25 @@
    "answer_type": "hoards",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.0,
-    "precision": 1.0,
-    "recall": 0.0,
-    "found": [],
-    "made_up": [],
+    "f1": 0.8,
+    "precision": 0.6666666666666666,
+    "recall": 1.0,
+    "found": [
+     "igch1438",
+     "igch1444"
+    ],
+    "made_up": [
+     "unresolved:Asia Minor 1964"
+    ],
     "neutral_hits": [
-     "igch1441"
+     "igch1437"
     ],
-    "missed": [
-     {
-      "id": "igch1438",
-      "stage": "hoard",
-      "why": "no hoard entity"
-     },
-     {
-      "id": "igch1444",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
-     }
-    ],
+    "missed": [],
     "answer": [
-     "igch1441"
+     "igch1437",
+     "igch1438",
+     "igch1444",
+     "unresolved:Asia Minor 1964"
     ]
    },
    "rag": {
@@ -2178,8 +2256,8 @@
     "missed": [
      {
       "fact": "contains igch1444 Cius",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+      "stage": "link",
+      "why": "mint not linked to the hoard"
      }
     ],
     "missing_support": []
@@ -2441,14 +2519,9 @@
       "why": "findspot does not name the region"
      },
      {
-      "fact": "burial igch1664 date",
-      "stage": "attribute",
-      "why": "burial date on a Claim with no hoard subject"
-     },
-     {
       "fact": "burial igch1678 date",
       "stage": "attribute",
-      "why": "burial date only in Claim prose"
+      "why": "no burial date in the records"
      }
     ],
     "missing_support": []
@@ -2517,14 +2590,14 @@
       "why": "mint not linked to the hoard"
      },
      {
-      "fact": "burial igch1664 date",
+      "fact": "burial igch1516 date",
       "stage": "attribute",
       "why": "burial date on a Claim with no hoard subject"
      },
      {
       "fact": "burial igch1678 date",
       "stage": "attribute",
-      "why": "burial date only in Claim prose"
+      "why": "no burial date in the records"
      }
     ],
     "missing_support": []
@@ -2585,6 +2658,11 @@
      },
      {
       "fact": "contains igch1664 Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1664 Sardes",
       "stage": "link",
       "why": "mint not linked to the hoard"
      },
@@ -2679,14 +2757,9 @@
       "why": "findspot does not name the region"
      },
      {
-      "fact": "burial igch1664 date",
-      "stage": "attribute",
-      "why": "burial date on a Claim with no hoard subject"
-     },
-     {
       "fact": "burial igch1678 date",
       "stage": "attribute",
-      "why": "burial date only in Claim prose"
+      "why": "no burial date in the records"
      }
     ],
     "missing_support": []
@@ -2740,11 +2813,6 @@
     "gold": "Lampsacus",
     "missed": [],
     "missing_support": [
-     {
-      "fact": "contains igch1438 Lampsacus",
-      "stage": "hoard",
-      "why": "no hoard entity"
-     },
      {
       "fact": "contains igch1678 Miletus",
       "stage": "link",
@@ -3080,20 +3148,22 @@
    "answer_type": "mints",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.7499999999999999,
+    "f1": 0.8235294117647058,
     "precision": 1.0,
-    "recall": 0.6,
+    "recall": 0.7,
     "found": [
      "Abydus",
      "Colophon",
      "Lampsacus",
      "Magnesia ad Maeandrum",
      "Ptolemais-Ake",
-     "Sardis"
+     "Sardis",
+     "Sidon"
     ],
     "made_up": [],
     "neutral_hits": [
-     "Amphipolis"
+     "Amphipolis",
+     "Pella"
     ],
     "missed": [
      {
@@ -3103,11 +3173,6 @@
      },
      {
       "id": "Salamis",
-      "stage": "link",
-      "why": "mint not linked to the hoard"
-     },
-     {
-      "id": "Sidon",
       "stage": "link",
       "why": "mint not linked to the hoard"
      },
@@ -3123,8 +3188,10 @@
      "Colophon",
      "Lampsacus",
      "Magnesia ad Maeandrum",
+     "Pella",
      "Ptolemais-Ake",
-     "Sardis"
+     "Sardis",
+     "Sidon"
     ]
    },
    "rag": {
@@ -3211,28 +3278,21 @@
    "answer_type": "mints",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.0,
+    "f1": 0.7272727272727273,
     "precision": 1.0,
-    "recall": 0.0,
-    "found": [],
+    "recall": 0.5714285714285714,
+    "found": [
+     "Abydus",
+     "Lampsacus",
+     "Miletus",
+     "Sardis"
+    ],
     "made_up": [],
-    "neutral_hits": [],
+    "neutral_hits": [
+     "Amphipolis",
+     "Pella"
+    ],
     "missed": [
-     {
-      "id": "Abydus",
-      "stage": "link",
-      "why": "mint not linked to the hoard"
-     },
-     {
-      "id": "Lampsacus",
-      "stage": "link",
-      "why": "mint not linked to the hoard"
-     },
-     {
-      "id": "Miletus",
-      "stage": "link",
-      "why": "mint not linked to the hoard"
-     },
      {
       "id": "Myriandrus",
       "stage": "link",
@@ -3244,17 +3304,19 @@
       "why": "mint not linked to the hoard"
      },
      {
-      "id": "Sardis",
-      "stage": "link",
-      "why": "mint not linked to the hoard"
-     },
-     {
       "id": "Tarsus",
       "stage": "link",
       "why": "mint not linked to the hoard"
      }
     ],
-    "answer": []
+    "answer": [
+     "Abydus",
+     "Amphipolis",
+     "Lampsacus",
+     "Miletus",
+     "Pella",
+     "Sardis"
+    ]
    },
    "rag": {
     "5": {
@@ -3434,20 +3496,22 @@
    "answer_type": "mints",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.7499999999999999,
+    "f1": 0.8235294117647058,
     "precision": 1.0,
-    "recall": 0.6,
+    "recall": 0.7,
     "found": [
      "Abydus",
      "Colophon",
      "Magnesia ad Maeandrum",
      "Miletus",
      "Ptolemais-Ake",
-     "Sardis"
+     "Sardis",
+     "Sidon"
     ],
     "made_up": [],
     "neutral_hits": [
-     "Amphipolis"
+     "Amphipolis",
+     "Pella"
     ],
     "missed": [
      {
@@ -3457,11 +3521,6 @@
      },
      {
       "id": "Salamis",
-      "stage": "link",
-      "why": "mint not linked to the hoard"
-     },
-     {
-      "id": "Sidon",
       "stage": "link",
       "why": "mint not linked to the hoard"
      },
@@ -3477,8 +3536,10 @@
      "Colophon",
      "Magnesia ad Maeandrum",
      "Miletus",
+     "Pella",
      "Ptolemais-Ake",
-     "Sardis"
+     "Sardis",
+     "Sidon"
     ]
    },
    "rag": {
@@ -3638,36 +3699,33 @@
    "answer_type": "mints",
    "open_world_sensitive": false,
    "records": {
-    "f1": 0.8,
+    "f1": 0.8750000000000001,
     "precision": 1.0,
-    "recall": 0.6666666666666666,
+    "recall": 0.7777777777777778,
     "found": [
      "Colophon",
      "Lampsacus",
      "Magnesia ad Maeandrum",
      "Miletus",
      "Ptolemais-Ake",
-     "Sardis"
+     "Sardis",
+     "Sidon"
     ],
     "made_up": [],
     "neutral_hits": [
-     "Amphipolis"
+     "Amphipolis",
+     "Pella"
     ],
     "missed": [
      {
       "id": "Cius",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
-     },
-     {
-      "id": "Sidon",
       "stage": "link",
       "why": "mint not linked to the hoard"
      },
      {
       "id": "Teos",
-      "stage": "hoard",
-      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+      "stage": "link",
+      "why": "mint not linked to the hoard"
      }
     ],
     "answer": [
@@ -3676,8 +3734,10 @@
      "Lampsacus",
      "Magnesia ad Maeandrum",
      "Miletus",
+     "Pella",
      "Ptolemais-Ake",
-     "Sardis"
+     "Sardis",
+     "Sidon"
     ]
    },
    "rag": {
@@ -3832,16 +3892,19 @@
    "answer_type": "hoards",
    "open_world_sensitive": true,
    "records": {
-    "f1": 1.0,
-    "precision": 1.0,
+    "f1": 0.6666666666666666,
+    "precision": 0.5,
     "recall": 1.0,
     "found": [
      "igch1668"
     ],
-    "made_up": [],
+    "made_up": [
+     "igch1664"
+    ],
     "neutral_hits": [],
     "missed": [],
     "answer": [
+     "igch1664",
      "igch1668"
     ]
    },
@@ -3899,20 +3962,18 @@
    "answer_type": "hoards",
    "open_world_sensitive": true,
    "records": {
-    "f1": 0.0,
+    "f1": 1.0,
     "precision": 1.0,
-    "recall": 0.0,
-    "found": [],
+    "recall": 1.0,
+    "found": [
+     "igch1438"
+    ],
     "made_up": [],
     "neutral_hits": [],
-    "missed": [
-     {
-      "id": "igch1438",
-      "stage": "hoard",
-      "why": "no hoard entity"
-     }
-    ],
-    "answer": []
+    "missed": [],
+    "answer": [
+     "igch1438"
+    ]
    },
    "rag": {
     "5": {
@@ -3970,31 +4031,33 @@
    "answer_type": "hoards",
    "open_world_sensitive": true,
    "records": {
-    "f1": 0.8000000000000002,
-    "precision": 0.8,
-    "recall": 0.8,
+    "f1": 0.7142857142857143,
+    "precision": 0.5555555555555556,
+    "recall": 1.0,
     "found": [
      "igch0176",
      "igch0774",
      "igch0958",
+     "igch1438",
      "igch1668"
     ],
     "made_up": [
+     "igch1516",
+     "igch1664",
+     "igch1670",
      "igch1678"
     ],
     "neutral_hits": [],
-    "missed": [
-     {
-      "id": "igch1438",
-      "stage": "hoard",
-      "why": "no hoard entity"
-     }
-    ],
+    "missed": [],
     "answer": [
      "igch0176",
      "igch0774",
      "igch0958",
+     "igch1438",
+     "igch1516",
+     "igch1664",
      "igch1668",
+     "igch1670",
      "igch1678"
     ]
    },
@@ -4071,12 +4134,15 @@
      "igch1678"
     ],
     "made_up": [],
-    "neutral_hits": [],
+    "neutral_hits": [
+     "igch1670"
+    ],
     "missed": [],
     "answer": [
      "igch0176",
      "igch0774",
      "igch1668",
+     "igch1670",
      "igch1678"
     ]
    },
@@ -4140,22 +4206,23 @@
    "open_world_sensitive": true,
    "records": {
     "f1": 0.6666666666666666,
-    "precision": 1.0,
-    "recall": 0.5,
+    "precision": 0.5,
+    "recall": 1.0,
     "found": [
-     "igch0958"
+     "igch0958",
+     "igch1438"
     ],
-    "made_up": [],
+    "made_up": [
+     "igch1516",
+     "igch1664"
+    ],
     "neutral_hits": [],
-    "missed": [
-     {
-      "id": "igch1438",
-      "stage": "hoard",
-      "why": "no hoard entity"
-     }
-    ],
+    "missed": [],
     "answer": [
-     "igch0958"
+     "igch0958",
+     "igch1438",
+     "igch1516",
+     "igch1664"
     ]
    },
    "rag": {
@@ -4218,14 +4285,20 @@
    "answer_type": "hoards",
    "open_world_sensitive": true,
    "records": {
-    "f1": 0.6666666666666666,
-    "precision": 1.0,
+    "f1": 0.4,
+    "precision": 0.3333333333333333,
     "recall": 0.5,
     "found": [
      "igch0774"
     ],
-    "made_up": [],
-    "neutral_hits": [],
+    "made_up": [
+     "igch1441",
+     "igch1516"
+    ],
+    "neutral_hits": [
+     "igch1664",
+     "igch1670"
+    ],
     "missed": [
      {
       "id": "igch1678",
@@ -4234,7 +4307,11 @@
      }
     ],
     "answer": [
-     "igch0774"
+     "igch0774",
+     "igch1441",
+     "igch1516",
+     "igch1664",
+     "igch1670"
     ]
    },
    "rag": {
@@ -4292,16 +4369,19 @@
    "answer_type": "hoards",
    "open_world_sensitive": true,
    "records": {
-    "f1": 0.8571428571428571,
-    "precision": 1.0,
+    "f1": 0.75,
+    "precision": 0.75,
     "recall": 0.75,
     "found": [
      "igch0410",
      "igch1664",
      "igch1670"
     ],
-    "made_up": [],
+    "made_up": [
+     "unresolved:Asia Minor 1964"
+    ],
     "neutral_hits": [
+     "igch1441",
      "igch1472",
      "igch1516"
     ],
@@ -4314,10 +4394,12 @@
     ],
     "answer": [
      "igch0410",
+     "igch1441",
      "igch1472",
      "igch1516",
      "igch1664",
-     "igch1670"
+     "igch1670",
+     "unresolved:Asia Minor 1964"
     ]
    },
    "rag": {
