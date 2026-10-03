@@ -67,7 +67,10 @@ seed = { kinds = ["Claim", "ArgumentReconstruction"] }
 walk = ["Tension", "Involves"]
 hops = 1
 budget = 12
-summary_sources = []
+# The RAPTOR tree's nodes nearest the question, at every level: the paper's
+# collapsed-tree retrieval. Without it summaries reached only `thematic`
+# questions (pilot 2026-10-02: 1 of 12).
+summary_sources = ["raptor"]
 exemplars = [
   "where does the work contradict itself",
   "which claims are in tension",
@@ -84,6 +87,7 @@ seed = { kinds = ["Entity", "State"] }
 walk = ["Transition", "Causes"]
 hops = 2
 budget = 12
+summary_sources = ["raptor"]
 exemplars = [
   "how does this character change",
   "how does it develop over the course of the book",
