@@ -81,9 +81,17 @@ dist/
 # opposite — "the build context is the workspace root so this path resolves".
 #
 # Ordering is load-bearing: `.containerignore` evaluation is last-match-wins,
-# so this MUST stay below `target/`. One file, not the tree — and if the
-# release binary ever grows enough to matter, the context budget check names it.
+# so this MUST stay below `target/`. Files, not the tree: the image COPYs the
+# four binaries of the worker-mode chain (sovereign-cli execs
+# sovereign-cli-daemon, which execs sovereign-pod-worker, whose child reaches
+# sovereign-stock), and only sovereign-cli was re-included until 2026-10-02 —
+# the other three joined the image in e007f0edd without a line here. If the
+# release binaries ever grow enough to matter, the context budget check
+# names them.
 !target/release/sovereign-cli
+!target/release/sovereign-cli-daemon
+!target/release/sovereign-stock
+!target/release/sovereign-pod-worker
 
 # Build OUTPUTS and host-only trees that were being tar-streamed into every
 # container build. Found 2026-09-03, the first time
