@@ -14,6 +14,9 @@ use tempfile::tempdir;
 #[path = "runner_text.rs"]
 mod text;
 
+#[path = "runner_relation_focus.rs"]
+mod relation_focus;
+
 fn chapter(id: &str, title: &str, body: &str) -> ChapterInput {
     // Pad every test body past MIN_PHASE1_CHAPTER_WORDS so the
     // short-chapter skip doesn't fire on fixtures that are meant

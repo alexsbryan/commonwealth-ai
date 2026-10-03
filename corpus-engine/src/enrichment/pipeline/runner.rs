@@ -805,6 +805,11 @@ impl PhaseRunner {
         // default falls through to the seedless prompt. Pipelines
         // with `SeedStrategy::None` never write this cache entry.
         let seed_opt: Option<SeedEntities> = self.cache.read(PipelinePhase::SeedExtraction)?;
+        // One focused call per declared relation with both ends per `from`
+        // entity; empty, so zero calls, for a corpus that declares none.
+        let focus = super::pipelines::relation_focus::RelationFocus::from_policies(
+            &self.pipeline.declaration(),
+        );
 
         let mut extracted: Vec<ExtractedQuestion> = Vec::with_capacity(targets.len());
         let mut failures: Vec<Phase1Failure> = Vec::new();
@@ -1198,6 +1203,8 @@ impl PhaseRunner {
             let mut section_extraction = parsed.section_extraction;
             if let Some(ref mut sx) = section_extraction {
                 sx.section_id = chapter.chapter_id.clone();
+                // Before the chain, so its sketches are snapped like the joint pass's.
+                focus.apply(&self.chat, &prompt, sx).await;
                 // Cross-cutting post-process chain. Every pipeline's
                 // output flows through this registry — adding a new
                 // shared transform (path canonicalisation, dedupe,

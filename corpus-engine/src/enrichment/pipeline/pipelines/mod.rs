@@ -20,4 +20,5 @@ pub mod ontology_schema;
 pub mod parse_policy;
 pub mod philosophy_atlas;
 pub mod referential_atlas;
+pub mod relation_focus;
 pub mod sketch_parse;

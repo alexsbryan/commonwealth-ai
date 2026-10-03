@@ -501,7 +501,8 @@ question the pipeline asks about a type is a method on the resolved
   recipe-declared genre from a versioned `[enrichment.ontology]` block. A
   version-1 declaration drives the Phase-1 prompt, the generated response
   schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
-  the navigation map. **Both tension axes degrade by REPORTING, never by
+  the navigation map; a relation declared with both ends also gets one focused
+  Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`). **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at
