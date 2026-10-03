@@ -24,11 +24,11 @@ misattributed claims (attributed_to is a holder this item credits only to anothe
 Per opposing pair of required positions: tension_edge (a Tension edge whose endpoint names or
 sub_question match both), tension_edge_holders (endpoints are a holder of each side),
 collapsed_entity (ONE entity whose names match both sides: the dispute merged at write time),
-tension_candidate (tension_candidates.json). The candidates file predates the 2026-05-22
-content-hash id migration (c9e6e4095; candidates mtime 2026-05-12, atoms.json 2026-05-22), so its
-`claim-0004` ids resolve against nothing: the direct check is COULD-NOT-JUDGE. A positional
-recovery (claim-000N = the N-th Claim in atoms.json) is reported beside it, labelled as the
-substitution it is, with its own consistency rate.
+tension_candidate_direct (a candidate in tension_candidates.json whose two atoms, resolved by id,
+carry P and Q). COULD-NOT-JUDGE only while no candidate id resolves: a candidates file older than
+atoms.json (e.g. before the 2026-05-22 content-hash id migration, c9e6e4095) orphans every id until
+a rebuild re-keys it. A positional recovery (claim-000N = the N-th Claim in atoms.json) is reported
+beside it, labelled as the substitution it is, with its own consistency rate.
 """
 import collections, json, pathlib, re, sys
 
@@ -116,7 +116,8 @@ class Atlas:
         self.by = collections.defaultdict(list)
         for a in atoms:
             self.by[a["atom_type"]].append(a["data"])
-        self.ids = {a["data"]["id"] for a in atoms}
+        self.atom = {a["data"]["id"]: a["data"] for a in atoms}
+        self.ids = set(self.atom)
         self.ent = {e["id"]: e for e in self.by["Entity"]}
         self.edges = json.loads((d / "edges.json").read_text())["edges"]
         self.cands = json.loads((d / "tension_candidates.json").read_text())["candidates"]
@@ -213,7 +214,12 @@ def census_item(it, atlas):
                     teh.append(e["id"])
             collapsed = [atlas.names(e["id"]) for e in atlas.by["Entity"]
                          if hits(p["match"], atlas.names(e["id"])) and hits(q["match"], atlas.names(e["id"]))]
-            direct = [c for c in atlas.cands if c["source_atom"] in atlas.ids and c["target_atom"] in atlas.ids]
+            resolved = [c for c in atlas.cands if c["source_atom"] in atlas.ids and c["target_atom"] in atlas.ids]
+            direct = [c["id"] for c in resolved
+                      if (claim_carries(atlas, atlas.atom[c["source_atom"]], p["match"])
+                          and claim_carries(atlas, atlas.atom[c["target_atom"]], q["match"]))
+                      or (claim_carries(atlas, atlas.atom[c["source_atom"]], q["match"])
+                          and claim_carries(atlas, atlas.atom[c["target_atom"]], p["match"]))]
             pos_hit = []
             for c in atlas.cands:
                 a, b = atlas.positional(c["source_atom"]), atlas.positional(c["target_atom"])
@@ -224,7 +230,8 @@ def census_item(it, atlas):
                     pos_hit.append(c["id"])
             opp.append({"pair": [p["id"], q["id"]], "tension_edge": te, "tension_edge_holders": teh,
                         "collapsed_entity": collapsed,
-                        "tension_candidate_direct": "could-not-judge" if not direct else bool(direct),
+                        "tension_candidate_direct": direct[:20] if resolved else "could-not-judge",
+                        "tension_candidate_direct_count": len(direct),
                         "tension_candidate_positional_SUBSTITUTION": pos_hit[:20],
                         "tension_candidate_positional_count": len(pos_hit)})
     return {"id": it["id"], "positions": pos_rows, "pairs": pairs, "opposing": opp}
@@ -341,7 +348,9 @@ def main():
             "tension_edge_read_true": rate([{**r, "x": "true" in r["tension_edge_read"].values()} for r in opps], "x"),
             "tension_edge_holders": rate(opps, "tension_edge_holders"),
             "collapsed_entity": rate(opps, "collapsed_entity"),
-            "tension_candidate_direct": "could-not-judge (0 candidate ids resolve in atoms.json)",
+            "tension_candidate_direct": rate(opps, "tension_candidate_direct")
+            if any(r["tension_candidate_direct"] != "could-not-judge" for r in opps)
+            else "could-not-judge (0 candidate ids resolve in atoms.json)",
             "tension_candidate_positional_SUBSTITUTION": rate(
                 [{**r, "x": r["tension_candidate_positional_count"] > 0} for r in opps], "x"),
         },
