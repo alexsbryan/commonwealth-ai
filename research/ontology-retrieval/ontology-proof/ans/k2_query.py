@@ -8,9 +8,13 @@ ontology, so that code, not the model, executes the semantics?
 GRAMMAR, closed, built from the fixture's declared ontology (atlas/ontology.json, checked equal to
 recipe-dev-b.toml's types), never from K2:
     {target_type: an entity type,
-     filters:   [{attribute: one of the target's own non-ref attributes, op: eq|lt|gt|contains, value}],
-     relations: [{relation: a declared relation or ref, other_type: its far end, other_name, negate}],
+     filters:   [{attribute: `name` or one of the target's own non-ref attributes, op: eq|lt|gt|contains,
+                  value, negate}],
+     relations: [{relation: a declared relation or ref, other_type: its far end, other_name, negate,
+                  where: null | {filters: the far end's own, relations: the far end's, named, no where}}],
      aggregate: none|count|argmax|argmin, aggregate_over: a target attribute or a related type | null}
+Iteration 2 (campaign Decisions 2026-10-03, amended before running) added `where`, filter `negate` and
+`name`: iteration 1 could not express a two-hop join or a filter on the related type.
 One JSON Schema `anyOf` branch per target type, so each branch's enums hold only what that type
 declares. It is sent as `response_format: {type: json_schema}`: the serving host lifts the schema
 into `structured_output` (sovereign-serving-host/src/inference_adapter.rs:415-416, via
@@ -93,21 +97,31 @@ def grammar(types):
 
 
 def schema(ents, attrs, edges):
+    def filters(t):
+        return {"type": "array", "maxItems": 4, "items": {
+            "type": "object", "additionalProperties": False, "required": ["attribute", "op", "value", "negate"],
+            "properties": {"attribute": {"enum": ["name"] + [a["name"] for a in attrs[t]]}, "op": {"enum": OPS},
+                           "value": {"type": ["string", "number"]}, "negate": {"type": "boolean"}}}}
+
+    def relations(t, depth):
+        items = []
+        for r, o, _ in edges.get(t, []):
+            props = {"relation": {"const": r}, "other_type": {"const": o},
+                     "other_name": {"type": ["string", "null"]}, "negate": {"type": "boolean"}}
+            if depth == 1:                                        # the far end's own conditions; depth 2 ends here
+                props["where"] = {"anyOf": [{"type": "null"}, {
+                    "type": "object", "additionalProperties": False, "required": ["filters", "relations"],
+                    "properties": {"filters": filters(o), "relations": relations(o, 2)}}]}
+            items.append({"type": "object", "additionalProperties": False, "required": list(props), "properties": props})
+        return {"type": "array", "maxItems": 4, "items": {"anyOf": items}} if items else {"type": "array", "maxItems": 0}
+
     branches = []
     for t in ents:
-        rels = [{"type": "object", "additionalProperties": False,
-                 "required": ["relation", "other_type", "other_name", "negate"],
-                 "properties": {"relation": {"const": r}, "other_type": {"const": o},
-                                "other_name": {"type": ["string", "null"]}, "negate": {"type": "boolean"}}}
-                for r, o, _ in edges.get(t, [])]
         over = [a["name"] for a in attrs[t] if a["type"] in ("time", "quantity")] + sorted({o for _, o, _ in edges.get(t, [])})
         props = {
             "target_type": {"const": t},
-            "filters": {"type": "array", "maxItems": 4, "items": {
-                "type": "object", "additionalProperties": False, "required": ["attribute", "op", "value"],
-                "properties": {"attribute": {"enum": [a["name"] for a in attrs[t]]}, "op": {"enum": OPS},
-                               "value": {"type": ["string", "number"]}}}} if attrs[t] else {"type": "array", "maxItems": 0},
-            "relations": {"type": "array", "maxItems": 4, "items": {"anyOf": rels}} if rels else {"type": "array", "maxItems": 0},
+            "filters": filters(t),
+            "relations": relations(t, 1),
             "aggregate": {"enum": AGGS},
             "aggregate_over": {"enum": [None] + over},
         }
@@ -136,22 +150,32 @@ def documentation(types, guidance, ents, attrs, edges):
         L.append(f"  `{r}` means: {d}")
     L += ["", "QUERY GRAMMAR (answer with exactly one JSON object):",
           "- target_type: the kind of thing the question asks for.",
-          "- filters: conditions on the target's OWN attributes. op `eq` = equals, `contains` = the attribute's",
-          "  text mentions the value, `lt` / `gt` = earlier/smaller or later/larger than the value.",
-          "  Times are years as signed numbers: years B.C. are negative (318 B.C. = -318), A.D. positive.",
+          "- filters: conditions on the target's OWN attributes, or on `name` (the entity's own name).",
+          "  op `eq` = equals, `contains` = the attribute's text mentions the value, `lt` / `gt` =",
+          "  earlier/smaller or later/larger than the value. negate=true keeps the targets that do NOT",
+          "  meet the condition. Times are years as signed numbers: years B.C. are negative",
+          "  (318 B.C. = -318), A.D. positive.",
           "- relations: the target must (negate=false) or must not (negate=true) be linked by `relation`",
-          "  to an entity of `other_type` named `other_name` (null = to any such entity).",
+          "  to an entity of `other_type` named `other_name` (null = to any such entity) that also meets",
+          "  `where` (null = no further condition). `where` holds that linked entity's own filters and",
+          "  its own relations to named entities, so a relation can reach entities that are described",
+          "  rather than named.",
           "- aggregate: none = list every target that matches; count = how many targets match;",
           "  argmax / argmin = the matching target with the largest / smallest `aggregate_over`, which is",
           "  one of the target's time or quantity attributes, or a related type (= how many distinct",
-          "  linked entities of that type the target has).", "",
+          "  linked entities of that type the target has, counting only those that meet the `where` of",
+          "  the query's relation to that type).", "",
           "EXAMPLES (a different knowledge base: books, authors, libraries):",
           'Q: Which books printed before 1600 are held by the Bodleian?',
-          'A: {"target_type": "book", "filters": [{"attribute": "printed", "op": "lt", "value": 1600}], '
-          '"relations": [{"relation": "held_by", "other_type": "library", "other_name": "Bodleian", "negate": false}], '
-          '"aggregate": "none", "aggregate_over": null}',
+          'A: {"target_type": "book", "filters": [{"attribute": "printed", "op": "lt", "value": 1600, "negate": false}], '
+          '"relations": [{"relation": "held_by", "other_type": "library", "other_name": "Bodleian", "negate": false, '
+          '"where": null}], "aggregate": "none", "aggregate_over": null}',
           'Q: Which author has written the most books?',
-          'A: {"target_type": "author", "filters": [], "relations": [], "aggregate": "argmax", "aggregate_over": "book"}']
+          'A: {"target_type": "author", "filters": [], "relations": [], "aggregate": "argmax", "aggregate_over": "book"}',
+          'Q: Which authors wrote a book printed before 1500?',
+          'A: {"target_type": "author", "filters": [], "relations": [{"relation": "wrote", "other_type": "book", '
+          '"other_name": null, "negate": false, "where": {"filters": [{"attribute": "printed", "op": "lt", '
+          '"value": 1500, "negate": false}], "relations": []}}], "aggregate": "none", "aggregate_over": null}']
     return "\n".join(L)
 
 
@@ -290,8 +314,51 @@ class Executor:
             return interval_of(str(v)) if a in ("struck", "weight") and v is not None else v
         return None
 
+    def is_named(self, t, x, name):
+        if t == "hoard":
+            return x in self.hoard_groups(str(name))
+        if t == "mint":
+            return x in self.rec.labels(str(name))
+        return bool(rx(str(name)).search(fold((self.ents.get(x) or {}).get("canonical_name") or "")))
+
+    def candidates(self, t):
+        return {"hoard": list(self.rec.groups), "mint": list(self.mint_labels), "coin": list(self.coins),
+                "ruler": list(self.rulers)}[t]
+
+    def matches(self, t, x, filters, relations):
+        return all(self.keep(t, x, f) != f.get("negate", False) for f in filters) \
+            and all(self.holds(t, x, r) != r["negate"] for r in relations)
+
+    def select(self, t, name, where):
+        """The far-end entities of type t a relation may land on: named `name` (if given), meeting `where`."""
+        return [y for y in self.candidates(t) if (not name or self.is_named(t, y, name))
+                and self.matches(t, y, where["filters"], where["relations"])]
+
+    def holds(self, t, x, rel):
+        if not rel.get("where"):
+            return self.related(t, x, rel["relation"], rel["other_type"], rel["other_name"])
+        return any(self.link(t, x, rel["relation"], y) for y in self.select(rel["other_type"], rel["other_name"], rel["where"]))
+
+    def link(self, t, x, r, y):
+        """Is target x (of type t) linked to far-end entity y by r? One hop, one decider."""
+        rec = self.rec
+        in_hoard = lambda c, g: (self.coins[c].get("attributes") or {}).get("hoard") in self.group_ids(g)  # noqa: E731
+        mint_of = lambda c: rec.labels(rec._mint_of(self.coins[c]) or "")  # noqa: E731
+        ruler_of = lambda c: (self.coins[c].get("attributes") or {}).get("ruler")  # noqa: E731
+        if r == "holds_coins_of":
+            return rec.has(x, y) if t == "hoard" else rec.has(y, x)
+        if r == "coin.hoard":
+            return in_hoard(y, x) if t == "hoard" else in_hoard(x, y)
+        if r == "coin.mint":
+            return x in mint_of(y) if t == "mint" else y in mint_of(x)
+        if r == "coin.ruler":
+            return ruler_of(y) == x if t == "ruler" else ruler_of(x) == y
+        return False
+
     def keep(self, target, x, f):
         a, op, v = f["attribute"], f["op"], f["value"]
+        if a == "name":
+            return op in ("eq", "contains") and self.is_named(target, x, v)
         if target == "hoard" and a == "findspot":
             if op == "contains":
                 return self.rec.in_region(x, str(v))
@@ -309,9 +376,7 @@ class Executor:
         if q is None:
             return None
         t, rec = q["target_type"], self.rec
-        cands = {"hoard": list(rec.groups), "mint": list(self.mint_labels), "coin": list(self.coins), "ruler": list(self.rulers)}[t]
-        hit = [x for x in cands if all(self.keep(t, x, f) for f in q["filters"])
-               and all(self.related(t, x, r["relation"], r["other_type"], r["other_name"]) != r["negate"] for r in q["relations"])]
+        hit = [x for x in self.candidates(t) if self.matches(t, x, q["filters"], q["relations"])]
         name = (lambda x: rec.resolved[x]) if t == "hoard" else (lambda x: x) if t == "mint" else \
             (lambda x: f"{t}:{self.ents[x]['canonical_name']}")
         agg, over = q["aggregate"], q["aggregate_over"]
@@ -319,6 +384,10 @@ class Executor:
             return len(hit)
         if agg == "none" or over is None:
             return sorted({name(x) for x in hit}) if agg == "none" else None
+        # a count over a related type counts only the linked entities meeting that relation's `where`
+        scoped = [set(self.select(over, r["other_name"], r["where"])) for r in q["relations"]
+                  if r["other_type"] == over and r.get("where") and not r["negate"]]
+        scope = set.intersection(*scoped) if scoped else None
         if t == "hoard" and over == "buried":                    # k2_t0 Records.superlative, earliest / latest
             cand = [g for g in hit if rec.burial[g]]
             if not cand:
@@ -328,31 +397,23 @@ class Executor:
             win = sorted({rec.resolved[g] for g in cand if key(g) == best})
             return win[0] if len(win) == 1 else win
         if t == "hoard" and over == "mint":                      # k2_t0 hoard-most-mints
-            return rec._argmax({rec.resolved[g]: len(rec.members[g]) for g in hit}) if agg == "argmax" else \
-                self._argmin({rec.resolved[g]: len(rec.members[g]) for g in hit})
+            size = lambda g: len(rec.members[g] if scope is None else rec.members[g] & scope)  # noqa: E731
+            return rec._argmax({rec.resolved[g]: size(g) for g in hit}) if agg == "argmax" else \
+                self._argmin({rec.resolved[g]: size(g) for g in hit})
         if t == "mint" and over == "hoard":                      # k2_t0 mint-most-hoards
-            score = collections.Counter({m: sum(1 for g in rec.groups if rec.has(g, m)) for m in hit})
+            pool = rec.groups if scope is None else scope
+            score = collections.Counter({m: sum(1 for g in pool if rec.has(g, m)) for m in hit})
             return rec._argmax({m: v for m, v in score.items() if v}) if agg == "argmax" else self._argmin(dict(score))
         # any other (attribute or related type): generic, by the same tie rule
         def size(x):
             if over in {o for _, o, _ in EDGES.get(t, [])}:
                 rels = [r for r, o, _ in EDGES[t] if o == over]
-                pool = {"hoard": list(rec.groups), "mint": self.mint_labels, "coin": list(self.coins), "ruler": list(self.rulers)}[over]
-                return sum(1 for y in pool if any(self.related(over, y, r, t, None) and self._is(t, x, over, y, r) for r in rels))
+                pool = self.candidates(over) if scope is None else scope
+                return sum(1 for y in pool if any(self.related(over, y, r, t, None) and self.link(t, x, r, y) for r in rels))
             iv = self.attr(t, x, over)
             return (iv[1] if agg == "argmax" else iv[0]) if isinstance(iv, tuple) else None
         sc = {name(x): v for x in hit if (v := size(x)) is not None}
         return rec._argmax(sc) if agg == "argmax" else self._argmin(sc)
-
-    def _is(self, t, x, over, y, r):
-        """Is related-type entity y linked to target x by r? (used only by the generic argmax path)"""
-        if r == "holds_coins_of":
-            return self.rec.has(y, x) if t == "mint" else self.rec.has(x, y)
-        if r == "coin.hoard":
-            return (self.coins[y].get("attributes") or {}).get("hoard") in self.group_ids(x) if t == "hoard" else False
-        if r == "coin.mint":
-            return x in self.rec.labels(self.rec._mint_of(self.coins[y]) or "") if t == "mint" else False
-        return False
 
     @staticmethod
     def _argmin(score):
@@ -366,15 +427,23 @@ class Executor:
 # ── reference queries (instrument check only; never shown to the model) ────
 def reference(q):
     p, c = q["params"], q["class"]
-    hc = lambda m, neg=False: {"relation": "holds_coins_of", "other_type": "mint", "other_name": k2_bank.display_mint(m), "negate": neg}  # noqa: E731
-    region = lambda r: [{"attribute": "findspot", "op": "contains", "value": r}]  # noqa: E731
+    hc = lambda m, neg=False, inner=False: {"relation": "holds_coins_of", "other_type": "mint",  # noqa: E731
+                                            "other_name": k2_bank.display_mint(m), "negate": neg, **({} if inner else {"where": None})}
+    region = lambda r: [{"attribute": "findspot", "op": "contains", "value": r, "negate": False}]  # noqa: E731
+    to_hoards = lambda where: {"relation": "holds_coins_of", "other_type": "hoard", "other_name": None,  # noqa: E731
+                               "negate": False, "where": where}
     base = {"target_type": "hoard", "filters": [], "relations": [], "aggregate": "none", "aggregate_over": None}
     ms = p.get("mints", [])
     if c in ("intersection", "count"):
         return {**base, "relations": [hc(m) for m in ms], "aggregate": "count" if c == "count" else "none"}
+    if c == "co-occurrence":                                      # mints in a hoard that holds M, other than M
+        return {**base, "target_type": "mint",
+                "filters": [{"attribute": "name", "op": "eq", "value": k2_bank.display_mint(ms[0]), "negate": True}],
+                "relations": [to_hoards({"filters": [], "relations": [hc(ms[0], inner=True)]})]}
     if c == "constraint-date":
         way, y = p["burial"]
-        return {**base, "filters": [{"attribute": "buried", "op": "lt" if way == "before" else "gt", "value": -y}], "relations": [hc(ms[0])]}
+        return {**base, "filters": [{"attribute": "buried", "op": "lt" if way == "before" else "gt", "value": -y, "negate": False}],
+                "relations": [hc(ms[0])]}
     if c == "constraint-region":
         return {**base, "filters": region(p["region"]), "relations": [hc(ms[0])]}
     if c == "negation":
@@ -383,18 +452,19 @@ def reference(q):
         return {**base, "relations": [hc(ms[0]), hc(ms[1], True)]}
     if c == "superlative":
         if "mint-most-hoards" in q["id"]:
-            return None if p.get("region") else {**base, "target_type": "mint", "aggregate": "argmax", "aggregate_over": "hoard"}
+            rel = [to_hoards({"filters": region(p["region"]), "relations": []})] if p.get("region") else []
+            return {**base, "target_type": "mint", "relations": rel, "aggregate": "argmax", "aggregate_over": "hoard"}
         f = region(p["region"]) if p.get("region") else []
         if "hoard-most-mints" in q["id"]:
             return {**base, "filters": f, "aggregate": "argmax", "aggregate_over": "mint"}
         rel = [hc(p["mint"])] if p.get("mint") else []
         return {**base, "filters": f, "relations": rel, "aggregate": "argmin" if p["way"] == "earliest" else "argmax",
                 "aggregate_over": "buried"}
-    return None                                                   # co-occurrence: a two-hop join
+    return None                                                   # uncertainty: no attested case
 
 
-INEXPRESSIBLE = {"co-occurrence": "two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint",
-                 "superlative-region-mint": "a filter on the RELATED type (hoards found in R) while the target is mint"}
+# iteration 1 could not write these; iteration 2's `where` and filter `negate` express both
+INEXPRESSIBLE = {}
 
 
 # ── gold-complete records, from the bank's attested facts ──────────────────
@@ -426,7 +496,7 @@ def diagnose(q, model_q, ref):
     if model_q is None:
         return "invalid output after retry"
     if ref is None:
-        return "inexpressible: " + (INEXPRESSIBLE["co-occurrence"] if q["class"] == "co-occurrence" else INEXPRESSIBLE["superlative-region-mint"])
+        return "inexpressible: " + INEXPRESSIBLE.get(q["class"], "no reference query")
     why = []
     if model_q["target_type"] != ref["target_type"]:
         why.append(f"wrong target type ({model_q['target_type']} for {ref['target_type']})")
@@ -448,7 +518,17 @@ def diagnose(q, model_q, ref):
     for m in mr:
         if not any(near(m[2], x[2]) for x in rr) and not (not m[2] and any(m[0] == x[0] and m[1] == x[1] for x in rr)):
             why.append(f"extra relation ({m[0]} {m[2] or 'any'}{' NOT' if m[3] else ''})")
-    mf = {(f["attribute"], f["op"]) for f in model_q["filters"]}
+    for r in ref["relations"]:                                    # the far end's own conditions, one level down
+        if not r.get("where"):
+            continue
+        twin = [m for m in model_q["relations"] if (m["relation"], m["other_type"], m["negate"]) == (r["relation"], r["other_type"], r["negate"])]
+        if twin and not any(m.get("where") for m in twin):
+            why.append(f"where dropped on {r['relation']}->{r['other_type']}")
+        elif twin:
+            sub = lambda w: {**w, "target_type": r["other_type"], "aggregate": "none", "aggregate_over": None}  # noqa: E731
+            inner = diagnose(q, sub(next(m for m in twin if m.get("where"))["where"]), sub(r["where"]))
+            if inner not in ("same query as the reference, different answer", "redundant relation only"):
+                why.append(f"in where on {r['relation']}->{r['other_type']}: {inner}")
     for f in ref["filters"]:
         hit = [g for g in model_q["filters"] if g["attribute"] == f["attribute"]]
         if not hit:
@@ -456,6 +536,10 @@ def diagnose(q, model_q, ref):
             why.append(f"missing {f['attribute']} filter" + (f" (used {[(g['attribute'], g['op']) for g in other]})" if other else ""))
         elif hit[0]["op"] != f["op"]:
             why.append(f"{f['attribute']} op {hit[0]['op']} for {f['op']}")
+        elif hit[0].get("negate", False) != f.get("negate", False):
+            why.append(f"{f['attribute']} negation {'dropped' if f.get('negate') else 'spurious'}")
+        elif f["attribute"] == "name" and not near(fold(str(hit[0]["value"])), fold(str(f["value"]))):
+            why.append(f"name value {hit[0]['value']!r} for {f['value']!r}")
         elif f["attribute"] == "buried" and year(hit[0]["value"]) != f["value"]:
             why.append(f"buried value {hit[0]['value']!r} for {f['value']} (B.C. sign)")
         elif f["attribute"] == "findspot" and fold(str(hit[0]["value"])) != fold(f["value"]):

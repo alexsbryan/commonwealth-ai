@@ -17,10 +17,7 @@
   ],
   "outputs_failing_validation": 0
  },
- "inexpressible": {
-  "co-occurrence": "two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint",
-  "superlative-region-mint": "a filter on the RELATED type (hoards found in R) while the target is mint"
- },
+ "inexpressible": {},
  "instrument_checks": {
   "reference_reproduces_program": [],
   "program_on_gold_records_vs_gold": []
@@ -58,14 +55,14 @@
   },
   "constraint-region": {
    "n": 6,
-   "parse_agree": 0.833,
+   "parse_agree": 1.0,
    "parse_agree_non_vacuous": 0.333,
    "parse_agree_gold_records": 0.833,
    "expressible": 6,
    "query_correct": 0.833,
    "query_correct_of_expressible": 0.833,
    "coincidental_agreements": 0,
-   "end_to_end": 0.244,
+   "end_to_end": 0.133,
    "made_up": 0,
    "deterministic": 6,
    "records_ceiling": 0.133,
@@ -88,14 +85,14 @@
   },
   "superlative": {
    "n": 6,
-   "parse_agree": 0.667,
-   "parse_agree_non_vacuous": 0.333,
+   "parse_agree": 0.833,
+   "parse_agree_non_vacuous": 0.5,
    "parse_agree_gold_records": 0.833,
-   "expressible": 5,
-   "query_correct": 0.667,
-   "query_correct_of_expressible": 0.8,
-   "coincidental_agreements": 1,
-   "end_to_end": 0.333,
+   "expressible": 6,
+   "query_correct": 0.833,
+   "query_correct_of_expressible": 0.833,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.5,
    "made_up": 0,
    "deterministic": 6,
    "records_ceiling": 0.5,
@@ -103,14 +100,14 @@
   },
   "co-occurrence": {
    "n": 8,
-   "parse_agree": 0.25,
-   "parse_agree_non_vacuous": 0.25,
+   "parse_agree": 0.125,
+   "parse_agree_non_vacuous": 0.0,
    "parse_agree_gold_records": 0.0,
-   "expressible": 0,
+   "expressible": 8,
    "query_correct": 0.0,
-   "query_correct_of_expressible": null,
-   "coincidental_agreements": 2,
-   "end_to_end": 0.422,
+   "query_correct_of_expressible": 0.0,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.338,
    "made_up": 1,
    "deterministic": 8,
    "records_ceiling": 0.378,
@@ -133,14 +130,14 @@
   },
   "ALL": {
    "n": 48,
-   "parse_agree": 0.812,
-   "parse_agree_non_vacuous": 0.396,
+   "parse_agree": 0.833,
+   "parse_agree_non_vacuous": 0.375,
    "parse_agree_gold_records": 0.771,
-   "expressible": 39,
-   "query_correct": 0.75,
-   "query_correct_of_expressible": 0.923,
-   "coincidental_agreements": 3,
-   "end_to_end": 0.359,
+   "expressible": 48,
+   "query_correct": 0.771,
+   "query_correct_of_expressible": 0.771,
+   "coincidental_agreements": 0,
+   "end_to_end": 0.352,
    "made_up": 3,
    "deterministic": 48,
    "records_ceiling": 0.359,
@@ -165,11 +162,13 @@
        "required": [
         "attribute",
         "op",
-        "value"
+        "value",
+        "negate"
        ],
        "properties": {
         "attribute": {
          "enum": [
+          "name",
           "findspot",
           "found",
           "buried"
@@ -188,6 +187,9 @@
           "string",
           "number"
          ]
+        },
+        "negate": {
+         "type": "boolean"
         }
        }
       }
@@ -204,7 +206,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -221,6 +224,154 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name",
+                   "denomination",
+                   "metal",
+                   "weight",
+                   "struck"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.ruler"
+                   },
+                   "other_type": {
+                    "const": "ruler"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.mint"
+                   },
+                   "other_type": {
+                    "const": "mint"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.hoard"
+                   },
+                   "other_type": {
+                    "const": "hoard"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         },
@@ -231,7 +382,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -248,6 +400,123 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.mint"
+                   },
+                   "other_type": {
+                    "const": "coin"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "holds_coins_of"
+                   },
+                   "other_type": {
+                    "const": "hoard"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         }
@@ -296,11 +565,13 @@
        "required": [
         "attribute",
         "op",
-        "value"
+        "value",
+        "negate"
        ],
        "properties": {
         "attribute": {
          "enum": [
+          "name",
           "denomination",
           "metal",
           "weight",
@@ -320,6 +591,9 @@
           "string",
           "number"
          ]
+        },
+        "negate": {
+         "type": "boolean"
         }
        }
       }
@@ -336,7 +610,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -353,6 +628,96 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.ruler"
+                   },
+                   "other_type": {
+                    "const": "coin"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         },
@@ -363,7 +728,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -380,6 +746,123 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.mint"
+                   },
+                   "other_type": {
+                    "const": "coin"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "holds_coins_of"
+                   },
+                   "other_type": {
+                    "const": "hoard"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         },
@@ -390,7 +873,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -407,6 +891,126 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name",
+                   "findspot",
+                   "found",
+                   "buried"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.hoard"
+                   },
+                   "other_type": {
+                    "const": "coin"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "holds_coins_of"
+                   },
+                   "other_type": {
+                    "const": "mint"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         }
@@ -449,7 +1053,41 @@
      },
      "filters": {
       "type": "array",
-      "maxItems": 0
+      "maxItems": 4,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "attribute",
+        "op",
+        "value",
+        "negate"
+       ],
+       "properties": {
+        "attribute": {
+         "enum": [
+          "name"
+         ]
+        },
+        "op": {
+         "enum": [
+          "eq",
+          "lt",
+          "gt",
+          "contains"
+         ]
+        },
+        "value": {
+         "type": [
+          "string",
+          "number"
+         ]
+        },
+        "negate": {
+         "type": "boolean"
+        }
+       }
+      }
      },
      "relations": {
       "type": "array",
@@ -463,7 +1101,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -480,6 +1119,154 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name",
+                   "denomination",
+                   "metal",
+                   "weight",
+                   "struck"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.ruler"
+                   },
+                   "other_type": {
+                    "const": "ruler"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.mint"
+                   },
+                   "other_type": {
+                    "const": "mint"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.hoard"
+                   },
+                   "other_type": {
+                    "const": "hoard"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         }
@@ -518,7 +1305,41 @@
      },
      "filters": {
       "type": "array",
-      "maxItems": 0
+      "maxItems": 4,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "attribute",
+        "op",
+        "value",
+        "negate"
+       ],
+       "properties": {
+        "attribute": {
+         "enum": [
+          "name"
+         ]
+        },
+        "op": {
+         "enum": [
+          "eq",
+          "lt",
+          "gt",
+          "contains"
+         ]
+        },
+        "value": {
+         "type": [
+          "string",
+          "number"
+         ]
+        },
+        "negate": {
+         "type": "boolean"
+        }
+       }
+      }
      },
      "relations": {
       "type": "array",
@@ -532,7 +1353,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -549,6 +1371,154 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name",
+                   "denomination",
+                   "metal",
+                   "weight",
+                   "struck"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.ruler"
+                   },
+                   "other_type": {
+                    "const": "ruler"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.mint"
+                   },
+                   "other_type": {
+                    "const": "mint"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.hoard"
+                   },
+                   "other_type": {
+                    "const": "hoard"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         },
@@ -559,7 +1529,8 @@
           "relation",
           "other_type",
           "other_name",
-          "negate"
+          "negate",
+          "where"
          ],
          "properties": {
           "relation": {
@@ -576,6 +1547,126 @@
           },
           "negate": {
            "type": "boolean"
+          },
+          "where": {
+           "anyOf": [
+            {
+             "type": "null"
+            },
+            {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "filters",
+              "relations"
+             ],
+             "properties": {
+              "filters": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                 "attribute",
+                 "op",
+                 "value",
+                 "negate"
+                ],
+                "properties": {
+                 "attribute": {
+                  "enum": [
+                   "name",
+                   "findspot",
+                   "found",
+                   "buried"
+                  ]
+                 },
+                 "op": {
+                  "enum": [
+                   "eq",
+                   "lt",
+                   "gt",
+                   "contains"
+                  ]
+                 },
+                 "value": {
+                  "type": [
+                   "string",
+                   "number"
+                  ]
+                 },
+                 "negate": {
+                  "type": "boolean"
+                 }
+                }
+               }
+              },
+              "relations": {
+               "type": "array",
+               "maxItems": 4,
+               "items": {
+                "anyOf": [
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "coin.hoard"
+                   },
+                   "other_type": {
+                    "const": "coin"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 },
+                 {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                   "relation",
+                   "other_type",
+                   "other_name",
+                   "negate"
+                  ],
+                  "properties": {
+                   "relation": {
+                    "const": "holds_coins_of"
+                   },
+                   "other_type": {
+                    "const": "mint"
+                   },
+                   "other_name": {
+                    "type": [
+                     "string",
+                     "null"
+                    ]
+                   },
+                   "negate": {
+                    "type": "boolean"
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
           }
          }
         }
@@ -609,8 +1700,8 @@
   ]
  },
  "system": "You translate a question about a knowledge base into one typed query over its schema. Use only the types, attributes and relations the schema declares. Output only the JSON query.",
- "documentation": "KNOWLEDGE BASE SCHEMA\n\nThis corpus is numismatic scholarship on the coinage of Alexander the Great and the\nHellenistic kingdoms: hoard reports, mint studies and dating arguments. A hoard is a\ngroup of coins buried together and found together; the books name a hoard by where and\nwhen it was found (the Demanhur hoard, Asia Minor 1964, Armenak) and the later books add\nan IGCH number. A hoard report lists the coins the hoard held, mint by mint. Each coin or\ngroup of coins is a thing in its own right: the ruler in whose name it was struck, the\nmint that struck it, its denomination (stater, tetradrachm, drachm), metal, weight, when\nit was struck, and the hoard it came from when the text says so. A mint is a city where\ncoins were struck. A ruler is the king or dynast named on the coin. Attributions are\nclaims a scholar makes about a coin's mint or date, graded by the kind of evidence\noffered; a later book may dispute an earlier attribution, and the dispute is worth\nsurfacing.\n\nEntity types and their attributes:\n- hoard: A group of coins buried and found together, named by findspot and year of discovery: the Demanhur hoard, Asia Minor 1964.\n    findspot (text): the place where the hoard was found (a place name, region or country)\n    found (time): when the hoard was discovered (a year)\n    buried (time range): when the hoard was buried (a year, or a span of years)\n- coin: A coin type or group of coins: ruler, mint, denomination, metal, and the hoard it came from.\n    denomination (text): the coin's denomination (stater, tetradrachm, drachm ...)\n    metal (text, one of ['gold', 'silver', 'billon', 'copper']): the coin's metal\n    weight (quantity, unit g): the coin's weight\n    struck (time range): when the coin was struck (a year, or a span of years)\n- ruler:\n- mint: A city where coins were struck: Amphipolis, Babylon, Lampsacus.\n\nRelations (each usable from either end; `other_type` names the far end):\n- from a hoard: relation `coin.hoard`, other_type `coin` — that coin's hoard is this hoard\n- from a hoard: relation `holds_coins_of`, other_type `mint` — this hoard holds_coins_of that mint\n- from a coin: relation `coin.ruler`, other_type `ruler` — this coin's ruler is that ruler\n- from a coin: relation `coin.mint`, other_type `mint` — this coin's mint is that mint\n- from a coin: relation `coin.hoard`, other_type `hoard` — this coin's hoard is that hoard\n- from a ruler: relation `coin.ruler`, other_type `coin` — that coin's ruler is this ruler\n- from a mint: relation `coin.mint`, other_type `coin` — that coin's mint is this mint\n- from a mint: relation `holds_coins_of`, other_type `hoard` — that hoard holds_coins_of this mint\n  `holds_coins_of` means: The hoard contains coins struck at this mint. A hoard report lists its coins mint by mint; every mint named for a hoard is one of these, even when no single coin is described.\n\nQUERY GRAMMAR (answer with exactly one JSON object):\n- target_type: the kind of thing the question asks for.\n- filters: conditions on the target's OWN attributes. op `eq` = equals, `contains` = the attribute's\n  text mentions the value, `lt` / `gt` = earlier/smaller or later/larger than the value.\n  Times are years as signed numbers: years B.C. are negative (318 B.C. = -318), A.D. positive.\n- relations: the target must (negate=false) or must not (negate=true) be linked by `relation`\n  to an entity of `other_type` named `other_name` (null = to any such entity).\n- aggregate: none = list every target that matches; count = how many targets match;\n  argmax / argmin = the matching target with the largest / smallest `aggregate_over`, which is\n  one of the target's time or quantity attributes, or a related type (= how many distinct\n  linked entities of that type the target has).\n\nEXAMPLES (a different knowledge base: books, authors, libraries):\nQ: Which books printed before 1600 are held by the Bodleian?\nA: {\"target_type\": \"book\", \"filters\": [{\"attribute\": \"printed\", \"op\": \"lt\", \"value\": 1600}], \"relations\": [{\"relation\": \"held_by\", \"other_type\": \"library\", \"other_name\": \"Bodleian\", \"negate\": false}], \"aggregate\": \"none\", \"aggregate_over\": null}\nQ: Which author has written the most books?\nA: {\"target_type\": \"author\", \"filters\": [], \"relations\": [], \"aggregate\": \"argmax\", \"aggregate_over\": \"book\"}",
- "prompt_sha256": "6db7be62453449e6cf95b4b67ea9df61362a1d878a1156c3193c866e3f0e6d3c",
+ "documentation": "KNOWLEDGE BASE SCHEMA\n\nThis corpus is numismatic scholarship on the coinage of Alexander the Great and the\nHellenistic kingdoms: hoard reports, mint studies and dating arguments. A hoard is a\ngroup of coins buried together and found together; the books name a hoard by where and\nwhen it was found (the Demanhur hoard, Asia Minor 1964, Armenak) and the later books add\nan IGCH number. A hoard report lists the coins the hoard held, mint by mint. Each coin or\ngroup of coins is a thing in its own right: the ruler in whose name it was struck, the\nmint that struck it, its denomination (stater, tetradrachm, drachm), metal, weight, when\nit was struck, and the hoard it came from when the text says so. A mint is a city where\ncoins were struck. A ruler is the king or dynast named on the coin. Attributions are\nclaims a scholar makes about a coin's mint or date, graded by the kind of evidence\noffered; a later book may dispute an earlier attribution, and the dispute is worth\nsurfacing.\n\nEntity types and their attributes:\n- hoard: A group of coins buried and found together, named by findspot and year of discovery: the Demanhur hoard, Asia Minor 1964.\n    findspot (text): the place where the hoard was found (a place name, region or country)\n    found (time): when the hoard was discovered (a year)\n    buried (time range): when the hoard was buried (a year, or a span of years)\n- coin: A coin type or group of coins: ruler, mint, denomination, metal, and the hoard it came from.\n    denomination (text): the coin's denomination (stater, tetradrachm, drachm ...)\n    metal (text, one of ['gold', 'silver', 'billon', 'copper']): the coin's metal\n    weight (quantity, unit g): the coin's weight\n    struck (time range): when the coin was struck (a year, or a span of years)\n- ruler:\n- mint: A city where coins were struck: Amphipolis, Babylon, Lampsacus.\n\nRelations (each usable from either end; `other_type` names the far end):\n- from a hoard: relation `coin.hoard`, other_type `coin` — that coin's hoard is this hoard\n- from a hoard: relation `holds_coins_of`, other_type `mint` — this hoard holds_coins_of that mint\n- from a coin: relation `coin.ruler`, other_type `ruler` — this coin's ruler is that ruler\n- from a coin: relation `coin.mint`, other_type `mint` — this coin's mint is that mint\n- from a coin: relation `coin.hoard`, other_type `hoard` — this coin's hoard is that hoard\n- from a ruler: relation `coin.ruler`, other_type `coin` — that coin's ruler is this ruler\n- from a mint: relation `coin.mint`, other_type `coin` — that coin's mint is this mint\n- from a mint: relation `holds_coins_of`, other_type `hoard` — that hoard holds_coins_of this mint\n  `holds_coins_of` means: The hoard contains coins struck at this mint. A hoard report lists its coins mint by mint; every mint named for a hoard is one of these, even when no single coin is described.\n\nQUERY GRAMMAR (answer with exactly one JSON object):\n- target_type: the kind of thing the question asks for.\n- filters: conditions on the target's OWN attributes, or on `name` (the entity's own name).\n  op `eq` = equals, `contains` = the attribute's text mentions the value, `lt` / `gt` =\n  earlier/smaller or later/larger than the value. negate=true keeps the targets that do NOT\n  meet the condition. Times are years as signed numbers: years B.C. are negative\n  (318 B.C. = -318), A.D. positive.\n- relations: the target must (negate=false) or must not (negate=true) be linked by `relation`\n  to an entity of `other_type` named `other_name` (null = to any such entity) that also meets\n  `where` (null = no further condition). `where` holds that linked entity's own filters and\n  its own relations to named entities, so a relation can reach entities that are described\n  rather than named.\n- aggregate: none = list every target that matches; count = how many targets match;\n  argmax / argmin = the matching target with the largest / smallest `aggregate_over`, which is\n  one of the target's time or quantity attributes, or a related type (= how many distinct\n  linked entities of that type the target has, counting only those that meet the `where` of\n  the query's relation to that type).\n\nEXAMPLES (a different knowledge base: books, authors, libraries):\nQ: Which books printed before 1600 are held by the Bodleian?\nA: {\"target_type\": \"book\", \"filters\": [{\"attribute\": \"printed\", \"op\": \"lt\", \"value\": 1600, \"negate\": false}], \"relations\": [{\"relation\": \"held_by\", \"other_type\": \"library\", \"other_name\": \"Bodleian\", \"negate\": false, \"where\": null}], \"aggregate\": \"none\", \"aggregate_over\": null}\nQ: Which author has written the most books?\nA: {\"target_type\": \"author\", \"filters\": [], \"relations\": [], \"aggregate\": \"argmax\", \"aggregate_over\": \"book\"}\nQ: Which authors wrote a book printed before 1500?\nA: {\"target_type\": \"author\", \"filters\": [], \"relations\": [{\"relation\": \"wrote\", \"other_type\": \"book\", \"other_name\": null, \"negate\": false, \"where\": {\"filters\": [{\"attribute\": \"printed\", \"op\": \"lt\", \"value\": 1500, \"negate\": false}], \"relations\": []}}], \"aggregate\": \"none\", \"aggregate_over\": null}",
+ "prompt_sha256": "89e351d1e0f72b02101d1258d64addd86c2b3851ec71d2bc1a34226b06855a54",
  "questions": [
   {
    "id": "k2-int-lampsacus-miletus",
@@ -624,13 +1715,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -644,20 +1737,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 3.73,
+   "seconds": 4.6,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -667,13 +1762,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -747,13 +1844,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -767,20 +1866,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 3.66,
+   "seconds": 4.26,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -790,13 +1891,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -865,14 +1968,36 @@
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
-      "other_name": "Ake",
-      "negate": false
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "eq",
+         "value": "Ake",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
-      "other_name": "Sidon",
-      "negate": false
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "eq",
+         "value": "Sidon",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
@@ -886,20 +2011,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sidon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.36,
+   "seconds": 5.53,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -908,14 +2035,36 @@
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
-      "other_name": "Ake",
-      "negate": false
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "eq",
+         "value": "Ake",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
-      "other_name": "Sidon",
-      "negate": false
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "eq",
+         "value": "Sidon",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
@@ -961,13 +2110,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -981,20 +2132,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.39,
+   "seconds": 4.14,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1004,13 +2157,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1052,13 +2207,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Magnesia",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1072,20 +2229,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Magnesia",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.32,
+   "seconds": 4.21,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1095,13 +2254,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Magnesia",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1153,13 +2314,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Colophon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1173,20 +2336,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Colophon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.3,
+   "seconds": 4.23,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1196,13 +2361,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Colophon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1252,13 +2419,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1272,20 +2441,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 4.41,
+   "seconds": 4.25,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1295,13 +2466,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1341,13 +2514,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1361,20 +2536,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.29,
+   "seconds": 4.15,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1384,13 +2561,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1428,7 +2607,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1436,7 +2616,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1448,7 +2629,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1456,14 +2638,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 3.56,
+   "seconds": 4.18,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1471,7 +2654,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1479,7 +2663,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1519,7 +2704,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1527,7 +2713,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1539,7 +2726,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1547,14 +2735,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.2,
+   "seconds": 4.07,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1562,7 +2751,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1570,7 +2760,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1622,7 +2813,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1630,19 +2822,24 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.hoard",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.hoard",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": true
+        },
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
@@ -1654,7 +2851,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1662,14 +2860,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 3.45,
+   "seconds": 5.73,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1677,7 +2876,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1685,19 +2885,24 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.hoard",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.hoard",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": true
+        },
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
@@ -1722,7 +2927,7 @@
    "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "name dropped: holds_coins_of->mint with other_name null for 'ake'; extra relation (coin.hoard any); extra relation (coin.hoard any NOT)"
+   "diagnosis": "name dropped: holds_coins_of->mint with other_name null for 'ake'"
   },
   {
    "id": "k2-date-after310-cius",
@@ -1734,7 +2939,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1742,7 +2948,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1754,7 +2961,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1762,14 +2970,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.2,
+   "seconds": 4.09,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1777,7 +2986,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1785,7 +2995,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1823,7 +3034,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1831,7 +3043,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1843,7 +3056,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1851,14 +3065,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.22,
+   "seconds": 4.08,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1866,7 +3081,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1874,7 +3090,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1912,7 +3129,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1920,7 +3138,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Salamis",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -1932,7 +3151,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1940,14 +3160,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Salamis",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.22,
+   "seconds": 4.09,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -1955,7 +3176,8 @@
      {
       "attribute": "buried",
       "op": "lt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -1963,7 +3185,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Salamis",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2001,7 +3224,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -2009,7 +3233,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2021,7 +3246,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -2029,14 +3255,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.29,
+   "seconds": 4.53,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2044,7 +3271,8 @@
      {
       "attribute": "buried",
       "op": "gt",
-      "value": -310
+      "value": -310,
+      "negate": false
      }
     ],
     "relations": [
@@ -2052,7 +3280,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2104,7 +3333,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2112,7 +3342,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2124,7 +3355,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2132,14 +3364,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.18,
+   "seconds": 4.14,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2147,7 +3380,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2155,7 +3389,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2203,7 +3438,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2211,13 +3447,24 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.hoard",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        },
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": true
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
@@ -2229,7 +3476,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2237,14 +3485,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.96,
+   "seconds": 5.72,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2252,7 +3501,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2260,45 +3510,49 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.hoard",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        },
+        {
+         "relation": "coin.mint",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": true
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "executed": [
-    "igch1664",
-    "igch1668"
-   ],
+   "executed": [],
    "program": [],
-   "parse_agree": false,
-   "vacuous": false,
-   "executed_on_gold_records": [
-    "igch1664",
-    "igch1668",
-    "igch1678"
-   ],
+   "parse_agree": true,
+   "vacuous": true,
+   "executed_on_gold_records": [],
    "program_on_gold_records": [
     "igch1664",
     "igch1678"
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.6666666666666666,
+    "f1": 0.0,
     "precision": 1.0,
-    "recall": 0.5,
+    "recall": 0.0,
     "made_up": []
    },
    "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "name dropped: holds_coins_of->mint with other_name null for 'ake'; extra relation (coin.hoard any NOT)"
+   "diagnosis": "name dropped: holds_coins_of->mint with other_name null for 'ake'"
   },
   {
    "id": "k2-region-asia-minor-cius",
@@ -2310,7 +3564,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -2318,7 +3573,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2330,7 +3586,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -2338,14 +3595,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.21,
+   "seconds": 3.98,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2353,7 +3611,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -2361,7 +3620,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2399,7 +3659,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2407,7 +3668,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2419,7 +3681,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2427,14 +3690,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.25,
+   "seconds": 4.0,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2442,7 +3706,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -2450,7 +3715,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2488,7 +3754,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Peloponnese"
+      "value": "Peloponnese",
+      "negate": false
      }
     ],
     "relations": [
@@ -2496,7 +3763,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2508,7 +3776,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Peloponnese"
+      "value": "Peloponnese",
+      "negate": false
      }
     ],
     "relations": [
@@ -2516,14 +3785,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 4.15,
+   "seconds": 4.09,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2531,7 +3801,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Peloponnese"
+      "value": "Peloponnese",
+      "negate": false
      }
     ],
     "relations": [
@@ -2539,7 +3810,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2577,7 +3849,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -2585,7 +3858,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2597,7 +3871,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -2605,14 +3880,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.2,
+   "seconds": 4.14,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2620,7 +3896,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -2628,7 +3905,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -2678,7 +3956,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2692,14 +3971,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.67,
+   "seconds": 3.55,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2709,7 +3989,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Tarsus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2742,7 +4023,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2756,14 +4038,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 1.79,
+   "seconds": 3.36,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2773,7 +4056,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Cius",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2806,7 +4090,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2820,14 +4105,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 1.35,
+   "seconds": 3.37,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2837,7 +4123,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Myriandrus",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2870,7 +4157,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Salamis",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2884,14 +4172,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Salamis",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 1.74,
+   "seconds": 3.32,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2901,7 +4190,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Salamis",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2934,13 +4224,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sidon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -2954,20 +4246,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sidon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.4,
+   "seconds": 4.23,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -2977,13 +4271,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Ake",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sidon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "count",
@@ -3014,7 +4310,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3027,7 +4324,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3035,7 +4333,7 @@
     "aggregate_over": "buried"
    },
    "attempts": 1,
-   "seconds": 1.46,
+   "seconds": 3.2,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -3043,7 +4341,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3077,7 +4376,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sidon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "argmin",
@@ -3091,14 +4391,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sidon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "argmin",
     "aggregate_over": "buried"
    },
    "attempts": 1,
-   "seconds": 1.72,
+   "seconds": 3.39,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -3108,7 +4409,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sidon",
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "argmin",
@@ -3139,7 +4441,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3152,7 +4455,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3160,7 +4464,7 @@
     "aggregate_over": "mint"
    },
    "attempts": 1,
-   "seconds": 1.5,
+   "seconds": 3.13,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -3168,7 +4472,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3200,7 +4505,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3213,7 +4519,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3221,7 +4528,7 @@
     "aggregate_over": "buried"
    },
    "attempts": 1,
-   "seconds": 1.51,
+   "seconds": 3.1,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -3229,7 +4536,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [],
@@ -3263,7 +4571,8 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "argmax",
@@ -3277,7 +4586,7 @@
     "aggregate_over": "hoard"
    },
    "attempts": 1,
-   "seconds": 1.7,
+   "seconds": 3.44,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
@@ -3287,7 +4596,8 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": null
      }
     ],
     "aggregate": "argmax",
@@ -3320,21 +4630,50 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "contains",
+         "value": "Egypt",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      }
     ],
     "aggregate": "argmax",
     "aggregate_over": "hoard"
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "contains",
+         "value": "Egypt",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "argmax",
+    "aggregate_over": "hoard"
+   },
    "attempts": 1,
-   "seconds": 2.38,
+   "seconds": 4.47,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
@@ -3344,35 +4683,37 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
-     },
-     {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "contains",
+         "value": "Egypt",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      }
     ],
     "aggregate": "argmax",
     "aggregate_over": "hoard"
    },
-   "executed": [
-    "Colophon",
-    "Magnesia ad Maeandrum"
-   ],
+   "executed": "Lampsacus",
    "program": "Lampsacus",
-   "parse_agree": false,
+   "parse_agree": true,
    "vacuous": false,
    "executed_on_gold_records": "Lampsacus",
    "program_on_gold_records": "Lampsacus",
    "parse_agree_gold_records": true,
    "end_to_end": {
-    "exact": 0.0
+    "exact": 1.0
    },
-   "expressible": false,
-   "coincidental": true,
-   "query_correct": false,
-   "diagnosis": "inexpressible: a filter on the RELATED type (hoards found in R) while the target is mint"
+   "expressible": true,
+   "coincidental": false,
+   "query_correct": true,
+   "diagnosis": null
   },
   {
    "id": "k2-cooc-tarsus",
@@ -3383,47 +4724,108 @@
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": false
-     },
-     {
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Tarsus",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Tarsus",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 2.48,
+   "seconds": 5.48,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": false
-     },
-     {
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "executed": [
-    "Sidon"
+    "Colophon"
    ],
    "program": [],
    "parse_agree": false,
@@ -3440,15 +4842,15 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.25,
+    "f1": 0.0,
     "precision": 1.0,
-    "recall": 0.14285714285714285,
+    "recall": 0.0,
     "made_up": []
    },
-   "expressible": false,
+   "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to tarsus; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-cooc-myriandrus",
@@ -3459,57 +4861,124 @@
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": "Myriandrus",
-      "negate": true
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Myriandrus",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Myriandrus",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 4.73,
+   "seconds": 6.1,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": "Myriandrus",
-      "negate": true
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "executed": [
-    "Abydus",
-    "Amphipolis",
-    "Lampsacus",
-    "Miletus",
-    "Ptolemais-Ake",
-    "Sardis",
-    "Sidon"
-   ],
+   "executed": [],
    "program": [],
-   "parse_agree": false,
-   "vacuous": false,
+   "parse_agree": true,
+   "vacuous": true,
    "executed_on_gold_records": [],
    "program_on_gold_records": [
     "Lampsacus",
@@ -3521,15 +4990,15 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.9090909090909091,
+    "f1": 0.0,
     "precision": 1.0,
-    "recall": 0.8333333333333334,
+    "recall": 0.0,
     "made_up": []
    },
-   "expressible": false,
+   "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to myriandrus; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-cooc-miletus",
@@ -3540,52 +5009,123 @@
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
-      "other_name": "Miletus",
-      "negate": true
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Miletus",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Miletus",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 2.37,
+   "seconds": 6.15,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
-      "other_name": "Miletus",
-      "negate": true
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "executed": [
-    "Abydus",
-    "Amphipolis",
-    "Lampsacus",
-    "Ptolemais-Ake",
-    "Sardis",
-    "Sidon"
+    "Colophon",
+    "Miletus"
    ],
    "program": [
     "Abydus",
@@ -3616,15 +5156,17 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.6666666666666666,
-    "precision": 1.0,
-    "recall": 0.5,
-    "made_up": []
+    "f1": 0.16666666666666669,
+    "precision": 0.5,
+    "recall": 0.1,
+    "made_up": [
+     "Miletus"
+    ]
    },
-   "expressible": false,
+   "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to miletus; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-cooc-sidon",
@@ -3635,47 +5177,125 @@
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": false
-     },
-     {
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "eq",
+         "value": "Sidon",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Sidon",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Sidon",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 2.39,
+   "seconds": 6.18,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
     "filters": [],
     "relations": [
      {
-      "relation": "coin.mint",
-      "other_type": "coin",
-      "other_name": null,
-      "negate": false
-     },
-     {
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": true
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
+     },
+     {
+      "relation": "coin.mint",
+      "other_type": "coin",
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "eq",
+         "value": "Sidon",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "executed": [
-    "Sidon"
+    "Abydus",
+    "Colophon",
+    "Lampsacus",
+    "Miletus"
    ],
    "program": [],
    "parse_agree": false,
@@ -3695,17 +5315,15 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.0,
-    "precision": 0.0,
-    "recall": 0.0,
-    "made_up": [
-     "Sidon"
-    ]
+    "f1": 0.6,
+    "precision": 1.0,
+    "recall": 0.42857142857142855,
+    "made_up": []
    },
-   "expressible": false,
+   "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to sidon; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-cooc-ake",
@@ -3719,21 +5337,74 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
       "other_name": null,
-      "negate": true
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": "Ake",
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Ake",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Ake",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 2.37,
+   "seconds": 7.26,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
@@ -3743,21 +5414,45 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
       "other_name": null,
-      "negate": true
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": "Ake",
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "executed": [
+    "Abydus",
     "Colophon",
-    "Magnesia ad Maeandrum"
+    "Lampsacus",
+    "Miletus"
    ],
    "program": [
     "Abydus",
@@ -3770,24 +5465,7 @@
    ],
    "parse_agree": false,
    "vacuous": false,
-   "executed_on_gold_records": [
-    "Abydus",
-    "Amphipolis",
-    "Babylon",
-    "Cius",
-    "Colophon",
-    "Lampsacus",
-    "Magnesia ad Maeandrum",
-    "Miletus",
-    "Myriandrus",
-    "Pella",
-    "Ptolemais-Ake",
-    "Salamis",
-    "Sardis",
-    "Sidon",
-    "Tarsus",
-    "Teos"
-   ],
+   "executed_on_gold_records": [],
    "program_on_gold_records": [
     "Abydus",
     "Lampsacus",
@@ -3799,15 +5477,15 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.0,
+    "f1": 0.6,
     "precision": 1.0,
-    "recall": 0.0,
+    "recall": 0.42857142857142855,
     "made_up": []
    },
-   "expressible": false,
+   "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to ake; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-cooc-lampsacus",
@@ -3821,21 +5499,74 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
-      "other_name": "Lampsacus",
-      "negate": true
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Lampsacus",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Lampsacus",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 2.36,
+   "seconds": 6.66,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
@@ -3845,26 +5576,43 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
-      "other_name": "Lampsacus",
-      "negate": true
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "executed": [
-    "Abydus",
-    "Amphipolis",
     "Colophon",
-    "Magnesia ad Maeandrum",
-    "Miletus",
-    "Ptolemais-Ake",
-    "Sardis"
+    "Miletus"
    ],
    "program": [
     "Abydus",
@@ -3875,26 +5623,9 @@
     "Ptolemais-Ake",
     "Sardis"
    ],
-   "parse_agree": true,
+   "parse_agree": false,
    "vacuous": false,
-   "executed_on_gold_records": [
-    "Abydus",
-    "Amphipolis",
-    "Babylon",
-    "Cius",
-    "Colophon",
-    "Lampsacus",
-    "Magnesia ad Maeandrum",
-    "Miletus",
-    "Myriandrus",
-    "Pella",
-    "Ptolemais-Ake",
-    "Salamis",
-    "Sardis",
-    "Sidon",
-    "Tarsus",
-    "Teos"
-   ],
+   "executed_on_gold_records": [],
    "program_on_gold_records": [
     "Abydus",
     "Amphipolis",
@@ -3912,15 +5643,15 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.7499999999999999,
+    "f1": 0.33333333333333337,
     "precision": 1.0,
-    "recall": 0.6,
+    "recall": 0.2,
     "made_up": []
    },
-   "expressible": false,
-   "coincidental": true,
+   "expressible": true,
+   "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to lampsacus; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-cooc-salamis",
@@ -3934,21 +5665,74 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
       "other_name": null,
-      "negate": true
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": "Salamis",
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Salamis",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Salamis",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 2.37,
+   "seconds": 6.84,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
@@ -3958,43 +5742,50 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
       "other_name": null,
-      "negate": true
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.ruler",
+         "other_type": "ruler",
+         "other_name": "Salamis",
+         "negate": false
+        }
+       ]
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "executed": [
+    "Abydus",
     "Colophon",
-    "Magnesia ad Maeandrum"
+    "Lampsacus",
+    "Miletus"
    ],
    "program": [],
    "parse_agree": false,
    "vacuous": false,
-   "executed_on_gold_records": [
-    "Abydus",
-    "Amphipolis",
-    "Babylon",
-    "Cius",
-    "Colophon",
-    "Lampsacus",
-    "Magnesia ad Maeandrum",
-    "Miletus",
-    "Myriandrus",
-    "Pella",
-    "Ptolemais-Ake",
-    "Salamis",
-    "Sardis",
-    "Sidon",
-    "Tarsus",
-    "Teos"
-   ],
+   "executed_on_gold_records": [],
    "program_on_gold_records": [
     "Lampsacus",
     "Miletus",
@@ -4002,15 +5793,15 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.0,
+    "f1": 0.8,
     "precision": 1.0,
-    "recall": 0.0,
+    "recall": 0.6666666666666666,
     "made_up": []
    },
-   "expressible": false,
+   "expressible": true,
    "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to salamis; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-cooc-abydus",
@@ -4024,21 +5815,67 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
-      "other_name": "Abydus",
-      "negate": true
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
-   "reference": null,
+   "reference": {
+    "target_type": "mint",
+    "filters": [
+     {
+      "attribute": "name",
+      "op": "eq",
+      "value": "Abydus",
+      "negate": true
+     }
+    ],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "holds_coins_of",
+         "other_type": "mint",
+         "other_name": "Abydus",
+         "negate": false
+        }
+       ]
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
    "attempts": 1,
-   "seconds": 2.38,
+   "seconds": 6.97,
    "deterministic": true,
    "run2_query": {
     "target_type": "mint",
@@ -4048,26 +5885,35 @@
       "relation": "holds_coins_of",
       "other_type": "hoard",
       "other_name": null,
-      "negate": false
+      "negate": false,
+      "where": {
+       "filters": [],
+       "relations": [
+        {
+         "relation": "coin.hoard",
+         "other_type": "coin",
+         "other_name": null,
+         "negate": false
+        }
+       ]
+      }
      },
      {
       "relation": "coin.mint",
       "other_type": "coin",
-      "other_name": "Abydus",
-      "negate": true
+      "other_name": null,
+      "negate": true,
+      "where": {
+       "filters": [],
+       "relations": []
+      }
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "executed": [
-    "Amphipolis",
-    "Colophon",
-    "Lampsacus",
-    "Magnesia ad Maeandrum",
-    "Miletus",
-    "Ptolemais-Ake",
-    "Sardis"
+    "Colophon"
    ],
    "program": [
     "Amphipolis",
@@ -4078,26 +5924,9 @@
     "Ptolemais-Ake",
     "Sardis"
    ],
-   "parse_agree": true,
+   "parse_agree": false,
    "vacuous": false,
-   "executed_on_gold_records": [
-    "Abydus",
-    "Amphipolis",
-    "Babylon",
-    "Cius",
-    "Colophon",
-    "Lampsacus",
-    "Magnesia ad Maeandrum",
-    "Miletus",
-    "Myriandrus",
-    "Pella",
-    "Ptolemais-Ake",
-    "Salamis",
-    "Sardis",
-    "Sidon",
-    "Tarsus",
-    "Teos"
-   ],
+   "executed_on_gold_records": [],
    "program_on_gold_records": [
     "Amphipolis",
     "Babylon",
@@ -4114,15 +5943,15 @@
    ],
    "parse_agree_gold_records": false,
    "end_to_end": {
-    "f1": 0.8,
+    "f1": 0.19999999999999998,
     "precision": 1.0,
-    "recall": 0.6666666666666666,
+    "recall": 0.1111111111111111,
     "made_up": []
    },
-   "expressible": false,
-   "coincidental": true,
+   "expressible": true,
+   "coincidental": false,
    "query_correct": false,
-   "diagnosis": "inexpressible: two-hop join (mint <- hoard -> M): relations are one hop with a named endpoint"
+   "diagnosis": "in where on holds_coins_of->hoard: missing relation to abydus; extra relation (coin.hoard any); missing name filter"
   },
   {
    "id": "k2-neg-egypt-abydus",
@@ -4134,7 +5963,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -4142,7 +5972,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4154,7 +5985,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -4162,14 +5994,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.26,
+   "seconds": 7.01,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4177,7 +6010,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -4185,7 +6019,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4231,7 +6066,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -4239,7 +6075,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4251,7 +6088,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -4259,14 +6097,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.27,
+   "seconds": 5.44,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4274,7 +6113,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Egypt"
+      "value": "Egypt",
+      "negate": false
      }
     ],
     "relations": [
@@ -4282,7 +6122,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4324,7 +6165,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -4332,7 +6174,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4344,7 +6187,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -4352,14 +6196,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.26,
+   "seconds": 5.56,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4367,7 +6212,8 @@
      {
       "attribute": "findspot",
       "op": "contains",
-      "value": "Asia Minor"
+      "value": "Asia Minor",
+      "negate": false
      }
     ],
     "relations": [
@@ -4375,7 +6221,8 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4421,13 +6268,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4441,20 +6290,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.4,
+   "seconds": 5.33,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4464,13 +6315,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4532,13 +6385,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4552,20 +6407,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.4,
+   "seconds": 6.7,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4575,13 +6432,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Lampsacus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4641,13 +6500,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4661,20 +6522,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.4,
+   "seconds": 5.53,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4684,13 +6547,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Sardes",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4740,13 +6605,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4760,20 +6627,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.4,
+   "seconds": 5.83,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4783,13 +6652,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Abydus",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4839,13 +6710,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Colophon",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
@@ -4859,20 +6732,22 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Colophon",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
     "aggregate_over": null
    },
    "attempts": 1,
-   "seconds": 2.34,
+   "seconds": 6.28,
    "deterministic": true,
    "run2_query": {
     "target_type": "hoard",
@@ -4882,13 +6757,15 @@
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Miletus",
-      "negate": false
+      "negate": false,
+      "where": null
      },
      {
       "relation": "holds_coins_of",
       "other_type": "mint",
       "other_name": "Colophon",
-      "negate": true
+      "negate": true,
+      "where": null
      }
     ],
     "aggregate": "none",
