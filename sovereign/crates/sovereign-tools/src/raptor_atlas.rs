@@ -174,7 +174,9 @@ const SUMMARY_MAX_OUTPUT_TOKENS: u32 = 2048;
 /// 2026-10-03.1: a summary is embedded under its document's title header
 /// (`corpus_index::chunkers::title_headed`), so every tree before it carries
 /// bare summary vectors.
-pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-10-03.1";
+/// 2026-10-03.2: members are read in story order, each headed with its place
+/// in the work (`writer_members`).
+pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-10-03.2";
 
 /// How a node's summary text is produced (T1 P1.1).
 ///
@@ -431,6 +433,14 @@ async fn build_raptor_atlas_impl(
     if chunks.is_empty() {
         return Ok(Vec::new());
     }
+    // A passage's place in the work: its rank among the document's chunk ids
+    // (ingest order is reading order). Only one titled document is a work;
+    // chunks of several (the vault theme pass) get no position headers.
+    let places = doc_title.as_ref().map(|_| WorkPlaces::new(chunks));
+    tracing::debug!(
+        passages = places.as_ref().map(|p| p.passages),
+        "raptor_atlas: writer members carry their place in the work"
+    );
 
     // ── Checkpoint decide ────────────────────────────────────
     //
@@ -596,6 +606,12 @@ async fn build_raptor_atlas_impl(
                     .iter()
                     .filter_map(|&i| chunks.get(i).map(|c| c.content.clone()))
                     .collect(),
+                member_places: places.as_ref().map(|p| {
+                    inp.member_indices
+                        .iter()
+                        .filter_map(|&i| chunks.get(i).map(|c| p.span(&[c.chunk_id])))
+                        .collect()
+                }),
                 direct_member_chunk_ids: inp
                     .member_indices
                     .iter()
@@ -785,6 +801,12 @@ async fn build_raptor_atlas_impl(
                     .iter()
                     .map(|&i| current_layer[i].summary.clone())
                     .collect(),
+                member_places: places.as_ref().map(|p| {
+                    member_indices
+                        .iter()
+                        .map(|&i| p.span(&current_layer[i].evidence_chunk_ids))
+                        .collect()
+                }),
                 direct_member_chunk_ids: Vec::new(),
                 evidence_chunk_ids,
                 children_node_ids: children_ids,
@@ -985,6 +1007,9 @@ struct ClusterSummarizationInput {
     /// extractive mode those are themselves source sentences, so
     /// every level's summary stays verbatim source text.
     member_full_texts: Vec<String>,
+    /// Where each member sits in the work, aligned with `member_full_texts`.
+    /// `None` when the build is not over one document.
+    member_places: Option<Vec<MemberPlace>>,
     direct_member_chunk_ids: Vec<u32>,
     evidence_chunk_ids: Vec<u32>,
     children_node_ids: Vec<String>,
@@ -998,6 +1023,98 @@ struct ClusterSummarizationInput {
     correction_hint: Option<String>,
     /// The title the tree's chunks share; the summary is embedded under it.
     doc_title: Option<String>,
+}
+
+/// Each passage's 1-based rank among its document's chunk ids.
+struct WorkPlaces {
+    rank: std::collections::HashMap<u32, usize>,
+    passages: usize,
+}
+
+impl WorkPlaces {
+    fn new(chunks: &[ChunkInput]) -> Self {
+        let mut ids: Vec<u32> = chunks.iter().map(|c| c.chunk_id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let passages = ids.len();
+        let rank = ids
+            .into_iter()
+            .enumerate()
+            .map(|(i, id)| (id, i + 1))
+            .collect();
+        Self { rank, passages }
+    }
+
+    /// The span a member covers: one passage for a leaf, its subtree's
+    /// evidence for a child summary.
+    fn span(&self, chunk_ids: &[u32]) -> MemberPlace {
+        let (first, last, count) = chunk_ids
+            .iter()
+            .filter_map(|id| self.rank.get(id).copied())
+            .fold((usize::MAX, 0, 0), |(f, l, n), r| {
+                (f.min(r), l.max(r), n + 1)
+            });
+        MemberPlace {
+            first,
+            last,
+            count,
+            of: self.passages,
+        }
+    }
+}
+
+/// A writer member's place in the work: passages `first..=last`, `count` of
+/// the work's `of`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MemberPlace {
+    first: usize,
+    last: usize,
+    count: usize,
+    of: usize,
+}
+
+impl MemberPlace {
+    fn header(&self) -> String {
+        if self.count == 1 {
+            format!("passage {} of {}", self.first, self.of)
+        } else {
+            format!(
+                "passages {}-{}, {} of the work's {}",
+                self.first, self.last, self.count, self.of
+            )
+        }
+    }
+}
+
+/// The members as the writer and the verifier both read them. With places:
+/// in story order, each headed with where it sits in the work. A cluster
+/// draws passages from across a novel, and unlabelled they read as one scene
+/// (the pilot's Amsterdam household and its Arendal one came out as "Garvloit
+/// and his wife Marie Forstberg"). A child summary's header also says how much
+/// of the work it covers — the weight its parent should give it, where the
+/// pilot's root gave a two-passage digression half its length.
+fn writer_members(input: &ClusterSummarizationInput) -> Vec<String> {
+    let Some(places) = input.member_places.as_ref() else {
+        return input.member_full_texts.clone();
+    };
+    if places.len() != input.member_full_texts.len() {
+        tracing::warn!(
+            level = input.level,
+            places = places.len(),
+            members = input.member_full_texts.len(),
+            "raptor_atlas: member places misaligned with member texts; writing without them"
+        );
+        return input.member_full_texts.clone();
+    }
+    let mut order: Vec<usize> = (0..places.len()).collect();
+    order.sort_by_key(|&i| (places[i].first, places[i].last));
+    order
+        .into_iter()
+        .map(|i| match places[i].count {
+            0 => input.member_full_texts[i].clone(),
+            _ => format!("({}) {}", places[i].header(), input.member_full_texts[i]),
+        })
+        .collect()
 }
 
 /// Dispatch summarization for many clusters in parallel via
@@ -1061,7 +1178,7 @@ fn build_abstractive_request(
     // on the pilot tree, where 13 of 14 nodes fell to the extractive floor.
     let mut used = 0usize;
     let mut parts: Vec<String> = Vec::new();
-    for (i, text) in input.member_full_texts.iter().enumerate() {
+    for (i, text) in writer_members(input).iter().enumerate() {
         if !parts.is_empty() && used + text.len() > SUMMARY_INPUT_CHAR_BUDGET {
             tracing::warn!(
                 level = input.level,
@@ -1125,6 +1242,14 @@ fn build_abstractive_request(
         ""
     };
 
+    let place_block = if input.member_places.is_some() {
+        "The passages are given in the order they occur, each headed with its place in the \
+         work. Passages far apart are separate scenes: keep each event with the people its own \
+         passage names, and weigh each passage by how much of the work it covers.\n\n"
+    } else {
+        ""
+    };
+
     let prompt = format!(
         "You are summarizing a group of related passages from a {doc_type} document.\n\
          Write a summary of the passages, including as many key details as possible: a {cue}. \
@@ -1134,7 +1259,7 @@ fn build_abstractive_request(
          appear in the passages.\n\n\
          Respond with a single JSON object only:\n\
          {{\"summary\": \"<the summary, no quote marks>\", \"primary_entities\": [\"Name1\", \"Name2\"]}}\n\n\
-         {faithful_block}{correction_block}Passages:\n{body}\n\nJSON:",
+         {faithful_block}{correction_block}{place_block}Passages:\n{body}\n\nJSON:",
         doc_type = doc_type.label(),
         cue = doc_cue,
     );
@@ -1279,13 +1404,12 @@ async fn summarize_one_cluster_abstractive(
         // Stable per-cluster key → deterministic sampling across
         // re-runs and checkpoint resumes.
         let cluster_key = format!("{}:{:?}", input.level, input.evidence_chunk_ids);
+        // The judge reads what the writer read, place headers included: a
+        // summary that says "later" is checked against text that says so.
+        let members = writer_members(&input);
         if ctx.policy.selects(&cluster_key) {
             VerifyStats::bump(&ctx.stats.verified);
-            match ctx
-                .verifier
-                .verify(&parsed.summary, &input.member_full_texts)
-                .await
-            {
+            match ctx.verifier.verify(&parsed.summary, &members).await {
                 Some(v) if v.passed() => VerifyStats::bump(&ctx.stats.passed_first),
                 Some(first) => {
                     VerifyStats::bump(&ctx.stats.retried);
@@ -1297,6 +1421,11 @@ async fn summarize_one_cluster_abstractive(
                         vetoed = ?first.name_violations,
                         "raptor_atlas: summary failed verification; retrying with faithful prompt"
                     );
+                    tracing::debug!(
+                        level = input.level,
+                        rejected = %parsed.summary,
+                        "raptor_atlas: the summary the verifier rejected"
+                    );
                     let retry_req = build_abstractive_request(&input, &doc_type, true);
                     let retry_parsed =
                         match complete_after_sheds(inference, &retry_req, input.level).await {
@@ -1304,11 +1433,7 @@ async fn summarize_one_cluster_abstractive(
                             Err(_) => None,
                         };
                     match retry_parsed {
-                        Some((p2, m2)) => match ctx
-                            .verifier
-                            .verify(&p2.summary, &input.member_full_texts)
-                            .await
-                        {
+                        Some((p2, m2)) => match ctx.verifier.verify(&p2.summary, &members).await {
                             Some(v2) if v2.passed() => {
                                 VerifyStats::bump(&ctx.stats.passed_retry);
                                 parsed = p2;
@@ -1323,6 +1448,11 @@ async fn summarize_one_cluster_abstractive(
                                     whole = ?v2.whole_summary_violation,
                                     vetoed = ?v2.name_violations,
                                     "raptor_atlas: retry still unsupported; persisting extractive floor instead"
+                                );
+                                tracing::debug!(
+                                    level = input.level,
+                                    rejected = %p2.summary,
+                                    "raptor_atlas: the retry the verifier rejected"
                                 );
                                 return extract_one_cluster(inference, input).await;
                             }

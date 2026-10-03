@@ -312,6 +312,112 @@ fn the_summary_writer_reads_full_member_text() {
     );
 }
 
+/// A pilot-shaped cluster: two passages 159 apart, handed over out of story
+/// order, in a work whose chunk ids arrive unsorted.
+fn placed_test_input() -> ClusterSummarizationInput {
+    let chunk = |id: u32| ChunkInput {
+        chunk_id: id,
+        content: String::new(),
+        title: Some("pilot-and-his-wife".into()),
+    };
+    let work: Vec<ChunkInput> = (1..=244).rev().map(chunk).collect();
+    let places = WorkPlaces::new(&work);
+    let mut input = extractive_test_input();
+    input.member_full_texts = vec![
+        "At Amsterdam Elizabeth keeps house for the Garvloits.".into(),
+        "In Arendal Marie Forstberg receives the lieutenant.".into(),
+    ];
+    input.member_places = Some(vec![places.span(&[122]), places.span(&[41])]);
+    input
+}
+
+/// Unlabelled, a cluster's passages read as one scene: the pilot's writer
+/// merged the Amsterdam household (passage 122) with the Arendal one (41)
+/// into "Garvloit and his wife Marie Forstberg". Failing input: the writer
+/// reading members as given, `[0] <122> [1] <41>`, with no place.
+#[test]
+fn the_writer_reads_members_in_story_order_headed_with_their_place() {
+    let req = build_abstractive_request(&placed_test_input(), &DocumentTypeTag::Narrative, false);
+    let early = req
+        .prompt
+        .find("(passage 41 of 244) In Arendal")
+        .expect("passage 41 headed with its place");
+    let late = req
+        .prompt
+        .find("(passage 122 of 244) At Amsterdam")
+        .expect("passage 122 headed with its place");
+    assert!(early < late, "members are not in story order");
+}
+
+/// A child summary says how much of the work it covers. The pilot's root
+/// read a 242-passage child and a 2-passage digression unweighted and gave
+/// the digression half its length.
+#[test]
+fn a_child_summary_is_headed_with_how_much_of_the_work_it_covers() {
+    let work: Vec<ChunkInput> = (1..=244)
+        .map(|id| ChunkInput {
+            chunk_id: id,
+            content: String::new(),
+            title: None,
+        })
+        .collect();
+    let places = WorkPlaces::new(&work);
+    let digression = places.span(&[121, 123]);
+    assert_eq!(digression.header(), "passages 121-123, 2 of the work's 244");
+    let everything_else: Vec<u32> = (1..=244).filter(|id| *id != 121 && *id != 123).collect();
+    assert_eq!(
+        places.span(&everything_else).header(),
+        "passages 1-244, 242 of the work's 244"
+    );
+}
+
+/// Records the member texts it was asked to judge against.
+struct RecordingVerifier {
+    seen: std::sync::Mutex<Vec<Vec<String>>>,
+}
+
+#[async_trait]
+impl crate::summary_verify::SummaryVerifier for RecordingVerifier {
+    async fn verify(
+        &self,
+        _summary: &str,
+        member_texts: &[String],
+    ) -> Option<crate::summary_verify::SummaryVerdict> {
+        self.seen.lock().unwrap().push(member_texts.to_vec());
+        pass_verdict()
+    }
+}
+
+/// The judge reads what the writer read: a summary that places an event
+/// "later" is checked against text that carries the places. Failing input:
+/// the verifier handed the bare member texts.
+#[tokio::test]
+async fn the_verifier_reads_the_members_the_writer_read() {
+    let inference: Arc<dyn InferenceProvider> = Arc::new(OkLlmEmbedOk);
+    let verifier = Arc::new(RecordingVerifier {
+        seen: std::sync::Mutex::new(Vec::new()),
+    });
+    let ctx = Arc::new(crate::summary_verify::VerifyCtx {
+        verifier: verifier.clone(),
+        policy: crate::summary_verify::VerifyPolicy::On,
+        stats: Arc::new(crate::summary_verify::VerifyStats::default()),
+    });
+    let input = placed_test_input();
+    let written = writer_members(&input);
+    summarize_one_cluster(
+        &inference,
+        input,
+        DocumentTypeTag::Narrative,
+        SummaryMode::Abstractive,
+        Some(ctx),
+    )
+    .await
+    .expect("verified summary persists");
+    let seen = verifier.seen.lock().unwrap();
+    assert_eq!(seen.as_slice(), &[written.clone()]);
+    assert!(written[0].starts_with("(passage 41 of 244)"));
+}
+
 fn extractive_test_input() -> ClusterSummarizationInput {
     let anchor =
         "The anchor sentence describes the central theme of this cluster in detail.".to_string();
@@ -321,6 +427,7 @@ fn extractive_test_input() -> ClusterSummarizationInput {
         level: 0,
         member_descriptors: vec![anchor.clone(), aside.clone()],
         member_full_texts: vec![anchor, aside],
+        member_places: None,
         direct_member_chunk_ids: vec![1, 2],
         evidence_chunk_ids: vec![1, 2],
         children_node_ids: Vec::new(),
