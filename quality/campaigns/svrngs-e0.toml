@@ -1,17 +1,17 @@
 # Flight rules — read raw. Verdicts come from measurement rows, never prose here.
 #
-# svrngs E0: the bot, in the chat. docs/RING_SPEC.md Part I D7 "E0" is the
-# spec; its demos table is what this campaign is judged on. Runs on today's rail
-# and membership on the operator's computer: no phone, no new wire, no sandbox.
+# svrngs E0: the bot, in the chat. The svrngs repository's docs/DESIGN.md D7
+# "E0" is the spec; its demos table is what this campaign is judged on. One
+# svrngs process on the operator's computer: no iroh, no phone, no sandbox.
 id        = "svrngs-e0"
 objective = "Five people in a Discord channel who have never heard of svrngs split a pizza through the bot, with no app, no account and no key, and a friend gets their own group there from their own computer in fifteen minutes"
-spec      = "docs/RING_SPEC.md Part I: D7 E0 (units E0.1-E0.5 and its demos), D9 E0 bars, C5 the bridge, C11 setup"
+spec      = "the svrngs repository (~/dev/svrngs), docs/DESIGN.md: D7 E0 (units E0.1-E0.5 and its demos), D9 E0 bars, C5 the bridge, C11 setup. The code lands there; this file is the work queue for it"
 declared  = "2026-10-03"
 status    = "active"
 
 [predicate]
 statement = "On one computer, a Discord channel bound by `svrngs start` lets five people with no svrngs app, account or key add, confirm and settle an expense through the bot, every balance the bot posts equals the Expenses fold over the group's journal, the bridge executable imports no app code, and nothing a key wrote renders into the chat unless the chat wrote it"
-check     = "scripts/svrngs-e0-demo.sh verdict all"
+check     = "$HOME/dev/svrngs/scripts/e0-demo.sh verdict all"
 # The demo driver is OWED by rung e0-0. Until it exists every bar reads
 # could-not-judge, never a fabricated verdict (ARCH 5, ARCH 6).
 
@@ -20,7 +20,7 @@ id           = "n-plus-one"
 demo         = "Split the pizza: five strangers in Discord, one types the pizza, the others tap Confirm, the bot says who owes whom"
 rung         = "e0-3"
 one_line     = "CLAIM: four of five people new to svrngs, unassisted, settle an expense through the bot within three minutes of joining the channel, with zero account creations and zero key prompts"
-derives_from = "RING_SPEC Part I D9 E0 `N+1`; RING_ENTRY Bars 'The N+1 test'. Chat speakers act through the Bridge key with `on_behalf_of` (commonwealth-rail-core/src/lib.rs:455, built); no Discord code exists today (RING_SPEC Part II §3.7)."
+derives_from = "svrngs DESIGN D9 E0 `N+1`; RING_ENTRY Bars 'The N+1 test'. Chat speakers act through the Bridge key on behalf of their guest-book entry (DESIGN C2, C5); the idea is commonwealth-ai's `SignedOp.on_behalf_of` (commonwealth-rail-core/src/lib.rs:455), ported, not linked."
 floor        = 0.8
 floor_basis  = "structural: the N+1 bar's own threshold, four of five, set before any data (RING_ENTRY)"
 target       = 0.8
@@ -33,7 +33,7 @@ id           = "host-setup"
 demo         = "Your own group in fifteen minutes: a friend installs svrngs, pastes a Discord token, picks a channel, and their friends are settling up"
 rung         = "e0-5"
 one_line     = "CLAIM: three of four people, unassisted, go from install to a first chat act within fifteen minutes"
-derives_from = "RING_SPEC Part I C11 (five nominal steps) and D9 E0 `host-setup`; today's verbs are `svrn ring new|roster|show` (sovereign-cli-mesh/src/ring_cmd/mod.rs:70-73) and there is no `svrngs start`; the `svrngs` command is new, in `svrngs/` (RING_SPEC D2b)."
+derives_from = "svrngs DESIGN C11 (five nominal steps) and D9 E0 `host-setup`; commonwealth-ai's verbs are `svrn ring new|roster|show` (sovereign-cli-mesh/src/ring_cmd/mod.rs:70-73); `svrngs start` is new, in the svrngs repository."
 floor        = 0.75
 floor_basis  = "structural: the host-setup bar's own threshold, three of four (RING_SPEC D9)"
 target       = 0.75
@@ -45,7 +45,7 @@ status       = "open"
 id           = "double-confirm"
 one_line     = "CLAIM: a Confirm retried, including across a bridge restart, produces exactly one act"
 rung         = "e0-2"
-derives_from = "RING_SPEC Part I D9 E0 `double-confirm`; the interaction id rides in the payload and the fold takes it once (tension T24)."
+derives_from = "svrngs DESIGN D9 E0 `double-confirm`; the interaction id rides in the payload and the fold takes it once (tension T24)."
 floor        = 1.0
 floor_basis  = "structural: one act per interaction id or the bar is not met"
 target       = 1.0
@@ -57,7 +57,7 @@ status       = "open"
 id           = "removal-latency"
 one_line     = "CLAIM: someone banned in the chat cannot have an act admitted sixty seconds after the ban"
 rung         = "e0-1"
-derives_from = "RING_ENTRY Bars 'Removal latency'; RING_SPEC Part I D9 E0; the guest book is keyed by Discord user id and a ban removes from it (C5)."
+derives_from = "RING_ENTRY Bars 'Removal latency'; svrngs DESIGN D9 E0; the guest book is keyed by Discord user id and a ban removes from it (C5)."
 floor        = 1.0
 floor_basis  = "structural: watched failing first with the bridge's leave handler disabled; any admitted act past sixty seconds is 0"
 target       = 1.0
@@ -69,7 +69,7 @@ status       = "open"
 id           = "bridge-holds-no-app"
 one_line     = "CLAIM: the bridge executable imports no app module; app code runs only in cw-rails' handler runner"
 rung         = "e0-1"
-derives_from = "RING_SPEC Part I C5 ('It never loads app code') and D9 E0 `bridge-holds-no-app`."
+derives_from = "svrngs DESIGN C5 ('It never loads app code') and D9 E0 `bridge-holds-no-app`."
 floor        = 1.0
 floor_basis  = "structural: zero app imports in the bridge's dependency graph, watched failing on a planted import"
 target       = 1.0
@@ -81,7 +81,7 @@ status       = "open"
 id           = "origin-gate"
 one_line     = "CLAIM: nothing written in the group by a key renders into the chat unless the chat wrote it; a planted violation fails the build"
 rung         = "e0-4"
-derives_from = "RING_ENTRY Bars 'The origin gate' and §3 (the information-flow label); RING_SPEC Part I D9 E0 `origin-gate`."
+derives_from = "RING_ENTRY Bars 'The origin gate' and §3 (the information-flow label); svrngs DESIGN D9 E0 `origin-gate`."
 floor        = 1.0
 floor_basis  = "structural: zero violations, and the planted one must fail the build"
 target       = 1.0
@@ -93,7 +93,7 @@ status       = "open"
 id           = "five-laws"
 one_line     = "CLAIM: Expenses' reducer holds determinism, environment independence, non-interference, idempotence, totality and no module globals"
 rung         = "e0-3"
-derives_from = "RING_APP_LIBRARY §4 (the five laws); RING_SPEC Part I C12 (the sixth) and D9 E0 `five-laws`; today's three copies of expenses.js (sovereign/apps/ring-doc, ring_cmd/templates, My-doc) become one."
+derives_from = "RING_APP_LIBRARY §4 (the five laws); svrngs DESIGN C12 (the sixth) and D9 E0 `five-laws`; one expenses.js in svrngs' apps/expenses, ported from commonwealth-ai's three copies (sovereign/apps/ring-doc, ring_cmd/templates, My-doc)."
 floor        = 1.0
 floor_basis  = "structural: every law holds on the golden journals, watched failing on a reducer reading Date.now()"
 target       = 1.0
@@ -105,7 +105,7 @@ status       = "open"
 id           = "plain-words"
 one_line     = "CLAIM: an allowlist covers the bot's greeting and replies, setup output and the install page, and no person-facing string says ring, member, guest, key, sync, journal, host or relay"
 rung         = "e0-5"
-derives_from = "RING_SPEC Part I D0 ('No universe to explain') and D9 `plain-words`."
+derives_from = "svrngs DESIGN D0 ('No universe to explain') and D9 `plain-words`."
 floor        = 1.0
 floor_basis  = "structural: zero listed words outside the allowlist, watched failing on 'ring' in the greeting"
 target       = 1.0
