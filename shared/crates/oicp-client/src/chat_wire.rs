@@ -80,6 +80,10 @@ pub(crate) fn write_structured_output(
                 None => body["tools"] = json!([function]),
             }
             body["tool_choice"] = if mode == StructuredOutputMode::ToolUseForced {
+                // A forced call and thinking do not ride together: DeepSeek
+                // answers 400 and Anthropic refuses the pair. Every spelling
+                // off, whatever the request asked for.
+                write_thinking(body, Some(0), Some(false));
                 json!({"type": "function", "function": {"name": name}})
             } else {
                 json!("auto")
@@ -359,6 +363,24 @@ mod tests {
         assert_eq!(
             body["tool_choice"],
             json!({"type": "function", "function": {"name": "s"}})
+        );
+    }
+
+    /// THE FAILING INPUT: DeepSeek answers a forced `tool_choice` in thinking
+    /// mode with 400 ("Thinking mode does not support this tool_choice"), and
+    /// Anthropic's API refuses the same pair. A schema forced as a function
+    /// therefore goes out with thinking off in every spelling, whatever the
+    /// request asked for.
+    #[test]
+    fn a_forced_function_turns_thinking_off() {
+        let mut body = json!({});
+        write_thinking(&mut body, Some(2048), Some(true));
+        write_structured_output(&mut body, &schema(), StructuredOutputMode::ToolUseForced);
+        assert_eq!(body["thinking"], json!({"type": "disabled"}));
+        assert_eq!(body["think_budget"], json!(0));
+        assert_eq!(
+            body["chat_template_kwargs"]["enable_thinking"],
+            json!(false)
         );
     }
 
