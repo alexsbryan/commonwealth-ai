@@ -1,0 +1,1215 @@
+{
+ "corpus": "ft-ans-dev-b",
+ "cli": "sovereign",
+ "agree": 38,
+ "total": 48,
+ "agree_product_shaped": 48,
+ "per_class": {
+  "intersection": {
+   "agree": 6,
+   "total": 8
+  },
+  "constraint-date": {
+   "agree": 7,
+   "total": 7
+  },
+  "constraint-region": {
+   "agree": 6,
+   "total": 6
+  },
+  "count": {
+   "agree": 5,
+   "total": 5
+  },
+  "superlative": {
+   "agree": 6,
+   "total": 6
+  },
+  "co-occurrence": {
+   "agree": 4,
+   "total": 8
+  },
+  "negation": {
+   "agree": 4,
+   "total": 8
+  }
+ },
+ "causes": {
+  "coin-composition": 10,
+  "igch-group": 2
+ },
+ "questions": [
+  {
+   "id": "k2-int-lampsacus-miletus",
+   "class": "intersection",
+   "agree": false,
+   "python": [
+    "igch0410",
+    "igch0774",
+    "igch0866",
+    "igch1437",
+    "igch1444",
+    "igch1472",
+    "unresolved:Asia Minor 1964"
+   ],
+   "rust": [
+    "igch0410",
+    "igch0774",
+    "igch0866",
+    "igch1437",
+    "igch1444",
+    "igch1472"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Larnaca hoard",
+    "Gîldău hoard",
+    "Anadol (IGCH 866)",
+    "Paeonia hoard",
+    "Asia Minor 1961 (IGCH 1444)",
+    "Asia Minor 1964 (IGCH 1437)"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "igch0410",
+    "igch0774",
+    "igch0866",
+    "igch1437",
+    "igch1444",
+    "igch1472"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  },
+  {
+   "id": "k2-int-miletus-sardes",
+   "class": "intersection",
+   "agree": false,
+   "python": [
+    "igch0410",
+    "igch0866",
+    "igch1437",
+    "igch1441",
+    "igch1444",
+    "igch1472",
+    "igch1516",
+    "igch1670",
+    "unresolved:Asia Minor 1964"
+   ],
+   "rust": [
+    "igch0410",
+    "igch0866",
+    "igch1437",
+    "igch1441",
+    "igch1444",
+    "igch1472",
+    "igch1516",
+    "igch1670"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Larnaca hoard",
+    "Asia Minor 1964 (IGCH 1441)",
+    "Anadol (IGCH 866)",
+    "Paeonia hoard",
+    "Aleppo Hoard",
+    "Asia Minor 1961 (IGCH 1444)",
+    "Asia Minor 1964 (IGCH 1437)",
+    "Kuft Hoard"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "igch0410",
+    "igch0866",
+    "igch1437",
+    "igch1441",
+    "igch1444",
+    "igch1472",
+    "igch1516",
+    "igch1670"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  },
+  {
+   "id": "k2-int-ake-sidon",
+   "class": "intersection",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Sidon' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-int-lampsacus-tarsus",
+   "class": "intersection",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Tarsus' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-int-abydus-magnesia",
+   "class": "intersection",
+   "agree": true,
+   "python": [
+    "igch0410",
+    "igch0866",
+    "igch1437",
+    "igch1444"
+   ],
+   "rust": [
+    "igch0410",
+    "igch0866",
+    "igch1437",
+    "igch1444"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Anadol (IGCH 866)",
+    "Paeonia hoard",
+    "Asia Minor 1961 (IGCH 1444)",
+    "Asia Minor 1964 (IGCH 1437)"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "igch0410",
+    "igch0866",
+    "igch1437",
+    "igch1444"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-int-abydus-colophon",
+   "class": "intersection",
+   "agree": true,
+   "python": [
+    "igch0866",
+    "igch1437",
+    "igch1444"
+   ],
+   "rust": [
+    "igch0866",
+    "igch1437",
+    "igch1444"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Anadol (IGCH 866)",
+    "Asia Minor 1961 (IGCH 1444)",
+    "Asia Minor 1964 (IGCH 1437)"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "igch0866",
+    "igch1437",
+    "igch1444"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-int-abydus-cius",
+   "class": "intersection",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Cius' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-int-ake-tarsus",
+   "class": "intersection",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Tarsus' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-date-before310-tarsus",
+   "class": "constraint-date",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Tarsus' names no mint atom in this atlas; the constraint is judged on that.",
+    "23 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-date-after310-abydus",
+   "class": "constraint-date",
+   "agree": true,
+   "python": [
+    "igch1472"
+   ],
+   "rust": [
+    "igch1472"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Larnaca hoard"
+   ],
+   "rust_notes": [
+    "23 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "python_product_shaped": [
+    "igch1472"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-date-after310-ake",
+   "class": "constraint-date",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "23 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-date-after310-cius",
+   "class": "constraint-date",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Cius' names no mint atom in this atlas; the constraint is judged on that.",
+    "23 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-date-before310-myriandrus",
+   "class": "constraint-date",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Myriandrus' names no mint atom in this atlas; the constraint is judged on that.",
+    "23 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-date-before310-salamis",
+   "class": "constraint-date",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Salamis' names no mint atom in this atlas; the constraint is judged on that.",
+    "23 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-date-after310-miletus",
+   "class": "constraint-date",
+   "agree": true,
+   "python": [
+    "igch1472"
+   ],
+   "rust": [
+    "igch1472"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Larnaca hoard"
+   ],
+   "rust_notes": [
+    "23 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "python_product_shaped": [
+    "igch1472"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-region-egypt-lampsacus",
+   "class": "constraint-region",
+   "agree": true,
+   "python": [
+    "igch1664",
+    "igch1668"
+   ],
+   "rust": [
+    "igch1664",
+    "igch1668"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Demanhur hoard",
+    "Egypt 1912: IGCH 1668"
+   ],
+   "rust_notes": [
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [
+    "igch1664",
+    "igch1668"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-region-egypt-ake",
+   "class": "constraint-region",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-region-asia-minor-cius",
+   "class": "constraint-region",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Cius' names no mint atom in this atlas; the constraint is judged on that.",
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-region-egypt-myriandrus",
+   "class": "constraint-region",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Myriandrus' names no mint atom in this atlas; the constraint is judged on that.",
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-region-peloponnese-lampsacus",
+   "class": "constraint-region",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-region-asia-minor-abydus",
+   "class": "constraint-region",
+   "agree": true,
+   "python": [
+    "igch1437",
+    "igch1438",
+    "igch1444",
+    "unresolved:Asia Minor 1964"
+   ],
+   "rust": [
+    "igch1437",
+    "igch1438",
+    "igch1444",
+    "unresolved:Asia Minor 1964"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Asia Minor 1961 (IGCH 1444)",
+    "Asia Minor 1964 (IGCH 1437)",
+    "Asia Minor 1964",
+    "Asia Minor 1964: IGCH 1438"
+   ],
+   "rust_notes": [
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [
+    "igch1437",
+    "igch1438",
+    "igch1444",
+    "unresolved:Asia Minor 1964"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-count-tarsus",
+   "class": "count",
+   "agree": true,
+   "python": 0,
+   "rust": 0,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Tarsus' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": 0,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-count-cius",
+   "class": "count",
+   "agree": true,
+   "python": 0,
+   "rust": 0,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Cius' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": 0,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-count-myriandrus",
+   "class": "count",
+   "agree": true,
+   "python": 0,
+   "rust": 0,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Myriandrus' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": 0,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-count-salamis",
+   "class": "count",
+   "agree": true,
+   "python": 0,
+   "rust": 0,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Salamis' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": 0,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-count-ake-sidon",
+   "class": "count",
+   "agree": true,
+   "python": 0,
+   "rust": 0,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Sidon' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": 0,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-sup-earliest-egypt",
+   "class": "superlative",
+   "agree": true,
+   "python": null,
+   "rust": null,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "2 matching hoard atom(s) carry no readable buried, so were not ranked.",
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": null,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-sup-earliest-sidon",
+   "class": "superlative",
+   "agree": true,
+   "python": null,
+   "rust": null,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Sidon' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": null,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-sup-hoard-most-mints-egypt",
+   "class": "superlative",
+   "agree": true,
+   "python": "igch1664",
+   "rust": "igch1664",
+   "exit": 0,
+   "rust_rows": [
+    "Demanhur hoard"
+   ],
+   "rust_notes": [
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": "igch1664",
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-sup-latest-egypt",
+   "class": "superlative",
+   "agree": true,
+   "python": null,
+   "rust": null,
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "2 matching hoard atom(s) carry no readable buried, so were not ranked.",
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": null,
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-sup-mint-most-hoards",
+   "class": "superlative",
+   "agree": true,
+   "python": "Lampsacus",
+   "rust": "Lampsacus",
+   "exit": 0,
+   "rust_rows": [
+    "Lampsacus"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": "Lampsacus",
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-sup-mint-most-hoards-egypt",
+   "class": "superlative",
+   "agree": true,
+   "python": "Lampsacus",
+   "rust": "Lampsacus",
+   "exit": 0,
+   "rust_rows": [
+    "Lampsacus"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": "Lampsacus",
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-cooc-tarsus",
+   "class": "co-occurrence",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Tarsus' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-cooc-myriandrus",
+   "class": "co-occurrence",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Myriandrus' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-cooc-miletus",
+   "class": "co-occurrence",
+   "agree": false,
+   "python": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Pella",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Sidon"
+   ],
+   "rust": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Lampsacus",
+    "Abydus",
+    "Sardes",
+    "Magnesia",
+    "Colophon",
+    "Amphipolis",
+    "Ake"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  },
+  {
+   "id": "k2-cooc-sidon",
+   "class": "co-occurrence",
+   "agree": false,
+   "python": [
+    "Abydus",
+    "Amphipolis",
+    "Lampsacus",
+    "Miletus",
+    "Pella",
+    "Sardis"
+   ],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Sidon' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  },
+  {
+   "id": "k2-cooc-ake",
+   "class": "co-occurrence",
+   "agree": true,
+   "python": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Sardis"
+   ],
+   "rust": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Sardis"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Lampsacus",
+    "Abydus",
+    "Miletus",
+    "Sardes",
+    "Magnesia",
+    "Colophon",
+    "Amphipolis"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Sardis"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-cooc-lampsacus",
+   "class": "co-occurrence",
+   "agree": false,
+   "python": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Sidon"
+   ],
+   "rust": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Abydus",
+    "Miletus",
+    "Sardes",
+    "Magnesia",
+    "Colophon",
+    "Amphipolis",
+    "Ake"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  },
+  {
+   "id": "k2-cooc-salamis",
+   "class": "co-occurrence",
+   "agree": true,
+   "python": [],
+   "rust": [],
+   "exit": 0,
+   "rust_rows": [],
+   "rust_notes": [
+    "'Salamis' names no mint atom in this atlas; the constraint is judged on that."
+   ],
+   "python_product_shaped": [],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-cooc-abydus",
+   "class": "co-occurrence",
+   "agree": false,
+   "python": [
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Pella",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Sidon"
+   ],
+   "rust": [
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Lampsacus",
+    "Miletus",
+    "Sardes",
+    "Magnesia",
+    "Colophon",
+    "Amphipolis",
+    "Ake"
+   ],
+   "rust_notes": [],
+   "python_product_shaped": [
+    "Amphipolis",
+    "Colophon",
+    "Lampsacus",
+    "Magnesia ad Maeandrum",
+    "Miletus",
+    "Ptolemais-Ake",
+    "Sardis"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  },
+  {
+   "id": "k2-neg-egypt-abydus",
+   "class": "negation",
+   "agree": true,
+   "python": [
+    "igch1668"
+   ],
+   "rust": [
+    "igch1668"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Egypt 1912: IGCH 1668"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent.",
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [
+    "igch1668"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-neg-egypt-miletus",
+   "class": "negation",
+   "agree": true,
+   "python": [
+    "igch1664",
+    "igch1668"
+   ],
+   "rust": [
+    "igch1664",
+    "igch1668"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Demanhur hoard",
+    "Egypt 1912: IGCH 1668"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent.",
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [
+    "igch1664",
+    "igch1668"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-neg-asia-minor-miletus",
+   "class": "negation",
+   "agree": false,
+   "python": [
+    "igch1438"
+   ],
+   "rust": [
+    "igch1438",
+    "unresolved:Asia Minor 1964"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Asia Minor 1964",
+    "Asia Minor 1964: IGCH 1438"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent.",
+    "2 hoard atom(s) set aside: findspot unset or unreadable."
+   ],
+   "python_product_shaped": [
+    "igch1438",
+    "unresolved:Asia Minor 1964"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  },
+  {
+   "id": "k2-neg-lampsacus-not-sardes",
+   "class": "negation",
+   "agree": false,
+   "python": [
+    "igch0176",
+    "igch0774",
+    "igch0958",
+    "igch1438",
+    "igch1516",
+    "igch1664",
+    "igch1668",
+    "igch1670",
+    "igch1678"
+   ],
+   "rust": [
+    "igch0176",
+    "igch0774",
+    "igch0958",
+    "igch1438",
+    "igch1444",
+    "igch1516",
+    "igch1664",
+    "igch1668",
+    "igch1670",
+    "igch1678",
+    "unresolved:Asia Minor 1964"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Demanhur hoard",
+    "Gîldău hoard",
+    "Phacous hoard",
+    "Mărăşeşti hoard",
+    "Aleppo: IGCH 1516; Sardes and Miletus hoard",
+    "Asia Minor 1961: IGCH 1444; Sardes and Miletus",
+    "Asia Minor 1964",
+    "Asia Minor 1964: IGCH 1438",
+    "Egypt 1912: IGCH 1668",
+    "Kuft: IGCH 1670",
+    "IGCH 176"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent."
+   ],
+   "python_product_shaped": [
+    "igch0176",
+    "igch0774",
+    "igch0958",
+    "igch1438",
+    "igch1444",
+    "igch1516",
+    "igch1664",
+    "igch1668",
+    "igch1670",
+    "igch1678",
+    "unresolved:Asia Minor 1964"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition",
+    "igch-group"
+   ]
+  },
+  {
+   "id": "k2-neg-lampsacus-not-abydus",
+   "class": "negation",
+   "agree": true,
+   "python": [
+    "igch0176",
+    "igch0774",
+    "igch1668",
+    "igch1670",
+    "igch1678"
+   ],
+   "rust": [
+    "igch0176",
+    "igch0774",
+    "igch1668",
+    "igch1670",
+    "igch1678"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Gîldău hoard",
+    "Phacous hoard",
+    "Egypt 1912: IGCH 1668",
+    "Kuft: IGCH 1670",
+    "IGCH 176"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent."
+   ],
+   "python_product_shaped": [
+    "igch0176",
+    "igch0774",
+    "igch1668",
+    "igch1670",
+    "igch1678"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-neg-abydus-not-sardes",
+   "class": "negation",
+   "agree": false,
+   "python": [
+    "igch0958",
+    "igch1438",
+    "igch1516",
+    "igch1664"
+   ],
+   "rust": [
+    "igch0958",
+    "igch1438",
+    "igch1444",
+    "igch1516",
+    "igch1664",
+    "unresolved:Asia Minor 1964"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Demanhur hoard",
+    "Mărăşeşti hoard",
+    "Aleppo: IGCH 1516; Sardes and Miletus hoard",
+    "Asia Minor 1961: IGCH 1444; Sardes and Miletus",
+    "Asia Minor 1964",
+    "Asia Minor 1964: IGCH 1438"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent."
+   ],
+   "python_product_shaped": [
+    "igch0958",
+    "igch1438",
+    "igch1444",
+    "igch1516",
+    "igch1664",
+    "unresolved:Asia Minor 1964"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition",
+    "igch-group"
+   ]
+  },
+  {
+   "id": "k2-neg-miletus-not-abydus",
+   "class": "negation",
+   "agree": true,
+   "python": [
+    "igch0774",
+    "igch1441",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "rust": [
+    "igch0774",
+    "igch1441",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Asia Minor 1964 (IGCH 1441)",
+    "Gîldău hoard",
+    "Aleppo Hoard",
+    "Demanhur (IGCH 1664)",
+    "Kuft Hoard"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent."
+   ],
+   "python_product_shaped": [
+    "igch0774",
+    "igch1441",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "agree_product_shaped": true
+  },
+  {
+   "id": "k2-neg-miletus-not-colophon",
+   "class": "negation",
+   "agree": false,
+   "python": [
+    "igch0410",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670",
+    "unresolved:Asia Minor 1964"
+   ],
+   "rust": [
+    "igch0410",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "exit": 0,
+   "rust_rows": [
+    "Larnaca hoard",
+    "Asia Minor 1964 (IGCH 1441)",
+    "Paeonia hoard",
+    "Aleppo Hoard",
+    "Demanhur (IGCH 1664)",
+    "Kuft Hoard"
+   ],
+   "rust_notes": [
+    "a negated relation is judged over the links this atlas records; an unrecorded link counts as absent."
+   ],
+   "python_product_shaped": [
+    "igch0410",
+    "igch1441",
+    "igch1472",
+    "igch1516",
+    "igch1664",
+    "igch1670"
+   ],
+   "agree_product_shaped": true,
+   "cause": [
+    "coin-composition"
+   ]
+  }
+ ]
+}
