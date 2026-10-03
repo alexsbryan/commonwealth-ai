@@ -4,7 +4,7 @@
 //! Boots the `sovereign-stock` binary the way `svrn daemon run` execs it (the
 //! argv the sovereign-daemon binary takes: `run --config <path>`), on a temp
 //! root with the model-free mock engine, cw-rails pinned to a closed port with
-//! no binary to bring up, and a free `SOVEREIGN_SERVE_PORT`. Then:
+//! no binary to bring up, and a reserved `SOVEREIGN_SERVE_PORT`. Then:
 //!
 //! - `/status` says `serve (this process)`, and the serving decision reached
 //!   the log (svrn's and serve's allowlists, unioned);
@@ -46,11 +46,22 @@ impl Drop for Killed {
     }
 }
 
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .expect("ephemeral port")
-        .port()
+/// A loopback port the child will bind, reserved rather than merely seen free.
+/// Binding `:0` and dropping the listener left the port free for the seconds
+/// until the child bound it, and a parallel test's `bind(:0)` took it in a
+/// full-workspace run (note 3f7d5a40). Closing an accepted connection from the
+/// listening side first parks the port in TIME_WAIT for 60s: the kernel hands
+/// it to no other `bind(:0)` or `connect()` meanwhile, and the child's tokio
+/// bind, which sets SO_REUSEADDR, still takes it. A port nothing binds (the
+/// dead rails) refuses connections for that window too.
+fn reserved_port() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("ephemeral port");
+    let addr = listener.local_addr().expect("ephemeral port");
+    let client = std::net::TcpStream::connect(addr).expect("connect to the reserved port");
+    let (accepted, _) = listener.accept().expect("accept on the reserved port");
+    drop(accepted);
+    drop(client);
+    addr.port()
 }
 
 fn client() -> reqwest::blocking::Client {
@@ -164,7 +175,12 @@ fn the_stock_install_serves_both_ports_from_one_process_and_one_engine() {
     for d in [&home, &rails_dir, &root.path().join("data")] {
         std::fs::create_dir_all(d).expect("dir");
     }
-    let (svrn, internal, serve, dead_rails) = (free_port(), free_port(), free_port(), free_port());
+    let (svrn, internal, serve, dead_rails) = (
+        reserved_port(),
+        reserved_port(),
+        reserved_port(),
+        reserved_port(),
+    );
     let config = root.path().join("config.toml");
     std::fs::write(
         &config,
@@ -331,7 +347,12 @@ fn a_distributed_config_is_hosted_and_starts_its_mesh_subsystems() {
     for d in [&home, &rails_dir, &root.path().join("data")] {
         std::fs::create_dir_all(d).expect("dir");
     }
-    let (svrn, internal, serve, dead_rails) = (free_port(), free_port(), free_port(), free_port());
+    let (svrn, internal, serve, dead_rails) = (
+        reserved_port(),
+        reserved_port(),
+        reserved_port(),
+        reserved_port(),
+    );
     let config = root.path().join("config.toml");
     std::fs::write(
         &config,
@@ -426,7 +447,12 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
     for d in [&home, &rails_dir, &root.path().join("data")] {
         std::fs::create_dir_all(d).expect("dir");
     }
-    let (svrn, internal, serve, dead_rails) = (free_port(), free_port(), free_port(), free_port());
+    let (svrn, internal, serve, dead_rails) = (
+        reserved_port(),
+        reserved_port(),
+        reserved_port(),
+        reserved_port(),
+    );
     let config = root.path().join("config.toml");
     std::fs::write(
         &config,
