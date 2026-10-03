@@ -1,0 +1,210 @@
+# Reading of census.py's lexical hits against sep-kant-transcendental-idealism (atoms.json of
+# 2026-05-22). census.py joins these and reports `read` counts beside the lexical ones; a
+# lexical hit with no row here is reported as `unread`, never as true.
+# reader = "agent, 2026-10-03, provisional": the operator's reading replaces it (principle 7: the
+# judge here is the operator; this file is the instrument check, not the verdict).
+#
+# verdict: true | false | via-reading  (the claim's attributed_to is a concept named after the
+#          holders, e.g. "Feder-Garve interpretation": the reading-not-holder defect)
+# kind = "attributed": the (position, holder) pair's attributed_right hit, per claim
+# kind = "missed": a claim found on reading that carries the pair but the lexical match missed
+# kind = "tension": a Tension edge matched to an opposing pair
+
+[meta]
+reader = "agent, 2026-10-03, provisional"
+atlas = "sep-kant-transcendental-idealism"
+
+[[rows]]
+kind = "attributed"
+item = "d01-phenomenalist-vs-dual-aspect"
+position = "phenomenalist"
+holder = "Feder and Garve"
+claim = "claim-0b8d762a085d60e4"
+verdict = "via-reading"
+why = "attributed_to 'Feder-Garve interpretation' (concept); content states identity phenomenalism as 'one plausible reading'"
+
+[[rows]]
+kind = "attributed"
+item = "d01-phenomenalist-vs-dual-aspect"
+position = "phenomenalist"
+holder = "Adickes, Westphal"
+claim = "claim-55760b6c55aa1831"
+verdict = "true"
+why = "attributed to Erich Adickes: the phenomenalist account of things in themselves (centers of force)"
+
+[[rows]]
+kind = "attributed"
+item = "d01-phenomenalist-vs-dual-aspect"
+position = "dual-aspect"
+holder = "Allison, Prauss, Bird"
+claim = "claim-7b36588dab4e4fa4"
+verdict = "true"
+why = "attributed to Henry Allison: the two-aspect reading"
+
+[[rows]]
+kind = "attributed"
+item = "d02-epistemic-vs-metaphysical-dual-aspect"
+position = "epistemological"
+holder = "Allison"
+claim = "claim-9f2994857e05a569"
+verdict = "true"
+why = "Allison: space and time are epistemic conditions"
+
+[[rows]]
+kind = "attributed"
+item = "d02-epistemic-vs-metaphysical-dual-aspect"
+position = "epistemological"
+holder = "Allison"
+claim = "claim-e8bcd96a6db34fe0"
+verdict = "true"
+why = "Allison: thinking things in themselves under categories is not cognition"
+
+[[rows]]
+kind = "attributed"
+item = "d02-epistemic-vs-metaphysical-dual-aspect"
+position = "metaphysical"
+holder = "Langton"
+claim = "claim-a9c9604894ba2b85"
+verdict = "true"
+why = "Langton: Non-spatiality* (being spatial is not an intrinsic property)"
+
+[[rows]]
+kind = "attributed"
+item = "d06-identity-phenomenalism"
+position = "identity-phenomenalism"
+holder = "Feder and Garve"
+claim = "claim-0b8d762a085d60e4"
+verdict = "via-reading"
+why = "same claim as d01: attributed to the concept 'Feder-Garve interpretation'"
+
+[[rows]]
+kind = "attributed"
+item = "d07-robinson-vs-allison"
+position = "epistemic-condition"
+holder = "Allison"
+claim = "claim-9f2994857e05a569"
+verdict = "true"
+why = "Allison's epistemic-condition notion"
+
+[[rows]]
+kind = "attributed"
+item = "d07-robinson-vs-allison"
+position = "epistemic-condition"
+holder = "Allison"
+claim = "claim-e8bcd96a6db34fe0"
+verdict = "true"
+why = "Allison's epistemic-condition notion"
+
+[[rows]]
+kind = "attributed"
+item = "d07-robinson-vs-allison"
+position = "otiose-qualification"
+holder = "Robinson"
+claim = "claim-dead0a75760a91e5"
+verdict = "true"
+why = "attributed to Robinson: 'qua appearances' otiose"
+
+[[rows]]
+kind = "attributed"
+item = "d08-abstraction-objection"
+position = "non-spatiality-by-abstraction"
+holder = "Allison"
+claim = "claim-081ed7c7d2e91323"
+verdict = "true"
+why = "Allison: qua things in themselves (discursive intellect in general) not in space"
+
+[[rows]]
+kind = "attributed"
+item = "d09-fundamentality-objection"
+position = "reversal-objection"
+holder = "Ameriks"
+claim = "claim-c8ddc0429441a70b"
+verdict = "true"
+why = "attributed to Ameriks: things in themselves more basic; Allison reverses this"
+
+[[rows]]
+kind = "attributed"
+item = "d10-humility-epistemic-loss"
+position = "epistemic-loss"
+holder = "Langton"
+claim = "claim-b735ca70c170d37b"
+verdict = "true"
+why = "attributed to Langton: Allison's reading incompatible with epistemic loss"
+
+[[rows]]
+kind = "attributed"
+item = "d10-humility-epistemic-loss"
+position = "epistemic-reading-defended"
+holder = "Allison"
+claim = "claim-7b36588dab4e4fa4"
+verdict = "false"
+why = "Allison's general two-aspect claim (sec_0022); nothing records his reply to Langton (2004: 9-11)"
+
+[[rows]]
+kind = "attributed"
+item = "d11-what-are-things-in-themselves"
+position = "centers-of-force"
+holder = "Adickes"
+claim = "claim-55760b6c55aa1831"
+verdict = "true"
+why = "attributed to Erich Adickes: mind-independent centers of force"
+
+[[rows]]
+kind = "attributed"
+item = "d11-what-are-things-in-themselves"
+position = "objects-considered-abstractly"
+holder = "Allison, Prauss, Bird"
+claim = "claim-9f2994857e05a569"
+verdict = "true"
+why = "Allison's epistemic reading"
+
+[[rows]]
+kind = "attributed"
+item = "d11-what-are-things-in-themselves"
+position = "objects-considered-abstractly"
+holder = "Allison, Prauss, Bird"
+claim = "claim-e8bcd96a6db34fe0"
+verdict = "true"
+why = "Allison: things in themselves thought, not cognized"
+
+[[rows]]
+kind = "missed"
+item = "d04-identity-question-decidable"
+position = "undecidable"
+holder = "Allison"
+claim = "claim-c2720351d42abd6c"
+verdict = "true"
+why = "attributed to Henry Allison: 'not clear we can give content or warrant' to identity claims; no `match` pattern covers 'not clear ... content' (lexical false negative, left unfixed: patterns are frozen after the first run)"
+
+[[rows]]
+kind = "missed"
+item = "d08-abstraction-objection"
+position = "abstraction-objection"
+holder = "Van Cleve"
+claim = "claim-12ae57066dfaa530"
+verdict = "false"
+why = "the objection is extracted (refrain, not deny) but attributed_to is empty: the position survives, its holder does not"
+
+[[rows]]
+kind = "tension"
+item = "d02-epistemic-vs-metaphysical-dual-aspect"
+pair = ["epistemological", "metaphysical"]
+edge = "edge-00265"
+verdict = "true"
+why = "epistemological dual aspect reading <-> metaphysical dual aspect reading; sub_question names standpoint vs intrinsic properties"
+
+[[rows]]
+kind = "tension"
+item = "d10-humility-epistemic-loss"
+pair = ["epistemic-loss", "epistemic-reading-defended"]
+edge = "edge-00265"
+verdict = "true"
+why = "same edge: the Langton/Allison fault line, though its sub_question is not about epistemic loss"
+
+[[rows]]
+kind = "tension"
+item = "d11-what-are-things-in-themselves"
+pair = ["objects-considered-abstractly", "substances-intrinsic"]
+edge = "edge-00265"
+verdict = "true"
+why = "same edge: epistemic vs metaphysical account of things in themselves"

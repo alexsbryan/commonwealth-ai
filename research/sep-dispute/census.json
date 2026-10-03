@@ -1,0 +1,1969 @@
+{
+ "summary": {
+  "atlas": "sep-kant-transcendental-idealism",
+  "atom_kinds": [
+   "ArgumentReconstruction",
+   "Claim",
+   "Configuration",
+   "Entity",
+   "Event",
+   "Question",
+   "Relation",
+   "State"
+  ],
+  "counts": {
+   "Entity": 51,
+   "Event": 4,
+   "State": 29,
+   "Relation": 18,
+   "Claim": 93,
+   "Question": 37,
+   "Configuration": 3,
+   "ArgumentReconstruction": 21
+  },
+  "tension_edges": 3,
+  "tension_candidates": 731,
+  "tension_candidates_resolvable": 0,
+  "positional_recovery_consistency": {
+   "shared_attribution": 404,
+   "of": 615
+  },
+  "bank": {
+   "items": 12,
+   "scored": 11,
+   "neutral": 1,
+   "positions": 23,
+   "pairs": 38,
+   "opposing_pairs": 13,
+   "witnesses": 90
+  },
+  "pair_recall_lexical": {
+   "claim_pair": {
+    "hit": 15,
+    "of": 38,
+    "recall": 0.395
+   },
+   "claim_pair_grounded": {
+    "hit": 11,
+    "of": 38,
+    "recall": 0.289
+   },
+   "attributed_right": {
+    "hit": 14,
+    "of": 38,
+    "recall": 0.368
+   },
+   "argument_pair": {
+    "hit": 10,
+    "of": 38,
+    "recall": 0.263
+   },
+   "holder_entity": {
+    "hit": 32,
+    "of": 38,
+    "recall": 0.842
+   }
+  },
+  "pair_recall_read": {
+   "reader": "agent, 2026-10-03, provisional",
+   "attributed_right": {
+    "hit": 12,
+    "of": 38,
+    "recall": 0.316
+   },
+   "via_reading_entity_only": {
+    "hit": 2,
+    "of": 38,
+    "recall": 0.053
+   },
+   "pairs_with_unread_hits": {
+    "hit": 0,
+    "of": 38,
+    "recall": 0.0
+   }
+  },
+  "item_level_read": {
+   "items_every_required_position_held_by_a_right_holder": 3,
+   "of": 11,
+   "per_item": {
+    "d01-phenomenalist-vs-dual-aspect": "2/2",
+    "d02-epistemic-vs-metaphysical-dual-aspect": "2/2",
+    "d03-one-object-vs-two-object": "0/2",
+    "d04-identity-question-decidable": "1/2",
+    "d05-strawson-vs-dual-aspect": "0/2",
+    "d06-identity-phenomenalism": "0/2",
+    "d07-robinson-vs-allison": "2/2",
+    "d08-abstraction-objection": "1/2",
+    "d09-fundamentality-objection": "1/2",
+    "d10-humility-epistemic-loss": "1/2",
+    "d11-what-are-things-in-themselves": "2/3"
+   }
+  },
+  "position_recall": {
+   "claim_position_lexical": {
+    "hit": 21,
+    "of": 23,
+    "recall": 0.913
+   },
+   "carrier_attribution_lexical": {
+    "none": 34,
+    "gold_holder": 17,
+    "person_other": 16,
+    "concept_or_reading": 28,
+    "kant": 16
+   },
+   "position_atom": {
+    "hit": 0,
+    "of": 23,
+    "note": "no Position atom kind in this atlas"
+   },
+   "concept_entity_proxy": {
+    "hit": 9,
+    "of": 23,
+    "recall": 0.391
+   },
+   "misattribution": "WITHDRAWN: a lexical check (claim carries P, attributed_to holds only Q) flagged 7 claims on the first run; all 7 were the holder's own claims against P on reading"
+  },
+  "opposing_recall": {
+   "tension_edge": {
+    "hit": 3,
+    "of": 13,
+    "recall": 0.231
+   },
+   "tension_edge_read_true": {
+    "hit": 3,
+    "of": 13,
+    "recall": 0.231
+   },
+   "tension_edge_holders": {
+    "hit": 0,
+    "of": 13,
+    "recall": 0.0
+   },
+   "collapsed_entity": {
+    "hit": 1,
+    "of": 13,
+    "recall": 0.077
+   },
+   "tension_candidate_direct": "could-not-judge (0 candidate ids resolve in atoms.json)",
+   "tension_candidate_positional_SUBSTITUTION": {
+    "hit": 6,
+    "of": 13,
+    "recall": 0.462
+   }
+  }
+ },
+ "items": [
+  {
+   "id": "d01-phenomenalist-vs-dual-aspect",
+   "positions": [
+    {
+     "position": "phenomenalist",
+     "claim_position": true,
+     "claims_carrying": 16,
+     "carrier_attribution": {
+      "none": 7,
+      "gold_holder": 2,
+      "person_other": 3,
+      "concept_or_reading": 2,
+      "kant": 2
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "phenomenalism",
+      "qualified phenomenalist reading"
+     ]
+    },
+    {
+     "position": "dual-aspect",
+     "claim_position": true,
+     "claims_carrying": 4,
+     "carrier_attribution": {
+      "none": 1,
+      "kant": 1,
+      "concept_or_reading": 1,
+      "gold_holder": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "dual aspect view",
+      "epistemological dual aspect reading",
+      "metaphysical dual aspect reading"
+     ]
+    }
+   ],
+   "pairs": [
+    {
+     "position": "phenomenalist",
+     "holder": "Feder and Garve",
+     "witness_sections": [
+      "sec_0003",
+      "sec_0012"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": false,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "concept"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-0b8d762a085d60e4",
+        "attributed_to": "Feder-Garve interpretation",
+        "sections": [
+         "sec_0004"
+        ],
+        "content": "On one plausible reading, objects in space exist only if we have experiences of them (identity phenomenalism)."
+       }
+      ],
+      "attributed_right": [
+       "claim-0b8d762a085d60e4"
+      ],
+      "argument": [
+       "argument-4eb347c326ea4cee"
+      ]
+     },
+     "read": {
+      "claim-0b8d762a085d60e4": "via-reading"
+     },
+     "read_attributed_right": false,
+     "read_via_reading_only": true,
+     "unread": false
+    },
+    {
+     "position": "phenomenalist",
+     "holder": "P.F. Strawson",
+     "witness_sections": [
+      "sec_0003",
+      "sec_0012"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "phenomenalist",
+     "holder": "Mendelssohn, Eberhard, Hamann, Jacobi, Fichte, Schelling",
+     "witness_sections": [
+      "sec_0003",
+      "sec_0012"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "phenomenalist",
+     "holder": "Guyer",
+     "witness_sections": [
+      "sec_0003",
+      "sec_0006",
+      "sec_0012"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": false,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "phenomenalist",
+     "holder": "Adickes, Westphal",
+     "witness_sections": [
+      "sec_0003",
+      "sec_0012",
+      "sec_0022"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": false,
+     "attributed_right": true,
+     "argument_pair": false,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-55760b6c55aa1831",
+        "attributed_to": "Erich Adickes",
+        "sections": [
+         "sec_0023"
+        ],
+        "content": "Phenomenalist interpretations hold that things in themselves are mind-independent centers of force and causal inputs to perceptual faculties."
+       }
+      ],
+      "attributed_right": [
+       "claim-55760b6c55aa1831"
+      ],
+      "argument": []
+     },
+     "read": {
+      "claim-55760b6c55aa1831": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "phenomenalist",
+     "holder": "Aquila, Van Cleve",
+     "witness_sections": [
+      "sec_0003",
+      "sec_0012",
+      "sec_0022"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "dual-aspect",
+     "holder": "Allison, Prauss, Bird",
+     "witness_sections": [
+      "sec_0012",
+      "sec_0025"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": false,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-7b36588dab4e4fa4",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0022"
+        ],
+        "content": "Kant's two-aspect reading distinguishes objects as they are for us from how they might be for pure understanding without affirming isomorphism."
+       }
+      ],
+      "attributed_right": [
+       "claim-7b36588dab4e4fa4"
+      ],
+      "argument": [
+       "argument-33afce37333799d3"
+      ]
+     },
+     "read": {
+      "claim-7b36588dab4e4fa4": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "dual-aspect",
+     "holder": "Langton",
+     "witness_sections": [
+      "sec_0012",
+      "sec_0016"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "dual-aspect",
+     "holder": "Allais, Rosefeldt, McDaniel, Marshall",
+     "witness_sections": [
+      "sec_0012",
+      "sec_0016"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "phenomenalist",
+      "dual-aspect"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [
+      "cand-0024",
+      "cand-0274",
+      "cand-0275",
+      "cand-0616",
+      "cand-0662",
+      "cand-0673",
+      "cand-0695",
+      "cand-0696",
+      "cand-0697",
+      "cand-0709"
+     ],
+     "tension_candidate_positional_count": 10,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d02-epistemic-vs-metaphysical-dual-aspect",
+   "positions": [
+    {
+     "position": "epistemological",
+     "claim_position": true,
+     "claims_carrying": 8,
+     "carrier_attribution": {
+      "gold_holder": 2,
+      "person_other": 2,
+      "none": 2,
+      "concept_or_reading": 2
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "epistemological dual aspect reading"
+     ]
+    },
+    {
+     "position": "metaphysical",
+     "claim_position": true,
+     "claims_carrying": 2,
+     "carrier_attribution": {
+      "concept_or_reading": 1,
+      "gold_holder": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "metaphysical dual aspect reading"
+     ]
+    }
+   ],
+   "pairs": [
+    {
+     "position": "epistemological",
+     "holder": "Allison",
+     "witness_sections": [
+      "sec_0013"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-9f2994857e05a569",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0013"
+        ],
+        "content": "Space and time are 'epistemic conditions'—representations we must apply to objects in order to cognize them as empirical appearances."
+       },
+       {
+        "id": "claim-e8bcd96a6db34fe0",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0013"
+        ],
+        "content": "Thinking of objects as things in themselves using categories does not constitute cognition because it lacks the epistemic condition of intuition (space/time)."
+       },
+       {
+        "id": "claim-ba3972133688ec47",
+        "attributed_to": null,
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Allison's response to the objection that her reading allows for spatially necessary objects begs the question by assuming a standpoint-independent perspective on reality."
+       },
+       {
+        "id": "claim-b735ca70c170d37b",
+        "attributed_to": "Langton | Langton (1998)",
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Langton argues that Allison's reading is incompatible with the sense of epistemic loss or cognitive deprivation found in Kant regarding things in themselves."
+       }
+      ],
+      "attributed_right": [
+       "claim-9f2994857e05a569",
+       "claim-e8bcd96a6db34fe0"
+      ],
+      "argument": [
+       "argument-33afce37333799d3"
+      ]
+     },
+     "read": {
+      "claim-9f2994857e05a569": "true",
+      "claim-e8bcd96a6db34fe0": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "epistemological",
+     "holder": "Prauss, Bird",
+     "witness_sections": [
+      "sec_0013"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "metaphysical",
+     "holder": "Langton",
+     "witness_sections": [
+      "sec_0013"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": false,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-a9c9604894ba2b85",
+        "attributed_to": "Langton | Langton (1998)",
+        "sections": [
+         "sec_0017"
+        ],
+        "content": "(Non-spatiality) is equivalent to (Non-spatiality*), meaning being spatial is not an intrinsic propery."
+       }
+      ],
+      "attributed_right": [
+       "claim-a9c9604894ba2b85"
+      ],
+      "argument": [
+       "argument-57cb268c899f45b8"
+      ]
+     },
+     "read": {
+      "claim-a9c9604894ba2b85": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "metaphysical",
+     "holder": "Allais, Rosefeldt, McDaniel, Marshall",
+     "witness_sections": [
+      "sec_0013",
+      "sec_0016"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "epistemological",
+      "metaphysical"
+     ],
+     "tension_edge": [
+      "edge-00265"
+     ],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [
+      "cand-0016",
+      "cand-0700",
+      "cand-0702"
+     ],
+     "tension_candidate_positional_count": 3,
+     "tension_edge_read": {
+      "edge-00265": "true"
+     }
+    }
+   ]
+  },
+  {
+   "id": "d03-one-object-vs-two-object",
+   "positions": [
+    {
+     "position": "one-object",
+     "claim_position": true,
+     "claims_carrying": 11,
+     "carrier_attribution": {
+      "concept_or_reading": 7,
+      "none": 3,
+      "person_other": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "phenomenalism",
+      "non-identity reading"
+     ]
+    },
+    {
+     "position": "two-object",
+     "claim_position": true,
+     "claims_carrying": 6,
+     "carrier_attribution": {
+      "none": 3,
+      "concept_or_reading": 3
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "non-identity reading"
+     ]
+    }
+   ],
+   "pairs": [
+    {
+     "position": "one-object",
+     "holder": "Adickes",
+     "witness_sections": [
+      "sec_0019"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "one-object",
+     "holder": "Allais",
+     "witness_sections": [
+      "sec_0019"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "one-object",
+     "holder": "Westphal",
+     "witness_sections": [
+      "sec_0019"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "two-object",
+     "holder": "Aquila, Van Cleve",
+     "witness_sections": [
+      "sec_0019",
+      "sec_0020",
+      "sec_0022"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "two-object",
+     "holder": "Stang",
+     "witness_sections": [
+      "sec_0019",
+      "sec_0020",
+      "sec_0022"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": false,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "one-object",
+      "two-object"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [
+      "non-identity reading | identity reading"
+     ],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [
+      "cand-0398",
+      "cand-0399",
+      "cand-0401",
+      "cand-0618",
+      "cand-0619",
+      "cand-0620",
+      "cand-0674",
+      "cand-0675",
+      "cand-0676",
+      "cand-0714",
+      "cand-0715",
+      "cand-0716",
+      "cand-0721",
+      "cand-0722",
+      "cand-0723"
+     ],
+     "tension_candidate_positional_count": 15,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d04-identity-question-decidable",
+   "positions": [
+    {
+     "position": "undecidable",
+     "claim_position": true,
+     "claims_carrying": 1,
+     "carrier_attribution": {
+      "concept_or_reading": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    },
+    {
+     "position": "warranted-non-identity",
+     "claim_position": true,
+     "claims_carrying": 3,
+     "carrier_attribution": {
+      "none": 2,
+      "kant": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    }
+   ],
+   "pairs": [
+    {
+     "position": "undecidable",
+     "holder": "Allison",
+     "witness_sections": [
+      "sec_0020"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {
+      "claim-c2720351d42abd6c": "missed-true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "undecidable",
+     "holder": "Adams",
+     "witness_sections": [
+      "sec_0020"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": false,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "warranted-non-identity",
+     "holder": "Stang",
+     "witness_sections": [
+      "sec_0020"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": false,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "undecidable",
+      "warranted-non-identity"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [],
+     "tension_candidate_positional_count": 0,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d05-strawson-vs-dual-aspect",
+   "positions": [
+    {
+     "position": "independent",
+     "claim_position": true,
+     "claims_carrying": 4,
+     "carrier_attribution": {
+      "person_other": 1,
+      "none": 2,
+      "kant": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    },
+    {
+     "position": "dependent",
+     "claim_position": false,
+     "claims_carrying": 0,
+     "carrier_attribution": {},
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    }
+   ],
+   "pairs": [
+    {
+     "position": "independent",
+     "holder": "P.F. Strawson",
+     "witness_sections": [
+      "sec_0012"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "dependent",
+     "holder": "the 1960s-70s dual-aspect scholars",
+     "witness_sections": [
+      "sec_0012"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "independent",
+      "dependent"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [],
+     "tension_candidate_positional_count": 0,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d06-identity-phenomenalism",
+   "positions": [
+    {
+     "position": "identity-phenomenalism",
+     "claim_position": true,
+     "claims_carrying": 4,
+     "carrier_attribution": {
+      "gold_holder": 1,
+      "none": 1,
+      "concept_or_reading": 2
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "phenomenalism"
+     ]
+    },
+    {
+     "position": "rejected",
+     "claim_position": true,
+     "claims_carrying": 3,
+     "carrier_attribution": {
+      "concept_or_reading": 1,
+      "person_other": 1,
+      "kant": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    }
+   ],
+   "pairs": [
+    {
+     "position": "identity-phenomenalism",
+     "holder": "Feder and Garve",
+     "witness_sections": [
+      "sec_0004",
+      "sec_0006"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "concept"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-0b8d762a085d60e4",
+        "attributed_to": "Feder-Garve interpretation",
+        "sections": [
+         "sec_0004"
+        ],
+        "content": "On one plausible reading, objects in space exist only if we have experiences of them (identity phenomenalism)."
+       }
+      ],
+      "attributed_right": [
+       "claim-0b8d762a085d60e4"
+      ],
+      "argument": [
+       "argument-4eb347c326ea4cee"
+      ]
+     },
+     "read": {
+      "claim-0b8d762a085d60e4": "via-reading"
+     },
+     "read_attributed_right": false,
+     "read_via_reading_only": true,
+     "unread": false
+    },
+    {
+     "position": "identity-phenomenalism",
+     "holder": "Guyer",
+     "witness_sections": [
+      "sec_0004",
+      "sec_0006"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": false,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "rejected",
+     "holder": "Allison",
+     "witness_sections": [
+      "sec_0006",
+      "sec_0007"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "rejected",
+     "holder": "the entry's author (Stang)",
+     "witness_sections": [
+      "sec_0006",
+      "sec_0007",
+      "sec_0026"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": false,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "identity-phenomenalism",
+      "rejected"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [
+      "cand-0593",
+      "cand-0596",
+      "cand-0598"
+     ],
+     "tension_candidate_positional_count": 3,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d07-robinson-vs-allison",
+   "positions": [
+    {
+     "position": "epistemic-condition",
+     "claim_position": true,
+     "claims_carrying": 4,
+     "carrier_attribution": {
+      "gold_holder": 2,
+      "person_other": 1,
+      "concept_or_reading": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    },
+    {
+     "position": "otiose-qualification",
+     "claim_position": true,
+     "claims_carrying": 10,
+     "carrier_attribution": {
+      "concept_or_reading": 3,
+      "none": 3,
+      "person_other": 1,
+      "gold_holder": 1,
+      "kant": 2
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "phenomenalism"
+     ]
+    }
+   ],
+   "pairs": [
+    {
+     "position": "epistemic-condition",
+     "holder": "Allison",
+     "witness_sections": [
+      "sec_0013"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": false,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-9f2994857e05a569",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0013"
+        ],
+        "content": "Space and time are 'epistemic conditions'—representations we must apply to objects in order to cognize them as empirical appearances."
+       },
+       {
+        "id": "claim-e8bcd96a6db34fe0",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0013"
+        ],
+        "content": "Thinking of objects as things in themselves using categories does not constitute cognition because it lacks the epistemic condition of intuition (space/time)."
+       }
+      ],
+      "attributed_right": [
+       "claim-9f2994857e05a569",
+       "claim-e8bcd96a6db34fe0"
+      ],
+      "argument": []
+     },
+     "read": {
+      "claim-9f2994857e05a569": "true",
+      "claim-e8bcd96a6db34fe0": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "otiose-qualification",
+     "holder": "Robinson",
+     "witness_sections": [
+      "sec_0014"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-dead0a75760a91e5",
+        "attributed_to": "Robinson",
+        "sections": [
+         "sec_0014"
+        ],
+        "content": "The claim that space is an epistemic condition entails objects are spatial simpliciter, making 'qua appearances' otiose."
+       }
+      ],
+      "attributed_right": [
+       "claim-dead0a75760a91e5"
+      ],
+      "argument": [
+       "argument-06b5ee6dd7c4d1db"
+      ]
+     },
+     "read": {
+      "claim-dead0a75760a91e5": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "epistemic-condition",
+      "otiose-qualification"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [
+      "cand-0020",
+      "cand-0022",
+      "cand-0622",
+      "cand-0678",
+      "cand-0717"
+     ],
+     "tension_candidate_positional_count": 5,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d08-abstraction-objection",
+   "positions": [
+    {
+     "position": "non-spatiality-by-abstraction",
+     "claim_position": true,
+     "claims_carrying": 9,
+     "carrier_attribution": {
+      "kant": 3,
+      "gold_holder": 1,
+      "none": 4,
+      "person_other": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": [
+      "Non-spatiality*"
+     ]
+    },
+    {
+     "position": "abstraction-objection",
+     "claim_position": true,
+     "claims_carrying": 12,
+     "carrier_attribution": {
+      "kant": 4,
+      "person_other": 3,
+      "none": 4,
+      "concept_or_reading": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    }
+   ],
+   "pairs": [
+    {
+     "position": "non-spatiality-by-abstraction",
+     "holder": "Allison",
+     "witness_sections": [
+      "sec_0013"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-081ed7c7d2e91323",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0013"
+        ],
+        "content": "Objects qua appearing (objects of our specific cognition) are in space and time; but qua things in themselves (considered by discursive intellect in general), they are not in space."
+       },
+       {
+        "id": "claim-3a41193bebebdebb",
+        "attributed_to": null,
+        "sections": [
+         "sec_0014"
+        ],
+        "content": "Allison's reading renders the non-spatiality thesis and uncognizability of things in themselves a trivial tautology."
+       },
+       {
+        "id": "claim-6054f027fe31bc59",
+        "attributed_to": null,
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Allison's reconstruction of the non-spatiality theorem is too weak because it does not require discursive intellects with a non-spatiotemporal form of cognition to be possible."
+       },
+       {
+        "id": "claim-ba3972133688ec47",
+        "attributed_to": null,
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Allison's response to the objection that her reading allows for spatially necessary objects begs the question by assuming a standpoint-independent perspective on reality."
+       }
+      ],
+      "attributed_right": [
+       "claim-081ed7c7d2e91323"
+      ],
+      "argument": [
+       "argument-6e520e203bde2b50",
+       "argument-f5371e7c407509f7"
+      ]
+     },
+     "read": {
+      "claim-081ed7c7d2e91323": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "abstraction-objection",
+     "holder": "Van Cleve",
+     "witness_sections": [
+      "sec_0014",
+      "sec_0015"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {
+      "claim-12ae57066dfaa530": "missed-false"
+     },
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "non-spatiality-by-abstraction",
+      "abstraction-objection"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [
+      "cand-0228",
+      "cand-0230",
+      "cand-0238",
+      "cand-0240",
+      "cand-0246",
+      "cand-0252",
+      "cand-0271",
+      "cand-0277",
+      "cand-0298",
+      "cand-0300",
+      "cand-0339"
+     ],
+     "tension_candidate_positional_count": 11,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d09-fundamentality-objection",
+   "positions": [
+    {
+     "position": "reversal-objection",
+     "claim_position": true,
+     "claims_carrying": 1,
+     "carrier_attribution": {
+      "gold_holder": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    },
+    {
+     "position": "no-standpoint-independent-fact",
+     "claim_position": true,
+     "claims_carrying": 1,
+     "carrier_attribution": {
+      "none": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    }
+   ],
+   "pairs": [
+    {
+     "position": "reversal-objection",
+     "holder": "Ameriks",
+     "witness_sections": [
+      "sec_0016"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": false,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-c8ddc0429441a70b",
+        "attributed_to": "Ameriks",
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Kant describes things in themselves as more ontologically basic than appearances, which Allison appears to reverse by treating them as abstractions from empirical perspectives."
+       }
+      ],
+      "attributed_right": [
+       "claim-c8ddc0429441a70b"
+      ],
+      "argument": []
+     },
+     "read": {
+      "claim-c8ddc0429441a70b": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "no-standpoint-independent-fact",
+     "holder": "Allison",
+     "witness_sections": [
+      "sec_0016"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": false,
+     "argument_pair": false,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-ba3972133688ec47",
+        "attributed_to": null,
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Allison's response to the objection that her reading allows for spatially necessary objects begs the question by assuming a standpoint-independent perspective on reality."
+       }
+      ],
+      "attributed_right": [],
+      "argument": []
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "reversal-objection",
+      "no-standpoint-independent-fact"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [],
+     "tension_candidate_positional_count": 0,
+     "tension_edge_read": {}
+    }
+   ]
+  },
+  {
+   "id": "d10-humility-epistemic-loss",
+   "positions": [
+    {
+     "position": "epistemic-loss",
+     "claim_position": true,
+     "claims_carrying": 1,
+     "carrier_attribution": {
+      "gold_holder": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    },
+    {
+     "position": "epistemic-reading-defended",
+     "claim_position": true,
+     "claims_carrying": 4,
+     "carrier_attribution": {
+      "none": 1,
+      "gold_holder": 1,
+      "concept_or_reading": 1,
+      "kant": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    }
+   ],
+   "pairs": [
+    {
+     "position": "epistemic-loss",
+     "holder": "Langton",
+     "witness_sections": [
+      "sec_0016"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-b735ca70c170d37b",
+        "attributed_to": "Langton | Langton (1998)",
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Langton argues that Allison's reading is incompatible with the sense of epistemic loss or cognitive deprivation found in Kant regarding things in themselves."
+       }
+      ],
+      "attributed_right": [
+       "claim-b735ca70c170d37b"
+      ],
+      "argument": [
+       "argument-57cb268c899f45b8"
+      ]
+     },
+     "read": {
+      "claim-b735ca70c170d37b": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "epistemic-reading-defended",
+     "holder": "Allison",
+     "witness_sections": [
+      "sec_0016"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": true,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-ba3972133688ec47",
+        "attributed_to": null,
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Allison's response to the objection that her reading allows for spatially necessary objects begs the question by assuming a standpoint-independent perspective on reality."
+       },
+       {
+        "id": "claim-7b36588dab4e4fa4",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0022"
+        ],
+        "content": "Kant's two-aspect reading distinguishes objects as they are for us from how they might be for pure understanding without affirming isomorphism."
+       }
+      ],
+      "attributed_right": [
+       "claim-7b36588dab4e4fa4"
+      ],
+      "argument": [
+       "argument-33afce37333799d3"
+      ]
+     },
+     "read": {
+      "claim-7b36588dab4e4fa4": "false"
+     },
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "epistemic-loss",
+      "epistemic-reading-defended"
+     ],
+     "tension_edge": [
+      "edge-00265"
+     ],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [],
+     "tension_candidate_positional_count": 0,
+     "tension_edge_read": {
+      "edge-00265": "true"
+     }
+    }
+   ]
+  },
+  {
+   "id": "d11-what-are-things-in-themselves",
+   "positions": [
+    {
+     "position": "centers-of-force",
+     "claim_position": true,
+     "claims_carrying": 1,
+     "carrier_attribution": {
+      "gold_holder": 1
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    },
+    {
+     "position": "objects-considered-abstractly",
+     "claim_position": true,
+     "claims_carrying": 6,
+     "carrier_attribution": {
+      "gold_holder": 2,
+      "person_other": 2,
+      "concept_or_reading": 2
+     },
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    },
+    {
+     "position": "substances-intrinsic",
+     "claim_position": false,
+     "claims_carrying": 0,
+     "carrier_attribution": {},
+     "position_atom": 0,
+     "concept_entity_proxy": []
+    }
+   ],
+   "pairs": [
+    {
+     "position": "centers-of-force",
+     "holder": "Adickes",
+     "witness_sections": [
+      "sec_0023"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": false,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-55760b6c55aa1831",
+        "attributed_to": "Erich Adickes",
+        "sections": [
+         "sec_0023"
+        ],
+        "content": "Phenomenalist interpretations hold that things in themselves are mind-independent centers of force and causal inputs to perceptual faculties."
+       }
+      ],
+      "attributed_right": [
+       "claim-55760b6c55aa1831"
+      ],
+      "argument": []
+     },
+     "read": {
+      "claim-55760b6c55aa1831": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "objects-considered-abstractly",
+     "holder": "Allison, Prauss, Bird",
+     "witness_sections": [
+      "sec_0013",
+      "sec_0023"
+     ],
+     "claim_pair": true,
+     "claim_pair_grounded": true,
+     "attributed_right": true,
+     "argument_pair": false,
+     "attributed_right_to": [
+      "person"
+     ],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [
+       {
+        "id": "claim-9f2994857e05a569",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0013"
+        ],
+        "content": "Space and time are 'epistemic conditions'—representations we must apply to objects in order to cognize them as empirical appearances."
+       },
+       {
+        "id": "claim-e8bcd96a6db34fe0",
+        "attributed_to": "Henry Allison | Allison",
+        "sections": [
+         "sec_0013"
+        ],
+        "content": "Thinking of objects as things in themselves using categories does not constitute cognition because it lacks the epistemic condition of intuition (space/time)."
+       },
+       {
+        "id": "claim-b735ca70c170d37b",
+        "attributed_to": "Langton | Langton (1998)",
+        "sections": [
+         "sec_0016"
+        ],
+        "content": "Langton argues that Allison's reading is incompatible with the sense of epistemic loss or cognitive deprivation found in Kant regarding things in themselves."
+       }
+      ],
+      "attributed_right": [
+       "claim-9f2994857e05a569",
+       "claim-e8bcd96a6db34fe0"
+      ],
+      "argument": []
+     },
+     "read": {
+      "claim-9f2994857e05a569": "true",
+      "claim-e8bcd96a6db34fe0": "true"
+     },
+     "read_attributed_right": true,
+     "read_via_reading_only": false,
+     "unread": false
+    },
+    {
+     "position": "substances-intrinsic",
+     "holder": "Langton",
+     "witness_sections": [
+      "sec_0023"
+     ],
+     "claim_pair": false,
+     "claim_pair_grounded": false,
+     "attributed_right": false,
+     "argument_pair": true,
+     "attributed_right_to": [],
+     "holder_entity": true,
+     "evidence": {
+      "pair": [],
+      "attributed_right": [],
+      "argument": [
+       "argument-57cb268c899f45b8"
+      ]
+     },
+     "read": {},
+     "read_attributed_right": false,
+     "read_via_reading_only": false,
+     "unread": false
+    }
+   ],
+   "opposing": [
+    {
+     "pair": [
+      "centers-of-force",
+      "objects-considered-abstractly"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [],
+     "tension_candidate_positional_count": 0,
+     "tension_edge_read": {}
+    },
+    {
+     "pair": [
+      "centers-of-force",
+      "substances-intrinsic"
+     ],
+     "tension_edge": [],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [],
+     "tension_candidate_positional_count": 0,
+     "tension_edge_read": {}
+    },
+    {
+     "pair": [
+      "objects-considered-abstractly",
+      "substances-intrinsic"
+     ],
+     "tension_edge": [
+      "edge-00265"
+     ],
+     "tension_edge_holders": [],
+     "collapsed_entity": [],
+     "tension_candidate_direct": "could-not-judge",
+     "tension_candidate_positional_SUBSTITUTION": [],
+     "tension_candidate_positional_count": 0,
+     "tension_edge_read": {
+      "edge-00265": "true"
+     }
+    }
+   ]
+  }
+ ]
+}

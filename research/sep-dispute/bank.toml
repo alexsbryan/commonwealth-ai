@@ -1,0 +1,566 @@
+# SEP dispute bank, first fixture: "Kant's Transcendental Idealism" (Stang, SEP 2016).
+# feature-fidelity campaign, dispute half (.sovereign/features/feature-fidelity/campaign.md,
+# Decisions 2026-10-03: fixture rule; autonomy (2)).
+#
+# THE RULE, fixed before any census number existed:
+# * Gold comes from the chunk text only. Every position and every holder carries at least one
+#   VERBATIM witness {chunk, quote}; `chunk` is the `id` in ~/.svrnmesh/indexes/sep/chunks.lance
+#   (url .../entries/kant-transcendental-idealism/). census.py refuses to run if any quote is not
+#   in its chunk (whitespace-collapsed, nothing else normalised) and records each witness's atlas
+#   section (sec_NNNN, from sep-kant-transcendental-idealism/chapters.json).
+# * A holder is gold for a position only when the text names that person as holding, defending,
+#   or putting forward that position. "cf."/"see also" citations of a view's neighbours, people
+#   who only supply an example, and a holder the text itself places on both sides are NEUTRAL:
+#   a scorer neither requires nor penalises them. Holders cited only in footnotes absent from the
+#   chunk text do not exist for this bank.
+# * An item whose positions cannot each be credited to a named holder is `neutral = true`
+#   (kept as a probe, never scored).
+# * `required = false` marks a position the text states but an answer need not name; if the
+#   answer does name a holder for it, misattribution rules still apply.
+# * `targets` on an objection position: persons the objection is ABOUT (Allison, for the
+#   objections to his reading); their co-mention is neither credit nor misattribution.
+# * `match` lists are regexes over the answer: positions case-insensitive, holders
+#   case-sensitive. They were written from the text's own vocabulary; census.py checks that each
+#   pattern list matches its own witness quotes (an instrument check, not a tuning step).
+#
+# Scoring (implemented in score.py; `python3 score.py --selftest` shows each check failing on a
+# known-bad answer):
+#   positions_named  every required position has a `match` hit somewhere in the answer
+#   holders_credited every required position has >= 1 gold holder named in a window of two
+#                    consecutive sentences that also names that position (pronoun follow-ons)
+#   misattribution   a sentence naming position P and holder H, where H is gold only for another
+#                    position Q of this item, and the sentence names no position H holds; exempt
+#                    when the sentence also credits P to its own gold holder or carries an
+#                    [scoring].opposition_cue ("Robinson objects to Allison's ...")
+#   collapse         a required position is missing, or a [scoring].collapse / item collapse
+#                    pattern hits (one side asserted as settled)
+#   hedge_kept       when hedge_required: >= 1 hedge marker present and no item `forbidden`
+#                    pattern hits (e.g. a reply the text only says Allison "might" make, stated
+#                    as made)
+#   item passes      all five hold. Empty answer = could-not-judge, not failed.
+
+[meta]
+entry = "kant-transcendental-idealism"
+title = "Kant's Transcendental Idealism"
+author = "Nicholas F. Stang"
+url = "https://plato.stanford.edu/entries/kant-transcendental-idealism/"
+text_corpus = "sep"
+text_chunks = "105306-105560"
+atlas_corpus = "sep-kant-transcendental-idealism"
+atlas_pipeline = "philosophy_atlas (enrich sep-ingest; no enrichment config on disk)"
+drafted = "2026-10-03"
+
+[scoring]
+sentence_split = '(?<=[.!?;])\s+|\n+'
+normalise = "NFKC; curly quotes and apostrophes to straight; en/em dash to hyphen; whitespace collapsed"
+collapse = [
+  '\b(scholars|interpreters|commentators|kantians) (now |all |generally )?(agree|concur)\b',
+  '(?<!no )(?<!little )\bconsensus (is|view|reading)\b',
+  '\bthe (correct|right|true|definitive|settled) (reading|interpretation|view)\b',
+  '\b(settles?|settled|resolves?|resolved) (the|this) (debate|dispute|question|controversy)\b',
+  '\bdefinitively\b',
+]
+opposition_cue = '\b(objects? to|objected|objections?|against|critici[sz]e[sd]?|critics?|critical of|reject(s|ed)?|challenge[sd]?|den(y|ies|ied)|oppos(e|es|ed)|opposition|contra|disagree[sd]?|repl(y|ies|ied)|respond(s|ed)?|response)\b'
+hedge_markers = [
+  'unclear', 'not (always |entirely )?clear', 'controvers', 'debated?', 'disput', 'contested',
+  '\bmay\b', '\bmight\b', '\bperhaps\b', '\bprobably\b', 'arguabl', 'charitabl', 'not conclusive',
+  'no consensus', 'little consensus', 'agnostic', 'open question',
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d01-phenomenalist-vs-dual-aspect"
+class = "dispute"
+neutral = false
+question = "Is Kant's transcendental idealism a form of phenomenalism? What are the competing readings, and who holds each?"
+hedge_required = true
+hedges = [
+  {chunk = 105306, quote = 'There is probably no major interpretive question in Kant’s philosophy on which there is so little consensus.'},
+  {chunk = 105551, quote = 'this debate shows no sign of abating any time soon.'},
+]
+collapse = ['\bkant (was|is) (simply |clearly |plainly )?a (berkeleyan )?phenomenalist\b', 'phenomenalist (reading|interpretation) (is|was|has been) (simply |clearly )?(wrong|refuted|mistaken)']
+
+[[questions.positions]]
+id = "phenomenalist"
+label = "phenomenalist (Berkeleyan, subjectivist) reading"
+required = true
+match = ['phenomenalis', 'berkeleyan', 'subjectivis']
+witnesses = [
+  {chunk = 105331, quote = 'The first published review of the Critique of Pure Reason, by Feder and Garve (1782), accuses Kant of holding a basically Berkeleyan phenomenalist conception of objects in space.'},
+  {chunk = 105423, quote = 'In the twentieth century, the phenomenalist (or “Berkeleyan”) interpretation of transcendental idealism is associated with P.F. Strawson'},
+]
+holders = [
+  {name = "Feder and Garve", match = ['\bFeder\b', '\bGarve\b'], witnesses = [{chunk = 105331, quote = 'by Feder and Garve (1782), accuses Kant of holding a basically Berkeleyan phenomenalist conception'}]},
+  {name = "P.F. Strawson", match = ['\bStrawson\b'], witnesses = [{chunk = 105423, quote = 'the phenomenalist (or “Berkeleyan”) interpretation of transcendental idealism is associated with P.F. Strawson'}]},
+  {name = "Mendelssohn, Eberhard, Hamann, Jacobi, Fichte, Schelling", match = ['\bMendelssohn\b', '\bEberhard\b', '\bHamann\b', '\bJacobi\b', '\bFichte\b', '\bSchelling\b'], witnesses = [{chunk = 105331, quote = 'many of the key figures in German philosophy in 1781 and after (e.g., Mendelssohn, Eberhard, Hamann, Jacobi, Fichte, Schelling) take the phenomenalist or “subjectivist” reading of Kant for granted'}]},
+  {name = "Guyer", match = ['\bGuyer\b'], witnesses = [{chunk = 105364, quote = 'While the identity phenomenalist interpretation has found few defenders among contemporary readers (Guyer 1987: 333–336 is a notable exception'}]},
+  {name = "Adickes, Westphal", match = ['\bAdickes\b', '\bWestphal\b'], witnesses = [{chunk = 105518, quote = 'the identity version of phenomenalism (Adickes 1924; Westphal 1968)'}]},
+  {name = "Aquila, Van Cleve", match = ['\bAquila\b', 'Van Cleve'], witnesses = [{chunk = 105518, quote = 'the non-identity version of phenomenalism (Aquila 1983; Van Cleve 1999)'}]},
+]
+
+[[questions.positions]]
+id = "dual-aspect"
+label = "non-phenomenalist dual-aspect (two-aspect) reading"
+required = true
+match = ['dual[- ]aspect', 'two[- ]aspect', 'non-phenomenalis', 'anti-phenomenalis', 'two (different )?(standpoints|perspectives|ways of considering)']
+witnesses = [
+  {chunk = 105424, quote = 'In the 1960s and 1970s a group of scholars, in some cases in direct opposition to Strawson, developed a non-phenomenalist, anti-metaphysical reading of transcendental idealism'},
+]
+holders = [
+  {name = "Allison, Prauss, Bird", match = ['\bAllison(ian)?\b', '\bPrauss\b', '\bBird\b'], witnesses = [{chunk = 105551, quote = 'was challenged in twentieth century Anglophone scholarship by, among others, Graham Bird, Gerold Prauss, and Henry Allison.'}]},
+  {name = "Langton", match = ['\bLangton\b'], witnesses = [{chunk = 105460, quote = 'Perhaps the most influential metaphysical but non-phenomenalist interpretation of Kant’s idealism has been Langton (1998).'}]},
+  {name = "Allais, Rosefeldt, McDaniel, Marshall", match = ['\bAllais\b', '\bRosefeldt\b', '\bMcDaniel\b', '\bMarshall\b'], witnesses = [{chunk = 105459, quote = 'These metaphysical “dual aspect” interpretations differ in exactly how they understand the distinction between these different sets of properties (see also Allais (2004, 2006, 2007, 2015); Rosefeldt (2007, 2013); McDaniel (ms); and Marshall (2013)).'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d02-epistemic-vs-metaphysical-dual-aspect"
+class = "dispute"
+neutral = false
+question = "Among 'dual aspect' readings of the distinction between appearances and things in themselves, what are the two main kinds, and whose interpretation exemplifies each?"
+hedge_required = false
+hedges = []
+collapse = []
+
+[[questions.positions]]
+id = "epistemological"
+label = "epistemological (standpoint) dual-aspect reading"
+required = true
+match = ['epistem(ic|ological)', 'standpoints?']
+witnesses = [
+  {chunk = 105430, quote = 'The main difference is between epistemological and metaphysical “dual aspect” interpretations (Allison 2004: 52). On the epistemological reading, the distinction between appearances and things in themselves is simply a distinction in the standpoint from which we consider them.'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105431, quote = 'The next two sub-sections explore the epistemological interpretation of Henry Allison.'}]},
+  {name = "Prauss, Bird", match = ['\bPrauss\b', '\bBird\b'], witnesses = [{chunk = 105432, quote = 'In modern Kant scholarship, the epistemic reading was first put forward by Gerold Prauss, Henry Allison, and Graham Bird.'}]},
+]
+
+[[questions.positions]]
+id = "metaphysical"
+label = "metaphysical dual-aspect reading (two classes of properties of one object)"
+required = true
+match = ['(?<!anti-)metaphysical', 'intrinsic', '(two|different) (classes|sets) of properties']
+witnesses = [
+  {chunk = 105431, quote = 'By contrast, metaphysical “dual aspect” interpreters take the distinction to carry more metaphysical weight. They interpret the appearance/thing in itself distinction as a metaphysical distinction between two different classes of properties had by objects, for instance, their relational properties and their intrinsic properties.'},
+]
+holders = [
+  {name = "Langton", match = ['\bLangton\b'], witnesses = [{chunk = 105431, quote = 'The remainder of the sections concerns metaphysical “dual aspect” readings, focusing on the widely discussed interpretation of Langton (1998).'}]},
+  {name = "Allais, Rosefeldt, McDaniel, Marshall", match = ['\bAllais\b', '\bRosefeldt\b', '\bMcDaniel\b', '\bMarshall\b'], witnesses = [{chunk = 105459, quote = 'These metaphysical “dual aspect” interpretations differ in exactly how they understand the distinction between these different sets of properties (see also Allais (2004, 2006, 2007, 2015); Rosefeldt (2007, 2013); McDaniel (ms); and Marshall (2013)).'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d03-one-object-vs-two-object"
+class = "dispute"
+neutral = false
+question = "Are Kantian appearances numerically identical to things in themselves? Set out the 'one object' and 'two object' readings and which interpreters the entry places on each side."
+hedge_required = true
+hedges = [
+  {chunk = 105518, quote = 'It depends on the controversial assumption that assertions of identity between appearances and things in themselves, outside of practical contexts, have a content.'},
+  {chunk = 105495, quote = 'the characterization of these views as “one object” and “two object” is unfortunate'},
+]
+collapse = []
+neutral_holders = [
+  {name = "Langton", match = ['\bLangton\b'], why = "the text lists Langton 1998: 13 among one-object readers (105494) and says she 'in fact opts for a non-identity reading' (105504)"},
+  {name = "Ameriks", match = ['\bAmeriks\b'], why = "introduced the one/two-object taxonomy (105493); not placed on a side"},
+]
+
+[[questions.positions]]
+id = "one-object"
+label = "one-object (identity) reading"
+required = true
+match = ['one[- ]object', '(?<!non-)(?<!non)\bidentity\b', 'one[- ]world', 'numerically identical']
+witnesses = [
+  {chunk = 105494, quote = '"one object" readers claim they are (Adickes 1924: 20, 27; Allais 2004: 657; Langton 1998: 13; Westphal 1968: 120)'},
+]
+holders = [
+  {name = "Adickes", match = ['\bAdickes\b'], witnesses = [{chunk = 105494, quote = '"one object" readers claim they are (Adickes 1924: 20, 27;'}]},
+  {name = "Allais", match = ['\bAllais\b'], witnesses = [{chunk = 105494, quote = 'Allais 2004: 657;'}]},
+  {name = "Westphal", match = ['\bWestphal\b'], witnesses = [{chunk = 105494, quote = 'Westphal 1968: 120), and "two object" readers deny'}]},
+]
+
+[[questions.positions]]
+id = "two-object"
+label = "two-object (non-identity) reading"
+required = true
+match = ['two[- ]objects?', 'non-?identity', 'two[- ]worlds?', 'numerically distinct', 'deny(ing)? identity']
+witnesses = [
+  {chunk = 105494, quote = 'and "two object" readers deny this.'},
+  {chunk = 105518, quote = 'the non-identity version of phenomenalism (Aquila 1983; Van Cleve 1999)'},
+  {chunk = 105500, quote = 'this argument provides warrant for denying identity on purely theoretical grounds.'},
+]
+holders = [
+  {name = "Aquila, Van Cleve", match = ['\bAquila\b', 'Van Cleve'], witnesses = [{chunk = 105518, quote = 'the non-identity version of phenomenalism (Aquila 1983; Van Cleve 1999)'}]},
+  {name = "Stang", match = ['\bStang\b'], witnesses = [{chunk = 105499, quote = 'there are those who disagree (Stang 2014; cf. Walker 2010)'}]},
+]
+
+[[questions.positions]]
+id = "neutral-on-identity"
+label = "neutral or agnostic on identity"
+required = false
+match = ['neutral', 'agnostic', 'no warrant', 'contentless', 'no content']
+witnesses = [
+  {chunk = 105519, quote = 'Henry Allison has recently argued that even his view is neutral on the identity/non-identity debate'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105519, quote = 'Henry Allison has recently argued that even his view is neutral on the identity/non-identity debate'}]},
+  {name = "Adams", match = ['\bAdams\b'], witnesses = [{chunk = 105499, quote = 'many interpreters (notably Adams 1997: 822) think that we can have no warrant for asserting the identity or non-identity of appearances and things in themselves in general'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d04-identity-question-decidable"
+class = "dispute"
+neutral = false
+question = "Can Kant's theoretical philosophy settle whether appearances are identical to things in themselves? Who says it cannot, and who disagrees?"
+hedge_required = true
+hedges = [
+  {chunk = 105497, quote = 'It is not clear that within the theoretical use of reason we can give any content to the claim of the numerical identity (or distinctness) of appearances and things in themselves, nor any warrant for asserting or denying  it.'},
+]
+collapse = []
+neutral_holders = [
+  {name = "Walker", match = ['\bWalker\b'], why = "cited only as 'cf. Walker 2010' (105499)"},
+]
+
+[[questions.positions]]
+id = "undecidable"
+label = "no content or no warrant outside practical contexts; Kant must be agnostic"
+required = true
+match = ['no (clear )?content', 'contentless', 'no warrant', 'agnostic', 'cannot (be )?(settle|settled|decided|known)', 'outside (of )?(moral|practical) contexts']
+witnesses = [
+  {chunk = 105497, quote = 'As Henry Allison and others have pointed out, it is not clear that there is any content to the question of whether an appearance is numerically identical to a thing in itself, outside of moral  contexts.'},
+  {chunk = 105499, quote = 'many interpreters (notably Adams 1997: 822) think that we can have no warrant for asserting the identity or non-identity of appearances and things in themselves in general, and thus think the identity/non-identity debate (at least in theoretical contexts) concerns something about which Kant must be agnostic'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105497, quote = 'As Henry Allison and others have pointed out, it is not clear that there is any content to the question'}]},
+  {name = "Adams", match = ['\bAdams\b'], witnesses = [{chunk = 105499, quote = 'many interpreters (notably Adams 1997: 822) think that we can have no warrant'}]},
+]
+
+[[questions.positions]]
+id = "warranted-non-identity"
+label = "theoretical warrant for denying identity (different modal properties)"
+required = true
+match = ['warrant for denying', 'deny(ing)? (the )?identity', 'modal properties', 'must be distinct', 'are distinct', 'theoretical grounds']
+witnesses = [
+  {chunk = 105500, quote = 'This argument purports to show that, since appearances and things in themselves have different modal properties, they must be distinct. Since (P1) and (P2) are claims Kant makes in the context of his theoretical philosophy, this argument provides warrant for denying identity on purely theoretical grounds.'},
+]
+holders = [
+  {name = "Stang", match = ['\bStang\b'], witnesses = [{chunk = 105499, quote = 'there are those who disagree (Stang 2014; cf. Walker 2010)'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d05-strawson-vs-dual-aspect"
+class = "dispute"
+neutral = false
+question = "Do the central arguments of the Critique of Pure Reason depend on transcendental idealism? Who denied it, and who argued that they do?"
+hedge_required = false
+hedges = []
+collapse = []
+neutral_holders = [
+  {name = "Allison, Prauss, Bird", match = ['\bAllison(ian)?\b', '\bPrauss\b', '\bBird\b'], why = "named as challengers of the phenomenalist reading (105551) and first proponents of the epistemic reading (105432), but 105424 does not name the scholars who argued, contra Strawson, that the arguments rely on transcendental idealism"},
+]
+
+[[questions.positions]]
+id = "independent"
+label = "transcendental idealism a blunder; the core arguments can be reconstructed without it"
+required = true
+match = ['blunder', '(do not|does not|don.t|need not) (in fact )?(rely|depend)', 'independently of it', 'reconstruct']
+witnesses = [
+  {chunk = 105423, quote = 'argued that, for many of the reasons we have seen, transcendental idealism was a blunder on Kant’s part (Strawson 1966: 16, 38–42, 253–73). However, Strawson claimed, the core arguments of the Critique do not in fact rely on it and can be reconstructed independently of it.'},
+]
+holders = [
+  {name = "P.F. Strawson", match = ['\bStrawson\b'], witnesses = [{chunk = 105423, quote = 'However, Strawson claimed, the core arguments of the Critique do not in fact rely on it'}]},
+]
+
+[[questions.positions]]
+id = "dependent"
+label = "the central arguments do rely on transcendental idealism"
+required = true
+match = ['(do|does) rely', '(rely|relies|depend|depends) on (transcendental idealism|it)\b', 'contra strawson', 'against strawson']
+witnesses = [
+  {chunk = 105424, quote = 'They sought to rescue transcendental idealism from what they took to be the phenomenalist misconstrual, defend its philosophical cogency from its detractors, and show, contra Strawson, that the central arguments of the Critique do rely on transcendental idealism.'},
+]
+holders = [
+  {name = "the 1960s-70s dual-aspect scholars", match = ['dual[- ]aspect', 'two[- ]aspect'], witnesses = [{chunk = 105424, quote = 'In the 1960s and 1970s a group of scholars, in some cases in direct opposition to Strawson, developed a non-phenomenalist, anti-metaphysical reading of transcendental idealism, the “dual aspect”  view.'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d06-identity-phenomenalism"
+class = "dispute"
+neutral = false
+question = "Did Kant hold that appearances simply are our representations? Who has read him that way, and who rejects that reading?"
+hedge_required = true
+hedges = [
+  {chunk = 105368, quote = 'While this is not conclusive, it is evidence that the identity phenomenalist interpretation should be abandoned.'},
+]
+collapse = []
+
+[[questions.positions]]
+id = "identity-phenomenalism"
+label = "identity phenomenalism: appearances are identical to representations"
+required = true
+match = ['identity phenomenalis', 'identical (to|with) (our |mere )?representations', '(appearances|objects|bodies) (simply |literally )?are (our |mere )?representations']
+witnesses = [
+  {chunk = 105338, quote = 'Feder-Garve accuse Kant of holding (1), which I will call “identity phenomenalism”.'},
+  {chunk = 105364, quote = 'While the identity phenomenalist interpretation has found few defenders among contemporary readers (Guyer 1987: 333–336 is a notable exception'},
+]
+holders = [
+  {name = "Feder and Garve", match = ['\bFeder\b', '\bGarve\b'], witnesses = [{chunk = 105338, quote = 'Feder-Garve accuse Kant of holding (1), which I will call “identity phenomenalism”.'}]},
+  {name = "Guyer", match = ['\bGuyer\b'], witnesses = [{chunk = 105364, quote = 'Guyer 1987: 333–336 is a notable exception'}]},
+]
+
+[[questions.positions]]
+id = "rejected"
+label = "the identity-phenomenalist reading should be rejected"
+required = true
+match = ['reject', 'abandon', 'few defenders', 'objects? of (our )?representations?', 'not identical', 'cannot be identical', 'critic']
+witnesses = [
+  {chunk = 105364, quote = 'for critical discussion, see Allison 2004: 8–9'},
+  {chunk = 105368, quote = 'it follows that the objects cannot be identical to our representations of them.'},
+  {chunk = 105368, quote = 'it is evidence that the identity phenomenalist interpretation should be abandoned.'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105364, quote = 'for critical discussion, see Allison 2004: 8–9'}]},
+  {name = "the entry's author (Stang)", match = ['\bStang\b', '\b(the|this) (entry|article)\b', '\bthe author\b'], witnesses = [{chunk = 105557, quote = 'Copyright © 2016 by   Nicholas F. Stang'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d07-robinson-vs-allison"
+class = "dispute"
+neutral = false
+question = "What objection has been raised to Allison's notion of an 'epistemic condition', by whom, and how might Allison answer it?"
+hedge_required = true
+hedges = [
+  {chunk = 105443, quote = 'Allison might reply to this objection by pointing out that it implicitly assumes that the claim empirical objects are in space is coherent independently of specifying a perspective on those objects.'},
+  {chunk = 105443, quote = 'it is not always clear that Allison’s reconstruction does depend on this premise, and it is not clear where Kant argues for such a conclusion.'},
+]
+collapse = []
+forbidden = ['\bAllison (replies|replied|responds|responded|answers|answered|rejoins)\b']
+
+[[questions.positions]]
+id = "epistemic-condition"
+label = "Allison: space and time are epistemic conditions; objects are spatial qua appearances"
+required = true
+match = ['epistemic conditions?', 'qua appearances?', 'considered (with|under) (our )?epistemic']
+witnesses = [
+  {chunk = 105434, quote = 'An “epistemic condition” is Allison’s term for a representation we must apply to objects in order to cognize them (Allison 2004: 11, 14).'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105434, quote = 'An “epistemic condition” is Allison’s term for a representation we must apply to objects in order to cognize them'}]},
+]
+
+[[questions.positions]]
+id = "otiose-qualification"
+targets = ['\bAllison(ian)?\b']
+label = "the 'qua appearances' qualification is otiose; the view collapses into phenomenalism or misrepresentation"
+required = true
+match = ['otiose', 'simpliciter', 'misrepresent', 'phenomenalism']
+witnesses = [
+  {chunk = 105442, quote = 'So in the claim that “objects qua appearances” or “objects considered with our epistemic conditions” the qualification “qua appearances” or “considered with our epistemic conditions” is otiose.'},
+  {chunk = 105442, quote = 'entails either that these objects exist in virtue of our representations of them (which results in phenomenalism) or it entails that they are spatial in virtue of our representing them but would not be spatial otherwise.'},
+]
+holders = [
+  {name = "Robinson", match = ['\bRobinson\b'], witnesses = [{chunk = 105442, quote = 'Robinson (1994) raises a quite general objection to Allison’s notion of an epistemic condition'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d08-abstraction-objection"
+class = "dispute"
+neutral = false
+question = "What is the 'abstraction' objection to Allison's argument that things in themselves are not spatial, who presses it, and what does the entry say on Allison's behalf?"
+hedge_required = true
+hedges = [
+  {chunk = 105449, quote = 'While it is sometimes unclear from Allison’s texts which analysis he opts for, the charitable reading is that he accepts (2*).'},
+]
+collapse = []
+neutral_holders = [
+  {name = "Guyer", match = ['\bGuyer\b'], why = "supplies the job-applicant example (105446); not stated to press the objection"},
+]
+
+[[questions.positions]]
+id = "non-spatiality-by-abstraction"
+label = "Allison: considered as objects of discursive cognition in general, things are not in space"
+required = true
+match = ['non-?spatial', 'not (in|spatial)', 'discursive (cognition|intellect)s? in general']
+witnesses = [
+  {chunk = 105435, quote = 'So we can say that objects qua appearing (objects of spatiotemporal discursive cognition) are in space, but qua things in themselves (objects of discursive cognition in general) they are not in space. This, in a nutshell, is Allison’s reconstruction of the argument for the non-spatiality of things in  themselves.'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105435, quote = 'This, in a nutshell, is Allison’s reconstruction of the argument for the non-spatiality of things in  themselves.'}]},
+]
+
+[[questions.positions]]
+id = "abstraction-objection"
+targets = ['\bAllison(ian)?\b']
+label = "abstracting from a property licenses refraining from judging, not denying it"
+required = true
+match = ['barefoot', 'shoes', 'abstract(ing|ion)?', 'refrain', 'merely not judge', 'race', 'considered']
+witnesses = [
+  {chunk = 105444, quote = 'One influential objection focuses on the role that “abstracting” from our spatiotemporal intuition plays in Allison’s reconstruction. Van Cleve puts it somewhat facetiously:'},
+  {chunk = 105446, quote = 'then we should not say that o is non-spatial; we should merely not judge that it is spatial.'},
+]
+holders = [
+  {name = "Van Cleve", match = ['Van Cleve'], witnesses = [{chunk = 105444, quote = 'Van Cleve puts it somewhat facetiously:'}, {chunk = 105445, quote = 'I am inclined to say no; consider me how you will, I am not now barefoot. (Van Cleve 1999:  8)'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d09-fundamentality-objection"
+class = "dispute"
+neutral = false
+question = "Kant often describes things in themselves as the grounds of appearances. Who argues that the epistemic reading reverses this dependence, and how is the objection answered?"
+hedge_required = false
+hedges = [
+  {chunk = 105458, quote = 'Allison does not offer an alternate reading of the relevant texts'},
+]
+collapse = []
+
+[[questions.positions]]
+id = "reversal-objection"
+targets = ['\bAllison(ian)?\b']
+label = "the epistemic reading reverses the dependence of appearances on things in themselves"
+required = true
+match = ['revers', 'more fundamental', 'ontologically basic', 'grounds? of appearances', 'noumenal level']
+witnesses = [
+  {chunk = 105458, quote = 'One major textual hurdle for Allison’s “epistemic” reading of transcendental idealism is the various passages in which Kant describes things in themselves as more fundamental, more ontologically basic, than appearances, or describes things in themselves as the grounds of appearances. Allison appears to reverse this relation of dependence'},
+]
+holders = [
+  {name = "Ameriks", match = ['\bAmeriks\b'], witnesses = [{chunk = 105458, quote = 'Ameriks (1992: 334) raises this objection'}]},
+]
+
+[[questions.positions]]
+id = "no-standpoint-independent-fact"
+label = "reply: the objection assumes a standpoint-independent fact (e.g. whether we are free)"
+required = true
+match = ['standpoint-?independent', 'fact of the matter', 'independent of (any|a) (standpoint|perspective)', 'freedom|free\b']
+witnesses = [
+  {chunk = 105458, quote = 'Ameriks’ objection assumes, once again, that there is some fact of the matter as to whether we are free or not'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105458, quote = 'and Allison (2004: 45) replies to it.'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d10-humility-epistemic-loss"
+class = "dispute"
+neutral = false
+question = "Does the epistemic reading do justice to Kant's sense that we are genuinely ignorant of things in themselves? Who says it does not, what do they offer instead, and who defends the epistemic reading?"
+hedge_required = false
+hedges = [
+  {chunk = 105473, quote = 'even if Langton is wrong about how Kant proves Humility, she may still be right about what Humility means'},
+  {chunk = 105482, quote = 'This is hard to square with Langton’s reading.'},
+]
+collapse = []
+
+[[questions.positions]]
+id = "epistemic-loss"
+targets = ['\bAllison(ian)?\b']
+label = "genuine epistemic loss; things in themselves are substances whose intrinsic properties we cannot know"
+required = true
+match = ['epistemic loss', 'genuinely', 'cognitively deprived', 'irremediably', 'intrinsic propert']
+witnesses = [
+  {chunk = 105460, quote = 'Langton begins by pointing out that Kant thinks we are genuinely missing out on something in not knowing things in themselves, and this sense of “epistemic loss” is incompatible with Allison’s reading.'},
+  {chunk = 105464, quote = 'Langton’s solution to this, one of the oldest problems of Kant scholarship, is to interpret things in themselves as substances with intrinsic properties'},
+]
+holders = [
+  {name = "Langton", match = ['\bLangton\b'], witnesses = [{chunk = 105460, quote = 'Langton begins by pointing out that Kant thinks we are genuinely missing out on something in not knowing things in themselves'}]},
+]
+
+[[questions.positions]]
+id = "epistemic-reading-defended"
+label = "the epistemic reading ('Allisonian humility'), defended against the criticism"
+required = true
+match = ['allisonian humility', 'epistemic reading', 'responds?', 'reply|replies', 'standpoint']
+witnesses = [
+  {chunk = 105460, quote = '(Allison responds to Langton’s criticism in 2004: 9–11).'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105460, quote = '(Allison responds to Langton’s criticism in 2004: 9–11).'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "d11-what-are-things-in-themselves"
+class = "dispute"
+neutral = false
+question = "What are things in themselves according to the main interpretations of transcendental idealism, and whose view is each answer?"
+hedge_required = false
+hedges = []
+collapse = []
+neutral_holders = [
+  {name = "Ameriks", match = ['\bAmeriks\b'], why = "'a variant of this thought is expressed by Ameriks 2003' (105528): a variant, not the view"},
+]
+
+[[questions.positions]]
+id = "centers-of-force"
+label = "phenomenalist: a plurality of mind-independent centers of force"
+required = true
+match = ['cent(er|re)s? of force', 'mind-independent']
+witnesses = [
+  {chunk = 105528, quote = 'Perhaps the best statement of the phenomenalist interpretation of things in themselves is given by Erich Adickes (1924: 14–19): things in themselves are a plurality of mind-independent centers of force.'},
+]
+holders = [
+  {name = "Adickes", match = ['\bAdickes\b'], witnesses = [{chunk = 105528, quote = 'is given by Erich Adickes (1924: 14–19): things in themselves are a plurality of mind-independent centers of force.'}]},
+]
+
+[[questions.positions]]
+id = "objects-considered-abstractly"
+label = "epistemic: objects considered independently of our spatiotemporal form of intuition"
+required = true
+match = ['considered (independently|apart|in abstraction)', 'discursive cognition in general', 'epistemic']
+witnesses = [
+  {chunk = 105529, quote = 'On the epistemic reading, things in themselves are simply objects considered independently of our distinctively spatiotemporal form of intuition.'},
+]
+holders = [
+  {name = "Allison, Prauss, Bird", match = ['\bAllison(ian)?\b', '\bPrauss\b', '\bBird\b'], witnesses = [{chunk = 105432, quote = 'In modern Kant scholarship, the epistemic reading was first put forward by Gerold Prauss, Henry Allison, and Graham Bird.'}]},
+]
+
+[[questions.positions]]
+id = "substances-intrinsic"
+label = "metaphysical dual aspect: substances with intrinsic properties"
+required = true
+match = ['intrinsic propert', 'substances? with intrinsic']
+witnesses = [
+  {chunk = 105530, quote = 'On Langton’s reading, for instance, things in themselves are substances with intrinsic properties.'},
+]
+holders = [
+  {name = "Langton", match = ['\bLangton\b'], witnesses = [{chunk = 105530, quote = 'On Langton’s reading, for instance, things in themselves are substances with intrinsic properties.'}]},
+]
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+[[questions]]
+id = "n01-a-vs-b-edition"
+class = "dispute"
+neutral = true
+neutral_why = "the doctrine-change side is held by 'some scholars' whose names sit in footnote 14, absent from the chunk text; only the other side has a named holder (Allison)"
+question = "Did Kant change his doctrine of transcendental idealism between the first (1781) and second (1787) editions of the Critique? Who holds which view?"
+hedge_required = false
+hedges = []
+collapse = []
+
+[[questions.positions]]
+id = "doctrine-changed"
+label = "a change in doctrine: a more realistic view in B"
+required = true
+match = ['change(d)? (in|his) (doctrine|mind)', 'more realistic']
+witnesses = [
+  {chunk = 105349, quote = 'some scholars think that, on this point, there is a difference in doctrine between the A and B editions: made aware of the problematic Berkeleyan consequences of the first edition, Kant endeavored to develop a more realistic view in the B  Edition.'},
+]
+holders = []
+
+[[questions.positions]]
+id = "presentation-only"
+label = "a difference of presentation; the view is basically the same"
+required = true
+match = ['presentation', 'basically the same', 'same view']
+witnesses = [
+  {chunk = 105349, quote = 'Other scholars think the difference is largely a matter of presentation: in the B edition, Kant highlights the more realistic aspects of his view and downplays its phenomenalistic sides, but the view is basically the same (e.g., Allison 2004).'},
+]
+holders = [
+  {name = "Allison", match = ['\bAllison(ian)?\b'], witnesses = [{chunk = 105349, quote = 'but the view is basically the same (e.g., Allison 2004).'}]},
+]
