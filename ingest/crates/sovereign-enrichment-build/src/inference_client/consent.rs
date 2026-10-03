@@ -65,8 +65,8 @@ pub(crate) fn consent_from_value(raw: &str, corpus_id: &str) -> Option<ConsentGr
                 target: "egress",
                 corpus = corpus_id,
                 floor = floor.as_str(),
-                "enrich: consent grant in force; remote providers may receive payloads \
-                 at or below this custody"
+                "enrich: consent grant in force; a chat host off this machine or a hosted \
+                 engine may receive payloads at or below this custody"
             );
             Some(ConsentGrant {
                 run_id: format!("enrich:{corpus_id}"),
