@@ -105,16 +105,10 @@ pub(crate) fn synthesize_default_claims(
 // source of truth for "what the embedded path can do" (SLOT_POLICY §6).
 
 /// Conservative feature set for the standalone-Commonwealth orchestrator
-/// path, which may front heterogeneous backends. We claim only what any
-/// OpenAI-compatible llama-server the orchestrator spawns reliably
-/// honours: JSON-Schema / JSON-object structured output and the routing
-/// envelope. Lark grammar and the sampler allow-lists are embedded-only
-/// and NOT advertised here.
-const HUB_FEATURES: &[&str] = &[
-    features::CONSTRAINT_JSON_SCHEMA,
-    features::CONSTRAINT_JSON_OBJECT,
-    features::OICP_REQUEST_PROPERTIES,
-];
+/// path, which may front heterogeneous backends: only what any
+/// OpenAI-compatible server reliably honours. The same list a hosted engine
+/// advertises over the mesh (`oicp_synthesis::build_self_manifest`).
+const HUB_FEATURES: &[&str] = features::OPENAI_COMPATIBLE_FEATURES;
 
 // NOTE: `features::MODEL_FINGERPRINT` is intentionally NOT advertised
 // yet. We populate `ProviderModel.fingerprint` below (harmless extra

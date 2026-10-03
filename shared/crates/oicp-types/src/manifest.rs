@@ -88,6 +88,16 @@ pub mod features {
         X_FORCED_CHOICE,
     ];
 
+    /// What an OpenAI-compatible backend honours whatever is behind it (a
+    /// spawned llama-server, a hosted vendor): structured output and the
+    /// routing envelope. Lark grammars, the sampler allow-lists and the
+    /// forced-choice sentinel are the embedded path's alone.
+    pub const OPENAI_COMPATIBLE_FEATURES: &[&str] = &[
+        CONSTRAINT_JSON_SCHEMA,
+        CONSTRAINT_JSON_OBJECT,
+        OICP_REQUEST_PROPERTIES,
+    ];
+
     /// Extension-feature prefix (§2.1). A host MAY advertise
     /// `x:`-prefixed features not registered in this crate build.
     pub const EXTENSION_PREFIX: &str = "x:";

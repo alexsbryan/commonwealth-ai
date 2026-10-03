@@ -13,7 +13,7 @@ use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, LatencyClass, ModelStatus,
     ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
-use sovereign_contracts::traits::{InferenceProvider, ResidentSlot};
+use sovereign_contracts::traits::{InferenceProvider, ResidentSlot, ServingLocus};
 use sovereign_contracts::types::Speed;
 
 use crate::slot_select::SlotManifest;
@@ -143,7 +143,8 @@ pub fn build_self_manifest(
     // desktop would advertise its entry node's model as its own, and peers
     // would route real traffic to a node that holds nothing. That is §10.6's
     // slot-alias incident in a new place: a plausible manifest, HTTP 200, and
-    // the wrong node serving.
+    // the wrong node serving. A hosted engine does serve its vendor model,
+    // so it reports it as resident (`SplitInferenceProvider::engine`).
     //
     // The gate is emptiness, never per-model residency. `resident_slots()`
     // lists every CONFIGURED slot with `resident` as a flag — a lazily-unloaded
@@ -163,7 +164,7 @@ pub fn build_self_manifest(
             "build_self_manifest: provider reports no resident slots — this node \
              holds no weights and advertises no models"
         );
-        return manifest_of(resolve_primary_model_name(provider), Vec::new());
+        return manifest_of(resolve_primary_model_name(provider), Vec::new(), provider);
     }
     // Speed::Fast first, then Speed::Slow. Iterating in this order
     // means that if Fast and Slow resolve to the same underlying
@@ -446,7 +447,7 @@ pub fn build_self_manifest(
     // (~28 GB primary) so peers attributed every reply to the
     // code model.
     let provider_name = resolve_primary_model_name(provider);
-    manifest_of(provider_name, models)
+    manifest_of(provider_name, models, provider)
 }
 
 /// Wrap an advertised model set in the manifest envelope.
@@ -457,7 +458,17 @@ pub fn build_self_manifest(
 /// cannot drift between them: a node advertising zero models must still
 /// negotiate features identically to one advertising five, or peers would read
 /// its capability set as a downgrade rather than as an empty inventory.
-fn manifest_of(provider_name: String, models: Vec<ProviderModel>) -> ProviderManifest {
+fn manifest_of(
+    provider_name: String,
+    models: Vec<ProviderModel>,
+    provider: &dyn InferenceProvider,
+) -> ProviderManifest {
+    // A hosted engine honours what any OpenAI-compatible backend does, and
+    // a peer's lark grammar or forced choice must not be sent to it.
+    let features = match provider.serving_locus() {
+        ServingLocus::ForwardsToThirdParty => oicp_types::features::OPENAI_COMPATIBLE_FEATURES,
+        _ => oicp_types::features::EMBEDDED_FEATURES,
+    };
     ProviderManifest {
         oicp_version: OICP_VERSION.to_string(),
         provider: Some(ProviderInfo {
@@ -475,10 +486,7 @@ fn manifest_of(provider_name: String, models: Vec<ProviderModel>) -> ProviderMan
         // (mesh nodes run the embedded llama.cpp path); the HTTP
         // `/oicp/v1/capabilities` route derives from the same const via
         // `apply_v04_enrichment`.
-        features: oicp_types::features::EMBEDDED_FEATURES
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+        features: features.iter().map(|s| s.to_string()).collect(),
     }
 }
 
@@ -1279,4 +1287,6 @@ mod self_manifest_tests {
              not whichever advertised slot happens to be largest"
         );
     }
+
+    mod hosted;
 }

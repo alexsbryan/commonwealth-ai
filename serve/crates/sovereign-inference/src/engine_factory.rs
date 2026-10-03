@@ -400,6 +400,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
         embed,
         section.api_key.clone(),
         model_id.to_string(),
+        section.fast_model_id.clone(),
         section.context_size,
         section.extra_params.clone(),
     )
@@ -559,6 +560,7 @@ mod tests {
             endpoint: Some("http://127.0.0.1:1/v1".to_string()),
             model_id: Some("some-model".to_string()),
             api_key: None,
+            fast_model_id: None,
             context_size: 8192,
             embed_model_id: None,
             embed_endpoint: None,
@@ -600,6 +602,7 @@ mod tests {
             endpoint: Some("http://127.0.0.1:8000/v1".to_string()),
             model_id: Some("Qwen3.5-35B-A3B".to_string()),
             api_key: None,
+            fast_model_id: None,
             context_size: 32768,
             embed_endpoint: Some("http://127.0.0.1:8001/v1".to_string()),
             embed_model_id: Some("BAAI/bge-m3".to_string()),

@@ -269,6 +269,49 @@ impl RemoteApiProvider {
     }
 }
 
+/// A hosted engine's own models: its vendor models as resident slots, so the
+/// manifest, aliases and status see a node that serves them, and the model a
+/// fast turn goes to.
+pub(crate) struct Hosted {
+    pub(crate) slots: Vec<sovereign_contracts::traits::ResidentSlot>,
+    fast_model_id: Option<String>,
+}
+
+impl Hosted {
+    fn new(chat_model_id: &str, fast_model_id: Option<String>, local_embed: Option<&str>) -> Self {
+        let slot = |role: &str, model_id: &str| sovereign_contracts::traits::ResidentSlot {
+            role: role.to_string(),
+            model_id: model_id.to_string(),
+            resident: true,
+            size_bytes: None,
+            transitioning: false,
+            placement: None,
+        };
+        let mut slots = vec![slot("primary", chat_model_id)];
+        slots.extend(fast_model_id.as_deref().map(|id| slot("fast", id)));
+        slots.extend(local_embed.map(|id| slot("embed", id)));
+        Self {
+            slots,
+            fast_model_id,
+        }
+    }
+
+    pub(crate) fn model_id_for(
+        &self,
+        speed: sovereign_contracts::types::Speed,
+        chat: &str,
+    ) -> String {
+        match (&self.fast_model_id, speed) {
+            (Some(fast), sovereign_contracts::types::Speed::Fast) => fast.clone(),
+            _ => chat.to_string(),
+        }
+    }
+
+    pub(crate) fn primary(&self) -> Option<sovereign_contracts::traits::ResidentSlot> {
+        self.slots.iter().find(|s| s.role == "primary").cloned()
+    }
+}
+
 /// Where a remote engine's embeddings run.
 pub enum EngineEmbed {
     /// An embedding server at this `/v1` base. A third party is never sent
@@ -300,6 +343,7 @@ impl SplitInferenceProvider {
         embed: EngineEmbed,
         api_key: Option<String>,
         chat_model_id: String,
+        fast_model_id: Option<String>,
         context_size: u32,
         extra_params: Option<serde_json::Value>,
     ) -> Result<Self> {
@@ -316,6 +360,7 @@ impl SplitInferenceProvider {
             Ok(provider.waiting_out_sheds())
         };
         let chat = half(chat_endpoint_v1, &chat_model_id)?.with_extra_params(extra_params);
+        let local_embed = matches!(embed, EngineEmbed::Local { .. });
         let (embed, embed_model_id, embed_at): (
             std::sync::Arc<dyn sovereign_contracts::traits::InferenceProvider>,
             String,
@@ -341,20 +386,54 @@ impl SplitInferenceProvider {
             target: "oicp_client",
             chat = %chat_endpoint_v1,
             chat_far_end = ?chat.far_end(),
+            fast = ?fast_model_id,
             embed = %embed_at,
             %embed_model_id,
             ?locus,
             "engine pair built"
         );
+        let hosted = Hosted::new(
+            &chat_model_id,
+            fast_model_id,
+            local_embed.then_some(embed_model_id.as_str()),
+        );
         Ok(Self {
             chat: std::sync::Arc::new(chat),
             embed,
+            hosted: Some(hosted),
             chat_model_id,
             embed_model_id,
             context_size,
             locus,
             served: None,
         })
+    }
+}
+
+impl SplitInferenceProvider {
+    /// A turn that names no model, pinned to the hosted engine's model for
+    /// its speed. A daemon picks a slot for an empty `model`; a vendor
+    /// rejects one, and an unnamed fast turn goes out empty
+    /// (`build_request_in`'s `model_field`).
+    pub(crate) fn for_speed<'a>(
+        &self,
+        request: &'a sovereign_contracts::types::CompletionRequest,
+    ) -> std::borrow::Cow<'a, sovereign_contracts::types::CompletionRequest> {
+        match &self.hosted {
+            Some(hosted) if request.model_id.is_none() => {
+                let model = hosted.model_id_for(request.preferred_speed, &self.chat_model_id);
+                tracing::debug!(
+                    target: "oicp_client",
+                    speed = ?request.preferred_speed,
+                    %model,
+                    "hosted engine: an unnamed turn pinned to the model for its speed"
+                );
+                let mut pinned = request.clone();
+                pinned.model_id = Some(model);
+                std::borrow::Cow::Owned(pinned)
+            }
+            _ => std::borrow::Cow::Borrowed(request),
+        }
     }
 }
 

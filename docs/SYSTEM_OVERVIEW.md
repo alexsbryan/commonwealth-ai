@@ -783,7 +783,12 @@ one rule, applied by `RemoteApiProvider::outbound`, the only way to build a
 request). A hosted engine therefore embeds on this machine: `[engine]
 embed_path` loads the embedding GGUF in this process as an
 `EmbedOnlyProvider` (`EngineEmbed::Local`), and `plan_serving` reads
-`[models]` for no engine but llama, so a hosted node needs none.
+`[models]` for no engine but llama, so a hosted node needs none. The engine
+reports its vendor models (and the local embed model) as resident slots
+(`oicp_client::outbound::Hosted`), so its manifest advertises them to peers
+like any loaded model, with `OPENAI_COMPATIBLE_FEATURES` instead of the
+embedded set; `[engine] fast_model_id` names a second model for fast turns,
+and a turn that names no model is pinned to the one for its speed.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers

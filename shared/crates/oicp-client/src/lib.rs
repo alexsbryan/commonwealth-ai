@@ -1410,6 +1410,9 @@ pub struct SplitInferenceProvider {
     locus: sovereign_contracts::traits::ServingLocus,
     /// serve's self-report, in the loopback mode only (`serve_loopback`).
     served: Option<sovereign_contracts::engine_state::ServedSelf>,
+    /// A hosted engine's own models (`Self::engine` only). A forwarder holds
+    /// nothing and reports nothing; a hosted engine serves its vendor model.
+    hosted: Option<outbound::Hosted>,
 }
 
 mod chat_wire;
@@ -1509,6 +1512,7 @@ impl SplitInferenceProvider {
                 sovereign_contracts::traits::ServingLocus::ForwardsOffBox
             },
             served: None,
+            hosted: None,
         }
     }
 
@@ -1586,6 +1590,7 @@ impl SplitInferenceProvider {
             context_size,
             locus,
             served: None,
+            hosted: None,
         }
     }
 
@@ -1652,6 +1657,7 @@ impl SplitInferenceProvider {
                 sovereign_contracts::traits::ServingLocus::ForwardsOffBox
             },
             served: None,
+            hosted: None,
         }
     }
 
@@ -1714,14 +1720,14 @@ impl SplitInferenceProvider {
 #[async_trait]
 impl InferenceProvider for SplitInferenceProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
-        self.chat.complete(request).await
+        self.chat.complete(&self.for_speed(request)).await
     }
 
     async fn complete_stream(
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        self.chat.complete_stream(request).await
+        self.chat.complete_stream(&self.for_speed(request)).await
     }
 
     /// Stream with a TYPED terminal frame.
@@ -1747,14 +1753,20 @@ impl InferenceProvider for SplitInferenceProvider {
         if serve_loopback::wants_raw_completion(&self.served, request) {
             return self.chat.raw_completion_stream(request).await;
         }
-        self.chat.complete_stream_with_finish(request).await
+        self.chat
+            .complete_stream_with_finish(&self.for_speed(request))
+            .await
     }
 
     async fn complete_batch(
         &self,
         requests: &[CompletionRequest],
     ) -> Result<Vec<CompletionResponse>> {
-        self.chat.complete_batch(requests).await
+        let requests: Vec<_> = requests
+            .iter()
+            .map(|r| self.for_speed(r).into_owned())
+            .collect();
+        self.chat.complete_batch(&requests).await
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
@@ -1784,6 +1796,9 @@ impl InferenceProvider for SplitInferenceProvider {
         if let Some(served) = &self.served {
             return serve_loopback::model_id_for(served, speed);
         }
+        if let Some(hosted) = &self.hosted {
+            return hosted.model_id_for(speed, &self.chat_model_id);
+        }
         // Only one chat slot over HTTP; the daemon's own engine maps the
         // request (Speed / max_tokens) to its loaded fast/primary slots.
         // Reporting the request model is the most honest client-side signal.
@@ -1791,7 +1806,10 @@ impl InferenceProvider for SplitInferenceProvider {
     }
 
     fn resident_slots(&self) -> Vec<ResidentSlot> {
-        serve_loopback::resident_slots(&self.served)
+        match &self.hosted {
+            Some(hosted) => hosted.slots.clone(),
+            None => serve_loopback::resident_slots(&self.served),
+        }
     }
 
     fn edit_slot_info(&self) -> Option<EditSlotInfo> {
@@ -1859,6 +1877,9 @@ impl InferenceProvider for SplitInferenceProvider {
     async fn primary_slot_status(&self) -> Option<ResidentSlot> {
         if let Some(served) = &self.served {
             return serve_loopback::primary_slot(served);
+        }
+        if let Some(hosted) = &self.hosted {
+            return hosted.primary();
         }
         #[derive(Deserialize)]
         struct StatusBody {

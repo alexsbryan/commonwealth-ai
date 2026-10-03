@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use sovereign_contracts::error::Error;
 use sovereign_contracts::oicp::{InferenceRequirements, ShardingPrivacy};
 use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
-use sovereign_contracts::types::CompletionRequest;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 
 use super::{EngineEmbed, FarEnd};
 use crate::{RemoteApiProvider, SplitInferenceProvider};
@@ -128,7 +128,7 @@ fn an_engine_off_this_machine_is_a_third_party() {
             endpoint_v1: embed.into(),
             model_id: "e".into(),
         };
-        SplitInferenceProvider::engine(chat, embed, None, "c".into(), 8192, None).unwrap()
+        SplitInferenceProvider::engine(chat, embed, None, "c".into(), None, 8192, None).unwrap()
     };
     let vendor = pair("https://api.example.com/v1", "http://127.0.0.1:8001/v1");
     assert_eq!(vendor.serving_locus(), ServingLocus::ForwardsToThirdParty);
@@ -152,7 +152,7 @@ async fn a_hosted_engine_embeds_in_this_process() {
         model_id: "Qwen3-Embedding-0.6B-Q8_0".into(),
     };
     let engine =
-        SplitInferenceProvider::engine(&url, embed, None, "vendor-model".into(), 8192, None)
+        SplitInferenceProvider::engine(&url, embed, None, "vendor-model".into(), None, 8192, None)
             .unwrap();
     assert_eq!(engine.embed("chunk").await.unwrap(), vec![5.0; 4]);
     assert_eq!(engine.embed_query("q").await.unwrap(), vec![1.0; 4]);
@@ -164,6 +164,76 @@ async fn a_hosted_engine_embeds_in_this_process() {
     assert_eq!(hits.load(SeqCst), 0, "an embedding reached the vendor");
     engine.complete(&request(None)).await.unwrap();
     assert_eq!(hits.load(SeqCst), 1, "chat goes to the vendor");
+}
+
+/// A hosted engine serves its vendor models, so it reports them as resident,
+/// and a turn that names no model is pinned to the one for its speed. THE
+/// FAILING INPUT: an unnamed fast turn went out with `"model": ""`, which a
+/// vendor rejects.
+#[tokio::test]
+async fn a_hosted_engine_reports_its_models_and_pins_unnamed_turns() {
+    let (url, _, bodies) = vendor().await;
+    let local = sovereign_contracts::double::TestProvider::new().with_embed_marker(|_| vec![0.0]);
+    let embed = EngineEmbed::Local {
+        provider: Arc::new(local),
+        model_id: "embed-gguf".into(),
+    };
+    let engine = SplitInferenceProvider::engine(
+        &url,
+        embed,
+        None,
+        "big".into(),
+        Some("small".into()),
+        8192,
+        None,
+    )
+    .unwrap();
+    let slots: Vec<_> = engine
+        .resident_slots()
+        .into_iter()
+        .map(|s| (s.role, s.model_id, s.resident))
+        .collect();
+    let want = |r: &str, m: &str| (r.to_string(), m.to_string(), true);
+    assert_eq!(
+        slots,
+        [
+            want("primary", "big"),
+            want("fast", "small"),
+            want("embed", "embed-gguf")
+        ]
+    );
+    assert_eq!(engine.model_id_for(Speed::Fast), "small");
+    assert_eq!(engine.model_id_for(Speed::Slow), "big");
+
+    for speed in [Speed::Fast, Speed::Slow] {
+        let unnamed = CompletionRequest {
+            prompt: "hi".into(),
+            preferred_speed: speed,
+            ..Default::default()
+        };
+        engine.complete(&unnamed).await.unwrap();
+    }
+    let models: Vec<String> = bodies
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|b| b["model"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert_eq!(models, ["small", "big"]);
+}
+
+/// Only a hosted engine reports slots. A forwarder holds nothing, and a slot
+/// it reported would advertise its entry node's model as its own.
+#[test]
+fn a_forwarder_reports_no_slots() {
+    let forwarder = SplitInferenceProvider::new(
+        "http://127.0.0.1:9741/v1",
+        "m".into(),
+        "e".into(),
+        8192,
+        String::new(),
+    );
+    assert!(forwarder.resident_slots().is_empty());
 }
 
 /// The admission table, whole: every far end against every payload.

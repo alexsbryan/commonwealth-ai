@@ -131,6 +131,10 @@ embedded. Name the embedding GGUF in `embed_path` and this process loads it
 section and no second server are needed. A llama-server on this machine,
 named in `embed_endpoint`, also works.
 
+**Peers can use it.** The node advertises the vendor model to the mesh like
+any loaded model, so a peer's turn can be served from it, on this node's key.
+`fast_model_id` names a second, quicker model for fast turns.
+
 **Vendor knobs go in `extra_params`**, merged into every chat body last.
 OpenRouter needs `require_parameters`, or it may route a schema request to a
 backend that ignores the schema, and that loss is silent.

@@ -122,6 +122,10 @@ pub struct EngineSection {
     /// routing, not a label, so a wrong value is a routing bug.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    /// A second model for fast turns (a cheaper or quicker one at the same
+    /// endpoint). Unset, fast turns use `model_id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast_model_id: Option<String>,
     /// Context window to advertise for this engine. Only meaningful
     /// where the engine cannot report its own.
     #[serde(default = "default_engine_context_size")]
@@ -168,6 +172,7 @@ impl Default for EngineSection {
             endpoint: None,
             api_key: None,
             model_id: None,
+            fast_model_id: None,
             context_size: default_engine_context_size(),
             embed_model_id: None,
             embed_endpoint: None,
