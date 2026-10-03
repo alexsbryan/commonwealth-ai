@@ -14,7 +14,8 @@ recipe-dev-b.toml's types), never from K2:
                   where: null | {filters: the far end's own, relations: the far end's, named, no where}}],
      aggregate: none|count|argmax|argmin, aggregate_over: a target attribute or a related type | null}
 Iteration 2 (campaign Decisions 2026-10-03, amended before running) added `where`, filter `negate` and
-`name`: iteration 1 could not express a two-hop join or a filter on the related type.
+`name`: iteration 1 could not express a two-hop join or a filter on the related type. Iteration 3 added
+one example of a NAMED relation inside `where`: iteration 2's model never put a name there.
 One JSON Schema `anyOf` branch per target type, so each branch's enums hold only what that type
 declares. It is sent as `response_format: {type: json_schema}`: the serving host lifts the schema
 into `structured_output` (sovereign-serving-host/src/inference_adapter.rs:415-416, via
@@ -175,7 +176,11 @@ def documentation(types, guidance, ents, attrs, edges):
           'Q: Which authors wrote a book printed before 1500?',
           'A: {"target_type": "author", "filters": [], "relations": [{"relation": "wrote", "other_type": "book", '
           '"other_name": null, "negate": false, "where": {"filters": [{"attribute": "printed", "op": "lt", '
-          '"value": 1500, "negate": false}], "relations": []}}], "aggregate": "none", "aggregate_over": null}']
+          '"value": 1500, "negate": false}], "relations": []}}], "aggregate": "none", "aggregate_over": null}',
+          'Q: Which libraries hold a book written by Austen?',
+          'A: {"target_type": "library", "filters": [], "relations": [{"relation": "held_by", "other_type": "book", '
+          '"other_name": null, "negate": false, "where": {"filters": [], "relations": [{"relation": "wrote", '
+          '"other_type": "author", "other_name": "Austen", "negate": false}]}}], "aggregate": "none", "aggregate_over": null}']
     return "\n".join(L)
 
 
