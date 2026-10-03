@@ -133,12 +133,12 @@ If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same com
 |---|---|
 | `tools`, `code`, `project`, `claim` | `sovereign-cli-dev` |
 | `daemon`, `doctor`, `setup`, `install-service` | `sovereign-cli-daemon` |
-| `enrich`, `corpus`, `atlas`, `meta-atlas`, `recipe`, `pipeline`, `alignment` (all but the sub-verbs in `SVRN_SIDE`, `sovereign-cli/src/ingest_bin.rs`) | `svrn-ingest` (crate `sovereign-pipeline`) |
+| `enrich`, `corpus`, `atlas`, `recipe`, `pipeline` (`INGEST_VERBS`, `ingest_bin.rs`) | `svrn-ingest` (`sovereign-pipeline`) |
 | `mcp`, `bench`, `chat`, `eval` | `sovereign-stock` |
 | `mesh`, `ring`, `job` (`mesh warm-cache`/`fetch-model`: `sovereign-serve`) | `sovereign-cli-mesh` |
 | `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
 
-To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build -p sovereign-cli --features dev-tools -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-stock -p sovereign-pipeline` (or `cargo build --bins --features sovereign-cli/dev-tools`).
+To build every binary a change spans: `cargo build --bins --features sovereign-cli/dev-tools`, or name each owner above with `-p` (`sovereign-cli` needs `--features dev-tools`).
 
 **`sovereign-cli` MUST be built with `--features dev-tools`.** Without it the build succeeds and silently replaces your `target/debug/sovereign-cli` with an end-user binary that has NO `notes`, `code`, `project`, `atos`, or `tools` verbs — and the loss surfaces minutes later on an unrelated command as "not in the default build", which reads like a missing feature rather than "your last build downgraded your install". Since 2026-07-26 the dispatcher warns on every invocation when it detects this (a `sovereign-cli-dev` sibling next to a dispatcher lacking the feature); the repair is the command above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, in the `sovereign-vulkan` toolbox — there is no `dev-toolbox` on this host) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
 
