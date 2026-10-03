@@ -17,7 +17,7 @@
 # for a single-target slim build:
 #     --build-arg CUDA_ARCHITECTURES=90       # H100 only
 #
-# ── build (from commonwealth-ai/ workspace root, NOT from sovereign/):
+# ── build (from the commonwealth-ai/ workspace root, NOT from serve/):
 #     cd ~/dev/commonwealth-ai
 #     podman build -t ghcr.io/<you>/sovereign-cuda:latest \
 #                  -f serve/container/Containerfile.cuda .
@@ -148,42 +148,36 @@ ENV CMAKE_C_COMPILER_LAUNCHER=sccache
 ENV CMAKE_CXX_COMPILER_LAUNCHER=sccache
 ENV CMAKE_CUDA_COMPILER_LAUNCHER=sccache
 
-# Build context = commonwealth-ai/ workspace root. Post-monorepo (May
-# 2026) the single workspace Cargo.toml + Cargo.lock live here; each
-# of ingest/crates/corpus-engine/, shared/crates/oicp-types/, cmnwlth/, sovereign/ contains
-# workspace-member crates referenced by path from the root manifest.
+# Build context = commonwealth-ai/ workspace root, which carries the one
+# workspace Cargo.toml + Cargo.lock. Cargo refuses to load the workspace when
+# any `[workspace] members` entry is missing, built here or not, so every
+# member is copied: each program's crates/ dir whole, then the members that
+# sit outside one. Nothing else is: no crate this image builds include_str!s a
+# file outside its own dir, and none has a build script.
+#
+# This block used to be a hand-kept list of crates, and it kept drifting:
+# `kernel-types` and `corpus-engine-sections` were missing on 2026-08-28, and
+# after the top-level-programs move it copied nine paths that no longer
+# existed while missing every svrn/, serve/, distributions/ and clients/
+# member. A member missing here fails `cargo fetch` ~6 minutes in, after the
+# CUDA layers. scripts/tests/release-build-context.sh now derives
+# the member list from the root manifest and fails, in seconds and without
+# podman, when a member, a [patch] path or a COPY source is missing.
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
-COPY cmnwlth/        ./cmnwlth/
-COPY ingest/crates/corpus-engine/       ./ingest/crates/corpus-engine/
-# corpus-engine decomposition carve-outs — top-level sibling workspace
-# members since mid-2026; cargo refuses the workspace if any is absent.
-#
-# THIS LIST IS REMEMBERED, NOT DERIVED, AND IT HAS DRIFTED TWICE. A member
-# added to the root `[workspace] members` does not fail anything here until
-# someone rebuilds the image, and then it fails at STEP 47 (`cargo fetch`)
-# with "failed to read /workspace/<crate>/Cargo.toml", ~6 minutes in — long
-# after the CUDA layers that make a rebuild expensive. On 2026-08-28 the list
-# was missing BOTH `kernel-types` and `corpus-engine-sections`, which had
-# joined since the last build (image `bb4749ee`, 2026-07-27).
-#
-# Before rebuilding, diff the two:
-#   python3 -c "import re,pathlib;t=pathlib.Path('Cargo.toml').read_text();\
-#   print(sorted({p.split('/')[0] for p in re.findall(chr(34)+'([^'+chr(34)+']+)'+chr(34), \
-#   re.search(r'members\s*=\s*\[(.*?)\]',t,re.S).group(1))}))"
-# against the COPY targets below.
-COPY shared/crates/corpus-engine-scip/        ./shared/crates/corpus-engine-scip/
-COPY corpus-engine-atos/        ./corpus-engine-atos/
-COPY code/crates/corpus-engine-notes/       ./code/crates/corpus-engine-notes/
-COPY code/crates/corpus-engine-archaeology/ ./code/crates/corpus-engine-archaeology/
-COPY shared/crates/corpus-engine-yield/       ./shared/crates/corpus-engine-yield/
-COPY code/crates/corpus-engine-watchers/    ./code/crates/corpus-engine-watchers/
-COPY shared/crates/corpus-engine-sections/    ./shared/crates/corpus-engine-sections/
-COPY shared/crates/kernel-types/        ./shared/crates/kernel-types/
-COPY shared/crates/oicp-types/          ./shared/crates/oicp-types/
-COPY shared/crates/oicp-client/         ./shared/crates/oicp-client/
-COPY studio/crates/       ./studio/crates/
-COPY quality/arch-layers/ ./quality/arch-layers/
+COPY svrn/crates/          ./svrn/crates/
+COPY serve/crates/         ./serve/crates/
+COPY cmnwlth/crates/       ./cmnwlth/crates/
+COPY ingest/crates/        ./ingest/crates/
+COPY code/crates/          ./code/crates/
+COPY shared/crates/        ./shared/crates/
+COPY bench/crates/         ./bench/crates/
+COPY distributions/crates/ ./distributions/crates/
+COPY clients/studio/            ./clients/studio/
+COPY clients/desktop/src-tauri/ ./clients/desktop/src-tauri/
+COPY clients/mobile/src-tauri/  ./clients/mobile/src-tauri/
+COPY quality/xtask/        ./quality/xtask/
+COPY quality/arch-layers/  ./quality/arch-layers/
 # [patch.crates-io] in the root manifest points llama-cpp-4, llama-cpp-sys-4
 # and lance-linalg at vendor/ — without it cargo resolves the unpatched
 # registry crates (wrong llama.cpp = wrong RPC wire version).
@@ -203,41 +197,14 @@ COPY quality/arch-layers/ ./quality/arch-layers/
 # extraction is now unconditional at the cargo build step below; see the
 # comment there.
 COPY vendor/              ./vendor/
-# Whole recipes tree (~1.4 MB): corpus-engine/build.rs vendors it into
-# OUT_DIR and sovereign-contracts include_str!s registry.toml + schema/.
-COPY ingest/crates/sovereign-recipes/      ./ingest/crates/sovereign-recipes/
-# Only copy the parts of sovereign/ that cargo actually needs. Skipping
-# container/, scripts/, docs/, bench/, etc. means edits to those don't
-# invalidate the cargo-build layer (which is the slow one). Workspace
-# members all live under crates/, but a few sovereign-rooted files are
-# pulled in via `include_str!` at compile time and must be present:
-#   - sovereign/models.toml              → sovereign-core::models_manifest
-#   - svrn/.opencode/               → sovereign-cli::doctor_cmd
-# The service templates moved into sovereign-service/data/ (2026-09-21) and
-# ride along in the crates/ copy — no separate COPY.
-COPY sovereign/models.toml ./sovereign/models.toml
-COPY sovereign/crates/    ./sovereign/crates/
-COPY svrn/.opencode/ ./svrn/.opencode/
-# sovereign-core include_str!s the router exemplar TOMLs + embed cache.
-COPY sovereign/router/    ./sovereign/router/
-# sovereign-cli-llm's bench_cmd include_str!s exactly this one file —
-# do NOT copy all of bench/lanes (44 MB of gyms/eval banks).
-# Compile-time `include_str!` targets under bench/lanes/. These are NOT
-# bench data for the image to run — they are baked into sovereign-core at
-# compile time, so a missing one is a BUILD failure, not a missing feature:
-#   error: couldn't read .../bench/calibration/h1-port/h1_admission_calibration.json
-# Each is named individually rather than copying bench/lanes/ wholesale
-# (17 MB in calibration alone, almost none of it compiled in).
-#
-# TO FIND THE FULL SET after touching sovereign-core, resolve every escaping
-# include and check it against the COPYs here:
-#   grep -rn 'include_str!' --include=*.rs svrn/crates/sovereign-core | grep '\.\./'
-# The deep relative paths are the hazard — `admission.rs` reaches SIX levels
-# up, so nothing about the call site suggests it depends on bench/.
-COPY bench/lanes/book-report/bench.toml ./bench/lanes/book-report/bench.toml
-COPY bench/lanes/calibration/h1-port/h1_admission_calibration.json ./bench/lanes/calibration/h1-port/
-COPY bench/lanes/calibration/h1-port/h1_scores.jsonl ./bench/lanes/calibration/h1-port/
-COPY bench/lanes/routing/calibration/axes_v1.toml ./bench/lanes/routing/calibration/
+# sovereign-cli-shared's cli_contract::manifest_path() is
+# env!("SOVEREIGN_CLI_CONTRACT"); in-tree the workspace .cargo/config.toml
+# sets it. That config is not copied (its linux target links with clang +
+# mold, which this image does not carry), so the knob is set here: unset is
+# a compile error. The value is the file's place in the source tree. Only
+# `svrn contract` and the hidden dev verbs `__contract-smoke`/`__journey-plan`
+# read it (sovereign-cli main.rs), and a worker pod runs none of them.
+ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
 
 # Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
 # "vulkan" is currently checked in — the repo default has flipped over

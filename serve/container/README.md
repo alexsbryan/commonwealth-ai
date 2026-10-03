@@ -19,10 +19,11 @@ to extend the image.
 
 ## Build
 
-From the workspace root (`commonwealth-ai/`, not `sovereign/`),
-because `sovereign/Cargo.toml` has path-deps reaching `../corpus-engine`,
-`../oicp-types`, `../commonwealth/`. Building from `sovereign/` alone
-would fail to resolve those crates.
+From the workspace root (`commonwealth-ai/`), because the root `Cargo.toml`
+is the one workspace manifest and cargo will not load the workspace with any
+member missing. Both Containerfiles copy every program's `crates/` dir plus
+the members outside one; `scripts/tests/release-build-context.sh` checks that
+COPY set against the manifest's members and `[patch]` paths, without podman.
 
 ```bash
 cd ~/dev/commonwealth-ai

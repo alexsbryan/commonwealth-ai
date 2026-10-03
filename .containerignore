@@ -113,8 +113,16 @@ test-artifacts/
 # Run logs and a second agent harness; neither is copied by anything.
 runs/
 .opencode/
-# The mobile tree is not a COPY source for the CLI or desktop images.
-clients/mobile/
+# clients/mobile/ used to be excluded here as "not a COPY source". Its
+# src-tauri/ is a workspace member, and the serve images COPY every member
+# because cargo will not load the workspace with one missing, so the tree
+# stays in (1.6 MB once **/node_modules/ and **/target/ are gone).
+#
+# The desktop's sidecar downloads are not: src-tauri/binaries/ holds ~49 MB
+# of gitignored paddle-ocr and pdfium builds that the serve images' COPY of
+# clients/desktop/src-tauri/ would otherwise bake into the cargo layer. The
+# desktop images COPY nothing from there; they bind-mount the repo.
+clients/desktop/src-tauri/binaries/
 
 # ingest/crates/sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
 # build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts

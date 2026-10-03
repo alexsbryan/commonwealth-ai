@@ -23,6 +23,14 @@
 #   3. NO un-ignored top-level tree exceeds the size budget, whatever it is
 #      called. 1 and 2 only know the names we already thought of; 3 is what
 #      would have caught research/ without anyone naming it.
+#   4. A Containerfile that builds the workspace copies all of it: every
+#      `[workspace] members` path and `[patch]` path from the root manifest,
+#      and an ENV for each `.cargo/config.toml` `[env]` knob a crate reads with
+#      env!. Check 2 also refuses a COPY source the tree does not have. Both
+#      landed 2026-10-02, after the top-level-programs move left the serve
+#      images copying six and nine paths that no longer existed while missing
+#      every svrn/, serve/ and clients/ member — and check 2 passed them all,
+#      because a path that does not exist is not excluded either.
 #
 # No podman, no network, no containers — this reads the ignore file and the
 # Containerfiles and walks the tree.
@@ -146,6 +154,7 @@ for tree in \
     .xwin-container \
     .ort-cache-container \
     dist \
+    clients/desktop/src-tauri/binaries \
     .git
 do
     if path_is_ignored "$tree"; then
@@ -193,6 +202,11 @@ else
                 copy_checked=$((copy_checked + 1))
                 if path_is_ignored "$src"; then
                     fail "$cf COPYs '$src' but $IGNORE_FILE excludes it — the image build would fail on a missing file"
+                elif ! git check-ignore -q -- "$src" && [[ -z "$(git ls-files -- "$src" | head -1)" ]]; then
+                    # A gitignored source (target/release/…) is a host build
+                    # output that exists only after a build; anything else must
+                    # be in the tree, or podman fails the COPY outright.
+                    fail "$cf COPYs '$src', which is not in the tree — the image build would fail on a missing file"
                 else
                     ok "COPY source reachable: $src"
                 fi
@@ -270,6 +284,65 @@ if [[ -n "$total_mb" ]]; then
     else
         ok "effective context is ${total_mb} MB (budget ${BUDGET_MB} MB)"
     fi
+fi
+
+# ─── 4. A Containerfile that builds the workspace copies all of it ─────
+# Cargo refuses to load the workspace when any member or [patch] path is
+# missing, built or not, and in an image build that surfaces at `cargo fetch`
+# minutes in. Derived from the root manifest, so a new member cannot drift:
+# it fails here until some COPY covers it (a COPY of an ancestor dir counts).
+manifest_paths() {  # members, then [patch.*] paths, comment-stripped
+    awk '
+        { sub(/#.*/, "") }
+        /^\[/ { in_ws = ($0 ~ /^\[workspace\]/); in_patch = ($0 ~ /^\[patch\./); in_members = 0 }
+        in_ws && /^[[:space:]]*members[[:space:]]*=/ { in_members = 1 }
+        in_members {
+            line = $0
+            while (match(line, /"[^"]+"/)) { print substr(line, RSTART + 1, RLENGTH - 2); line = substr(line, RSTART + RLENGTH) }
+            if ($0 ~ /\]/) in_members = 0
+        }
+        in_patch && match($0, /path[[:space:]]*=[[:space:]]*"[^"]+"/) {
+            v = substr($0, RSTART, RLENGTH); sub(/^[^"]*"/, "", v); sub(/"$/, "", v); print v
+        }
+    ' Cargo.toml
+}
+env_knobs() {  # [env] keys of .cargo/config.toml that a non-test crate source reads with env!
+    [[ -f .cargo/config.toml ]] || return 0
+    awk '/^\[/ { in_env = ($0 ~ /^\[env\]/); next } in_env && match($0, /^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/) {
+            k = substr($0, 1, RLENGTH); sub(/[[:space:]]*=$/, "", k); print k }' .cargo/config.toml \
+    | while read -r k; do
+        git grep -qE "env!\([[:space:]]*\"$k\"" -- '*.rs' ':!**/tests/**' ':!**/tests.rs' ':!**/*_tests.rs' && echo "$k"
+    done
+}
+mapfile -t ws_paths < <(manifest_paths)
+mapfile -t ws_knobs < <(env_knobs)
+builders=0
+if (( ${#ws_paths[@]} == 0 )); then
+    fail "parsed 0 workspace members from Cargo.toml — the member-coverage check asserted nothing"
+else
+    for cf in "${containerfiles[@]}"; do
+        grep -vE '^[[:space:]]*#' "$cf" | grep -qE '\bcargo (build|fetch)\b' || continue
+        builders=$((builders + 1))
+        mapfile -t cf_srcs < <(grep -hE '^[[:space:]]*(COPY|ADD)[[:space:]]' "$cf" | grep -v -- '--from=' \
+            | awk '{ n = 0; for (i = 2; i <= NF; i++) if ($i !~ /^--/) a[++n] = $i; for (i = 1; i < n; i++) { p = a[i]; sub(/\/$/, "", p); print p } }')
+        missing=0
+        for m in "${ws_paths[@]}"; do
+            covered=0
+            for c in "${cf_srcs[@]}"; do
+                [[ "$m" == "$c" || "$m" == "$c"/* || "$c" == "." ]] && { covered=1; break; }
+            done
+            (( covered )) || { missing=$((missing + 1)); fail "$cf builds the workspace but COPYs nothing covering '$m' — cargo refuses a workspace with a member or [patch] path missing"; }
+        done
+        (( missing )) || ok "$cf COPYs all ${#ws_paths[@]} workspace member and [patch] paths"
+        for k in "${ws_knobs[@]}"; do
+            if grep -qE "^[[:space:]]*ENV[[:space:]]+$k[=[:space:]]" "$cf"; then
+                ok "$cf sets ENV $k (.cargo/config.toml [env], read by env!)"
+            else
+                fail "$cf builds the workspace without ENV $k — .cargo/config.toml sets it in-tree, a crate reads it with env!, and the image does not copy that config"
+            fi
+        done
+    done
+    (( builders > 0 )) || fail "no Containerfile runs cargo build/fetch — the member-coverage check asserted nothing"
 fi
 
 if (( unknown_count > 0 )) && (( rc == 0 )); then
