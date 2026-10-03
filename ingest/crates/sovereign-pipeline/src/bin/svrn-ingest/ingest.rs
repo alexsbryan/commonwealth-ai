@@ -125,10 +125,11 @@ pub struct IngestArgs {
     #[arg(long)]
     pub no_enrich: bool,
 
-    /// Release this corpus's text to a chat host off this machine, up to this
-    /// custody: `public-web | peer | personal`. Absent means default-deny: a
-    /// host off this machine refuses, and the local daemon never needs a
-    /// grant.
+    /// Release this corpus's text beyond this machine, up to this custody:
+    /// `public-web | peer | personal`. It lets a chat host on another machine
+    /// receive it, and lets the local daemon hand it to a hosted engine
+    /// (every request then declares `third_party_allowed`). Absent means
+    /// default-deny.
     #[arg(long, value_parser = sovereign_enrichment_build::inference_client::parse_consent_class)]
     pub consent: Option<sovereign_contracts::types::Custody>,
 }
@@ -200,7 +201,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     if let Some(floor) = args.consent {
         sovereign_enrichment_build::inference_client::export_run_consent(floor);
         eprintln!(
-            "corpus-mcp: --consent {}: a chat host off this machine may receive this corpus's text",
+            "corpus-mcp: --consent {}: a chat host off this machine or a hosted engine may receive this corpus's text",
             floor.as_str()
         );
     }
