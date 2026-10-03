@@ -1378,7 +1378,9 @@ impl InferenceProvider for RemoteApiProvider {
 /// share one impl rather than diverging.
 pub struct SplitInferenceProvider {
     chat: std::sync::Arc<RemoteApiProvider>,
-    embed: std::sync::Arc<RemoteApiProvider>,
+    /// A daemon's or server's embed route, or, under a hosted engine, a model
+    /// in this process ([`EngineEmbed::Local`]).
+    embed: std::sync::Arc<dyn InferenceProvider>,
     chat_model_id: String,
     /// Kept so `embed_model_id()` can vouch for persisted embeddings
     /// (the T1 memory-embedding staleness guard) without a daemon
@@ -1412,7 +1414,7 @@ pub struct SplitInferenceProvider {
 
 mod chat_wire;
 mod outbound;
-pub use outbound::{FarEnd, Payload, ThirdPartyRefusal};
+pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal};
 mod shed;
 pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
 mod loopback;

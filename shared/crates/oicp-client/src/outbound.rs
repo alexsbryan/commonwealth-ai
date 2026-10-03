@@ -269,18 +269,37 @@ impl RemoteApiProvider {
     }
 }
 
+/// Where a remote engine's embeddings run.
+pub enum EngineEmbed {
+    /// An embedding server at this `/v1` base. A third party is never sent
+    /// texts, so for a hosted engine this must be a server on this machine.
+    Remote {
+        /// The server's `/v1` base.
+        endpoint_v1: String,
+        /// The model it embeds with.
+        model_id: String,
+    },
+    /// A model in this process (`[engine] embed_path`): the small embedding
+    /// GGUF, so a hosted engine embeds on this machine with no second server.
+    Local {
+        /// The loaded model.
+        provider: std::sync::Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+        /// Its id, vouched for on persisted embeddings.
+        model_id: String,
+    },
+}
+
 impl SplitInferenceProvider {
     /// The pair behind `[engine] kind = "remote"`, and the one place an
     /// engine's far ends are decided ([`FarEnd::of_engine_endpoint`]). The
     /// locus follows the chat half, where a turn runs.
     ///
-    /// Both halves wait out sheds: an engine is the only holder there is.
+    /// Both remote halves wait out sheds: an engine is the only holder there is.
     pub fn engine(
         chat_endpoint_v1: &str,
-        embed_endpoint_v1: &str,
+        embed: EngineEmbed,
         api_key: Option<String>,
         chat_model_id: String,
-        embed_model_id: String,
         context_size: u32,
         extra_params: Option<serde_json::Value>,
     ) -> Result<Self> {
@@ -297,7 +316,23 @@ impl SplitInferenceProvider {
             Ok(provider.waiting_out_sheds())
         };
         let chat = half(chat_endpoint_v1, &chat_model_id)?.with_extra_params(extra_params);
-        let embed = half(embed_endpoint_v1, &embed_model_id)?;
+        let (embed, embed_model_id, embed_at): (
+            std::sync::Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+            String,
+            String,
+        ) = match embed {
+            EngineEmbed::Remote {
+                endpoint_v1,
+                model_id,
+            } => {
+                let half = half(&endpoint_v1, &model_id)?;
+                let at = format!("{endpoint_v1} ({:?})", half.far_end());
+                (std::sync::Arc::new(half), model_id, at)
+            }
+            EngineEmbed::Local { provider, model_id } => {
+                (provider, model_id, "this process".to_string())
+            }
+        };
         let locus = match chat.far_end() {
             FarEnd::ThirdParty => ServingLocus::ForwardsToThirdParty,
             FarEnd::Origin | FarEnd::Peer => ServingLocus::ForwardsOnBox,
@@ -306,14 +341,14 @@ impl SplitInferenceProvider {
             target: "oicp_client",
             chat = %chat_endpoint_v1,
             chat_far_end = ?chat.far_end(),
-            embed = %embed_endpoint_v1,
-            embed_far_end = ?embed.far_end(),
+            embed = %embed_at,
+            %embed_model_id,
             ?locus,
             "engine pair built"
         );
         Ok(Self {
             chat: std::sync::Arc::new(chat),
-            embed: std::sync::Arc::new(embed),
+            embed,
             chat_model_id,
             embed_model_id,
             context_size,

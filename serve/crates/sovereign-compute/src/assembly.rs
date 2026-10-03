@@ -122,12 +122,19 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     // Through the accessor, not the field: the refusal it returns names WHY
     // there are no slots (a terminal routes instead; an unconfigured node
     // runs `svrn setup`).
-    let models = config.models()?;
     let engine = config.engine.kind.clone();
+    // A remote engine holds no chat slots, so it needs no `[models]`; every
+    // other engine reads its slots from there.
+    let models = if engine == EngineKind::Remote {
+        config.models().ok()
+    } else {
+        Some(config.models()?)
+    };
     let mut in_process = BTreeSet::new();
-    // Only llama holds local slots; every other engine embeds remotely and
-    // reports `Unknown` (`BuiltEngine::external`).
-    let embed_family = if engine == EngineKind::Llama {
+    // Llama holds its slots here. A remote engine holds one only when it
+    // embeds in this process (`[engine] embed_path`); any other engine embeds
+    // remotely and reports `Unknown` (`BuiltEngine::external`).
+    let embed_family = if let (EngineKind::Llama, Some(models)) = (&engine, models) {
         in_process.insert(PlannedSlot::Fast);
         if !engine_factory::child_owns_primary(config) {
             in_process.insert(PlannedSlot::Primary);
@@ -146,6 +153,10 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             in_process.insert(PlannedSlot::Rerank);
         }
         engine_factory::embed_family_for(&models.embed)
+    } else if let (EngineKind::Remote, Some(path)) = (&engine, config.engine.embed_path.as_deref())
+    {
+        in_process.insert(PlannedSlot::Embed);
+        engine_factory::embed_family_for(path)
     } else {
         ModelFamily::Unknown
     };
@@ -158,7 +169,7 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
                 .iter()
                 .map(|s| (s.name.clone(), s.model.clone())),
         );
-        if let Some(spec) = distributed_primary_spec(config, models) {
+        if let Some(spec) = models.and_then(|m| distributed_primary_spec(config, m)) {
             children.insert((spec.name, spec.model));
         }
     }
@@ -210,7 +221,12 @@ impl ReloadFactory {
             plan: Some(plan.clone()),
             reason,
         };
-        let models = config.models().map_err(fail)?;
+        // Required by every engine but a remote one, as in `plan_serving`.
+        let models = if config.engine.kind == EngineKind::Remote {
+            config.models().ok()
+        } else {
+            Some(config.models().map_err(fail)?)
+        };
 
         // `[compute] distributed_primary` — the primary lives in a supervised
         // child, so this process must NOT also hold it.
@@ -226,7 +242,9 @@ impl ReloadFactory {
                     .to_string(),
             ));
         }
-        if child_owns_primary && models.fast_path() == models.primary.as_path() {
+        if let Some(models) =
+            models.filter(|m| child_owns_primary && m.fast_path() == m.primary.as_path())
+        {
             return Err(fail(format!(
                 "[compute] distributed_primary = true requires a DISTINCT small `fast` model.\n\
                  hint: with no `[models].fast`, fast_path() falls back to the primary GGUF ({}), so \
@@ -235,7 +253,7 @@ impl ReloadFactory {
                 models.primary.display()
             )));
         }
-        if child_owns_primary {
+        if let Some(models) = models.filter(|_| child_owns_primary) {
             tracing::info!(
                 target: "compute_child",
                 primary = %models.primary.display(),
@@ -313,7 +331,7 @@ impl ReloadFactory {
 #[allow(clippy::type_complexity)]
 fn build_in_process(
     config: &SetupConfig,
-    models: &ModelsSection,
+    models: Option<&ModelsSection>,
     plan: &ServingPlan,
 ) -> Result<
     (
@@ -340,6 +358,7 @@ fn build_in_process(
     // it configures report their own unavailability through the trait's
     // defaults rather than being faked (ARCH §18.3).
     if let Some(arc) = built.llama.as_ref() {
+        let models = models.ok_or("the llama engine built with no `[models]` to install from")?;
         // Wire the optional LRU memory budget BEFORE installing extras. With a
         // budget set, each `load_extra` call (including the eager startup loads
         // from `[models.extra]`) checks against it and evicts cold slots if
@@ -503,14 +522,14 @@ fn distributed_primary_spec(
 #[allow(clippy::type_complexity)]
 fn start_compute_layer(
     config: &SetupConfig,
-    models: &ModelsSection,
+    models: Option<&ModelsSection>,
     inner: Arc<dyn InferenceProvider>,
 ) -> (
     Arc<dyn InferenceProvider>,
     Option<Arc<DynamicChildSlot>>,
     Option<Arc<ComputeChildManager>>,
 ) {
-    let distributed_spec = distributed_primary_spec(config, models);
+    let distributed_spec = models.and_then(|m| distributed_primary_spec(config, m));
     if !(config.compute.enabled && (!config.compute.slot.is_empty() || distributed_spec.is_some()))
     {
         return (inner, None, None);
@@ -666,6 +685,9 @@ mod reload_builds_tests;
 #[cfg(test)]
 #[path = "assembly/reload_tests.rs"]
 mod reload_tests;
+#[cfg(test)]
+#[path = "assembly/remote_plan_tests.rs"]
+mod remote_plan_tests;
 #[cfg(test)]
 #[path = "assembly/serves_rerank_tests.rs"]
 mod serves_rerank_tests;

@@ -780,7 +780,10 @@ decides each half's `FarEnd`: a loopback endpoint is a server on this box
 end is released by the operator's config: completions go to it, without our
 OICP envelope, and texts to embed or rerank never do (`FarEnd::admit`, the
 one rule, applied by `RemoteApiProvider::outbound`, the only way to build a
-request). A hosted engine therefore embeds on this machine.
+request). A hosted engine therefore embeds on this machine: `[engine]
+embed_path` loads the embedding GGUF in this process as an
+`EmbedOnlyProvider` (`EngineEmbed::Local`), and `plan_serving` reads
+`[models]` for no engine but llama, so a hosted node needs none.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers

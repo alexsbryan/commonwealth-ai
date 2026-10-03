@@ -143,6 +143,12 @@ pub struct EngineSection {
     /// chats and retrieves is usually talking to two ports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embed_endpoint: Option<String>,
+    /// An embedding GGUF this process loads, so a hosted engine embeds on
+    /// this machine with no second server: text is never sent to a third
+    /// party to be embedded. Excludes `embed_endpoint`; the model id is the
+    /// file stem, as under `llama`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embed_path: Option<std::path::PathBuf>,
     /// Fields merged last into every chat body `remote` sends: a vendor's own
     /// knobs, e.g. OpenRouter's `provider = { require_parameters = true }`,
     /// without which it may route a schema request to a backend that ignores
@@ -165,6 +171,7 @@ impl Default for EngineSection {
             context_size: default_engine_context_size(),
             embed_model_id: None,
             embed_endpoint: None,
+            embed_path: None,
             extra_params: None,
         }
     }

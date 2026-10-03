@@ -307,6 +307,7 @@ pub fn embed_family_for(path: &std::path::Path) -> ModelFamily {
 /// request report the failure. That is what makes the seam testable
 /// without a server (see `tests/engine_factory.rs`).
 fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
+    use crate::remote::EngineEmbed;
     let endpoint = section.endpoint.as_deref().ok_or_else(|| {
         "[engine] kind = \"remote\" requires `endpoint` (e.g. \
          endpoint = \"http://localhost:8000/v1\")"
@@ -324,6 +325,13 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
     // model per process and return a non-embedding shape (or an error) when
     // a chat model reaches `/embeddings`. So an embed endpoint must name its
     // model.
+    if section.embed_path.is_some() && section.embed_endpoint.is_some() {
+        return Err(
+            "[engine] embed_path and embed_endpoint are both set. Embeddings come from one \
+             place: a model this process loads (embed_path) or a server (embed_endpoint)."
+                .to_string(),
+        );
+    }
     if section.embed_endpoint.is_some() && section.embed_model_id.is_none() {
         return Err(
             "[engine] embed_endpoint is set but embed_model_id is not. The embedding \
@@ -332,19 +340,66 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
                 .to_string(),
         );
     }
-    let embed_endpoint = section.embed_endpoint.as_deref().unwrap_or(endpoint);
-    let embed_model_id = section.embed_model_id.as_deref().unwrap_or(model_id);
+    // Chat and embeddings are ONE model id on ONE endpoint unless the
+    // operator says otherwise. That default is correct against a Sovereign
+    // daemon, which routes embeddings to its own embed slot whatever id it
+    // is handed, and wrong against vLLM / SGLang / TGI, which serve one
+    // model per process and return a non-embedding shape (or an error) when
+    // a chat model reaches `/embeddings`. So an embed endpoint must name its
+    // model. A vendor is never sent texts at all, so a hosted engine names
+    // `embed_path` instead: the small embedding GGUF, in this process.
+    let embed = match section.embed_path.as_deref() {
+        Some(path) => {
+            let family = embed_family_for(path);
+            let model_id = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .ok_or_else(|| format!("[engine] embed_path {} names no file", path.display()))?;
+            // llama-cpp-4 panics on a missing file (`model.rs`: "does not
+            // exist"); refuse first, naming the path, so a typo is a message
+            // and not a dead daemon.
+            if !path.is_file() {
+                return Err(format!(
+                    "[engine] embed_path {} is not a file. Point it at the embedding GGUF \
+                     (`svrn setup --hosted` downloads one).",
+                    path.display()
+                ));
+            }
+            let provider = crate::embedded::EmbedOnlyProvider::load(path, family.clone())
+                .map_err(|e| format!("[engine] embed_path {}: {e}", path.display()))?;
+            tracing::info!(
+                target: "engine_factory",
+                path = %path.display(),
+                ?family,
+                %model_id,
+                "remote engine: embeddings run in this process"
+            );
+            EngineEmbed::Local {
+                provider: Arc::new(provider),
+                model_id,
+            }
+        }
+        None => EngineEmbed::Remote {
+            endpoint_v1: section
+                .embed_endpoint
+                .as_deref()
+                .unwrap_or(endpoint)
+                .to_string(),
+            model_id: section
+                .embed_model_id
+                .as_deref()
+                .unwrap_or(model_id)
+                .to_string(),
+        },
+    };
     // One shape for every remote engine. The pair decides each half's far
-    // end (an endpoint off this machine is a third party, which sends nothing
-    // a request did not declare) and the locus the router reads. The
-    // single-endpoint branch this replaced reported `OwnWeights`, so a
-    // `local_only` turn went to whatever the endpoint named.
+    // end (an endpoint off this machine is a third party, never sent texts)
+    // and the locus the router reads.
     let provider = crate::remote::SplitInferenceProvider::engine(
         endpoint,
-        embed_endpoint,
+        embed,
         section.api_key.clone(),
         model_id.to_string(),
-        embed_model_id.to_string(),
         section.context_size,
         section.extra_params.clone(),
     )
@@ -353,10 +408,8 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
         target: "engine_factory",
         endpoint = %endpoint,
         model_id = %model_id,
-        embed_endpoint = %embed_endpoint,
-        embed_model_id = %embed_model_id,
         locus = ?provider.serving_locus(),
-        "remote engine constructed — this node holds no weights"
+        "remote engine constructed — this node holds no chat weights"
     );
     let provider: Arc<dyn InferenceProvider> = Arc::new(provider);
     Ok(BuiltEngine::external(provider))
@@ -465,6 +518,34 @@ mod tests {
         assert!(err.contains("model_id"), "got: {err}");
     }
 
+    /// Embeddings come from one place. A local embed model that cannot load
+    /// is a refusal naming its path, never a quiet fall back to the vendor,
+    /// which would be sent texts.
+    #[test]
+    fn a_local_embed_model_is_the_one_source_or_a_refusal() {
+        let mut section = EngineSection {
+            kind: EngineKind::Remote,
+            endpoint: Some("https://api.example.com/v1".to_string()),
+            model_id: Some("vendor-model".to_string()),
+            embed_path: Some("/nonexistent/Qwen3-Embedding-0.6B-Q8_0.gguf".into()),
+            embed_endpoint: Some("http://127.0.0.1:8001/v1".to_string()),
+            embed_model_id: Some("e".to_string()),
+            ..Default::default()
+        };
+        let err = build_remote(&section).expect_err("two embed sources must refuse");
+        assert!(
+            err.contains("embed_path") && err.contains("embed_endpoint"),
+            "got: {err}"
+        );
+
+        section.embed_endpoint = None;
+        let err = build_remote(&section).expect_err("an unloadable embed model must refuse");
+        assert!(
+            err.contains("/nonexistent/Qwen3-Embedding-0.6B-Q8_0.gguf"),
+            "got: {err}"
+        );
+    }
+
     /// The whole point of the seam: an engine that is not llama.cpp
     /// builds, holds no llama handle, and needs no GGUF on disk. This is
     /// the test that would have been impossible before the factory —
@@ -481,6 +562,7 @@ mod tests {
             context_size: 8192,
             embed_model_id: None,
             embed_endpoint: None,
+            embed_path: None,
             extra_params: None,
         };
         // Deliberately absent paths: if this engine touched a GGUF the
@@ -521,6 +603,7 @@ mod tests {
             context_size: 32768,
             embed_endpoint: Some("http://127.0.0.1:8001/v1".to_string()),
             embed_model_id: Some("BAAI/bge-m3".to_string()),
+            embed_path: None,
             extra_params: None,
         };
         let built = build_engine(&config).expect("split chat/embed builds without I/O");

@@ -125,9 +125,11 @@ this machine as a third party, and that changes what it will send there.
 node's chat turns and enrichment calls to it. Our OICP envelope is not sent;
 a vendor does not speak it.
 
-**Embeddings stay on this machine.** An embedding request carries no envelope,
-so it can never declare that release. Point `embed_endpoint` at a server here:
-a llama-server running the embedding model is enough.
+**Embeddings stay on this machine.** Text is never sent to a vendor to be
+embedded. Name the embedding GGUF in `embed_path` and this process loads it
+(Qwen3-Embedding-0.6B is about 600 MB and runs on CPU), so no `[models]`
+section and no second server are needed. A llama-server on this machine,
+named in `embed_endpoint`, also works.
 
 **Vendor knobs go in `extra_params`**, merged into every chat body last.
 OpenRouter needs `require_parameters`, or it may route a schema request to a
@@ -140,8 +142,7 @@ endpoint = "https://openrouter.ai/api/v1"
 model_id = "deepseek/deepseek-v3.2"
 api_key = "..."
 context_size = 65536
-embed_endpoint = "http://127.0.0.1:8089/v1"
-embed_model_id = "Qwen3-Embedding-0.6B"
+embed_path = "/home/me/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
 extra_params = { provider = { require_parameters = true } }
 ```
 

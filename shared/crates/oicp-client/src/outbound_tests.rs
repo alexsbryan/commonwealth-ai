@@ -8,7 +8,7 @@ use sovereign_contracts::oicp::{InferenceRequirements, ShardingPrivacy};
 use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
 use sovereign_contracts::types::CompletionRequest;
 
-use super::FarEnd;
+use super::{EngineEmbed, FarEnd};
 use crate::{RemoteApiProvider, SplitInferenceProvider};
 
 /// A vendor in miniature: answers chat, embeddings and rerank, counts every
@@ -124,24 +124,46 @@ async fn only_a_third_party_admits() {
 #[test]
 fn an_engine_off_this_machine_is_a_third_party() {
     let pair = |chat: &str, embed: &str| {
-        SplitInferenceProvider::engine(chat, embed, None, "c".into(), "e".into(), 8192, None)
-            .unwrap()
+        let embed = EngineEmbed::Remote {
+            endpoint_v1: embed.into(),
+            model_id: "e".into(),
+        };
+        SplitInferenceProvider::engine(chat, embed, None, "c".into(), 8192, None).unwrap()
     };
-    let vendor = pair("https://api.example.com/v1", "https://api.example.com/v1");
+    let vendor = pair("https://api.example.com/v1", "http://127.0.0.1:8001/v1");
     assert_eq!(vendor.serving_locus(), ServingLocus::ForwardsToThirdParty);
-    assert_eq!(vendor.embed.far_end(), FarEnd::ThirdParty);
+    assert_eq!(vendor.chat.far_end(), FarEnd::ThirdParty);
 
     let local = pair("http://127.0.0.1:8000/v1", "http://127.0.0.1:8001/v1");
     assert_eq!(local.serving_locus(), ServingLocus::ForwardsOnBox);
-    assert_eq!(
-        (local.chat.far_end(), local.embed.far_end()),
-        (FarEnd::Origin, FarEnd::Origin)
-    );
+    assert_eq!(local.chat.far_end(), FarEnd::Origin);
+}
 
-    // Hosted chat, embeddings on this machine (the M1 shape).
-    let split = pair("https://api.example.com/v1", "http://127.0.0.1:9741/v1");
-    assert_eq!(split.serving_locus(), ServingLocus::ForwardsToThirdParty);
-    assert_eq!(split.embed.far_end(), FarEnd::Origin);
+/// A hosted engine with `[engine] embed_path`: chat goes to the vendor, and
+/// every embedding is answered in this process. The vendor counts what
+/// reaches it, so an embedding that leaked would move the counter.
+#[tokio::test]
+async fn a_hosted_engine_embeds_in_this_process() {
+    let (url, hits, _) = vendor().await;
+    let local = sovereign_contracts::double::TestProvider::new()
+        .with_embed_marker(|t| vec![t.len() as f32; 4]);
+    let embed = EngineEmbed::Local {
+        provider: Arc::new(local),
+        model_id: "Qwen3-Embedding-0.6B-Q8_0".into(),
+    };
+    let engine =
+        SplitInferenceProvider::engine(&url, embed, None, "vendor-model".into(), 8192, None)
+            .unwrap();
+    assert_eq!(engine.embed("chunk").await.unwrap(), vec![5.0; 4]);
+    assert_eq!(engine.embed_query("q").await.unwrap(), vec![1.0; 4]);
+    assert_eq!(
+        engine.embed_batch(&["ab".to_string()]).await.unwrap(),
+        vec![vec![2.0; 4]]
+    );
+    assert_eq!(engine.embed_model_id(), "Qwen3-Embedding-0.6B-Q8_0");
+    assert_eq!(hits.load(SeqCst), 0, "an embedding reached the vendor");
+    engine.complete(&request(None)).await.unwrap();
+    assert_eq!(hits.load(SeqCst), 1, "chat goes to the vendor");
 }
 
 /// The admission table, whole: every far end against every payload.
