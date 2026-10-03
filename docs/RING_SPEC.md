@@ -61,6 +61,9 @@ Its screen runs sandboxed and reaches only `window.group`:
 | `group.play(name, paths, {on: here \| screen})` | the shell's own player for a lent service's media — an HLS playlist and a plain file — here, or on a TV in the room; the app sends play, pause and seek and sees state, never the TV or the URL | Films |
 | exports `init`, `reduce`, `propose`, `say`, `due` | pure functions the runtime calls: the app's state from its acts; a proposal from a chat command; a text view; what is due at a time | every seed; Expenses for `due` |
 
+Terms arrive with the seed that earns them (D7); SDK v1 is what exists when the
+first outside developer starts (E3).
+
 **The manifest**, signed by the app's developer key, names the app, its version,
 the SDK version it targets — which pins the fold engine: the QuickJS-wasm bytes
 by hash — metering, memory maximum, stack size and the fold's own loop all
@@ -661,52 +664,56 @@ p2panda); LiveStore's
 versioned event names; webxdc's two sandbox requirements; meshapp's pack and
 install.
 
-**Build, by stage:**
-- *Stage 0, the register:*
-  0. rail-core reshaped into the sans-IO state machine (D2a) — modules
-     `chain`, `ingest`, `register`, `admit`, `sync` behind `decide`, `apply`,
-     `fold` and `sync` — behaviour preserved, before any rule changes; the
-     journal actor; the layer-gate rows; `ARCHITECTURE.md`;
-  1. genesis, the group id and continuation — refounding and legacy migration
-     as one mechanism — and the group's directory;
-  2. ids over `(actor, seq, prev, ts, H(body))` with the signature over the id;
-     causal ingest; the digest by heads;
-  3. the register (U1): `Invite`; `Admit` with person id, role, encryption key,
-     endpoint and invite, co-signed; `RemoveRequest`, the keeper's `Remove` and
-     `Keeper`; one membership writer (U2); retiring the fork marker; and the docs
-     that describe seq cuts, floors or fork voiding — `RailAct::Remove`,
-     `RailAct::Seal`, `RailAct::Admit`, `SignedOp.view`, the `sig.rs` and
-     `membership.rs` module docs;
-  4. group routes that check their own register; the acceptor's union of
-     endpoints; the claim route redeeming `Invite`s; ra-23's single ed25519
-     major.
-- *Stage A, the runtime and SDK:*
-  5. the node core out of the workspace hack, building for every platform;
-  6. the app: shell, sandbox, permissions, key custody, two-way sync, several
-     groups;
-  7. SDK v1 with its engine pinned by hash, fold segments, and the handler
-     runner;
-  8. files;
-  9. install and update;
-  10. seals and private storage;
-  11. `group.start`;
-  12. the dev loop, the reference and the harness;
-  13. the seeds;
-  14. the project's relay, port mapping and the invite;
-  15. the member door for `group.open`: admission by the register and the
-      tunnel to the lender;
-  16. `group.request` (GET only) and `group.play`: the shell's player and its
-      media background mode, the URL on the WiFi served by the person's own
-      always-on node or the phone, the serve-to-a-screen route, the AirPlay,
-      Cast and DLNA adapters, the door's credential mask, play count and refused
-      paths — and the forwarding module's doc, which says responses are never
-      parsed; the Films seed.
-- *Stage B, the chat:*
-  17. the bridge append and the Bridge role;
-  18. the bridge;
-  19. setup and the bridge's single executable.
-- *Alongside:*
-  20. D4's removals.
+**Build, by experiment.** Each experiment tests one assumption with the least
+machinery that can test it, and builds only what its bars need. Everything else
+waits in D8 for the signal that earns it.
+
+*E0 — will a group settle up through the bot, in the chat it already uses?* On
+the operator's computer, on today's rail and membership: no phone, no new wire,
+no sandbox.
+
+| Unit | Builds | On | Bars |
+|---|---|---|---|
+| E0.1 bridge | discord.js on the gateway behind its five calls; the greeting; the guest book keyed by Discord user id; a ban removes from it | a new executable beside cw-rails; `SignedOp.on_behalf_of` (built) | removal-latency, bridge-holds-no-app |
+| E0.2 bridge append | the loopback append with a capability token, signed by the Bridge-role key; Confirm taken once by interaction id | `commonwealth-rails/src/rail.rs` | double-confirm |
+| E0.3 one Expenses | one `expenses.js`, the other two copies deleted; its `propose`, `say` and `due` run by an embedded QuickJS on the host | `sovereign-contracts/src/guest_pages/` | five-laws, N+1 |
+| E0.4 origin gate | the bridge renders only what the chat wrote | the bridge | origin-gate |
+| E0.5 setup | `svrn group start`, five steps | `sovereign-cli-mesh` | host-setup, plain-words |
+
+*E1 — will people move from the chat to their own key?* A phone signing beside
+the host is the first second writer, so this is where the register (C1) is
+earned. The keeper is the host.
+
+| Unit | Builds | On | Bars |
+|---|---|---|---|
+| E1.0 reshape | rail-core as the sans-IO state machine and the journal actor (D2a), behaviour preserved; the layer-gate rows; `ARCHITECTURE.md` | `commonwealth-rail-core`, `commonwealth-rail` | the existing tests, unchanged |
+| E1.1 wire v1 | git-like acts — `prev`, the id and the signature over it, causal ingest, the digest by heads | `chain`, `ingest`, `sync` | converge, causal-ingest, forks-void-nothing, fresh-node-progress |
+| E1.2 continuation | a genesis that continues an earlier group, and the group directory; E0's groups move to wire v1 this way, so refounding is proven by its first use | `register`, `svrn group refound` | refound-from-a-copy, group-is-a-directory, genesis-certifies |
+| E1.3 register | `Invite`, the co-signed `Admit` and person ids, `RemoveRequest` and the keeper's `Remove`; one membership writer; the seq-cut and fork-marker code and docs retired | `register`, `admit` | removal-is-sequenced, refusal-not-absence, invite, person-id, admit-co-signed |
+| E1.4 doors by register | the acceptor and every group route admit by the register, not the mesh | `acceptor.rs`, `ring_sync`, `ring_routes` | one-decider, cross-group, first-contact |
+| E1.5 the app | the Tauri shell with the node core, a key per group in the keystore, two-way sync with the host, Expenses and the Library built in, the claim route from the bot's link | `sovereign-mobile` | same-core, phone-to-own-key, reinstall-keeps-person, rebuild-from-a-phone |
+| E1.6 one engine | the host and the app fold with one embedded QuickJS build, JSON-only state | the runtime | fold-parity |
+| E1.7 door basics | lent views under CSP; refused paths, Jellyfin's `/Sessions/Logout` first | the door | peer-text-is-text, lent-service |
+
+*E2 — will a group take up a second app?* Phase 1: twenty groups, each live
+only once a second copy has synced. It builds the second app the groups ask for
+and nothing else.
+
+| Unit | Builds | On | Bars |
+|---|---|---|---|
+| E2.1 second copy | commands register only after another node of the group has synced | the bridge | two-copies-before-live |
+| E2.2 the asked-for app | Films (`group.request`, `group.play` here) or Album (files) — whichever groups ask for first, counted | the app | second-app rate, films-journey or file-erased |
+| E2.3 a TV | AirPlay from the phone with the credential mask at the door; then Cast when a Chromecast household asks, DLNA (Android) when a DLNA household asks, and the person's own always-on node serving when `finishes-a-film` fails for a household that asked | the door, the app | play-on-a-tv, finishes-a-film, credential-stays-home |
+
+*E3 — will outside developers build on it?* Only now does strangers' code run
+on people's phones, so only now is the platform machinery earned.
+
+| Unit | Builds | On | Bars |
+|---|---|---|---|
+| E3.1 SDK v1 | `window.group` published with the terms the seeds use by then; the manifest, capabilities and consent; install and update by signed manifest and bundle hash; the update preview | meshapp's pack and install | permissions, update-preview |
+| E3.2 sandbox | a frame per app, its CSP, the MessageChannel port | the app | frame-cannot-ipc |
+| E3.3 an engine for strangers' code | QuickJS in wasm under wasmtime, metering inside the hashed bytes, fold segments, the engine pinned by the SDK version (C4) | `fold-engine` | engine-parity, fold-speed |
+| E3.4 the developer surface | the dev loop, the reference, the harness | `svrn app dev` | developers |
 
 **Avoid:**
 - an existing local-first system as the substrate;
@@ -723,6 +730,12 @@ install.
 |---|---|
 | the town: deeds, keepers, insurance, handover, first refusal | a lent service a group would miss, counted |
 | the LAN guest door | a group asks for browser guests on its WiFi |
+| phones-only groups: a phone as keeper, phones accepting connections, the relay as the only path, keeper handoff, refounding from the app | a group with no computer asks, counted, and E1's key-holding share holds |
+| sealed payloads and private storage (Tap) | a group asks for the post-party question |
+| `group.start` (Event) and `group.live` (Doc together) | a group asks to spin one off; two people edit one Doc at once, seen |
+| another device for the same person | someone asks to add a second device |
+| a second chat adapter, and the trait it earns | a group on another chat asks |
+| the wasm engine, metering and segments for first-party apps | strangers' code (E3) |
 | compacting act bodies | a group's journal on a phone passes a size measured to matter; it returns as a keeper-signed checkpoint of the fold, not a floor per key |
 | a TV's own Jellyfin app (Fire TV, Xbox, webOS, Tizen, non-AirPlay Roku) pulling from a door the person's own computer serves on its WiFi — an app and a login on every TV | people whose TV takes no push ask, counted |
 | `Remote-User` and per-person accounts on lent services | a named service that needs them |
@@ -737,70 +750,91 @@ install.
 
 ## D9. Bars
 
-Each bar is watched failing first, on the input named after the arrow.
+Each bar is watched failing first, on the input named after the arrow. A stage's
+bars are only those its build needs; the rest wait with the machinery they test.
+Bars against the pure core are golden-journal tests and run in seconds; bars
+about people are runs, counted by hand.
 
-**Stage 0**
-
-| Bar | What must hold | Failing input |
-|---|---|---|
-| one-decider | Plant `roster.json`, mesh membership, a registered namespace and the guest book so that they disagree. Every door, `log` and fold answers with the register. | today's mesh-gated sync |
-| converge | Deliver the same acts in any order and any batching, forks included: every copy holds the same set and reaches the same fold and completeness. | today's first-seen-wins at a taken seq |
-| causal-ingest | An act whose `prev` is not held is not held; a branch withheld under a published act and released after its key's removal counts nowhere. | `prev` carried but unchecked (v12) |
-| forks-void-nothing | A key that signs two acts on one `prev` — by reinstall, restore or on purpose — voids neither, and every copy folds both. | the fork marker swallowing an `Admit` |
-| removal-is-sequenced | Concurrent requests, two people asking to remove each other, and a request signed after its signer's removal: the keeper's order decides, no one else is cut, and the removed key's later acts count on no copy. | today's two removers racing (v13's third-party cycle) |
-| keeper-handoff | After `Keeper`, removals continue under the new keeper; with the keeper's device gone, admitting and writing continue, and the app says removals wait and offers to refound. | a keeper hard-coded to the starter |
-| refound-from-a-copy | From one member's directory, a 25-person group whose keeper is lost — and one held by a captor — is refounded with its apps, history, balances and files; carried people prove continuity with their earlier keys; the captor, not invited, can act in neither the new group nor its history past the heads. | today: no path but starting empty |
-| group-is-a-directory | A group's state on a device is `genesis.json`, `journal.jsonl` and `files/`, readable with a text editor and copyable with `cp`; a copy folds to the same state on another device, and holds no key or private storage. | a journal readable only through the daemon |
-| refusal-not-absence | A removed key that mints keys never leaves the group incomplete. | `UnknownSigner` counted as absence |
-| genesis-certifies | A forged genesis for a group id, or a migrated genesis whose roster does not hash into the id, is refused. | a group with no genesis being accepted |
-| cross-group | On a shared node, someone in group A cannot read group B's checkpoint or live lane. | today's checkpoint route |
-| fresh-node-progress | A fresh phone syncs a group whose Bridge history is over 4 MB and whose `Admit` sits at a high seq, with a fork early in it. | today's hex-ordered sender |
-| invite | An `Invite` that does not count, an expired one, a second redemption at an honest node holding the first, or an `Admit` redeeming it without its one-time key admits no one; two concurrent redemptions both count and the group is shown both. | a claim token outside the record (v10) |
-| person-id | Neither a newcomer nor someone already in the group can become or pre-claim an existing person — including by redeeming a link with another `person_id` or `role`. | first admission decided by timestamp (v10) |
-| admit-co-signed | An `Admit` that re-labels a person, swaps their encryption key, or grants Bridge without the admitted key's signature, or an endpoint rotation without the new endpoint key's, is refused. | today's admitter-only `Admit` |
-| first-contact | A new phone's first claim lands only by redeeming an `Invite`; an unstamped loopback caller is refused. | today's open join route |
-
-**Stage A**
-
-| Bar | What must hold | Failing input |
-|---|---|---|
-| same-core | A closure test passes, and `cargo check --target aarch64-apple-ios` succeeds. | a phone syncing through `HttpBridge` |
-| frame-cannot-ipc | On iOS and Android, a planted bundle — and a lent service's view — reaches no shell command, network or storage; `group.live` is the one path out, and only for a bundle that declares it. | a bundle loaded in the window |
-| lent-service | A person outside the group is refused at the member door; video over the relay is capped and the app says so. | a door that admits by mesh membership |
-| fold-parity | Golden journals fold to byte-identical state on every platform and on two builds of the app, under a swapped locale and timezone and any batching and arrival order, with a fold that breaches its budget marked incomplete everywhere; folding at K and at K = 1 agrees where both complete. | transcendental maths from the platform's library; a fold near the memory cap; one instance per arriving batch; a wasmtime upgrade between the two builds; recursion at the stack limit; a reducer that catches out-of-memory |
-| fold-speed | On the oldest supported iPhone, under Pulley with injected metering, a full refold plus an update preview of 3,000 Expenses acts finishes within a time set before the first measurement, and so does the first fold after a shell update. | unmeasured today; a reducer looping `TypedArray.set` over a large buffer |
-| permissions | An undeclared capability is refused, and an install whose manifest is not signed by the lineage key it names never runs. | no manifest check; an install naming another developer's key |
-| update-preview | A hostile update's effect on past acts is shown before it runs, and one that adds a capability asks everyone again. | silent activation |
-| file-erased | Void a photo, sealed or not, and sync: no node still holds its bytes. | bytes kept forever |
-| phones-only | Two phones and no computer start a group, write on both, and fold the same, through the relay. | a phone that can only dial |
-| relay-off | With the relay off, direct paths keep syncing and the rest say so. | a relay hard-coded in the app |
-| rebuild-from-a-phone | Wipe the always-on node. One phone's copy restores the group, genesis included. | membership held in `roster.json` |
-| reinstall-keeps-person | Reinstall the app, restore the phone from its own backup, move it by Quick Start with the old one still in use, or join from a phone whose clock is behind its admitter's, then act: the same person, nothing voided, nothing silenced. | the fork marker; a same-device restore |
-| play-on-a-tv | On an Apple TV, an AirPlay 2 TV, a Chromecast with Google TV and (from Android) a DLNA-only TV, a film from a library lent from another house starts from the phone within ten seconds, with nothing installed or typed on the TV; its URL serves only the TV picked and is gone when playback stops. | today's member door, loopback and relay-capped |
-| finishes-a-film | For each of those TVs, with and without the person's own always-on node, a two-hour film plays to the end while the phone locks at minute 5 and switches app at minute 20 — or the app said beforehand, in plain words, that it would not. | the phone as the only server |
-| credential-stays-home | Grep every byte the TV, the phone's app frames and the record receive during browsing and playback: the lender's token appears nowhere, and a sign-out from the lent view leaves the library playable. | today's door, which passes bodies through |
-| refound-in-hours | A group of five, its keeper's phone gone, refounds from the app and is back to writing within two hours, every person carried over. | measured against today's flow |
-| films-journey | Four of five people who own one of those TVs start a friend's film on it within two minutes of first opening Films. | measured against today's flow |
-| developers | At least two of three outside developers each run an app that is not a seed, using at least two of sealed payloads, files and `group.start`, in a real group of three people for a week, with no platform change and no more than five questions the reference should have answered. | today's docs |
-
-**Stage B**
+**E0 — the bot, in the chat**
 
 | Bar | What must hold | Failing input |
 |---|---|---|
 | N+1 | Four of five strangers in the chat settle an expense within three minutes, with no account and no key prompt. | measured against today's flow |
-| phone-to-own-key | Four of five phone-only people go from the bot's link to their first act signed by their own key within five minutes, TestFlight included. | measured against today's flow |
+| host-setup | Three of four people, unassisted, go from install to a first chat act within fifteen minutes. | measured against today's flow |
 | double-confirm | A Confirm retried after a bridge restart produces one act. | a Confirm with no interaction id |
 | bridge-holds-no-app | The bridge never imports app code. | an import of an app module |
+| origin-gate | Nothing written in the group by a key renders into the chat unless the chat wrote it; a planted violation fails the build. | a planted violation |
+| removal-latency | Someone banned in the chat cannot have an act admitted sixty seconds later. | the bridge's leave handler disabled |
+| five-laws | Expenses' reducer holds determinism, environment independence, non-interference, idempotence, totality and no module globals. | a reducer reading `Date.now()` |
 | plain-words | An allowlist covers the shell, the seeds, the bot, setup output and the iOS permission strings. | "ring" in the greeting |
-| host-setup | Three of four people, unassisted, go from install to a first chat act within fifteen minutes. | measured against today's flow |
 
-**Phase 1**
+**E1 — own keys.** The register's bars are tests against `rail-core`:
+
+| Bar | What must hold | Failing input |
+|---|---|---|
+| converge | Deliver the same acts in any order and any batching, forks included: every copy holds the same set and reaches the same fold and completeness. | today's first-seen-wins at a taken seq |
+| causal-ingest | An act whose `prev` is not held is not held; a branch withheld under a published act and released after its key's removal counts nowhere. | `prev` carried but unchecked (v12) |
+| forks-void-nothing | A key that signs two acts on one `prev` — by reinstall, restore or on purpose — voids neither, and every copy folds both. | the fork marker swallowing an `Admit` |
+| removal-is-sequenced | Concurrent requests, two people asking to remove each other, and a request signed after its signer's removal: the keeper's order decides, no one else is cut, and the removed key's later acts count on no copy. | today's two removers racing (v13's third-party cycle) |
+| refusal-not-absence | A removed key that mints keys never leaves the group incomplete. | `UnknownSigner` counted as absence |
+| genesis-certifies | A forged genesis for a group id, or a migrated genesis whose roster does not hash into the id, is refused. | a group with no genesis being accepted |
+| refound-from-a-copy | From one member's directory, a 25-person group whose keeper is lost — and one held by a captor — is refounded with its apps, history, balances and files; carried people prove continuity with their earlier keys; the captor, not invited, can act in neither the new group nor its history past the heads. | today: no path but starting empty |
+| group-is-a-directory | A group's state on a device is `genesis.json`, `journal.jsonl` and `files/`, readable with a text editor and copyable with `cp`; a copy folds to the same state on another device, and holds no key or private storage. | a journal readable only through the daemon |
+| invite | An `Invite` that does not count, an expired one, a second redemption at an honest node holding the first, or an `Admit` redeeming it without its one-time key admits no one; two concurrent redemptions both count and the group is shown both. | a claim token outside the record (v10) |
+| person-id | Neither a newcomer nor someone already in the group can become or pre-claim an existing person — including by redeeming a link with another `person_id` or `role`. | first admission decided by timestamp (v10) |
+| admit-co-signed | An `Admit` that re-labels a person, swaps their encryption key, or grants Bridge without the admitted key's signature, or an endpoint rotation without the new endpoint key's, is refused. | today's admitter-only `Admit` |
+| one-decider | Plant `roster.json`, mesh membership, a registered namespace and the guest book so that they disagree. Every door, `log` and fold answers with the register. | today's mesh-gated sync |
+| cross-group | On a shared node, someone in group A cannot read group B's checkpoint or live lane. | today's checkpoint route |
+| first-contact | A new phone's first claim lands only by redeeming an `Invite`; an unstamped loopback caller is refused. | today's open join route |
+| fresh-node-progress | A fresh phone syncs a group whose Bridge history is over 4 MB and whose `Admit` sits at a high seq, with a fork early in it. | today's hex-ordered sender |
+
+And the people's bars:
+
+| Bar | What must hold | Failing input |
+|---|---|---|
+| same-core | A closure test passes, and `cargo check --target aarch64-apple-ios` succeeds. | a phone syncing through `HttpBridge` |
+| fold-parity | Golden journals fold to byte-identical state on the host and on iOS and Android, under a swapped locale and timezone. | transcendental maths from the platform's library |
+| phone-to-own-key | Four of five phone-only people go from the bot's link to their first act signed by their own key within five minutes, TestFlight included. | measured against today's flow |
+| reinstall-keeps-person | Reinstall the app, restore the phone from its own backup, move it by Quick Start with the old one still in use, or join from a phone whose clock is behind its admitter's, then act: the same person, nothing voided, nothing silenced. | the fork marker; a same-device restore |
+| rebuild-from-a-phone | Wipe the always-on node. One phone's copy restores the group, genesis included. | membership held in `roster.json` |
+| peer-text-is-text | A payload carrying `<img onerror>` renders as text in every view, lent ones included. | `serve_file` without CSP |
+| lent-service | A person outside the group is refused at the member door; video over the relay is capped and the app says so. | a door that admits by mesh membership |
+| key-holding share | Half of active people hold a key by week eight. | counted by hand, with consent |
+| flip rate | At least a quarter of bridged groups move admission into the group within six months; kill under 5% (RING_ENTRY). | counted by hand, with consent |
+
+**E2 — a second app** (Phase 1, twenty groups). `play-on-a-tv` and
+`finishes-a-film` grow a column per protocol as households ask for it, AirPlay
+first; `file-erased` is earned only if the second app is Album.
 
 | Bar | What must hold | Failing input |
 |---|---|---|
 | two-copies-before-live | A group's commands register only after another of its nodes has synced. | registering immediately |
 | second-app rate | At least 40% of groups still active at eight weeks run a second app; kill under 15% (STRATEGY_RINGS). | counted by hand, with consent |
-| key-holding share | Half of active people hold a key by week eight. | counted by hand, with consent |
+| play-on-a-tv | On an Apple TV, an AirPlay 2 TV, a Chromecast with Google TV and (from Android) a DLNA-only TV, a film from a library lent from another house starts from the phone within ten seconds, with nothing installed or typed on the TV; its URL serves only the TV picked and is gone when playback stops. | today's member door, loopback and relay-capped |
+| finishes-a-film | For each of those TVs, with and without the person's own always-on node, a two-hour film plays to the end while the phone locks at minute 5 and switches app at minute 20 — or the app said beforehand, in plain words, that it would not. | the phone as the only server |
+| credential-stays-home | Grep every byte the TV, the phone's app frames and the record receive during browsing and playback: the lender's token appears nowhere, and a sign-out from the lent view leaves the library playable. | today's door, which passes bodies through |
+| films-journey | Four of five people who own one of those TVs start a friend's film on it within two minutes of first opening Films. | measured against today's flow |
+| file-erased | Void a photo, sealed or not, and sync: no node still holds its bytes. | bytes kept forever |
+
+**E3 — outside developers**
+
+| Bar | What must hold | Failing input |
+|---|---|---|
+| frame-cannot-ipc | On iOS and Android, a planted bundle — and a lent service's view — reaches no shell command, network or storage; `group.live` is the one path out, and only for a bundle that declares it. | a bundle loaded in the window |
+| permissions | An undeclared capability is refused, and an install whose manifest is not signed by the lineage key it names never runs. | no manifest check; an install naming another developer's key |
+| update-preview | A hostile update's effect on past acts is shown before it runs, and one that adds a capability asks everyone again. | silent activation |
+| engine-parity | Golden journals fold to byte-identical state on every platform and on two builds of the app, under a swapped locale and timezone and any batching and arrival order, with a fold that breaches its budget marked incomplete everywhere; folding at K and at K = 1 agrees where both complete. | transcendental maths from the platform's library; a fold near the memory cap; one instance per arriving batch; a wasmtime upgrade between the two builds; recursion at the stack limit; a reducer that catches out-of-memory |
+| fold-speed | On the oldest supported iPhone, under Pulley with injected metering, a full refold plus an update preview of 3,000 Expenses acts finishes within a time set before the first measurement, and so does the first fold after a shell update. | unmeasured today; a reducer looping `TypedArray.set` over a large buffer |
+| developers | At least two of three outside developers each run an app that is not a seed, using at least two of sealed payloads, files and `group.start`, in a real group of three people for a week, with no platform change and no more than five questions the reference should have answered. | today's docs |
+
+**Waiting with their machinery** (D8):
+
+| Bar | What must hold | Failing input |
+|---|---|---|
+| phones-only | Two phones and no computer start a group, write on both, and fold the same, through the relay. | a phone that can only dial |
+| relay-off | With the relay off, direct paths keep syncing and the rest say so. | a relay hard-coded in the app |
+| keeper-handoff | After `Keeper`, removals continue under the new keeper; with the keeper's device gone, admitting and writing continue, and the app says removals wait and offers to refound. | a keeper hard-coded to the starter |
+| refound-in-hours | A group of five, its keeper's phone gone, refounds from the app and is back to writing within two hours, every person carried over. | measured against today's flow |
 
 ## D10. Risks
 
@@ -881,8 +915,9 @@ By the operator, 2026-10-03:
 - **A file primitive; keep the Library.**
 - **E0** runs on the operator's always-on computer.
 - **Reach:** the box is the meeting point, and the project runs the only relay.
-- **Devices:** a server and a phone are the same kind of thing, and phones-only
-  groups are in the first stage.
+- **Devices:** a server and a phone are the same kind of thing. Phones-only
+  groups were placed in the first stage; the lean order (2026-10-03, "no complex
+  machinery before earning it") moves them behind a trigger in D8 — to confirm.
 - **Apps declare their capabilities, and the group sees them.**
 
 Owed by the operator: the app's name.
@@ -902,9 +937,10 @@ By this design, open to the operator's veto:
 
 ## D12. Order of work
 
-Stage 0 (the register) → Stage A (the runtime and SDK) → Stage B (the chat, on
-the operator's computer) → Phase 1 (twenty groups). Each stage starts only when
-the bars of the stage before it hold.
+E0 (the bot, on the operator's computer) → E1 (own keys) → E2 (a second app,
+twenty groups) → E3 (outside developers). An experiment starts when the one
+before it passes its bars. A kill bar that fires stops the line and goes to the
+operator. Machinery that no experiment lists waits in D8 for its trigger.
 
 The design loop stops here. It ran nine rounds; the TV path converged, the
 runtime's last findings were engine build settings, and the register's recurring
@@ -1163,119 +1199,18 @@ are defined nowhere in code (`sovereign code converge noun`, 2026-10-02); mint
 each once, in the crate that owns it. LIB §22 predates this section and calls
 the host a keeper; this section wins.
 
-## 5. Units
+## 5. Units and 6. Bars
 
-One unit is one to three ralph rows. Work in order; `Depends` binds. `Rung` is
-the `ring-apps` rung it lands, or `new`.
-
-| Unit | Rung | Depends | Deliverable | Lands in | Bar |
-|---|---|---|---|---|---|
-| U1 membership-cut | ra-5, ra-11 | — | the fold honours `Remove.through_seq` | `commonwealth-rail-core/src/membership.rs:152` | `ra-retired-key-is-refused`, `ra-membership-is-order-free` |
-| U2 membership-writer | ra-5 | U1 | `svrn ring admit` / `remove` and one route that writes them; the generic append doors refuse membership acts | `sovereign-cli-mesh/src/ring_cmd/mod.rs`, `commonwealth-rails/src/rail.rs:280` | town-membership-door |
-| U3 fork-view | ra-8 | — | contradictory view digests from one actor become a reported gap, beside the existing `RailGap::SequenceFork` (`admit.rs:109`) | `commonwealth-rail-core/src/admit.rs` | `ra-fork-is-reported` |
-| U4 reach-by-register | new | U2 | dial a roster key with no mesh row (measure first); sync fans to roster ∩ reachable; `member_check` admits any key on a roster the node holds | `ring_sync/journal.rs:153-164`, `acceptor.rs:49-63` | town-one-register |
-| U5 allow-names-ring | new | U4 | `ring:<id>` in every allow list; the knowledge route asks the register; D5 fixed | `apps.rs:297`, `config.rs:88`, `published_origins.rs:49`, `routes_internal/knowledge.rs` | town-one-register |
-| U6 peer-text-is-text | new | — | CSP in `serve_file`; scaffold views build structure, never `innerHTML` | `host-kit/src/shell/files.rs:38`, `ring_cmd/templates/app.js:42,57,89` | town-peer-text-is-text |
-| U7 fold-library | new | — | the library extracted from the expense fold and ring-doc, served beside the shim, the five laws as `node --test` | `sovereign-contracts/src/guest_pages/` | town-five-laws |
-| U8 one-manifest | ra-10 | — | the manifest schema, read by `svrn run` and written by `svrn ring new` | the schema crate the api-gate guards; `run_cmd.rs`; `scaffold.rs` | town-app-generality |
-| U9 deeds-fold | new | U2, U8 | the deeds as a Rust civic book beside `membership`, with permutation and turn-order tests | the crate the layer gate allows beside `PublishedApps` | town-first-refusal |
-| U10 copies | ra-7 | U8, U9 | the host ships whole copies to keepers on change, by hash, with age | `commonwealth-media/src/apps.rs` | town-host-off |
-| U11 keeper-door | ra-7 | U10 | a keeper serves the last copy read-only; reach falls back to a keeper when the host's claim lapses | `commonwealth-media/src/origins.rs:446` | town-host-off |
-| U12 one-writer + handover | ra-7 | U9, U11 | the door refuses writes from a node the deeds do not name; `Handover` with the final copy | the door's write path | town-one-writer, town-handover |
-| U13 first-refusal | ra-7 | U12 | `Release`, `Refusal`, `Take`, `Pass`; dormant apps kept | the deeds fold, the door | town-first-refusal |
-| U14 bridge + Discord | new | U2 | bridge core and Discord adapter on one host: greeting, register upkeep, guest grade, expense commands, clerk proposals behind Confirm, link-only fallback | a new crate, named after `converge noun Bridge` | entry-n-plus-one, entry-removal-latency |
-| U15 origin-gate | new | U14 | a planted ring-origin act rendered into a transport fails the build | the bridge core | entry-origin-gate |
-| U16 invite | ra-11 | U2 | one invite with expiry and use count; `svrn ring invite`; D4 fixed | `ring_cmd`, `commonwealth-rails/src/join.rs:62` | entry-one-link |
-| U17 no-member-value gate | ra-9 | decision O1 | no surface returns a per-member series; the subjects in D9 handled | the surfaces in D9 | entry-no-member-value |
-| U18 gesture gate | new | U7, U14 | gesture kinds declared; an unconfirmed gesture act refused | the library's `kind`, the bridge | entry-gesture-needs-person |
-| U19 journal-acquirer | ra-12 | — | `[acquire] type = "ring-journal"`, indexing what the fold shows | `corpus-engine` acquirers | elder-cites-an-act |
-| U20 ask-performer | ra-12 | U7 | the `pending` performer, `ask` first, the answer as a fulfilment act | the runtime and the lending node | elder-one-answer |
-| U21 phone-member | ra-11 | U16 | the ring app: `sovereign-mobile` with a persistent, keystore-wrapped key introduced under the person; `window.ring` served by the shell over iroh to the host; rail-core native; client-signed append through `RingJournal::ingest`; a read-only remote teaser in `ring-runtime/web` | `sovereign-mobile/src-tauri`, the door, `sovereign/apps/ring-runtime/web/app.js` | phone-to-own-key, off-the-wifi (`RING_ENTRY.md` "Phones") |
-| U22 provisioner | new | U4 | per-member Jellyfin accounts reconciled from the register, beside today's shared viewer | `sovereign-cli-mesh/src/mesh_media/` | entry-revocation |
-| U23 uninsured-notice | new | U9, U14 | the clerk lists a leaving host's uninsured apps to the ring | the bridge's clerk | — |
-| U24 ring-header | new | U5 | the door adds a verified `X-Mesh-Rings`, stripping client copies | `commonwealth-transport/src/iroh_identity_forward.rs` | proto-ring-header |
-| U25 sharing-table | new | U5 | the person's lend table across rings, ring groups, and the "share here too?" prompt on join | the node's config owner, and the desktop | proto-nothing-by-default |
-| U26 per-ring-key | ra-5 | U2 | an optional signing key per ring, bound to the person by one `Admit` | `ring_cmd`, the keystore | proto-records-unlinkable |
-| U27 carry-consent | ra-2 | O6 | Carry refuses another author's act without their consent or their ring's rule | the Carry act, when `ra-2` builds it | proto-carry-consent |
-| U28 protocol-v1 | ra-23 | U1, U3 | the journal protocol published as v1: signing bytes, canonical form, sync digest, gaps, membership, each with golden vectors | `commonwealth-rail-core/fixtures/`, `docs/internal/rings/reference/RAIL_PROTOCOL_SKETCH.md` | proto-second-implementation |
-| U29 connector-kits | new | U8, U14, U22 | one kit per edge in §10's order, each with schema, conformance, `svrn new <kind>`, a dev loop, a reference, a skill | `.claude/skills/`, the schema crates | proto-thirty-minute-brick |
-
-**Premises** — each prints this today, run from the repo root:
-
-- U1 `git grep -n 'RailAct::Remove { key, \.\. }' -- commonwealth/crates/commonwealth-rail-core/src/membership.rs` → `:152`
-- U2 `git grep -n -E 'Some\("(admit|remove)"\)' -- sovereign/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs` → nothing
-- U3 `git grep -n 'kind.view' -- commonwealth/crates/commonwealth-rail-core/src` → only `admit.rs:408`, `sync.rs:174` and tests (verification)
-- U4 `git grep -n 'm.status == NodeStatus::Online' -- commonwealth/crates/commonwealth-rails/src/ring_sync/journal.rs` → `:159`
-- U5 `git grep -n '"ring:' -- commonwealth/crates/commonwealth-media/src commonwealth/crates/commonwealth-rails/src sovereign/crates/sovereign-contracts/src/setup_config_iroh.rs` → nothing
-- U6 `git grep -n innerHTML -- sovereign/crates/sovereign-cli-mesh/src/ring_cmd/templates/app.js` → `:42`, `:57`, `:89`
-- U7 `git grep -n -E 'diffFold|byKind\(|upcast\(' -- '*.js' '*.mjs' ':!**/node_modules/**' ':!**/vendor/**'` → nothing
-- U8 `git grep -n -E 'writer *= *"(host|ring)"' -- ':!*.md'` → nothing
-- U9 `git grep -n -E 'enum DeedAct|struct Deed|Deeds' -- '*.rs'` → nothing
-- U10 `git grep -n -i -E 'state_dir|code_hash|app_snapshot' -- commonwealth/crates/commonwealth-media/src/apps.rs sovereign/crates/sovereign-cli-mesh/src/run_cmd.rs` → nothing
-- U11 `git grep -n -i read_only -- commonwealth/crates/commonwealth-media/src/apps.rs commonwealth/crates/commonwealth-media/src/origins.rs` → nothing
-- U14 `git grep -n -i -E 'serenity|teloxide|twilight|discord_' -- '*Cargo.toml' '*.rs'` → nothing
-- U16 `git grep -n -E 'Some\("invite"\)|max_uses|use_count|remaining_uses' -- '*.rs'` → nothing
-- U17 `git grep -n 'fn mesh_get_contributions' -- sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs` → `:520`
-- U18 `git grep -n -i gesture -- sovereign/crates/sovereign-contracts/src/guest_pages sovereign/crates/sovereign-cli-mesh/src/ring_cmd` → nothing
-- U19 `git grep -n -E 'RingJournal|commonwealth[-_]rail' -- 'corpus-engine*' sovereign/crates/sovereign-core sovereign-recipes ':!corpus-engine/xtask'` → nothing
-- U21 `git grep -n -i ephemeral -- sovereign-mobile/src-tauri/src/iroh_bridge.rs` → `:14`
-- U22 `git grep -n 'const VIEWER_NAME' -- sovereign/crates/sovereign-cli-mesh/src/mesh_media/viewer.rs` → `:52`
-- U24 `git grep -n -i x-mesh-rings -- '*.rs'` → nothing
-- U25 `git grep -n -i -E 'sharing_table|ShareTable|LendTable' -- '*.rs'` → nothing
-- U26 `git grep -n -i -E 'per_ring_key|ring_signing_key' -- '*.rs'` → nothing
-- U27 `git grep -n -E 'Carry *\{|enum CarryAct' -- '*.rs'` → nothing
-- U28 `git ls-files commonwealth/crates/commonwealth-rail-core/fixtures` → only `view_golden.json`
-- U29 `git ls-files | grep -E '\.claude/skills/(ring-app|bridge-adapter|provisioner)'` → nothing
-
-## 6. Bars
-
-`ring-apps` holds eight bars against a cap of nine (`scripts/co-lineage.py:93`,
-`MAX_BARS`, a load error). Its ninth is `ra-fork-is-reported` (U3): two acts
-from one actor whose views contradict are a reported gap, watched failing with
-the view check disabled. Every other new bar goes in one of two child
-campaigns, each watched failing first on the named input.
-
-**`ring-town`** — the register, reach, the door, the library, deeds and keepers:
-
-| Bar | Claim | Watched failing with |
-|---|---|---|
-| town-one-register | one `Remove` ends reach to every kind of app — app, media, offer, corpus, inference, work — within 60 s | any one allow list left on its own names |
-| town-membership-door | membership acts are written only through the membership door; an `Admit` sent to a generic append door is refused | the refusal removed |
-| town-peer-text-is-text | a payload carrying `<img onerror>` renders as text under the door, `ring show` and `meshapp dev` | `serve_file` without CSP |
-| town-five-laws | determinism, environment independence, non-interference, idempotence and totality hold for every library reducer | a reducer reading `Date.now()` |
-| town-app-generality | a one-file Flask app on sqlite, a civic-book page and a stock self-hosted server are insured by manifest alone, no change to any | a manifest without `code` |
-| town-host-off | an insured app answers a `GET` from a keeper, labelled with the copy's age, and refuses a `POST` naming the host | insurance off; `read_only` ignored |
-| town-handover | zero writes lost across a handover under a steady write load | the final copy skipped |
-| town-one-writer | no node the deeds do not name accepts a write | the door's deed check disabled |
-| town-first-refusal | a host removed; keepers offered the app in `Insure` order; with no taker the last copy survives on every keeper | turns ordered by arrival instead of rail order |
-
-**`ring-entry`** — the bridge, joining, the gates:
-
-| Bar | Claim | Watched failing with |
-|---|---|---|
-| entry-n-plus-one | four of five strangers settle an expense and open a title within three minutes of joining the chat, zero accounts, zero key prompts | — (a run, counted by hand) |
-| entry-removal-latency | a member banned in the chat cannot have an act admitted 60 s later | the leave handler disabled |
-| entry-origin-gate | zero ring-origin acts rendered into a transport | a planted violation |
-| entry-bridge-seam | a second adapter lands with no change to the bridge core | — (the second adapter's diff) |
-| entry-one-link | one link takes a phone from a QR to its first signed act; four of five non-technical people in under two minutes | two links |
-| entry-revocation | one `Remove` disables every provisioned account | the provisioner off |
-| entry-no-member-value | no route, CLI or UI returns a per-member series | a planted per-member route |
-| entry-gesture-needs-person | an unconfirmed gesture act is refused | a planted auto-confirmed vouch |
-| entry-flip-rate | at least a quarter of bridged rings move the register home within six months; kill under 5% | — (a strategic count, by hand) |
-
-**`ring-protocol`** — the narrow waist, many rings, the edges:
-
-| Bar | Claim | Watched failing with |
-|---|---|---|
-| proto-ring-header | an app lent to two rings sees which ring the caller came through; a client-sent `X-Mesh-Rings` never reaches it | the strip removed |
-| proto-nothing-by-default | a person joining a new ring shares nothing with it until they choose | a lend defaulting to every ring |
-| proto-records-unlinkable | two rings' journals under per-ring keys share no signing key for one person | one key reused |
-| proto-carry-consent | carrying another author's act without consent or a ring rule is refused | the check disabled |
-| proto-second-implementation | an implementation from the published spec alone, sharing no code with ours, verifies and orders the golden journals identically | a canonical-form change without a version bump |
-| proto-thirty-minute-brick | per edge: a fresh agent session holding only the kit's skill ships a brick that passes conformance in under 30 minutes, reading no platform source (`LEGO_KIT.md`) | — (a timed run per kit) |
-
-The two `elder-` bars in §5 (an Elder answer resolves to a signed act; every
-node folds one recorded answer) belong to a fourth campaign when U19 starts.
+Re-derived into Part I's D7 and D9 on 2026-10-03, ordered as experiments. Where
+the old units went: U14 and U15 → E0.1 and E0.4; U7 → E0.3, for Expenses only;
+U2 and U16 → E1.3; U26 → E1.3, where a key per group is the default; U4 and U5
+→ E1.4; U21 → E1.5; U6 → E1.7; U8 → E3.1. Retired: U1 and U3, since cuts are
+the keeper's and forks void nothing. Cut, with their triggers in D8: U9-U13 and
+U23 (the town), U17-U20 (the clerk and the Elder), U22 (per-person accounts),
+U24, U25 and U27 (lending to several groups, carrying), U28 and U29 (the
+protocol and the kits). The `ring-apps` bars `ra-retired-key-is-refused`,
+`ra-membership-is-order-free` and `ra-fork-is-reported` give way to E1's
+`removal-is-sequenced`, `converge` and `forks-void-nothing`.
 
 ## 7. Defects found by this inventory
 
