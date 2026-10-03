@@ -140,7 +140,16 @@ thing), [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md),
 - `index/` — LanceDB (IVF-PQ) + Tantivy FTS, `IndexMeta`, `ScopeMeta`.
 - `enrichment/` — v1 field engine, v2 atlas, `reconciliation/` (multi-origin
   merge with reversible oplog; signals are identity-grade only).
-- `atlas_traversal/`, `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
+- `atlas_traversal/` (pure half in `understanding-atlas`) — question →
+  `QueryPlan` → `traverse` → brief, no model. Every declared-type question
+  runs through ONE executor, `typed::execute`: a `TypedQuery` (target type;
+  filters `eq`/`lt`/`gt`/`contains`, times as signed-year intervals; relation
+  constraints over a declared relation type or a `<type>.<attr>` ref, a named
+  far end matched by folded name or alias, never a substring; a depth-2
+  `where`; `none`/`count`/`argmax`/`argmin`/`tally`) answers with a
+  `TypedTable` whose rows carry evidence chunk ids. An unset attribute sets
+  the atom aside as unjudged and says so.
+- `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
   `alignment_projector.rs`.
 
 **The wall clock has one decider per dependency island.**

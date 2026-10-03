@@ -33,7 +33,7 @@ use crate::enrichment::atlas::edges::{Edge, EdgeType};
 use crate::enrichment::ontology::OntologyPolicies;
 
 use super::classifier::{QueryPlan, QueryTarget};
-use super::typed::{self, TypedQuery};
+use super::typed::{self, TypedQuery, TypedTable};
 
 /// Atoms + edges the traversal found for a given plan, plus
 /// metadata about whether the query resolved to anything. The
@@ -71,6 +71,10 @@ pub struct TraversalResult {
     /// of the binary resolves to the queried entity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub oppositions: Vec<Opposition>,
+    /// The cited answer table of a declared-type query (`enumerate` /
+    /// `aggregate`): one row per answer atom with its evidence chunk ids.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table: Option<TypedTable>,
 }
 
 impl TraversalResult {
