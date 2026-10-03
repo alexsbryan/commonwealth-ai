@@ -10,6 +10,7 @@ import io
 import os
 import pathlib
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -1712,6 +1713,43 @@ class SupervisorTests(unittest.TestCase):
             with mock.patch.object(ralph, "head_of", return_value="a" * 40):
                 self.assertEqual(s.run(), 0)
             self.assertEqual(attempts, [1])
+
+    def test_a_sigterm_reaches_the_campaign_child_instead_of_a_sigkill(self):
+        # `launchctl kickstart -k` SIGTERMs the supervisor. The pool under it
+        # must get the SIGTERM (its handler takes the lane sessions down), not
+        # subprocess.run's SIGKILL, which orphaned a live lane session that
+        # drove one worktree beside its successor (2026-10-02).
+        pool = ("import os, pathlib, signal, sys, time\n"
+                "d = pathlib.Path(sys.argv[1])\n"
+                "def term(s, f):\n"
+                "    (d / 'pool-term').write_text('SIGTERM')\n"
+                "    sys.exit(0)\n"
+                "signal.signal(signal.SIGTERM, term)\n"
+                "(d / 'pool-ready').write_text(str(os.getpid()))\n"
+                "time.sleep(60)\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            d = pathlib.Path(tmp)
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
+            child = write(tmp, "pool.py", pool)
+            sup = subprocess.Popen(
+                [sys.executable, ralph.__file__, "supervise", "--workdir", tmp, "--label", "t",
+                 "--", sys.executable, str(child), tmp],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                deadline = time.time() + 20
+                while not (d / "pool-ready").exists() and time.time() < deadline:
+                    time.sleep(0.05)
+                self.assertTrue((d / "pool-ready").exists(), "the campaign child never started")
+                sup.send_signal(signal.SIGTERM)
+                sup.wait(timeout=20)
+            finally:
+                sup.kill()
+                ready = d / "pool-ready"
+                if ready.exists() and ready.read_text():
+                    with contextlib.suppress(ProcessLookupError):
+                        os.kill(int(ready.read_text()), signal.SIGKILL)
+            term = d / "pool-term"
+            self.assertEqual(term.read_text() if term.exists() else "SIGKILLed", "SIGTERM")
 
 
 class WatchTests(unittest.TestCase):

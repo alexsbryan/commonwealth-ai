@@ -1296,9 +1296,39 @@ def sessions_under(workdir):
 # (2026-09-16).
 _ACTIVE_SESSIONS = set()
 
+# The supervisor's campaign child (the pool), which owns sessions of its own: a
+# SIGTERM is forwarded to it and awaited, so ITS handler takes ITS sessions
+# down. The supervisor ran it under subprocess.run, whose except clause
+# SIGKILLed the pool when this handler raised — the pool's handler never ran,
+# and a live lane session drove one worktree beside its successor for ~90 min
+# after a `launchctl kickstart -k` (2026-10-02).
+_FORWARD_TERM = set()
+_FORWARD_GRACE_S = 10
+
+
+def _forward_and_reap(proc, signum, grace=_FORWARD_GRACE_S):
+    """Send `signum` to a child and wait up to `grace` seconds for it to exit.
+    os.waitpid, not Popen.wait: the handler can interrupt the main thread
+    inside Popen.wait, which holds that Popen's waitpid lock."""
+    try:
+        os.kill(proc.pid, signum)
+    except ProcessLookupError:
+        return
+    deadline = time.time() + grace
+    while time.time() < deadline:
+        try:
+            pid, _ = os.waitpid(proc.pid, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if pid:
+            return
+        time.sleep(0.1)
+
 
 def _install_signal_handlers():
     def _term(signum, _frame):
+        for proc in list(_FORWARD_TERM):
+            _forward_and_reap(proc, signal.SIGTERM)
         for proc in list(_ACTIVE_SESSIONS):
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
@@ -2976,7 +3006,12 @@ def cmd_supervise(args):
     ensure_excludes(paths.workdir, runtime_markers(paths))
 
     def run_inner():
-        subprocess.run(campaign, cwd=str(paths.workdir))
+        proc = subprocess.Popen(campaign, cwd=str(paths.workdir))
+        _FORWARD_TERM.add(proc)
+        try:
+            proc.wait()
+        finally:
+            _FORWARD_TERM.discard(proc)
 
     def resolver_run(attempt, reason):
         resolve_model = models["RESOLVE_MODEL"] or models["REVIEW_MODEL"]
