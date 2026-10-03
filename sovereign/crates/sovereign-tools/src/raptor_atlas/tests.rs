@@ -284,6 +284,17 @@ async fn verify_gate_verifier_failure_is_not_a_pass() {
     );
 }
 
+/// The writer's cap is the runaway guard at every level. A small input (an
+/// upper level, the root) got `0.28 x input` clamped to 384 tokens and the
+/// pilot's root was cut mid-JSON. Failing input: the old formula on this
+/// two-sentence cluster.
+#[test]
+fn a_small_cluster_gets_the_full_output_guard() {
+    let req =
+        build_abstractive_request(&extractive_test_input(), &DocumentTypeTag::Narrative, false);
+    assert_eq!(req.max_tokens, Some(SUMMARY_MAX_OUTPUT_TOKENS as usize));
+}
+
 /// The writer reads the full member text the verifier judges, not the
 /// 280-char preview: on the pilot tree the preview-fed writer lost 13 of
 /// 14 nodes to the extractive floor.

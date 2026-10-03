@@ -156,10 +156,11 @@ const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
 /// largest leaf cluster is 72.5k chars.
 const SUMMARY_INPUT_CHAR_BUDGET: usize = 90_000;
 
-/// Summary length as a share of the text summarized — the RAPTOR paper's
-/// measured average (Sarthi et al. 2024, ~0.28), capped by
-/// [`SUMMARY_MAX_OUTPUT_TOKENS`].
-const SUMMARY_COMPRESSION_TARGET: f32 = 0.28;
+/// The writer's `max_tokens`: a runaway guard, never a length target. The
+/// writer writes its natural length (the paper's ~0.28 compression is
+/// descriptive, operator 2026-10-02). A cap of 0.28 x input cut the pilot's
+/// root at 384 tokens (`finish_reason=Length`, 2026-10-03), mid-JSON, and lost
+/// the node to the extractive floor: upper levels read little and write a lot.
 const SUMMARY_MAX_OUTPUT_TOKENS: u32 = 2048;
 
 /// Version stamp for the summarization prompt + grammar (T1 P1.3).
@@ -1075,9 +1076,7 @@ fn build_abstractive_request(
         parts.push(format!("[{i}] {text}"));
     }
     let body = parts.join("\n\n");
-    let output_budget = ((used as f32 / 4.0 * SUMMARY_COMPRESSION_TARGET) as u32)
-        .clamp(256, SUMMARY_MAX_OUTPUT_TOKENS)
-        + 128;
+    let output_budget = SUMMARY_MAX_OUTPUT_TOKENS;
 
     let doc_cue = match doc_type {
         DocumentTypeTag::Narrative => {
