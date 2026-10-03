@@ -6,6 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::CompletionRequest;
+use std::sync::atomic::Ordering;
+
+use crate::{error_excerpt, ChatMessage, RemoteApiProvider};
 
 /// How a host is asked for output that matches a JSON Schema. A property of
 /// the HOST, not of the request: the request carries the schema, and the
@@ -49,8 +54,7 @@ pub(crate) fn write_structured_output(
     schema: &Value,
     mode: StructuredOutputMode,
 ) {
-    let title = schema.get("title").and_then(Value::as_str);
-    let name = openai_function_name(title.unwrap_or("structured"));
+    let name = schema_function_name(schema);
     match mode {
         StructuredOutputMode::JsonSchema => {
             body["response_format"] = json!({
@@ -151,6 +155,119 @@ pub fn openai_function_name(name: &str) -> String {
         "emit_response".to_string()
     } else {
         folded
+    }
+}
+
+/// The name a schema goes by on the wire: its `title`, folded.
+fn schema_function_name(schema: &Value) -> String {
+    let title = schema.get("title").and_then(Value::as_str);
+    openai_function_name(title.unwrap_or("structured"))
+}
+
+impl RemoteApiProvider {
+    /// The host's spelling now: as configured, or a forced function call once
+    /// the host has refused `json_schema` and answered that instead.
+    pub(crate) fn effective_structured_output_mode(&self) -> StructuredOutputMode {
+        if self.json_schema_refused.load(Ordering::Relaxed) {
+            StructuredOutputMode::ToolUseForced
+        } else {
+            self.structured_output_mode
+        }
+    }
+
+    /// POST one chat completion in this host's spelling, and say which
+    /// spelling answered.
+    ///
+    /// A host that rejects `json_schema` (DeepSeek's chat API answers 400
+    /// "unavailable now") is asked again, once, with the schema as a forced
+    /// function call. Only a retry that ANSWERS flips the provider for the rest
+    /// of its life: a 400 for another reason (an oversized prompt) fails the
+    /// retry too, and both refusals are reported. Streaming does not retry; it
+    /// follows the flip once a completion has learned it.
+    ///
+    /// Only a LAST-RESORT endpoint is asked again (`wait_out_sheds`, the same
+    /// persist-or-report decision as a shed). A peer's refusal is a routing
+    /// signal and goes back to the router at once, unchanged.
+    pub(crate) async fn send_chat(
+        &self,
+        url: &str,
+        request: &CompletionRequest,
+    ) -> Result<(reqwest::Response, StructuredOutputMode)> {
+        let what = "Remote API request";
+        let mode = self.effective_structured_output_mode();
+        let body = self.build_request_in(request, mode);
+        // The whole body, so a run can be replayed by hand (§9.1). Debug: it
+        // carries the full prompt and any schema.
+        tracing::debug!(target: "oicp_client", %url, %body, "chat request body");
+        let send = |b: &Value| self.stamped(self.client.post(url).json(b));
+        let refusal = match self.send_honouring_shed_raw(|| send(&body), what).await? {
+            Ok(response) => return Ok((response, mode)),
+            Err(refusal) => refusal,
+        };
+        let schema_refused = self.wait_out_sheds
+            && request.structured_output.is_some()
+            && mode == StructuredOutputMode::JsonSchema
+            && refusal.status == reqwest::StatusCode::BAD_REQUEST;
+        if !schema_refused {
+            return Err(refusal.into_error(what));
+        }
+        let forced = StructuredOutputMode::ToolUseForced;
+        let retry = self.build_request_in(request, forced);
+        tracing::info!(
+            target: "oicp_client",
+            %url,
+            refusal = %error_excerpt(&refusal.body),
+            "host refused a json_schema request (400); asking once more with the schema as a forced function call"
+        );
+        tracing::debug!(target: "oicp_client", %url, body = %retry, "chat request body");
+        match self.send_honouring_shed_raw(|| send(&retry), what).await? {
+            Ok(response) => {
+                self.json_schema_refused.store(true, Ordering::Relaxed);
+                tracing::warn!(
+                    target: "oicp_client",
+                    %url,
+                    "json_schema refused, forced function call answered: this provider sends schemas as a function call from now on"
+                );
+                Ok((response, forced))
+            }
+            Err(second) => Err(Error::Inference(format!(
+                "{what} returned {}: {}; asked again with the schema as a forced function call, it returned {}: {}",
+                refusal.status,
+                error_excerpt(&refusal.body),
+                second.status,
+                error_excerpt(&second.body)
+            ))),
+        }
+    }
+}
+
+impl ChatMessage {
+    /// The assistant turn as the caller's answer. A schema that rode a
+    /// function call comes back as that call's arguments, the JSON the caller
+    /// asked for whichever spelling the host needed; anything else is
+    /// [`ChatMessage::as_text`].
+    pub(crate) fn answer(&self, request: &CompletionRequest, mode: StructuredOutputMode) -> String {
+        let Some(schema) = request
+            .structured_output
+            .as_ref()
+            .filter(|_| mode.via_tool())
+        else {
+            return self.as_text();
+        };
+        let name = schema_function_name(schema);
+        let call = self.tool_calls.iter().find(|c| c.function.name == name);
+        if let Some(args) = call.and_then(|c| c.function.arguments.clone()) {
+            return args;
+        }
+        // `tool_choice: auto` lets the model answer in text. Use it, and say
+        // so: the schema was offered, not enforced.
+        tracing::warn!(
+            target: "oicp_client",
+            function = %name,
+            ?mode,
+            "schema offered as a function call but the model answered in text; schema not enforced on this call"
+        );
+        self.as_text()
     }
 }
 
@@ -263,6 +380,121 @@ mod tests {
             .collect();
         assert_eq!(names, ["lookup", "s"]);
         assert_eq!(body["tool_choice"], "auto");
+    }
+
+    /// A host that answers every chat request 400 and counts them.
+    async fn refusing_host() -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+        let hits = std::sync::Arc::new(AtomicUsize::new(0));
+        let counter = hits.clone();
+        let chat = move || {
+            counter.fetch_add(1, SeqCst);
+            async {
+                let refusal =
+                    r#"{"error":{"message":"This response_format type is unavailable now"}}"#;
+                (axum::http::StatusCode::BAD_REQUEST, refusal)
+            }
+        };
+        let app = axum::Router::new().route("/v1/chat/completions", axum::routing::post(chat));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        (format!("http://{addr}/v1"), hits)
+    }
+
+    /// DeepSeek's chat API in miniature: 400 to a `json_schema` request, a
+    /// forced function call answered.
+    async fn schema_refusing_host() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Value>>>) {
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let chat = move |axum::Json(body): axum::Json<Value>| {
+            log.lock().unwrap().push(body.clone());
+            async move {
+                if body.get("response_format").is_some() {
+                    let refusal = json!({"error": {"message": "This response_format type is unavailable now"}});
+                    return (axum::http::StatusCode::BAD_REQUEST, axum::Json(refusal));
+                }
+                let name = body["tool_choice"]["function"]["name"].clone();
+                let call = json!({"id": "c1", "type": "function",
+                    "function": {"name": name, "arguments": "{\"q\":\"why?\"}"}});
+                let reply = json!({"choices": [{"message": {"content": null, "tool_calls": [call]},
+                    "finish_reason": "tool_calls"}]});
+                (axum::http::StatusCode::OK, axum::Json(reply))
+            }
+        };
+        let app = axum::Router::new().route("/v1/chat/completions", axum::routing::post(chat));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        (format!("http://{addr}/v1"), seen)
+    }
+
+    /// THE FAILING INPUT: a vendor on the default `json_schema` that refuses
+    /// it. Before 2026-10-03 the only way through was a per-provider
+    /// `structured_output_mode = "tool-use-forced"`. Now the refusal is asked
+    /// once more as a forced function call, the answer is the call's
+    /// arguments, and the provider remembers: the next call goes that way.
+    #[tokio::test]
+    async fn a_refused_json_schema_is_asked_again_as_a_function_and_remembered() {
+        use sovereign_contracts::traits::InferenceProvider;
+        let (url, seen) = schema_refusing_host().await;
+        let request = CompletionRequest {
+            prompt: "p".into(),
+            model_id: Some("m".into()),
+            structured_output: Some(titled_schema(&schema(), Some("phase 1 (atlas)"))),
+            ..Default::default()
+        };
+        let host = RemoteApiProvider::new(&url, None, "m", 0).waiting_out_sheds();
+        assert_eq!(
+            host.complete(&request).await.unwrap().text,
+            r#"{"q":"why?"}"#
+        );
+        assert_eq!(
+            host.complete(&request).await.unwrap().text,
+            r#"{"q":"why?"}"#
+        );
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(
+            seen.len(),
+            3,
+            "one refusal, one retry, one call straight to the function"
+        );
+        assert_eq!(seen[0]["response_format"]["type"], "json_schema");
+        for (i, body) in seen.iter().enumerate().skip(1) {
+            assert!(body.get("response_format").is_none(), "body {i}: {body}");
+            assert_eq!(body["tool_choice"]["function"]["name"], "phase_1__atlas_");
+        }
+    }
+
+    /// A peer's refusal is a routing signal: reported at once, never re-asked.
+    /// Only a last-resort endpoint gets the forced-function retry.
+    #[tokio::test]
+    async fn only_a_last_resort_host_is_asked_again() {
+        use sovereign_contracts::traits::InferenceProvider;
+        use std::sync::atomic::Ordering::SeqCst;
+        let (url, hits) = refusing_host().await;
+        let request = CompletionRequest {
+            prompt: "p".into(),
+            model_id: Some("m".into()),
+            structured_output: Some(schema()),
+            ..Default::default()
+        };
+        let peer = RemoteApiProvider::new(&url, None, "m", 0);
+        assert!(peer.complete(&request).await.is_err());
+        assert_eq!(hits.load(SeqCst), 1, "a peer is not re-asked");
+
+        let last_resort = RemoteApiProvider::new(&url, None, "m", 0).waiting_out_sheds();
+        let err = last_resort
+            .complete(&request)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert_eq!(hits.load(SeqCst), 3, "the last resort is asked once more");
+        assert!(
+            err.contains("forced function call"),
+            "both refusals named: {err}"
+        );
     }
 
     #[test]

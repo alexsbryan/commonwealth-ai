@@ -118,13 +118,15 @@ base_url = "http://10.0.0.5:8080/v1"
 A bare model id resolves to provider `local`. `anthropic` is the other
 dialect (`/v1/messages`).
 
-**Set `structured_output_mode` deliberately.** The extraction pipeline
-asks for JSON against a schema, and providers differ in how they honor it:
-`json-schema` (the provider enforces it — OpenAI, our daemon),
-`json-object` (valid JSON, no schema enforcement), `tool-use-auto`, and
-`tool-use-forced` (maximum adherence, not universally supported). A
-llama-server that doesn't enforce `json_schema` needs `json-object`, and
-guessing wrong shows up as extraction quality loss rather than an error.
+**`structured_output_mode` is an override, not a requirement.** The
+extraction pipeline asks for JSON against a schema. By default it asks for
+`json_schema` (the provider enforces it: OpenAI, our daemon), and a host that
+refuses that with a 400 (DeepSeek's chat API) is asked once more with the
+schema as a forced function call; if that answers, the provider uses it for
+the rest of the run. Set the mode only to pin a spelling: `json-object` (valid
+JSON, no schema enforcement), `tool-use-auto`, or `tool-use-forced`. A host
+that accepts `json_schema` but ignores it does not 400, so it is not caught by
+the fallback, and shows up as extraction quality loss rather than an error.
 
 **The gotcha that will bite you.** There is one egress boundary, and it
 decides local-versus-remote by comparing the resolved `base_url` against

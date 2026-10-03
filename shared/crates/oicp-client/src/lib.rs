@@ -272,6 +272,9 @@ pub struct RemoteApiProvider {
     /// Operator-set vendor fields merged into every body last (OpenRouter's
     /// `provider` routing, OpenAI's `seed`).
     extra_params: Option<serde_json::Value>,
+    /// Set once this host refused `json_schema` and answered a forced function
+    /// call instead (`chat_wire::send_chat`); schemas go that way from then on.
+    json_schema_refused: std::sync::atomic::AtomicBool,
 }
 
 /// Default request timeout for `RemoteApiProvider`. Matches the
@@ -423,6 +426,7 @@ impl RemoteApiProvider {
             structured_output_mode: StructuredOutputMode::default(),
             forwards: true,
             extra_params: None,
+            json_schema_refused: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -544,74 +548,6 @@ impl RemoteApiProvider {
     /// distinguish that from correct behaviour, so the invariant is
     /// made structural rather than remembered (ARCH §7). Seven call
     /// sites hand-maintained the auth half before this existed.
-    /// Send, and come back when the host asks us to.
-    ///
-    /// THE ONE place this client waits out backpressure (ARCH §10.6). `build`
-    /// re-creates the request per attempt rather than cloning, so a body
-    /// stream cannot be consumed by a failed try.
-    ///
-    /// Returns the FIRST success, or the last refusal. A refusal that is not a
-    /// shed returns immediately and untouched — see [`shed_retry_after`].
-    async fn send_honouring_shed<F>(
-        &self,
-        build: F,
-        what: &'static str,
-    ) -> Result<reqwest::Response>
-    where
-        F: Fn() -> reqwest::RequestBuilder,
-    {
-        let mut waited = std::time::Duration::ZERO;
-        let mut attempt = 0u32;
-        loop {
-            let response = build()
-                .send()
-                .await
-                .map_err(|e| Error::Inference(format!("{what} failed: {e}")))?;
-            if response.status().is_success() {
-                return Ok(response);
-            }
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            attempt += 1;
-
-            let shed = if self.wait_out_sheds {
-                shed_retry_after(status, &body)
-            } else {
-                // Not our shed to wait out: report it so the caller can route
-                // elsewhere. Peers depend on this — see `wait_out_sheds`.
-                None
-            };
-            let Some(delay) = shed else {
-                // Not backpressure — a real failure. Surface it as it arrived.
-                return Err(Error::Inference(format!(
-                    "{what} returned {status}: {}",
-                    error_excerpt(&body)
-                )));
-            };
-            if attempt >= SHED_MAX_ATTEMPTS || waited + delay > SHED_TOTAL_WAIT_CAP {
-                // Out of budget. Report the shed AS a shed — the caller needs
-                // to know this was "busy", not "broken", to decide whether to
-                // route elsewhere (§18.3).
-                return Err(Error::Inference(format!(
-                    "{what} shed by the host after {attempt} attempt(s), \
-                     {}s waited: {}",
-                    waited.as_secs(),
-                    error_excerpt(&body)
-                )));
-            }
-            tracing::info!(
-                target: "oicp_client",
-                what,
-                attempt,
-                delay_ms = delay.as_millis() as u64,
-                waited_ms = waited.as_millis() as u64,
-                "shed — honouring the host's Retry-After and coming back"
-            );
-            tokio::time::sleep(delay).await;
-            waited += delay;
-        }
-    }
-
     fn stamped(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         let mut req = req;
         if let Some(ref auth) = self.auth_header() {
@@ -634,6 +570,14 @@ impl RemoteApiProvider {
     }
 
     fn build_request(&self, request: &CompletionRequest) -> serde_json::Value {
+        self.build_request_in(request, self.effective_structured_output_mode())
+    }
+
+    fn build_request_in(
+        &self,
+        request: &CompletionRequest,
+        mode: StructuredOutputMode,
+    ) -> serde_json::Value {
         let mut messages = Vec::new();
 
         if let Some(ref system) = request.system_message {
@@ -859,7 +803,7 @@ impl RemoteApiProvider {
         // `inference_adapter::extract_response_format_schema`. After the tool
         // catalog, so a tool-mode host gets the schema beside the caller's tools.
         if let Some(schema) = &request.structured_output {
-            chat_wire::write_structured_output(&mut body, schema, self.structured_output_mode);
+            chat_wire::write_structured_output(&mut body, schema, mode);
         }
 
         // The sampler and constraint fields the chat wire already carries
@@ -1115,17 +1059,7 @@ impl InferenceProvider for RemoteApiProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let start = Instant::now();
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
-        let body = self.build_request(request);
-        // The whole body, so a run can be replayed by hand (§9.1). Debug: it
-        // carries the full prompt and any schema.
-        tracing::debug!(target: "oicp_client", %url, %body, "chat request body");
-
-        let response = self
-            .send_honouring_shed(
-                || self.stamped(self.client.post(&url).json(&body)),
-                "Remote API request",
-            )
-            .await?;
+        let (response, mode) = self.send_chat(&url, request).await?;
 
         let chat_response: ChatCompletionResponse = response
             .json()
@@ -1134,7 +1068,7 @@ impl InferenceProvider for RemoteApiProvider {
 
         let first_choice = chat_response.choices.first();
         let text = first_choice
-            .map(|c| c.message.as_text())
+            .map(|c| c.message.answer(request, mode))
             .unwrap_or_default();
         let finish_reason = first_choice
             .and_then(|c| c.finish_reason.as_deref())
@@ -1553,6 +1487,7 @@ pub struct SplitInferenceProvider {
 }
 
 mod chat_wire;
+mod shed;
 pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
 mod loopback;
 pub use loopback::endpoint_is_loopback;

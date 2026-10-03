@@ -80,7 +80,7 @@
 48898	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
 115	ingest/crates/sovereign-authoring-harness::tests
-6448	ingest/crates/sovereign-enrichment-build
+6428	ingest/crates/sovereign-enrichment-build
 1601	ingest/crates/sovereign-enrichment-build::tests
 305	ingest/crates/sovereign-enrichment-catalog
 370	ingest/crates/sovereign-enrichment-catalog::tests
@@ -131,8 +131,8 @@
 480	shared/crates/mesh-join-vocab::tests
 611	shared/crates/mesh-reach
 667	shared/crates/mesh-reach::tests
-2737	shared/crates/oicp-client
-1161	shared/crates/oicp-client::tests
+2868	shared/crates/oicp-client
+1260	shared/crates/oicp-client::tests
 5224	shared/crates/oicp-types
 2545	shared/crates/oicp-types::tests
 266	shared/crates/oplog

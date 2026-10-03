@@ -10,7 +10,6 @@ use crate::providers::ResolvedProvider;
 use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::error::{Error, Result};
 use oicp_client::{titled_schema, RemoteApiProvider};
-use oicp_types::tool_calls::parse_tool_calls_from_text;
 use oicp_types::{CompletionRequest, InferenceRequirements, LatencyClass};
 use sovereign_contracts::traits::InferenceProvider;
 use std::sync::atomic::Ordering;
@@ -51,7 +50,6 @@ impl DaemonInferenceClient {
             .unwrap_or(0);
         let mode = provider.structured_output_mode;
         let has_schema = prompt.response_schema.is_some();
-        let via_tool = has_schema && mode.via_tool();
         let request = CompletionRequest {
             prompt: prompt.user.clone(),
             system_message: Some(prompt.system.clone()),
@@ -157,41 +155,21 @@ impl DaemonInferenceClient {
                 )));
             }
         };
-        // A forced function call comes back as the `<tool_call>` envelope
-        // `oicp_client` renders native calls into; its arguments are the answer.
-        let tool_args = via_tool
-            .then(|| parse_tool_calls_from_text(&resp.text).into_iter().next())
-            .flatten()
-            .map(|call| call.arguments);
-        let text_content = Some(resp.text.as_str()).filter(|s| !s.trim().is_empty());
-        let content = match (via_tool, tool_args, text_content) {
-            (true, Some(args), _) => args,
-            // `tool_choice: auto` lets the model answer in text instead. Use
-            // it, and say so: the schema was offered, not enforced.
-            (true, None, Some(t)) => {
-                tracing::warn!(
-                    phase = %phase_label,
-                    model = %model_label,
-                    "inference_client: tool offered but the model answered in text; \
-                     parsing the text, schema not enforced on this call"
-                );
-                t.to_string()
-            }
-            (false, _, Some(t)) => t.to_string(),
-            _ => {
-                return Err(Error::Serialization(format!(
-                    "chat response from `{}` carried neither content nor a tool call \
-                     (finish_reason {:?})",
-                    provider.name, resp.finish_reason
-                )))
-            }
-        };
+        // The JSON answer whichever spelling the host needed: a schema that
+        // rode a function call comes back as its arguments (`oicp_client`).
+        if resp.text.trim().is_empty() {
+            return Err(Error::Serialization(format!(
+                "chat response from `{}` carried neither content nor a tool call \
+                 (finish_reason {:?})",
+                provider.name, resp.finish_reason
+            )));
+        }
+        let content = resp.text;
         // The answer as the parser will see it, beside the request body
         // `oicp_client` logged, so a parse failure can be diagnosed from one
         // run (§9.1).
         tracing::debug!(
             phase = %phase_label,
-            via_tool,
             content = %content,
             "inference_client: response content"
         );
