@@ -123,7 +123,7 @@ impl RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>> {
-        self.admit("raw completion", request.oicp.as_ref())?;
+        let admitted = self.outbound(crate::Payload::Completion(request.oicp.as_ref()))?;
         let url = format!("{}/completions", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": request.model_id,
@@ -135,7 +135,7 @@ impl RemoteApiProvider {
         tracing::debug!(%url, prompt_chars = request.prompt.len(), "remote: raw completion to serve");
         let response = self
             .send_honouring_shed(
-                || self.stamped(self.client.post(&url).json(&body)),
+                || admitted.post(&url).json(&body),
                 "Raw completion request",
             )
             .await?;

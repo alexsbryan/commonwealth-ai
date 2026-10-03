@@ -215,9 +215,10 @@ pub struct RemoteApiProvider {
     /// dropping it is what made three sub-requests of one turn fail inside
     /// 17ms against a 32-second hint (note `bf432b4d`).
     wait_out_sheds: bool,
-    client: reqwest::Client,
+    /// The HTTP half: client, bearer, node stamp and far end. Every request
+    /// goes out through [`Self::outbound`].
+    outbound: outbound::Outbound,
     endpoint: EndpointRef,
-    api_key: Option<String>,
     model_id: String,
     /// When true, `model_id` is a routing/attribution LABEL rather than
     /// a name the remote endpoint can resolve, and must never be put on
@@ -233,26 +234,6 @@ pub struct RemoteApiProvider {
     /// healthy peer after three strikes. See the regression test
     /// `an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve`.
     model_id_is_placeholder: bool,
-    /// This node's id, lowercase hex, stamped as `X-Node-Id` on every
-    /// outbound request when set. `None` = the request presents as
-    /// LOCAL traffic to the receiving daemon.
-    ///
-    /// This field is the whole of M5 piece 3, and it is a policy
-    /// control, not plumbing: `commonwealth-api`'s admission layer
-    /// gates exclusively on the presence of this header
-    /// (`admission.rs:125`). Absent, a peer's chat completion is
-    /// admitted as if the user themselves had typed it — bypassing
-    /// the operator's pause, the foreground yield, and the
-    /// `max_peer_inflight` ceiling (default 1). Present, all three
-    /// arm.
-    ///
-    /// Opt-in for the same reason `model_id_is_placeholder` is: this
-    /// provider also serves OpenAI, Ollama and bench endpoints, none
-    /// of which are mesh peers and none of which should be told a
-    /// node identity. Only the mesh routing layer knows it is talking
-    /// to a peer — `peer_inference.rs::provider_for_peer` is the one
-    /// caller that sets it.
-    node_id: Option<String>,
     /// Writes the turn's admission id onto the chat wire; see `turn_admission.rs`.
     carries_turn_admission: bool,
     context_size: u32,
@@ -266,9 +247,6 @@ pub struct RemoteApiProvider {
     query_instruction: String,
     /// How this provider's host is asked for schema-shaped output.
     structured_output_mode: StructuredOutputMode,
-    /// Who answers: a peer (the default), the caller's own daemon
-    /// ([`Self::originating`]), or a third party ([`Self::third_party`]).
-    far_end: FarEnd,
     /// Operator-set vendor fields merged into every body last (OpenRouter's
     /// `provider` routing, OpenAI's `seed`).
     extra_params: Option<serde_json::Value>,
@@ -325,7 +303,7 @@ impl RemoteApiProvider {
     /// that would corrupt retrieval in a way no test downstream would
     /// catch.
     async fn embed_many_one_request(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        self.admit("embedding request", None)?;
+        let admitted = self.outbound(Payload::Texts)?;
         let url = format!("{}/embeddings", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": &self.model_id,
@@ -337,7 +315,7 @@ impl RemoteApiProvider {
         // `NotImplemented` so a caller can fall back to per-item embedding.
         // Flattening that into `Inference` would be the same collapse this
         // client already refuses to make on a 503 body (§18.3).
-        let req = self.stamped(self.client.post(&url).json(&body));
+        let req = admitted.post(&url).json(&body);
 
         let lap = sovereign_contracts::engine_state::Lap::start("client", "embed");
         let response = req
@@ -410,13 +388,11 @@ impl RemoteApiProvider {
         Self {
             // Off: see the field docs — a peer shed is a routing signal, not a wait.
             wait_out_sheds: false,
-            client,
+            outbound: outbound::Outbound::new(client, api_key),
             endpoint,
-            api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
             carries_turn_admission: false,
-            node_id: None,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
             // that this pure HTTP client no longer computes. Callers that
@@ -425,7 +401,6 @@ impl RemoteApiProvider {
             // (`embed`, which ignores the prefix) leave it empty.
             query_instruction: String::new(),
             structured_output_mode: StructuredOutputMode::default(),
-            far_end: FarEnd::Peer,
             extra_params: None,
             json_schema_refused: std::sync::atomic::AtomicBool::new(false),
         }
@@ -494,70 +469,17 @@ impl RemoteApiProvider {
         self
     }
 
-    /// Requests through this provider ORIGINATE here (an enrich run calling
-    /// its own daemon, an engine on this machine), they are not forwards for a peer: the
-    /// caller's OICP envelope crosses verbatim, no hop is spent and none is
-    /// synthesized. A forward spends one, and an unstated budget is one hop,
-    /// so a forwarded enrich call would reach the daemon unable to use a peer.
-    pub fn originating(mut self) -> Self {
-        self.far_end = FarEnd::Origin;
-        self
-    }
-
     /// Merge these vendor fields into every request body, last.
     pub fn with_extra_params(mut self, extra: Option<serde_json::Value>) -> Self {
         self.extra_params = extra;
         self
     }
 
-    /// Identify this node to the remote as a MESH PEER, by stamping
-    /// `X-Node-Id: <hex>` on everything this provider sends.
-    ///
-    /// Call this only when the remote is a Commonwealth daemon and
-    /// the traffic really is peer traffic. It changes how the far
-    /// side treats the request: peer-tagged inference is subject to
-    /// the operator's pause, the foreground yield, and the
-    /// `max_peer_inflight` ceiling, any of which can answer `503` +
-    /// `Retry-After` in ~10 ms instead of serving. That refusal is
-    /// the point — see `MESH_N4_TOPOLOGY.md` §M5 — but it means an
-    /// unconsidered call here turns served requests into shed ones.
-    ///
-    /// The hex encoding is what `commonwealth-api`'s
-    /// `parse_x_node_id` expects; an unparseable value is not
-    /// ignored, it buckets under the zero node and is still gated.
     /// Declare this endpoint the LAST RESORT, so a shed is waited out rather
     /// than reported. See [`Self::wait_out_sheds`] — do not set this on a peer.
     pub fn waiting_out_sheds(mut self) -> Self {
         self.wait_out_sheds = true;
         self
-    }
-
-    pub fn with_node_id(mut self, node_id_hex: impl Into<String>) -> Self {
-        self.node_id = Some(node_id_hex.into());
-        self
-    }
-
-    /// Apply the headers EVERY outbound request from this provider
-    /// carries: bearer auth, and the mesh identity when this provider
-    /// was built for a peer.
-    ///
-    /// One body, deliberately, because a new outbound method that
-    /// forgets the stamp fails SILENTLY and in the safe-looking
-    /// direction: the request still succeeds, it is simply admitted
-    /// on the far side as though the peer's user had typed it — no
-    /// pause, no yield, no ceiling. Nothing in a test or a log would
-    /// distinguish that from correct behaviour, so the invariant is
-    /// made structural rather than remembered (ARCH §7). Seven call
-    /// sites hand-maintained the auth half before this existed.
-    fn stamped(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        let mut req = req;
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
-        if let Some(ref id) = self.node_id {
-            req = req.header("X-Node-Id", id);
-        }
-        req
     }
 
     /// Set the query-side embedding instruction prefix (empty by default).
@@ -660,11 +582,11 @@ impl RemoteApiProvider {
         // unbounded. The desktop avoids that structurally by handing peers its
         // raw provider (sovereign-desktop state.rs); the CLI daemon installs
         // the mesh-routing provider and had no equivalent until this.
-        let oicp_val = if self.far_end == FarEnd::ThirdParty {
-            // A vendor does not speak OICP. The envelope is ours: `admit`
+        let oicp_val = if self.far_end() == FarEnd::ThirdParty {
+            // A vendor does not speak OICP. The envelope is ours: admission
             // has already read the one field that mattered to it.
             None
-        } else if self.far_end == FarEnd::Origin {
+        } else if self.far_end() == FarEnd::Origin {
             // Not a forward (`originating`): the caller's envelope or none.
             request
                 .oicp
@@ -847,10 +769,6 @@ impl RemoteApiProvider {
         body
     }
 
-    fn auth_header(&self) -> Option<String> {
-        self.api_key.as_ref().map(|k| format!("Bearer {k}"))
-    }
-
     /// The daemon root: this provider's endpoint with any `/v1` suffix
     /// stripped. Routes mounted at the daemon root (not under `/v1`) — warmup,
     /// `/status`, and the OICP capabilities manifest — resolve from here. Two
@@ -886,7 +804,7 @@ impl RemoteApiProvider {
         // `/v1`-shaped endpoint hit `…/v1/oicp/v1/capabilities` → 404 → None.
         let url = format!("{}/oicp/v1/capabilities", self.daemon_root().await.ok()?);
 
-        let req = self.stamped(self.client.get(&url));
+        let req = self.outbound(Payload::Probe).ok()?.get(&url);
 
         let response = req.send().await.ok()?;
         if !response.status().is_success() {
@@ -1063,9 +981,9 @@ struct StreamDelta {
 impl InferenceProvider for RemoteApiProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let start = Instant::now();
-        self.admit("chat request", request.oicp.as_ref())?;
+        let admitted = self.outbound(Payload::Completion(request.oicp.as_ref()))?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
-        let (response, mode) = self.send_chat(&url, request).await?;
+        let (response, mode) = self.send_chat(&admitted, &url, request).await?;
 
         let chat_response: ChatCompletionResponse = response
             .json()
@@ -1128,7 +1046,7 @@ impl InferenceProvider for RemoteApiProvider {
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
         use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
-        self.admit("chat request", request.oicp.as_ref())?;
+        let admitted = self.outbound(Payload::Completion(request.oicp.as_ref()))?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
@@ -1136,7 +1054,7 @@ impl InferenceProvider for RemoteApiProvider {
         let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
         let response = self
             .send_honouring_shed(
-                || self.stamped(self.client.post(&url).json(&body)),
+                || admitted.post(&url).json(&body),
                 "Remote typed stream request",
             )
             .await?;
@@ -1214,14 +1132,14 @@ impl InferenceProvider for RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        self.admit("chat request", request.oicp.as_ref())?;
+        let admitted = self.outbound(Payload::Completion(request.oicp.as_ref()))?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
         let response = self
             .send_honouring_shed(
-                || self.stamped(self.client.post(&url).json(&body)),
+                || admitted.post(&url).json(&body),
                 "Remote stream request",
             )
             .await?;
@@ -1273,7 +1191,7 @@ impl InferenceProvider for RemoteApiProvider {
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        self.admit("embedding request", None)?;
+        let admitted = self.outbound(Payload::Texts)?;
         let url = format!("{}/embeddings", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": &self.model_id,
@@ -1282,7 +1200,7 @@ impl InferenceProvider for RemoteApiProvider {
 
         let response = self
             .send_honouring_shed(
-                || self.stamped(self.client.post(&url).json(&body)),
+                || admitted.post(&url).json(&body),
                 "Embedding request",
             )
             .await?;
@@ -1427,7 +1345,7 @@ impl InferenceProvider for RemoteApiProvider {
             );
             return Ok(());
         };
-        let req = self.stamped(self.client.post(&url).json(&serde_json::json!({})));
+        let req = self.outbound(Payload::Probe)?.post(&url).json(&serde_json::json!({}));
         match req.send().await {
             Ok(r) if r.status().is_success() => Ok(()),
             Ok(r) => {
@@ -1496,8 +1414,8 @@ pub struct SplitInferenceProvider {
 }
 
 mod chat_wire;
-mod far_end;
-pub use far_end::FarEnd;
+mod outbound;
+pub use outbound::{FarEnd, Payload, ThirdPartyRefusal};
 mod shed;
 pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
 mod loopback;
@@ -2960,7 +2878,7 @@ mod tests {
         );
     }
 
-    /// The stamp lives in ONE body (`stamped`) precisely so a new
+    /// The stamp lives in ONE body (`outbound::Admitted`) precisely so a new
     /// outbound method cannot quietly ship without it. This pins the
     /// streaming path, which is the one the product's chat actually
     /// uses — non-streaming passing tells you nothing about it.

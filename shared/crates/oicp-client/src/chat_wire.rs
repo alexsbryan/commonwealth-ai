@@ -194,6 +194,7 @@ impl RemoteApiProvider {
     /// signal and goes back to the router at once, unchanged.
     pub(crate) async fn send_chat(
         &self,
+        admitted: &crate::outbound::Admitted<'_>,
         url: &str,
         request: &CompletionRequest,
     ) -> Result<(reqwest::Response, StructuredOutputMode)> {
@@ -203,7 +204,7 @@ impl RemoteApiProvider {
         // The whole body, so a run can be replayed by hand (§9.1). Debug: it
         // carries the full prompt and any schema.
         tracing::debug!(target: "oicp_client", %url, %body, "chat request body");
-        let send = |b: &Value| self.stamped(self.client.post(url).json(b));
+        let send = |b: &Value| admitted.post(url).json(b);
         let refusal = match self.send_honouring_shed_raw(|| send(&body), what).await? {
             Ok(response) => return Ok((response, mode)),
             Err(refusal) => refusal,

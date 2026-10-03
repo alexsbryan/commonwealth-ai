@@ -11,7 +11,7 @@ impl RemoteApiProvider {
     /// Score `docs` against `query` on the remote's `/rerank` route. Scores
     /// come back in input order whatever order the server lists them in.
     pub(crate) async fn rerank_over_route(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        self.admit("rerank request", None)?;
+        let admitted = self.outbound(crate::Payload::Texts)?;
         let url = format!("{}/rerank", self.endpoint.resolve().await?);
         let body = RerankRequest {
             model: self.model_id.clone(),
@@ -20,7 +20,7 @@ impl RemoteApiProvider {
         };
         let response = self
             .send_honouring_shed(
-                || self.stamped(self.client.post(&url).json(&body)),
+                || admitted.post(&url).json(&body),
                 "Rerank request",
             )
             .await?;

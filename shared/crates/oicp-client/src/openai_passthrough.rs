@@ -36,7 +36,7 @@ use sovereign_contracts::traits::{
 };
 use sovereign_contracts::types::*;
 
-use crate::{RemoteApiProvider, SplitInferenceProvider};
+use crate::{Payload, RemoteApiProvider, SplitInferenceProvider};
 
 /// The trace target of every event here.
 const TARGET: &str = "openai_passthrough";
@@ -81,7 +81,9 @@ impl OpenAiPassthrough {
         let read = async {
             let response = self
                 .target
-                .stamped(self.target.client.get(&url))
+                .outbound(Payload::Probe)
+                .map_err(|e| e.to_string())?
+                .get(&url)
                 .send()
                 .await
                 .map_err(|e| e.to_string())?;
@@ -106,23 +108,20 @@ impl OpenAiPassthrough {
         }
     }
 
-    /// POST `body` to `{base}{path}`, with the target's stamp and shed rule.
+    /// POST `body` to `{base}{path}`, admitted as `payload`, with the target's
+    /// stamp and shed rule.
     async fn post(
         &self,
         path: &str,
+        payload: Payload<'_>,
         body: &impl serde::Serialize,
         what: &'static str,
     ) -> Result<reqwest::Response> {
+        let admitted = self.target.outbound(payload)?;
         let url = format!("{}{path}", self.target.endpoint.resolve().await?);
         tracing::debug!(target: TARGET, %url, what, "relayed");
         self.target
-            .send_honouring_shed(
-                || {
-                    self.target
-                        .stamped(self.target.client.post(&url).json(body))
-                },
-                what,
-            )
+            .send_honouring_shed(|| admitted.post(&url).json(body), what)
             .await
     }
 }
@@ -307,7 +306,12 @@ impl LocalInferenceService for OpenAiPassthrough {
     ) -> std::result::Result<ChatCompletionResponse, LocalInferenceError> {
         request.stream = Some(false);
         let response = self
-            .post("/chat/completions", &request, "Relayed chat completion")
+            .post(
+                "/chat/completions",
+                Payload::Completion(request.oicp.as_ref()),
+                &request,
+                "Relayed chat completion",
+            )
             .await
             .map_err(|e| LocalInferenceError::Other(e.to_string()))?;
         response
@@ -325,7 +329,12 @@ impl LocalInferenceService for OpenAiPassthrough {
     {
         request.stream = Some(true);
         let response = self
-            .post("/chat/completions", &request, "Relayed chat stream")
+            .post(
+                "/chat/completions",
+                Payload::Completion(request.oicp.as_ref()),
+                &request,
+                "Relayed chat stream",
+            )
             .await
             .map_err(|e| LocalInferenceError::Other(e.to_string()))?;
         Ok(relay_sse(response, chat_frames))
@@ -357,7 +366,12 @@ impl LocalInferenceService for OpenAiPassthrough {
             raw_prompt: request.raw_prompt,
         };
         let response = self
-            .post("/completions", &wire, "Relayed FIM completion")
+            .post(
+                "/completions",
+                Payload::Completion(None),
+                &wire,
+                "Relayed FIM completion",
+            )
             .await
             .map_err(|e| e.to_string())?;
         // The wire names no slot and no marker family: the edit slot the

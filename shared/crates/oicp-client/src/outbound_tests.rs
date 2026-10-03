@@ -153,3 +153,58 @@ fn an_engine_off_this_machine_is_a_third_party() {
     assert_eq!(split.serving_locus(), ServingLocus::ForwardsToThirdParty);
     assert_eq!(split.embed.far_end(), FarEnd::Origin);
 }
+
+/// The admission table, whole: every far end against every payload shape and
+/// every declaration a completion can carry.
+#[test]
+fn admission_is_a_table_over_far_end_and_payload() {
+    use super::{Payload, ThirdPartyRefusal};
+    let env = |s| InferenceRequirements::new().with_sharding(s);
+    let (local, mesh, third) = (
+        env(ShardingPrivacy::LocalOnly),
+        env(ShardingPrivacy::MeshAllowed),
+        env(ShardingPrivacy::ThirdPartyAllowed),
+    );
+    let undeclared = |declared| Err(ThirdPartyRefusal::Undeclared { declared });
+    let rows = [
+        (Payload::Probe, Ok(())),
+        (Payload::Texts, Err(ThirdPartyRefusal::Undeclarable)),
+        (Payload::Completion(None), undeclared(None)),
+        (
+            Payload::Completion(Some(&local)),
+            undeclared(Some(ShardingPrivacy::LocalOnly)),
+        ),
+        (
+            Payload::Completion(Some(&mesh)),
+            undeclared(Some(ShardingPrivacy::MeshAllowed)),
+        ),
+        (Payload::Completion(Some(&third)), Ok(())),
+    ];
+    for (payload, third_party) in rows {
+        assert_eq!(FarEnd::Peer.admit(&payload), Ok(()), "peer: {payload:?}");
+        assert_eq!(FarEnd::Origin.admit(&payload), Ok(()), "origin: {payload:?}");
+        assert_eq!(
+            FarEnd::ThirdParty.admit(&payload),
+            third_party,
+            "third party: {payload:?}"
+        );
+    }
+}
+
+/// D1's one classification: this machine is `Origin`, everything else, an
+/// unreadable address included, is a third party.
+#[test]
+fn an_engine_endpoint_is_this_machine_only_when_it_says_loopback() {
+    for (endpoint, far_end) in [
+        ("http://127.0.0.1:8000/v1", FarEnd::Origin),
+        ("http://localhost:9741/v1", FarEnd::Origin),
+        ("http://[::1]:9741/v1", FarEnd::Origin),
+        ("https://openrouter.ai/api/v1", FarEnd::ThirdParty),
+        ("http://192.168.1.20:9741/v1", FarEnd::ThirdParty),
+        ("http://127.example.com/v1", FarEnd::ThirdParty),
+        ("not an address", FarEnd::ThirdParty),
+        ("", FarEnd::ThirdParty),
+    ] {
+        assert_eq!(FarEnd::of_engine_endpoint(endpoint), far_end, "{endpoint}");
+    }
+}
