@@ -37,12 +37,24 @@ unchanged) reserves every late summary ahead of every leaf; `collapsed` seats
 each at its cosine rank among the leaves, leaf order untouched
 (`atlas_grounding/placement.rs`).
 
-**First measurement (pilot essay bank, 12 questions, `--prod-pipeline`).**
-Collapsed seats no summary: non-leaf share 0/120 (head 96/120), facts in pool
-18/32 (head 23/32). The best summary reads cosine 0.42-0.60 against pooled
-leaves at 0.57-0.77. Against the question vector alone, over all 244 leaves
-and 14 summaries, the best summary ranks 27th-124th, so the paper's own
-collapsed tree is leaf-only on this book with `qwen-embedding-0.6b`.
+**Measurements (pilot essay bank, 12 questions; facts-in-pool on this bank
+counts three names, not substance).** On the tree as first built, collapsed
+seated no summary (0/120 vs head 96/120): summaries were embedded bare while
+every leaf carries ingest's title header, and the best summary ranked
+27th-124th of 258 nodes against the question vector. Rebuilt with summaries
+under the same header and a root (426c0970d, 19de4aa5a), the clean offline
+ranking puts a summary 1st-9th on every question, non-leaf share 20.8% at
+top-10 (paper 23-57%). In the pipeline collapsed still seats 5/120, because
+entity-boost leaves carry cosine to the entity string, not the question
+(note 1bf9d2da); head seats the root in its 8 on most questions.
+Provisional T1 (one run, `--synth`, judged pairwise in both orders by
+`book_judge.py` on the local primary, which is also the synthesizer, and
+uncalibrated): head 2 wins, 3 losses, 6 ties, 1 could-not-judge (p = 1.0);
+mean accuracy 3.09 head vs 3.50 collapsed. Head drew 58 judge-listed errors
+to 41, and the gap is binding (who did what, 24 vs 7), not time (22 vs 20):
+summaries compress several people into one paragraph and the synthesizer
+swaps them. The pilot's entity layer carries the same errors (e.g. Garvloit
+described as Elizabeth's mother), so it cannot yet supply the binding.
 
 **Flip condition.** Collapsed wins the R-T1 pairwise on the pilot and
 eagle-cliff essay banks (`book_judge.py`, both orders) with the non-leaf pool

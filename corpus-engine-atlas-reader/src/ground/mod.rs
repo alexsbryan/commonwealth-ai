@@ -48,7 +48,7 @@ use understanding_vocab::ontology::{OntologyPolicies, WalkPolicy, SUMMARY_SEED_B
 
 use crate::atoms::AtomType;
 use crate::context::{
-    atom_verbatim_excerpt, contains_whole_word, cosine, edge_weight, AtlasContext, ChunkRequest,
+    atom_verbatim_excerpt, cosine, edge_weight, name_mentions, AtlasContext, ChunkRequest,
 };
 use crate::edges::EdgeType;
 use crate::evidence_site::{ChunkSelector, EvidenceSite};
@@ -200,28 +200,7 @@ pub async fn ground(
             if name.len() < 4 {
                 continue;
             }
-            let name_lower = name.to_lowercase();
-            let mut hit = contains_whole_word(&q_lower, &name_lower);
-            if !hit {
-                if let Some(last) = name_lower.split_whitespace().last() {
-                    // GENERIC-HEAD GUARD (2026-09-22). The last-word
-                    // fallback exists so a compound question can reach an
-                    // atom it names in part; but when the last word IS the
-                    // entry's own declared type, the match carries no
-                    // identity — "which mints are represented among the
-                    // coins of the Corinth hoard" contains "hoard", and
-                    // every `X hoard` atom in the corpus seeded off that
-                    // one word (measured: 153 seeds, 405 nodes, 164
-                    // requests that fetched the Siphnos/Demanhur tables
-                    // while the named hoard's own sections were crowded
-                    // out). A full-phrase match still seeds normally; only
-                    // the generic-head fallback is withdrawn.
-                    let generic_head = declared.iter().any(|t| t.eq_ignore_ascii_case(last));
-                    if last.len() >= 4 && last != name_lower && !generic_head {
-                        hit = contains_whole_word(&q_lower, last);
-                    }
-                }
-            }
+            let mut hit = name_mentions(&q_lower, name, &declared) > 0;
             if !hit {
                 if let Some(rest) = entry.embed_text.strip_prefix("[Argument: ") {
                     if let Some(end) = rest.find(']') {
