@@ -2165,8 +2165,11 @@ class Pool:
 
     # A reflink clone shares the main tree's blocks until a lane rebuilds them
     # (btrfs; 7s for 136G, measured 2026-09-01). Never one target shared across
-    # worktrees: cargo then ran another tree's build script (same date).
-    CLONE_TARGET = ("cp", "-a", "--reflink=always")
+    # worktrees: cargo then ran another tree's build script (same date). macOS
+    # cp has no --reflink ("illegal option", so every ersilia lane built from
+    # an empty target, 2026-10-02); its -c is the APFS clonefile(2) clone.
+    CLONE_TARGET = (("cp", "-a", "-c") if sys.platform == "darwin"
+                    else ("cp", "-a", "--reflink=always"))
 
     def _provision_target(self, unit, wt):
         """A new lane's target/ is a clone of the main tree's, and every tracked

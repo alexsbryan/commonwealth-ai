@@ -2828,6 +2828,21 @@ class PoolQueueTests(unittest.TestCase):
                 self.assertEqual(pool.run(), 0)
             self.assertIn("target NOT cloned", out.getvalue())
 
+    @unittest.skipUnless(sys.platform == "darwin", "the APFS clone; Linux's is btrfs-only")
+    def test_the_default_clone_runs_on_macos(self):
+        # macOS cp has no --reflink: the btrfs default failed "illegal option"
+        # and every ersilia lane built from an empty target (2026-10-02). The
+        # default itself, not a stand-in, clones a target here.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/deps/libserde.rlib", "warm")
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertNotIn("target NOT cloned", out.getvalue())
+            self.assertIn("target cloned from", out.getvalue())
+
     def share(self, lanes, avail_gb, cores=32):
         """lib/cargo-jobs.sh's split with the machine's probes stubbed."""
         r = subprocess.run(
