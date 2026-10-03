@@ -11,7 +11,7 @@ two machines reconcile when they disagree, and how a shared record of what
 happened stays honest.
 
 Mostly you build a peer against it rather than run it, and the one shipped
-consumer is [Sovereign](../sovereign/), which embeds it and exposes it as
+consumer is [Sovereign](../svrn/), which embeds it and exposes it as
 `sovereign mesh`. Since 2026-09-11 there is also one binary in the package —
 `cw-rails` ([`commonwealth-rails`](crates/commonwealth-rails)), a minimal daemon
 that joins a mesh and serves it, for someone writing a shim rather than

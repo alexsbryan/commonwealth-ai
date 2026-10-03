@@ -55,7 +55,7 @@ commonwealth-ai/
 ├── ingest/crates/understanding-host/        # Understanding's host tier — the ports and the knot
 ├── svrn/crates/corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
 ├── ingest/crates/sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
-├── sovereign/                 # Local AI assistant (CLI / desktop / daemon)
+├── svrn/                      # Local AI assistant (CLI / daemon); the desktop is clients/desktop/
 ├── cmnwlth/              # Mesh coordination daemon
 ├── clients/studio/            # Headless studio CLI (the authoring package's other crates sit with their programs)
 ├── quality/                   # Quality program — layer map, gate baselines, arch-layers crate
@@ -1344,8 +1344,9 @@ cmnwlth, `llama-server` + `rpc-server` on `PATH`. For desktop, Node.js +
 Tauri 2.
 
 The repo is **one unified Cargo workspace** — every crate a member under the
-root `Cargo.toml`. `sovereign/`, `cmnwlth/` and the corpus-engine
-carve-outs are directories of member crates, not separate workspaces.
+root `Cargo.toml`. The program dirs (`svrn/`, `serve/`, `cmnwlth/`,
+`ingest/`, `code/`, `bench/`), `shared/`, `clients/` and `distributions/`
+are directories of member crates, not separate workspaces.
 
 ```sh
 cargo build --workspace                    # recipes + assets compiled in by corpus-engine-recipes

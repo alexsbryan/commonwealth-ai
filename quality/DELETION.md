@@ -86,7 +86,7 @@ cites the reader that keeps its file alive:
 
 - `peek_budget.json`, `pre_reconciliation.json` — opened by literal path at
   `bench_cmd/enron.rs:349` and `:736`
-- `runs/serve50-availability/peer-{busy,idle}_*.log` — cited by
+- `research/runs/serve50-availability/peer-{busy,idle}_*.log` — cited by
   `quality/initiative-bars.toml:1817` as the evidence for a banked verdict
 
 Widening a lane or adding a spare is a **diff to that script**, reviewed like

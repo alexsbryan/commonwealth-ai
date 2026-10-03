@@ -66,7 +66,7 @@ Ollama is the shape these commands are written for — one process, one URL,
 both models — and it is the first rung of the ladder for that reason. It was
 run against a live Ollama for the first time on 2026-09-07 (v0.33.3, installed
 under `~/.local/ollama` with no root; artefacts in
-`runs/ei3c-ollama-arm/evidence-2026-09-07-run3/`). What that measured:
+`research/runs/ei3c-ollama-arm/evidence-2026-09-07-run3/`). What that measured:
 
 - **Discovery works.** The ladder named Ollama at rung 1 and stopped there —
   `endpoint candidate ollama http://localhost:11434/v1 — 2 model(s) listed`.

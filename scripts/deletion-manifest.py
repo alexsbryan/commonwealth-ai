@@ -56,8 +56,8 @@ SPARE_BENCH = {
 # quality/initiative-bars.toml:1817 cites these two as the evidence for a
 # banked bar verdict. Deleting them dangles a recorded verdict.
 SPARE_LOGS = {
-    "runs/serve50-availability/peer-busy_20260814_125105.log",
-    "runs/serve50-availability/peer-idle_20260814_124029.log",
+    "research/runs/serve50-availability/peer-busy_20260814_125105.log",
+    "research/runs/serve50-availability/peer-idle_20260814_124029.log",
 }
 
 # ── DR flight trees. READ_CLASSES is derived from every consumer found:

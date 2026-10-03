@@ -199,7 +199,7 @@ echo "acceptance: recipe new -> refuses to overwrite, and did not touch the file
 # true when NONE of them answers: the ladder stops at the first live rung by
 # design. So the first host that installed Ollama — §4's own documented default,
 # rung 1 — failed this step for the ladder behaving exactly as specified
-# (run 3, runs/ei3c-ollama-arm/evidence-2026-09-07-run3/acceptance-head.log).
+# (run 3, research/runs/ei3c-ollama-arm/evidence-2026-09-07-run3/acceptance-head.log).
 # A check that encodes the world it was written in is not a check.
 #
 # So: find which rung answers HERE, then assert what that world can actually

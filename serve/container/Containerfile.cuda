@@ -212,12 +212,12 @@ COPY ingest/crates/sovereign-recipes/      ./ingest/crates/sovereign-recipes/
 # members all live under crates/, but a few sovereign-rooted files are
 # pulled in via `include_str!` at compile time and must be present:
 #   - sovereign/models.toml              → sovereign-core::models_manifest
-#   - sovereign/.opencode/               → sovereign-cli::doctor_cmd
+#   - svrn/.opencode/               → sovereign-cli::doctor_cmd
 # The service templates moved into sovereign-service/data/ (2026-09-21) and
 # ride along in the crates/ copy — no separate COPY.
 COPY sovereign/models.toml ./sovereign/models.toml
 COPY sovereign/crates/    ./sovereign/crates/
-COPY sovereign/.opencode/ ./sovereign/.opencode/
+COPY svrn/.opencode/ ./svrn/.opencode/
 # sovereign-core include_str!s the router exemplar TOMLs + embed cache.
 COPY sovereign/router/    ./sovereign/router/
 # sovereign-cli-llm's bench_cmd include_str!s exactly this one file —

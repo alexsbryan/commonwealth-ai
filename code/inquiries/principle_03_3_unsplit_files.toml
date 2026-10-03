@@ -18,7 +18,7 @@
 # SYSTEM_OVERVIEW §10.1/§10.1b, this inquiry's globs miss the
 # renamed files and the inquiry fails — exactly the doc-drift
 # signal we want. Pairs with the pre-push ratchet
-# (sovereign/.githooks/pre-push) which blocks regressions in the
+# (svrn/.githooks/pre-push) which blocks regressions in the
 # passing-inquiry count.
 
 [inquiry]

@@ -1814,7 +1814,7 @@ orders and the peer's pushed work: lint 0 errors, tests 9,749 pass /
   [[initiative.bar.transition]]
   on = "2026-08-14"
   to = "failed"
-  by = "fleet arms runs/serve50-availability/peer-busy_20260814_125105.log + peer-idle_20260814_124029.log (script aa469648); decision log ~/.sovereign/decisions-EXP.jsonl scoped by ts_unix_ms"
+  by = "fleet arms research/runs/serve50-availability/peer-busy_20260814_125105.log + peer-idle_20260814_124029.log (script aa469648); decision log ~/.sovereign/decisions-EXP.jsonl scoped by ts_unix_ms"
   note = """MEASURED AT LAST, AND SPLIT: one half of the green is MET with
 evidence, the other half is NOT MEASURED, and the binding constraint has
 moved to a gate this order never modelled. Still FAILED overall — the bar
