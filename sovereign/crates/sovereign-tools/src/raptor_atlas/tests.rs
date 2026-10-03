@@ -317,6 +317,7 @@ fn extractive_test_input() -> ClusterSummarizationInput {
         centroid_embedding: vec![1.0, 0.0],
         cluster_coherence: 0.9,
         correction_hint: None,
+        doc_title: None,
     }
 }
 
@@ -509,6 +510,7 @@ fn descriptors_for_prompt_caps_by_centrality_and_reorders_chronologically() {
         .map(|i| ChunkInput {
             chunk_id: i as u32,
             content: format!("chunk {i} body text"),
+            title: None,
         })
         .collect();
     let embeddings: Vec<Vec<f32>> = (0..40)
@@ -551,6 +553,7 @@ fn descriptors_for_prompt_leaves_small_clusters_whole() {
         .map(|i| ChunkInput {
             chunk_id: i as u32,
             content: format!("chunk {i} body text"),
+            title: None,
         })
         .collect();
     let embeddings: Vec<Vec<f32>> = (0..4).map(|_| vec![1.0, 0.0]).collect();
@@ -566,11 +569,13 @@ fn extract_quote_spans_pulls_longest_sentence_per_chunk() {
             chunk_id: 1,
             content: "Short. This is the load-bearing sentence with quite a few words. Tiny."
                 .to_string(),
+            title: None,
         },
         ChunkInput {
             chunk_id: 2,
             content: "Another chunk where this longer sentence is the one to anchor on. End."
                 .to_string(),
+            title: None,
         },
     ];
     let embs = [vec![1.0, 0.0], vec![0.0, 1.0]];
@@ -593,11 +598,13 @@ fn extract_quote_spans_dedupes_by_prefix() {
             chunk_id: 1,
             content: "The professor walked through London streets alone and unsuspected by men."
                 .to_string(),
+            title: None,
         },
         ChunkInput {
             chunk_id: 2,
             content: "The professor walked through London streets alone and unsuspected by men."
                 .to_string(),
+            title: None,
         },
     ];
     let embs = [vec![1.0, 0.0], vec![1.0, 0.0]];
@@ -665,14 +672,9 @@ impl InferenceProvider for DistinctEmbed {
     }
 }
 
-/// `--to-root` recurses to ONE node; the default stops at a top layer of up to
-/// `ROOT_BRANCHING_CEILING` nodes. Same 40 chunks, same leaf target, the two
-/// shapes differ only in the root rule — failing input: a loop that still
-/// reads the constant ceiling builds the same two-node top for both.
-#[tokio::test]
-async fn to_root_builds_one_root_and_the_default_stops_short_of_it() {
-    let inference: Arc<dyn InferenceProvider> = Arc::new(DistinctEmbed);
-    let chunks: Vec<ChunkInput> = (0..40u32)
+/// Forty chunks in two directions, and the top layer's node count.
+fn shape_fixture() -> (Vec<ChunkInput>, Vec<Vec<f32>>) {
+    let chunks = (0..40u32)
         .map(|i| ChunkInput {
             chunk_id: i,
             content: if i % 2 == 0 {
@@ -680,9 +682,10 @@ async fn to_root_builds_one_root_and_the_default_stops_short_of_it() {
             } else {
                 format!("A different passage {i} wanders along the coast toward the town.")
             },
+            title: None,
         })
         .collect();
-    let embeddings: Vec<Vec<f32>> = (0..40)
+    let embeddings = (0..40)
         .map(|i| {
             let jitter = i as f32 * 0.01;
             if i % 2 == 0 {
@@ -692,13 +695,114 @@ async fn to_root_builds_one_root_and_the_default_stops_short_of_it() {
             }
         })
         .collect();
-    let top = |nodes: &[RaptorNode]| {
-        let max = nodes.iter().map(|n| n.level).max().unwrap();
-        nodes.iter().filter(|n| n.level == max).count()
-    };
-    let build = |shape: TreeShape| {
-        let inference = Arc::clone(&inference);
-        let (chunks, embeddings) = (chunks.clone(), embeddings.clone());
+    (chunks, embeddings)
+}
+
+fn top_layer(nodes: &[RaptorNode]) -> usize {
+    let max = nodes.iter().map(|n| n.level).max().unwrap();
+    nodes.iter().filter(|n| n.level == max).count()
+}
+
+async fn build_shape(
+    checkpoint: Option<&RaptorCheckpointHandle>,
+    shape: TreeShape,
+) -> Vec<RaptorNode> {
+    let inference: Arc<dyn InferenceProvider> = Arc::new(DistinctEmbed);
+    let (chunks, embeddings) = shape_fixture();
+    build_raptor_atlas_with_verify(
+        &inference,
+        &chunks,
+        &embeddings,
+        DocumentTypeTag::Narrative,
+        checkpoint,
+        None,
+        None,
+        SummaryMode::Extractive,
+        None,
+        shape,
+    )
+    .await
+    .expect("build")
+}
+
+const LEAF_4: TreeShape = TreeShape {
+    leaf_target: 4,
+    root_ceiling: ROOT_BRANCHING_CEILING,
+};
+const LEAF_4_ROOTED: TreeShape = TreeShape {
+    leaf_target: 4,
+    root_ceiling: 1,
+};
+
+/// `--to-root` recurses to ONE node; the default stops at a top layer of up to
+/// `ROOT_BRANCHING_CEILING` nodes. Same 40 chunks, same leaf target, the two
+/// shapes differ only in the root rule — failing input: a loop that still
+/// reads the constant ceiling builds the same two-node top for both.
+#[tokio::test]
+async fn to_root_builds_one_root_and_the_default_stops_short_of_it() {
+    let default = build_shape(None, LEAF_4).await;
+    let rooted = build_shape(None, LEAF_4_ROOTED).await;
+    let default_top = top_layer(&default);
+    assert!(
+        (2..=ROOT_BRANCHING_CEILING).contains(&default_top),
+        "default top layer holds {default_top} nodes"
+    );
+    assert_eq!(top_layer(&rooted), 1, "--to-root must end in a single root");
+    assert!(
+        rooted.iter().map(|n| n.level).max() > default.iter().map(|n| n.level).max(),
+        "the root is a level above the default's top layer"
+    );
+}
+
+/// A completed checkpoint built short of a root does not answer a `--to-root`
+/// build with the old tree: it reopens above the leaves, reuses level 0 and
+/// builds the root. The cached leaf is tampered first, so reuse is observed,
+/// not assumed — failing input: returning the completed checkpoint verbatim
+/// (top layer of 2), or rebuilding level 0 (the tamper disappears).
+#[tokio::test]
+async fn a_completed_rootless_checkpoint_reopens_above_the_leaves_for_to_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let handle = RaptorCheckpointHandle::at(tmp.path(), "fixture");
+    let first = build_shape(Some(&handle), LEAF_4).await;
+    assert!(top_layer(&first) >= 2);
+    let mut leaf = handle
+        .read_cluster_node(0, 0)
+        .unwrap()
+        .expect("leaf 0 cached");
+    leaf.summary = "TAMPERED".into();
+    handle.write_cluster_node(0, 0, &leaf).unwrap();
+
+    let rooted = build_shape(Some(&handle), LEAF_4_ROOTED).await;
+    assert_eq!(
+        top_layer(&rooted),
+        1,
+        "the reopened build must reach a root"
+    );
+    assert!(
+        rooted
+            .iter()
+            .any(|n| n.level == 0 && n.summary == "TAMPERED"),
+        "level 0 must come from the checkpoint, not a rebuild"
+    );
+    assert_eq!(handle.read_manifest().unwrap().root_ceiling, Some(1));
+    // The same rule again is a cache hit: the completed rooted tree, verbatim.
+    let again = build_shape(Some(&handle), LEAF_4_ROOTED).await;
+    assert_eq!(again.len(), rooted.len());
+}
+
+/// Every summary is embedded under the header its leaves carry: the title the
+/// tree's chunks share, by `corpus_index::chunkers::title_headed`. Chunks of
+/// two documents share none, so their summaries embed bare. Failing input:
+/// embedding `summary` itself (the pre-2026-10-03 rule) in the titled case.
+#[tokio::test]
+async fn summaries_embed_under_the_title_their_chunks_share() {
+    let inference: Arc<dyn InferenceProvider> = Arc::new(DistinctEmbed);
+    let (mut chunks, embeddings) = shape_fixture();
+    for c in &mut chunks {
+        c.title = Some("pilot-and-his-wife".into());
+    }
+    let build = |chunks: Vec<ChunkInput>| {
+        let (inference, embeddings) = (Arc::clone(&inference), embeddings.clone());
         async move {
             build_raptor_atlas_with_verify(
                 &inference,
@@ -710,30 +814,25 @@ async fn to_root_builds_one_root_and_the_default_stops_short_of_it() {
                 None,
                 SummaryMode::Extractive,
                 None,
-                shape,
+                LEAF_4_ROOTED,
             )
             .await
             .expect("build")
         }
     };
-    let default = build(TreeShape {
-        leaf_target: 4,
-        ..TreeShape::DEFAULT
-    })
-    .await;
-    let rooted = build(TreeShape {
-        leaf_target: 4,
-        root_ceiling: 1,
-    })
-    .await;
-    let default_top = top(&default);
-    assert!(
-        (2..=ROOT_BRANCHING_CEILING).contains(&default_top),
-        "default top layer holds {default_top} nodes"
-    );
-    assert_eq!(top(&rooted), 1, "--to-root must end in a single root");
-    assert!(
-        rooted.iter().map(|n| n.level).max() > default.iter().map(|n| n.level).max(),
-        "the root is a level above the default's top layer"
-    );
+    let titled = build(chunks.clone()).await;
+    for n in &titled {
+        let headed = format!("pilot-and-his-wife\n\n{}", n.summary);
+        assert_eq!(
+            n.summary_embedding,
+            DistinctEmbed.embed(&headed).await.unwrap()
+        );
+    }
+    chunks[0].title = Some("another-book".into());
+    for n in &build(chunks).await {
+        assert_eq!(
+            n.summary_embedding,
+            DistinctEmbed.embed(&n.summary).await.unwrap()
+        );
+    }
 }

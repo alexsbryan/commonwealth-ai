@@ -296,6 +296,8 @@ pub(super) async fn build_and_persist_raptor_atlas(
             raptor_chunks.push(ChunkInput {
                 chunk_id: c.chunk_index as u32,
                 content: c.content.clone(),
+                // Asset chunks are not ingest-headed, so their summaries are not.
+                title: None,
             });
             embeddings.push(emb.clone());
         }

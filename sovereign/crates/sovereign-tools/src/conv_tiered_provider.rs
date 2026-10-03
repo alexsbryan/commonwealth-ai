@@ -452,6 +452,7 @@ impl FolderTieredProvider {
             &chunk_ids,
             embedding_dim,
             version_for_hash,
+            self.tree_shape.leaf_target,
         );
         let checkpoint = crate::raptor_checkpoint::RaptorCheckpointHandle::at_note(
             &index_dir, conv_uuid, input_hash,
@@ -666,6 +667,8 @@ impl FolderTieredProvider {
                 chunks.push(ChunkInput {
                     chunk_id: next_id,
                     content: node.summary.clone(),
+                    // Many documents' summaries: no one title heads them.
+                    title: None,
                 });
                 embeddings.push(node.summary_embedding.clone());
                 source_for_input.push(doc_id.clone());
@@ -1294,6 +1297,7 @@ async fn build_folder_artifacts(
         .map(|c| ChunkInput {
             chunk_id: c.id as u32,
             content: c.content.clone(),
+            title: c.title.clone(),
         })
         .collect();
 

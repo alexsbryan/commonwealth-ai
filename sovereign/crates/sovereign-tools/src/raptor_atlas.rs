@@ -170,7 +170,10 @@ const SUMMARY_MAX_OUTPUT_TOKENS: u32 = 2048;
 /// as `prompt_version`, which is what `enrich raptor --refresh-stale`
 /// compares to find outdated trees. Date-suffixed so two bumps in one
 /// initiative stay distinguishable.
-pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-10-02.1";
+/// 2026-10-03.1: a summary is embedded under its document's title header
+/// (`corpus_index::chunkers::title_headed`), so every tree before it carries
+/// bare summary vectors.
+pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-10-03.1";
 
 /// How a node's summary text is produced (T1 P1.1).
 ///
@@ -193,7 +196,8 @@ pub enum SummaryMode {
 /// change to sentence splitting, ranking, or the length target.
 /// Stamped as `prompt_version` on extractive nodes and folded into
 /// the checkpoint `input_hash` by extractive-mode callers.
-pub const EXTRACTIVE_ALGO_VERSION: &str = "rex-2026-07-31.1";
+/// 2026-10-03.1: embedded under the document's title header, as abstractive.
+pub const EXTRACTIVE_ALGO_VERSION: &str = "rex-2026-10-03.1";
 
 /// `summarizer_model` stamp for extractive nodes: no model wrote
 /// prose, so the stamp names the mechanism instead of a model stem.
@@ -410,6 +414,19 @@ async fn build_raptor_atlas_impl(
             embeddings.len()
         )));
     }
+    // The title the chunks share — ingest's header for this document. Chunks
+    // of several documents (the vault theme pass) share none, and get none.
+    let doc_title: Option<String> = match chunks.first().and_then(|c| c.title.clone()) {
+        Some(t)
+            if chunks
+                .iter()
+                .all(|c| c.title.as_deref() == Some(t.as_str())) =>
+        {
+            Some(t)
+        }
+        _ => None,
+    };
+    tracing::debug!(doc_title = ?doc_title, "raptor_atlas: summary embed header");
     if chunks.is_empty() {
         return Ok(Vec::new());
     }
@@ -423,12 +440,22 @@ async fn build_raptor_atlas_impl(
     if let Some(handle) = checkpoint {
         match handle.decide() {
             CheckpointDecision::Resume(ref manifest) if manifest.completed_at.is_some() => {
-                let cached = handle.load_all_nodes()?;
+                let built_to = manifest.root_ceiling.unwrap_or(ROOT_BRANCHING_CEILING);
+                if built_to == shape.root_ceiling {
+                    let cached = handle.load_all_nodes()?;
+                    tracing::info!(
+                        cached_nodes = cached.len(),
+                        "raptor_atlas: completed checkpoint found; skipping LLM build"
+                    );
+                    return Ok(cached);
+                }
                 tracing::info!(
-                    cached_nodes = cached.len(),
-                    "raptor_atlas: completed checkpoint found; skipping LLM build"
+                    built_to,
+                    root_ceiling = shape.root_ceiling,
+                    "raptor_atlas: completed checkpoint built to another root rule; \
+                     reusing level 0, rebuilding the levels above it"
                 );
-                return Ok(cached);
+                handle.reopen_above_leaves()?;
             }
             CheckpointDecision::StaleAndReset => {
                 tracing::info!(
@@ -583,6 +610,7 @@ async fn build_raptor_atlas_impl(
                 centroid_embedding: inp.centroid,
                 cluster_coherence: inp.coherence,
                 correction_hint: correction_hint.map(|s| s.to_string()),
+                doc_title: doc_title.clone(),
             },
         ));
     }
@@ -763,6 +791,7 @@ async fn build_raptor_atlas_impl(
                 centroid_embedding: centroid,
                 cluster_coherence: coherence,
                 correction_hint: correction_hint.map(|s| s.to_string()),
+                doc_title: doc_title.clone(),
             });
         }
 
@@ -818,7 +847,7 @@ async fn build_raptor_atlas_impl(
                 );
             }
         }
-        if let Err(e) = handle.mark_complete() {
+        if let Err(e) = handle.mark_complete(shape.root_ceiling) {
             tracing::warn!(
                 error = %e,
                 "raptor_atlas: mark_complete failed; next restart will re-summarize tree layers"
@@ -921,6 +950,9 @@ fn target_k(n: usize, avg_cluster_size: usize) -> usize {
 pub struct ChunkInput {
     pub chunk_id: u32,
     pub content: String,
+    /// The document title ingest headed this chunk with, if any. A tree whose
+    /// chunks share one title embeds every summary under that same header.
+    pub title: Option<String>,
 }
 
 impl ChunkInput {
@@ -963,6 +995,8 @@ struct ClusterSummarizationInput {
     /// active correction; injected into the summarization prompt so
     /// regeneration is guided, not a blind re-roll.
     correction_hint: Option<String>,
+    /// The title the tree's chunks share; the summary is embedded under it.
+    doc_title: Option<String>,
 }
 
 /// Dispatch summarization for many clusters in parallel via
@@ -1213,8 +1247,17 @@ async fn summarize_one_cluster_abstractive(
     let mut parsed = match parse_cluster_summary(&resp.text) {
         Some(p) => p,
         None => {
+            let chars: Vec<char> = resp.text.chars().collect();
+            let head: String = chars.iter().take(160).collect();
+            let tail: String = chars[chars.len().saturating_sub(160)..].iter().collect();
             tracing::warn!(
                 level = input.level,
+                max_tokens = req.max_tokens,
+                finish_reason = ?resp.finish_reason,
+                completion_tokens = ?resp.completion_tokens,
+                reply_chars = chars.len(),
+                reply_head = %head,
+                reply_tail = %tail,
                 "raptor_atlas: summary parse failed; falling back to extractive"
             );
             return extract_one_cluster(inference, input).await;
@@ -1316,7 +1359,8 @@ async fn summarize_one_cluster_abstractive(
     }
 
     // Embed the summary so query-time matching can hit this node.
-    let summary_embedding = match inference.embed(&parsed.summary).await {
+    let headed = corpus_index::chunkers::title_headed(input.doc_title.as_deref(), &parsed.summary);
+    let summary_embedding = match inference.embed(&headed).await {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!(
@@ -1464,7 +1508,8 @@ async fn extract_one_cluster(
         .collect::<Vec<_>>()
         .join(" ");
 
-    let summary_embedding = match inference.embed(&summary).await {
+    let headed = corpus_index::chunkers::title_headed(input.doc_title.as_deref(), &summary);
+    let summary_embedding = match inference.embed(&headed).await {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!(

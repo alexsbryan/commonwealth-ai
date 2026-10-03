@@ -121,6 +121,7 @@ pub async fn build_memory_atlas(
         .map(|(i, m)| ChunkInput {
             chunk_id: i as u32,
             content: m.content.clone(),
+            title: None,
         })
         .collect();
 

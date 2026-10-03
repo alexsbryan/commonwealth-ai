@@ -28,12 +28,7 @@ pub(crate) fn chunk_doc(chunker: &dyn Chunker, doc: &ExtractedDoc) -> Vec<String
     chunker
         .chunk(&cleaned)
         .into_iter()
-        .map(|tc| match &doc.title {
-            Some(title) if !tc.content.starts_with(title.as_str()) => {
-                format!("{title}\n\n{}", tc.content)
-            }
-            _ => tc.content,
-        })
+        .map(|tc| corpus_index::chunkers::title_headed(doc.title.as_deref(), &tc.content))
         .collect()
 }
 
