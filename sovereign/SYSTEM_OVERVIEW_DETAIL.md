@@ -1765,7 +1765,7 @@ rule, and the "44 GB boot peak" were all this one corpus.
   parse failure rather than a rule. A built-in declares the `entity_type`
   its atoms actually carry and puts the genre's noun on `label` — the
   literary map is `concept (theme)`, `person (character)` — because
-  `traverse_enumerate` matches declared names against `entity_type`;
+  `atlas_traversal::typed::execute` matches declared names against `entity_type`;
   `Configuration` and `ArgumentReconstruction` are closed kinds and are
   recorded on the derivation axis (`configurations`, `arguments`), not as
   types. `OntologyPolicies.navigation` (`ontology/navigation.rs`) is the
@@ -1797,7 +1797,8 @@ rule, and the "44 GB boot peak" were all this one corpus.
   walks `specializes`, so "which coins" returns the sceattas too;
   `atlas_traversal` gains `QueryPlan::Enumerate` / `Aggregate`, minted only by
   `classify_query_with` when a vocabulary is present and refused by the engine
-  when it is not; `governance_view::project_claim` scopes a rule on the
+  when it is not — both construct a `typed::TypedQuery` and run through
+  `typed::execute`, the one decider for declared-type listing; `governance_view::project_claim` scopes a rule on the
   claim's `subject` (what it is about) falling back to `attributed_to` (whose
   voice it is), and takes its deontic from the reserved `deontic` attribute the
   ontology parser already validated; and `meta_atlas`'s

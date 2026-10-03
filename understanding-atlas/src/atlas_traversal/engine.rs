@@ -19,6 +19,7 @@
 //! | `TensionList` | Open-question atoms + any Tension edges. |
 //! | `ConfigurationList` | All Configuration atoms. |
 //! | `CorpusOverview` | Top-salience entities, notable relations, configurations. |
+//! | `Enumerate` / `Aggregate` / `Typed` | Atoms of a DECLARED type — one decider, [`super::typed::execute`]; the two keyword plans construct a [`TypedQuery`]. |
 //! | `Unknown` | Nothing — result marked `hit = false`. |
 
 use serde::{Deserialize, Serialize};
@@ -29,9 +30,10 @@ use crate::enrichment::atlas::atoms::{
     ResolutionStatus, State,
 };
 use crate::enrichment::atlas::edges::{Edge, EdgeType};
-use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
+use crate::enrichment::ontology::OntologyPolicies;
 
 use super::classifier::{QueryPlan, QueryTarget};
+use super::typed::{self, TypedQuery};
 
 /// Atoms + edges the traversal found for a given plan, plus
 /// metadata about whether the query resolved to anything. The
@@ -72,7 +74,7 @@ pub struct TraversalResult {
 }
 
 impl TraversalResult {
-    fn miss(kind: &str, headline: impl Into<String>) -> Self {
+    pub(super) fn miss(kind: &str, headline: impl Into<String>) -> Self {
         Self {
             hit: false,
             kind: kind.into(),
@@ -81,7 +83,7 @@ impl TraversalResult {
         }
     }
 
-    fn hit(kind: &str, headline: impl Into<String>) -> Self {
+    pub(super) fn hit(kind: &str, headline: impl Into<String>) -> Self {
         Self {
             hit: true,
             kind: kind.into(),
@@ -107,9 +109,9 @@ pub struct AtlasView<'a> {
     pub positions: &'a [Position],
     pub oppositions: &'a [Opposition],
     /// The corpus's declared ontology (`atlas/ontology.json`), or `None` when
-    /// it declared nothing. Read by [`traverse_enumerate`] and
-    /// [`traverse_aggregate`] only — plans that can only be produced when this
-    /// is `Some`, so every pre-ontology walk is untouched.
+    /// it declared nothing. Read by [`typed::execute`] only — the declared-type
+    /// plans, which can only be produced when this is `Some`, so every
+    /// pre-ontology walk is untouched.
     pub vocab: Option<&'a OntologyPolicies>,
 }
 
@@ -125,8 +127,13 @@ pub fn traverse(plan: &QueryPlan, atlas: AtlasView<'_>) -> TraversalResult {
         QueryPlan::TensionList => traverse_tension_list(atlas),
         QueryPlan::ConfigurationList => traverse_configuration_list(atlas),
         QueryPlan::CorpusOverview => traverse_corpus_overview(atlas),
-        QueryPlan::Enumerate { entity_type } => traverse_enumerate(entity_type, atlas),
-        QueryPlan::Aggregate { entity_type, over } => traverse_aggregate(entity_type, over, atlas),
+        QueryPlan::Enumerate { entity_type } => {
+            typed::execute(&TypedQuery::listing(entity_type), atlas)
+        }
+        QueryPlan::Aggregate { entity_type, over } => {
+            typed::execute(&TypedQuery::tally(entity_type, over), atlas)
+        }
+        QueryPlan::Typed(query) => typed::execute(query, atlas),
         QueryPlan::Unknown { raw_query } => {
             TraversalResult::miss("unknown", format!("Unclassified query: {raw_query}"))
         }
@@ -448,157 +455,6 @@ fn traverse_configuration_list(atlas: AtlasView<'_>) -> TraversalResult {
         format!("{} configuration(s)", atlas.configurations.len()),
     );
     result.configurations = atlas.configurations.to_vec();
-    result
-}
-
-/// Cap on how many atoms an enumeration or aggregation returns. Matches the
-/// brief's scannability budget; `traverse_corpus_overview` uses 8 for a
-/// sample, but an enumeration's whole point is completeness, so this is the
-/// larger "a catalogue, not a sample" bound.
-const ENUMERATE_MAX: usize = 64;
-
-/// Every Entity of a declared type, including its `specializes` descendants.
-///
-/// What a headline calls instances of a declared type: the author's `label`
-/// when they declared one, else the type name. One accessor, so the
-/// enumeration and the tally cannot call the same type two different things.
-///
-/// `label` is SINGULAR by its own contract ("what the UI calls instances of
-/// this type"), and an author's noun cannot be pluralised by a rule we own —
-/// so the enumeration headline names the type and then counts
-/// (`coin: 7 in this atlas`) rather than trying to agree in number. Until
-/// 2026-09-03 it read `7 coin in this atlas` for every shipped template; the
-/// only test that covered it declared a plural `label` no template carries.
-fn declared_label(index: &TypeIndex, entity_type: &str) -> String {
-    index
-        .get(entity_type)
-        .and_then(|d| d.label.clone())
-        .unwrap_or_else(|| entity_type.to_string())
-}
-
-/// This is why an enumeration of `coin` returns the sceattas too: the atlas
-/// stores each atom under its OWN declared subtype, and `sceatta specializes
-/// coin` is what makes a sceatta a coin. The walk goes through
-/// [`TypeIndex::is_a`] — the one place the chain is walked.
-fn traverse_enumerate(entity_type: &str, atlas: AtlasView<'_>) -> TraversalResult {
-    let Some(policies) = atlas.vocab else {
-        // Unreachable via `classify_query_with` (the plan is only minted when
-        // a vocabulary exists), but a hand-built plan must refuse rather than
-        // silently enumerate on equality alone.
-        return TraversalResult::miss(
-            "enumerate",
-            format!("No declared ontology in this atlas, so '{entity_type}' names no type."),
-        );
-    };
-    let index = TypeIndex::from_policies(policies);
-    let mut matched: Vec<Entity> = atlas
-        .entities
-        .iter()
-        .filter(|e| index.is_a(e.entity_type.as_str_repr(), entity_type))
-        .cloned()
-        .collect();
-    let total = matched.len();
-    matched.sort_by(|a, b| {
-        b.salience
-            .partial_cmp(&a.salience)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.id.as_str().cmp(b.id.as_str()))
-    });
-    matched.truncate(ENUMERATE_MAX);
-
-    tracing::debug!(
-        entity_type,
-        total,
-        returned = matched.len(),
-        "atlas traversal: enumerate over declared type"
-    );
-
-    if matched.is_empty() {
-        return TraversalResult::miss(
-            "enumerate",
-            format!("No {entity_type} atoms in this atlas."),
-        );
-    }
-    let mut result = TraversalResult::hit(
-        "enumerate",
-        format!(
-            "{}: {total} in this atlas",
-            declared_label(&index, entity_type)
-        ),
-    );
-    result.entities = matched;
-    result
-}
-
-/// Tally the declared type's atoms by one of its declared attributes.
-///
-/// Entities and Claims both carry `attributes`, and a declared claim type is
-/// as tallyable as a declared entity type ("how many attributions by grade"),
-/// so both are walked. An atom missing the attribute is counted under
-/// `(unset)` rather than dropped — an absence is reported, never defaulted.
-fn traverse_aggregate(entity_type: &str, over: &str, atlas: AtlasView<'_>) -> TraversalResult {
-    let Some(policies) = atlas.vocab else {
-        return TraversalResult::miss(
-            "aggregate",
-            format!("No declared ontology in this atlas, so '{entity_type}' names no type."),
-        );
-    };
-    let index = TypeIndex::from_policies(policies);
-    const UNSET: &str = "(unset)";
-
-    let mut tally: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
-    let mut bucket = |attrs: &serde_json::Map<String, serde_json::Value>| {
-        let key = match attrs.get(over) {
-            Some(serde_json::Value::String(s)) => match s.trim() {
-                "" => UNSET.to_string(),
-                t => t.to_string(),
-            },
-            Some(serde_json::Value::Null) | None => UNSET.to_string(),
-            Some(v) => v.to_string(),
-        };
-        *tally.entry(key).or_insert(0) += 1;
-    };
-
-    let mut result = TraversalResult::hit("aggregate", String::new());
-    for e in atlas.entities {
-        if index.is_a(e.entity_type.as_str_repr(), entity_type) {
-            bucket(&e.attributes);
-            result.entities.push(e.clone());
-        }
-    }
-    for c in atlas.claims {
-        let subtype = c.claim_kind.as_deref().unwrap_or_default();
-        if index.is_a(subtype, entity_type) {
-            bucket(&c.attributes);
-            result.claims.push(c.clone());
-        }
-    }
-
-    let total: usize = tally.values().sum();
-    tracing::debug!(
-        entity_type,
-        over,
-        total,
-        buckets = tally.len(),
-        "atlas traversal: aggregate over declared attribute"
-    );
-    if total == 0 {
-        return TraversalResult::miss(
-            "aggregate",
-            format!("No {entity_type} atoms in this atlas to tally by {over}."),
-        );
-    }
-    let breakdown = tally
-        .iter()
-        .map(|(k, n)| format!("{k}: {n}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    result.headline = format!(
-        "{total} {} by {over} — {breakdown}",
-        declared_label(&index, entity_type)
-    );
-    result.entities.truncate(ENUMERATE_MAX);
-    result.claims.truncate(ENUMERATE_MAX);
     result
 }
 

@@ -59,6 +59,10 @@ pub enum QueryPlan {
     /// "How many coins by metal?" — a declared type tallied over one of
     /// its declared attributes.
     Aggregate { entity_type: String, over: String },
+    /// A typed query handed in whole (`enrich atlas-query --typed`) — never
+    /// minted by the keyword classifier. `Enumerate` and `Aggregate` run
+    /// through the same executor; this is its general form.
+    Typed(super::typed::TypedQuery),
     /// Classifier couldn't match. The caller can fall back.
     Unknown { raw_query: String },
 }
