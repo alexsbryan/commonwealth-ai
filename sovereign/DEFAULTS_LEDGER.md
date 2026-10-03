@@ -2296,6 +2296,37 @@ it is an experiment (then it should not be default-on). Resolve it with the
 
 ## REJECTED — measured no; do not re-litigate without new evidence
 
+### GLiNER with declared types as the atlas entity pass — not built (`fi-gliner-declared-labels`, 2026-10-03)
+- **Bar:** feature-fidelity `fi-gliner-declared-labels` — ingest wall time
+  at most 0.5x the LLM entity pass's, at member recall no lower than the
+  LLM arm's minus its band. **Closed on a structural bound, not a G-T2
+  run**, named as such: the bound is the best case the run could show.
+- **The bound.** Atlas entities are not a separate LLM call; they are one
+  facet of the joint Phase-1 call per section, so a GLiNER entity pass
+  can only remove that facet's output. On ft-ans-dev-b's cached Phase 1
+  (29 sections, `~/.svrnmesh/enrichment/ft-ans-dev-b/runs/_phase1_checkpoint.jsonl`),
+  `entities_introduced` is 37% of the section extraction's output
+  characters; claims 32%, relations 14%. Prefill, thinking, the focused
+  relation calls and GLiNER's own time only shrink the saving, so the
+  ratio cannot fall below 0.63 with GLiNER owning every entity.
+- **Neither arm reaches the bar.** Full replacement fails the recall half:
+  declared attributes, the hoard's `igch` identity key and coin refs ride
+  on the LLM's entity sketches (`pipeline/atlas.rs` `EntitySketch.attributes`),
+  GLiNER cannot fill them, and without the identity key the K2 probe lost
+  14 rows. The hybrid that keeps hoard and coin on the LLM hands GLiNER
+  19% of the output: ratio no better than 0.81. Label recall was not yet
+  solved either (the declared name `mint` tags 8/72 gold mints at 0.6).
+- **What is NOT rejected:** GLiNER on the wire and at ingest
+  (`chunk_entities`), its G-T0 reproduction (seam faithful, 51.15 vs 50.7
+  F1), and the two wire defects G-T0 found — `/v1/ner` carries no labels,
+  offsets are bytes where the contract says chars — which stand as
+  defects in their own right.
+- **Re-open only if:** the extraction stops being one joint call per
+  section (entities in their own pass, where GLiNER replaces a whole
+  call), or a corpus whose declared types carry no attributes or
+  identity keys makes full replacement legal — and then on a measured
+  G-T2, both halves.
+
 ### Native grounding, H1 admission **as a gate** — rejected as calibrated, and the gate is deleted
 > **Read the scope of this row carefully.** What is rejected here is
 > *deciding* on H1's answerability. The `SOVEREIGN_NATIVE_GROUNDING`
