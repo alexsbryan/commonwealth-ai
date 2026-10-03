@@ -1,0 +1,7889 @@
+{
+ "atoms": "/private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/fb313319-b1ca-4a29-af76-8521f1407726/scratchpad/gliner/atoms.snapshot.json",
+ "atoms_mtime": "Sat Oct  3 13:27:50 2026",
+ "labels": [
+  "hoard",
+  "coin",
+  "ruler",
+  "mint"
+ ],
+ "seam_default_labels": [
+  "Person",
+  "Organization",
+  "Work",
+  "Location",
+  "Event"
+ ],
+ "gold_mints": [
+  "Abydus",
+  "Amphipolis",
+  "Babylon",
+  "Cius",
+  "Colophon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sardis",
+  "Sidon",
+  "Tarsus",
+  "Teos"
+ ],
+ "text_attested_mints": [
+  "Abydus",
+  "Alexandria",
+  "Amphipolis",
+  "Babylon",
+  "Citium",
+  "Cius",
+  "Colophon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sardis",
+  "Side",
+  "Sidon",
+  "Tarsus",
+  "Teos"
+ ],
+ "llm_mint_entities": [
+  "Abydus",
+  "Ake",
+  "Amphipolis",
+  "Babylon mint",
+  "Colophon",
+  "Ephesus",
+  "Lampsacus",
+  "Magnesia",
+  "Miletus",
+  "Mylasa",
+  "Mytilene",
+  "Pella mint",
+  "Rhodes",
+  "Sardes",
+  "Teos or Phocaea"
+ ],
+ "no_llm_mint_entity": {
+  "gold": [
+   "Cius",
+   "Myriandrus",
+   "Salamis",
+   "Sidon",
+   "Tarsus"
+  ],
+  "text_attested": [
+   "Alexandria",
+   "Citium",
+   "Cius",
+   "Myriandrus",
+   "Salamis",
+   "Side",
+   "Sidon",
+   "Tarsus"
+  ]
+ },
+ "recall": {
+  "declared mint-label t=0.6 gold": {
+   "units": 72,
+   "found": 8,
+   "recall": 0.111,
+   "mints": 16,
+   "mints_found": 6,
+   "per_mint": {
+    "Abydus": "2/14",
+    "Amphipolis": "0/1",
+    "Babylon": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/2",
+    "Lampsacus": "1/17",
+    "Magnesia ad Maeandrum": "0/3",
+    "Miletus": "0/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "1/4",
+    "Salamis": "0/1",
+    "Sardis": "0/9",
+    "Sidon": "2/5",
+    "Tarsus": "1/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared any-label t=0.6 gold": {
+   "units": 72,
+   "found": 15,
+   "recall": 0.208,
+   "mints": 16,
+   "mints_found": 8,
+   "per_mint": {
+    "Abydus": "3/14",
+    "Amphipolis": "0/1",
+    "Babylon": "0/1",
+    "Cius": "1/1",
+    "Colophon": "0/2",
+    "Lampsacus": "4/17",
+    "Magnesia ad Maeandrum": "0/3",
+    "Miletus": "0/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "1/4",
+    "Salamis": "0/1",
+    "Sardis": "2/9",
+    "Sidon": "2/5",
+    "Tarsus": "1/2",
+    "Teos": "0/1"
+   }
+  },
+  "seam-default-labels any-label t=0.6 gold": {
+   "units": 72,
+   "found": 49,
+   "recall": 0.681,
+   "mints": 16,
+   "mints_found": 14,
+   "per_mint": {
+    "Abydus": "8/14",
+    "Amphipolis": "1/1",
+    "Babylon": "0/1",
+    "Cius": "1/1",
+    "Colophon": "1/2",
+    "Lampsacus": "9/17",
+    "Magnesia ad Maeandrum": "3/3",
+    "Miletus": "9/9",
+    "Myriandrus": "1/1",
+    "Pella": "1/1",
+    "Ptolemais-Ake": "1/4",
+    "Salamis": "1/1",
+    "Sardis": "7/9",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared mint-label t=0.6 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 4,
+   "recall": 0.4,
+   "mints": 5,
+   "mints_found": 3,
+   "per_mint": {
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "2/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.6 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 5,
+   "recall": 0.5,
+   "mints": 5,
+   "mints_found": 4,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "2/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.6 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 9,
+   "recall": 0.9,
+   "mints": 5,
+   "mints_found": 5,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  },
+  "declared mint-label t=0.6 text_attested": {
+   "units": 111,
+   "found": 13,
+   "recall": 0.117,
+   "mints": 19,
+   "mints_found": 8,
+   "per_mint": {
+    "Abydus": "2/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "3/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/5",
+    "Lampsacus": "2/24",
+    "Magnesia ad Maeandrum": "1/9",
+    "Miletus": "0/11",
+    "Myriandrus": "1/1",
+    "Pella": "0/3",
+    "Ptolemais-Ake": "1/5",
+    "Salamis": "0/1",
+    "Sardis": "0/15",
+    "Side": "0/1",
+    "Sidon": "2/5",
+    "Tarsus": "1/2",
+    "Teos": "0/2"
+   }
+  },
+  "declared any-label t=0.6 text_attested": {
+   "units": 111,
+   "found": 21,
+   "recall": 0.189,
+   "mints": 19,
+   "mints_found": 10,
+   "per_mint": {
+    "Abydus": "3/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "3/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Colophon": "0/5",
+    "Lampsacus": "6/24",
+    "Magnesia ad Maeandrum": "1/9",
+    "Miletus": "0/11",
+    "Myriandrus": "1/1",
+    "Pella": "0/3",
+    "Ptolemais-Ake": "1/5",
+    "Salamis": "0/1",
+    "Sardis": "2/15",
+    "Side": "0/1",
+    "Sidon": "2/5",
+    "Tarsus": "1/2",
+    "Teos": "0/2"
+   }
+  },
+  "seam-default-labels any-label t=0.6 text_attested": {
+   "units": 111,
+   "found": 71,
+   "recall": 0.64,
+   "mints": 19,
+   "mints_found": 15,
+   "per_mint": {
+    "Abydus": "9/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "5/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Colophon": "2/5",
+    "Lampsacus": "13/24",
+    "Magnesia ad Maeandrum": "6/9",
+    "Miletus": "11/11",
+    "Myriandrus": "1/1",
+    "Pella": "2/3",
+    "Ptolemais-Ake": "2/5",
+    "Salamis": "1/1",
+    "Sardis": "11/15",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "1/2"
+   }
+  },
+  "declared mint-label t=0.6 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 4,
+   "recall": 0.308,
+   "mints": 8,
+   "mints_found": 3,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "2/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.6 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 5,
+   "recall": 0.385,
+   "mints": 8,
+   "mints_found": 4,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "2/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.6 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 9,
+   "recall": 0.692,
+   "mints": 8,
+   "mints_found": 5,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  },
+  "declared mint-label t=0.5 gold": {
+   "units": 72,
+   "found": 11,
+   "recall": 0.153,
+   "mints": 16,
+   "mints_found": 7,
+   "per_mint": {
+    "Abydus": "2/14",
+    "Amphipolis": "0/1",
+    "Babylon": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/2",
+    "Lampsacus": "1/17",
+    "Magnesia ad Maeandrum": "0/3",
+    "Miletus": "1/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "2/4",
+    "Salamis": "0/1",
+    "Sardis": "0/9",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared any-label t=0.5 gold": {
+   "units": 72,
+   "found": 22,
+   "recall": 0.306,
+   "mints": 16,
+   "mints_found": 9,
+   "per_mint": {
+    "Abydus": "5/14",
+    "Amphipolis": "0/1",
+    "Babylon": "0/1",
+    "Cius": "1/1",
+    "Colophon": "0/2",
+    "Lampsacus": "6/17",
+    "Magnesia ad Maeandrum": "0/3",
+    "Miletus": "1/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "2/4",
+    "Salamis": "0/1",
+    "Sardis": "2/9",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/1"
+   }
+  },
+  "seam-default-labels any-label t=0.5 gold": {
+   "units": 72,
+   "found": 55,
+   "recall": 0.764,
+   "mints": 16,
+   "mints_found": 14,
+   "per_mint": {
+    "Abydus": "10/14",
+    "Amphipolis": "1/1",
+    "Babylon": "0/1",
+    "Cius": "1/1",
+    "Colophon": "1/2",
+    "Lampsacus": "11/17",
+    "Magnesia ad Maeandrum": "3/3",
+    "Miletus": "9/9",
+    "Myriandrus": "1/1",
+    "Pella": "1/1",
+    "Ptolemais-Ake": "3/4",
+    "Salamis": "1/1",
+    "Sardis": "7/9",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared mint-label t=0.5 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 5,
+   "recall": 0.5,
+   "mints": 5,
+   "mints_found": 3,
+   "per_mint": {
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.5 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 6,
+   "recall": 0.6,
+   "mints": 5,
+   "mints_found": 4,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.5 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 9,
+   "recall": 0.9,
+   "mints": 5,
+   "mints_found": 5,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  },
+  "declared mint-label t=0.5 text_attested": {
+   "units": 111,
+   "found": 19,
+   "recall": 0.171,
+   "mints": 19,
+   "mints_found": 9,
+   "per_mint": {
+    "Abydus": "2/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "3/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/5",
+    "Lampsacus": "2/24",
+    "Magnesia ad Maeandrum": "2/9",
+    "Miletus": "2/11",
+    "Myriandrus": "1/1",
+    "Pella": "0/3",
+    "Ptolemais-Ake": "3/5",
+    "Salamis": "0/1",
+    "Sardis": "0/15",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/2"
+   }
+  },
+  "declared any-label t=0.5 text_attested": {
+   "units": 111,
+   "found": 32,
+   "recall": 0.288,
+   "mints": 19,
+   "mints_found": 11,
+   "per_mint": {
+    "Abydus": "5/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "3/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Colophon": "0/5",
+    "Lampsacus": "8/24",
+    "Magnesia ad Maeandrum": "2/9",
+    "Miletus": "2/11",
+    "Myriandrus": "1/1",
+    "Pella": "0/3",
+    "Ptolemais-Ake": "3/5",
+    "Salamis": "0/1",
+    "Sardis": "3/15",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/2"
+   }
+  },
+  "seam-default-labels any-label t=0.5 text_attested": {
+   "units": 111,
+   "found": 82,
+   "recall": 0.739,
+   "mints": 19,
+   "mints_found": 15,
+   "per_mint": {
+    "Abydus": "11/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "6/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Colophon": "3/5",
+    "Lampsacus": "16/24",
+    "Magnesia ad Maeandrum": "7/9",
+    "Miletus": "11/11",
+    "Myriandrus": "1/1",
+    "Pella": "3/3",
+    "Ptolemais-Ake": "4/5",
+    "Salamis": "1/1",
+    "Sardis": "11/15",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "1/2"
+   }
+  },
+  "declared mint-label t=0.5 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 5,
+   "recall": 0.385,
+   "mints": 8,
+   "mints_found": 3,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.5 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 6,
+   "recall": 0.462,
+   "mints": 8,
+   "mints_found": 4,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.5 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 9,
+   "recall": 0.692,
+   "mints": 8,
+   "mints_found": 5,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  },
+  "declared mint-label t=0.4 gold": {
+   "units": 72,
+   "found": 14,
+   "recall": 0.194,
+   "mints": 16,
+   "mints_found": 7,
+   "per_mint": {
+    "Abydus": "4/14",
+    "Amphipolis": "0/1",
+    "Babylon": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/2",
+    "Lampsacus": "1/17",
+    "Magnesia ad Maeandrum": "0/3",
+    "Miletus": "2/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "2/4",
+    "Salamis": "0/1",
+    "Sardis": "0/9",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared any-label t=0.4 gold": {
+   "units": 72,
+   "found": 31,
+   "recall": 0.431,
+   "mints": 16,
+   "mints_found": 10,
+   "per_mint": {
+    "Abydus": "8/14",
+    "Amphipolis": "0/1",
+    "Babylon": "0/1",
+    "Cius": "1/1",
+    "Colophon": "1/2",
+    "Lampsacus": "8/17",
+    "Magnesia ad Maeandrum": "0/3",
+    "Miletus": "3/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "3/4",
+    "Salamis": "0/1",
+    "Sardis": "2/9",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/1"
+   }
+  },
+  "seam-default-labels any-label t=0.4 gold": {
+   "units": 72,
+   "found": 58,
+   "recall": 0.806,
+   "mints": 16,
+   "mints_found": 15,
+   "per_mint": {
+    "Abydus": "10/14",
+    "Amphipolis": "1/1",
+    "Babylon": "1/1",
+    "Cius": "1/1",
+    "Colophon": "1/2",
+    "Lampsacus": "13/17",
+    "Magnesia ad Maeandrum": "3/3",
+    "Miletus": "9/9",
+    "Myriandrus": "1/1",
+    "Pella": "1/1",
+    "Ptolemais-Ake": "3/4",
+    "Salamis": "1/1",
+    "Sardis": "7/9",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared mint-label t=0.4 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 5,
+   "recall": 0.5,
+   "mints": 5,
+   "mints_found": 3,
+   "per_mint": {
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.4 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 6,
+   "recall": 0.6,
+   "mints": 5,
+   "mints_found": 4,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.4 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 9,
+   "recall": 0.9,
+   "mints": 5,
+   "mints_found": 5,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  },
+  "declared mint-label t=0.4 text_attested": {
+   "units": 111,
+   "found": 23,
+   "recall": 0.207,
+   "mints": 19,
+   "mints_found": 10,
+   "per_mint": {
+    "Abydus": "4/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "3/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/5",
+    "Lampsacus": "2/24",
+    "Magnesia ad Maeandrum": "2/9",
+    "Miletus": "3/11",
+    "Myriandrus": "1/1",
+    "Pella": "0/3",
+    "Ptolemais-Ake": "3/5",
+    "Salamis": "0/1",
+    "Sardis": "1/15",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/2"
+   }
+  },
+  "declared any-label t=0.4 text_attested": {
+   "units": 111,
+   "found": 44,
+   "recall": 0.396,
+   "mints": 19,
+   "mints_found": 12,
+   "per_mint": {
+    "Abydus": "9/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "3/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Colophon": "2/5",
+    "Lampsacus": "10/24",
+    "Magnesia ad Maeandrum": "2/9",
+    "Miletus": "4/11",
+    "Myriandrus": "1/1",
+    "Pella": "0/3",
+    "Ptolemais-Ake": "4/5",
+    "Salamis": "0/1",
+    "Sardis": "4/15",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/2"
+   }
+  },
+  "seam-default-labels any-label t=0.4 text_attested": {
+   "units": 111,
+   "found": 85,
+   "recall": 0.766,
+   "mints": 19,
+   "mints_found": 16,
+   "per_mint": {
+    "Abydus": "11/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "6/6",
+    "Babylon": "1/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Colophon": "3/5",
+    "Lampsacus": "18/24",
+    "Magnesia ad Maeandrum": "7/9",
+    "Miletus": "11/11",
+    "Myriandrus": "1/1",
+    "Pella": "3/3",
+    "Ptolemais-Ake": "4/5",
+    "Salamis": "1/1",
+    "Sardis": "11/15",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "1/2"
+   }
+  },
+  "declared mint-label t=0.4 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 5,
+   "recall": 0.385,
+   "mints": 8,
+   "mints_found": 3,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.4 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 6,
+   "recall": 0.462,
+   "mints": 8,
+   "mints_found": 4,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.4 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 9,
+   "recall": 0.692,
+   "mints": 8,
+   "mints_found": 5,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  },
+  "declared mint-label t=0.3 gold": {
+   "units": 72,
+   "found": 19,
+   "recall": 0.264,
+   "mints": 16,
+   "mints_found": 10,
+   "per_mint": {
+    "Abydus": "4/14",
+    "Amphipolis": "1/1",
+    "Babylon": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/2",
+    "Lampsacus": "1/17",
+    "Magnesia ad Maeandrum": "1/3",
+    "Miletus": "2/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "3/4",
+    "Salamis": "0/1",
+    "Sardis": "2/9",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared any-label t=0.3 gold": {
+   "units": 72,
+   "found": 40,
+   "recall": 0.556,
+   "mints": 16,
+   "mints_found": 13,
+   "per_mint": {
+    "Abydus": "9/14",
+    "Amphipolis": "1/1",
+    "Babylon": "0/1",
+    "Cius": "1/1",
+    "Colophon": "1/2",
+    "Lampsacus": "9/17",
+    "Magnesia ad Maeandrum": "1/3",
+    "Miletus": "3/9",
+    "Myriandrus": "1/1",
+    "Pella": "0/1",
+    "Ptolemais-Ake": "4/4",
+    "Salamis": "0/1",
+    "Sardis": "5/9",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "1/1"
+   }
+  },
+  "seam-default-labels any-label t=0.3 gold": {
+   "units": 72,
+   "found": 63,
+   "recall": 0.875,
+   "mints": 16,
+   "mints_found": 15,
+   "per_mint": {
+    "Abydus": "12/14",
+    "Amphipolis": "1/1",
+    "Babylon": "1/1",
+    "Cius": "1/1",
+    "Colophon": "2/2",
+    "Lampsacus": "15/17",
+    "Magnesia ad Maeandrum": "3/3",
+    "Miletus": "9/9",
+    "Myriandrus": "1/1",
+    "Pella": "1/1",
+    "Ptolemais-Ake": "3/4",
+    "Salamis": "1/1",
+    "Sardis": "7/9",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "0/1"
+   }
+  },
+  "declared mint-label t=0.3 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 5,
+   "recall": 0.5,
+   "mints": 5,
+   "mints_found": 3,
+   "per_mint": {
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.3 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 6,
+   "recall": 0.6,
+   "mints": 5,
+   "mints_found": 4,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.3 gold_no_llm_mint_entity": {
+   "units": 10,
+   "found": 9,
+   "recall": 0.9,
+   "mints": 5,
+   "mints_found": 5,
+   "per_mint": {
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  },
+  "declared mint-label t=0.3 text_attested": {
+   "units": 111,
+   "found": 32,
+   "recall": 0.288,
+   "mints": 19,
+   "mints_found": 12,
+   "per_mint": {
+    "Abydus": "4/17",
+    "Alexandria": "0/1",
+    "Amphipolis": "4/6",
+    "Babylon": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Colophon": "0/5",
+    "Lampsacus": "3/24",
+    "Magnesia ad Maeandrum": "3/9",
+    "Miletus": "3/11",
+    "Myriandrus": "1/1",
+    "Pella": "1/3",
+    "Ptolemais-Ake": "4/5",
+    "Salamis": "0/1",
+    "Sardis": "4/15",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "1/2"
+   }
+  },
+  "declared any-label t=0.3 text_attested": {
+   "units": 111,
+   "found": 61,
+   "recall": 0.55,
+   "mints": 19,
+   "mints_found": 16,
+   "per_mint": {
+    "Abydus": "11/17",
+    "Alexandria": "1/1",
+    "Amphipolis": "5/6",
+    "Babylon": "0/1",
+    "Citium": "1/1",
+    "Cius": "1/1",
+    "Colophon": "2/5",
+    "Lampsacus": "12/24",
+    "Magnesia ad Maeandrum": "3/9",
+    "Miletus": "4/11",
+    "Myriandrus": "1/1",
+    "Pella": "1/3",
+    "Ptolemais-Ake": "5/5",
+    "Salamis": "0/1",
+    "Sardis": "8/15",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2",
+    "Teos": "2/2"
+   }
+  },
+  "seam-default-labels any-label t=0.3 text_attested": {
+   "units": 111,
+   "found": 96,
+   "recall": 0.865,
+   "mints": 19,
+   "mints_found": 17,
+   "per_mint": {
+    "Abydus": "14/17",
+    "Alexandria": "1/1",
+    "Amphipolis": "6/6",
+    "Babylon": "1/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Colophon": "4/5",
+    "Lampsacus": "22/24",
+    "Magnesia ad Maeandrum": "8/9",
+    "Miletus": "11/11",
+    "Myriandrus": "1/1",
+    "Pella": "3/3",
+    "Ptolemais-Ake": "4/5",
+    "Salamis": "1/1",
+    "Sardis": "12/15",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2",
+    "Teos": "1/2"
+   }
+  },
+  "declared mint-label t=0.3 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 5,
+   "recall": 0.385,
+   "mints": 8,
+   "mints_found": 3,
+   "per_mint": {
+    "Alexandria": "0/1",
+    "Citium": "0/1",
+    "Cius": "0/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "declared any-label t=0.3 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 8,
+   "recall": 0.615,
+   "mints": 8,
+   "mints_found": 6,
+   "per_mint": {
+    "Alexandria": "1/1",
+    "Citium": "1/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "0/1",
+    "Side": "0/1",
+    "Sidon": "3/5",
+    "Tarsus": "1/2"
+   }
+  },
+  "seam-default-labels any-label t=0.3 text_attested_no_llm_mint_entity": {
+   "units": 13,
+   "found": 10,
+   "recall": 0.769,
+   "mints": 8,
+   "mints_found": 6,
+   "per_mint": {
+    "Alexandria": "1/1",
+    "Citium": "0/1",
+    "Cius": "1/1",
+    "Myriandrus": "1/1",
+    "Salamis": "1/1",
+    "Side": "0/1",
+    "Sidon": "4/5",
+    "Tarsus": "2/2"
+   }
+  }
+ },
+ "mint_mentions_t0.6": {
+  "total": 45,
+  "name_a_bank_mint": 28,
+  "top_not_a_bank_mint": [
+   [
+    "Demanhur",
+    3
+   ],
+   [
+    "IGCH",
+    2
+   ],
+   [
+    "Paeonia",
+    2
+   ],
+   [
+    "Fulmen Cantharus",
+    2
+   ],
+   [
+    "United States Mint",
+    2
+   ],
+   [
+    "Amphipois",
+    1
+   ],
+   [
+    "Phocaea",
+    1
+   ],
+   [
+    "Aleppo",
+    1
+   ],
+   [
+    "IGCH 1438",
+    1
+   ],
+   [
+    "Olympia",
+    1
+   ],
+   [
+    "DEMANHUR",
+    1
+   ]
+  ]
+ },
+ "label_counts_t0.6": {
+  "coin": 17,
+  "ruler": 48,
+  "mint": 45,
+  "hoard": 15
+ },
+ "hoards": {
+  "t=0.6 hoard-label": {
+   "found": 3,
+   "of": 18,
+   "dev_found": 2,
+   "dev_of": 13,
+   "missed": [
+    "igch0176",
+    "igch0410",
+    "igch0774",
+    "igch0777",
+    "igch0866",
+    "igch0958",
+    "igch1437",
+    "igch1438",
+    "igch1441",
+    "igch1444",
+    "igch1472",
+    "igch1668",
+    "igch1670",
+    "igch1678",
+    "sec_00012"
+   ]
+  },
+  "t=0.6 any-label": {
+   "found": 6,
+   "of": 18,
+   "dev_found": 5,
+   "dev_of": 13,
+   "missed": [
+    "igch0774",
+    "igch0777",
+    "igch0866",
+    "igch0958",
+    "igch1437",
+    "igch1441",
+    "igch1444",
+    "igch1472",
+    "igch1668",
+    "igch1670",
+    "igch1678",
+    "sec_00012"
+   ]
+  },
+  "t=0.5 hoard-label": {
+   "found": 4,
+   "of": 18,
+   "dev_found": 3,
+   "dev_of": 13,
+   "missed": [
+    "igch0176",
+    "igch0410",
+    "igch0774",
+    "igch0777",
+    "igch0866",
+    "igch0958",
+    "igch1437",
+    "igch1438",
+    "igch1441",
+    "igch1444",
+    "igch1472",
+    "igch1668",
+    "igch1678",
+    "sec_00012"
+   ]
+  },
+  "t=0.5 any-label": {
+   "found": 10,
+   "of": 18,
+   "dev_found": 9,
+   "dev_of": 13,
+   "missed": [
+    "igch0777",
+    "igch0866",
+    "igch0958",
+    "igch1437",
+    "igch1441",
+    "igch1444",
+    "igch1668",
+    "sec_00012"
+   ]
+  },
+  "t=0.4 hoard-label": {
+   "found": 6,
+   "of": 18,
+   "dev_found": 4,
+   "dev_of": 13,
+   "missed": [
+    "igch0176",
+    "igch0410",
+    "igch0774",
+    "igch0777",
+    "igch0866",
+    "igch0958",
+    "igch1438",
+    "igch1441",
+    "igch1472",
+    "igch1668",
+    "igch1678",
+    "sec_00012"
+   ]
+  },
+  "t=0.4 any-label": {
+   "found": 13,
+   "of": 18,
+   "dev_found": 11,
+   "dev_of": 13,
+   "missed": [
+    "igch0777",
+    "igch0866",
+    "igch0958",
+    "igch1441",
+    "sec_00012"
+   ]
+  },
+  "t=0.3 hoard-label": {
+   "found": 11,
+   "of": 18,
+   "dev_found": 7,
+   "dev_of": 13,
+   "missed": [
+    "igch0774",
+    "igch0866",
+    "igch1438",
+    "igch1472",
+    "igch1668",
+    "igch1678",
+    "sec_00012"
+   ]
+  },
+  "t=0.3 any-label": {
+   "found": 17,
+   "of": 18,
+   "dev_found": 13,
+   "dev_of": 13,
+   "missed": [
+    "sec_00012"
+   ]
+  }
+ },
+ "offset_exposure_t0.6": {
+  "mentions": 125,
+  "byte_offset_differs_from_char": 125
+ },
+ "gold_units_found_by_label_t0.6": {
+  "declared": {
+   "mint": 8,
+   "coin": 2,
+   "ruler": 5
+  },
+  "seam-default-labels": {
+   "Person": 8,
+   "Location": 40,
+   "Organization": 2
+  }
+ },
+ "onnx_vs_torch_max_abs_logit_diff": 0.0001773834228515625,
+ "mentions": {
+  "declared": {
+   "1": [
+    {
+     "start": 47,
+     "end": 53,
+     "text": "G\u00eeld\u0103u",
+     "label": "mint",
+     "score": 0.5438897609710693
+    },
+    {
+     "start": 56,
+     "end": 64,
+     "text": "IGCH 774",
+     "label": "mint",
+     "score": 0.42947179079055786
+    },
+    {
+     "start": 182,
+     "end": 188,
+     "text": "Fulmen",
+     "label": "coin",
+     "score": 0.633222222328186
+    },
+    {
+     "start": 203,
+     "end": 212,
+     "text": "Cantharus",
+     "label": "coin",
+     "score": 0.43012067675590515
+    },
+    {
+     "start": 228,
+     "end": 235,
+     "text": "Trident",
+     "label": "coin",
+     "score": 0.7785210013389587
+    },
+    {
+     "start": 328,
+     "end": 338,
+     "text": "Spear-head",
+     "label": "coin",
+     "score": 0.6845612525939941
+    },
+    {
+     "start": 358,
+     "end": 365,
+     "text": "NC 1915",
+     "label": "hoard",
+     "score": 0.3186659514904022
+    },
+    {
+     "start": 377,
+     "end": 383,
+     "text": "Rudder",
+     "label": "coin",
+     "score": 0.7555484771728516
+    },
+    {
+     "start": 524,
+     "end": 532,
+     "text": "Colophon",
+     "label": "coin",
+     "score": 0.4467184543609619
+    },
+    {
+     "start": 802,
+     "end": 810,
+     "text": "Philippe",
+     "label": "ruler",
+     "score": 0.3552809953689575
+    },
+    {
+     "start": 968,
+     "end": 978,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.8636071085929871
+    }
+   ],
+   "2": [
+    {
+     "start": 65,
+     "end": 69,
+     "text": "IGCH",
+     "label": "mint",
+     "score": 0.8388004302978516
+    },
+    {
+     "start": 87,
+     "end": 95,
+     "text": "Philippe",
+     "label": "ruler",
+     "score": 0.6767517924308777
+    },
+    {
+     "start": 187,
+     "end": 195,
+     "text": "Colophon",
+     "label": "mint",
+     "score": 0.8604430556297302
+    },
+    {
+     "start": 280,
+     "end": 287,
+     "text": "Miletus",
+     "label": "mint",
+     "score": 0.41617292165756226
+    },
+    {
+     "start": 292,
+     "end": 298,
+     "text": "Sardes",
+     "label": "mint",
+     "score": 0.3865621089935303
+    },
+    {
+     "start": 344,
+     "end": 349,
+     "text": "Le R.",
+     "label": "coin",
+     "score": 0.3527911901473999
+    },
+    {
+     "start": 375,
+     "end": 382,
+     "text": "Serpent",
+     "label": "coin",
+     "score": 0.7991756796836853
+    },
+    {
+     "start": 408,
+     "end": 414,
+     "text": "Tripod",
+     "label": "coin",
+     "score": 0.7658295631408691
+    },
+    {
+     "start": 440,
+     "end": 449,
+     "text": "Bucranium",
+     "label": "coin",
+     "score": 0.6339008212089539
+    },
+    {
+     "start": 551,
+     "end": 558,
+     "text": "Philips",
+     "label": "coin",
+     "score": 0.3351025879383087
+    },
+    {
+     "start": 601,
+     "end": 616,
+     "text": "Amphipolis IIIA",
+     "label": "mint",
+     "score": 0.32192161679267883
+    },
+    {
+     "start": 769,
+     "end": 779,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.9393256306648254
+    },
+    {
+     "start": 901,
+     "end": 909,
+     "text": "M\u00f8rkholm",
+     "label": "ruler",
+     "score": 0.30616217851638794
+    }
+   ],
+   "3": [
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Paeonia",
+     "label": "mint",
+     "score": 0.7146449089050293
+    },
+    {
+     "start": 526,
+     "end": 532,
+     "text": "Tripod",
+     "label": "coin",
+     "score": 0.5158635377883911
+    },
+    {
+     "start": 1811,
+     "end": 1821,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.9558068513870239
+    },
+    {
+     "start": 570,
+     "end": 575,
+     "text": "torch",
+     "label": "coin",
+     "score": 0.3041022717952728
+    },
+    {
+     "start": 991,
+     "end": 1000,
+     "text": "Philip II",
+     "label": "ruler",
+     "score": 0.9563555717468262
+    },
+    {
+     "start": 919,
+     "end": 927,
+     "text": "IGCH 777",
+     "label": "hoard",
+     "score": 0.34224435687065125
+    },
+    {
+     "start": 1005,
+     "end": 1018,
+     "text": "Alexander III",
+     "label": "ruler",
+     "score": 0.9513710737228394
+    },
+    {
+     "start": 1605,
+     "end": 1610,
+     "text": "Pella",
+     "label": "mint",
+     "score": 0.36737921833992004
+    },
+    {
+     "start": 1615,
+     "end": 1624,
+     "text": "Amphipois",
+     "label": "mint",
+     "score": 0.6487497091293335
+    },
+    {
+     "start": 1643,
+     "end": 1658,
+     "text": "Le Rider's 465b",
+     "label": "coin",
+     "score": 0.6153634190559387
+    },
+    {
+     "start": 1753,
+     "end": 1759,
+     "text": "Abydus",
+     "label": "ruler",
+     "score": 0.35071465373039246
+    },
+    {
+     "start": 1779,
+     "end": 1783,
+     "text": "Teos",
+     "label": "mint",
+     "score": 0.3766856789588928
+    },
+    {
+     "start": 1887,
+     "end": 1897,
+     "text": "Amphipolis",
+     "label": "mint",
+     "score": 0.6922625303268433
+    },
+    {
+     "start": 1904,
+     "end": 1921,
+     "text": "Fulmen Cantharus",
+     "label": "mint",
+     "score": 0.849949061870575
+    },
+    {
+     "start": 1937,
+     "end": 1946,
+     "text": "Lampsacus",
+     "label": "mint",
+     "score": 0.6690720915794373
+    },
+    {
+     "start": 1969,
+     "end": 1975,
+     "text": "Abydus",
+     "label": "mint",
+     "score": 0.42037490010261536
+    },
+    {
+     "start": 2034,
+     "end": 2042,
+     "text": "Magnesia",
+     "label": "mint",
+     "score": 0.37068331241607666
+    }
+   ],
+   "4": [
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Paeonia",
+     "label": "mint",
+     "score": 0.8152216672897339
+    },
+    {
+     "start": 57,
+     "end": 65,
+     "text": "IGCH 410",
+     "label": "hoard",
+     "score": 0.33729106187820435
+    },
+    {
+     "start": 104,
+     "end": 114,
+     "text": "Amphipolis",
+     "label": "mint",
+     "score": 0.8788374662399292
+    },
+    {
+     "start": 121,
+     "end": 138,
+     "text": "Fulmen Cantharus",
+     "label": "mint",
+     "score": 0.8606328368186951
+    },
+    {
+     "start": 145,
+     "end": 152,
+     "text": "Trident",
+     "label": "coin",
+     "score": 0.46753597259521484
+    },
+    {
+     "start": 319,
+     "end": 326,
+     "text": "Serpent",
+     "label": "coin",
+     "score": 0.4965410530567169
+    },
+    {
+     "start": 306,
+     "end": 312,
+     "text": "Sardes",
+     "label": "mint",
+     "score": 0.36684900522232056
+    },
+    {
+     "start": 342,
+     "end": 351,
+     "text": "Bucranium",
+     "label": "coin",
+     "score": 0.4147811233997345
+    },
+    {
+     "start": 362,
+     "end": 390,
+     "text": "Citium Alexandria Rose, \u0394I",
+     "label": "coin",
+     "score": 0.3989863395690918
+    },
+    {
+     "start": 547,
+     "end": 557,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.939727246761322
+    }
+   ],
+   "5": [
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Larnaca",
+     "label": "mint",
+     "score": 0.5159608125686646
+    },
+    {
+     "start": 69,
+     "end": 77,
+     "text": "Le Rider",
+     "label": "ruler",
+     "score": 0.6918420195579529
+    },
+    {
+     "start": 79,
+     "end": 87,
+     "text": "Philippe",
+     "label": "ruler",
+     "score": 0.48308995366096497
+    },
+    {
+     "start": 320,
+     "end": 333,
+     "text": "Ear of barley",
+     "label": "coin",
+     "score": 0.4531628489494324
+    },
+    {
+     "start": 335,
+     "end": 343,
+     "text": "bipennis",
+     "label": "coin",
+     "score": 0.4422869086265564
+    },
+    {
+     "start": 416,
+     "end": 427,
+     "text": "Stag's head",
+     "label": "coin",
+     "score": 0.5576058030128479
+    },
+    {
+     "start": 450,
+     "end": 464,
+     "text": "Griffin's head",
+     "label": "coin",
+     "score": 0.586936891078949
+    }
+   ],
+   "6": [
+    {
+     "start": 154,
+     "end": 165,
+     "text": "lyre stater",
+     "label": "coin",
+     "score": 0.3173988163471222
+    },
+    {
+     "start": 458,
+     "end": 471,
+     "text": "Larnaca Hoard",
+     "label": "hoard",
+     "score": 0.8804589509963989
+    },
+    {
+     "start": 749,
+     "end": 757,
+     "text": "Magnesia",
+     "label": "mint",
+     "score": 0.8560150861740112
+    },
+    {
+     "start": 759,
+     "end": 765,
+     "text": "Mylasa",
+     "label": "mint",
+     "score": 0.615402102470398
+    },
+    {
+     "start": 767,
+     "end": 775,
+     "text": "Mytilene",
+     "label": "mint",
+     "score": 0.487120121717453
+    },
+    {
+     "start": 780,
+     "end": 786,
+     "text": "Rhodes",
+     "label": "mint",
+     "score": 0.421867698431015
+    },
+    {
+     "start": 807,
+     "end": 813,
+     "text": "Abydus",
+     "label": "mint",
+     "score": 0.8404700756072998
+    },
+    {
+     "start": 815,
+     "end": 822,
+     "text": "Ephesus",
+     "label": "mint",
+     "score": 0.30203956365585327
+    },
+    {
+     "start": 827,
+     "end": 831,
+     "text": "Teos",
+     "label": "mint",
+     "score": 0.5129328370094299
+    },
+    {
+     "start": 835,
+     "end": 842,
+     "text": "Phocaea",
+     "label": "mint",
+     "score": 0.6387156844139099
+    },
+    {
+     "start": 995,
+     "end": 1011,
+     "text": "No. Greece Hoard",
+     "label": "hoard",
+     "score": 0.7480016946792603
+    }
+   ],
+   "7": [
+    {
+     "start": 592,
+     "end": 598,
+     "text": "Anadol",
+     "label": "ruler",
+     "score": 0.3206142485141754
+    },
+    {
+     "start": 67,
+     "end": 75,
+     "text": "Le Rider",
+     "label": "ruler",
+     "score": 0.3791177272796631
+    },
+    {
+     "start": 77,
+     "end": 85,
+     "text": "Philippe",
+     "label": "ruler",
+     "score": 0.46262606978416443
+    },
+    {
+     "start": 116,
+     "end": 129,
+     "text": "Ear of barley",
+     "label": "hoard",
+     "score": 0.4757041037082672
+    },
+    {
+     "start": 231,
+     "end": 239,
+     "text": "bipennis",
+     "label": "hoard",
+     "score": 0.6168022751808167
+    },
+    {
+     "start": 217,
+     "end": 229,
+     "text": "Helmet crest",
+     "label": "hoard",
+     "score": 0.48401159048080444
+    },
+    {
+     "start": 322,
+     "end": 329,
+     "text": "Serpent",
+     "label": "coin",
+     "score": 0.6375699043273926
+    },
+    {
+     "start": 364,
+     "end": 371,
+     "text": "T. 221e",
+     "label": "coin",
+     "score": 0.3282467722892761
+    },
+    {
+     "start": 411,
+     "end": 421,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.8597853779792786
+    },
+    {
+     "start": 423,
+     "end": 429,
+     "text": "T. 298",
+     "label": "coin",
+     "score": 0.31347668170928955
+    },
+    {
+     "start": 529,
+     "end": 538,
+     "text": "Hermitage",
+     "label": "mint",
+     "score": 0.5552731156349182
+    }
+   ],
+   "8": [
+    {
+     "start": 67,
+     "end": 76,
+     "text": "IGCH 1437",
+     "label": "hoard",
+     "score": 0.46617186069488525
+    },
+    {
+     "start": 221,
+     "end": 231,
+     "text": "Amphipolis",
+     "label": "mint",
+     "score": 0.7893775701522827
+    },
+    {
+     "start": 283,
+     "end": 293,
+     "text": "Rev. to l.",
+     "label": "coin",
+     "score": 0.5641510486602783
+    },
+    {
+     "start": 272,
+     "end": 281,
+     "text": "Lampsacus",
+     "label": "mint",
+     "score": 0.34831929206848145
+    },
+    {
+     "start": 1115,
+     "end": 1126,
+     "text": "Hersh Coll.",
+     "label": "mint",
+     "score": 0.450207382440567
+    },
+    {
+     "start": 557,
+     "end": 563,
+     "text": "Hermes",
+     "label": "coin",
+     "score": 0.3033297061920166
+    }
+   ],
+   "9": [
+    {
+     "start": 1381,
+     "end": 1384,
+     "text": "Ake",
+     "label": "mint",
+     "score": 0.568907618522644
+    },
+    {
+     "start": 1445,
+     "end": 1457,
+     "text": "crucial coin",
+     "label": "coin",
+     "score": 0.33879655599594116
+    },
+    {
+     "start": 1493,
+     "end": 1496,
+     "text": "Ake",
+     "label": "ruler",
+     "score": 0.3547719419002533
+    },
+    {
+     "start": 1767,
+     "end": 1776,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.9013786911964417
+    },
+    {
+     "start": 1863,
+     "end": 1879,
+     "text": "Asia Minor mints",
+     "label": "mint",
+     "score": 0.4087573289871216
+    }
+   ],
+   "10": [
+    {
+     "start": 67,
+     "end": 71,
+     "text": "IGCH",
+     "label": "mint",
+     "score": 0.6802376508712769
+    },
+    {
+     "start": 162,
+     "end": 171,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.5289576649665833
+    },
+    {
+     "start": 258,
+     "end": 274,
+     "text": "Asia Minor mints",
+     "label": "mint",
+     "score": 0.34226107597351074
+    },
+    {
+     "start": 375,
+     "end": 385,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.9502599835395813
+    },
+    {
+     "start": 469,
+     "end": 475,
+     "text": "Philip",
+     "label": "ruler",
+     "score": 0.3354826867580414
+    },
+    {
+     "start": 975,
+     "end": 984,
+     "text": "Philip II",
+     "label": "ruler",
+     "score": 0.9256945848464966
+    },
+    {
+     "start": 1510,
+     "end": 1516,
+     "text": "Abydus",
+     "label": "mint",
+     "score": 0.798686146736145
+    },
+    {
+     "start": 1521,
+     "end": 1529,
+     "text": "Magnesia",
+     "label": "mint",
+     "score": 0.7969796657562256
+    },
+    {
+     "start": 1672,
+     "end": 1680,
+     "text": "24 coins",
+     "label": "coin",
+     "score": 0.5352860689163208
+    }
+   ],
+   "11": [
+    {
+     "start": 160,
+     "end": 166,
+     "text": "Abydus",
+     "label": "mint",
+     "score": 0.6620153188705444
+    },
+    {
+     "start": 1024,
+     "end": 1032,
+     "text": "Magnesia",
+     "label": "mint",
+     "score": 0.5627145171165466
+    },
+    {
+     "start": 1131,
+     "end": 1140,
+     "text": "Lampsacus",
+     "label": "mint",
+     "score": 0.884926974773407
+    },
+    {
+     "start": 505,
+     "end": 512,
+     "text": "Miletus",
+     "label": "mint",
+     "score": 0.5548848509788513
+    },
+    {
+     "start": 529,
+     "end": 535,
+     "text": "Sardes",
+     "label": "mint",
+     "score": 0.43501728773117065
+    },
+    {
+     "start": 699,
+     "end": 703,
+     "text": "Teos",
+     "label": "mint",
+     "score": 0.8427659869194031
+    },
+    {
+     "start": 778,
+     "end": 787,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.5409836769104004
+    }
+   ],
+   "12": [
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "mint",
+     "score": 0.30833128094673157
+    },
+    {
+     "start": 67,
+     "end": 76,
+     "text": "IGCH 1437",
+     "label": "hoard",
+     "score": 0.47701558470726013
+    },
+    {
+     "start": 931,
+     "end": 939,
+     "text": "Philp II",
+     "label": "ruler",
+     "score": 0.7328397631645203
+    },
+    {
+     "start": 1019,
+     "end": 1028,
+     "text": "Bab Hoard",
+     "label": "hoard",
+     "score": 0.8491324782371521
+    },
+    {
+     "start": 1031,
+     "end": 1040,
+     "text": "IGCH 1534",
+     "label": "hoard",
+     "score": 0.48197564482688904
+    },
+    {
+     "start": 1253,
+     "end": 1270,
+     "text": "Amphipolis drachm",
+     "label": "hoard",
+     "score": 0.35126325488090515
+    }
+   ],
+   "13": [
+    {
+     "start": 901,
+     "end": 909,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.44195884466171265
+    },
+    {
+     "start": 74,
+     "end": 81,
+     "text": "Miletus",
+     "label": "ruler",
+     "score": 0.4088207185268402
+    },
+    {
+     "start": 117,
+     "end": 130,
+     "text": "Ear of barley",
+     "label": "coin",
+     "score": 0.6916449666023254
+    },
+    {
+     "start": 889,
+     "end": 895,
+     "text": "Sardes",
+     "label": "ruler",
+     "score": 0.9694268703460693
+    },
+    {
+     "start": 266,
+     "end": 275,
+     "text": "Bucranium",
+     "label": "coin",
+     "score": 0.7849988341331482
+    },
+    {
+     "start": 293,
+     "end": 317,
+     "text": "Mithras head - trisceles",
+     "label": "coin",
+     "score": 0.5920644402503967
+    },
+    {
+     "start": 319,
+     "end": 324,
+     "text": "T. 46",
+     "label": "coin",
+     "score": 0.3586885631084442
+    },
+    {
+     "start": 602,
+     "end": 604,
+     "text": "TI",
+     "label": "coin",
+     "score": 0.5197992920875549
+    },
+    {
+     "start": 827,
+     "end": 845,
+     "text": "Sinan Pascha Hoard",
+     "label": "hoard",
+     "score": 0.9776107668876648
+    },
+    {
+     "start": 957,
+     "end": 965,
+     "text": "Craterus",
+     "label": "ruler",
+     "score": 0.8305633664131165
+    }
+   ],
+   "14": [
+    {
+     "start": 49,
+     "end": 53,
+     "text": "Kuft",
+     "label": "mint",
+     "score": 0.3510367274284363
+    },
+    {
+     "start": 56,
+     "end": 60,
+     "text": "IGCH",
+     "label": "mint",
+     "score": 0.4242746829986572
+    },
+    {
+     "start": 82,
+     "end": 92,
+     "text": "Kuft Hoard",
+     "label": "hoard",
+     "score": 0.5398954153060913
+    },
+    {
+     "start": 96,
+     "end": 109,
+     "text": "Alexander III",
+     "label": "ruler",
+     "score": 0.8890367150306702
+    },
+    {
+     "start": 274,
+     "end": 281,
+     "text": "Miletus",
+     "label": "mint",
+     "score": 0.5460607409477234
+    },
+    {
+     "start": 333,
+     "end": 348,
+     "text": "Sardes TI-leaf",
+     "label": "coin",
+     "score": 0.3444778323173523
+    },
+    {
+     "start": 367,
+     "end": 375,
+     "text": "TI-torch",
+     "label": "coin",
+     "score": 0.4839468002319336
+    },
+    {
+     "start": 433,
+     "end": 436,
+     "text": "Ake",
+     "label": "coin",
+     "score": 0.40122190117836
+    },
+    {
+     "start": 633,
+     "end": 643,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.839172899723053
+    }
+   ],
+   "15": [
+    {
+     "start": 961,
+     "end": 965,
+     "text": "Cius",
+     "label": "ruler",
+     "score": 0.8414129018783569
+    },
+    {
+     "start": 816,
+     "end": 822,
+     "text": "Sardes",
+     "label": "ruler",
+     "score": 0.548582911491394
+    },
+    {
+     "start": 733,
+     "end": 742,
+     "text": "Lampsacus",
+     "label": "ruler",
+     "score": 0.6047781705856323
+    },
+    {
+     "start": 752,
+     "end": 758,
+     "text": "Abydus",
+     "label": "ruler",
+     "score": 0.5045073628425598
+    },
+    {
+     "start": 768,
+     "end": 776,
+     "text": "Colophon",
+     "label": "coin",
+     "score": 0.44248858094215393
+    },
+    {
+     "start": 803,
+     "end": 807,
+     "text": "Teos",
+     "label": "coin",
+     "score": 0.33207881450653076
+    },
+    {
+     "start": 1223,
+     "end": 1233,
+     "text": "Lysimachus",
+     "label": "ruler",
+     "score": 0.9068480134010315
+    },
+    {
+     "start": 1543,
+     "end": 1563,
+     "text": "Ptolemaic Alexanders",
+     "label": "ruler",
+     "score": 0.6834480166435242
+    },
+    {
+     "start": 1631,
+     "end": 1641,
+     "text": "Kuft Hoard",
+     "label": "hoard",
+     "score": 0.6198176145553589
+    },
+    {
+     "start": 1687,
+     "end": 1694,
+     "text": "Pfeiler",
+     "label": "ruler",
+     "score": 0.4135211110115051
+    }
+   ],
+   "16": [
+    {
+     "start": 49,
+     "end": 56,
+     "text": "Phacous",
+     "label": "mint",
+     "score": 0.544200599193573
+    },
+    {
+     "start": 59,
+     "end": 68,
+     "text": "IGCH 1678",
+     "label": "mint",
+     "score": 0.3605351746082306
+    },
+    {
+     "start": 330,
+     "end": 333,
+     "text": "Ake",
+     "label": "mint",
+     "score": 0.645653486251831
+    },
+    {
+     "start": 346,
+     "end": 351,
+     "text": "Sidon",
+     "label": "mint",
+     "score": 0.6760011911392212
+    },
+    {
+     "start": 472,
+     "end": 482,
+     "text": "Kuft Hoard",
+     "label": "hoard",
+     "score": 0.895901620388031
+    },
+    {
+     "start": 706,
+     "end": 716,
+     "text": "Philip III",
+     "label": "ruler",
+     "score": 0.9479517340660095
+    },
+    {
+     "start": 739,
+     "end": 745,
+     "text": "Sardes",
+     "label": "mint",
+     "score": 0.3356286585330963
+    },
+    {
+     "start": 910,
+     "end": 923,
+     "text": "Cavalla Hoard",
+     "label": "hoard",
+     "score": 0.9003427624702454
+    }
+   ],
+   "17": [
+    {
+     "start": 49,
+     "end": 55,
+     "text": "Aleppo",
+     "label": "mint",
+     "score": 0.6668100953102112
+    },
+    {
+     "start": 341,
+     "end": 347,
+     "text": "Sardes",
+     "label": "ruler",
+     "score": 0.7519894242286682
+    },
+    {
+     "start": 502,
+     "end": 511,
+     "text": "Bucranium",
+     "label": "coin",
+     "score": 0.5258045792579651
+    },
+    {
+     "start": 807,
+     "end": 812,
+     "text": "Sidon",
+     "label": "mint",
+     "score": 0.6845200061798096
+    },
+    {
+     "start": 825,
+     "end": 828,
+     "text": "Ake",
+     "label": "mint",
+     "score": 0.37337353825569153
+    },
+    {
+     "start": 1037,
+     "end": 1047,
+     "text": "Lysimachus",
+     "label": "ruler",
+     "score": 0.9165825843811035
+    },
+    {
+     "start": 1079,
+     "end": 1085,
+     "text": "Abydus",
+     "label": "mint",
+     "score": 0.4459388256072998
+    },
+    {
+     "start": 1258,
+     "end": 1270,
+     "text": "Aleppo Hoard",
+     "label": "hoard",
+     "score": 0.9034176468849182
+    }
+   ],
+   "18": [
+    {
+     "start": 142,
+     "end": 152,
+     "text": "Lysimachus",
+     "label": "ruler",
+     "score": 0.8342588543891907
+    },
+    {
+     "start": 473,
+     "end": 482,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.9370779991149902
+    },
+    {
+     "start": 669,
+     "end": 676,
+     "text": "Babylon",
+     "label": "mint",
+     "score": 0.47266799211502075
+    },
+    {
+     "start": 809,
+     "end": 824,
+     "text": "Levantine hoard",
+     "label": "hoard",
+     "score": 0.45691582560539246
+    }
+   ],
+   "19": [
+    {
+     "start": 47,
+     "end": 53,
+     "text": "Gild\u00e0u",
+     "label": "mint",
+     "score": 0.5181384682655334
+    },
+    {
+     "start": 55,
+     "end": 63,
+     "text": "IGCH 774",
+     "label": "coin",
+     "score": 0.389018714427948
+    }
+   ],
+   "20": [
+    {
+     "start": 64,
+     "end": 73,
+     "text": "IGCH 1441",
+     "label": "hoard",
+     "score": 0.3989604115486145
+    },
+    {
+     "start": 75,
+     "end": 93,
+     "text": "Sardes and Miletus",
+     "label": "ruler",
+     "score": 0.41829726099967957
+    },
+    {
+     "start": 102,
+     "end": 111,
+     "text": "Lampsacus",
+     "label": "ruler",
+     "score": 0.47988519072532654
+    },
+    {
+     "start": 141,
+     "end": 147,
+     "text": "Abydus",
+     "label": "ruler",
+     "score": 0.45323631167411804
+    },
+    {
+     "start": 149,
+     "end": 155,
+     "text": "Hermes",
+     "label": "ruler",
+     "score": 0.5233065485954285
+    },
+    {
+     "start": 195,
+     "end": 204,
+     "text": "pentagram",
+     "label": "coin",
+     "score": 0.3668663799762726
+    },
+    {
+     "start": 206,
+     "end": 216,
+     "text": "cornucopia",
+     "label": "coin",
+     "score": 0.30011576414108276
+    }
+   ],
+   "21": [
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Paeonia",
+     "label": "mint",
+     "score": 0.5771987438201904
+    },
+    {
+     "start": 56,
+     "end": 64,
+     "text": "IGCH 410",
+     "label": "hoard",
+     "score": 0.38243618607521057
+    },
+    {
+     "start": 66,
+     "end": 84,
+     "text": "Sardes and Miletus",
+     "label": "mint",
+     "score": 0.5548580288887024
+    },
+    {
+     "start": 259,
+     "end": 268,
+     "text": "Lampsacus",
+     "label": "ruler",
+     "score": 0.6456982493400574
+    },
+    {
+     "start": 119,
+     "end": 125,
+     "text": "Abydus",
+     "label": "ruler",
+     "score": 0.31983134150505066
+    },
+    {
+     "start": 350,
+     "end": 356,
+     "text": "Hermes",
+     "label": "coin",
+     "score": 0.437651127576828
+    }
+   ],
+   "22": [
+    {
+     "start": 0,
+     "end": 14,
+     "text": "Thompson NS 19",
+     "label": "hoard",
+     "score": 0.4128534495830536
+    },
+    {
+     "start": 56,
+     "end": 65,
+     "text": "IGCH 1472",
+     "label": "mint",
+     "score": 0.4721541404724121
+    },
+    {
+     "start": 67,
+     "end": 85,
+     "text": "Sardes and Miletus",
+     "label": "ruler",
+     "score": 0.30840837955474854
+    },
+    {
+     "start": 135,
+     "end": 152,
+     "text": "Greek Coin Hoards",
+     "label": "hoard",
+     "score": 0.5905581116676331
+    },
+    {
+     "start": 239,
+     "end": 248,
+     "text": "Lampsacus",
+     "label": "ruler",
+     "score": 0.5212962627410889
+    },
+    {
+     "start": 264,
+     "end": 283,
+     "text": "Forepart of Pegasus",
+     "label": "coin",
+     "score": 0.5961344838142395
+    },
+    {
+     "start": 390,
+     "end": 401,
+     "text": "Horse\u2019s leg",
+     "label": "coin",
+     "score": 0.36059054732322693
+    },
+    {
+     "start": 506,
+     "end": 516,
+     "text": "cornucopia",
+     "label": "coin",
+     "score": 0.4584955871105194
+    }
+   ],
+   "23": [
+    {
+     "start": 0,
+     "end": 14,
+     "text": "Thompson NS 19",
+     "label": "hoard",
+     "score": 0.3116346001625061
+    },
+    {
+     "start": 58,
+     "end": 66,
+     "text": "IGCH 958",
+     "label": "hoard",
+     "score": 0.31194165349006653
+    },
+    {
+     "start": 155,
+     "end": 169,
+     "text": "Poenaru Bordea",
+     "label": "ruler",
+     "score": 0.9043736457824707
+    }
+   ],
+   "24": [
+    {
+     "start": 234,
+     "end": 253,
+     "text": "Forepart of Pegasus",
+     "label": "coin",
+     "score": 0.3973662853240967
+    },
+    {
+     "start": 340,
+     "end": 349,
+     "text": "Palm tree",
+     "label": "coin",
+     "score": 0.30800414085388184
+    }
+   ],
+   "25": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "ruler",
+     "score": 0.5526750683784485
+    },
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "mint",
+     "score": 0.30155783891677856
+    },
+    {
+     "start": 66,
+     "end": 75,
+     "text": "IGCH 1438",
+     "label": "mint",
+     "score": 0.6342626214027405
+    },
+    {
+     "start": 139,
+     "end": 148,
+     "text": "Lampsacus",
+     "label": "coin",
+     "score": 0.6303712725639343
+    },
+    {
+     "start": 150,
+     "end": 158,
+     "text": "Caduceus",
+     "label": "coin",
+     "score": 0.7015910148620605
+    },
+    {
+     "start": 174,
+     "end": 180,
+     "text": "Abydus",
+     "label": "coin",
+     "score": 0.7222289443016052
+    }
+   ],
+   "26": [
+    {
+     "start": 49,
+     "end": 57,
+     "text": "Demanhur",
+     "label": "ruler",
+     "score": 0.41068777441978455
+    },
+    {
+     "start": 97,
+     "end": 116,
+     "text": "Lampsacus Caduceus",
+     "label": "coin",
+     "score": 0.4402220547199249
+    },
+    {
+     "start": 194,
+     "end": 208,
+     "text": "Abydus Hermes",
+     "label": "coin",
+     "score": 0.39975547790527344
+    }
+   ],
+   "27": [
+    {
+     "start": 61,
+     "end": 70,
+     "text": "IGCH 1668",
+     "label": "mint",
+     "score": 0.44596266746520996
+    },
+    {
+     "start": 72,
+     "end": 84,
+     "text": "Lampsacus 2",
+     "label": "coin",
+     "score": 0.5420711636543274
+    },
+    {
+     "start": 85,
+     "end": 92,
+     "text": "Demeter",
+     "label": "ruler",
+     "score": 0.8378106951713562
+    }
+   ],
+   "28": [
+    {
+     "start": 33,
+     "end": 46,
+     "text": "SILVER HOARDS",
+     "label": "hoard",
+     "score": 0.37016013264656067
+    },
+    {
+     "start": 49,
+     "end": 55,
+     "text": "Aleppo",
+     "label": "mint",
+     "score": 0.46416765451431274
+    },
+    {
+     "start": 57,
+     "end": 66,
+     "text": "IGCH 1516",
+     "label": "mint",
+     "score": 0.5682881474494934
+    },
+    {
+     "start": 68,
+     "end": 74,
+     "text": "Sardes",
+     "label": "ruler",
+     "score": 0.6493026614189148
+    },
+    {
+     "start": 95,
+     "end": 104,
+     "text": "Lampsacus",
+     "label": "ruler",
+     "score": 0.7086308598518372
+    },
+    {
+     "start": 122,
+     "end": 130,
+     "text": "Caduceus",
+     "label": "coin",
+     "score": 0.40590837597846985
+    },
+    {
+     "start": 145,
+     "end": 152,
+     "text": "Demeter",
+     "label": "ruler",
+     "score": 0.6744829416275024
+    },
+    {
+     "start": 211,
+     "end": 218,
+     "text": "Amphora",
+     "label": "coin",
+     "score": 0.3785160779953003
+    },
+    {
+     "start": 508,
+     "end": 514,
+     "text": "Abydus",
+     "label": "ruler",
+     "score": 0.569011926651001
+    }
+   ],
+   "29": [
+    {
+     "start": 55,
+     "end": 64,
+     "text": "IGCH 1670",
+     "label": "hoard",
+     "score": 0.3908196687698364
+    },
+    {
+     "start": 93,
+     "end": 102,
+     "text": "Lampsacus",
+     "label": "ruler",
+     "score": 0.3264216482639313
+    },
+    {
+     "start": 104,
+     "end": 111,
+     "text": "Demeter",
+     "label": "ruler",
+     "score": 0.6412732005119324
+    },
+    {
+     "start": 114,
+     "end": 128,
+     "text": "Abydus Hermes",
+     "label": "ruler",
+     "score": 0.46346423029899597
+    }
+   ],
+   "30": [
+    {
+     "start": 66,
+     "end": 75,
+     "text": "IGCH 1444",
+     "label": "hoard",
+     "score": 0.4571227729320526
+    },
+    {
+     "start": 77,
+     "end": 95,
+     "text": "Sardes and Miletus",
+     "label": "mint",
+     "score": 0.5847311615943909
+    },
+    {
+     "start": 165,
+     "end": 190,
+     "text": "Yunak through Aphrodisias",
+     "label": "mint",
+     "score": 0.3982883095741272
+    },
+    {
+     "start": 225,
+     "end": 234,
+     "text": "Lampsacus",
+     "label": "mint",
+     "score": 0.41127410531044006
+    },
+    {
+     "start": 239,
+     "end": 245,
+     "text": "Abydus",
+     "label": "ruler",
+     "score": 0.3549541234970093
+    }
+   ],
+   "31": [
+    {
+     "start": 0,
+     "end": 14,
+     "text": "Thompson NS 19",
+     "label": "hoard",
+     "score": 0.34278208017349243
+    },
+    {
+     "start": 58,
+     "end": 67,
+     "text": "IGCH 1678",
+     "label": "coin",
+     "score": 0.4649720788002014
+    },
+    {
+     "start": 69,
+     "end": 75,
+     "text": "Sardes",
+     "label": "ruler",
+     "score": 0.3406279385089874
+    },
+    {
+     "start": 124,
+     "end": 131,
+     "text": "Demeter",
+     "label": "ruler",
+     "score": 0.890769898891449
+    }
+   ],
+   "32": [
+    {
+     "start": 0,
+     "end": 14,
+     "text": "Thompson NS 19",
+     "label": "coin",
+     "score": 0.4043889045715332
+    },
+    {
+     "start": 49,
+     "end": 56,
+     "text": "Olympia",
+     "label": "mint",
+     "score": 0.37745365500450134
+    },
+    {
+     "start": 58,
+     "end": 66,
+     "text": "IGCH 176",
+     "label": "hoard",
+     "score": 0.34649431705474854
+    },
+    {
+     "start": 68,
+     "end": 86,
+     "text": "Sardes and Miletus",
+     "label": "mint",
+     "score": 0.3683526813983917
+    }
+   ],
+   "33": [
+    {
+     "start": 722,
+     "end": 729,
+     "text": "Olympia",
+     "label": "mint",
+     "score": 0.5862775444984436
+    },
+    {
+     "start": 1032,
+     "end": 1037,
+     "text": "hoard",
+     "label": "hoard",
+     "score": 0.39532533288002014
+    }
+   ],
+   "34": [
+    {
+     "start": 23,
+     "end": 42,
+     "text": "ALEXANDER HOARDS IV",
+     "label": "ruler",
+     "score": 0.38895586133003235
+    },
+    {
+     "start": 47,
+     "end": 54,
+     "text": "OLYMPIA",
+     "label": "ruler",
+     "score": 0.6959659457206726
+    },
+    {
+     "start": 1504,
+     "end": 1516,
+     "text": "Elean issues",
+     "label": "coin",
+     "score": 0.4312351644039154
+    },
+    {
+     "start": 1570,
+     "end": 1582,
+     "text": "Alexandrines",
+     "label": "coin",
+     "score": 0.6521276235580444
+    },
+    {
+     "start": 1657,
+     "end": 1662,
+     "text": "hoard",
+     "label": "hoard",
+     "score": 0.45728909969329834
+    },
+    {
+     "start": 1681,
+     "end": 1685,
+     "text": "Elis",
+     "label": "mint",
+     "score": 0.5986726880073547
+    },
+    {
+     "start": 1854,
+     "end": 1861,
+     "text": "Olympia",
+     "label": "mint",
+     "score": 0.6852476000785828
+    }
+   ],
+   "35": [
+    {
+     "start": 27,
+     "end": 35,
+     "text": "DEMANHUR",
+     "label": "hoard",
+     "score": 0.32285603880882263
+    },
+    {
+     "start": 519,
+     "end": 530,
+     "text": "magistrates",
+     "label": "ruler",
+     "score": 0.4941082298755646
+    },
+    {
+     "start": 545,
+     "end": 562,
+     "text": "Alexander\u2019s mints",
+     "label": "mint",
+     "score": 0.46815797686576843
+    },
+    {
+     "start": 1357,
+     "end": 1373,
+     "text": "Demanhur deposit",
+     "label": "hoard",
+     "score": 0.6498719453811646
+    },
+    {
+     "start": 1516,
+     "end": 1530,
+     "text": "British Museum",
+     "label": "mint",
+     "score": 0.4364030659198761
+    },
+    {
+     "start": 1557,
+     "end": 1575,
+     "text": "United States Mint",
+     "label": "mint",
+     "score": 0.9353916049003601
+    }
+   ],
+   "36": [
+    {
+     "start": 116,
+     "end": 134,
+     "text": "United States Mint",
+     "label": "mint",
+     "score": 0.971059262752533
+    },
+    {
+     "start": 260,
+     "end": 278,
+     "text": "Gen. Ronald Storrs",
+     "label": "ruler",
+     "score": 0.4083753526210785
+    },
+    {
+     "start": 349,
+     "end": 366,
+     "text": "Alexander coinage",
+     "label": "hoard",
+     "score": 0.6945720314979553
+    },
+    {
+     "start": 1495,
+     "end": 1508,
+     "text": "Demanhur find",
+     "label": "hoard",
+     "score": 0.4367603063583374
+    },
+    {
+     "start": 1732,
+     "end": 1737,
+     "text": "hoard",
+     "label": "hoard",
+     "score": 0.361338347196579
+    }
+   ],
+   "37": [
+    {
+     "start": 1615,
+     "end": 1623,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.43503502011299133
+    },
+    {
+     "start": 696,
+     "end": 703,
+     "text": "Lot III",
+     "label": "hoard",
+     "score": 0.3326869308948517
+    },
+    {
+     "start": 801,
+     "end": 807,
+     "text": "Lot IV",
+     "label": "hoard",
+     "score": 0.3465607762336731
+    },
+    {
+     "start": 1492,
+     "end": 1501,
+     "text": "Ptolemy I",
+     "label": "ruler",
+     "score": 0.9004301428794861
+    },
+    {
+     "start": 1511,
+     "end": 1527,
+     "text": "Svoronos no. 265",
+     "label": "hoard",
+     "score": 0.3831070065498352
+    },
+    {
+     "start": 1745,
+     "end": 1759,
+     "text": "Demanhur hoard",
+     "label": "hoard",
+     "score": 0.8226951956748962
+    },
+    {
+     "start": 1633,
+     "end": 1643,
+     "text": "Alexanders",
+     "label": "ruler",
+     "score": 0.8238152861595154
+    }
+   ],
+   "38": [
+    {
+     "start": 1483,
+     "end": 1491,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.5306482911109924
+    },
+    {
+     "start": 455,
+     "end": 477,
+     "text": "Alexander tetradrachms",
+     "label": "coin",
+     "score": 0.5491039156913757
+    },
+    {
+     "start": 893,
+     "end": 905,
+     "text": "ancient coin",
+     "label": "hoard",
+     "score": 0.3247637152671814
+    }
+   ],
+   "39": [
+    {
+     "start": 264,
+     "end": 278,
+     "text": "Demanhur coins",
+     "label": "coin",
+     "score": 0.6055240631103516
+    },
+    {
+     "start": 765,
+     "end": 786,
+     "text": "Athenian tetradrachms",
+     "label": "coin",
+     "score": 0.5277487635612488
+    },
+    {
+     "start": 1354,
+     "end": 1373,
+     "text": "Alexander the Great",
+     "label": "ruler",
+     "score": 0.9084243774414062
+    }
+   ],
+   "40": [
+    {
+     "start": 118,
+     "end": 126,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.8477163910865784
+    },
+    {
+     "start": 564,
+     "end": 573,
+     "text": "The hoard",
+     "label": "hoard",
+     "score": 0.7248353362083435
+    }
+   ],
+   "41": [
+    {
+     "start": 1616,
+     "end": 1621,
+     "text": "hoard",
+     "label": "hoard",
+     "score": 0.4626975357532501
+    },
+    {
+     "start": 1668,
+     "end": 1676,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.42616674304008484
+    },
+    {
+     "start": 1734,
+     "end": 1745,
+     "text": "M. de Ricci",
+     "label": "ruler",
+     "score": 0.8594771027565002
+    },
+    {
+     "start": 1805,
+     "end": 1823,
+     "text": "ten thousand coins",
+     "label": "coin",
+     "score": 0.607937216758728
+    }
+   ],
+   "42": [
+    {
+     "start": 294,
+     "end": 308,
+     "text": "Demanhur hoard",
+     "label": "hoard",
+     "score": 0.8033168911933899
+    },
+    {
+     "start": 1552,
+     "end": 1571,
+     "text": "Alexander the Great",
+     "label": "ruler",
+     "score": 0.9188248515129089
+    },
+    {
+     "start": 1576,
+     "end": 1593,
+     "text": "Philip Arrhidaeus",
+     "label": "ruler",
+     "score": 0.8582306504249573
+    },
+    {
+     "start": 1803,
+     "end": 1809,
+     "text": "series",
+     "label": "hoard",
+     "score": 0.3335472643375397
+    },
+    {
+     "start": 1839,
+     "end": 1847,
+     "text": "one mint",
+     "label": "mint",
+     "score": 0.3480167090892792
+    }
+   ],
+   "43": [
+    {
+     "start": 27,
+     "end": 35,
+     "text": "DEMANHUR",
+     "label": "mint",
+     "score": 0.8137721419334412
+    },
+    {
+     "start": 897,
+     "end": 906,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.9723840951919556
+    },
+    {
+     "start": 1416,
+     "end": 1432,
+     "text": "Macedonian mints",
+     "label": "mint",
+     "score": 0.3633691072463989
+    },
+    {
+     "start": 1594,
+     "end": 1614,
+     "text": "Peloponnesian issues",
+     "label": "hoard",
+     "score": 0.42113152146339417
+    }
+   ],
+   "44": [
+    {
+     "start": 1077,
+     "end": 1086,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.9325926899909973
+    },
+    {
+     "start": 476,
+     "end": 489,
+     "text": "Heracles head",
+     "label": "coin",
+     "score": 0.3520243465900421
+    },
+    {
+     "start": 966,
+     "end": 973,
+     "text": "Mazaeus",
+     "label": "ruler",
+     "score": 0.7982207536697388
+    }
+   ],
+   "45": [
+    {
+     "start": 340,
+     "end": 358,
+     "text": "Alexandrine issues",
+     "label": "coin",
+     "score": 0.4489470422267914
+    },
+    {
+     "start": 495,
+     "end": 509,
+     "text": "Aradian issues",
+     "label": "coin",
+     "score": 0.5887924432754517
+    },
+    {
+     "start": 1734,
+     "end": 1740,
+     "text": "Byblus",
+     "label": "mint",
+     "score": 0.703629195690155
+    },
+    {
+     "start": 629,
+     "end": 639,
+     "text": "local king",
+     "label": "ruler",
+     "score": 0.3966389000415802
+    },
+    {
+     "start": 651,
+     "end": 666,
+     "text": "Sidonian issues",
+     "label": "coin",
+     "score": 0.5304571986198425
+    },
+    {
+     "start": 739,
+     "end": 754,
+     "text": "reigning prince",
+     "label": "ruler",
+     "score": 0.5961958765983582
+    },
+    {
+     "start": 978,
+     "end": 1005,
+     "text": "Alexander issues of Babylon",
+     "label": "mint",
+     "score": 0.3413066864013672
+    },
+    {
+     "start": 1742,
+     "end": 1755,
+     "text": "Berytus Sidon",
+     "label": "mint",
+     "score": 0.7854512333869934
+    },
+    {
+     "start": 1757,
+     "end": 1760,
+     "text": "Ake",
+     "label": "mint",
+     "score": 0.6837506294250488
+    },
+    {
+     "start": 1762,
+     "end": 1768,
+     "text": "Citium",
+     "label": "mint",
+     "score": 0.8385683298110962
+    },
+    {
+     "start": 1770,
+     "end": 1777,
+     "text": "Amathus",
+     "label": "mint",
+     "score": 0.867686927318573
+    }
+   ],
+   "46": [
+    {
+     "start": 118,
+     "end": 124,
+     "text": "Byblus",
+     "label": "mint",
+     "score": 0.7500941753387451
+    },
+    {
+     "start": 126,
+     "end": 139,
+     "text": "Berytus Sidon",
+     "label": "mint",
+     "score": 0.7426149249076843
+    },
+    {
+     "start": 141,
+     "end": 144,
+     "text": "Ake",
+     "label": "mint",
+     "score": 0.6124727725982666
+    },
+    {
+     "start": 146,
+     "end": 152,
+     "text": "Citium",
+     "label": "mint",
+     "score": 0.8126804828643799
+    },
+    {
+     "start": 154,
+     "end": 161,
+     "text": "Amathus",
+     "label": "mint",
+     "score": 0.8878860473632812
+    },
+    {
+     "start": 1264,
+     "end": 1273,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.9588238596916199
+    }
+   ],
+   "47": [
+    {
+     "start": 834,
+     "end": 843,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.735342264175415
+    },
+    {
+     "start": 1318,
+     "end": 1329,
+     "text": "thunderbolt",
+     "label": "coin",
+     "score": 0.5706488490104675
+    },
+    {
+     "start": 1331,
+     "end": 1339,
+     "text": "caduceus",
+     "label": "coin",
+     "score": 0.48127302527427673
+    },
+    {
+     "start": 1341,
+     "end": 1348,
+     "text": "amphora",
+     "label": "coin",
+     "score": 0.5687144994735718
+    },
+    {
+     "start": 1350,
+     "end": 1354,
+     "text": "club",
+     "label": "coin",
+     "score": 0.46338075399398804
+    }
+   ],
+   "48": [
+    {
+     "start": 0,
+     "end": 6,
+     "text": "Newell",
+     "label": "ruler",
+     "score": 0.3125249445438385
+    },
+    {
+     "start": 315,
+     "end": 331,
+     "text": "Alexander hoards",
+     "label": "hoard",
+     "score": 0.4527312219142914
+    },
+    {
+     "start": 756,
+     "end": 765,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.6549418568611145
+    }
+   ],
+   "49": [
+    {
+     "start": 283,
+     "end": 291,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.44632402062416077
+    },
+    {
+     "start": 103,
+     "end": 112,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.5958738923072815
+    },
+    {
+     "start": 852,
+     "end": 858,
+     "text": "Tarsus",
+     "label": "mint",
+     "score": 0.7589766979217529
+    },
+    {
+     "start": 860,
+     "end": 870,
+     "text": "Myriandrus",
+     "label": "mint",
+     "score": 0.7627976536750793
+    },
+    {
+     "start": 872,
+     "end": 877,
+     "text": "Sidon",
+     "label": "mint",
+     "score": 0.5612508654594421
+    },
+    {
+     "start": 883,
+     "end": 886,
+     "text": "Ake",
+     "label": "mint",
+     "score": 0.515082597732544
+    },
+    {
+     "start": 1271,
+     "end": 1285,
+     "text": "Demanhur hoard",
+     "label": "hoard",
+     "score": 0.8075380921363831
+    },
+    {
+     "start": 1611,
+     "end": 1615,
+     "text": "find",
+     "label": "hoard",
+     "score": 0.35571590065956116
+    },
+    {
+     "start": 1641,
+     "end": 1643,
+     "text": "VG",
+     "label": "coin",
+     "score": 0.4664483964443207
+    },
+    {
+     "start": 1768,
+     "end": 1770,
+     "text": "VF",
+     "label": "coin",
+     "score": 0.44277891516685486
+    },
+    {
+     "start": 1793,
+     "end": 1798,
+     "text": "coins",
+     "label": "coin",
+     "score": 0.30258509516716003
+    }
+   ],
+   "50": [
+    {
+     "start": 1084,
+     "end": 1092,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.8839333653450012
+    }
+   ],
+   "51": [
+    {
+     "start": 1648,
+     "end": 1656,
+     "text": "Demanhur",
+     "label": "mint",
+     "score": 0.707038938999176
+    },
+    {
+     "start": 382,
+     "end": 391,
+     "text": "Alexander",
+     "label": "ruler",
+     "score": 0.940526008605957
+    },
+    {
+     "start": 1163,
+     "end": 1167,
+     "text": "Zeus",
+     "label": "ruler",
+     "score": 0.3322083353996277
+    }
+   ]
+  },
+  "seam-default-labels": {
+   "1": [
+    {
+     "start": 47,
+     "end": 53,
+     "text": "G\u00eeld\u0103u",
+     "label": "Location",
+     "score": 0.7155571579933167
+    },
+    {
+     "start": 56,
+     "end": 60,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.582290530204773
+    },
+    {
+     "start": 131,
+     "end": 143,
+     "text": "Bucur Mitrea",
+     "label": "Person",
+     "score": 0.9076900482177734
+    },
+    {
+     "start": 162,
+     "end": 171,
+     "text": "Macedonia",
+     "label": "Location",
+     "score": 0.9051133990287781
+    },
+    {
+     "start": 250,
+     "end": 256,
+     "text": "Tarsus",
+     "label": "Location",
+     "score": 0.8990761637687683
+    },
+    {
+     "start": 286,
+     "end": 292,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.9166492223739624
+    },
+    {
+     "start": 310,
+     "end": 317,
+     "text": "Salamis",
+     "label": "Location",
+     "score": 0.965822160243988
+    },
+    {
+     "start": 707,
+     "end": 709,
+     "text": "NC",
+     "label": "Location",
+     "score": 0.5103660225868225
+    },
+    {
+     "start": 410,
+     "end": 417,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.8970077037811279
+    },
+    {
+     "start": 443,
+     "end": 451,
+     "text": "bipennis",
+     "label": "Location",
+     "score": 0.4395900368690491
+    },
+    {
+     "start": 472,
+     "end": 481,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.888985812664032
+    },
+    {
+     "start": 524,
+     "end": 532,
+     "text": "Colophon",
+     "label": "Location",
+     "score": 0.5004302263259888
+    },
+    {
+     "start": 783,
+     "end": 791,
+     "text": "Le Rider",
+     "label": "Person",
+     "score": 0.7253421545028687
+    },
+    {
+     "start": 802,
+     "end": 810,
+     "text": "Philippe",
+     "label": "Person",
+     "score": 0.5885465741157532
+    },
+    {
+     "start": 894,
+     "end": 903,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.3190441131591797
+    },
+    {
+     "start": 968,
+     "end": 978,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.792698323726654
+    }
+   ],
+   "2": [
+    {
+     "start": 47,
+     "end": 57,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.973818302154541
+    },
+    {
+     "start": 65,
+     "end": 69,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.4681907892227173
+    },
+    {
+     "start": 77,
+     "end": 85,
+     "text": "Le Rider",
+     "label": "Person",
+     "score": 0.9698389172554016
+    },
+    {
+     "start": 87,
+     "end": 95,
+     "text": "Philippe",
+     "label": "Person",
+     "score": 0.705998420715332
+    },
+    {
+     "start": 318,
+     "end": 325,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.9455419778823853
+    },
+    {
+     "start": 358,
+     "end": 364,
+     "text": "Sardes",
+     "label": "Location",
+     "score": 0.7007375955581665
+    },
+    {
+     "start": 375,
+     "end": 382,
+     "text": "Serpent",
+     "label": "Work",
+     "score": 0.35303306579589844
+    },
+    {
+     "start": 408,
+     "end": 414,
+     "text": "Tripod",
+     "label": "Work",
+     "score": 0.31066516041755676
+    },
+    {
+     "start": 586,
+     "end": 596,
+     "text": "Pella IIIB",
+     "label": "Location",
+     "score": 0.6329526305198669
+    },
+    {
+     "start": 601,
+     "end": 616,
+     "text": "Amphipolis IIIA",
+     "label": "Location",
+     "score": 0.6389259099960327
+    },
+    {
+     "start": 870,
+     "end": 880,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.9315428733825684
+    },
+    {
+     "start": 901,
+     "end": 909,
+     "text": "M\u00f8rkholm",
+     "label": "Person",
+     "score": 0.45508307218551636
+    },
+    {
+     "start": 1042,
+     "end": 1049,
+     "text": "Babylon",
+     "label": "Location",
+     "score": 0.47622618079185486
+    },
+    {
+     "start": 1088,
+     "end": 1102,
+     "text": "Nancy Waggoner",
+     "label": "Person",
+     "score": 0.6473576426506042
+    }
+   ],
+   "3": [
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Paeonia",
+     "label": "Location",
+     "score": 0.8060520887374878
+    },
+    {
+     "start": 57,
+     "end": 61,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.5637174248695374
+    },
+    {
+     "start": 68,
+     "end": 76,
+     "text": "Le Rider",
+     "label": "Person",
+     "score": 0.940249502658844
+    },
+    {
+     "start": 78,
+     "end": 86,
+     "text": "Philippe",
+     "label": "Person",
+     "score": 0.6137574911117554
+    },
+    {
+     "start": 111,
+     "end": 120,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.8816380500793457
+    },
+    {
+     "start": 122,
+     "end": 128,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.8626410365104675
+    },
+    {
+     "start": 130,
+     "end": 138,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.8467082381248474
+    },
+    {
+     "start": 140,
+     "end": 147,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.9533388614654541
+    },
+    {
+     "start": 152,
+     "end": 158,
+     "text": "Sardes",
+     "label": "Location",
+     "score": 0.7618167996406555
+    },
+    {
+     "start": 266,
+     "end": 280,
+     "text": "Pierre Strauss",
+     "label": "Person",
+     "score": 0.4587462842464447
+    },
+    {
+     "start": 340,
+     "end": 349,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.3888471722602844
+    },
+    {
+     "start": 1811,
+     "end": 1821,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.9394249320030212
+    },
+    {
+     "start": 991,
+     "end": 1000,
+     "text": "Philip II",
+     "label": "Person",
+     "score": 0.9613271355628967
+    },
+    {
+     "start": 1732,
+     "end": 1742,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.808635950088501
+    },
+    {
+     "start": 847,
+     "end": 854,
+     "text": "Sotheby",
+     "label": "Organization",
+     "score": 0.6877630352973938
+    },
+    {
+     "start": 874,
+     "end": 886,
+     "text": "Parke Bernet",
+     "label": "Person",
+     "score": 0.4919496774673462
+    },
+    {
+     "start": 903,
+     "end": 916,
+     "text": "Jasna Poljana",
+     "label": "Person",
+     "score": 0.5671101808547974
+    },
+    {
+     "start": 1005,
+     "end": 1018,
+     "text": "Alexander III",
+     "label": "Person",
+     "score": 0.9670180678367615
+    },
+    {
+     "start": 1286,
+     "end": 1302,
+     "text": "Georges Le Rider",
+     "label": "Person",
+     "score": 0.7619448900222778
+    },
+    {
+     "start": 1416,
+     "end": 1430,
+     "text": "Ivan Karayotov",
+     "label": "Person",
+     "score": 0.843147337436676
+    },
+    {
+     "start": 1438,
+     "end": 1451,
+     "text": "Burgas Museum",
+     "label": "Organization",
+     "score": 0.8606823682785034
+    },
+    {
+     "start": 1456,
+     "end": 1475,
+     "text": "Jordanka Youroukova",
+     "label": "Person",
+     "score": 0.883251428604126
+    },
+    {
+     "start": 1483,
+     "end": 1496,
+     "text": "Sophia Museum",
+     "label": "Organization",
+     "score": 0.8854424953460693
+    },
+    {
+     "start": 1605,
+     "end": 1610,
+     "text": "Pella",
+     "label": "Location",
+     "score": 0.7617636919021606
+    },
+    {
+     "start": 1575,
+     "end": 1582,
+     "text": "Philips",
+     "label": "Person",
+     "score": 0.30639922618865967
+    },
+    {
+     "start": 1615,
+     "end": 1624,
+     "text": "Amphipois",
+     "label": "Location",
+     "score": 0.8788618445396423
+    },
+    {
+     "start": 1779,
+     "end": 1783,
+     "text": "Teos",
+     "label": "Location",
+     "score": 0.8585736751556396
+    },
+    {
+     "start": 1887,
+     "end": 1897,
+     "text": "Amphipolis",
+     "label": "Location",
+     "score": 0.9455629587173462
+    },
+    {
+     "start": 1904,
+     "end": 1921,
+     "text": "Fulmen Cantharus",
+     "label": "Location",
+     "score": 0.5869452357292175
+    }
+   ],
+   "4": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.337044894695282
+    },
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Paeonia",
+     "label": "Location",
+     "score": 0.7727608680725098
+    },
+    {
+     "start": 104,
+     "end": 114,
+     "text": "Amphipolis",
+     "label": "Location",
+     "score": 0.9355506300926208
+    },
+    {
+     "start": 121,
+     "end": 138,
+     "text": "Fulmen Cantharus",
+     "label": "Person",
+     "score": 0.5432418584823608
+    },
+    {
+     "start": 154,
+     "end": 163,
+     "text": "Lampsacus",
+     "label": "Organization",
+     "score": 0.3139559328556061
+    },
+    {
+     "start": 186,
+     "end": 192,
+     "text": "Abydus",
+     "label": "Person",
+     "score": 0.3079381287097931
+    },
+    {
+     "start": 306,
+     "end": 312,
+     "text": "Sardes",
+     "label": "Person",
+     "score": 0.3568715453147888
+    },
+    {
+     "start": 370,
+     "end": 386,
+     "text": "Alexandria Rose",
+     "label": "Person",
+     "score": 0.3761312663555145
+    },
+    {
+     "start": 547,
+     "end": 557,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.8870981931686401
+    }
+   ],
+   "5": [
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Larnaca",
+     "label": "Location",
+     "score": 0.7884674668312073
+    },
+    {
+     "start": 699,
+     "end": 707,
+     "text": "Le Rider",
+     "label": "Person",
+     "score": 0.9630956053733826
+    },
+    {
+     "start": 79,
+     "end": 87,
+     "text": "Philippe",
+     "label": "Person",
+     "score": 0.5585688948631287
+    },
+    {
+     "start": 750,
+     "end": 760,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.8559110760688782
+    },
+    {
+     "start": 175,
+     "end": 187,
+     "text": "Martin Price",
+     "label": "Person",
+     "score": 0.8626470565795898
+    },
+    {
+     "start": 231,
+     "end": 238,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.9593712687492371
+    },
+    {
+     "start": 399,
+     "end": 405,
+     "text": "Sardes",
+     "label": "Location",
+     "score": 0.8608960509300232
+    },
+    {
+     "start": 689,
+     "end": 694,
+     "text": "Price",
+     "label": "Person",
+     "score": 0.44155755639076233
+    }
+   ],
+   "6": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.41101330518722534
+    },
+    {
+     "start": 999,
+     "end": 1005,
+     "text": "Greece",
+     "label": "Location",
+     "score": 0.5710560083389282
+    },
+    {
+     "start": 393,
+     "end": 408,
+     "text": "Maeander Valley",
+     "label": "Location",
+     "score": 0.9434943199157715
+    },
+    {
+     "start": 286,
+     "end": 291,
+     "text": "Price",
+     "label": "Person",
+     "score": 0.712350606918335
+    },
+    {
+     "start": 382,
+     "end": 389,
+     "text": "Philips",
+     "label": "Person",
+     "score": 0.9273987412452698
+    },
+    {
+     "start": 749,
+     "end": 757,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.9370493292808533
+    },
+    {
+     "start": 759,
+     "end": 765,
+     "text": "Mylasa",
+     "label": "Location",
+     "score": 0.8941835761070251
+    },
+    {
+     "start": 767,
+     "end": 775,
+     "text": "Mytilene",
+     "label": "Location",
+     "score": 0.9212540984153748
+    },
+    {
+     "start": 780,
+     "end": 786,
+     "text": "Rhodes",
+     "label": "Location",
+     "score": 0.9625818133354187
+    },
+    {
+     "start": 807,
+     "end": 813,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.9049926996231079
+    },
+    {
+     "start": 815,
+     "end": 822,
+     "text": "Ephesus",
+     "label": "Location",
+     "score": 0.8819613456726074
+    },
+    {
+     "start": 827,
+     "end": 831,
+     "text": "Teos",
+     "label": "Location",
+     "score": 0.5034652948379517
+    },
+    {
+     "start": 835,
+     "end": 842,
+     "text": "Phocaea",
+     "label": "Location",
+     "score": 0.7979856729507446
+    }
+   ],
+   "7": [
+    {
+     "start": 592,
+     "end": 598,
+     "text": "Anadol",
+     "label": "Person",
+     "score": 0.8680500388145447
+    },
+    {
+     "start": 56,
+     "end": 60,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.46987810730934143
+    },
+    {
+     "start": 67,
+     "end": 75,
+     "text": "Le Rider",
+     "label": "Person",
+     "score": 0.7523824572563171
+    },
+    {
+     "start": 77,
+     "end": 85,
+     "text": "Philippe",
+     "label": "Person",
+     "score": 0.611713171005249
+    },
+    {
+     "start": 98,
+     "end": 105,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.8470262885093689
+    },
+    {
+     "start": 131,
+     "end": 139,
+     "text": "bipennis",
+     "label": "Location",
+     "score": 0.483810156583786
+    },
+    {
+     "start": 411,
+     "end": 421,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.8366360068321228
+    },
+    {
+     "start": 475,
+     "end": 484,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.9030678272247314
+    },
+    {
+     "start": 486,
+     "end": 492,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.8744199872016907
+    },
+    {
+     "start": 494,
+     "end": 502,
+     "text": "Colophon",
+     "label": "Location",
+     "score": 0.8466262221336365
+    },
+    {
+     "start": 507,
+     "end": 515,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.8808444142341614
+    },
+    {
+     "start": 529,
+     "end": 538,
+     "text": "Hermitage",
+     "label": "Location",
+     "score": 0.7051409482955933
+    },
+    {
+     "start": 615,
+     "end": 621,
+     "text": "Pridik",
+     "label": "Person",
+     "score": 0.3124561011791229
+    },
+    {
+     "start": 737,
+     "end": 743,
+     "text": "Seyrig",
+     "label": "Person",
+     "score": 0.6203208565711975
+    }
+   ],
+   "8": [
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.49175721406936646
+    },
+    {
+     "start": 221,
+     "end": 231,
+     "text": "Amphipolis",
+     "label": "Location",
+     "score": 0.8803166747093201
+    },
+    {
+     "start": 1700,
+     "end": 1710,
+     "text": "Rev. to l.",
+     "label": "Person",
+     "score": 0.9528104662895203
+    },
+    {
+     "start": 799,
+     "end": 810,
+     "text": "Hersh Coll.",
+     "label": "Organization",
+     "score": 0.6815013289451599
+    },
+    {
+     "start": 272,
+     "end": 281,
+     "text": "Lampsacus",
+     "label": "Person",
+     "score": 0.7200210690498352
+    },
+    {
+     "start": 295,
+     "end": 299,
+     "text": "club",
+     "label": "Organization",
+     "score": 0.440326988697052
+    },
+    {
+     "start": 332,
+     "end": 336,
+     "text": "Rev.",
+     "label": "Person",
+     "score": 0.9155163168907166
+    },
+    {
+     "start": 356,
+     "end": 363,
+     "text": "Artemis",
+     "label": "Person",
+     "score": 0.6795519590377808
+    },
+    {
+     "start": 474,
+     "end": 484,
+     "text": "Hersh Coll",
+     "label": "Organization",
+     "score": 0.4791233241558075
+    },
+    {
+     "start": 537,
+     "end": 543,
+     "text": "Abydus",
+     "label": "Person",
+     "score": 0.7951030731201172
+    },
+    {
+     "start": 557,
+     "end": 563,
+     "text": "Hermes",
+     "label": "Person",
+     "score": 0.8386840224266052
+    },
+    {
+     "start": 1409,
+     "end": 1415,
+     "text": "Sardes",
+     "label": "Person",
+     "score": 0.8270301222801208
+    },
+    {
+     "start": 1791,
+     "end": 1802,
+     "text": "Hersn Coll.",
+     "label": "Organization",
+     "score": 0.712858259677887
+    },
+    {
+     "start": 1607,
+     "end": 1610,
+     "text": "ANS",
+     "label": "Organization",
+     "score": 0.3808325529098511
+    },
+    {
+     "start": 1924,
+     "end": 1932,
+     "text": "Magnesia",
+     "label": "Person",
+     "score": 0.8179562091827393
+    }
+   ],
+   "9": [
+    {
+     "start": 1648,
+     "end": 1658,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.9738214612007141
+    },
+    {
+     "start": 270,
+     "end": 280,
+     "text": "Rev. to l.",
+     "label": "Person",
+     "score": 0.6854938268661499
+    },
+    {
+     "start": 550,
+     "end": 561,
+     "text": "Hersh Coll.",
+     "label": "Organization",
+     "score": 0.4074561595916748
+    },
+    {
+     "start": 199,
+     "end": 207,
+     "text": "Magnesia",
+     "label": "Person",
+     "score": 0.5651677250862122
+    },
+    {
+     "start": 364,
+     "end": 368,
+     "text": "Rev.",
+     "label": "Person",
+     "score": 0.819595217704773
+    },
+    {
+     "start": 987,
+     "end": 995,
+     "text": "Colophon",
+     "label": "Person",
+     "score": 0.72209233045578
+    },
+    {
+     "start": 1040,
+     "end": 1048,
+     "text": "Milet us",
+     "label": "Location",
+     "score": 0.5697559714317322
+    },
+    {
+     "start": 1157,
+     "end": 1160,
+     "text": "Rev",
+     "label": "Person",
+     "score": 0.4183436334133148
+    },
+    {
+     "start": 1381,
+     "end": 1384,
+     "text": "Ake",
+     "label": "Person",
+     "score": 0.896820604801178
+    },
+    {
+     "start": 1716,
+     "end": 1722,
+     "text": "burial",
+     "label": "Event",
+     "score": 0.37279340624809265
+    },
+    {
+     "start": 1767,
+     "end": 1776,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.8252640962600708
+    }
+   ],
+   "10": [
+    {
+     "start": 1141,
+     "end": 1151,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.9720101356506348
+    },
+    {
+     "start": 1321,
+     "end": 1325,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.8020426034927368
+    },
+    {
+     "start": 302,
+     "end": 311,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.9642449617385864
+    },
+    {
+     "start": 375,
+     "end": 385,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.9691242575645447
+    },
+    {
+     "start": 738,
+     "end": 744,
+     "text": "Philip",
+     "label": "Person",
+     "score": 0.8684184551239014
+    },
+    {
+     "start": 602,
+     "end": 608,
+     "text": "Sardes",
+     "label": "Location",
+     "score": 0.804067075252533
+    },
+    {
+     "start": 975,
+     "end": 984,
+     "text": "Philip II",
+     "label": "Person",
+     "score": 0.9584206938743591
+    },
+    {
+     "start": 847,
+     "end": 856,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.9458207488059998
+    },
+    {
+     "start": 889,
+     "end": 895,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.9040193557739258
+    },
+    {
+     "start": 1035,
+     "end": 1042,
+     "text": "Philips",
+     "label": "Person",
+     "score": 0.6231492161750793
+    },
+    {
+     "start": 1066,
+     "end": 1071,
+     "text": "Pella",
+     "label": "Location",
+     "score": 0.5889889597892761
+    },
+    {
+     "start": 1076,
+     "end": 1086,
+     "text": "Amphipolis",
+     "label": "Location",
+     "score": 0.8228986263275146
+    },
+    {
+     "start": 1646,
+     "end": 1652,
+     "text": "Abydus",
+     "label": "Organization",
+     "score": 0.7566872835159302
+    },
+    {
+     "start": 1521,
+     "end": 1529,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.9705650210380554
+    },
+    {
+     "start": 1583,
+     "end": 1587,
+     "text": "mint",
+     "label": "Organization",
+     "score": 0.5356186628341675
+    },
+    {
+     "start": 1613,
+     "end": 1619,
+     "text": "burial",
+     "label": "Event",
+     "score": 0.6106839776039124
+    }
+   ],
+   "11": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.8742294907569885
+    },
+    {
+     "start": 1319,
+     "end": 1329,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.9609890580177307
+    },
+    {
+     "start": 160,
+     "end": 166,
+     "text": "Abydus",
+     "label": "Organization",
+     "score": 0.7116652727127075
+    },
+    {
+     "start": 1024,
+     "end": 1032,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.9505226016044617
+    },
+    {
+     "start": 1131,
+     "end": 1140,
+     "text": "Lampsacus",
+     "label": "Organization",
+     "score": 0.8200674057006836
+    },
+    {
+     "start": 505,
+     "end": 512,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.8158618211746216
+    },
+    {
+     "start": 529,
+     "end": 535,
+     "text": "Sardes",
+     "label": "Location",
+     "score": 0.7535188794136047
+    },
+    {
+     "start": 581,
+     "end": 585,
+     "text": "mint",
+     "label": "Organization",
+     "score": 0.3290814757347107
+    },
+    {
+     "start": 699,
+     "end": 703,
+     "text": "Teos",
+     "label": "Organization",
+     "score": 0.7371252775192261
+    },
+    {
+     "start": 778,
+     "end": 787,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.6451996564865112
+    },
+    {
+     "start": 1434,
+     "end": 1447,
+     "text": "Hellespontine",
+     "label": "Location",
+     "score": 0.6498352885246277
+    },
+    {
+     "start": 1461,
+     "end": 1476,
+     "text": "Ionian workshop",
+     "label": "Organization",
+     "score": 0.5652490854263306
+    },
+    {
+     "start": 1630,
+     "end": 1649,
+     "text": "military operations",
+     "label": "Event",
+     "score": 0.3224063217639923
+    },
+    {
+     "start": 1653,
+     "end": 1661,
+     "text": "Craterus",
+     "label": "Person",
+     "score": 0.43752193450927734
+    },
+    {
+     "start": 1666,
+     "end": 1673,
+     "text": "Eumenes",
+     "label": "Organization",
+     "score": 0.3636516332626343
+    }
+   ],
+   "12": [
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.9476853013038635
+    },
+    {
+     "start": 228,
+     "end": 247,
+     "text": "military operations",
+     "label": "Event",
+     "score": 0.5252119898796082
+    },
+    {
+     "start": 301,
+     "end": 316,
+     "text": "European dealer",
+     "label": "Organization",
+     "score": 0.4014386832714081
+    },
+    {
+     "start": 349,
+     "end": 363,
+     "text": "Charles Hersch",
+     "label": "Person",
+     "score": 0.9379352927207947
+    },
+    {
+     "start": 576,
+     "end": 592,
+     "text": "Hersh Collection",
+     "label": "Organization",
+     "score": 0.7035686373710632
+    },
+    {
+     "start": 646,
+     "end": 649,
+     "text": "ANS",
+     "label": "Organization",
+     "score": 0.693662166595459
+    },
+    {
+     "start": 774,
+     "end": 786,
+     "text": "E. T. Newell",
+     "label": "Person",
+     "score": 0.8294102549552917
+    },
+    {
+     "start": 788,
+     "end": 793,
+     "text": "Sidon",
+     "label": "Person",
+     "score": 0.4488692283630371
+    },
+    {
+     "start": 798,
+     "end": 801,
+     "text": "Ake",
+     "label": "Person",
+     "score": 0.4223087728023529
+    },
+    {
+     "start": 871,
+     "end": 879,
+     "text": "Philippe",
+     "label": "Person",
+     "score": 0.7267624139785767
+    },
+    {
+     "start": 931,
+     "end": 939,
+     "text": "Philp II",
+     "label": "Person",
+     "score": 0.6279619932174683
+    },
+    {
+     "start": 1019,
+     "end": 1028,
+     "text": "Bab Hoard",
+     "label": "Work",
+     "score": 0.583483099937439
+    },
+    {
+     "start": 1253,
+     "end": 1263,
+     "text": "Amphipolis",
+     "label": "Location",
+     "score": 0.5291697978973389
+    },
+    {
+     "start": 1352,
+     "end": 1361,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.3857131004333496
+    },
+    {
+     "start": 1374,
+     "end": 1382,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.391513466835022
+    }
+   ],
+   "13": [
+    {
+     "start": 49,
+     "end": 57,
+     "text": "Demanhur",
+     "label": "Location",
+     "score": 0.9605515599250793
+    },
+    {
+     "start": 418,
+     "end": 425,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.9436726570129395
+    },
+    {
+     "start": 247,
+     "end": 253,
+     "text": "Sardes",
+     "label": "Person",
+     "score": 0.9292718768119812
+    },
+    {
+     "start": 774,
+     "end": 779,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.409419447183609
+    },
+    {
+     "start": 827,
+     "end": 845,
+     "text": "Sinan Pascha Hoard",
+     "label": "Work",
+     "score": 0.5085800886154175
+    },
+    {
+     "start": 916,
+     "end": 924,
+     "text": "Diodorus",
+     "label": "Person",
+     "score": 0.8481690883636475
+    },
+    {
+     "start": 939,
+     "end": 945,
+     "text": "battle",
+     "label": "Event",
+     "score": 0.5685353875160217
+    },
+    {
+     "start": 957,
+     "end": 965,
+     "text": "Craterus",
+     "label": "Person",
+     "score": 0.9064726829528809
+    },
+    {
+     "start": 993,
+     "end": 1008,
+     "text": "Hellespont area",
+     "label": "Location",
+     "score": 0.7198087573051453
+    },
+    {
+     "start": 1035,
+     "end": 1048,
+     "text": "Parian Marble",
+     "label": "Work",
+     "score": 0.578564465045929
+    }
+   ],
+   "14": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.5382844805717468
+    },
+    {
+     "start": 211,
+     "end": 215,
+     "text": "Kuft",
+     "label": "Organization",
+     "score": 0.48672834038734436
+    },
+    {
+     "start": 56,
+     "end": 60,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.43110743165016174
+    },
+    {
+     "start": 68,
+     "end": 75,
+     "text": "D. Nash",
+     "label": "Person",
+     "score": 0.8962470293045044
+    },
+    {
+     "start": 96,
+     "end": 109,
+     "text": "Alexander III",
+     "label": "Person",
+     "score": 0.7653457522392273
+    },
+    {
+     "start": 529,
+     "end": 533,
+     "text": "Nash",
+     "label": "Person",
+     "score": 0.6810950636863708
+    },
+    {
+     "start": 724,
+     "end": 731,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.9764383435249329
+    },
+    {
+     "start": 415,
+     "end": 420,
+     "text": "Sidon",
+     "label": "Location",
+     "score": 0.73637455701828
+    },
+    {
+     "start": 509,
+     "end": 515,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.5643886923789978
+    },
+    {
+     "start": 520,
+     "end": 527,
+     "text": "Jenkins",
+     "label": "Person",
+     "score": 0.39481204748153687
+    },
+    {
+     "start": 576,
+     "end": 586,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.8321396708488464
+    },
+    {
+     "start": 633,
+     "end": 643,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.6128343939781189
+    },
+    {
+     "start": 799,
+     "end": 807,
+     "text": "Demanhur",
+     "label": "Location",
+     "score": 0.6124175786972046
+    },
+    {
+     "start": 822,
+     "end": 833,
+     "text": "Series VIII",
+     "label": "Work",
+     "score": 0.52077716588974
+    }
+   ],
+   "15": [
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.9140073657035828
+    },
+    {
+     "start": 67,
+     "end": 71,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.3015977442264557
+    },
+    {
+     "start": 143,
+     "end": 158,
+     "text": "European dealer",
+     "label": "Person",
+     "score": 0.3135700225830078
+    },
+    {
+     "start": 183,
+     "end": 196,
+     "text": "Charles Hersh",
+     "label": "Person",
+     "score": 0.8746718764305115
+    },
+    {
+     "start": 405,
+     "end": 408,
+     "text": "ANS",
+     "label": "Organization",
+     "score": 0.8432401418685913
+    },
+    {
+     "start": 490,
+     "end": 494,
+     "text": "Cius",
+     "label": "Person",
+     "score": 0.935326337814331
+    },
+    {
+     "start": 509,
+     "end": 525,
+     "text": "Georges Le Rider",
+     "label": "Person",
+     "score": 0.7593809366226196
+    },
+    {
+     "start": 595,
+     "end": 601,
+     "text": "Sardes",
+     "label": "Person",
+     "score": 0.7613648772239685
+    },
+    {
+     "start": 898,
+     "end": 905,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.8785572052001953
+    },
+    {
+     "start": 733,
+     "end": 742,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.7003976702690125
+    },
+    {
+     "start": 752,
+     "end": 758,
+     "text": "Abydus",
+     "label": "Person",
+     "score": 0.349612295627594
+    },
+    {
+     "start": 768,
+     "end": 776,
+     "text": "Colophon",
+     "label": "Location",
+     "score": 0.36273273825645447
+    },
+    {
+     "start": 786,
+     "end": 794,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.6537062525749207
+    },
+    {
+     "start": 1060,
+     "end": 1070,
+     "text": "Lysimachus",
+     "label": "Person",
+     "score": 0.9429027438163757
+    },
+    {
+     "start": 1076,
+     "end": 1082,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.305794358253479
+    },
+    {
+     "start": 1512,
+     "end": 1521,
+     "text": "O. Zervos",
+     "label": "Person",
+     "score": 0.9295372366905212
+    },
+    {
+     "start": 1524,
+     "end": 1563,
+     "text": "The Delta Hoard of Ptolemaic Alexanders",
+     "label": "Work",
+     "score": 0.5343134999275208
+    },
+    {
+     "start": 1644,
+     "end": 1649,
+     "text": "ANSMN",
+     "label": "Organization",
+     "score": 0.47443559765815735
+    },
+    {
+     "start": 1604,
+     "end": 1610,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.6469776034355164
+    },
+    {
+     "start": 1687,
+     "end": 1694,
+     "text": "Pfeiler",
+     "label": "Person",
+     "score": 0.9163615107536316
+    },
+    {
+     "start": 1745,
+     "end": 1753,
+     "text": "Seleucia",
+     "label": "Location",
+     "score": 0.37030029296875
+    },
+    {
+     "start": 1812,
+     "end": 1862,
+     "text": "Deux tr-sors de monnaies grecques de la Propontide",
+     "label": "Work",
+     "score": 0.44586458802223206
+    },
+    {
+     "start": 1864,
+     "end": 1869,
+     "text": "Paris",
+     "label": "Location",
+     "score": 0.6338638663291931
+    }
+   ],
+   "16": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.7721503973007202
+    },
+    {
+     "start": 111,
+     "end": 120,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.4870322346687317
+    },
+    {
+     "start": 146,
+     "end": 156,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.60238116979599
+    },
+    {
+     "start": 177,
+     "end": 184,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.6209417581558228
+    },
+    {
+     "start": 330,
+     "end": 333,
+     "text": "Ake",
+     "label": "Location",
+     "score": 0.5410357117652893
+    },
+    {
+     "start": 346,
+     "end": 351,
+     "text": "Sidon",
+     "label": "Location",
+     "score": 0.851361870765686
+    },
+    {
+     "start": 361,
+     "end": 368,
+     "text": "Jenkins",
+     "label": "Person",
+     "score": 0.9171056747436523
+    },
+    {
+     "start": 430,
+     "end": 435,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.5595045685768127
+    },
+    {
+     "start": 472,
+     "end": 482,
+     "text": "Kuft Hoard",
+     "label": "Work",
+     "score": 0.5442759990692139
+    },
+    {
+     "start": 503,
+     "end": 507,
+     "text": "Nash",
+     "label": "Person",
+     "score": 0.9069408774375916
+    },
+    {
+     "start": 706,
+     "end": 716,
+     "text": "Philip III",
+     "label": "Person",
+     "score": 0.8580595254898071
+    },
+    {
+     "start": 739,
+     "end": 745,
+     "text": "Sardes",
+     "label": "Location",
+     "score": 0.6424927711486816
+    },
+    {
+     "start": 910,
+     "end": 923,
+     "text": "Cavalla Hoard",
+     "label": "Work",
+     "score": 0.47871002554893494
+    }
+   ],
+   "17": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.6718997359275818
+    },
+    {
+     "start": 1258,
+     "end": 1264,
+     "text": "Aleppo",
+     "label": "Location",
+     "score": 0.9709512591362
+    },
+    {
+     "start": 755,
+     "end": 761,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.9176430106163025
+    },
+    {
+     "start": 341,
+     "end": 347,
+     "text": "Sardes",
+     "label": "Person",
+     "score": 0.9116501212120056
+    },
+    {
+     "start": 355,
+     "end": 362,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.7432866096496582
+    },
+    {
+     "start": 807,
+     "end": 812,
+     "text": "Sidon",
+     "label": "Location",
+     "score": 0.9063800573348999
+    },
+    {
+     "start": 825,
+     "end": 828,
+     "text": "Ake",
+     "label": "Location",
+     "score": 0.5858083367347717
+    },
+    {
+     "start": 1037,
+     "end": 1047,
+     "text": "Lysimachus",
+     "label": "Person",
+     "score": 0.9715843796730042
+    },
+    {
+     "start": 1051,
+     "end": 1060,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.8920885920524597
+    },
+    {
+     "start": 1079,
+     "end": 1085,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.6838140487670898
+    }
+   ],
+   "18": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.32092201709747314
+    },
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.9872472286224365
+    },
+    {
+     "start": 86,
+     "end": 94,
+     "text": "Kampmann",
+     "label": "Person",
+     "score": 0.6985453367233276
+    },
+    {
+     "start": 142,
+     "end": 152,
+     "text": "Lysimachus",
+     "label": "Person",
+     "score": 0.9831458926200867
+    },
+    {
+     "start": 330,
+     "end": 339,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.7023084163665771
+    },
+    {
+     "start": 359,
+     "end": 367,
+     "text": "Magnesia",
+     "label": "Location",
+     "score": 0.36427924036979675
+    },
+    {
+     "start": 473,
+     "end": 482,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.8844536542892456
+    },
+    {
+     "start": 589,
+     "end": 599,
+     "text": "Amphipolis",
+     "label": "Location",
+     "score": 0.8680835962295532
+    },
+    {
+     "start": 611,
+     "end": 616,
+     "text": "Pella",
+     "label": "Location",
+     "score": 0.8055900931358337
+    },
+    {
+     "start": 669,
+     "end": 676,
+     "text": "Babylon",
+     "label": "Location",
+     "score": 0.8847562670707703
+    },
+    {
+     "start": 728,
+     "end": 736,
+     "text": "Anatolia",
+     "label": "Location",
+     "score": 0.6444960832595825
+    },
+    {
+     "start": 738,
+     "end": 744,
+     "text": "Cyprus",
+     "label": "Location",
+     "score": 0.9159563183784485
+    },
+    {
+     "start": 746,
+     "end": 751,
+     "text": "Syria",
+     "label": "Location",
+     "score": 0.9178807139396667
+    },
+    {
+     "start": 753,
+     "end": 762,
+     "text": "Phoenicia",
+     "label": "Location",
+     "score": 0.9119162559509277
+    },
+    {
+     "start": 1082,
+     "end": 1088,
+     "text": "Levant",
+     "label": "Location",
+     "score": 0.4275066554546356
+    }
+   ],
+   "19": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.8976681232452393
+    },
+    {
+     "start": 47,
+     "end": 53,
+     "text": "Gild\u00e0u",
+     "label": "Location",
+     "score": 0.8291811347007751
+    },
+    {
+     "start": 55,
+     "end": 59,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.6668872237205505
+    },
+    {
+     "start": 65,
+     "end": 83,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.61907559633255
+    },
+    {
+     "start": 92,
+     "end": 101,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.5770241618156433
+    }
+   ],
+   "20": [
+    {
+     "start": 47,
+     "end": 57,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.7942834496498108
+    },
+    {
+     "start": 64,
+     "end": 68,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.37704068422317505
+    },
+    {
+     "start": 75,
+     "end": 93,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.6066529750823975
+    },
+    {
+     "start": 102,
+     "end": 111,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.43150636553764343
+    },
+    {
+     "start": 141,
+     "end": 147,
+     "text": "Abydus",
+     "label": "Person",
+     "score": 0.5192334055900574
+    },
+    {
+     "start": 149,
+     "end": 155,
+     "text": "Hermes",
+     "label": "Person",
+     "score": 0.858809769153595
+    }
+   ],
+   "21": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.4443404972553253
+    },
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Paeonia",
+     "label": "Location",
+     "score": 0.865680992603302
+    },
+    {
+     "start": 56,
+     "end": 60,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.33130979537963867
+    },
+    {
+     "start": 77,
+     "end": 84,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.5819931030273438
+    },
+    {
+     "start": 259,
+     "end": 268,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.748616099357605
+    },
+    {
+     "start": 139,
+     "end": 146,
+     "text": "Sotheby",
+     "label": "Organization",
+     "score": 0.908937931060791
+    },
+    {
+     "start": 167,
+     "end": 179,
+     "text": "Parke-Bernet",
+     "label": "Person",
+     "score": 0.6373891830444336
+    },
+    {
+     "start": 340,
+     "end": 346,
+     "text": "Abydus",
+     "label": "Person",
+     "score": 0.3008803427219391
+    },
+    {
+     "start": 350,
+     "end": 356,
+     "text": "Hermes",
+     "label": "Person",
+     "score": 0.7671570181846619
+    }
+   ],
+   "22": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.5431300401687622
+    },
+    {
+     "start": 47,
+     "end": 54,
+     "text": "Larnaca",
+     "label": "Location",
+     "score": 0.792229413986206
+    },
+    {
+     "start": 67,
+     "end": 85,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.5787056088447571
+    },
+    {
+     "start": 110,
+     "end": 122,
+     "text": "Martin Price",
+     "label": "Person",
+     "score": 0.9413849711418152
+    },
+    {
+     "start": 160,
+     "end": 174,
+     "text": "British Museum",
+     "label": "Organization",
+     "score": 0.8048543930053711
+    },
+    {
+     "start": 334,
+     "end": 343,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.36215299367904663
+    }
+   ],
+   "23": [
+    {
+     "start": 47,
+     "end": 56,
+     "text": "M\u0103r\u0103\u015fe\u015fti",
+     "label": "Location",
+     "score": 0.664607048034668
+    },
+    {
+     "start": 58,
+     "end": 62,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.3889625668525696
+    },
+    {
+     "start": 68,
+     "end": 86,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.5741125345230103
+    },
+    {
+     "start": 219,
+     "end": 228,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.9728531241416931
+    },
+    {
+     "start": 134,
+     "end": 140,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.8584475517272949
+    },
+    {
+     "start": 155,
+     "end": 169,
+     "text": "Poenaru Bordea",
+     "label": "Person",
+     "score": 0.9921907782554626
+    }
+   ],
+   "24": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.8055849671363831
+    },
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.7123404741287231
+    },
+    {
+     "start": 66,
+     "end": 70,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.3656325042247772
+    },
+    {
+     "start": 77,
+     "end": 95,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.6159539818763733
+    },
+    {
+     "start": 104,
+     "end": 121,
+     "text": "Lampsacus 2 Club",
+     "label": "Organization",
+     "score": 0.5923970937728882
+    },
+    {
+     "start": 178,
+     "end": 184,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.5064588189125061
+    },
+    {
+     "start": 188,
+     "end": 194,
+     "text": "Hermes",
+     "label": "Organization",
+     "score": 0.46085652709007263
+    },
+    {
+     "start": 234,
+     "end": 253,
+     "text": "Forepart of Pegasus",
+     "label": "Location",
+     "score": 0.5802294611930847
+    },
+    {
+     "start": 340,
+     "end": 349,
+     "text": "Palm tree",
+     "label": "Organization",
+     "score": 0.5550273656845093
+    }
+   ],
+   "25": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.9123123288154602
+    },
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.916396975517273
+    },
+    {
+     "start": 66,
+     "end": 75,
+     "text": "IGCH 1438",
+     "label": "Organization",
+     "score": 0.3475760221481323
+    }
+   ],
+   "26": [
+    {
+     "start": 49,
+     "end": 57,
+     "text": "Demanhur",
+     "label": "Location",
+     "score": 0.6977594494819641
+    },
+    {
+     "start": 59,
+     "end": 63,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.3379015624523163
+    },
+    {
+     "start": 70,
+     "end": 88,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.633278489112854
+    },
+    {
+     "start": 118,
+     "end": 125,
+     "text": "3 Club",
+     "label": "Organization",
+     "score": 0.32561421394348145
+    },
+    {
+     "start": 131,
+     "end": 138,
+     "text": "Demeter",
+     "label": "Person",
+     "score": 0.7674382328987122
+    },
+    {
+     "start": 202,
+     "end": 208,
+     "text": "Hermes",
+     "label": "Person",
+     "score": 0.7693551778793335
+    }
+   ],
+   "27": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.779445469379425
+    },
+    {
+     "start": 49,
+     "end": 54,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.9009325504302979
+    },
+    {
+     "start": 61,
+     "end": 70,
+     "text": "IGCH 1668",
+     "label": "Organization",
+     "score": 0.44964781403541565
+    },
+    {
+     "start": 72,
+     "end": 81,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.5187865495681763
+    },
+    {
+     "start": 85,
+     "end": 92,
+     "text": "Demeter",
+     "label": "Person",
+     "score": 0.8907211422920227
+    }
+   ],
+   "28": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.4674633741378784
+    },
+    {
+     "start": 49,
+     "end": 55,
+     "text": "Aleppo",
+     "label": "Location",
+     "score": 0.8885983824729919
+    },
+    {
+     "start": 520,
+     "end": 526,
+     "text": "Sardes",
+     "label": "Person",
+     "score": 0.7885826826095581
+    },
+    {
+     "start": 79,
+     "end": 86,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.8555618524551392
+    },
+    {
+     "start": 497,
+     "end": 506,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.9444304704666138
+    },
+    {
+     "start": 136,
+     "end": 143,
+     "text": "Drachms",
+     "label": "Location",
+     "score": 0.46751663088798523
+    },
+    {
+     "start": 145,
+     "end": 152,
+     "text": "Demeter",
+     "label": "Person",
+     "score": 0.8527933955192566
+    },
+    {
+     "start": 190,
+     "end": 192,
+     "text": "Al",
+     "label": "Person",
+     "score": 0.5060203075408936
+    },
+    {
+     "start": 276,
+     "end": 282,
+     "text": "Abydus",
+     "label": "Person",
+     "score": 0.9293991327285767
+    },
+    {
+     "start": 392,
+     "end": 398,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.5630326271057129
+    },
+    {
+     "start": 456,
+     "end": 474,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.771782398223877
+    }
+   ],
+   "29": [
+    {
+     "start": 49,
+     "end": 53,
+     "text": "Kuft",
+     "label": "Organization",
+     "score": 0.3286744952201843
+    },
+    {
+     "start": 55,
+     "end": 59,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.36669567227363586
+    },
+    {
+     "start": 66,
+     "end": 84,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.6724334955215454
+    },
+    {
+     "start": 93,
+     "end": 111,
+     "text": "Lampsacus Demeter",
+     "label": "Person",
+     "score": 0.7838963866233826
+    },
+    {
+     "start": 114,
+     "end": 128,
+     "text": "Abydus Hermes",
+     "label": "Person",
+     "score": 0.9266035556793213
+    }
+   ],
+   "30": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.8829740285873413
+    },
+    {
+     "start": 49,
+     "end": 59,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.80020672082901
+    },
+    {
+     "start": 77,
+     "end": 95,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.65565425157547
+    },
+    {
+     "start": 165,
+     "end": 170,
+     "text": "Yunak",
+     "label": "Location",
+     "score": 0.4206249415874481
+    },
+    {
+     "start": 179,
+     "end": 190,
+     "text": "Aphrodisias",
+     "label": "Location",
+     "score": 0.7779251337051392
+    },
+    {
+     "start": 225,
+     "end": 234,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.8314546942710876
+    },
+    {
+     "start": 239,
+     "end": 245,
+     "text": "Abydus",
+     "label": "Location",
+     "score": 0.6912775039672852
+    }
+   ],
+   "31": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.7706104516983032
+    },
+    {
+     "start": 49,
+     "end": 56,
+     "text": "Phacous",
+     "label": "Location",
+     "score": 0.46419546008110046
+    },
+    {
+     "start": 69,
+     "end": 75,
+     "text": "Sardes",
+     "label": "Location",
+     "score": 0.33723121881484985
+    },
+    {
+     "start": 80,
+     "end": 87,
+     "text": "Miletus",
+     "label": "Location",
+     "score": 0.6006578803062439
+    },
+    {
+     "start": 96,
+     "end": 118,
+     "text": "Lampsacus Tetradrachm",
+     "label": "Organization",
+     "score": 0.3556423783302307
+    },
+    {
+     "start": 124,
+     "end": 131,
+     "text": "Demeter",
+     "label": "Person",
+     "score": 0.8884924054145813
+    }
+   ],
+   "32": [
+    {
+     "start": 0,
+     "end": 8,
+     "text": "Thompson",
+     "label": "Person",
+     "score": 0.8392797708511353
+    },
+    {
+     "start": 49,
+     "end": 56,
+     "text": "Olympia",
+     "label": "Location",
+     "score": 0.8819385766983032
+    },
+    {
+     "start": 58,
+     "end": 62,
+     "text": "IGCH",
+     "label": "Organization",
+     "score": 0.6325749754905701
+    },
+    {
+     "start": 68,
+     "end": 86,
+     "text": "Sardes and Miletus",
+     "label": "Location",
+     "score": 0.6188303232192993
+    },
+    {
+     "start": 95,
+     "end": 104,
+     "text": "Lampsacus",
+     "label": "Location",
+     "score": 0.6545204520225525
+    },
+    {
+     "start": 127,
+     "end": 134,
+     "text": "Pegasus",
+     "label": "Location",
+     "score": 0.6357752084732056
+    }
+   ],
+   "33": [
+    {
+     "start": 0,
+     "end": 6,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.6577448844909668
+    },
+    {
+     "start": 23,
+     "end": 42,
+     "text": "ALEXANDER HOARDS IV",
+     "label": "Person",
+     "score": 0.3743495047092438
+    },
+    {
+     "start": 628,
+     "end": 635,
+     "text": "Olympia",
+     "label": "Location",
+     "score": 0.9442098736763
+    },
+    {
+     "start": 65,
+     "end": 81,
+     "text": "EDWARD T. NEWELL",
+     "label": "Person",
+     "score": 0.8465314507484436
+    },
+    {
+     "start": 198,
+     "end": 204,
+     "text": "writer",
+     "label": "Person",
+     "score": 0.6432502269744873
+    },
+    {
+     "start": 515,
+     "end": 529,
+     "text": "Greek importer",
+     "label": "Person",
+     "score": 0.43216902017593384
+    },
+    {
+     "start": 549,
+     "end": 555,
+     "text": "Boston",
+     "label": "Location",
+     "score": 0.7693362236022949
+    },
+    {
+     "start": 1105,
+     "end": 1111,
+     "text": "Greece",
+     "label": "Location",
+     "score": 0.610194981098175
+    },
+    {
+     "start": 1242,
+     "end": 1268,
+     "text": "Boston Museum of Fine Arts",
+     "label": "Organization",
+     "score": 0.8569837808609009
+    }
+   ],
+   "34": [
+    {
+     "start": 23,
+     "end": 42,
+     "text": "ALEXANDER HOARDS IV",
+     "label": "Person",
+     "score": 0.7985555529594421
+    },
+    {
+     "start": 918,
+     "end": 925,
+     "text": "Olympia",
+     "label": "Location",
+     "score": 0.9614424109458923
+    },
+    {
+     "start": 169,
+     "end": 195,
+     "text": "Boston Museum of Fine Arts",
+     "label": "Organization",
+     "score": 0.9019370675086975
+    },
+    {
+     "start": 827,
+     "end": 833,
+     "text": "writer",
+     "label": "Person",
+     "score": 0.44430381059646606
+    },
+    {
+     "start": 448,
+     "end": 464,
+     "text": "Athenian dealers",
+     "label": "Organization",
+     "score": 0.3375391364097595
+    },
+    {
+     "start": 474,
+     "end": 487,
+     "text": "Mr. S. P. Noe",
+     "label": "Person",
+     "score": 0.8703671097755432
+    },
+    {
+     "start": 506,
+     "end": 533,
+     "text": "American Numismatic Society",
+     "label": "Organization",
+     "score": 0.9198928475379944
+    },
+    {
+     "start": 1196,
+     "end": 1205,
+     "text": "Epidaurus",
+     "label": "Location",
+     "score": 0.9345666766166687
+    },
+    {
+     "start": 1207,
+     "end": 1217,
+     "text": "Kyparissia",
+     "label": "Location",
+     "score": 0.8927310705184937
+    },
+    {
+     "start": 1241,
+     "end": 1247,
+     "text": "Patras",
+     "label": "Location",
+     "score": 0.9210084676742554
+    },
+    {
+     "start": 1249,
+     "end": 1257,
+     "text": "Sophikon",
+     "label": "Location",
+     "score": 0.8398064374923706
+    },
+    {
+     "start": 1259,
+     "end": 1265,
+     "text": "Sparta",
+     "label": "Location",
+     "score": 0.9222095608711243
+    },
+    {
+     "start": 1442,
+     "end": 1449,
+     "text": "Corinth",
+     "label": "Location",
+     "score": 0.818202555179596
+    },
+    {
+     "start": 1681,
+     "end": 1685,
+     "text": "Elis",
+     "label": "Location",
+     "score": 0.8591842651367188
+    },
+    {
+     "start": 1630,
+     "end": 1635,
+     "text": "owner",
+     "label": "Person",
+     "score": 0.9096012115478516
+    }
+   ],
+   "35": [
+    {
+     "start": 0,
+     "end": 6,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.32018351554870605
+    },
+    {
+     "start": 27,
+     "end": 41,
+     "text": "DEMANHUR HOARD",
+     "label": "Event",
+     "score": 0.3080498278141022
+    },
+    {
+     "start": 46,
+     "end": 62,
+     "text": "Edward T. Newell",
+     "label": "Person",
+     "score": 0.9100416302680969
+    },
+    {
+     "start": 181,
+     "end": 187,
+     "text": "writer",
+     "label": "Person",
+     "score": 0.7393848299980164
+    },
+    {
+     "start": 195,
+     "end": 226,
+     "text": "American Journal of Numismatics",
+     "label": "Organization",
+     "score": 0.47135332226753235
+    },
+    {
+     "start": 1395,
+     "end": 1400,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.6948649287223816
+    },
+    {
+     "start": 1516,
+     "end": 1530,
+     "text": "British Museum",
+     "label": "Organization",
+     "score": 0.9027532339096069
+    },
+    {
+     "start": 1557,
+     "end": 1575,
+     "text": "United States Mint",
+     "label": "Organization",
+     "score": 0.9341620802879333
+    },
+    {
+     "start": 1579,
+     "end": 1591,
+     "text": "Philadelphia",
+     "label": "Location",
+     "score": 0.9060201644897461
+    },
+    {
+     "start": 1614,
+     "end": 1629,
+     "text": "National Museum",
+     "label": "Organization",
+     "score": 0.500850260257721
+    },
+    {
+     "start": 1631,
+     "end": 1641,
+     "text": "Washington",
+     "label": "Location",
+     "score": 0.8349398970603943
+    }
+   ],
+   "36": [
+    {
+     "start": 27,
+     "end": 41,
+     "text": "DEMANHUR HOARD",
+     "label": "Event",
+     "score": 0.5785658955574036
+    },
+    {
+     "start": 61,
+     "end": 67,
+     "text": "writer",
+     "label": "Person",
+     "score": 0.44083306193351746
+    },
+    {
+     "start": 75,
+     "end": 89,
+     "text": "British Museum",
+     "label": "Organization",
+     "score": 0.9636024236679077
+    },
+    {
+     "start": 116,
+     "end": 134,
+     "text": "United States Mint",
+     "label": "Organization",
+     "score": 0.9477000832557678
+    },
+    {
+     "start": 138,
+     "end": 150,
+     "text": "Philadelphia",
+     "label": "Location",
+     "score": 0.893307089805603
+    },
+    {
+     "start": 173,
+     "end": 188,
+     "text": "National Museum",
+     "label": "Organization",
+     "score": 0.6679984331130981
+    },
+    {
+     "start": 190,
+     "end": 200,
+     "text": "Washington",
+     "label": "Location",
+     "score": 0.7432564496994019
+    },
+    {
+     "start": 260,
+     "end": 278,
+     "text": "Gen. Ronald Storrs",
+     "label": "Person",
+     "score": 0.9482611417770386
+    },
+    {
+     "start": 284,
+     "end": 306,
+     "text": "Mr. F. Munroe Endicott",
+     "label": "Person",
+     "score": 0.8620752692222595
+    },
+    {
+     "start": 1707,
+     "end": 1712,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.9224887490272522
+    },
+    {
+     "start": 789,
+     "end": 807,
+     "text": "M. \u00c9tienne Bourgey",
+     "label": "Person",
+     "score": 0.8782621026039124
+    },
+    {
+     "start": 811,
+     "end": 816,
+     "text": "Paris",
+     "label": "Location",
+     "score": 0.8726473450660706
+    },
+    {
+     "start": 1190,
+     "end": 1199,
+     "text": "Dr. Pozzi",
+     "label": "Person",
+     "score": 0.8661845922470093
+    },
+    {
+     "start": 1210,
+     "end": 1228,
+     "text": "M. Pierre Saroglos",
+     "label": "Person",
+     "score": 0.853461503982544
+    },
+    {
+     "start": 1232,
+     "end": 1238,
+     "text": "Athens",
+     "label": "Location",
+     "score": 0.853355884552002
+    },
+    {
+     "start": 1349,
+     "end": 1365,
+     "text": "Mr. Azeez Khayat",
+     "label": "Person",
+     "score": 0.8994522094726562
+    },
+    {
+     "start": 1495,
+     "end": 1508,
+     "text": "Demanhur find",
+     "label": "Event",
+     "score": 0.48435622453689575
+    },
+    {
+     "start": 1614,
+     "end": 1643,
+     "text": "Toronto Archaeological Museum",
+     "label": "Organization",
+     "score": 0.8779367208480835
+    },
+    {
+     "start": 1685,
+     "end": 1702,
+     "text": "Mr. C. T. Curelly",
+     "label": "Person",
+     "score": 0.9104898571968079
+    },
+    {
+     "start": 1622,
+     "end": 1643,
+     "text": "Archaeological Museum",
+     "label": "Organization",
+     "score": 0.866823136806488
+    },
+    {
+     "start": 1823,
+     "end": 1834,
+     "text": "J. Schulman",
+     "label": "Person",
+     "score": 0.8828076720237732
+    },
+    {
+     "start": 1838,
+     "end": 1847,
+     "text": "Amsterdam",
+     "label": "Location",
+     "score": 0.8505748510360718
+    },
+    {
+     "start": 1849,
+     "end": 1868,
+     "text": "Messrs. Spink & Son",
+     "label": "Organization",
+     "score": 0.8843761086463928
+    },
+    {
+     "start": 1872,
+     "end": 1878,
+     "text": "London",
+     "label": "Location",
+     "score": 0.8116325736045837
+    },
+    {
+     "start": 1880,
+     "end": 1896,
+     "text": "Dr. Jacob Hirsch",
+     "label": "Person",
+     "score": 0.8342981338500977
+    },
+    {
+     "start": 1900,
+     "end": 1906,
+     "text": "Munich",
+     "label": "Location",
+     "score": 0.8300290703773499
+    }
+   ],
+   "37": [
+    {
+     "start": 1459,
+     "end": 1467,
+     "text": "Demanhur",
+     "label": "Location",
+     "score": 0.8390289545059204
+    },
+    {
+     "start": 67,
+     "end": 78,
+     "text": "J. Schulman",
+     "label": "Person",
+     "score": 0.8566604852676392
+    },
+    {
+     "start": 82,
+     "end": 91,
+     "text": "Amsterdam",
+     "label": "Location",
+     "score": 0.7613746523857117
+    },
+    {
+     "start": 93,
+     "end": 112,
+     "text": "Messrs. Spink & Son",
+     "label": "Organization",
+     "score": 0.8531163930892944
+    },
+    {
+     "start": 116,
+     "end": 122,
+     "text": "London",
+     "label": "Location",
+     "score": 0.7417575716972351
+    },
+    {
+     "start": 124,
+     "end": 140,
+     "text": "Dr. Jacob Hirsch",
+     "label": "Person",
+     "score": 0.832127571105957
+    },
+    {
+     "start": 144,
+     "end": 150,
+     "text": "Munich",
+     "label": "Location",
+     "score": 0.7215104699134827
+    },
+    {
+     "start": 1196,
+     "end": 1202,
+     "text": "writer",
+     "label": "Person",
+     "score": 0.6779603362083435
+    },
+    {
+     "start": 283,
+     "end": 297,
+     "text": "Th. Prowe Sale",
+     "label": "Event",
+     "score": 0.7511067390441895
+    },
+    {
+     "start": 299,
+     "end": 311,
+     "text": "Br\u00fcder Egger",
+     "label": "Location",
+     "score": 0.37317392230033875
+    },
+    {
+     "start": 313,
+     "end": 319,
+     "text": "Vienna",
+     "label": "Location",
+     "score": 0.7678137421607971
+    },
+    {
+     "start": 512,
+     "end": 533,
+     "text": "M. Alexis von Markoff",
+     "label": "Person",
+     "score": 0.8709622025489807
+    },
+    {
+     "start": 612,
+     "end": 623,
+     "text": "Prof. Milne",
+     "label": "Person",
+     "score": 0.9016628861427307
+    },
+    {
+     "start": 625,
+     "end": 642,
+     "text": "Mr. E. J. Seltman",
+     "label": "Person",
+     "score": 0.8747162818908691
+    },
+    {
+     "start": 644,
+     "end": 656,
+     "text": "Mr. Endicott",
+     "label": "Person",
+     "score": 0.856993556022644
+    },
+    {
+     "start": 658,
+     "end": 681,
+     "text": "Rev. Jeremiah Zimmerman",
+     "label": "Person",
+     "score": 0.8728405833244324
+    },
+    {
+     "start": 696,
+     "end": 703,
+     "text": "Lot III",
+     "label": "Work",
+     "score": 0.33729806542396545
+    },
+    {
+     "start": 801,
+     "end": 807,
+     "text": "Lot IV",
+     "label": "Work",
+     "score": 0.3872371315956116
+    },
+    {
+     "start": 891,
+     "end": 902,
+     "text": "Mrs. Draper",
+     "label": "Person",
+     "score": 0.7973865866661072
+    },
+    {
+     "start": 904,
+     "end": 927,
+     "text": "Mr. Thomas B. F. Curtis",
+     "label": "Person",
+     "score": 0.8038089275360107
+    },
+    {
+     "start": 958,
+     "end": 973,
+     "text": "Mr. T. L. Elder",
+     "label": "Person",
+     "score": 0.8363566398620605
+    },
+    {
+     "start": 1033,
+     "end": 1039,
+     "text": "author",
+     "label": "Person",
+     "score": 0.36374908685684204
+    },
+    {
+     "start": 1058,
+     "end": 1068,
+     "text": "Mr. Khayat",
+     "label": "Person",
+     "score": 0.4091733396053314
+    },
+    {
+     "start": 1102,
+     "end": 1129,
+     "text": "American Numismatic Society",
+     "label": "Organization",
+     "score": 0.8830378651618958
+    },
+    {
+     "start": 1131,
+     "end": 1155,
+     "text": "Mrs. Agnes Baldwin Brett",
+     "label": "Person",
+     "score": 0.8909240961074829
+    },
+    {
+     "start": 1157,
+     "end": 1175,
+     "text": "Messrs. L. V. Case",
+     "label": "Organization",
+     "score": 0.7115916013717651
+    },
+    {
+     "start": 1177,
+     "end": 1186,
+     "text": "V. Hammer",
+     "label": "Person",
+     "score": 0.4934786558151245
+    },
+    {
+     "start": 1257,
+     "end": 1266,
+     "text": "Mr. Elder",
+     "label": "Person",
+     "score": 0.375244677066803
+    },
+    {
+     "start": 1418,
+     "end": 1433,
+     "text": "Plates I and II",
+     "label": "Work",
+     "score": 0.3665521740913391
+    },
+    {
+     "start": 1492,
+     "end": 1501,
+     "text": "Ptolemy I",
+     "label": "Person",
+     "score": 0.3999347388744354
+    },
+    {
+     "start": 1571,
+     "end": 1576,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.9225906133651733
+    },
+    {
+     "start": 1633,
+     "end": 1643,
+     "text": "Alexanders",
+     "label": "Person",
+     "score": 0.7318195700645447
+    }
+   ],
+   "38": [
+    {
+     "start": 27,
+     "end": 35,
+     "text": "DEMANHUR",
+     "label": "Organization",
+     "score": 0.6058012247085571
+    },
+    {
+     "start": 114,
+     "end": 120,
+     "text": "writer",
+     "label": "Person",
+     "score": 0.8393073081970215
+    },
+    {
+     "start": 788,
+     "end": 793,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.9448950290679932
+    },
+    {
+     "start": 1209,
+     "end": 1231,
+     "text": "collectors and dealers",
+     "label": "Organization",
+     "score": 0.49821385741233826
+    },
+    {
+     "start": 1483,
+     "end": 1491,
+     "text": "Demanhur",
+     "label": "Person",
+     "score": 0.7536232471466064
+    },
+    {
+     "start": 1625,
+     "end": 1647,
+     "text": "dealers and collectors",
+     "label": "Organization",
+     "score": 0.3730628192424774
+    }
+   ],
+   "39": [
+    {
+     "start": 76,
+     "end": 86,
+     "text": "collectors",
+     "label": "Organization",
+     "score": 0.5877580046653748
+    },
+    {
+     "start": 1428,
+     "end": 1436,
+     "text": "tourists",
+     "label": "Organization",
+     "score": 0.4858003556728363
+    },
+    {
+     "start": 309,
+     "end": 314,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.9251096248626709
+    },
+    {
+     "start": 458,
+     "end": 463,
+     "text": "Syria",
+     "label": "Location",
+     "score": 0.8407703638076782
+    },
+    {
+     "start": 667,
+     "end": 677,
+     "text": "the writer",
+     "label": "Person",
+     "score": 0.9213448166847229
+    },
+    {
+     "start": 1354,
+     "end": 1373,
+     "text": "Alexander the Great",
+     "label": "Person",
+     "score": 0.9453940391540527
+    }
+   ],
+   "40": [
+    {
+     "start": 0,
+     "end": 6,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.38708552718162537
+    },
+    {
+     "start": 27,
+     "end": 35,
+     "text": "DEMANHUR",
+     "label": "Organization",
+     "score": 0.36927321553230286
+    },
+    {
+     "start": 964,
+     "end": 974,
+     "text": "the writer",
+     "label": "Person",
+     "score": 0.9786329865455627
+    },
+    {
+     "start": 426,
+     "end": 442,
+     "text": "original finders",
+     "label": "Organization",
+     "score": 0.3956988453865051
+    }
+   ],
+   "41": [
+    {
+     "start": 722,
+     "end": 730,
+     "text": "Demanhur",
+     "label": "Location",
+     "score": 0.9435688257217407
+    },
+    {
+     "start": 349,
+     "end": 361,
+     "text": "Sig. Dattari",
+     "label": "Person",
+     "score": 0.9064366221427917
+    },
+    {
+     "start": 587,
+     "end": 594,
+     "text": "natives",
+     "label": "Organization",
+     "score": 0.4384005069732666
+    },
+    {
+     "start": 700,
+     "end": 709,
+     "text": "merchants",
+     "label": "Organization",
+     "score": 0.3450292646884918
+    },
+    {
+     "start": 991,
+     "end": 1001,
+     "text": "Alexandria",
+     "label": "Location",
+     "score": 0.8769458532333374
+    },
+    {
+     "start": 1017,
+     "end": 1022,
+     "text": "Cairo",
+     "label": "Location",
+     "score": 0.8478102684020996
+    },
+    {
+     "start": 1302,
+     "end": 1314,
+     "text": "M. Bourgey\u2019s",
+     "label": "Person",
+     "score": 0.6084206104278564
+    },
+    {
+     "start": 1319,
+     "end": 1331,
+     "text": "Mr. Khayat\u2019s",
+     "label": "Person",
+     "score": 0.5971640944480896
+    },
+    {
+     "start": 1444,
+     "end": 1463,
+     "text": "M. Seymour de Ricci",
+     "label": "Person",
+     "score": 0.9120336174964905
+    },
+    {
+     "start": 1493,
+     "end": 1498,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.31361326575279236
+    },
+    {
+     "start": 1514,
+     "end": 1533,
+     "text": "archaeological work",
+     "label": "Work",
+     "score": 0.9019417762756348
+    },
+    {
+     "start": 1734,
+     "end": 1745,
+     "text": "M. de Ricci",
+     "label": "Person",
+     "score": 0.9802128672599792
+    }
+   ],
+   "42": [
+    {
+     "start": 1733,
+     "end": 1738,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.9756590127944946
+    },
+    {
+     "start": 584,
+     "end": 596,
+     "text": "Mr. Endicott",
+     "label": "Person",
+     "score": 0.832470178604126
+    },
+    {
+     "start": 601,
+     "end": 612,
+     "text": "Gen. Storrs",
+     "label": "Person",
+     "score": 0.8479593396186829
+    },
+    {
+     "start": 1249,
+     "end": 1259,
+     "text": "M. Bourgey",
+     "label": "Person",
+     "score": 0.38630056381225586
+    },
+    {
+     "start": 1309,
+     "end": 1318,
+     "text": "Dr. Pozzi",
+     "label": "Person",
+     "score": 0.6589018702507019
+    },
+    {
+     "start": 1320,
+     "end": 1331,
+     "text": "M. Saroglos",
+     "label": "Person",
+     "score": 0.6537309885025024
+    },
+    {
+     "start": 1341,
+     "end": 1355,
+     "text": "British Museum",
+     "label": "Organization",
+     "score": 0.9317508339881897
+    },
+    {
+     "start": 1552,
+     "end": 1571,
+     "text": "Alexander the Great",
+     "label": "Person",
+     "score": 0.9184391498565674
+    },
+    {
+     "start": 1576,
+     "end": 1593,
+     "text": "Philip Arrhidaeus",
+     "label": "Person",
+     "score": 0.9186764359474182
+    },
+    {
+     "start": 1606,
+     "end": 1615,
+     "text": "Macedonia",
+     "label": "Location",
+     "score": 0.9621003866195679
+    },
+    {
+     "start": 1621,
+     "end": 1632,
+     "text": "Peloponnese",
+     "label": "Location",
+     "score": 0.8972638845443726
+    },
+    {
+     "start": 1638,
+     "end": 1647,
+     "text": "Propontis",
+     "label": "Location",
+     "score": 0.7913854122161865
+    },
+    {
+     "start": 1649,
+     "end": 1672,
+     "text": "South-westernAsia Minor",
+     "label": "Location",
+     "score": 0.9223188757896423
+    },
+    {
+     "start": 1674,
+     "end": 1681,
+     "text": "Cilicia",
+     "label": "Location",
+     "score": 0.950718104839325
+    },
+    {
+     "start": 1683,
+     "end": 1689,
+     "text": "Cyprus",
+     "label": "Location",
+     "score": 0.9518521428108215
+    },
+    {
+     "start": 1691,
+     "end": 1696,
+     "text": "Syria",
+     "label": "Location",
+     "score": 0.9468517899513245
+    },
+    {
+     "start": 1707,
+     "end": 1716,
+     "text": "Phoenicia",
+     "label": "Location",
+     "score": 0.9385052919387817
+    },
+    {
+     "start": 1718,
+     "end": 1727,
+     "text": "Babylonia",
+     "label": "Location",
+     "score": 0.9757755994796753
+    },
+    {
+     "start": 1803,
+     "end": 1809,
+     "text": "series",
+     "label": "Work",
+     "score": 0.3506082594394684
+    },
+    {
+     "start": 1839,
+     "end": 1847,
+     "text": "one mint",
+     "label": "Organization",
+     "score": 0.47232088446617126
+    },
+    {
+     "start": 1912,
+     "end": 1923,
+     "text": "close study",
+     "label": "Work",
+     "score": 0.48007291555404663
+    }
+   ],
+   "43": [
+    {
+     "start": 27,
+     "end": 35,
+     "text": "DEMANHUR",
+     "label": "Organization",
+     "score": 0.7836690545082092
+    },
+    {
+     "start": 573,
+     "end": 586,
+     "text": "ancient world",
+     "label": "Location",
+     "score": 0.5413720607757568
+    },
+    {
+     "start": 897,
+     "end": 906,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.9909769296646118
+    },
+    {
+     "start": 799,
+     "end": 824,
+     "text": "local mint establishments",
+     "label": "Organization",
+     "score": 0.5786167979240417
+    },
+    {
+     "start": 1209,
+     "end": 1218,
+     "text": "Macedonia",
+     "label": "Location",
+     "score": 0.9234939217567444
+    },
+    {
+     "start": 1230,
+     "end": 1237,
+     "text": "Babylon",
+     "label": "Location",
+     "score": 0.7917172908782959
+    },
+    {
+     "start": 1416,
+     "end": 1432,
+     "text": "Macedonian mints",
+     "label": "Organization",
+     "score": 0.5422344207763672
+    },
+    {
+     "start": 1594,
+     "end": 1614,
+     "text": "Peloponnesian issues",
+     "label": "Work",
+     "score": 0.32870998978614807
+    },
+    {
+     "start": 1770,
+     "end": 1787,
+     "text": "Attic tetradrachm",
+     "label": "Work",
+     "score": 0.43553635478019714
+    },
+    {
+     "start": 1698,
+     "end": 1709,
+     "text": "die-cutters",
+     "label": "Organization",
+     "score": 0.6049005389213562
+    },
+    {
+     "start": 1811,
+     "end": 1850,
+     "text": "contemporary gold staters and distaters",
+     "label": "Organization",
+     "score": 0.4732097387313843
+    },
+    {
+     "start": 1874,
+     "end": 1878,
+     "text": "mint",
+     "label": "Location",
+     "score": 0.4202037453651428
+    },
+    {
+     "start": 1929,
+     "end": 1932,
+     "text": "art",
+     "label": "Work",
+     "score": 0.6198785901069641
+    },
+    {
+     "start": 1942,
+     "end": 1961,
+     "text": "larger tetradrachms",
+     "label": "Work",
+     "score": 0.4230839014053345
+    }
+   ],
+   "44": [
+    {
+     "start": 50,
+     "end": 67,
+     "text": "Attic tetradrachm",
+     "label": "Work",
+     "score": 0.3523937463760376
+    },
+    {
+     "start": 1077,
+     "end": 1086,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.9868320226669312
+    },
+    {
+     "start": 262,
+     "end": 282,
+     "text": "Hellespontine region",
+     "label": "Location",
+     "score": 0.8675774335861206
+    },
+    {
+     "start": 375,
+     "end": 380,
+     "text": "Caria",
+     "label": "Location",
+     "score": 0.30478808283805847
+    },
+    {
+     "start": 385,
+     "end": 390,
+     "text": "Lydia",
+     "label": "Location",
+     "score": 0.7765638828277588
+    },
+    {
+     "start": 456,
+     "end": 470,
+     "text": "Ionian artists",
+     "label": "Organization",
+     "score": 0.5105937123298645
+    },
+    {
+     "start": 476,
+     "end": 484,
+     "text": "Heracles",
+     "label": "Person",
+     "score": 0.9235450625419617
+    },
+    {
+     "start": 620,
+     "end": 624,
+     "text": "Zeus",
+     "label": "Person",
+     "score": 0.9195591807365417
+    },
+    {
+     "start": 671,
+     "end": 684,
+     "text": "gem engraving",
+     "label": "Work",
+     "score": 0.44025054574012756
+    },
+    {
+     "start": 845,
+     "end": 877,
+     "text": "Cilician and North Syrian issues",
+     "label": "Work",
+     "score": 0.32205888628959656
+    },
+    {
+     "start": 966,
+     "end": 973,
+     "text": "Mazaeus",
+     "label": "Person",
+     "score": 0.8500458598136902
+    },
+    {
+     "start": 984,
+     "end": 1001,
+     "text": "Persian governors",
+     "label": "Organization",
+     "score": 0.555941104888916
+    },
+    {
+     "start": 1134,
+     "end": 1150,
+     "text": "Island of Cyprus",
+     "label": "Location",
+     "score": 0.761570394039154
+    },
+    {
+     "start": 1279,
+     "end": 1289,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.8778079152107239
+    },
+    {
+     "start": 1310,
+     "end": 1317,
+     "text": "Cilicia",
+     "label": "Location",
+     "score": 0.7567093968391418
+    },
+    {
+     "start": 1382,
+     "end": 1391,
+     "text": "Phoenicia",
+     "label": "Location",
+     "score": 0.7724646925926208
+    }
+   ],
+   "45": [
+    {
+     "start": 124,
+     "end": 134,
+     "text": "Asia Minor",
+     "label": "Location",
+     "score": 0.9455873370170593
+    },
+    {
+     "start": 155,
+     "end": 162,
+     "text": "Cilicia",
+     "label": "Location",
+     "score": 0.6652063727378845
+    },
+    {
+     "start": 227,
+     "end": 236,
+     "text": "Phoenicia",
+     "label": "Location",
+     "score": 0.7755205631256104
+    },
+    {
+     "start": 340,
+     "end": 358,
+     "text": "Alexandrine issues",
+     "label": "Work",
+     "score": 0.734908401966095
+    },
+    {
+     "start": 473,
+     "end": 489,
+     "text": "Phoenician mints",
+     "label": "Organization",
+     "score": 0.5059848427772522
+    },
+    {
+     "start": 495,
+     "end": 509,
+     "text": "Aradian issues",
+     "label": "Work",
+     "score": 0.6285648941993713
+    },
+    {
+     "start": 1734,
+     "end": 1740,
+     "text": "Byblus",
+     "label": "Location",
+     "score": 0.9680413603782654
+    },
+    {
+     "start": 629,
+     "end": 639,
+     "text": "local king",
+     "label": "Person",
+     "score": 0.3859722316265106
+    },
+    {
+     "start": 651,
+     "end": 666,
+     "text": "Sidonian issues",
+     "label": "Work",
+     "score": 0.5545048713684082
+    },
+    {
+     "start": 739,
+     "end": 754,
+     "text": "reigning prince",
+     "label": "Person",
+     "score": 0.6283835172653198
+    },
+    {
+     "start": 961,
+     "end": 971,
+     "text": "Alexandria",
+     "label": "Location",
+     "score": 0.8454180359840393
+    },
+    {
+     "start": 978,
+     "end": 987,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.6531656980514526
+    },
+    {
+     "start": 998,
+     "end": 1005,
+     "text": "Babylon",
+     "label": "Location",
+     "score": 0.8369534611701965
+    },
+    {
+     "start": 1149,
+     "end": 1155,
+     "text": "Persia",
+     "label": "Location",
+     "score": 0.9100566506385803
+    },
+    {
+     "start": 1157,
+     "end": 1168,
+     "text": "Mesopotamia",
+     "label": "Location",
+     "score": 0.9057588577270508
+    },
+    {
+     "start": 1170,
+     "end": 1175,
+     "text": "Syria",
+     "label": "Location",
+     "score": 0.9111900925636292
+    },
+    {
+     "start": 1254,
+     "end": 1259,
+     "text": "Egypt",
+     "label": "Location",
+     "score": 0.7315773367881775
+    },
+    {
+     "start": 1674,
+     "end": 1695,
+     "text": "eastern Mediterranean",
+     "label": "Location",
+     "score": 0.44449037313461304
+    },
+    {
+     "start": 1742,
+     "end": 1755,
+     "text": "Berytus Sidon",
+     "label": "Location",
+     "score": 0.950795590877533
+    },
+    {
+     "start": 1757,
+     "end": 1760,
+     "text": "Ake",
+     "label": "Location",
+     "score": 0.9410666823387146
+    },
+    {
+     "start": 1762,
+     "end": 1768,
+     "text": "Citium",
+     "label": "Location",
+     "score": 0.942669153213501
+    },
+    {
+     "start": 1770,
+     "end": 1777,
+     "text": "Amathus",
+     "label": "Location",
+     "score": 0.9565711617469788
+    }
+   ],
+   "46": [
+    {
+     "start": 58,
+     "end": 79,
+     "text": "eastern Mediterranean",
+     "label": "Location",
+     "score": 0.31016725301742554
+    },
+    {
+     "start": 118,
+     "end": 124,
+     "text": "Byblus",
+     "label": "Location",
+     "score": 0.9392016530036926
+    },
+    {
+     "start": 126,
+     "end": 139,
+     "text": "Berytus Sidon",
+     "label": "Location",
+     "score": 0.8530076742172241
+    },
+    {
+     "start": 141,
+     "end": 144,
+     "text": "Ake",
+     "label": "Location",
+     "score": 0.858594536781311
+    },
+    {
+     "start": 146,
+     "end": 152,
+     "text": "Citium",
+     "label": "Location",
+     "score": 0.8554474115371704
+    },
+    {
+     "start": 154,
+     "end": 161,
+     "text": "Amathus",
+     "label": "Location",
+     "score": 0.8892958760261536
+    },
+    {
+     "start": 1264,
+     "end": 1273,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.9893956780433655
+    },
+    {
+     "start": 1004,
+     "end": 1013,
+     "text": "Phoenicia",
+     "label": "Location",
+     "score": 0.8480358719825745
+    },
+    {
+     "start": 1018,
+     "end": 1024,
+     "text": "Cyprus",
+     "label": "Location",
+     "score": 0.8794985413551331
+    },
+    {
+     "start": 1346,
+     "end": 1375,
+     "text": "imperially appointed officers",
+     "label": "Organization",
+     "score": 0.4372486174106598
+    },
+    {
+     "start": 1384,
+     "end": 1400,
+     "text": "provincial mints",
+     "label": "Organization",
+     "score": 0.4194762110710144
+    },
+    {
+     "start": 1431,
+     "end": 1449,
+     "text": "central government",
+     "label": "Organization",
+     "score": 0.6711368560791016
+    },
+    {
+     "start": 1508,
+     "end": 1514,
+     "text": "empire",
+     "label": "Organization",
+     "score": 0.3252999484539032
+    }
+   ],
+   "47": [
+    {
+     "start": 47,
+     "end": 65,
+     "text": "central government",
+     "label": "Organization",
+     "score": 0.6139271855354309
+    },
+    {
+     "start": 93,
+     "end": 101,
+     "text": "province",
+     "label": "Location",
+     "score": 0.6211697459220886
+    },
+    {
+     "start": 846,
+     "end": 852,
+     "text": "empire",
+     "label": "Organization",
+     "score": 0.6265770792961121
+    },
+    {
+     "start": 1066,
+     "end": 1070,
+     "text": "mint",
+     "label": "Organization",
+     "score": 0.4841642677783966
+    },
+    {
+     "start": 1033,
+     "end": 1049,
+     "text": "Greek magistrate",
+     "label": "Person",
+     "score": 0.7614947557449341
+    },
+    {
+     "start": 1410,
+     "end": 1423,
+     "text": "ancient world",
+     "label": "Location",
+     "score": 0.33970677852630615
+    }
+   ],
+   "48": [
+    {
+     "start": 0,
+     "end": 6,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.4712728261947632
+    },
+    {
+     "start": 151,
+     "end": 155,
+     "text": "mint",
+     "label": "Organization",
+     "score": 0.30319690704345703
+    },
+    {
+     "start": 756,
+     "end": 765,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.9531441330909729
+    },
+    {
+     "start": 608,
+     "end": 638,
+     "text": "The present series of articles",
+     "label": "Work",
+     "score": 0.4129045307636261
+    }
+   ],
+   "49": [
+    {
+     "start": 103,
+     "end": 112,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.4471176564693451
+    },
+    {
+     "start": 606,
+     "end": 639,
+     "text": "Les Monnaies d\u2019Alexandre le Grand",
+     "label": "Work",
+     "score": 0.49659064412117004
+    },
+    {
+     "start": 641,
+     "end": 651,
+     "text": "Copenhagen",
+     "label": "Location",
+     "score": 0.9344130158424377
+    },
+    {
+     "start": 733,
+     "end": 746,
+     "text": "M\u00fcller\u2019s work",
+     "label": "Work",
+     "score": 0.5099143981933594
+    },
+    {
+     "start": 852,
+     "end": 858,
+     "text": "Tarsus",
+     "label": "Location",
+     "score": 0.9418760538101196
+    },
+    {
+     "start": 860,
+     "end": 870,
+     "text": "Myriandrus",
+     "label": "Location",
+     "score": 0.8365253806114197
+    },
+    {
+     "start": 872,
+     "end": 877,
+     "text": "Sidon",
+     "label": "Location",
+     "score": 0.9178932309150696
+    },
+    {
+     "start": 883,
+     "end": 886,
+     "text": "Ake",
+     "label": "Person",
+     "score": 0.630651593208313
+    },
+    {
+     "start": 950,
+     "end": 958,
+     "text": "M\u00fcller\u2019s",
+     "label": "Person",
+     "score": 0.46815186738967896
+    },
+    {
+     "start": 1893,
+     "end": 1897,
+     "text": "mint",
+     "label": "Organization",
+     "score": 0.35454440116882324
+    }
+   ],
+   "50": [
+    {
+     "start": 0,
+     "end": 6,
+     "text": "Newell",
+     "label": "Person",
+     "score": 0.6639599204063416
+    },
+    {
+     "start": 1084,
+     "end": 1092,
+     "text": "Demanhur",
+     "label": "Organization",
+     "score": 0.8787729740142822
+    },
+    {
+     "start": 421,
+     "end": 433,
+     "text": "former owner",
+     "label": "Person",
+     "score": 0.5532984137535095
+    },
+    {
+     "start": 456,
+     "end": 461,
+     "text": "earth",
+     "label": "Location",
+     "score": 0.45404133200645447
+    },
+    {
+     "start": 1446,
+     "end": 1452,
+     "text": "writer",
+     "label": "Person",
+     "score": 0.39714208245277405
+    }
+   ],
+   "51": [
+    {
+     "start": 27,
+     "end": 35,
+     "text": "DEMANHUR",
+     "label": "Organization",
+     "score": 0.6371317505836487
+    },
+    {
+     "start": 369,
+     "end": 378,
+     "text": "provinces",
+     "label": "Location",
+     "score": 0.4973065257072449
+    },
+    {
+     "start": 857,
+     "end": 866,
+     "text": "Alexander",
+     "label": "Person",
+     "score": 0.9335780739784241
+    },
+    {
+     "start": 998,
+     "end": 1006,
+     "text": "Heracles",
+     "label": "Person",
+     "score": 0.9052618741989136
+    },
+    {
+     "start": 1163,
+     "end": 1167,
+     "text": "Zeus",
+     "label": "Person",
+     "score": 0.9389910697937012
+    },
+    {
+     "start": 1547,
+     "end": 1560,
+     "text": "certain mints",
+     "label": "Organization",
+     "score": 0.32493942975997925
+    },
+    {
+     "start": 1604,
+     "end": 1616,
+     "text": "kingly title",
+     "label": "Person",
+     "score": 0.5304444432258606
+    },
+    {
+     "start": 1713,
+     "end": 1722,
+     "text": "catalogue",
+     "label": "Work",
+     "score": 0.3108983039855957
+    }
+   ]
+  }
+ },
+ "seconds": 45
+}

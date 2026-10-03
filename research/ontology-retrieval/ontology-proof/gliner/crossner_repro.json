@@ -1,0 +1,86 @@
+{
+ "data": "/private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/fb313319-b1ca-4a29-af76-8521f1407726/scratchpad/gliner/crossner/iuie_ai_test.parquet",
+ "sentences": 431,
+ "labels": [
+  "algorithm",
+  "conference",
+  "else",
+  "product",
+  "task",
+  "field",
+  "metrics",
+  "organization",
+  "researcher",
+  "program language",
+  "country",
+  "location",
+  "person",
+  "university"
+ ],
+ "gold_entities": 1804,
+ "published": {
+  "f1": 50.7,
+  "source": "arXiv 2311.08526 Table 1, GLiNER-S, CrossNER AI; shown on the urchade/gliner_small-v2.1 model card"
+ },
+ "arms": {
+  "A-official": {
+   "f1": 52.58,
+   "detail": "P: 60.65%\tR: 46.40%\tF1: 52.58%\n"
+  },
+  "A-raw": {
+   "tp": 835,
+   "pred": 1377,
+   "gold": 1804,
+   "p": 60.64,
+   "r": 46.29,
+   "f1": 52.5
+  },
+  "B-raw": {
+   "tp": 835,
+   "pred": 1377,
+   "gold": 1804,
+   "p": 60.64,
+   "r": 46.29,
+   "f1": 52.5,
+   "spans_differing_from_A_raw": 0,
+   "onnx_vs_torch_max_abs_logit_diff": 0.000156402587890625,
+   "batches_compared": 54
+  },
+  "C-seampost": {
+   "tp": 754,
+   "pred": 1144,
+   "gold": 1804,
+   "p": 65.91,
+   "r": 41.8,
+   "f1": 51.15
+  },
+  "C-seampost-thr0.5": {
+   "tp": 822,
+   "pred": 1340,
+   "gold": 1804,
+   "p": 61.34,
+   "r": 45.57,
+   "f1": 52.29
+  },
+  "D-seamlabels": {
+   "tp": 209,
+   "pred": 665,
+   "gold": 1804,
+   "p": 31.43,
+   "r": 11.59,
+   "f1": 16.93,
+   "gold_of_types_it_can_name": 251
+  }
+ },
+ "tokenizer_parity": {
+  "texts": 100,
+  "differing": 0,
+  "example": null
+ },
+ "verdict": {
+  "seam_onnx_minus_published": 1.8,
+  "reference_minus_published": 1.88,
+  "within_2": true
+ },
+ "seconds": 113
+}
