@@ -80,11 +80,11 @@
 48898	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
 115	ingest/crates/sovereign-authoring-harness::tests
-6428	ingest/crates/sovereign-enrichment-build
-1601	ingest/crates/sovereign-enrichment-build::tests
+6250	ingest/crates/sovereign-enrichment-build
+1278	ingest/crates/sovereign-enrichment-build::tests
 305	ingest/crates/sovereign-enrichment-catalog
 370	ingest/crates/sovereign-enrichment-catalog::tests
-29090	ingest/crates/sovereign-pipeline
+29117	ingest/crates/sovereign-pipeline
 4925	ingest/crates/sovereign-pipeline::tests
 3837	ingest/crates/sovereign-recipe-author
 2428	ingest/crates/sovereign-recipe-author::tests
@@ -131,8 +131,8 @@
 480	shared/crates/mesh-join-vocab::tests
 611	shared/crates/mesh-reach
 667	shared/crates/mesh-reach::tests
-3117	shared/crates/oicp-client
-1275	shared/crates/oicp-client::tests
+3220	shared/crates/oicp-client
+1328	shared/crates/oicp-client::tests
 5225	shared/crates/oicp-types
 2553	shared/crates/oicp-types::tests
 266	shared/crates/oplog
@@ -142,8 +142,8 @@
 82	shared/crates/serving-policy-core::tests
 1193	shared/crates/sovereign-cli-base
 309	shared/crates/sovereign-cli-base::tests
-19043	shared/crates/sovereign-contracts
-8590	shared/crates/sovereign-contracts::tests
+19060	shared/crates/sovereign-contracts
+8647	shared/crates/sovereign-contracts::tests
 25	shared/crates/sovereign-peer-wire
 27	shared/crates/sovereign-time
 13	shared/crates/sovereign-time::tests
