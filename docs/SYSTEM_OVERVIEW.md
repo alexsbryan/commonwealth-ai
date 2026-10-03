@@ -571,7 +571,7 @@ question the pipeline asks about a type is a method on the resolved
 
 **Hosted chat models on the atlas path.**
 - **Resolution.** A `provider:model` chat model resolves through `sovereign-enrichment-build::providers` against `~/.config/sovereign/providers.toml`. The `openai-compatible` and `anthropic` dialects live in `inference_client/wire.rs`.
-- **Consent.** A provider that is not this client's own daemon passes `egress::verify` first, and that gate is default-deny. The grant is the run's `--consent <class>` (`svrn-ingest ingest`, `enrich build`). It reaches child processes as `SVRNMESH_EGRESS_CONSENT` and is read once, at `DaemonInferenceClient::from_enrich_config`.
+- **Consent.** Every dispatch passes `egress::verify` first, and only this client's own daemon on loopback (`oicp_client::endpoint_is_loopback`) is Local. Any other endpoint, including a configured daemon base on another host or a provider on localhost that may relay to a vendor, faces a gate that is default-deny. The grant is the run's `--consent <class>` (`svrn-ingest ingest`, `enrich build`). It reaches child processes as `SVRNMESH_EGRESS_CONSENT` and is read once, at `DaemonInferenceClient::from_enrich_config`.
 - **Structured output** is chosen per provider: `json-schema`, `json-object`, or a tool mode. On an `openai-compatible` host, a tool mode is OpenAI function calling. That is what DeepSeek needs: it rejects `json_schema` and enforces no schema under `json_object`.
 
 `Summary` is the twelfth atom kind and the only one whose `AtomType::grain` is

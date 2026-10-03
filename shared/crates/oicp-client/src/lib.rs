@@ -1541,32 +1541,8 @@ pub struct SplitInferenceProvider {
     served: Option<sovereign_contracts::engine_state::ServedSelf>,
 }
 
-/// Does this `/v1` endpoint point at something on this machine?
-///
-/// Host-only, and deliberately conservative: anything we cannot parse or do not
-/// recognise as loopback counts as OFF-box. A false "on-box" reading would let
-/// a `local_only` turn cross the network, which is the failure this whole check
-/// exists to prevent — so the unknown case must fail toward refusal (§18.3).
-fn endpoint_is_loopback(endpoint: &str) -> bool {
-    let rest = endpoint
-        .strip_prefix("http://")
-        .or_else(|| endpoint.strip_prefix("https://"))
-        .unwrap_or(endpoint);
-    let authority = rest.split('/').next().unwrap_or("");
-    // Strip the port. IPv6 literals arrive bracketed (`[::1]:9741`).
-    let host = if let Some(close) = authority.find(']') {
-        authority.get(1..close).unwrap_or("")
-    } else {
-        authority.split(':').next().unwrap_or("")
-    };
-    matches!(host, "localhost" | "127.0.0.1" | "::1")
-        || host.starts_with("127.")
-        || host.eq_ignore_ascii_case("ip6-localhost")
-}
-
-// In a sibling file for lib.rs's arch-gate ceiling; the names are unchanged.
-#[cfg(test)]
-mod loopback_tests;
+mod loopback;
+pub use loopback::endpoint_is_loopback;
 
 impl SplitInferenceProvider {
     /// Build the daemon-backed pair from an explicit context window and embed

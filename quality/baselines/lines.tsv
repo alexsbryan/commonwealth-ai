@@ -3,9 +3,9 @@
 #   cargo run -p xtask -- size-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
-25221	bench/crates/sovereign-cli-bench
+25218	bench/crates/sovereign-cli-bench
 5172	bench/crates/sovereign-cli-bench::tests
-8540	bench/crates/sovereign-eval
+8537	bench/crates/sovereign-eval
 4503	bench/crates/sovereign-eval::tests
 4	bench/lanes/agent-coding/problems/1.1-reverse-string/scaffold
 13	bench/lanes/agent-coding/problems/1.1-reverse-string/scaffold::tests
@@ -56,7 +56,7 @@
 1297	code/crates/corpus-engine-archaeology
 582	code/crates/corpus-engine-archaeology::tests
 4979	code/crates/corpus-engine-notes
-5874	code/crates/corpus-engine-notes::tests
+5868	code/crates/corpus-engine-notes::tests
 3459	code/crates/corpus-engine-watchers
 825	code/crates/corpus-engine-watchers::tests
 6931	code/crates/sovereign-agent-bench
@@ -65,7 +65,7 @@
 1750	code/crates/sovereign-agent-tools::tests
 27174	code/crates/sovereign-cli-dev
 7130	code/crates/sovereign-cli-dev::tests
-11979	code/crates/sovereign-code
+11976	code/crates/sovereign-code
 6877	code/crates/sovereign-code::tests
 5083	code/crates/sovereign-tdd
 4025	code/crates/sovereign-tdd::tests
@@ -80,11 +80,11 @@
 48903	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
 115	ingest/crates/sovereign-authoring-harness::tests
-6615	ingest/crates/sovereign-enrichment-build
-1619	ingest/crates/sovereign-enrichment-build::tests
+6583	ingest/crates/sovereign-enrichment-build
+1631	ingest/crates/sovereign-enrichment-build::tests
 305	ingest/crates/sovereign-enrichment-catalog
 370	ingest/crates/sovereign-enrichment-catalog::tests
-29061	ingest/crates/sovereign-pipeline
+29090	ingest/crates/sovereign-pipeline
 4925	ingest/crates/sovereign-pipeline::tests
 3837	ingest/crates/sovereign-recipe-author
 2428	ingest/crates/sovereign-recipe-author::tests
@@ -131,11 +131,11 @@
 480	shared/crates/mesh-join-vocab::tests
 611	shared/crates/mesh-reach
 667	shared/crates/mesh-reach::tests
-2325	shared/crates/oicp-client
-1293	shared/crates/oicp-client::tests
+2624	shared/crates/oicp-client
+1000	shared/crates/oicp-client::tests
 5224	shared/crates/oicp-types
 2545	shared/crates/oicp-types::tests
-317	shared/crates/oplog
+266	shared/crates/oplog
 62	shared/crates/oplog-types
 239	shared/crates/oplog::tests
 676	shared/crates/serving-policy-core
@@ -158,11 +158,11 @@
 14703	svrn/crates/sovereign-cli
 7253	svrn/crates/sovereign-cli-daemon
 1350	svrn/crates/sovereign-cli-daemon::tests
-30629	svrn/crates/sovereign-cli-llm
+30627	svrn/crates/sovereign-cli-llm
 8297	svrn/crates/sovereign-cli-llm::tests
 1074	svrn/crates/sovereign-cli-shared
 677	svrn/crates/sovereign-cli-shared::tests
-5028	svrn/crates/sovereign-cli::tests
+5022	svrn/crates/sovereign-cli::tests
 56332	svrn/crates/sovereign-core
 40759	svrn/crates/sovereign-core::tests
 39155	svrn/crates/sovereign-daemon

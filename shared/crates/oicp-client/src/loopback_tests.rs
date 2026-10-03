@@ -16,15 +16,16 @@ fn loopback_endpoints_are_recognised() {
 }
 
 /// A `terminal`'s entry node, and the shapes that must not be mistaken for
-/// loopback. `localhost.example.com` is the one worth a test: a prefix or
-/// `contains` check would call it local and let a `local_only` turn cross
-/// the network.
+/// loopback. `localhost.example.com` and `127.example.com` are the ones worth
+/// a test: a prefix or `contains` check calls them local and lets a
+/// `local_only` turn, or an enrich chunk, cross the network.
 #[test]
 fn remote_endpoints_are_not_loopback() {
     for e in [
         "http://halo:9741/v1",
         "http://192.168.1.10:9741/v1",
         "http://localhost.example.com:9741/v1",
+        "http://127.example.com:9741/v1",
         "http://notlocalhost:9741/v1",
         "https://10.0.0.4:9741",
     ] {

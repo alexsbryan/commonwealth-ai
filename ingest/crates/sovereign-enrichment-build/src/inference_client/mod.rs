@@ -135,10 +135,12 @@ pub struct DaemonInferenceClient {
     consent: Option<ConsentGrant>,
     /// The derived base URL of THIS client's own daemon (the same
     /// normalization the built-in `local` entry gets — see
-    /// `providers::local_daemon_base`). The gate compares a resolved
-    /// provider's `base_url` against this to tell local-daemon
-    /// dispatch from a remote payload.
-    local_base: String,
+    /// `providers::local_daemon_base`), and only when that daemon is on
+    /// this machine: a dispatch skips the egress gate when its provider's
+    /// `base_url` equals this. `None` when the configured base names another
+    /// host, so `--chat-url https://api.deepseek.com` is a remote payload
+    /// like any other.
+    local_base: Option<String>,
     /// Where `POST /v1/embeddings` goes, which is `base_url` for every
     /// host that serves both models — a daemon, Ollama, vLLM — and a
     /// DIFFERENT process for `llama-server`, which serves one model per
@@ -219,7 +221,8 @@ impl DaemonInferenceClient {
             // surface for enrich.
             payload_custody: Custody::Personal,
             consent: None,
-            local_base: local_daemon_base(&base_url_str),
+            local_base: Some(local_daemon_base(&base_url_str))
+                .filter(|base| oicp_client::endpoint_is_loopback(base)),
             // One host until told otherwise. `with_embed_base_url` is how a
             // caller says the embeddings live somewhere else.
             embed_base_url: base_url_str,
@@ -450,38 +453,48 @@ impl DaemonInferenceClient {
             model_id
         };
         let effective_max_tokens = max_tokens.or(provider.default_max_tokens);
-        // The egress boundary (order deep-research-t2a, R-5): a
-        // resolved provider whose endpoint is NOT this client's own
-        // daemon is a remote payload — it passes the ONE release gate
-        // BEFORE any request is built. Default custody Personal + no
-        // grant → typed refusal naming what was withheld. Dispatch to
-        // the built-in local provider (endpoint == this daemon) never
-        // leaves the machine and skips the gate.
-        if provider.base_url != self.local_base {
-            verify(
-                &EgressPayload {
-                    privacy: SearchPrivacy::External {
-                        provider: match provider.kind {
-                            ProviderKind::Anthropic => "anthropic",
-                            ProviderKind::OpenaiCompatible => "openai-compatible",
-                        },
-                    },
-                    custody: self.payload_custody,
-                    what: "chunk",
-                    target: &provider.name,
-                    detail: &prompt.user,
-                    user_formed: false,
+        // The egress boundary (order deep-research-t2a, R-5): every
+        // dispatch passes the ONE release gate BEFORE any request is
+        // built. Only this client's own on-box daemon is Local; any other
+        // endpoint is External, including a provider on loopback, which
+        // may be a relay to a vendor. Default custody Personal + no grant
+        // → typed refusal naming what was withheld.
+        let on_box = self.local_base.as_deref() == Some(provider.base_url.as_str());
+        tracing::debug!(
+            target: "egress",
+            provider = %provider.name,
+            base_url = %provider.base_url,
+            on_box,
+            "enrich dispatch locality"
+        );
+        let privacy = if on_box {
+            SearchPrivacy::Local
+        } else {
+            SearchPrivacy::External {
+                provider: match provider.kind {
+                    ProviderKind::Anthropic => "anthropic",
+                    ProviderKind::OpenaiCompatible => "openai-compatible",
                 },
-                self.consent.as_ref(),
-            )
-            .map_err(|r| {
-                Error::Safety(format!(
-                    "{r}. To release this corpus's text to `{}`, pass --consent <class> \
-                     (public-web | peer | personal) or set SVRNMESH_EGRESS_CONSENT",
-                    provider.name
-                ))
-            })?;
-        }
+            }
+        };
+        verify(
+            &EgressPayload {
+                privacy,
+                custody: self.payload_custody,
+                what: "chunk",
+                target: &provider.name,
+                detail: &prompt.user,
+                user_formed: false,
+            },
+            self.consent.as_ref(),
+        )
+        .map_err(|r| {
+            Error::Safety(format!(
+                "{r}. To release this corpus's text to `{}` ({}), pass --consent <class> \
+                 (public-web | peer | personal) or set SVRNMESH_EGRESS_CONSENT",
+                provider.name, provider.base_url
+            ))
+        })?;
         match provider.kind {
             ProviderKind::OpenaiCompatible => {
                 self.complete_openai_compatible(

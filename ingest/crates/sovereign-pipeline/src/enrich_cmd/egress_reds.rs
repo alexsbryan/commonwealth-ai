@@ -151,3 +151,43 @@ async fn an_exported_consent_reaches_the_remote_provider_through_from_enrich_con
     );
     assert_eq!(result.expect("released, then answered"), "ok");
 }
+
+/// THE FAILING INPUT: before 2026-10-03 a dispatch counted as local when its
+/// provider's base equalled the client's own daemon base, so pointing that base
+/// itself at a vendor (`--chat-url https://api.deepseek.com` with a bare model
+/// id) sent the chunk with no grant. The refusal now comes before any request
+/// is built, so the unroutable host is never contacted.
+#[tokio::test]
+async fn a_daemon_base_on_another_host_is_a_remote_payload() {
+    let _home = scoped_home();
+    let client =
+        DaemonInferenceClient::new("https://vendor.invalid", "bare-model", "embed").unwrap();
+    let prompt = ChatPrompt::new("Extract the named entities.", "PRIVATE-CORPUS-MARKER");
+
+    let err = tokio::time::timeout(Duration::from_secs(30), client.complete(&prompt))
+        .await
+        .expect("the boundary refuses before any request, so nothing can hang")
+        .expect_err("a chunk bound for another host needs a grant");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("consent") && msg.contains("vendor.invalid"),
+        "the refusal must name the grant and the host it withheld the chunk from: {msg}"
+    );
+}
+
+/// The other side of the same decider: the client's own daemon on loopback is
+/// the one endpoint that needs no grant.
+#[tokio::test]
+async fn the_on_box_daemon_needs_no_grant() {
+    let _home = scoped_home();
+    let (base_url, recorded) = mock_openai_host(CONTENT_OK).await;
+    let client = DaemonInferenceClient::new(&base_url, "bare-model", "embed").unwrap();
+    let prompt = ChatPrompt::new("Extract the named entities.", "PRIVATE-CORPUS-MARKER");
+
+    let out = tokio::time::timeout(Duration::from_secs(30), client.complete(&prompt))
+        .await
+        .expect("complete must not hang")
+        .expect("the on-box daemon is never gated");
+    assert_eq!(out, "ok");
+    assert_eq!(recorded.lock().unwrap().len(), 1);
+}
