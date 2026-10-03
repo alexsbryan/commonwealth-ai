@@ -264,6 +264,14 @@ pub struct RemoteApiProvider {
     /// path bit-identical to the embedded one. See
     /// `ModelsManifest::embed_query_instruction`.
     query_instruction: String,
+    /// How this provider's host is asked for schema-shaped output.
+    structured_output_mode: StructuredOutputMode,
+    /// False when requests through this provider originate here instead of
+    /// being forwarded for a peer; see [`Self::originating`].
+    forwards: bool,
+    /// Operator-set vendor fields merged into every body last (OpenRouter's
+    /// `provider` routing, OpenAI's `seed`).
+    extra_params: Option<serde_json::Value>,
 }
 
 /// Default request timeout for `RemoteApiProvider`. Matches the
@@ -384,12 +392,22 @@ impl RemoteApiProvider {
             .timeout(timeout)
             .build()
             .unwrap_or_default();
+        Self::with_client(endpoint, client, api_key, model_id, context_size)
+    }
 
+    /// Every constructor's one field list, so a new field has one default.
+    fn assemble(
+        client: reqwest::Client,
+        endpoint: EndpointRef,
+        api_key: Option<String>,
+        model_id: &str,
+        context_size: u32,
+    ) -> Self {
         Self {
             // Off: see the field docs — a peer shed is a routing signal, not a wait.
             wait_out_sheds: false,
             client,
-            endpoint: EndpointRef::Static(endpoint.trim_end_matches('/').to_string()),
+            endpoint,
             api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
@@ -402,6 +420,9 @@ impl RemoteApiProvider {
             // `with_query_instruction`; chat providers and document-embed
             // (`embed`, which ignores the prefix) leave it empty.
             query_instruction: String::new(),
+            structured_output_mode: StructuredOutputMode::default(),
+            forwards: true,
+            extra_params: None,
         }
     }
 
@@ -421,19 +442,8 @@ impl RemoteApiProvider {
             .timeout(DEFAULT_TIMEOUT)
             .build()
             .unwrap_or_default();
-        Self {
-            // Off: see the field docs — a peer shed is a routing signal, not a wait.
-            wait_out_sheds: false,
-            client,
-            endpoint: EndpointRef::Dynamic(resolver),
-            api_key,
-            model_id: model_id.to_string(),
-            model_id_is_placeholder: false,
-            carries_turn_admission: false,
-            node_id: None,
-            context_size,
-            query_instruction: String::new(),
-        }
+        let endpoint = EndpointRef::Dynamic(resolver);
+        Self::assemble(client, endpoint, api_key, model_id, context_size)
     }
 
     /// What this provider is bound to — an address, or the identity behind one.
@@ -457,24 +467,42 @@ impl RemoteApiProvider {
         model_id: &str,
         context_size: u32,
     ) -> Self {
-        Self {
-            // Off: see the field docs — a peer shed is a routing signal, not a wait.
-            wait_out_sheds: false,
-            client,
-            endpoint: EndpointRef::Static(endpoint.trim_end_matches('/').to_string()),
-            api_key: Some(bearer),
-            model_id: model_id.to_string(),
-            model_id_is_placeholder: false,
-            carries_turn_admission: false,
-            node_id: None,
-            context_size,
-            // The embed query-instruction prefix is model-family knowledge
-            // that this pure HTTP client no longer computes. Callers that
-            // need it (the embed slot of `SplitInferenceProvider`) set it via
-            // `with_query_instruction`; chat providers and document-embed
-            // (`embed`, which ignores the prefix) leave it empty.
-            query_instruction: String::new(),
-        }
+        Self::with_client(endpoint, client, Some(bearer), model_id, context_size)
+    }
+
+    /// Construct with a pre-built `reqwest::Client` (an egress-built one, say)
+    /// and the bearer when the host wants one.
+    pub fn with_client(
+        endpoint: &str,
+        client: reqwest::Client,
+        api_key: Option<String>,
+        model_id: &str,
+        context_size: u32,
+    ) -> Self {
+        let endpoint = EndpointRef::Static(endpoint.trim_end_matches('/').to_string());
+        Self::assemble(client, endpoint, api_key, model_id, context_size)
+    }
+
+    /// Spell `structured_output` the way this provider's host accepts.
+    pub fn with_structured_output_mode(mut self, mode: StructuredOutputMode) -> Self {
+        self.structured_output_mode = mode;
+        self
+    }
+
+    /// Requests through this provider ORIGINATE here (an enrich run calling
+    /// its own daemon or a vendor), they are not forwards for a peer: the
+    /// caller's OICP envelope crosses verbatim, no hop is spent and none is
+    /// synthesized. A forward spends one, and an unstated budget is one hop,
+    /// so a forwarded enrich call would reach the daemon unable to use a peer.
+    pub fn originating(mut self) -> Self {
+        self.forwards = false;
+        self
+    }
+
+    /// Merge these vendor fields into every request body, last.
+    pub fn with_extra_params(mut self, extra: Option<serde_json::Value>) -> Self {
+        self.extra_params = extra;
+        self
     }
 
     /// Identify this node to the remote as a MESH PEER, by stamping
@@ -687,7 +715,13 @@ impl RemoteApiProvider {
         // unbounded. The desktop avoids that structurally by handing peers its
         // raw provider (sovereign-desktop state.rs); the CLI daemon installs
         // the mesh-routing provider and had no equivalent until this.
-        let oicp_val = if let Some(ref oicp) = request.oicp {
+        let oicp_val = if !self.forwards {
+            // Not a forward (`originating`): the caller's envelope or none.
+            request
+                .oicp
+                .as_ref()
+                .and_then(|o| serde_json::to_value(o).ok())
+        } else if let Some(ref oicp) = request.oicp {
             serde_json::to_value(oicp.decremented_for_forward()).ok()
         } else if model_field.is_empty() {
             // Canonical Speed→LatencyClass map (SLOT_POLICY §8). Slow
@@ -741,54 +775,13 @@ impl RemoteApiProvider {
             body["oicp"] = v;
         }
 
-        // Forward the per-request `enable_thinking` toggle as
-        // `chat_template_kwargs: { enable_thinking: <bool> }` —
-        // the convention vLLM and llama-server both accept on
-        // OpenAI-compatible endpoints. Without this the daemon
-        // falls through to its hardcoded default
-        // (`embedded.rs::apply_chat_template_oaicompat` historically
-        // pinned `enable_thinking: false`). With it set explicitly
-        // by the caller, the relational/witness path can flip
-        // thinking ON so the chat template wraps the model's
-        // planning trace in `<think>...</think>` — and the
-        // post-process `strip_think_blocks` (eval-side runner +
-        // production runtime where wired) can drop it cleanly.
-        // Daemon-side unwrap: `inference_adapter::extract_enable_thinking`.
-        if let Some(enable) = request.enable_thinking {
-            body["chat_template_kwargs"] = serde_json::json!({
-                "enable_thinking": enable,
-            });
-        }
-
-        // Forward `think_budget` as the Commonwealth extension field the
-        // daemon's `resolve_think_budget` reads. Without this the
-        // runtime's `think_budget: Some(0)` (FastFocused synthesis, gap
-        // check, router — every "don't think, just answer" call) dies at
-        // the HTTP boundary and the engine-side thinking suppression in
-        // `format_prompt` never engages: the chat template pre-opens
-        // `<think>` and the model spends its whole `max_tokens` budget
-        // on CoT (2026-06-10 fabrication burn-down — chaos honesty 0.45,
-        // every fast-slot KQ answer was truncated raw deliberation).
-        if let Some(tb) = request.think_budget {
-            body["think_budget"] = serde_json::json!(tb);
-        }
-
-        // Forward `structured_output` to the daemon as the OpenAI
-        // `response_format: {type: "json_schema", json_schema: {...}}`
-        // envelope. Without this, the schema is dropped at the HTTP
-        // boundary and the daemon's grammar-constraint layer never
-        // sees it (silent fallback to free-form sampling). The daemon
-        // unwraps it back into `request.structured_output` via
-        // `inference_adapter::extract_response_format_schema`.
-        if let Some(schema) = &request.structured_output {
-            body["response_format"] = serde_json::json!({
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "structured",
-                    "schema": schema,
-                },
-            });
-        }
+        // `enable_thinking` → `chat_template_kwargs` (vLLM, llama-server;
+        // daemon-side `inference_adapter::extract_enable_thinking`), and
+        // `think_budget` in the daemon's and DeepSeek's spellings. Without the
+        // budget the runtime's `think_budget: Some(0)` (FastFocused synthesis,
+        // gap check, router) died at this boundary and every fast-slot answer
+        // was truncated raw deliberation (2026-06-10 fabrication burn-down).
+        chat_wire::write_thinking(&mut body, request.think_budget, request.enable_thinking);
 
         // Forward `lark_grammar` to the daemon as a sovereign-specific
         // extension field. The daemon's inference_adapter unwraps it
@@ -860,6 +853,15 @@ impl RemoteApiProvider {
             body["tool_choice"] = tc.clone();
         }
 
+        // `structured_output` in this host's spelling (`chat_wire`). Without
+        // it the schema was dropped at the HTTP boundary and the daemon's
+        // grammar layer never saw it; the daemon unwraps `response_format` via
+        // `inference_adapter::extract_response_format_schema`. After the tool
+        // catalog, so a tool-mode host gets the schema beside the caller's tools.
+        if let Some(schema) = &request.structured_output {
+            chat_wire::write_structured_output(&mut body, schema, self.structured_output_mode);
+        }
+
         // The sampler and constraint fields the chat wire already carries
         // and serve's `build_completion_request` already reads. Unwritten,
         // each was dropped on every turn that crossed this client
@@ -886,7 +888,13 @@ impl RemoteApiProvider {
         if let Some(ids) = &request.evidence_id_allowlist {
             body["evidence_id_allowlist"] = serde_json::json!(ids);
         }
-
+        // Operator-set vendor fields, last, so they can override.
+        if let (Some(extra), Some(obj)) = (
+            self.extra_params.as_ref().and_then(|e| e.as_object()),
+            body.as_object_mut(),
+        ) {
+            obj.extend(extra.iter().map(|(k, v)| (k.clone(), v.clone())));
+        }
         body
     }
 
@@ -1108,6 +1116,9 @@ impl InferenceProvider for RemoteApiProvider {
         let start = Instant::now();
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let body = self.build_request(request);
+        // The whole body, so a run can be replayed by hand (§9.1). Debug: it
+        // carries the full prompt and any schema.
+        tracing::debug!(target: "oicp_client", %url, %body, "chat request body");
 
         let response = self
             .send_honouring_shed(
@@ -1541,6 +1552,8 @@ pub struct SplitInferenceProvider {
     served: Option<sovereign_contracts::engine_state::ServedSelf>,
 }
 
+mod chat_wire;
+pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
 mod loopback;
 pub use loopback::endpoint_is_loopback;
 

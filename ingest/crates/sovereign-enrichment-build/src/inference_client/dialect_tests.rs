@@ -63,7 +63,12 @@ async fn tool_use_forced_sends_the_schema_as_a_forced_function_and_reads_its_arg
         "the schema rides the tool, not a response_format: {body}"
     );
     assert_eq!(body["tools"][0]["type"], "function");
-    assert_eq!(body["tools"][0]["function"]["parameters"], schema());
+    // The schema, carrying its label as the `title` annotation the function
+    // name is folded from.
+    assert_eq!(
+        body["tools"][0]["function"]["parameters"],
+        oicp_client::titled_schema(&schema(), Some("phase 1 (atlas)"))
+    );
     assert_eq!(
         body["tools"][0]["function"]["name"], "phase_1__atlas_",
         "a free-text schema name folds to the function-name alphabet"

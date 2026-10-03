@@ -570,9 +570,9 @@ question the pipeline asks about a type is a method on the resolved
   about the CHUNKER, not a reason to raise the ceiling.
 
 **Hosted chat models on the atlas path.**
-- **Resolution.** A `provider:model` chat model resolves through `sovereign-enrichment-build::providers` against `~/.config/sovereign/providers.toml`. The `openai-compatible` and `anthropic` dialects live in `inference_client/wire.rs`.
+- **Resolution.** A `provider:model` chat model resolves through `sovereign-enrichment-build::providers` against `~/.config/sovereign/providers.toml`. The `anthropic` dialect lives in `inference_client/wire.rs`. The `openai-compatible` one is `oicp_client::RemoteApiProvider` built `originating()` (the caller's OICP envelope crosses verbatim and no forward hop is spent), the same body builder, shed loop and response read as the daemon's mesh hop.
 - **Consent.** Every dispatch passes `egress::verify` first, and only this client's own daemon on loopback (`oicp_client::endpoint_is_loopback`) is Local. Any other endpoint, including a configured daemon base on another host or a provider on localhost that may relay to a vendor, faces a gate that is default-deny. The grant is the run's `--consent <class>` (`svrn-ingest ingest`, `enrich build`). It reaches child processes as `SVRNMESH_EGRESS_CONSENT` and is read once, at `DaemonInferenceClient::from_enrich_config`.
-- **Structured output** is chosen per provider: `json-schema`, `json-object`, or a tool mode. On an `openai-compatible` host, a tool mode is OpenAI function calling. That is what DeepSeek needs: it rejects `json_schema` and enforces no schema under `json_object`.
+- **Structured output** is chosen per provider: `json-schema`, `json-object`, or a tool mode (`oicp_client::StructuredOutputMode`, spelled by `oicp-client/src/chat_wire.rs`). On an `openai-compatible` host, a tool mode is OpenAI function calling, named after the schema's `title`. That is what DeepSeek needs: it rejects `json_schema` and enforces no schema under `json_object`.
 
 `Summary` is the twelfth atom kind and the only one whose `AtomType::grain` is
 `Grain::Summary` — the atlas face of one RAPTOR node. **The walk holds Summary

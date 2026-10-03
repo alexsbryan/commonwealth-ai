@@ -148,25 +148,10 @@ pub enum ProviderKind {
 }
 
 /// How structured output (JSON Schema) is communicated to the
-/// provider. See `ProviderConfig::structured_output_mode` for
-/// per-provider semantics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum StructuredOutputMode {
-    /// `response_format: {type: "json_schema", json_schema: {...}}`.
-    /// Provider enforces the schema (OpenAI, local daemon).
-    JsonSchema,
-    /// `response_format: {type: "json_object"}` — provider guarantees
-    /// valid JSON but no schema enforcement (DeepSeek).
-    JsonObject,
-    /// `tools=[{schema}], tool_choice: "auto"` — Anthropic-shape;
-    /// model voluntarily calls. Works on DeepSeek's Anthropic layer.
-    ToolUseAuto,
-    /// `tools=[{schema}], tool_choice: {type: "tool", name: ...}` —
-    /// Anthropic-shape with forced tool_choice. Maximum adherence;
-    /// not all models support it.
-    ToolUseForced,
-}
+/// provider. One enum for enrich's config and the shared chat builder that
+/// spells it; see `ProviderConfig::structured_output_mode` for per-provider
+/// semantics.
+pub use oicp_client::StructuredOutputMode;
 
 /// Parse a model spec of the form `provider:model_id` or bare
 /// `model_id`. Bare resolves to provider=`local`. Empty model id is

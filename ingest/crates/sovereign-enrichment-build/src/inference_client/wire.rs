@@ -6,20 +6,23 @@
 //! streaming, retry and error mapping. They are the same method twice in two
 //! dialects, so they live together and apart from the client's own lifecycle.
 
-use crate::providers::{
-    local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
-};
+use crate::providers::ResolvedProvider;
 use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::error::{Error, Result};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use oicp_client::{titled_schema, RemoteApiProvider};
+use oicp_types::tool_calls::parse_tool_calls_from_text;
+use oicp_types::{CompletionRequest, InferenceRequirements, LatencyClass};
+use sovereign_contracts::traits::InferenceProvider;
+use std::sync::atomic::Ordering;
 
 use super::DaemonInferenceClient;
 
 impl DaemonInferenceClient {
-    /// Original OpenAI-shape `/v1/chat/completions` dispatch. Kept
-    /// byte-identical to the pre-multi-provider behavior so the
-    /// local daemon path is unchanged.
+    /// OpenAI-shape `/v1/chat/completions` dispatch through the one chat
+    /// builder (`oicp_client::RemoteApiProvider`): the body, the shed loop and
+    /// the response read live there, shared with the daemon's mesh hop. What
+    /// stays here is enrich's own: its request defaults, the heartbeat, the
+    /// token ledger.
     pub(super) async fn complete_openai_compatible(
         &self,
         provider: &ResolvedProvider,
@@ -27,22 +30,6 @@ impl DaemonInferenceClient {
         prompt: &ChatPrompt,
         max_tokens: Option<u32>,
     ) -> Result<String> {
-        // base_url carries the API version (e.g. `.../v1`); dispatcher
-        // only appends the dialect-specific endpoint suffix. This
-        // keeps the convention consistent across vN releases — bump
-        // base_url when a provider ships a v2 endpoint.
-        let url = format!(
-            "{}/chat/completions",
-            provider.base_url.trim_end_matches('/'),
-        );
-        // `think_budget: 0` instructs the daemon to inject `/no_think`
-        // for SystemPromptToken thinking families (Qwen3 / Qwen3.5 /
-        // SmolLM3). The schema constraint already forces JSON
-        // correctness for atlas Phase 1; chain-of-thought tokens are
-        // pure latency cost — Qwen3.5-4B with thinking disabled went
-        // from 60+ s/chapter to ~10 s/chapter on the wiki-tier2-bank
-        // run. Models without SystemPromptToken thinking control
-        // (Gemma 3/4, Llama 3, Phi-4) ignore this field harmlessly.
         // Temperature precedence:
         //   1. per-prompt (composer-attached, atlas phase override)
         //   2. provider default (e.g. anthropic config)
@@ -53,133 +40,59 @@ impl DaemonInferenceClient {
             .or(provider.default_temperature)
             .unwrap_or(0.2);
         // Thinking budget precedence: prompt override → provider
-        // default → 0 (suppress for SystemPromptToken families like
-        // Qwen3/Qwen3.5/SmolLM3 where it costs latency without
-        // benefit at the schema-bound Phase 1).
+        // default → 0. Zero suppresses thinking for SystemPromptToken
+        // families (Qwen3 / Qwen3.5 / SmolLM3): the schema constraint
+        // already forces JSON correctness for atlas Phase 1, so
+        // chain-of-thought is pure latency — Qwen3.5-4B went from 60+
+        // s/chapter to ~10 s/chapter on the wiki-tier2-bank run.
         let think_budget = prompt
             .thinking_tokens
             .or(provider.default_thinking_tokens)
             .unwrap_or(0);
-        let mut body = serde_json::json!({
-            "model": model,
-            "messages": [
-                {"role": "system", "content": prompt.system},
-                {"role": "user", "content": prompt.user},
-            ],
-            "temperature": temperature,
-            "stream": false,
-        });
-        if let Some(obj) = body.as_object_mut() {
-            apply_thinking_controls(obj, think_budget);
-        }
-        if let Some(n) = max_tokens {
-            if let Some(obj) = body.as_object_mut() {
-                obj.insert("max_tokens".into(), serde_json::json!(n));
-            }
-        }
-        // OICP-v0.3 routing: when the composer attached an explicit
-        // `prompt.max_output_tokens` it has opted into hard-gated
-        // claim selection (per spec §2.4). Surface the budget — and
-        // pin latency to Fast so the request lands on a FastShort/
-        // FastLong claim rather than getting deprioritized to a
-        // Normal-latency Slow slot. Composers without an explicit
-        // budget keep the existing model-name routing path.
-        if let Some(mo) = prompt.max_output_tokens {
-            if let Some(obj) = body.as_object_mut() {
-                obj.insert(
-                    "oicp".into(),
-                    serde_json::json!({
-                        // Required by the daemon's request validator
-                        // (oicp-types §1). Without it the request
-                        // 422s before reaching the model — silently
-                        // killing phase1b entity/concept coverage
-                        // passes, which is how MacIntyre / Sandel /
-                        // Walzer leaked through Phase 1 extraction
-                        // even though the coverage prompt was
-                        // designed to catch them.
-                        "oicp_version": "0.3.0",
-                        "max_output_tokens": mo,
-                        "latency_class": "fast",
-                    }),
-                );
-            }
-        }
-        // Structured-output mode is provider-configurable. Default
-        // for OpenAI-compat is `json_schema` (full grammar
-        // enforcement). DeepSeek's chat-completions only honors
-        // `json_object`, so providers configured for DeepSeek set
-        // `structured_output_mode = "json-object"` and we drop the
-        // schema — the prompt itself carries the schema as text and
-        // the post-parser tolerates drift.
-        let mut has_schema = false;
-        let mut via_tool = false;
-        if let Some(schema) = prompt.response_schema.as_ref() {
-            let name = prompt
-                .response_schema_name
-                .as_deref()
-                .unwrap_or("response_schema");
-            use crate::providers::StructuredOutputMode as M;
-            let mode = provider.structured_output_mode;
-            if let Some(obj) = body.as_object_mut() {
-                match mode {
-                    M::JsonSchema => {
-                        obj.insert(
-                            "response_format".into(),
-                            serde_json::json!({
-                                "type": "json_schema",
-                                "json_schema": {"name": name, "schema": schema, "strict": true}
-                            }),
-                        );
-                    }
-                    M::JsonObject => {
-                        obj.insert(
-                            "response_format".into(),
-                            serde_json::json!({"type": "json_object"}),
-                        );
-                    }
-                    // OpenAI function calling: the schema is the one tool's
-                    // `parameters`. On a host with no schema-enforcing
-                    // response_format this is the strongest adherence there
-                    // is. Measured 2026-10-03 on DeepSeek's chat API, which
-                    // answers `json_schema` with 400 "unavailable now": under
-                    // `json_object` 15 of 20 wessex-hoard Phase 1 chapters
-                    // dropped the required `questions_raised`.
-                    M::ToolUseAuto | M::ToolUseForced => {
-                        let fn_name = openai_function_name(name);
-                        let choice = if mode == M::ToolUseForced {
-                            serde_json::json!({"type": "function", "function": {"name": fn_name}})
-                        } else {
-                            serde_json::json!("auto")
-                        };
-                        obj.insert(
-                            "tools".into(),
-                            serde_json::json!([{
-                                "type": "function",
-                                "function": {
-                                    "name": fn_name,
-                                    "description": "Return the structured result.",
-                                    "parameters": schema,
-                                }
-                            }]),
-                        );
-                        obj.insert("tool_choice".into(), choice);
-                        via_tool = true;
-                    }
-                }
-                has_schema = true;
-            }
-        }
-        // Vendor passthroughs merged last, as on the Anthropic path:
-        // OpenRouter's `provider` routing and `reasoning` controls, OpenAI's
-        // `seed`, without a dispatcher change per knob.
-        if let (Some(extra), Some(obj)) = (
-            provider.extra_params.as_ref().and_then(|e| e.as_object()),
-            body.as_object_mut(),
-        ) {
-            for (k, v) in extra {
-                obj.insert(k.clone(), v.clone());
-            }
-        }
+        let mode = provider.structured_output_mode;
+        let has_schema = prompt.response_schema.is_some();
+        let via_tool = has_schema && mode.via_tool();
+        let request = CompletionRequest {
+            prompt: prompt.user.clone(),
+            system_message: Some(prompt.system.clone()),
+            model_id: Some(model.to_string()),
+            temperature: Some(temperature),
+            max_tokens: max_tokens.map(|n| n as usize),
+            think_budget: Some(think_budget as usize),
+            // A zero budget for the chat template too: the one spelling a
+            // bare llama-server reads (`chat_wire::write_thinking`).
+            enable_thinking: (think_budget == 0).then_some(false),
+            // The schema label rides as the schema's `title`, which a
+            // function-call host names the function after.
+            structured_output: prompt
+                .response_schema
+                .as_ref()
+                .map(|s| titled_schema(s, prompt.response_schema_name.as_deref())),
+            // OICP routing: a composer that attached an explicit
+            // `max_output_tokens` has opted into hard-gated claim selection
+            // (§2.4), pinned to Fast so it lands on a FastShort/FastLong claim
+            // rather than a Normal-latency Slow slot. Without the envelope the
+            // phase1b coverage passes 422'd at the daemon's validator, which
+            // is how MacIntyre / Sandel / Walzer leaked through Phase 1.
+            oicp: prompt.max_output_tokens.map(|mo| {
+                InferenceRequirements::new()
+                    .with_latency_class(LatencyClass::Fast)
+                    .with_max_output_tokens(mo)
+            }),
+            ..Default::default()
+        };
+        // Chat only, so the context size is never read on this path.
+        let host = RemoteApiProvider::with_client(
+            &provider.base_url,
+            self.client.clone(),
+            provider.auth_secret.clone(),
+            model,
+            0,
+        )
+        .originating()
+        .waiting_out_sheds()
+        .with_structured_output_mode(mode)
+        .with_extra_params(provider.extra_params.clone());
 
         // Observability: a Phase-1 chat call against the fast slot
         // routinely runs minutes. Without a heartbeat the CLI looks
@@ -215,46 +128,21 @@ impl DaemonInferenceClient {
             })
         };
 
+        // The request body itself is traced at debug by `oicp_client`.
         tracing::info!(
             phase = %phase_label,
             model = %model_label,
             schema = has_schema,
+            mode = ?mode,
             max_tokens = ?max_tokens,
             "inference_client: dispatching /v1/chat/completions"
         );
-        // The whole body, so a run can be replayed by hand and a probe
-        // compared against what the runner actually sent (§9.1). Debug: it
-        // carries the full prompt and schema.
-        tracing::debug!(
-            phase = %phase_label,
-            body = %body,
-            "inference_client: request body"
-        );
-
-        // Bearer auth for remote OpenAI-compatible providers
-        // (OpenAI, OpenRouter, Together, vLLM-with-auth). The local
-        // daemon's `auth_secret` is `None`, so this is a no-op there.
-        let mut request_builder = self.client.post(&url).json(&body);
-        if let Some(secret) = provider.auth_secret.as_deref() {
-            request_builder = request_builder.bearer_auth(secret);
-        }
-        let outcome = send_honouring_shed(&request_builder, "daemon chat", &phase_label)
-            .await
-            .and_then(|(status, text)| {
-                if status.is_success() {
-                    Ok(text)
-                } else {
-                    Err(Error::Serialization(format!(
-                        "daemon chat error {status}: {text}"
-                    )))
-                }
-            });
-
+        let outcome = host.complete(&request).await;
         heartbeat.abort();
 
         let elapsed_ms = started.elapsed().as_millis();
-        let text = match outcome {
-            Ok(t) => t,
+        let resp = match outcome {
+            Ok(r) => r,
             Err(e) => {
                 tracing::warn!(
                     phase = %phase_label,
@@ -263,19 +151,19 @@ impl DaemonInferenceClient {
                     error = %e,
                     "inference_client: /v1/chat/completions failed"
                 );
-                return Err(e);
+                return Err(Error::Serialization(format!(
+                    "chat error from `{}`: {e}",
+                    provider.name
+                )));
             }
         };
-        let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-            Error::Serialization(format!("non-JSON chat response: {e} — body: {text}"))
-        })?;
-        let tool_args = v
-            .pointer("/choices/0/message/tool_calls/0/function/arguments")
-            .and_then(|s| s.as_str());
-        let text_content = v
-            .pointer("/choices/0/message/content")
-            .and_then(|s| s.as_str())
-            .filter(|s| !s.trim().is_empty());
+        // A forced function call comes back as the `<tool_call>` envelope
+        // `oicp_client` renders native calls into; its arguments are the answer.
+        let tool_args = via_tool
+            .then(|| parse_tool_calls_from_text(&resp.text).into_iter().next())
+            .flatten()
+            .map(|call| call.arguments);
+        let text_content = Some(resp.text.as_str()).filter(|s| !s.trim().is_empty());
         let content = match (via_tool, tool_args, text_content) {
             (true, Some(args), _) => args,
             // `tool_choice: auto` lets the model answer in text instead. Use
@@ -287,36 +175,29 @@ impl DaemonInferenceClient {
                     "inference_client: tool offered but the model answered in text; \
                      parsing the text, schema not enforced on this call"
                 );
-                t
+                t.to_string()
             }
-            (false, _, Some(t)) => t,
+            (false, _, Some(t)) => t.to_string(),
             _ => {
                 return Err(Error::Serialization(format!(
-                    "chat response carried neither choices[0].message.content nor a \
-                     tool call: {text}"
+                    "chat response from `{}` carried neither content nor a tool call \
+                     (finish_reason {:?})",
+                    provider.name, resp.finish_reason
                 )))
             }
         };
-        // The answer as the parser will see it, beside the request body logged
-        // above, so a parse failure can be diagnosed from one run (§9.1).
+        // The answer as the parser will see it, beside the request body
+        // `oicp_client` logged, so a parse failure can be diagnosed from one
+        // run (§9.1).
         tracing::debug!(
             phase = %phase_label,
             via_tool,
             content = %content,
             "inference_client: response content"
         );
-        let total_tokens = v
-            .pointer("/usage/total_tokens")
-            .and_then(|n| n.as_u64())
-            .unwrap_or(0);
-        let prompt_tokens = v
-            .pointer("/usage/prompt_tokens")
-            .and_then(|n| n.as_u64())
-            .unwrap_or(0);
-        let completion_tokens = v
-            .pointer("/usage/completion_tokens")
-            .and_then(|n| n.as_u64())
-            .unwrap_or(0);
+        let total_tokens = resp.tokens_used as u64;
+        let prompt_tokens = resp.prompt_tokens as u64;
+        let completion_tokens = resp.completion_tokens.unwrap_or(0) as u64;
         // Phase D2: bump the cumulative ledger. Relaxed ordering is
         // sufficient — we never branch on these counts, just persist
         // them periodically for status display.
@@ -335,19 +216,15 @@ impl DaemonInferenceClient {
         } else {
             0.0
         };
-        // Extract finish_reason from choices[0].finish_reason. Standard
-        // OpenAI shape: "stop" (EOS), "length" (max_tokens), "tool_calls".
-        // Added 2026-05-17 during the SEP-pipeline profiling pass —
-        // distinguishing EOS vs Length is essential for diagnosing
-        // truncated-output failures (we were seeing 361-token completions
-        // with no signal whether the model hit EOS or the daemon clamped
-        // max_tokens). Daemon-side population: see
+        // "stop" (EOS), "length" (max_tokens), "tool_calls". Distinguishing
+        // EOS from Length is what diagnoses truncated output (2026-05-17:
+        // 361-token completions with no signal which one ended them).
+        // Daemon-side population:
         // `sovereign_serving_host::inference_adapter::translate_finish_reason`.
-        let finish_reason = v
-            .pointer("/choices/0/finish_reason")
-            .and_then(|s| s.as_str())
-            .unwrap_or("?")
-            .to_string();
+        let finish_reason = resp
+            .finish_reason
+            .as_ref()
+            .map_or("?", |f| f.as_openai_str());
         tracing::info!(
             phase = %phase_label,
             model = %model_label,
@@ -358,7 +235,7 @@ impl DaemonInferenceClient {
             finish_reason = %finish_reason,
             "inference_client: /v1/chat/completions ok"
         );
-        Ok(content.to_string())
+        Ok(content)
     }
 
     /// Anthropic `/v1/messages` dispatch. Translates the OpenAI-shape
@@ -698,120 +575,5 @@ pub(super) async fn send_honouring_shed(
         );
         tokio::time::sleep(delay).await;
         waited += delay;
-    }
-}
-
-/// An OpenAI function name must match `^[a-zA-Z0-9_-]{1,64}$`; a schema
-/// name is free text, so fold it rather than let the host 400 on it.
-fn openai_function_name(name: &str) -> String {
-    let folded: String = name
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .take(64)
-        .collect();
-    if folded.is_empty() {
-        "emit_response".to_string()
-    } else {
-        folded
-    }
-}
-
-/// Put every spelling of "think this much" on the body that some
-/// OpenAI-compatible host reads. There are three, and a host reads ONE of
-/// them; the other two are unknown fields it drops on the floor:
-///
-/// - `think_budget` — the Commonwealth daemon's native field
-///   (`resolve_think_budget`). `0` makes the daemon inject `/no_think` for
-///   SystemPromptToken families (Qwen3 / Qwen3.5 / SmolLM3).
-/// - `thinking: {type: disabled|enabled}` — DeepSeek V3.1+ / V4.
-/// - `chat_template_kwargs: {enable_thinking: bool}` — llama-server, vLLM
-///   and SGLang, all of which hand the map to the Jinja chat template, and
-///   the Qwen3 templates read exactly this key. It is the ONLY one of the
-///   three a bare `llama-server` understands.
-///
-/// The third was missing until 2026-09-08, and the bare-endpoint acceptance
-/// (`svrn/crates/corpus-mcp/acceptance.sh`, a Qwen3.6-35B behind a plain llama-server)
-/// paid for it on every phase: all 20 chapters of the wessex-hoard fixture
-/// failed Phase 1 as `think_truncated` and were re-run on the exemplar-free
-/// terse prompt, phases 3 and 6 returned 0 of 4 and 0 of 164 (an empty
-/// `content` beside a full `reasoning_content`), and the run spent 201,596
-/// completion tokens where the daemon spent 17,940. What the terse retry
-/// costs is attribution: without the exemplars no claim carried
-/// `attributed_to`, and the EI3 bar read 17/21 against the control's 21/21.
-///
-/// Only the `0` case sets `enable_thinking`. A positive budget leaves the
-/// template's own default in place: forcing `true` would switch thinking ON
-/// for a model whose template ships it off, which is not what a budget
-/// says.
-fn apply_thinking_controls(
-    body: &mut serde_json::Map<String, serde_json::Value>,
-    think_budget: u32,
-) {
-    body.insert("think_budget".into(), serde_json::json!(think_budget));
-    let thinking = if think_budget == 0 {
-        serde_json::json!({"type": "disabled"})
-    } else {
-        serde_json::json!({
-            "type": "enabled",
-            "budget_tokens": think_budget,
-        })
-    };
-    body.insert("thinking".into(), thinking);
-    if think_budget == 0 {
-        body.insert(
-            "chat_template_kwargs".into(),
-            serde_json::json!({ "enable_thinking": false }),
-        );
-    }
-    tracing::debug!(
-        think_budget,
-        enable_thinking = if think_budget == 0 { Some(false) } else { None },
-        "enrich wire: thinking controls on the request"
-    );
-}
-
-#[cfg(test)]
-mod thinking_controls_tests {
-    use super::apply_thinking_controls;
-
-    /// THE FAILING INPUT: the body a bare llama-server received before
-    /// 2026-09-08 carried `think_budget` and `thinking`, neither of which it
-    /// reads, and no `chat_template_kwargs` — so a Qwen3 template thought
-    /// through the whole output budget under a JSON grammar and returned an
-    /// empty `content`. Drop the third insert above and this test names it.
-    #[test]
-    fn a_zero_budget_is_spelled_for_llama_server_too() {
-        let mut body = serde_json::Map::new();
-        apply_thinking_controls(&mut body, 0);
-        assert_eq!(body["think_budget"], serde_json::json!(0));
-        assert_eq!(body["thinking"], serde_json::json!({"type": "disabled"}));
-        assert_eq!(
-            body["chat_template_kwargs"],
-            serde_json::json!({"enable_thinking": false}),
-            "the one spelling llama-server / vLLM / SGLang read"
-        );
-    }
-
-    /// A positive budget opts in where a host has a budget notion and says
-    /// nothing to the chat template — the template's default stands.
-    #[test]
-    fn a_positive_budget_leaves_the_template_default_alone() {
-        let mut body = serde_json::Map::new();
-        apply_thinking_controls(&mut body, 2048);
-        assert_eq!(body["think_budget"], serde_json::json!(2048));
-        assert_eq!(
-            body["thinking"],
-            serde_json::json!({"type": "enabled", "budget_tokens": 2048})
-        );
-        assert!(
-            !body.contains_key("chat_template_kwargs"),
-            "no forced enable_thinking on a model whose template ships it off"
-        );
     }
 }

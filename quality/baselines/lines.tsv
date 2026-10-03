@@ -77,11 +77,11 @@
 142	distributions/crates/sovereign-stock
 5406	distributions/crates/sovereign-stock::tests
 63086	ingest/crates/corpus-engine
-48903	ingest/crates/corpus-engine::tests
+48898	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
 115	ingest/crates/sovereign-authoring-harness::tests
-6583	ingest/crates/sovereign-enrichment-build
-1631	ingest/crates/sovereign-enrichment-build::tests
+6448	ingest/crates/sovereign-enrichment-build
+1601	ingest/crates/sovereign-enrichment-build::tests
 305	ingest/crates/sovereign-enrichment-catalog
 370	ingest/crates/sovereign-enrichment-catalog::tests
 29090	ingest/crates/sovereign-pipeline
@@ -131,8 +131,8 @@
 480	shared/crates/mesh-join-vocab::tests
 611	shared/crates/mesh-reach
 667	shared/crates/mesh-reach::tests
-2624	shared/crates/oicp-client
-1000	shared/crates/oicp-client::tests
+2737	shared/crates/oicp-client
+1161	shared/crates/oicp-client::tests
 5224	shared/crates/oicp-types
 2545	shared/crates/oicp-types::tests
 266	shared/crates/oplog
