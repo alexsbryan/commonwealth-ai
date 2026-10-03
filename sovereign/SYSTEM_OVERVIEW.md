@@ -149,7 +149,9 @@ thing), [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md),
   `where`; `none`/`count`/`argmax`/`argmin`/`tally`) answers with a
   `TypedTable` whose rows carry evidence chunk ids, which the brief prints
   as a cited table with a count line. An unset attribute sets the atom
-  aside as unjudged and says so.
+  aside as unjudged and says so. `svrn enrich atlas-query <corpus> --typed
+  '<json>'` runs one as written (`--json`: rows `{name, atom_id,
+  attributes, evidence}`).
 - `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
   `alignment_projector.rs`.
 

@@ -11,13 +11,17 @@
 //!    [`AtlasGraph::call_chain`]; the Inc-7 chat path reuses the same method.
 //! 2. **Classifier variants (legacy).** "Who is X" / "tensions" / "trajectory"
 //!    / … route through the prose classifier + traversal engine unchanged.
+//! 3. **Typed query (`--typed` / `--typed-file`).** A JSON
+//!    `atlas_traversal::typed::TypedQuery` over the corpus's declared ontology,
+//!    executed as written (no classifier) into a cited table; `--json` emits its
+//!    rows `{name, atom_id, attributes, evidence}`.
 //!
 //! The NAMED CallChain and every classifier variant are pure Rust (no LLM). The
 //! CONCEPTUAL CallChain embeds the question once (the only model call) to seed
 //! by meaning, preferring the persistent ANN table and cosine-falling-back.
 
 use corpus_engine::atlas_traversal::{
-    assemble_brief, classify_query_with, engine::AtlasView, traverse, QueryPlan,
+    assemble_brief, classify_query_with, engine::AtlasView, traverse, typed::TypedQuery, QueryPlan,
 };
 use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, ATLAS_DIRNAME,
@@ -45,7 +49,8 @@ const HELP: Help = Help {
     summary: "Classify + traverse a question against a resolved atlas (CallChain for code).",
     sections: &[
         HelpSection::Usage(
-            "svrn enrich atlas-query <corpus-id> \"<question>\" [--depth N] [--callers] [--json]",
+            "svrn enrich atlas-query <corpus-id> \"<question>\" [--depth N] [--callers] [--json]\n\
+             svrn enrich atlas-query <corpus-id> (--typed '<json>' | --typed-file <path>) [--json]",
         ),
         HelpSection::Flags(&[
             (
@@ -58,8 +63,15 @@ const HELP: Help = Help {
             ),
             (
                 "--json",
-                "Emit the structured result (CallChainResult or TraversalResult) as JSON.",
+                "Emit the structured result (CallChainResult or TraversalResult) as JSON; \
+                 with --typed, {hit, kind, headline, matched, rows, notes}.",
             ),
+            (
+                "--typed '<json>'",
+                "Execute a typed query over the declared ontology instead of classifying a \
+                 question: {target_type, filters, relations, aggregate, aggregate_over}.",
+            ),
+            ("--typed-file <path>", "The same, read from a file."),
         ]),
         HelpSection::Examples(&[
             (
@@ -73,6 +85,10 @@ const HELP: Help = Help {
             (
                 "svrn enrich atlas-query bk \"Who is Alyosha?\"",
                 "Classifier variant — entity lookup over a prose atlas.",
+            ),
+            (
+                "svrn enrich atlas-query ft-ans-dev-b --typed '{\"target_type\":\"hoard\",\"relations\":[{\"relation\":\"holds_coins_of\",\"other_type\":\"mint\",\"other_name\":\"Miletus\"}]}'",
+                "Typed query — every hoard holding coins of Miletus, as a cited table.",
             ),
         ]),
         HelpSection::Notes(
@@ -171,6 +187,29 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
         .map(|f| f.policies)
         .filter(|p| p.has_declarations());
 
+    if let Some(query) = parsed.typed.clone() {
+        tracing::debug!(
+            corpus = %parsed.corpus_id,
+            target_type = %query.target_type,
+            declared = ontology.is_some(),
+            "atlas-query: typed query, classifier skipped"
+        );
+        let view = AtlasView {
+            entities: &entities,
+            events: &events,
+            states: &states,
+            relations: &relations,
+            claims: &claims,
+            questions: &questions,
+            configurations: &configurations,
+            edges: &edges_file,
+            positions: &positions,
+            oppositions: &oppositions,
+            vocab: ontology.as_ref(),
+        };
+        return print_typed(&traverse(&QueryPlan::Typed(query), view), parsed.as_json);
+    }
+
     let call_dir = detect_call_intent(&parsed.query, parsed.callers);
     let legacy_plan = classify_query_with(&parsed.query, &entities, ontology.as_ref());
     let do_callchain = call_dir.is_some() || matches!(legacy_plan, QueryPlan::Unknown { .. });
@@ -208,6 +247,40 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
     } else {
         println!("{}", assemble_brief(&result).to_text());
         0
+    }
+}
+
+/// Print a typed query's answer: the cited-table brief, or with `--json` the
+/// table's rows. A refusal or a type with no atoms exits 1 with the reason;
+/// an answer of zero rows is an answer and exits 0.
+fn print_typed(result: &corpus_engine::atlas_traversal::TraversalResult, as_json: bool) -> i32 {
+    if as_json {
+        let mut out = serde_json::json!({
+            "hit": result.hit,
+            "kind": result.kind,
+            "headline": result.headline,
+        });
+        if let Some(table) = &result.table {
+            out["matched"] = serde_json::json!(table.matched);
+            out["rows"] = serde_json::json!(table.rows);
+            out["notes"] = serde_json::json!(table.notes);
+        }
+        match serde_json::to_string_pretty(&out) {
+            Ok(s) => println!("{s}"),
+            Err(e) => {
+                eprintln!("error: serialising typed answer: {e}");
+                return 1;
+            }
+        }
+    } else if result.hit {
+        println!("{}", assemble_brief(result).to_text());
+    } else {
+        eprintln!("atlas-query: {}", result.headline);
+    }
+    if result.hit {
+        0
+    } else {
+        1
     }
 }
 
@@ -425,6 +498,9 @@ struct ParsedQuery {
     depth: usize,
     callers: bool,
     as_json: bool,
+    /// `--typed` / `--typed-file`: run this instead of classifying `query`
+    /// (which is then empty).
+    typed: Option<TypedQuery>,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedQuery, String> {
@@ -433,6 +509,7 @@ fn parse_args(args: &[String]) -> Result<ParsedQuery, String> {
     let mut depth = DEFAULT_DEPTH;
     let mut callers = false;
     let mut as_json = false;
+    let mut typed: Option<TypedQuery> = None;
     let mut positional_count = 0;
     let mut i = 0;
     while i < args.len() {
@@ -440,6 +517,22 @@ fn parse_args(args: &[String]) -> Result<ParsedQuery, String> {
         match arg {
             "--json" => as_json = true,
             "--callers" => callers = true,
+            "--typed" | "--typed-file" => {
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| format!("{arg} needs a value"))?;
+                let json = if arg == "--typed" {
+                    v.clone()
+                } else {
+                    std::fs::read_to_string(v).map_err(|e| format!("--typed-file {v}: {e}"))?
+                };
+                if typed.is_some() {
+                    return Err("give one typed query".to_string());
+                }
+                typed = Some(serde_json::from_str(&json).map_err(|e| format!("{arg}: {e}"))?);
+                i += 2;
+                continue;
+            }
             "--depth" => {
                 let v = args
                     .get(i + 1)
@@ -471,8 +564,14 @@ fn parse_args(args: &[String]) -> Result<ParsedQuery, String> {
         i += 1;
     }
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
-    let query = query.ok_or_else(|| "missing <query>".to_string())?;
-    if query.trim().is_empty() {
+    let query = match (query, &typed) {
+        (Some(_), Some(_)) => {
+            return Err("give a question or a typed query, not both".to_string());
+        }
+        (None, Some(_)) => String::new(),
+        (q, None) => q.ok_or_else(|| "missing <query>".to_string())?,
+    };
+    if typed.is_none() && query.trim().is_empty() {
         return Err("query must be non-empty".to_string());
     }
     Ok(ParsedQuery {
@@ -481,6 +580,7 @@ fn parse_args(args: &[String]) -> Result<ParsedQuery, String> {
         depth,
         callers,
         as_json,
+        typed,
     })
 }
 
@@ -530,6 +630,32 @@ mod tests {
     fn parse_args_rejects_unknown_flag() {
         let err = parse_args(&["bk".into(), "q".into(), "--nope".into()]).unwrap_err();
         assert!(err.contains("unknown flag"));
+    }
+
+    #[test]
+    fn parse_args_takes_a_typed_query_in_place_of_a_question() {
+        let json = r#"{"target_type":"hoard","aggregate":"count"}"#;
+        let p = parse_args(&["c".into(), "--typed".into(), json.into(), "--json".into()]).unwrap();
+        let q = p.typed.expect("typed query parsed");
+        assert_eq!(q.target_type, "hoard");
+        assert!(p.query.is_empty());
+        assert!(p.as_json);
+
+        let both = parse_args(&["c".into(), "q".into(), "--typed".into(), json.into()]);
+        assert!(both.unwrap_err().contains("not both"));
+        let bad = parse_args(&["c".into(), "--typed".into(), r#"{"target":"hoard"}"#.into()]);
+        assert!(bad.unwrap_err().starts_with("--typed:"));
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("q.json");
+        std::fs::write(&path, json).unwrap();
+        let p = parse_args(&[
+            "c".into(),
+            "--typed-file".into(),
+            path.display().to_string(),
+        ])
+        .unwrap();
+        assert_eq!(p.typed.unwrap().target_type, "hoard");
     }
 
     #[test]
