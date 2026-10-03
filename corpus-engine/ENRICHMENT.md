@@ -375,7 +375,9 @@ slot and one union `attributes` object per kind, claims require `claim_kind`
 instead of `discourse_act`, and `argument_reconstructions` is dropped unless
 `derive.arguments`. The same module renders the `## Declared types` prompt
 block from the same `TypeIndex::effective_attributes` the reader validates
-against, so the grammar, the prompt and the parser cannot disagree.
+against, and a relation's ends from the same `TypeIndex::endpoints`
+resolution enforces (`check_relation_endpoints`), so the grammar, the prompt
+and the parser cannot disagree.
 `pipelines/parse_policy.rs` + `pipelines/ontology_parse.rs` enforce it: a
 declared type survives as `EntityType::Other("<name>")`, attributes are kept
 only when declared on that type (inherited through `specializes`) and only in

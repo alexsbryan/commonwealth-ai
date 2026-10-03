@@ -58,6 +58,21 @@ pub fn render_declared_types(policies: &OntologyPolicies) -> String {
             if let Some(subject) = t.subject.as_deref() {
                 facets.push(format!("about a {subject}"));
             }
+            // A relation's declared ends are enforced at resolution, positionally
+            // (`check_relation_endpoints`); unstated here, the model read
+            // `holds_coins_of` as "who holds the coins" and every relation one
+            // section emitted named a collector, and was dropped.
+            if t.kind == TypeKind::Relation {
+                let ends = match index.endpoints(&t.name) {
+                    [Some(from), Some(to)] => Some(format!("from a {from} to a {to}")),
+                    [Some(from), None] => Some(format!("from a {from}")),
+                    [None, Some(to)] => Some(format!("to a {to}")),
+                    [None, None] => None,
+                };
+                if let Some(ends) = ends {
+                    facets.push(format!("{ends} (participants in that order)"));
+                }
+            }
             // A state type names one of the two state facets, and which one
             // is not guessable from the name — `of` decides it. Say it, or
             // the model has a `state_type` enum on two lists and no rule for
