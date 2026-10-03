@@ -90,6 +90,7 @@ pub(crate) async fn build_raptor_nodes_with_checkpoint(
     // abstractive summary). Corpus-scale callers pass `Sample(p)` for
     // SP3 economics, or `Off` to opt out explicitly.
     verify_policy: Option<crate::summary_verify::VerifyPolicy>,
+    shape: crate::raptor_atlas::TreeShape,
 ) -> Result<Vec<RaptorNode>> {
     if chunks.is_empty() {
         return Ok(Vec::new());
@@ -154,6 +155,7 @@ pub(crate) async fn build_raptor_nodes_with_checkpoint(
         correction_hint,
         summary_mode,
         verify.clone(),
+        shape,
     )
     .await
     .map_err(|e| Error::Execution(format!("build_raptor_atlas: {e}")))?;
@@ -207,6 +209,7 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
         correction_hint,
         summary_mode,
         verify_policy,
+        crate::raptor_atlas::TreeShape::DEFAULT,
     )
     .await?;
 

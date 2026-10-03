@@ -279,6 +279,9 @@ pub struct FolderTieredProvider {
     /// artifact builder's default (verify everything). Corpus-scale
     /// retrofits set `Sample(p)` for SP3 economics.
     verify_policy: Option<crate::summary_verify::VerifyPolicy>,
+    /// Leaf size and root rule for per-document trees. Threaded into
+    /// `build_folder_artifacts`.
+    tree_shape: crate::raptor_atlas::TreeShape,
 }
 
 /// Indirection so the provider can locate the per-corpus index dir
@@ -319,6 +322,7 @@ impl FolderTieredProvider {
             doc_type: DocumentTypeTag::Unknown,
             summary_mode: crate::raptor_atlas::SummaryMode::Abstractive,
             verify_policy: None,
+            tree_shape: crate::raptor_atlas::TreeShape::DEFAULT,
         }
     }
 
@@ -346,6 +350,12 @@ impl FolderTieredProvider {
     /// sentences — the T1 P1.1 floor.
     pub fn with_summary_mode(mut self, mode: crate::raptor_atlas::SummaryMode) -> Self {
         self.summary_mode = mode;
+        self
+    }
+
+    /// Override the per-document tree shape (leaf size, root rule).
+    pub fn with_tree_shape(mut self, shape: crate::raptor_atlas::TreeShape) -> Self {
+        self.tree_shape = shape;
         self
     }
 
@@ -777,6 +787,9 @@ impl FolderTieredProvider {
                 }
                 crate::raptor_atlas::SummaryMode::Extractive => None,
             },
+            // The vault-wide theme pass reads its top level as themes, so it
+            // keeps the default shape (feature-fidelity Decisions).
+            crate::raptor_atlas::TreeShape::DEFAULT,
         )
         .await
         .map_err(|e| {
@@ -948,6 +961,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     self.doc_type.clone(),
                     self.summary_mode,
                     self.verify_policy,
+                    self.tree_shape,
                     updated_at,
                     checkpoint_ref,
                     progress_ref,
@@ -1269,6 +1283,7 @@ async fn build_folder_artifacts(
     doc_type: DocumentTypeTag,
     summary_mode: crate::raptor_atlas::SummaryMode,
     verify_policy: Option<crate::summary_verify::VerifyPolicy>,
+    tree_shape: crate::raptor_atlas::TreeShape,
     updated_at: i64,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink>>,
@@ -1294,6 +1309,7 @@ async fn build_folder_artifacts(
         correction_hint,
         summary_mode,
         verify_policy,
+        tree_shape,
     )
     .await
     .map_err(|e| {

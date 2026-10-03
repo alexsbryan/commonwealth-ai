@@ -636,3 +636,104 @@ fn mean_cosine_to_centroid_is_in_zero_one() {
     // a→c and b→c each have cosine ~0.707; mean clamped to [0,1].
     assert!(m > 0.6 && m < 0.8, "expected ~0.707, got {m}");
 }
+
+/// Embeds each distinct text to its own direction, so every summary level has
+/// distinct points to cluster. `direction_embed`'s two vectors collapse a
+/// level of summaries onto duplicates and k-means fills one cluster.
+struct DistinctEmbed;
+
+#[async_trait]
+impl InferenceProvider for DistinctEmbed {
+    async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+        unreachable!("extractive builds make no completion call")
+    }
+    async fn complete_stream(
+        &self,
+        _: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
+        unreachable!("extractive builds make no completion call")
+    }
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        let h = text
+            .bytes()
+            .fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619));
+        let theta = (h % 10_000) as f32 / 10_000.0 * std::f32::consts::FRAC_PI_2;
+        Ok(vec![theta.cos(), theta.sin()])
+    }
+    fn capabilities(&self) -> ProviderCapabilities {
+        mock_caps()
+    }
+}
+
+/// `--to-root` recurses to ONE node; the default stops at a top layer of up to
+/// `ROOT_BRANCHING_CEILING` nodes. Same 40 chunks, same leaf target, the two
+/// shapes differ only in the root rule — failing input: a loop that still
+/// reads the constant ceiling builds the same two-node top for both.
+#[tokio::test]
+async fn to_root_builds_one_root_and_the_default_stops_short_of_it() {
+    let inference: Arc<dyn InferenceProvider> = Arc::new(DistinctEmbed);
+    let chunks: Vec<ChunkInput> = (0..40u32)
+        .map(|i| ChunkInput {
+            chunk_id: i,
+            content: if i % 2 == 0 {
+                format!("The anchor sentence {i} describes the lighthouse keeper at length.")
+            } else {
+                format!("A different passage {i} wanders along the coast toward the town.")
+            },
+        })
+        .collect();
+    let embeddings: Vec<Vec<f32>> = (0..40)
+        .map(|i| {
+            let jitter = i as f32 * 0.01;
+            if i % 2 == 0 {
+                vec![1.0, jitter]
+            } else {
+                vec![jitter, 1.0]
+            }
+        })
+        .collect();
+    let top = |nodes: &[RaptorNode]| {
+        let max = nodes.iter().map(|n| n.level).max().unwrap();
+        nodes.iter().filter(|n| n.level == max).count()
+    };
+    let build = |shape: TreeShape| {
+        let inference = Arc::clone(&inference);
+        let (chunks, embeddings) = (chunks.clone(), embeddings.clone());
+        async move {
+            build_raptor_atlas_with_verify(
+                &inference,
+                &chunks,
+                &embeddings,
+                DocumentTypeTag::Narrative,
+                None,
+                None,
+                None,
+                SummaryMode::Extractive,
+                None,
+                shape,
+            )
+            .await
+            .expect("build")
+        }
+    };
+    let default = build(TreeShape {
+        leaf_target: 4,
+        ..TreeShape::DEFAULT
+    })
+    .await;
+    let rooted = build(TreeShape {
+        leaf_target: 4,
+        root_ceiling: 1,
+    })
+    .await;
+    let default_top = top(&default);
+    assert!(
+        (2..=ROOT_BRANCHING_CEILING).contains(&default_top),
+        "default top layer holds {default_top} nodes"
+    );
+    assert_eq!(top(&rooted), 1, "--to-root must end in a single root");
+    assert!(
+        rooted.iter().map(|n| n.level).max() > default.iter().map(|n| n.level).max(),
+        "the root is a level above the default's top layer"
+    );
+}

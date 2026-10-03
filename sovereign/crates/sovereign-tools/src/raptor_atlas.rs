@@ -62,6 +62,25 @@ const NONLEAF_TARGET_FANOUT: usize = 5;
 /// nodes) and we don't summarize over it.
 const ROOT_BRANCHING_CEILING: usize = 4;
 
+/// A tree's shape: chunks per leaf on average, and the level size at which
+/// recursion stops. Tuned empirically (feature-fidelity R-T1); the paper's
+/// tree builds to one root over ~6.7 children per node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TreeShape {
+    /// Average chunks per leaf cluster.
+    pub leaf_target: usize,
+    /// Stop recursing once a level holds at most this many nodes; 1 builds to
+    /// a single root.
+    pub root_ceiling: usize,
+}
+
+impl TreeShape {
+    /// 20-chunk leaves; a top layer of 1-4 nodes left unsummarized.
+    pub const DEFAULT: Self = Self {
+        leaf_target: LEAF_TARGET_CLUSTER_SIZE,
+        root_ceiling: ROOT_BRANCHING_CEILING,
+    };
+}
 
 /// Concurrency for extractive clusters: embed calls only, no LLM.
 const SUMMARIZE_BUFFER: usize = 8;
@@ -240,6 +259,7 @@ pub async fn build_raptor_atlas_with_mode(
         correction_hint,
         mode,
         None,
+        TreeShape::DEFAULT,
     )
     .await
 }
@@ -262,6 +282,7 @@ pub async fn build_raptor_atlas_with_verify(
     correction_hint: Option<&str>,
     mode: SummaryMode,
     verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
+    shape: TreeShape,
 ) -> Result<Vec<RaptorNode>> {
     build_raptor_atlas_impl(
         inference,
@@ -271,7 +292,7 @@ pub async fn build_raptor_atlas_with_verify(
         checkpoint,
         progress,
         correction_hint,
-        LEAF_TARGET_CLUSTER_SIZE,
+        shape,
         mode,
         verify,
     )
@@ -302,7 +323,10 @@ pub async fn build_raptor_atlas_with_leaf_target(
         None,
         None,
         None,
-        leaf_target.max(2),
+        TreeShape {
+            leaf_target: leaf_target.max(2),
+            root_ceiling: ROOT_BRANCHING_CEILING,
+        },
         mode,
         None,
     )
@@ -357,7 +381,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
         checkpoint,
         progress,
         correction_hint,
-        LEAF_TARGET_CLUSTER_SIZE,
+        TreeShape::DEFAULT,
         SummaryMode::Abstractive,
         None,
     )
@@ -375,7 +399,7 @@ async fn build_raptor_atlas_impl(
     // Note-level correction hint, re-applied at every RAPTOR tree level
     // (rides on each `ClusterSummarizationInput`).
     correction_hint: Option<&str>,
-    leaf_target: usize,
+    shape: TreeShape,
     mode: SummaryMode,
     verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
 ) -> Result<Vec<RaptorNode>> {
@@ -448,7 +472,7 @@ async fn build_raptor_atlas_impl(
                 )
             }
             None => {
-                let k = target_k(chunks.len(), leaf_target);
+                let k = target_k(chunks.len(), shape.leaf_target);
                 let assignments = kmeans_cluster(embeddings, k, /* max_iters = */ 40);
                 if let Some(handle) = checkpoint {
                     let record = LevelClustering {
@@ -652,7 +676,7 @@ async fn build_raptor_atlas_impl(
     // ── Levels 1..N — recurse on summaries ───────────────────
     let mut current_level: u8 = 1;
     let mut current_layer: Vec<RaptorNode> = leaf_nodes;
-    while current_layer.len() > ROOT_BRANCHING_CEILING {
+    while current_layer.len() > shape.root_ceiling.max(1) {
         let layer_embeddings: Vec<Vec<f32>> = current_layer
             .iter()
             .map(|n| n.summary_embedding.clone())
@@ -806,6 +830,8 @@ async fn build_raptor_atlas_impl(
         nodes = all_nodes.len(),
         leaves = all_nodes.iter().filter(|n| n.level == 0).count(),
         max_level = all_nodes.iter().map(|n| n.level).max().unwrap_or(0),
+        leaf_target = shape.leaf_target,
+        root_ceiling = shape.root_ceiling,
         "raptor_atlas: build complete"
     );
 
