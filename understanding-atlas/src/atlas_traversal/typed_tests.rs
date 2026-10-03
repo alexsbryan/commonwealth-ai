@@ -585,3 +585,35 @@ fn a_claim_type_lists_its_claims() {
     assert_eq!(r.claims.len(), 1);
     assert_eq!(r.table.unwrap().rows[0].evidence, ["sec_c1"]);
 }
+
+/// The brief renders the table: one cited line per row, absent attributes as
+/// `(unset)`, a count line, and the notes.
+#[test]
+fn the_brief_is_a_cited_table() {
+    use crate::atlas_traversal::brief::assemble_brief;
+    let text = assemble_brief(&run(&hoards_holding(&["Miletus", "Sardes"]))).to_text();
+    assert!(
+        text.contains(
+            "- [extracted] Demanhur hoard — buried=c. 318 B.C.; findspot=Egypt (vicinity of Demanhur) [sec_e1, sec_r1, sec_r2]"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("\ncount: 1\n"), "{text}");
+
+    let tally = r#"{"target_type":"hoard","filters":[],"relations":[],"aggregate":"tally","aggregate_over":"buried"}"#;
+    let text = assemble_brief(&run(tally)).to_text();
+    assert!(
+        text.contains(
+            "- [extracted] Asia Minor 1964 — buried=(unset); findspot=Asia Minor [sec_e3]"
+        ),
+        "{text}"
+    );
+
+    let best = r#"{"target_type":"hoard","filters":[],"relations":[],"aggregate":"argmax","aggregate_over":"buried"}"#;
+    let text = assemble_brief(&run(best)).to_text();
+    assert!(text.contains("\ncount: 1 of 5 that match\n"), "{text}");
+    assert!(
+        text.contains("note: 1 matching hoard atom(s) carry no readable buried"),
+        "{text}"
+    );
+}
