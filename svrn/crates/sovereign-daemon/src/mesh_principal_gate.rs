@@ -66,9 +66,10 @@ pub const RESOLVERS: &[&str] = &[
 /// The five sites that STAMP the header outbound. Unchanged by this work and
 /// kept for one release — see the module docs for the failure a silent stop
 /// reproduces. `oicp-client` was always one; the list said four while the
-/// walk covered only `sovereign/crates/`.
+/// walk covered only `sovereign/crates/`. Its stamp is `Admitted::stamped`,
+/// the one request builder a `RemoteApiProvider` has.
 pub const SENDERS: &[&str] = &[
-    "shared/crates/oicp-client/src/lib.rs",
+    "shared/crates/oicp-client/src/outbound.rs",
     "svrn/crates/sovereign-grants/src/shard_manager.rs",
     "svrn/crates/sovereign-daemon/src/routes_knowledge.rs",
     "svrn/crates/sovereign-daemon/src/server.rs",
