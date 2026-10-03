@@ -430,10 +430,9 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // CURRENT build config: the prompt version const and the model
     // that would serve a summary call RIGHT NOW. The build stamps each
     // node with `resp.model_id` — the routing decision actually made
-    // per call (SLOT_POLICY routes the Workload::EnrichBulk summary
-    // fan-out to the fast lane, not the pinned chat slot). So the
-    // expected value must come from the same probe: one tiny EnrichBulk
-    // completion through the same provider. Resolving the chat-model
+    // per call, under `raptor_atlas::SUMMARY_WORKLOAD`. So the expected
+    // value must come from the same probe: one tiny completion under
+    // that same workload, through the same provider. Resolving the chat-model
     // alias via /v1/models instead compares attribution against
     // aspiration — observed live 2026-07-31: the alias table said the
     // 35B, EnrichBulk served the resident 4B, and every run reported
@@ -455,7 +454,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 sovereign_tools::raptor_atlas::EXTRACTIVE_SUMMARIZER.to_string(),
             )),
             sovereign_tools::raptor_atlas::SummaryMode::Abstractive => {
-                let mut probe = sovereign_contracts::slot_policy::Workload::EnrichBulk
+                let mut probe = sovereign_tools::raptor_atlas::SUMMARY_WORKLOAD
                     .request("Reply with the single word: ok".to_string())
                     .with_output_budget(8);
                 probe.think_budget = Some(0);

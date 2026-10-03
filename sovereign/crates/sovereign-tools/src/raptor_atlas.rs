@@ -178,6 +178,16 @@ const SUMMARY_MAX_OUTPUT_TOKENS: u32 = 2048;
 /// in the work (`writer_members`).
 pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-10-03.2";
 
+/// The slot class every abstractive summary call is sent under — SLOT_POLICY
+/// §3 ExtractDurable (EnrichBulk 2026-07-24 to 2026-10-02 for throughput).
+/// Full member text cannot fit the FastShort lane's 6,000-char gate, and the
+/// paper's summaries are the primary model's (feature-fidelity R0.2).
+/// `enrich raptor --refresh-stale` probes the model this class routes to
+/// RIGHT NOW to judge a tree's `summarizer_model` stamp; when the writer moved
+/// to ExtractDurable and the probe stayed on EnrichBulk, the probe named the
+/// 4B fast model and every primary-written tree read stale (2026-10-03).
+pub const SUMMARY_WORKLOAD: Workload = Workload::ExtractDurable;
+
 /// How a node's summary text is produced (T1 P1.1).
 ///
 /// `Extractive` selects verbatim member sentences by cosine to the
@@ -1279,11 +1289,7 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
 "#
     .to_string();
 
-    // SLOT_POLICY §3 ExtractDurable — the class the policy names for RAPTOR
-    // summaries (EnrichBulk 2026-07-24 to 2026-10-02 for throughput). Full
-    // member text cannot fit the FastShort lane's 6,000-char gate, and the
-    // paper's summaries are the primary model's (feature-fidelity R0.2).
-    let mut req = Workload::ExtractDurable
+    let mut req = SUMMARY_WORKLOAD
         .request(prompt)
         .with_output_budget(output_budget);
     req.temperature = Some(0.2);
