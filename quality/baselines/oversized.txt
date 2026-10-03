@@ -18,7 +18,7 @@
 1249	corpus-engine/src/enrichment/atlas/strategies/structure_first.rs
 2959	corpus-engine/src/enrichment/entity_extraction.rs
 2780	corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs
-3499	corpus-engine/src/enrichment/pipeline/runner.rs
+2289	corpus-engine/src/enrichment/pipeline/runner.rs
 1881	corpus-engine/src/enrichment/pipeline/types.rs
 1208	corpus-engine/src/extractors/email_rfc5322.rs
 1526	corpus-engine/src/extractors/xml.rs
