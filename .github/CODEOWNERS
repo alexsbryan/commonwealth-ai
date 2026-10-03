@@ -22,18 +22,24 @@
 /deny.toml                      @alexsbryan
 /rust-toolchain.toml            @alexsbryan
 
+# The programs, one top-level dir each, and what they share. Before the
+# top-level-programs move these were corpus-engine*/, sovereign/,
+# commonwealth/ and studio/ (quality/top-level-moves.toml).
+/svrn/                          @alexsbryan
+/serve/                         @alexsbryan
+/cmnwlth/                       @alexsbryan
+/ingest/                        @alexsbryan
+/code/                          @alexsbryan
+/bench/                         @alexsbryan
+/shared/                        @alexsbryan
+/clients/                       @alexsbryan
+/distributions/                 @alexsbryan
+
 # Knowledge layer — LanceDB + Tantivy + extractors + chunkers.
 /ingest/crates/corpus-engine/                 @alexsbryan
 /shared/crates/corpus-engine-scip/            @alexsbryan
-/corpus-engine-atos/            @alexsbryan
 /code/crates/corpus-engine-notes/           @alexsbryan
 /code/crates/corpus-engine-archaeology/     @alexsbryan
-
-# Sovereign — local runtime, CLI, desktop, and server.
-/sovereign/                     @alexsbryan
-
-# Commonwealth — the symmetric mesh daemon.
-/cmnwlth/                  @alexsbryan
 
 # Wire-protocol types shared across the tree.
 /shared/crates/oicp-types/                    @alexsbryan

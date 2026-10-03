@@ -211,7 +211,7 @@ runs_in = ["prepush", "ci:gates"]
 # when_changed: file sizes over `.rs`, plus the instruction surface it censuses (arch_gate.rs
 #               names AGENTS.md, .claude/CLAUDE.md, docs/SYSTEM_OVERVIEW.md) and its
 #               three baselines. Superset: a `.rs` anywhere re-selects it.
-when_changed = "(\\.rs$|^AGENTS\\.md$|^\\.claude/CLAUDE\\.md$|^sovereign/SYSTEM_OVERVIEW\\.md$|^quality/baselines/)"
+when_changed = "(\\.rs$|^AGENTS\\.md$|^\\.claude/CLAUDE\\.md$|^docs/SYSTEM_OVERVIEW\\.md$|^quality/baselines/)"
 doc = "docs/ARCH_PRINCIPLES.md §3.1"
 
 [[instrument]]

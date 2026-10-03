@@ -1,0 +1,474 @@
+# The top-level-programs move (2026-10-02): every directory and file it moved,
+# old path -> new path, in the order the commits moved them. Data, not program:
+# the one table a path-keyed instrument consults when it meets both spellings —
+# git history before the move, or a code-intel index older than the tree.
+#
+# Read it only through scripts/lib/top_level_moves.py (one reader, ARCH §8):
+#   back(path)     the pre-move spelling. nc-boundary and nc-congestion classify
+#                  by the families they were calibrated on (sovereign/,
+#                  corpus-engine, commonwealth/, studio/).
+#   forward(path)  the current spelling. domains-census congestion tags history
+#                  against a registry that describes the current tree.
+#
+# Rows are whole path segments; the longest matching prefix wins. No row's `to`
+# is moved again by a later row, so either direction is one hop.
+
+# ── xtask ──
+[[move]]
+from = "corpus-engine/xtask"
+to = "quality/xtask"
+
+# ── shared ──
+[[move]]
+from = "oicp-types"
+to = "shared/crates/oicp-types"
+[[move]]
+from = "workspace-hack"
+to = "shared/crates/workspace-hack"
+[[move]]
+from = "kernel-types"
+to = "shared/crates/kernel-types"
+[[move]]
+from = "corpus-engine-sections"
+to = "shared/crates/corpus-engine-sections"
+[[move]]
+from = "understanding-vocab"
+to = "shared/crates/understanding-vocab"
+[[move]]
+from = "corpus-index"
+to = "shared/crates/corpus-index"
+[[move]]
+from = "sovereign/crates/sovereign-time"
+to = "shared/crates/sovereign-time"
+[[move]]
+from = "sovereign/crates/sovereign-contracts"
+to = "shared/crates/sovereign-contracts"
+[[move]]
+from = "oicp-client"
+to = "shared/crates/oicp-client"
+[[move]]
+from = "sovereign/crates/sovereign-turn-client"
+to = "shared/crates/sovereign-turn-client"
+[[move]]
+from = "studio/crates/sovereign-workflow"
+to = "shared/crates/sovereign-workflow"
+[[move]]
+from = "commonwealth/crates/commonwealth-rail-core"
+to = "shared/crates/commonwealth-rail-core"
+[[move]]
+from = "sovereign/crates/sovereign-peer-wire"
+to = "shared/crates/sovereign-peer-wire"
+[[move]]
+from = "corpus-engine-atlas-reader"
+to = "shared/crates/corpus-engine-atlas-reader"
+[[move]]
+from = "corpus-engine-scip"
+to = "shared/crates/corpus-engine-scip"
+[[move]]
+from = "corpus-engine-yield"
+to = "shared/crates/corpus-engine-yield"
+[[move]]
+from = "oplog"
+to = "shared/crates/oplog"
+[[move]]
+from = "serving-policy-core"
+to = "shared/crates/serving-policy-core"
+[[move]]
+from = "mesh-join-vocab"
+to = "shared/crates/mesh-join-vocab"
+[[move]]
+from = "host-kit"
+to = "shared/crates/host-kit"
+[[move]]
+from = "mesh-reach"
+to = "shared/crates/mesh-reach"
+[[move]]
+from = "sovereign/crates/sovereign-cli-base"
+to = "shared/crates/sovereign-cli-base"
+
+# ── serve ──
+[[move]]
+from = "sovereign/crates/sovereign-scheduler"
+to = "serve/crates/sovereign-scheduler"
+[[move]]
+from = "sovereign/crates/sovereign-serving-host"
+to = "serve/crates/sovereign-serving-host"
+[[move]]
+from = "serving-policy"
+to = "serve/crates/serving-policy"
+[[move]]
+from = "sovereign/crates/sovereign-inference"
+to = "serve/crates/sovereign-inference"
+[[move]]
+from = "sovereign/crates/sovereign-compute"
+to = "serve/crates/sovereign-compute"
+[[move]]
+from = "sovereign/crates/sovereign-serve"
+to = "serve/crates/sovereign-serve"
+[[move]]
+from = "sovereign/crates/sovereign-gliner"
+to = "serve/crates/sovereign-gliner"
+[[move]]
+from = "sovereign/container"
+to = "serve/container"
+[[move]]
+from = "sovereign/SERVING_BOUNDARY.md"
+to = "serve/SERVING_BOUNDARY.md"
+[[move]]
+from = "sovereign/.cargo"
+to = "serve/.cargo"
+
+# ── cmnwlth ──
+[[move]]
+from = "commonwealth"
+to = "cmnwlth"
+[[move]]
+from = "oicp-conformance"
+to = "cmnwlth/crates/oicp-conformance"
+[[move]]
+from = "sovereign/crates/sovereign-pods"
+to = "cmnwlth/crates/sovereign-pods"
+[[move]]
+from = "sovereign/crates/sovereign-cli-mesh"
+to = "cmnwlth/crates/sovereign-cli-mesh"
+[[move]]
+from = "sovereign/apps"
+to = "cmnwlth/apps"
+[[move]]
+from = "sovereign/deploy/mesh"
+to = "cmnwlth/deploy/mesh"
+
+# ── oplog-types ──
+[[move]]
+from = "oplog-types"
+to = "shared/crates/oplog-types"
+
+# ── ingest ──
+[[move]]
+from = "corpus-engine"
+to = "ingest/crates/corpus-engine"
+[[move]]
+from = "sovereign/crates/sovereign-authoring-harness"
+to = "ingest/crates/sovereign-authoring-harness"
+[[move]]
+from = "sovereign/crates/sovereign-pipeline"
+to = "ingest/crates/sovereign-pipeline"
+[[move]]
+from = "studio/crates/sovereign-recipe-author"
+to = "ingest/crates/sovereign-recipe-author"
+[[move]]
+from = "sovereign/crates/sovereign-enrichment-build"
+to = "ingest/crates/sovereign-enrichment-build"
+[[move]]
+from = "sovereign/crates/sovereign-enrichment-catalog"
+to = "ingest/crates/sovereign-enrichment-catalog"
+[[move]]
+from = "understanding-atlas"
+to = "ingest/crates/understanding-atlas"
+[[move]]
+from = "understanding-host"
+to = "ingest/crates/understanding-host"
+[[move]]
+from = "sovereign-recipes"
+to = "ingest/crates/sovereign-recipes"
+
+# ── code ──
+[[move]]
+from = "sovereign/crates/sovereign-code"
+to = "code/crates/sovereign-code"
+[[move]]
+from = "sovereign/crates/sovereign-cli-dev"
+to = "code/crates/sovereign-cli-dev"
+[[move]]
+from = "sovereign/crates/sovereign-work-atlas"
+to = "code/crates/sovereign-work-atlas"
+[[move]]
+from = "corpus-engine-notes"
+to = "code/crates/corpus-engine-notes"
+[[move]]
+from = "corpus-engine-watchers"
+to = "code/crates/corpus-engine-watchers"
+[[move]]
+from = "corpus-engine-archaeology"
+to = "code/crates/corpus-engine-archaeology"
+[[move]]
+from = "code-facts"
+to = "code/crates/code-facts"
+[[move]]
+from = "code-next-edit"
+to = "code/crates/code-next-edit"
+[[move]]
+from = "sovereign/crates/sovereign-tdd"
+to = "code/crates/sovereign-tdd"
+[[move]]
+from = "sovereign/crates/sovereign-agent-tools"
+to = "code/crates/sovereign-agent-tools"
+[[move]]
+from = "sovereign/crates/sovereign-agent-bench"
+to = "code/crates/sovereign-agent-bench"
+[[move]]
+from = "sovereign/inquiries/callers_callees_twin_tools.toml"
+to = "code/inquiries/callers_callees_twin_tools.toml"
+[[move]]
+from = "sovereign/inquiries/principle_02_type_safe_dispatch.toml"
+to = "code/inquiries/principle_02_type_safe_dispatch.toml"
+[[move]]
+from = "sovereign/inquiries/principle_03_3_unsplit_files.toml"
+to = "code/inquiries/principle_03_3_unsplit_files.toml"
+[[move]]
+from = "sovereign/inquiries/principle_03_single_responsibility.toml"
+to = "code/inquiries/principle_03_single_responsibility.toml"
+[[move]]
+from = "sovereign/inquiries/principle_04_registry_pattern.toml"
+to = "code/inquiries/principle_04_registry_pattern.toml"
+[[move]]
+from = "sovereign/inquiries/principle_05_interface_segregation.toml"
+to = "code/inquiries/principle_05_interface_segregation.toml"
+[[move]]
+from = "sovereign/inquiries/principle_07_structural_privacy.toml"
+to = "code/inquiries/principle_07_structural_privacy.toml"
+[[move]]
+from = "sovereign/inquiries/principle_brief_witness.toml"
+to = "code/inquiries/principle_brief_witness.toml"
+
+# ── bench ──
+[[move]]
+from = "sovereign/crates/sovereign-eval"
+to = "bench/crates/sovereign-eval"
+[[move]]
+from = "sovereign/crates/sovereign-cli-bench"
+to = "bench/crates/sovereign-cli-bench"
+[[move]]
+from = "sovereign/bench"
+to = "bench/lanes"
+[[move]]
+from = "sovereign/inquiries/cognitive"
+to = "bench/lanes/cognitive"
+
+# ── svrn ──
+[[move]]
+from = "corpus-mcp"
+to = "svrn/crates/corpus-mcp"
+[[move]]
+from = "sovereign/crates/sovereign-core"
+to = "svrn/crates/sovereign-core"
+[[move]]
+from = "sovereign/crates/sovereign-daemon"
+to = "svrn/crates/sovereign-daemon"
+[[move]]
+from = "sovereign/crates/sovereign-tools"
+to = "svrn/crates/sovereign-tools"
+[[move]]
+from = "studio/crates/sovereign-tools-base"
+to = "svrn/crates/sovereign-tools-base"
+[[move]]
+from = "sovereign/crates/sovereign-store"
+to = "svrn/crates/sovereign-store"
+[[move]]
+from = "sovereign/crates/sovereign-service"
+to = "svrn/crates/sovereign-service"
+[[move]]
+from = "sovereign/crates/sovereign-cli"
+to = "svrn/crates/sovereign-cli"
+[[move]]
+from = "sovereign/crates/sovereign-cli-shared"
+to = "svrn/crates/sovereign-cli-shared"
+[[move]]
+from = "sovereign/crates/sovereign-cli-daemon"
+to = "svrn/crates/sovereign-cli-daemon"
+[[move]]
+from = "sovereign/crates/sovereign-cli-llm"
+to = "svrn/crates/sovereign-cli-llm"
+[[move]]
+from = "sovereign/crates/sovereign-runtime-recipe"
+to = "svrn/crates/sovereign-runtime-recipe"
+[[move]]
+from = "studio/crates/sovereign-workflow-host"
+to = "svrn/crates/sovereign-workflow-host"
+[[move]]
+from = "sovereign/crates/sovereign-meshapp"
+to = "svrn/crates/sovereign-meshapp"
+[[move]]
+from = "sovereign/crates/sovereign-grants"
+to = "svrn/crates/sovereign-grants"
+[[move]]
+from = "sovereign/docs"
+to = "svrn/docs"
+[[move]]
+from = "sovereign/scripts"
+to = "svrn/scripts"
+[[move]]
+from = "sovereign/modes"
+to = "svrn/modes"
+[[move]]
+from = "sovereign/tests"
+to = "svrn/tests"
+[[move]]
+from = "sovereign/ARCH_PRINCIPLES.md"
+to = "docs/ARCH_PRINCIPLES.md"
+[[move]]
+from = "sovereign/SYSTEM_OVERVIEW.md"
+to = "docs/SYSTEM_OVERVIEW.md"
+[[move]]
+from = "sovereign/SYSTEM_OVERVIEW_DETAIL.md"
+to = "docs/SYSTEM_OVERVIEW_DETAIL.md"
+[[move]]
+from = "sovereign/DEFAULTS_LEDGER.md"
+to = "docs/DEFAULTS_LEDGER.md"
+[[move]]
+from = "sovereign/HISTORY.md"
+to = "docs/HISTORY.md"
+[[move]]
+from = "sovereign/handoff"
+to = "docs/handoff"
+[[move]]
+from = "sovereign/README.md"
+to = "svrn/README.md"
+[[move]]
+from = "sovereign/ARCHITECTURE.md"
+to = "svrn/ARCHITECTURE.md"
+[[move]]
+from = "sovereign/ARCHITECTURE_ADDENDUM.md"
+to = "svrn/ARCHITECTURE_ADDENDUM.md"
+[[move]]
+from = "sovereign/IMPLEMENTATION_PLAN.md"
+to = "svrn/IMPLEMENTATION_PLAN.md"
+[[move]]
+from = "sovereign/KNOWLEDGE_BASE_FEAT.md"
+to = "svrn/KNOWLEDGE_BASE_FEAT.md"
+[[move]]
+from = "sovereign/KNOWLEDGE_BASE_PLAN.md"
+to = "svrn/KNOWLEDGE_BASE_PLAN.md"
+[[move]]
+from = "sovereign/PI_QUICKSTART.md"
+to = "svrn/PI_QUICKSTART.md"
+[[move]]
+from = "sovereign/SITUATED_FLYWHEEL.md"
+to = "svrn/SITUATED_FLYWHEEL.md"
+[[move]]
+from = "sovereign/AGENTS.md"
+to = "svrn/AGENTS.md"
+[[move]]
+from = "sovereign/bench-rocm.json"
+to = "svrn/bench-rocm.json"
+[[move]]
+from = "sovereign/sovereign-server.toml"
+to = "svrn/sovereign-server.toml"
+[[move]]
+from = "sovereign/.claude"
+to = "svrn/.claude"
+[[move]]
+from = "sovereign/.sovereign"
+to = "svrn/.sovereign"
+[[move]]
+from = "sovereign/.gitignore"
+to = "svrn/.gitignore"
+
+# ── clients ──
+[[move]]
+from = "sovereign/crates/sovereign-stock"
+to = "distributions/crates/sovereign-stock"
+[[move]]
+from = "sovereign/crates/sovereign-onprem"
+to = "distributions/crates/sovereign-onprem"
+[[move]]
+from = "sovereign/crates/sovereign-hosted-ingest"
+to = "distributions/crates/sovereign-hosted-ingest"
+[[move]]
+from = "sovereign/deploy/onprem"
+to = "distributions/deploy/onprem"
+[[move]]
+from = "sovereign/crates/sovereign-desktop"
+to = "clients/desktop"
+[[move]]
+from = "sovereign-mobile"
+to = "clients/mobile"
+[[move]]
+from = "studio/crates/sovereign-studio"
+to = "clients/studio"
+[[move]]
+from = "studio/BOUNDARY.md"
+to = "clients/studio/BOUNDARY.md"
+[[move]]
+from = "studio/LIBRARY.md"
+to = "clients/studio/LIBRARY.md"
+[[move]]
+from = "packages/chat-ui"
+to = "clients/chat-ui"
+[[move]]
+from = "packages/vscode-sovereign"
+to = "clients/vscode"
+[[move]]
+from = "landing"
+to = "clients/landing"
+
+# ── strays ──
+[[move]]
+from = "runs/ab-wikipedia"
+to = "research/runs/ab-wikipedia"
+[[move]]
+from = "runs/ei-3b-sep-backfill"
+to = "research/runs/ei-3b-sep-backfill"
+[[move]]
+from = "runs/ei-7b-field-digest"
+to = "research/runs/ei-7b-field-digest"
+[[move]]
+from = "runs/ei3c-gates"
+to = "research/runs/ei3c-gates"
+[[move]]
+from = "runs/ei3c-ollama-arm"
+to = "research/runs/ei3c-ollama-arm"
+[[move]]
+from = "runs/ei5b-stage2"
+to = "research/runs/ei5b-stage2"
+[[move]]
+from = "runs/ei5c-gates"
+to = "research/runs/ei5c-gates"
+[[move]]
+from = "runs/ei5c-lane-a2"
+to = "research/runs/ei5c-lane-a2"
+[[move]]
+from = "runs/ei5c-lanes"
+to = "research/runs/ei5c-lanes"
+[[move]]
+from = "runs/ei6-acceptance"
+to = "research/runs/ei6-acceptance"
+[[move]]
+from = "runs/ei6-restore-probe"
+to = "research/runs/ei6-restore-probe"
+[[move]]
+from = "runs/ei6b-acceptance"
+to = "research/runs/ei6b-acceptance"
+[[move]]
+from = "runs/ei6b-embed-parity"
+to = "research/runs/ei6b-embed-parity"
+[[move]]
+from = "runs/ei6b-local-restore"
+to = "research/runs/ei6b-local-restore"
+[[move]]
+from = "runs/gates-resume"
+to = "research/runs/gates-resume"
+[[move]]
+from = "runs/loop-dev-ab-offarm"
+to = "research/runs/loop-dev-ab-offarm"
+[[move]]
+from = "runs/sep-raptor-subset"
+to = "research/runs/sep-raptor-subset"
+[[move]]
+from = "runs/sep-repool"
+to = "research/runs/sep-repool"
+[[move]]
+from = "runs/sep-subset-pooling"
+to = "research/runs/sep-subset-pooling"
+[[move]]
+from = "runs/serve50-availability"
+to = "research/runs/serve50-availability"
+[[move]]
+from = "runs/wikipedia-rebuild"
+to = "research/runs/wikipedia-rebuild"
+[[move]]
+from = "sovereign/.githooks"
+to = "svrn/.githooks"
+[[move]]
+from = "sovereign/.opencode"
+to = "svrn/.opencode"

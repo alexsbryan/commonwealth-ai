@@ -28,6 +28,12 @@ from taint import txt, params_ordered
 DAEMON="http://localhost:9741/v1/chat/completions"
 M122="Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003"
 REPO=fg.REPO
+sys.path.insert(0, REPO + "/scripts/lib")
+from top_level_moves import Moves  # noqa: E402
+# The struct search's scope was sovereign/ and commonwealth/. Both are gone since
+# the top-level-programs move; their contents are wherever the table sent them.
+STRUCT_ROOTS = sorted({REPO + "/" + dst for src, dst in Moves.at(REPO).rows
+                       if src.split("/")[0] in ("sovereign", "commonwealth")})
 
 def chat(prompt, temperature=0.2, max_tokens=1100, model=M122):
     body=json.dumps(dict(model=model,temperature=temperature,max_tokens=max_tokens,
@@ -70,7 +76,7 @@ def struct_fields(type_str):
         import subprocess
         # 1) locate the definition site
         r=subprocess.run(["grep","-rn","--include=*.rs","-m1",f"struct {name} ",
-                          REPO+"/sovereign",REPO+"/commonwealth"],
+                          *STRUCT_ROOTS],
                          capture_output=True,text=True,timeout=20)
         hit=r.stdout.strip().splitlines()
         if hit:

@@ -220,7 +220,7 @@ pub enum ClaimedNodeId {
     Unreadable(String),
 }
 
-/// **The one production read of the `x-node-id` header in `sovereign/crates`.**
+/// **The one production read of the `x-node-id` header in the workspace.**
 ///
 /// The header is what a peer TYPES about itself, so it is evidence of a claim
 /// and never of an identity: on a surface the iroh acceptor fronts, the

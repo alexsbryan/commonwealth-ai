@@ -179,7 +179,7 @@ fn production_src_files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Repo-relative path ("sovereign/crates/..." form — the registry's
+/// Repo-relative path (`<program>/crates/...` form — the registry's
 /// key space).
 fn rel(root: &Path, p: &Path) -> String {
     p.strip_prefix(root)
