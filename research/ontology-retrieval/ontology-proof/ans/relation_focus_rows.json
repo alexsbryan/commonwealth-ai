@@ -1,0 +1,131 @@
+[
+ {
+  "section": "sec_00008",
+  "arm": "D",
+  "run": 0,
+  "from_entities": [
+   "Paeonia hoard",
+   "Jasna Poljana hoard"
+  ],
+  "seconds": 23.0,
+  "parse": true,
+  "emitted": 14,
+  "attested_reached": 10,
+  "attested": 10,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00008",
+  "arm": "D",
+  "run": 1,
+  "from_entities": [
+   "Paeonia hoard",
+   "Jasna Poljana hoard"
+  ],
+  "seconds": 20.0,
+  "parse": true,
+  "emitted": 14,
+  "attested_reached": 10,
+  "attested": 10,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00008",
+  "arm": "D",
+  "run": 2,
+  "from_entities": [
+   "Paeonia hoard",
+   "Jasna Poljana hoard"
+  ],
+  "seconds": 22.6,
+  "parse": true,
+  "emitted": 14,
+  "attested_reached": 10,
+  "attested": 10,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00004",
+  "arm": "D",
+  "run": 0,
+  "from_entities": [
+   "Asia Minor 1964 (IGCH 1441)"
+  ],
+  "seconds": 5.7,
+  "parse": true,
+  "emitted": 2,
+  "attested_reached": 2,
+  "attested": 6,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00004",
+  "arm": "D",
+  "run": 1,
+  "from_entities": [
+   "Asia Minor 1964 (IGCH 1441)"
+  ],
+  "seconds": 4.1,
+  "parse": true,
+  "emitted": 2,
+  "attested_reached": 2,
+  "attested": 6,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00004",
+  "arm": "D",
+  "run": 2,
+  "from_entities": [
+   "Asia Minor 1964 (IGCH 1441)"
+  ],
+  "seconds": 4.1,
+  "parse": true,
+  "emitted": 2,
+  "attested_reached": 2,
+  "attested": 6,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00009",
+  "arm": "D",
+  "run": 0,
+  "from_entities": [
+   "Aleppo Hoard"
+  ],
+  "seconds": 3.6,
+  "parse": true,
+  "emitted": 2,
+  "attested_reached": 2,
+  "attested": 6,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00009",
+  "arm": "D",
+  "run": 1,
+  "from_entities": [
+   "Aleppo Hoard"
+  ],
+  "seconds": 3.7,
+  "parse": true,
+  "emitted": 2,
+  "attested_reached": 2,
+  "attested": 6,
+  "non_mint_ends": 0
+ },
+ {
+  "section": "sec_00009",
+  "arm": "D",
+  "run": 2,
+  "from_entities": [
+   "Aleppo Hoard"
+  ],
+  "seconds": 2.7,
+  "parse": true,
+  "emitted": 2,
+  "attested_reached": 2,
+  "attested": 6,
+  "non_mint_ends": 0
+ }
+]
