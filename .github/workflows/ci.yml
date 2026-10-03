@@ -146,7 +146,7 @@ jobs:
               - 'vendor/**'
               - 'scripts/sovereign-test.sh'
               - 'scripts/lib/**'
-              - 'svrn/crates/sovereign-tools/src/code/test_adapters/**'
+              - 'code/crates/sovereign-code/src/test_adapters/**'
               # The CLI contract + journey manifest IS the test input for
               # cli_contract_{code,docs,journeys} and cli_journey_dispatch —
               # editing it can turn the suite red without touching a .rs file.
