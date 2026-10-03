@@ -41,7 +41,7 @@ Edges mean **"b derives from a"** (data dependence):
   in *value position* (skips method names, field names, free-fn names, type paths), so
   `x.method(a)` contributes `x` and `a`, not `method`.
 - **interprocedural** (SCIP call edges + positional arg matching): caller `arg_i` → callee
-  `@p:param_i`. Only first-party function-call edges (`% 0.1.20 %().` on both endpoints),
+  `@p:param_i`. Only first-party function-call edges (`% <workspace version> %().` on both endpoints),
   which excludes the module/structural refs that made naive reachability over-connect.
 
 Scale: **5,179 functions → ~32,800 nodes / ~60,900 edges in ~4 s.**

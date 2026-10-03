@@ -12,15 +12,21 @@ Nodes (per function, keyed by SCIP qualified name QUAL):
   QUAL::@srccall:<ln> a deserialize/body SOURCE call
 Edge  a -> b  ==  "b derives from a"  (data dependence), intra- + inter-procedural.
 """
-import os, re, sqlite3, sys, json, time
+import os, re, sqlite3, sys, json, time, tomllib
 from collections import defaultdict, deque
 from taint import (PARSER, txt, params_ordered, build_letmap, data_idents,
                    idents_in_pattern, is_test_function)
 import sources, guard
 
-REPO="/home/alexbryan/dev/commonwealth-ai"
-DB="/home/alexbryan/.sovereign/indexes/commonwealth-ai/scip_graph.db"
+REPO=os.path.abspath(os.path.join(os.path.dirname(__file__),"..","..",".."))
+DB=os.path.expanduser("~/.svrnmesh/indexes/commonwealth-ai/scip_graph.db")
 con=sqlite3.connect(DB)
+# First-party = the workspace version in every SCIP qualified name. Read, not
+# pinned: a literal "0.1.20" here matched nothing after the v0.2.0 cut and the
+# graph came back empty with exit 0.
+with open(os.path.join(REPO,"Cargo.toml"),"rb") as f:
+    VER=tomllib.load(f)["workspace"]["package"]["version"]
+FIRST_PARTY=f"% {VER} %()."
 
 PANIC_SINK={"unwrap","expect"}
 INJECT_CALL=re.compile(r"Command::new|process::Command|fs::(read|write|remove_|create|File|"
@@ -67,15 +73,15 @@ def add_sink(q,rel,n,kind,expr,src,letmap):
 
 # ---- SCIP load -----------------------------------------------------------
 t0=time.time()
-print("[scip] loading refs + symbols...", file=sys.stderr)
+print(f"[scip] loading refs + symbols (first-party = {FIRST_PARTY!r}, db={DB})...", file=sys.stderr)
 refs_by_caller=defaultdict(list)
 for cq,kq,ln in con.execute(
     "SELECT caller_qualified, callee_qualified, line FROM refs "
-    "WHERE caller_qualified LIKE '% 0.1.20 %().' AND callee_qualified LIKE '% 0.1.20 %().'"):
+    "WHERE caller_qualified LIKE ? AND callee_qualified LIKE ?", (FIRST_PARTY,FIRST_PARTY)):
     refs_by_caller[cq].append((kq,ln))
 rows_by_file=defaultdict(list)
 for q,f,ls in con.execute("SELECT qualified_name,file_path,line_start FROM symbols "
-                          "WHERE qualified_name LIKE '% 0.1.20 %().'"):
+                          "WHERE qualified_name LIKE ?", (FIRST_PARTY,)):
     rows_by_file[f].append((ls,q))
 
 # ---- locate every function's AST node, keyed by QUAL ---------------------
@@ -109,6 +115,9 @@ for rel in list(rows_by_file.keys()):
     if is_test_rel(rel): continue
     index_file_functions(rel)
 print(f"[graph] {len(FN)} functions located ({time.time()-t0:.1f}s)", file=sys.stderr)
+if not FN:
+    sys.exit(f"[graph] 0 functions located: no symbol matched {FIRST_PARTY!r} with a parseable "
+             f"file under {REPO} -- the index or the version filter is stale, not the code clean")
 
 # ---- emit nodes + edges (one AST pass per function) ----------------------
 def build():
@@ -211,7 +220,7 @@ def backward_slice(node):
     return seen
 
 def qual_of(nid): return nid.split("::@")[0].split("::")[0]
-def fn_short(nid): return qual_of(nid).split("0.1.20 ")[-1]
+def fn_short(nid): return qual_of(nid).split(f"{VER} ")[-1]
 def distinct_funcs(p): return len({qual_of(s) for s in p})
 
 if __name__=="__main__":
