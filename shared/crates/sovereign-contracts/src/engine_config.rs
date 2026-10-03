@@ -143,6 +143,12 @@ pub struct EngineSection {
     /// chats and retrieves is usually talking to two ports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embed_endpoint: Option<String>,
+    /// Fields merged last into every chat body `remote` sends: a vendor's own
+    /// knobs, e.g. OpenRouter's `provider = { require_parameters = true }`,
+    /// without which it may route a schema request to a backend that ignores
+    /// the schema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_params: Option<serde_json::Value>,
 }
 
 fn default_engine_context_size() -> u32 {
@@ -159,6 +165,7 @@ impl Default for EngineSection {
             context_size: default_engine_context_size(),
             embed_model_id: None,
             embed_endpoint: None,
+            extra_params: None,
         }
     }
 }

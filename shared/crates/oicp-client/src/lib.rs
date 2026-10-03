@@ -266,9 +266,9 @@ pub struct RemoteApiProvider {
     query_instruction: String,
     /// How this provider's host is asked for schema-shaped output.
     structured_output_mode: StructuredOutputMode,
-    /// False when requests through this provider originate here instead of
-    /// being forwarded for a peer; see [`Self::originating`].
-    forwards: bool,
+    /// Who answers: a peer (the default), the caller's own daemon
+    /// ([`Self::originating`]), or a third party ([`Self::third_party`]).
+    far_end: FarEnd,
     /// Operator-set vendor fields merged into every body last (OpenRouter's
     /// `provider` routing, OpenAI's `seed`).
     extra_params: Option<serde_json::Value>,
@@ -325,6 +325,7 @@ impl RemoteApiProvider {
     /// that would corrupt retrieval in a way no test downstream would
     /// catch.
     async fn embed_many_one_request(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        self.admit("embedding request", None)?;
         let url = format!("{}/embeddings", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": &self.model_id,
@@ -424,7 +425,7 @@ impl RemoteApiProvider {
             // (`embed`, which ignores the prefix) leave it empty.
             query_instruction: String::new(),
             structured_output_mode: StructuredOutputMode::default(),
-            forwards: true,
+            far_end: FarEnd::Peer,
             extra_params: None,
             json_schema_refused: std::sync::atomic::AtomicBool::new(false),
         }
@@ -494,12 +495,12 @@ impl RemoteApiProvider {
     }
 
     /// Requests through this provider ORIGINATE here (an enrich run calling
-    /// its own daemon or a vendor), they are not forwards for a peer: the
+    /// its own daemon, an engine on this machine), they are not forwards for a peer: the
     /// caller's OICP envelope crosses verbatim, no hop is spent and none is
     /// synthesized. A forward spends one, and an unstated budget is one hop,
     /// so a forwarded enrich call would reach the daemon unable to use a peer.
     pub fn originating(mut self) -> Self {
-        self.forwards = false;
+        self.far_end = FarEnd::Origin;
         self
     }
 
@@ -659,7 +660,11 @@ impl RemoteApiProvider {
         // unbounded. The desktop avoids that structurally by handing peers its
         // raw provider (sovereign-desktop state.rs); the CLI daemon installs
         // the mesh-routing provider and had no equivalent until this.
-        let oicp_val = if !self.forwards {
+        let oicp_val = if self.far_end == FarEnd::ThirdParty {
+            // A vendor does not speak OICP. The envelope is ours: `admit`
+            // has already read the one field that mattered to it.
+            None
+        } else if self.far_end == FarEnd::Origin {
             // Not a forward (`originating`): the caller's envelope or none.
             request
                 .oicp
@@ -1058,6 +1063,7 @@ struct StreamDelta {
 impl InferenceProvider for RemoteApiProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let start = Instant::now();
+        self.admit("chat request", request.oicp.as_ref())?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let (response, mode) = self.send_chat(&url, request).await?;
 
@@ -1122,6 +1128,7 @@ impl InferenceProvider for RemoteApiProvider {
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
         use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
+        self.admit("chat request", request.oicp.as_ref())?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
@@ -1207,6 +1214,7 @@ impl InferenceProvider for RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        self.admit("chat request", request.oicp.as_ref())?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
@@ -1265,6 +1273,7 @@ impl InferenceProvider for RemoteApiProvider {
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        self.admit("embedding request", None)?;
         let url = format!("{}/embeddings", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": &self.model_id,
@@ -1487,6 +1496,8 @@ pub struct SplitInferenceProvider {
 }
 
 mod chat_wire;
+mod far_end;
+pub use far_end::FarEnd;
 mod shed;
 pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
 mod loopback;

@@ -1155,10 +1155,8 @@ version = "0.1.0"
 [inference]
 privacy = "{}"
 "#,
-            match privacy {
-                ShardingPrivacy::LocalOnly => "local_only",
-                ShardingPrivacy::MeshAllowed => "mesh_allowed",
-            }
+            // The wire spelling serde owns, not a second copy of it.
+            serde_json::to_value(privacy).unwrap().as_str().unwrap()
         );
         parse_skill_toml(&toml).expect("parse test skill")
     }

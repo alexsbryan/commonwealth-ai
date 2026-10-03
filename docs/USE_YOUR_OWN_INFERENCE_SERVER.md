@@ -115,6 +115,44 @@ That's worth 1–5% on retrieval; a model without that asymmetry loses nothing.
 You can skip all of this if you don't use corpora, memory, or anything that
 retrieves — plain chat needs no embedding model.
 
+## A hosted provider
+
+`kind = "remote"` can point at a hosted API: OpenRouter, DeepSeek, or any
+other OpenAI-compatible vendor. Sovereign treats every endpoint that is not on
+this machine as a third party, and that changes what it will send there.
+
+**Only requests that say so go to it.** A request reaches a third-party engine
+only when its OICP envelope declares `privacy.sharding = "third_party_allowed"`.
+Anything else (no envelope, `local_only`, `mesh_allowed`) is refused before
+anything leaves, with an error naming that declaration. An enrichment run
+declares it with `--consent <class>`. Chat does not declare it yet, so chat on
+a hosted engine is refused rather than sent.
+
+**Embeddings stay on this machine.** An embedding request carries no envelope,
+so it can never declare that release. Point `embed_endpoint` at a server here:
+a llama-server running the embedding model is enough.
+
+**Vendor knobs go in `extra_params`**, merged into every chat body last.
+OpenRouter needs `require_parameters`, or it may route a schema request to a
+backend that ignores the schema, and that loss is silent.
+
+```toml
+[engine]
+kind = "remote"
+endpoint = "https://openrouter.ai/api/v1"
+model_id = "deepseek/deepseek-v3.2"
+api_key = "..."
+context_size = 65536
+embed_endpoint = "http://127.0.0.1:8089/v1"
+embed_model_id = "Qwen3-Embedding-0.6B"
+extra_params = { provider = { require_parameters = true } }
+```
+
+A server you run on another machine of your own, vLLM on your LAN for
+instance, is treated the same way, because an address cannot say whose machine
+it is. If your requests should not need the declaration, run a Sovereign node on
+that machine and reach it over the mesh instead.
+
 ## What still works, and what doesn't
 
 Chat, streaming, tool calls, the OpenAI-compatible API on `:9741`, corpora and
@@ -146,7 +184,8 @@ reports itself unavailable rather than pretending it worked.
 
 `kind = "remote"` talks the OpenAI API, which is what vLLM, SGLang, TGI,
 llama-server, LM Studio, Ollama and most hosted providers speak. If your engine
-speaks that, you're done — the name on the box doesn't matter.
+speaks that, you're done — the name on the box doesn't matter. A hosted
+one is a third party: read "A hosted provider" above.
 
 If it doesn't, or you want it in the daemon's own process rather than behind
 HTTP, you can compile an engine in. That means implementing four methods in Rust

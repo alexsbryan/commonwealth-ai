@@ -772,6 +772,21 @@ Cold start and hot reload both reach it through ONE serving assembly,
 which adds admission, llama's slot installs and the compute-child layer; a
 reload re-wraps the running compute children instead of spawning new ones.
 
+**A remote engine off this machine is a third party.** `build_remote` builds
+one shape, `oicp_client::SplitInferenceProvider::engine` (`far_end.rs`), which
+decides each half's `FarEnd`: a loopback endpoint is a server on this box
+(locus `ForwardsOnBox`), anything else a third party (locus
+`ForwardsToThirdParty`, client from `egress::model_client`). A third-party far
+end sends nothing a request did not declare: every sending method of
+`RemoteApiProvider` calls `admit` first, and only an envelope saying
+`privacy.sharding = "third_party_allowed"` passes. No envelope, `local_only`
+and `mesh_allowed` are refused with `PermissionDenied` before anything is
+sent, and embeddings and rerank, which carry no envelope, always are, so a
+hosted engine needs `embed_endpoint` on this machine. The envelope itself is
+not sent to a vendor. `third_party_allowed` is not a rung above
+`mesh_allowed`: the mesh readers compare to `MeshAllowed` exactly, so such a
+request never leaves for a peer.
+
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers
 while the app is closed, which makes idle-EXIT impossible and idle-UNLOAD the

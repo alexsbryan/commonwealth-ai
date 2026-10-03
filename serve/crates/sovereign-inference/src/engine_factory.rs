@@ -320,58 +320,45 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
     // Chat and embeddings are ONE model id on ONE endpoint unless the
     // operator says otherwise. That default is correct against a Sovereign
     // daemon, which routes embeddings to its own embed slot whatever id it
-    // is handed — and wrong against vLLM / SGLang / TGI, which serve one
+    // is handed, and wrong against vLLM / SGLang / TGI, which serve one
     // model per process and return a non-embedding shape (or an error) when
-    // a chat model reaches `/embeddings`. Naming either embed key opts into
-    // the split provider, which keeps the two ids on their own routes.
-    let provider: Arc<dyn InferenceProvider> =
-        if section.embed_model_id.is_some() || section.embed_endpoint.is_some() {
-            let embed_model_id = section.embed_model_id.clone().ok_or_else(|| {
-                "[engine] embed_endpoint is set but embed_model_id is not. The embedding \
-                 server still has to be told WHICH model to embed with, and guessing it \
-                 from the chat id is how a chat model ends up on the embeddings route."
-                    .to_string()
-            })?;
-            let embed_endpoint = section
-                .embed_endpoint
-                .clone()
-                .unwrap_or_else(|| endpoint.to_string());
-            tracing::info!(
-                target: "engine_factory",
-                endpoint = %endpoint,
-                model_id = %model_id,
-                embed_endpoint = %embed_endpoint,
-                embed_model_id = %embed_model_id,
-                "remote engine constructed (split chat/embed) — this node holds no weights"
-            );
-            Arc::new(crate::remote::SplitInferenceProvider::new_split_endpoints(
-                endpoint,
-                &embed_endpoint,
-                section.api_key.clone(),
-                model_id.to_string(),
-                embed_model_id,
-                section.context_size,
-                // No query-instruction prefix: it is a property of a specific
-                // embedding model, and an operator-configured one is not
-                // knowable here. Asymmetric models lose 1-5% retrieval, which
-                // is the honest cost of not inventing a prefix for them.
-                String::new(),
-            ))
-        } else {
-            tracing::info!(
-                target: "engine_factory",
-                endpoint = %endpoint,
-                model_id = %model_id,
-                context_size = section.context_size,
-                "remote engine constructed — this node holds no weights"
-            );
-            Arc::new(crate::remote::RemoteApiProvider::new(
-                endpoint,
-                section.api_key.clone(),
-                model_id,
-                section.context_size,
-            ))
-        };
+    // a chat model reaches `/embeddings`. So an embed endpoint must name its
+    // model.
+    if section.embed_endpoint.is_some() && section.embed_model_id.is_none() {
+        return Err(
+            "[engine] embed_endpoint is set but embed_model_id is not. The embedding \
+             server still has to be told WHICH model to embed with, and guessing it \
+             from the chat id is how a chat model ends up on the embeddings route."
+                .to_string(),
+        );
+    }
+    let embed_endpoint = section.embed_endpoint.as_deref().unwrap_or(endpoint);
+    let embed_model_id = section.embed_model_id.as_deref().unwrap_or(model_id);
+    // One shape for every remote engine. The pair decides each half's far
+    // end (an endpoint off this machine is a third party, which sends nothing
+    // a request did not declare) and the locus the router reads. The
+    // single-endpoint branch this replaced reported `OwnWeights`, so a
+    // `local_only` turn went to whatever the endpoint named.
+    let provider = crate::remote::SplitInferenceProvider::engine(
+        endpoint,
+        embed_endpoint,
+        section.api_key.clone(),
+        model_id.to_string(),
+        embed_model_id.to_string(),
+        section.context_size,
+        section.extra_params.clone(),
+    )
+    .map_err(|e| format!("[engine] kind = \"remote\": {e}"))?;
+    tracing::info!(
+        target: "engine_factory",
+        endpoint = %endpoint,
+        model_id = %model_id,
+        embed_endpoint = %embed_endpoint,
+        embed_model_id = %embed_model_id,
+        locus = ?provider.serving_locus(),
+        "remote engine constructed — this node holds no weights"
+    );
+    let provider: Arc<dyn InferenceProvider> = Arc::new(provider);
     Ok(BuiltEngine::external(provider))
 }
 
@@ -494,6 +481,7 @@ mod tests {
             context_size: 8192,
             embed_model_id: None,
             embed_endpoint: None,
+            extra_params: None,
         };
         // Deliberately absent paths: if this engine touched a GGUF the
         // build would fail, and that failure is the assertion.
@@ -533,6 +521,7 @@ mod tests {
             context_size: 32768,
             embed_endpoint: Some("http://127.0.0.1:8001/v1".to_string()),
             embed_model_id: Some("BAAI/bge-m3".to_string()),
+            extra_params: None,
         };
         let built = build_engine(&config).expect("split chat/embed builds without I/O");
         assert!(built.llama.is_none());
@@ -561,6 +550,40 @@ mod tests {
         };
         let err = build_engine(&config).expect_err("must refuse rather than guess");
         assert!(err.contains("embed_model_id"), "got: {err}");
+    }
+
+    /// The input the single-endpoint branch got wrong: it reported
+    /// `OwnWeights`, so a `local_only` turn went to whatever the endpoint
+    /// named. Off this machine is a third party in both config shapes; a
+    /// loopback server is this machine.
+    #[test]
+    fn a_remote_engine_off_this_machine_is_a_third_party() {
+        use sovereign_contracts::traits::ServingLocus;
+        let locus = |endpoint: &str, embed_endpoint: Option<&str>| {
+            let mut config = SetupConfig::unconfigured();
+            config.engine = EngineSection {
+                kind: EngineKind::Remote,
+                endpoint: Some(endpoint.to_string()),
+                model_id: Some("m".to_string()),
+                embed_endpoint: embed_endpoint.map(str::to_string),
+                embed_model_id: embed_endpoint.map(|_| "e".to_string()),
+                ..Default::default()
+            };
+            build_engine(&config)
+                .expect("builds without I/O")
+                .provider
+                .serving_locus()
+        };
+        let vendor = "https://api.deepseek.com/v1";
+        assert_eq!(locus(vendor, None), ServingLocus::ForwardsToThirdParty);
+        assert_eq!(
+            locus(vendor, Some("http://127.0.0.1:9741/v1")),
+            ServingLocus::ForwardsToThirdParty
+        );
+        assert_eq!(
+            locus("http://127.0.0.1:8000/v1", None),
+            ServingLocus::ForwardsOnBox
+        );
     }
 
     /// An out-of-tree engine reaches the seam through the registry, and

@@ -103,8 +103,8 @@
 2011	serve/crates/sovereign-compute::tests
 755	serve/crates/sovereign-gliner
 1307	serve/crates/sovereign-gliner::tests
-8409	serve/crates/sovereign-inference
-20446	serve/crates/sovereign-inference::tests
+8395	serve/crates/sovereign-inference
+20477	serve/crates/sovereign-inference::tests
 2563	serve/crates/sovereign-scheduler
 2301	serve/crates/sovereign-scheduler::tests
 9213	serve/crates/sovereign-serve
@@ -131,10 +131,10 @@
 480	shared/crates/mesh-join-vocab::tests
 611	shared/crates/mesh-reach
 667	shared/crates/mesh-reach::tests
-2868	shared/crates/oicp-client
-1260	shared/crates/oicp-client::tests
-5224	shared/crates/oicp-types
-2545	shared/crates/oicp-types::tests
+3117	shared/crates/oicp-client
+1275	shared/crates/oicp-client::tests
+5225	shared/crates/oicp-types
+2553	shared/crates/oicp-types::tests
 266	shared/crates/oplog
 62	shared/crates/oplog-types
 239	shared/crates/oplog::tests
@@ -142,8 +142,8 @@
 82	shared/crates/serving-policy-core::tests
 1193	shared/crates/sovereign-cli-base
 309	shared/crates/sovereign-cli-base::tests
-19039	shared/crates/sovereign-contracts
-8593	shared/crates/sovereign-contracts::tests
+19043	shared/crates/sovereign-contracts
+8590	shared/crates/sovereign-contracts::tests
 25	shared/crates/sovereign-peer-wire
 27	shared/crates/sovereign-time
 13	shared/crates/sovereign-time::tests
