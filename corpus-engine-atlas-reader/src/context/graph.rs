@@ -104,6 +104,10 @@ pub struct AtlasGraph {
     /// whether or not types are declared, or attached by a loader from the
     /// corpus's pipeline ([`Self::with_pipeline_map`]) when there is no file.
     navigation: Option<NavigationAttachment>,
+    /// This graph's entities, claims and relations as typed atoms, parsed
+    /// once from the records' payloads on the first typed query
+    /// ([`super::typed`]). Shared by clones, like the preload it reads.
+    pub(super) typed_atoms: Arc<std::sync::OnceLock<super::typed::TypedAtoms>>,
 }
 
 /// How a navigation map reached this graph — the owned form of
@@ -192,6 +196,7 @@ impl AtlasGraph {
             index_root: None,
             section_rows: Arc::new(HashMap::new()),
             navigation: None,
+            typed_atoms: Arc::default(),
         }
     }
 

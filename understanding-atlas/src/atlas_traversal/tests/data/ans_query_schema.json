@@ -1,0 +1,1558 @@
+{
+ "anyOf": [
+  {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "target_type": {
+     "const": "hoard"
+    },
+    "filters": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "attribute",
+       "op",
+       "value",
+       "negate"
+      ],
+      "properties": {
+       "attribute": {
+        "enum": [
+         "name",
+         "findspot",
+         "found",
+         "buried",
+         "igch"
+        ]
+       },
+       "op": {
+        "enum": [
+         "eq",
+         "lt",
+         "gt",
+         "contains"
+        ]
+       },
+       "value": {
+        "type": [
+         "string",
+         "number"
+        ]
+       },
+       "negate": {
+        "type": "boolean"
+       }
+      }
+     }
+    },
+    "relations": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "anyOf": [
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "coin.hoard"
+         },
+         "other_type": {
+          "const": "coin"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name",
+                  "denomination",
+                  "metal",
+                  "weight",
+                  "struck"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.ruler"
+                  },
+                  "other_type": {
+                   "const": "ruler"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.mint"
+                  },
+                  "other_type": {
+                   "const": "mint"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.hoard"
+                  },
+                  "other_type": {
+                   "const": "hoard"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "holds_coins_of"
+         },
+         "other_type": {
+          "const": "mint"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.mint"
+                  },
+                  "other_type": {
+                   "const": "coin"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "holds_coins_of"
+                  },
+                  "other_type": {
+                   "const": "hoard"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    },
+    "aggregate": {
+     "enum": [
+      "none",
+      "count",
+      "argmax",
+      "argmin"
+     ]
+    },
+    "aggregate_over": {
+     "enum": [
+      null,
+      "found",
+      "buried",
+      "coin",
+      "mint"
+     ]
+    }
+   },
+   "required": [
+    "target_type",
+    "filters",
+    "relations",
+    "aggregate",
+    "aggregate_over"
+   ]
+  },
+  {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "target_type": {
+     "const": "coin"
+    },
+    "filters": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "attribute",
+       "op",
+       "value",
+       "negate"
+      ],
+      "properties": {
+       "attribute": {
+        "enum": [
+         "name",
+         "denomination",
+         "metal",
+         "weight",
+         "struck"
+        ]
+       },
+       "op": {
+        "enum": [
+         "eq",
+         "lt",
+         "gt",
+         "contains"
+        ]
+       },
+       "value": {
+        "type": [
+         "string",
+         "number"
+        ]
+       },
+       "negate": {
+        "type": "boolean"
+       }
+      }
+     }
+    },
+    "relations": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "anyOf": [
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "coin.ruler"
+         },
+         "other_type": {
+          "const": "ruler"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.ruler"
+                  },
+                  "other_type": {
+                   "const": "coin"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "coin.mint"
+         },
+         "other_type": {
+          "const": "mint"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.mint"
+                  },
+                  "other_type": {
+                   "const": "coin"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "holds_coins_of"
+                  },
+                  "other_type": {
+                   "const": "hoard"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "coin.hoard"
+         },
+         "other_type": {
+          "const": "hoard"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name",
+                  "findspot",
+                  "found",
+                  "buried",
+                  "igch"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.hoard"
+                  },
+                  "other_type": {
+                   "const": "coin"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "holds_coins_of"
+                  },
+                  "other_type": {
+                   "const": "mint"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    },
+    "aggregate": {
+     "enum": [
+      "none",
+      "count",
+      "argmax",
+      "argmin"
+     ]
+    },
+    "aggregate_over": {
+     "enum": [
+      null,
+      "weight",
+      "struck",
+      "hoard",
+      "mint",
+      "ruler"
+     ]
+    }
+   },
+   "required": [
+    "target_type",
+    "filters",
+    "relations",
+    "aggregate",
+    "aggregate_over"
+   ]
+  },
+  {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "target_type": {
+     "const": "ruler"
+    },
+    "filters": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "attribute",
+       "op",
+       "value",
+       "negate"
+      ],
+      "properties": {
+       "attribute": {
+        "enum": [
+         "name"
+        ]
+       },
+       "op": {
+        "enum": [
+         "eq",
+         "lt",
+         "gt",
+         "contains"
+        ]
+       },
+       "value": {
+        "type": [
+         "string",
+         "number"
+        ]
+       },
+       "negate": {
+        "type": "boolean"
+       }
+      }
+     }
+    },
+    "relations": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "anyOf": [
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "coin.ruler"
+         },
+         "other_type": {
+          "const": "coin"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name",
+                  "denomination",
+                  "metal",
+                  "weight",
+                  "struck"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.ruler"
+                  },
+                  "other_type": {
+                   "const": "ruler"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.mint"
+                  },
+                  "other_type": {
+                   "const": "mint"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.hoard"
+                  },
+                  "other_type": {
+                   "const": "hoard"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    },
+    "aggregate": {
+     "enum": [
+      "none",
+      "count",
+      "argmax",
+      "argmin"
+     ]
+    },
+    "aggregate_over": {
+     "enum": [
+      null,
+      "coin"
+     ]
+    }
+   },
+   "required": [
+    "target_type",
+    "filters",
+    "relations",
+    "aggregate",
+    "aggregate_over"
+   ]
+  },
+  {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "target_type": {
+     "const": "mint"
+    },
+    "filters": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "attribute",
+       "op",
+       "value",
+       "negate"
+      ],
+      "properties": {
+       "attribute": {
+        "enum": [
+         "name"
+        ]
+       },
+       "op": {
+        "enum": [
+         "eq",
+         "lt",
+         "gt",
+         "contains"
+        ]
+       },
+       "value": {
+        "type": [
+         "string",
+         "number"
+        ]
+       },
+       "negate": {
+        "type": "boolean"
+       }
+      }
+     }
+    },
+    "relations": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "anyOf": [
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "coin.mint"
+         },
+         "other_type": {
+          "const": "coin"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name",
+                  "denomination",
+                  "metal",
+                  "weight",
+                  "struck"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.ruler"
+                  },
+                  "other_type": {
+                   "const": "ruler"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.mint"
+                  },
+                  "other_type": {
+                   "const": "mint"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.hoard"
+                  },
+                  "other_type": {
+                   "const": "hoard"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "relation",
+         "other_type",
+         "other_name",
+         "negate",
+         "where"
+        ],
+        "properties": {
+         "relation": {
+          "const": "holds_coins_of"
+         },
+         "other_type": {
+          "const": "hoard"
+         },
+         "other_name": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "negate": {
+          "type": "boolean"
+         },
+         "where": {
+          "anyOf": [
+           {
+            "type": "null"
+           },
+           {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "filters",
+             "relations"
+            ],
+            "properties": {
+             "filters": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "type": "object",
+               "additionalProperties": false,
+               "required": [
+                "attribute",
+                "op",
+                "value",
+                "negate"
+               ],
+               "properties": {
+                "attribute": {
+                 "enum": [
+                  "name",
+                  "findspot",
+                  "found",
+                  "buried",
+                  "igch"
+                 ]
+                },
+                "op": {
+                 "enum": [
+                  "eq",
+                  "lt",
+                  "gt",
+                  "contains"
+                 ]
+                },
+                "value": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                },
+                "negate": {
+                 "type": "boolean"
+                }
+               }
+              }
+             },
+             "relations": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "coin.hoard"
+                  },
+                  "other_type": {
+                   "const": "coin"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                },
+                {
+                 "type": "object",
+                 "additionalProperties": false,
+                 "required": [
+                  "relation",
+                  "other_type",
+                  "other_name",
+                  "negate"
+                 ],
+                 "properties": {
+                  "relation": {
+                   "const": "holds_coins_of"
+                  },
+                  "other_type": {
+                   "const": "mint"
+                  },
+                  "other_name": {
+                   "type": [
+                    "string",
+                    "null"
+                   ]
+                  },
+                  "negate": {
+                   "type": "boolean"
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    },
+    "aggregate": {
+     "enum": [
+      "none",
+      "count",
+      "argmax",
+      "argmin"
+     ]
+    },
+    "aggregate_over": {
+     "enum": [
+      null,
+      "coin",
+      "hoard"
+     ]
+    }
+   },
+   "required": [
+    "target_type",
+    "filters",
+    "relations",
+    "aggregate",
+    "aggregate_over"
+   ]
+  }
+ ]
+}

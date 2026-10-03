@@ -96,6 +96,8 @@ mod reindex_stamps_freshness;
 mod sharding_round_trip_e2e;
 #[path = "main/snapshot_restore_e2e.rs"]
 mod snapshot_restore_e2e;
+#[path = "main/typed_answer_graph.rs"]
+mod typed_answer_graph;
 // Not a test file: the two source-tree deciders the gates below share.
 #[path = "main/chunk_ner_bounded_seam.rs"]
 mod chunk_ner_bounded_seam;

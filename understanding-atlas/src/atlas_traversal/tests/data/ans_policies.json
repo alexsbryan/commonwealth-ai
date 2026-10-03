@@ -1,0 +1,399 @@
+{
+ "shape": {
+  "types": [
+   {
+    "name": "hoard",
+    "kind": "entity",
+    "description": "A group of coins buried and found together, named by findspot and year of discovery: the Demanhur hoard, Asia Minor 1964.",
+    "attributes": [
+     {
+      "name": "findspot",
+      "type": "text",
+      "values": [],
+      "description": "the place where the hoard was found (a place name, region or country)"
+     },
+     {
+      "name": "found",
+      "type": "time",
+      "range": false,
+      "description": "when the hoard was discovered (a year)"
+     },
+     {
+      "name": "buried",
+      "type": "time",
+      "range": true,
+      "description": "when the hoard was buried (a year, or a span of years)"
+     },
+     {
+      "name": "igch",
+      "type": "text",
+      "values": [],
+      "description": "the hoard's IGCH catalogue number, digits only: 1441 for \"IGCH 1441\""
+     }
+    ],
+    "specializes": null,
+    "role_of": null,
+    "from": null,
+    "to": null,
+    "participants": {},
+    "of": null,
+    "source": null,
+    "label": null,
+    "identity": [
+     "igch"
+    ],
+    "identity_fallback": [],
+    "force": null,
+    "deontic": [],
+    "subject": null,
+    "grades": [],
+    "anchors": [],
+    "scope": null
+   },
+   {
+    "name": "coin",
+    "kind": "entity",
+    "description": "A coin type or group of coins: ruler, mint, denomination, metal, and the hoard it came from.",
+    "attributes": [
+     {
+      "name": "ruler",
+      "type": "ref",
+      "of": "ruler",
+      "description": ""
+     },
+     {
+      "name": "mint",
+      "type": "ref",
+      "of": "mint",
+      "description": ""
+     },
+     {
+      "name": "hoard",
+      "type": "ref",
+      "of": "hoard",
+      "description": ""
+     },
+     {
+      "name": "denomination",
+      "type": "text",
+      "values": [],
+      "description": "the coin's denomination (stater, tetradrachm, drachm ...)"
+     },
+     {
+      "name": "metal",
+      "type": "text",
+      "values": [
+       "gold",
+       "silver",
+       "billon",
+       "copper"
+      ],
+      "description": "the coin's metal"
+     },
+     {
+      "name": "weight",
+      "type": "quantity",
+      "unit": "g",
+      "description": "the coin's weight"
+     },
+     {
+      "name": "struck",
+      "type": "time",
+      "range": true,
+      "description": "when the coin was struck (a year, or a span of years)"
+     }
+    ],
+    "specializes": null,
+    "role_of": null,
+    "from": null,
+    "to": null,
+    "participants": {},
+    "of": null,
+    "source": null,
+    "label": null,
+    "identity": [],
+    "identity_fallback": [],
+    "force": null,
+    "deontic": [],
+    "subject": null,
+    "grades": [],
+    "anchors": [],
+    "scope": null
+   },
+   {
+    "name": "ruler",
+    "kind": "entity",
+    "description": "",
+    "attributes": [],
+    "specializes": null,
+    "role_of": "person",
+    "from": null,
+    "to": null,
+    "participants": {},
+    "of": null,
+    "source": null,
+    "label": null,
+    "identity": [],
+    "identity_fallback": [],
+    "force": null,
+    "deontic": [],
+    "subject": null,
+    "grades": [],
+    "anchors": [],
+    "scope": null
+   },
+   {
+    "name": "mint",
+    "kind": "entity",
+    "description": "A city where coins were struck: Amphipolis, Babylon, Lampsacus.",
+    "attributes": [],
+    "specializes": null,
+    "role_of": null,
+    "from": null,
+    "to": null,
+    "participants": {},
+    "of": null,
+    "source": null,
+    "label": null,
+    "identity": [],
+    "identity_fallback": [],
+    "force": null,
+    "deontic": [],
+    "subject": null,
+    "grades": [],
+    "anchors": [],
+    "scope": null
+   },
+   {
+    "name": "holds_coins_of",
+    "kind": "relation",
+    "description": "The hoard contains coins struck at this mint. A hoard report lists its coins mint by mint; every mint named for a hoard is one of these, even when no single coin is described.",
+    "attributes": [],
+    "specializes": null,
+    "role_of": null,
+    "from": "hoard",
+    "to": "mint",
+    "participants": {},
+    "of": null,
+    "source": null,
+    "label": null,
+    "identity": [],
+    "identity_fallback": [],
+    "force": null,
+    "deontic": [],
+    "subject": null,
+    "grades": [],
+    "anchors": [],
+    "scope": null
+   },
+   {
+    "name": "attribution",
+    "kind": "claim",
+    "description": "",
+    "attributes": [
+     {
+      "name": "proposed_date",
+      "type": "time",
+      "range": true,
+      "description": ""
+     }
+    ],
+    "specializes": null,
+    "role_of": null,
+    "from": null,
+    "to": null,
+    "participants": {},
+    "of": null,
+    "source": null,
+    "label": null,
+    "identity": [],
+    "identity_fallback": [],
+    "force": "assertive",
+    "deontic": [],
+    "subject": "coin",
+    "grades": [
+     "die-link",
+     "hoard-context",
+     "stylistic",
+     "metrological"
+    ],
+    "anchors": [],
+    "scope": null
+   }
+  ],
+  "max_entities_per_section": null
+ },
+ "assertion": {
+  "voices": {
+   "not_entities": [],
+   "self": null,
+   "attributed_to": []
+  },
+  "must_not": []
+ },
+ "identity": {
+  "identity": {
+   "hoard": [
+    "igch"
+   ]
+  },
+  "identity_fallback": {}
+ },
+ "change": {
+  "clock": "document_date",
+  "supersedes": {}
+ },
+ "derivation": {
+  "tension": {
+   "label": null,
+   "between": [
+    "attribution"
+   ],
+   "same": null,
+   "not_conflicts": []
+  },
+  "patterns": [],
+  "configurations": false,
+  "arguments": false
+ },
+ "prose": {
+  "guidance": "This corpus is numismatic scholarship on the coinage of Alexander the Great and the\nHellenistic kingdoms: hoard reports, mint studies and dating arguments. A hoard is a\ngroup of coins buried together and found together; the books name a hoard by where and\nwhen it was found (the Demanhur hoard, Asia Minor 1964, Armenak) and the later books add\nan IGCH number. A hoard report lists the coins the hoard held, mint by mint. Each coin or\ngroup of coins is a thing in its own right: the ruler in whose name it was struck, the\nmint that struck it, its denomination (stater, tetradrachm, drachm), metal, weight, when\nit was struck, and the hoard it came from when the text says so. A mint is a city where\ncoins were struck. A ruler is the king or dynast named on the coin. Attributions are\nclaims a scholar makes about a coin's mint or date, graded by the kind of evidence\noffered; a later book may dispute an earlier attribution, and the dispute is worth\nsurfacing.\n",
+  "terms": {
+   "concern_term": "concern",
+   "position_term": "position",
+   "tension_term": "tension",
+   "absence_term": "gap",
+   "evidence_term": "passage"
+  }
+ },
+ "navigation": {
+  "thematic": {
+   "seed": {
+    "kinds": [
+     "Configuration",
+     "Entity",
+     "Summary"
+    ],
+    "entity_types": [
+     "concept"
+    ],
+    "declared": false,
+    "budgets": {
+     "Summary": 8
+    }
+   },
+   "walk": [
+    "Involves",
+    "Tension",
+    "Grounds",
+    "Configures"
+   ],
+   "hops": 2,
+   "budget": 12,
+   "exemplars": [
+    "what is this about",
+    "what are the themes",
+    "what does this work say as a whole",
+    "summarise what this is concerned with"
+   ],
+   "summary_sources": [
+    "atoms",
+    "raptor"
+   ]
+  },
+  "trajectory": {
+   "seed": {
+    "kinds": [
+     "Entity",
+     "State"
+    ],
+    "entity_types": [],
+    "declared": false,
+    "budgets": {}
+   },
+   "walk": [
+    "Transition",
+    "Causes"
+   ],
+   "hops": 2,
+   "budget": 12,
+   "exemplars": [
+    "how does this change",
+    "how did it develop over time",
+    "what happens to them over the course of it",
+    "trace the arc of this"
+   ],
+   "summary_sources": []
+  },
+  "tension": {
+   "seed": {
+    "kinds": [
+     "Claim",
+     "Position"
+    ],
+    "entity_types": [],
+    "declared": false,
+    "budgets": {}
+   },
+   "walk": [
+    "Tension",
+    "OpposesIn"
+   ],
+   "hops": 1,
+   "budget": 12,
+   "exemplars": [
+    "where does it disagree",
+    "what tensions does it raise",
+    "which claims contradict each other",
+    "what are the objections to this position"
+   ],
+   "summary_sources": []
+  },
+  "enumeration": {
+   "seed": {
+    "kinds": [],
+    "entity_types": [],
+    "declared": true,
+    "budgets": {}
+   },
+   "walk": [],
+   "hops": 0,
+   "budget": 12,
+   "exemplars": [
+    "which ones are there",
+    "list all of them",
+    "which types of things are included",
+    "what items does the collection contain",
+    "which members belong to this group",
+    "what kinds are represented in it",
+    "name every category it covers",
+    "which ones does it record"
+   ],
+   "summary_sources": []
+  },
+  "lookup": {
+   "seed": {
+    "kinds": [
+     "Entity",
+     "Event",
+     "Relation"
+    ],
+    "entity_types": [],
+    "declared": false,
+    "budgets": {}
+   },
+   "walk": [
+    "Involves"
+   ],
+   "hops": 1,
+   "budget": 12,
+   "exemplars": [
+    "who is this person",
+    "tell me about this one",
+    "what is this thing",
+    "give me the entry for it"
+   ],
+   "summary_sources": []
+  }
+ }
+}

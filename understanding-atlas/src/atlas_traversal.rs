@@ -18,6 +18,7 @@ pub mod spans;
 pub mod typed;
 mod typed_check;
 mod typed_match;
+pub mod typed_prompt;
 
 // The declared-ontology fixture the classifier and traversal tests use in
 // place of `corpus-engine`'s `recipe_templates::numismatics_policies` (a

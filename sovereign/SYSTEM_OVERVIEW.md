@@ -151,7 +151,10 @@ thing), [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md),
   as a cited table with a count line. An unset attribute sets the atom
   aside as unjudged and says so. `svrn enrich atlas-query <corpus> --typed
   '<json>'` runs one as written (`--json`: rows `{name, atom_id,
-  attributes, evidence}`).
+  attributes, evidence}`). `typed_prompt::query_grammar` renders a declared
+  ontology as the documentation and per-type JSON Schema a model writes one
+  against (the query-layer probe's, byte for byte); `AtlasGraph::typed_answer`
+  runs the same executor over a loaded graph.
 - `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
   `alignment_projector.rs`.
 
@@ -687,6 +690,11 @@ late summaries and prompt admission; the pipeline's `scope_audit` is not the
 final prompt pool. Atlas grounding reports raw request counts separately
 from the pipeline's chunk-equivalent injection ledger because one request can
 yield multiple passages.
+`atom_enum` (opt-in `SOVEREIGN_ATOM_ENUM=1`) answers a list question its
+Stage-1 gate calls ENUMERATE; when a corpus in scope declared types, the model
+writes a typed query (`atom_enum_typed.rs`, primary slot, schema-constrained)
+and the executed, cited table enters the pool as one `source=atom-enum`
+chunk, with the degree-ranked entity fetch as the named fallback.
 
 **An answer over missing knowledge says so, and CODE guarantees it.**
 `UnavailabilityReason` is a closed enum, `corpus_unavailability()` is the one

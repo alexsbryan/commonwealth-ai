@@ -36,6 +36,8 @@ use corpus_index::types::ScoredChunk;
 // `sovereign_core::atlas_context` — keeps resolving unchanged.
 #[path = "context/graph.rs"]
 mod graph;
+#[path = "context/typed.rs"]
+pub mod typed;
 #[path = "context/views.rs"]
 mod views;
 pub use graph::{

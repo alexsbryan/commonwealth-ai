@@ -2275,6 +2275,12 @@ already exists and is deterministic (~9 min per arm):
 | `SOVEREIGN_ATOM_ENUM` | entity-typed atom enumeration for enumeration-class questions | an A/B on a bank with enumeration questions ("which X were involved") — the Enron counterparty case its doc comment cites |
 | `SOVEREIGN_ATOM_ENUM_RELATIONS` | relation atoms in the same path | same bank, as a second arm on top of `ATOM_ENUM=1` |
 
+2026-10-03: a declared-ontology arm rides the `SOVEREIGN_ATOM_ENUM` gate (a
+typed query written by the model, executed in code, injected as a cited
+table — `atom_enum_typed.rs`). Its measurement is feature-fidelity's
+`fi-ontology-list` (O-T1 on ft-ans-dev-b's dev K1 rows, then O-T2), which is
+also the first enumeration-bank read this flag has had.
+
 Four more rows (`SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `_META_BRIDGE`,
 `_QUERY_DECOMP`, `_TITLE_EXPAND`) left this table 2026-09-21 when their
 retrieval steps were cut (ac032e5bc); no measurement is owed on code that is gone.
