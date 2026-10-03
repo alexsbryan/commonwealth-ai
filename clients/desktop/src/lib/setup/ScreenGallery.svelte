@@ -9,7 +9,7 @@
   `npm run screens`) at /screens.html — pure browser, no Tauri.
 
   Note: the setup phase strings come from `src-tauri/src/setup_flow.rs` and
-  the model list from `sovereign/models.toml` (shown raw, below); both are
+  the model list from `shared/crates/sovereign-contracts/data/models.toml` (shown raw, below); both are
   the real source of truth, mirrored here so the preview can't drift on the
   models and matches the live copy on the phases.
 -->
@@ -22,7 +22,7 @@
   import type { RecommendedProfile, PrimaryOption, SlotConfig } from "../types";
 
   interface Props {
-    /** Raw contents of sovereign/models.toml (imported `?raw`). */
+    /** Raw contents of shared/crates/sovereign-contracts/data/models.toml (imported `?raw`). */
     modelsToml: string;
   }
   let { modelsToml }: Props = $props();
@@ -208,7 +208,7 @@
         <div class="models">
           <h2>Recommended models</h2>
           <p class="models-note">
-            Source of truth: <code>sovereign/models.toml</code> (the same file the
+            Source of truth: <code>shared/crates/sovereign-contracts/data/models.toml</code> (the same file the
             Rust setup planner reads). The auto-setup picks each profile's
             <code>thoughtful</code> primary plus a <code>fast</code> and
             <code>embed</code> slot for your hardware tier.
