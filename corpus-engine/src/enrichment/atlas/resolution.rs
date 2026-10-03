@@ -2380,8 +2380,9 @@ fn find_substring_match(folded_query: &str, entities: &[Entity]) -> Option<usize
             }
             // Require a word boundary so `Ivan` doesn't substring-merge
             // into `Ivanovich` via bare contains(). Word boundary:
-            // either start/end of string, OR preceded/followed by a
-            // non-alphanumeric char (whitespace, hyphen, apostrophe).
+            // either start/end of string, OR preceded/followed by
+            // whitespace or punctuation that is not word-internal
+            // (a hyphen or apostrophe joins a compound; see has_whole_word).
             if has_whole_word(q, &candidate) || has_whole_word(&candidate, q) {
                 return Some(idx);
             }
@@ -2393,11 +2394,18 @@ fn find_substring_match(folded_query: &str, entities: &[Entity]) -> Option<usize
 /// True when `needle` appears inside `haystack` with whitespace /
 /// punctuation (or string boundary) on both sides. Prevents
 /// `Ivan` from substring-merging into `Ivanovich`.
+///
+/// A hyphen or apostrophe JOINS a compound, so it is not a boundary:
+/// containment inside a compound changes what the name means. `Paul` is not
+/// `Jean-Paul`, and `identity reading` is not `non-identity reading` — on
+/// sep-kant-transcendental-idealism one entity held both sides of the
+/// entry's central dispute through this match.
 fn has_whole_word(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() || haystack.len() < needle.len() {
         return false;
     }
-    let is_boundary = |c: char| !(c.is_alphanumeric() || c == '_');
+    let is_boundary =
+        |c: char| !(c.is_alphanumeric() || c == '_' || c == '-' || c == '\'' || c == '\u{2019}');
     let mut start = 0;
     while let Some(rel) = haystack[start..].find(needle) {
         let pos = start + rel;

@@ -507,3 +507,53 @@ fn relation_key_invariant_same_participants_different_labels_collapse_today() {
     );
     assert_eq!(out.relations[0].label, "Novice-elder bond");
 }
+
+/// Rule 4 must not match inside a hyphenated compound: a reading is not its
+/// own negation, and `Pierre` is not `Jean-Pierre` (both past rule 4's
+/// 5-char floor). On sep-kant-transcendental-idealism "non-identity reading"
+/// carried "identity reading" as an alias — one entity held both sides of the
+/// entry's central dispute. `atlas_resolve_rule_4_merges_title_prefix_names`
+/// (Zossima / Father Zossima) is the control that rule 4 still merges.
+///
+/// Falsifier: let `has_whole_word` treat `-` as a boundary again and the two
+/// readings resolve to one entity.
+#[tokio::test]
+async fn atlas_resolve_rule_4_never_merges_into_a_hyphenated_compound() {
+    let sections = vec![
+        section(
+            "sec_0001",
+            vec![entity(
+                "identity reading",
+                &[],
+                "Appearances are things in themselves.",
+            )],
+            vec![],
+        ),
+        section(
+            "sec_0002",
+            vec![
+                entity(
+                    "non-identity reading",
+                    &[],
+                    "Appearances are distinct objects.",
+                ),
+                entity("Jean-Pierre Rampal", &[], "French flautist."),
+                entity("Pierre", &[], "A Paris baker."),
+            ],
+            vec![],
+        ),
+    ];
+    let out = resolve_entities_and_events(&sections, &fake_embed())
+        .await
+        .unwrap();
+    let names: Vec<&str> = out
+        .entities
+        .iter()
+        .map(|e| e.canonical_name.as_str())
+        .collect();
+    assert_eq!(
+        out.entities.len(),
+        4,
+        "no compound absorbed a part: {names:?}"
+    );
+}
