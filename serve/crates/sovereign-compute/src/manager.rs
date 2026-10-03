@@ -1351,8 +1351,19 @@ impl InferenceProvider for ComputeRoutedProvider {
         // `svrn mesh bench` hashes `placement_digest` from this report, so every
         // distributed measurement was keyed and rendered as a one-node local
         // run, unfindable by the `mesh plan` lookup it exists to answer.
+        //
+        // The child owns the role, so it replaces whatever primary `inner`
+        // reports — a hosted engine reports its vendor model as primary, and
+        // two primaries would leave `/status` readers to pick one by order.
         if let Some(d) = &self.distributed_primary {
             let serving = d.provider.is_serving();
+            slots.retain(|s| {
+                let displaced = s.role == "primary";
+                if displaced {
+                    tracing::debug!(target: "compute_child", inner = %s.model_id, child = %d.slot.model_id(), "distributed child owns the primary slot; inner engine's primary not reported");
+                }
+                !displaced
+            });
             slots.push(ResidentSlot {
                 role: "primary".to_string(),
                 model_id: d.slot.model_id().to_string(),
