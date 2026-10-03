@@ -709,6 +709,12 @@ install.
 machinery that can test it, and builds only what its bars need. Everything else
 waits in D8 for the signal that earns it.
 
+**Demos keep the cadence.** No more than three units pass without a demo a
+future end user would want to watch: a scene on real phones and a real chat,
+recorded, with a run-of-show in `docs/internal/rings/demo/` as the ring-room
+demo has. Each demo's gate is a bar id, and it is shown when that bar passes.
+A unit names the demo it moves; one that moves none waits.
+
 *E0 — will a group settle up through the bot, in the chat it already uses?* On
 the operator's computer, on today's rail and membership: no phone, no new wire,
 no sandbox.
@@ -717,9 +723,14 @@ no sandbox.
 |---|---|---|---|
 | E0.1 bridge | discord.js on the gateway behind its five calls; the greeting; the guest book keyed by Discord user id; a ban removes from it | a new executable beside cw-rails; `SignedOp.on_behalf_of` (built) | removal-latency, bridge-holds-no-app |
 | E0.2 bridge append | the loopback append with a capability token, signed by the Bridge-role key; Confirm taken once by interaction id | `commonwealth-rails/src/rail.rs` | double-confirm |
-| E0.3 one Expenses | one `expenses.js`, the other two copies deleted; its `propose`, `say` and `due` run by an embedded QuickJS on the host | `sovereign-contracts/src/guest_pages/` | five-laws, N+1 |
+| E0.3 one Expenses | one `expenses.js`, the other two copies deleted; its `propose`, `say` and `due` run by an embedded QuickJS on the host | today's copies: `sovereign/apps/ring-doc/expenses.js`, `ring_cmd/templates/expenses.js`, `My-doc/expenses.js` | five-laws, N+1 |
 | E0.4 origin gate | the bridge renders only what the chat wrote | the bridge | origin-gate |
 | E0.5 setup | `svrn group start`, five steps | `sovereign-cli-mesh` | host-setup, plain-words |
+
+| Demo | After | What a person watches | Gate |
+|---|---|---|---|
+| Split the pizza | E0.3 | Five people in a Discord channel who have never heard of svrngs: one types the pizza, the others tap Confirm, and the bot says who owes whom — no app, no account | N+1 |
+| Your own group in fifteen minutes | E0.5 | A friend installs svrngs on their computer, pastes a Discord token, picks a channel, and their friends are settling up | host-setup |
 
 *E1 — will people move from the chat to their own key?* A phone signing beside
 the host is the first second writer, so this is where the register (C1) is
@@ -735,6 +746,12 @@ earned. The keeper is the host.
 | E1.5 the app | the Tauri shell with the node core, a key per group in the keystore, two-way sync with the host, Expenses and the Library built in, the claim route from the bot's link | `sovereign-mobile` | same-core, phone-to-own-key, reinstall-keeps-person, rebuild-from-a-phone |
 | E1.6 one engine | the `Engine` trait, and one embedded QuickJS build behind it on the host and the app; JSON-only state | the runtime | fold-parity |
 | E1.7 door basics | lent views under CSP; refused paths, Jellyfin's `/Sessions/Logout` first | the door | peer-text-is-text, lent-service |
+
+| Demo | After | What a person watches | Gate |
+|---|---|---|---|
+| Leave together, keep everything | E1.2 | Copy one member's svrngs folder to a new computer, start the group again, and every balance and every expense is back | refound-from-a-copy |
+| From the bot's link to your own phone | E1.5 | Tap the bot's link, svrngs opens, the chat says "Ama's phone joined", and Ama's next expense is signed by her phone, offline included; then wipe the computer and the group comes back from her phone | phone-to-own-key, rebuild-from-a-phone |
+| Movie night from a friend's shelf | E1.7 | Open Jo's library in svrngs and start a film from Jo's house on your phone | lent-service |
 
 *E2 — does the platform carry every class of app?* One reference app per class
 (D0a), each built only as far as proving its class needs, in Phase 1's twenty
@@ -752,6 +769,17 @@ machinery is already built.
 | E2.6 Doc | `group.live`, and a screen's own cache over Yjs | Doc (built) | live-doc |
 | E2.7 Tap | sealed payloads to named people's encryption keys, padded and naming no one; private storage | the register's `enc_key` | seal-hides |
 
+Each reference app is its own demo:
+
+| Demo | After | What a person watches | Gate |
+|---|---|---|---|
+| Jo's film on your TV | E2.2 | Pick a film from Jo's library on your phone and it plays on your living-room TV, with nothing installed on the TV | play-on-a-tv |
+| Your group's own AI | E2.3 | Ask "what do I owe Sam, and why?" and a model on Jo's computer answers, citing the expenses; then caption forty album photos and watch the work split across two friends' computers | ask-is-an-act, ask-fans-out |
+| Photos that leave when you say | E2.4 | Share an album; delete one photo and it is gone from every phone | file-erased |
+| Spin off the party | E2.5 | Vote on when and where, and the party's own group starts on three phones | start-a-group |
+| Write it together | E2.6 | Two phones edit one doc at once, each seeing the other type | live-doc |
+| The post-party question | E2.7 | Two people who both tap see the match, and nobody else ever learns who tapped | seal-hides |
+
 *E3 — will outside developers build on it?* Only now does strangers' code run
 on people's phones, so only now is the platform machinery earned.
 
@@ -761,6 +789,10 @@ on people's phones, so only now is the platform machinery earned.
 | E3.2 sandbox | a frame per app, its CSP, the MessageChannel port | the app | frame-cannot-ipc |
 | E3.3 an engine for strangers' code | QuickJS in wasm under wasmtime as a second implementation of `Engine`, metering inside the hashed bytes, fold segments, the engine pinned by the SDK version (C4) | `fold-engine` | engine-parity, fold-speed |
 | E3.4 the developer surface | the dev loop, the reference with the seven reference apps as worked examples, the harness | `svrn app dev` | developers |
+
+| Demo | After | What a person watches | Gate |
+|---|---|---|---|
+| An app in an afternoon | E3.4 | A developer outside the project copies a reference app, bends it into their own, and their group is using it that evening | developers |
 
 **Avoid:**
 - an existing local-first system as the substrate;
