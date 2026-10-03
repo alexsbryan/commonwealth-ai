@@ -182,7 +182,11 @@ fn admission_is_a_table_over_far_end_and_payload() {
     ];
     for (payload, third_party) in rows {
         assert_eq!(FarEnd::Peer.admit(&payload), Ok(()), "peer: {payload:?}");
-        assert_eq!(FarEnd::Origin.admit(&payload), Ok(()), "origin: {payload:?}");
+        assert_eq!(
+            FarEnd::Origin.admit(&payload),
+            Ok(()),
+            "origin: {payload:?}"
+        );
         assert_eq!(
             FarEnd::ThirdParty.admit(&payload),
             third_party,

@@ -1138,10 +1138,7 @@ impl InferenceProvider for RemoteApiProvider {
         body["stream"] = serde_json::json!(true);
 
         let response = self
-            .send_honouring_shed(
-                || admitted.post(&url).json(&body),
-                "Remote stream request",
-            )
+            .send_honouring_shed(|| admitted.post(&url).json(&body), "Remote stream request")
             .await?;
 
         let byte_stream = response.bytes_stream();
@@ -1199,10 +1196,7 @@ impl InferenceProvider for RemoteApiProvider {
         });
 
         let response = self
-            .send_honouring_shed(
-                || admitted.post(&url).json(&body),
-                "Embedding request",
-            )
+            .send_honouring_shed(|| admitted.post(&url).json(&body), "Embedding request")
             .await?;
 
         #[derive(Deserialize)]
@@ -1345,7 +1339,10 @@ impl InferenceProvider for RemoteApiProvider {
             );
             return Ok(());
         };
-        let req = self.outbound(Payload::Probe)?.post(&url).json(&serde_json::json!({}));
+        let req = self
+            .outbound(Payload::Probe)?
+            .post(&url)
+            .json(&serde_json::json!({}));
         match req.send().await {
             Ok(r) if r.status().is_success() => Ok(()),
             Ok(r) => {

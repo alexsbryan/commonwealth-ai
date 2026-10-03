@@ -19,10 +19,7 @@ impl RemoteApiProvider {
             documents: docs.to_vec(),
         };
         let response = self
-            .send_honouring_shed(
-                || admitted.post(&url).json(&body),
-                "Rerank request",
-            )
+            .send_honouring_shed(|| admitted.post(&url).json(&body), "Rerank request")
             .await?;
         let parsed: RerankResponse = response
             .json()

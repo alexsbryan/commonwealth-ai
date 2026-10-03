@@ -134,10 +134,7 @@ impl RemoteApiProvider {
         });
         tracing::debug!(%url, prompt_chars = request.prompt.len(), "remote: raw completion to serve");
         let response = self
-            .send_honouring_shed(
-                || admitted.post(&url).json(&body),
-                "Raw completion request",
-            )
+            .send_honouring_shed(|| admitted.post(&url).json(&body), "Raw completion request")
             .await?;
         let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(32);
         let byte_stream = response.bytes_stream();
