@@ -55,6 +55,7 @@ Its screen runs sandboxed and reaches only `window.group`:
 | `group.live` | an ephemeral channel, within this app, to the people who have this group open right now — cursors, presence; checked against the register, never written to the record; a declared capability | Doc |
 | `group.files.put/get`, and `add(payload, {files})` | bytes beside the record, named by hash in the act's envelope (so the runtime knows which act holds which file), within the group's limits | Album |
 | `group.start(name, people)` | a new group: an invite act in this group; each person accepts when they next open the app, on that device, completing when someone already in the new group next syncs; this app comes installed; a person with no key (chat only) is refused by name | Event |
+| `group.ask(kind, input \| inputs)` | work for the group's computers — a model's answer, or a batch over many inputs — submitted as acts, leased by every computer that lends the kind, and answered by acts signed by the computer that ran it, naming the model; the reducer folds answers like any act | Ask |
 | `localStorage` | private storage — a preloaded, capped shim over the shell — on this device, for this app in this group only | Tap |
 | `group.open(name)` | a service someone in the group lends (the Library), opened in its own view through the member door | Library |
 | `group.request(name, path)` | read a lent service's API as this person — GET only, by construction — through the shell's port and the member door, never the frame's network | Films |
@@ -71,7 +72,8 @@ inside those bytes — and the segment size K and per-segment fuel budget — th
 acts it skips (cumulative: a version that drops a skip is flagged), its chat
 command schema (the one place commands are declared), and **the capabilities it
 uses** — sealed payloads, files, private storage, the live channel, starting
-groups, lent services and their APIs, playing on a TV, the chat. The runtime refuses any capability not declared, and the
+groups, lent services and their APIs, playing on a TV, asking the group's
+computers, the chat. The runtime refuses any capability not declared, and the
 group sees each one as a plain sentence when the app is installed.
 
 **Install and update.** Anyone in the group may install an app; everyone sees
@@ -92,9 +94,25 @@ version stamp, which its preview shows.
 and version. An app reads and corrects only its own lineage's acts, plus the
 people list. It reports "N acts from a newer version" rather than guess.
 
-**Seeds:** Expenses and Doc (built, moved onto the SDK), Album, Event (a new
-group with a when-and-where vote), Tap, Library, Films (a lent Jellyfin, browsed
-and played on a TV).
+**Classes of app, each proven by one reference app.** The platform is proven by
+classes, not by apps: each class below is a capability a developer can build a
+whole family of apps on, and its reference app is the smallest one that uses it
+end to end — the worked example the next developer copies and bends.
+
+| Class | Proves | SDK terms | Reference app |
+|---|---|---|---|
+| shared record | state every copy folds the same, corrected without erasure, with reminders | `add`, `undo`, `state`, `due` | Expenses |
+| lent services | someone's running service, used by the group through its own screen, its API, or a TV | `open`, `request`, `play` | Library, Films |
+| group compute | work run on the group's own computers — distributed inference — with answers kept in the record | `ask` | Ask |
+| files | bytes beside the record, fetched on demand, erased when voided | `files` | Album |
+| spin-offs | a new group started from this one | `start` | Event |
+| live collaboration | people working on one thing at once, presence never written | `live`, a screen's own cache | Doc |
+| private coordination | inputs only their author sees, and payloads only named people can read | seals, `localStorage` | Tap |
+
+Expenses and Doc are built and move onto the SDK. Ask answers a question about
+the group's record with a model one of its members lends, citing the acts it
+used, and runs a batch — a caption for every photo in an album — fanned out
+across every computer in the group that lends a model.
 
 **WHY_THEY_JOIN on this surface:** the post-party question is Tap — sealed
 payloads that name no recipient and are padded to one size, uniform
@@ -152,6 +170,7 @@ device:
 | be the keeper, sequencing removals | one Person key; the always-on node's when there is one |
 | be the meeting point (its direct address in the invite) | an always-on node reachable from outside |
 | lend a service | a node running that service |
+| lend compute: run work units of the kinds it declares | a computer running the work — the svrn daemon serves `infer:v1` |
 | the bridge, and running apps' `propose`, `say`, `due` for it | the always-on node holding the chat's token |
 
 A group of phones alone is open while at least two of its apps are open. A
@@ -504,6 +523,21 @@ the `Authorization` header before any `ApiKey` in the URL, so a masked URL still
 plays. A lending declaration also names the paths the door refuses; Jellyfin's
 refuses `/Sessions/Logout`, which would sign the whole group out.
 
+**C3a group compute.** `group.ask` runs on the work plane, `commonwealth-work`,
+which is built: a unit is submitted, leased, renewed and completed or failed as
+signed acts in the group's journal, the queue is a fold with no I/O and no
+clock, and `may_take` decides who may take a unit. On each computer that lends
+compute, cw-rails' donor loop leases the units of kinds it runs and forwards
+each to an execute origin — the svrn daemon's `infer:v1` for models, as it
+forwards `ingest:v1` today. The completion carries a `kernel_types::Answer` and
+the model's identity, so every copy folds the same answer and a fold never
+calls a model. Distribution is the work plane's own: every lending computer
+leases in parallel, an expired lease is offered again, and the fold takes one
+completion per unit. A lend is an act naming the kinds, models and limits; the
+lender's door counts and refuses past them. Only computers the register admits
+lease, so a removed person's computer runs nothing. A group with no computer
+lending a model has no `infer`, and Ask says so.
+
 **C4 the runtime.** One sandbox model on every device.
 - *The fold runs headless, in one engine build, on every device:* the app's
   exported `init` and `reduce`, and `propose`, `say` and `due`, run in one
@@ -695,15 +729,21 @@ earned. The keeper is the host.
 | E1.6 one engine | the host and the app fold with one embedded QuickJS build, JSON-only state | the runtime | fold-parity |
 | E1.7 door basics | lent views under CSP; refused paths, Jellyfin's `/Sessions/Logout` first | the door | peer-text-is-text, lent-service |
 
-*E2 — will a group take up a second app?* Phase 1: twenty groups, each live
-only once a second copy has synced. It builds the second app the groups ask for
-and nothing else.
+*E2 — does the platform carry every class of app?* One reference app per class
+(D0a), each built only as far as proving its class needs, in Phase 1's twenty
+groups — each live once a second copy has synced, and each choosing which apps
+it runs, which is the second-app rate. The order puts first the classes whose
+machinery is already built.
 
 | Unit | Builds | On | Bars |
 |---|---|---|---|
 | E2.1 second copy | commands register only after another node of the group has synced | the bridge | two-copies-before-live |
-| E2.2 the asked-for app | Films (`group.request`, `group.play` here) or Album (files) — whichever groups ask for first, counted | the app | second-app rate, films-journey or file-erased |
-| E2.3 a TV | AirPlay from the phone with the credential mask at the door; then Cast when a Chromecast household asks, DLNA (Android) when a DLNA household asks, and the person's own always-on node serving when `finishes-a-film` fails for a household that asked | the door, the app | play-on-a-tv, finishes-a-film, credential-stays-home |
+| E2.2 Films | `group.request` and `group.play`; a TV by AirPlay from the phone with the credential mask at the door, then Cast, DLNA (Android) and the person's own always-on node serving, in the order households ask | the door (built), Jellyfin's viewer account (built) | lent-service, play-on-a-tv, finishes-a-film, credential-stays-home, films-journey |
+| E2.3 Ask | `group.ask` on the work plane; `infer:v1` as an execute origin of the svrn daemon; lends with kinds, models and limits | `commonwealth-work` and cw-rails' donor loop (built) | ask-is-an-act, ask-fans-out |
+| E2.4 Album | `group.files`, fetched on demand, erased when voided | the file store | file-erased |
+| E2.5 Event | `group.start`: an invite act, accepted on each phone | the register | start-a-group |
+| E2.6 Doc | `group.live`, and a screen's own cache over Yjs | Doc (built) | live-doc |
+| E2.7 Tap | sealed payloads to named people's encryption keys, padded and naming no one; private storage | the register's `enc_key` | seal-hides |
 
 *E3 — will outside developers build on it?* Only now does strangers' code run
 on people's phones, so only now is the platform machinery earned.
@@ -713,7 +753,7 @@ on people's phones, so only now is the platform machinery earned.
 | E3.1 SDK v1 | `window.group` published with the terms the seeds use by then; the manifest, capabilities and consent; install and update by signed manifest and bundle hash; the update preview | meshapp's pack and install | permissions, update-preview |
 | E3.2 sandbox | a frame per app, its CSP, the MessageChannel port | the app | frame-cannot-ipc |
 | E3.3 an engine for strangers' code | QuickJS in wasm under wasmtime, metering inside the hashed bytes, fold segments, the engine pinned by the SDK version (C4) | `fold-engine` | engine-parity, fold-speed |
-| E3.4 the developer surface | the dev loop, the reference, the harness | `svrn app dev` | developers |
+| E3.4 the developer surface | the dev loop, the reference with the seven reference apps as worked examples, the harness | `svrn app dev` | developers |
 
 **Avoid:**
 - an existing local-first system as the substrate;
@@ -731,8 +771,6 @@ on people's phones, so only now is the platform machinery earned.
 | the town: deeds, keepers, insurance, handover, first refusal | a lent service a group would miss, counted |
 | the LAN guest door | a group asks for browser guests on its WiFi |
 | phones-only groups: a phone as keeper, phones accepting connections, the relay as the only path, keeper handoff, refounding from the app | a group with no computer asks, counted, and E1's key-holding share holds |
-| sealed payloads and private storage (Tap) | a group asks for the post-party question |
-| `group.start` (Event) and `group.live` (Doc together) | a group asks to spin one off; two people edit one Doc at once, seen |
 | another device for the same person | someone asks to add a second device |
 | a second chat adapter, and the trait it earns | a group on another chat asks |
 | the wasm engine, metering and segments for first-party apps | strangers' code (E3) |
@@ -740,7 +778,7 @@ on people's phones, so only now is the platform machinery earned.
 | a TV's own Jellyfin app (Fire TV, Xbox, webOS, Tizen, non-AirPlay Roku) pulling from a door the person's own computer serves on its WiFi — an app and a login on every TV | people whose TV takes no push ask, counted |
 | `Remote-User` and per-person accounts on lent services | a named service that needs them |
 | acts across groups, a person-scoped store, local-model access (the grapevine) | a grapevine seed is wanted |
-| the clerk, the Elder, reminders a model writes | E0 passes |
+| the clerk, and the Elder answering in the chat | Ask passes its bars |
 | the node protocol for other implementers; agent kits | an outside builder asks |
 | erasure coding, gossip, streams, push | an app needs one, named |
 | a remote browser view | install friction at first contact, measured |
@@ -802,9 +840,9 @@ And the people's bars:
 | key-holding share | Half of active people hold a key by week eight. | counted by hand, with consent |
 | flip rate | At least a quarter of bridged groups move admission into the group within six months; kill under 5% (RING_ENTRY). | counted by hand, with consent |
 
-**E2 — a second app** (Phase 1, twenty groups). `play-on-a-tv` and
+**E2 — every class of app** (Phase 1, twenty groups). `play-on-a-tv` and
 `finishes-a-film` grow a column per protocol as households ask for it, AirPlay
-first; `file-erased` is earned only if the second app is Album.
+first.
 
 | Bar | What must hold | Failing input |
 |---|---|---|
@@ -814,6 +852,11 @@ first; `file-erased` is earned only if the second app is Album.
 | finishes-a-film | For each of those TVs, with and without the person's own always-on node, a two-hour film plays to the end while the phone locks at minute 5 and switches app at minute 20 — or the app said beforehand, in plain words, that it would not. | the phone as the only server |
 | credential-stays-home | Grep every byte the TV, the phone's app frames and the record receive during browsing and playback: the lender's token appears nowhere, and a sign-out from the lent view leaves the library playable. | today's door, which passes bodies through |
 | films-journey | Four of five people who own one of those TVs start a friend's film on it within two minutes of first opening Films. | measured against today's flow |
+| ask-is-an-act | Ask's answer lands as an act signed by the computer that ran it, naming the model, and every copy folds the same answer; with no computer lending a model, Ask says it is waiting for one; a removed person's computer leases nothing. | a reducer that calls the model |
+| ask-fans-out | A batch captioning 40 photos, on two computers lending a model, finishes in at most 60% of one computer's time, each photo answered once in the fold; a lease left to expire is offered again and finishes. | one lender only; a lease that never expires |
+| start-a-group | Event's vote starts a new group; three people accept on their phones and its first act lands; a chat-only person is refused by name. | no `group.start` |
+| live-doc | Two phones edit one Doc at once and each sees the other's edit within a second; presence is never written to the record; the Doc's acts fold to the same text on every copy. | no `group.live` |
+| seal-hides | A sealed act is unreadable on any device of a person it does not name, and nothing in the journal shows whom it names; two people who both tap see the match, and no one else does. | a plaintext payload |
 | file-erased | Void a photo, sealed or not, and sync: no node still holds its bytes. | bytes kept forever |
 
 **E3 — outside developers**
@@ -825,7 +868,7 @@ first; `file-erased` is earned only if the second app is Album.
 | update-preview | A hostile update's effect on past acts is shown before it runs, and one that adds a capability asks everyone again. | silent activation |
 | engine-parity | Golden journals fold to byte-identical state on every platform and on two builds of the app, under a swapped locale and timezone and any batching and arrival order, with a fold that breaches its budget marked incomplete everywhere; folding at K and at K = 1 agrees where both complete. | transcendental maths from the platform's library; a fold near the memory cap; one instance per arriving batch; a wasmtime upgrade between the two builds; recursion at the stack limit; a reducer that catches out-of-memory |
 | fold-speed | On the oldest supported iPhone, under Pulley with injected metering, a full refold plus an update preview of 3,000 Expenses acts finishes within a time set before the first measurement, and so does the first fold after a shell update. | unmeasured today; a reducer looping `TypedArray.set` over a large buffer |
-| developers | At least two of three outside developers each run an app that is not a seed, using at least two of sealed payloads, files and `group.start`, in a real group of three people for a week, with no platform change and no more than five questions the reference should have answered. | today's docs |
+| developers | At least two of three outside developers each run an app that is not a seed, riffing off a reference app and using at least two classes of D0a, in a real group of three people for a week, with no platform change and no more than five questions the reference should have answered. | today's docs |
 
 **Waiting with their machinery** (D8):
 
@@ -893,6 +936,8 @@ first; `file-erased` is earned only if the second app is Album.
 19. iOS keeping keychain items across an uninstall is observed behaviour, not a
     documented guarantee; if Apple changes it, iOS reinstalls work as Android's
     do.
+20. Asking spends the lender's machine; the lend's limits and the door's count are
+    the brake. An answer is the named model's, kept in the record as that.
 
 ## D11. Decisions
 
@@ -902,6 +947,9 @@ By the operator, 2026-10-03:
   per-person service accounts.
 - **Removal:** anyone may remove anyone, a removed key cannot remove, and there
   is no recovery inside a group.
+- **Classes, not apps:** the platform is proven by a reference app per class of
+  app, for the next developers to riff off, and group compute — distributed
+  inference on members' own computers, as svrn does — is one of the classes.
 - **Exit is cheap:** "If your ring gets fked you should have the state to
   reconstitute it (with dotfile elegance) within hours." A group's state is a
   directory every member holds, and refounding from it is J7. With that, one
@@ -1206,7 +1254,7 @@ the old units went: U14 and U15 → E0.1 and E0.4; U7 → E0.3, for Expenses onl
 U2 and U16 → E1.3; U26 → E1.3, where a key per group is the default; U4 and U5
 → E1.4; U21 → E1.5; U6 → E1.7; U8 → E3.1. Retired: U1 and U3, since cuts are
 the keeper's and forks void nothing. Cut, with their triggers in D8: U9-U13 and
-U23 (the town), U17-U20 (the clerk and the Elder), U22 (per-person accounts),
+U23 (the town), U17-U19 (the clerk and the Elder; U20's performer is E2.3's Ask), U22 (per-person accounts),
 U24, U25 and U27 (lending to several groups, carrying), U28 and U29 (the
 protocol and the kits). The `ring-apps` bars `ra-retired-key-is-refused`,
 `ra-membership-is-order-free` and `ra-fork-is-reported` give way to E1's
