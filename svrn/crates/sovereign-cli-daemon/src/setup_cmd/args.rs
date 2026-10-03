@@ -9,6 +9,9 @@ use super::Opts;
 
 pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut opts = Opts {
+        hosted: None,
+        model: None,
+        fast_model: None,
         terminal: None,
         entry: None,
         reset: false,
@@ -51,6 +54,18 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
                         })?
                         .clone(),
                 );
+            }
+            flag @ ("--hosted" | "--model" | "--fast-model") => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| format!("{flag} needs a value"))?
+                    .clone();
+                match flag {
+                    "--hosted" => opts.hosted = Some(value),
+                    "--model" => opts.model = Some(value),
+                    _ => opts.fast_model = Some(value),
+                }
             }
             "--reset" => opts.reset = true,
             "--yes" | "-y" => opts.yes = true,
@@ -110,6 +125,12 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
         }
         i += 1;
     }
+    if opts.hosted.is_some() && (opts.terminal.is_some() || opts.fim) {
+        return Err("--hosted, --terminal and --fim are different destinations".to_string());
+    }
+    if opts.hosted.is_none() && (opts.model.is_some() || opts.fast_model.is_some()) {
+        return Err("--model and --fast-model only apply to --hosted".to_string());
+    }
     if opts.terminal.is_some() && opts.fim {
         return Err(
             "--terminal and --fim are different destinations; run them separately".to_string(),
@@ -150,6 +171,8 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
              svrn setup --plan --json\n\
              svrn setup --terminal <entry> [--reset] [--data-dir <path>] \
              [--client-port <n>]\n\
+             svrn setup --hosted <deepseek|openrouter|url> [--model <id>] [--fast-model <id>] \
+             [--reset] [--data-dir <path>] [--client-port <n>] < key.txt\n\
              svrn setup --fim [--quant <rung>] [--yes] [--skip-editor]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
@@ -183,6 +206,19 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                  http://halo:9741). Probes the entry node and proves one served turn \
                  before reporting success. Follow with `svrn mesh join` to become a \
                  full member",
+            ),
+            (
+                "--hosted <vendor>",
+                "Chat on a hosted model: deepseek, openrouter, or any OpenAI-compatible \
+                 /v1 URL. Reads the API key from stdin, downloads only the small \
+                 embedding model (embeddings stay on this machine), and writes a remote \
+                 [engine] with no [models]. Writing it is the consent for this node's \
+                 turns to go to that vendor",
+            ),
+            (
+                "--model <id> / --fast-model <id>",
+                "With --hosted: the model the vendor serves (deepseek defaults to \
+                 deepseek-flash), and an optional quicker one for fast turns",
             ),
             (
                 "--reset",

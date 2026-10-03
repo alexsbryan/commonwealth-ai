@@ -37,6 +37,7 @@ mod download;
 mod emit;
 mod fim;
 mod finish;
+mod hosted;
 mod opencode;
 pub(crate) mod probe;
 mod terminal;
@@ -75,6 +76,26 @@ pub async fn run_setup(args: &[String]) -> i32 {
             return 0;
         }
         return fim::run_fim_setup(&opts).await;
+    }
+
+    // `--hosted` too: it writes a remote `[engine]` and fetches only the
+    // embedding model.
+    if args.iter().any(|a| a == "--hosted") {
+        return match parse_args(args) {
+            Ok(opts) if opts.help => {
+                print_usage();
+                0
+            }
+            Ok(opts) => {
+                let vendor = opts.hosted.clone().unwrap_or_default();
+                hosted::run_hosted_setup(&vendor, &opts).await
+            }
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                print_usage();
+                2
+            }
+        };
     }
 
     // `--terminal` is likewise a destination, not a modifier: it downloads
@@ -596,6 +617,13 @@ pub(super) fn run_config_path(opts: &Opts) -> PathBuf {
 
 #[derive(Debug)]
 struct Opts {
+    /// `--hosted <vendor>`: chat on a hosted model, embeddings here
+    /// (`hosted::run_hosted_setup`). A destination, like `--terminal`.
+    hosted: Option<String>,
+    /// `--model <id>` / `--fast-model <id>`: the hosted models, by the names
+    /// the vendor serves. Only with `--hosted`.
+    model: Option<String>,
+    fast_model: Option<String>,
     /// `--terminal <entry>`: set this machine up as a node that holds NO
     /// models and routes every turn to the named entry node. Not a modifier
     /// on the wizard — a different destination, like `--fim`, so it

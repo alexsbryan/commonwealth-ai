@@ -117,6 +117,17 @@ retrieves — plain chat needs no embedding model.
 
 ## A hosted provider
 
+No local model? One command sets a node up on a hosted one:
+
+```sh
+svrn setup --hosted deepseek < key.txt   # or openrouter --model <id>, or a /v1 URL
+svrn daemon
+```
+
+It downloads only the small embedding model and writes the `[engine]` below
+with no `[models]`. The key comes from stdin, never the command line, and the
+config is written readable by you only.
+
 `kind = "remote"` can point at a hosted API: OpenRouter, DeepSeek, or any
 other OpenAI-compatible vendor. Sovereign treats every endpoint that is not on
 this machine as a third party, and that changes what it will send there.
