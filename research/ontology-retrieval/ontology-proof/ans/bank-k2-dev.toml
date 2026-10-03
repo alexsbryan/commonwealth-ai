@@ -1,0 +1,4840 @@
+[bank]
+name = "ontology-proof-ans-k2-dev"
+corpus = "ft-ans-dev-b"
+description = "K2 semantic queries (joins, filters, counts, superlatives, negation) over the dev hoard fixture; gold = truth/hoards.json facts the fixture text attests (k2_bank.py). Neutral items are scored as neither found nor made up."
+census = {"intersection" = {"candidates" = 78, "kept" = 8, "verdicts" = {"kept" = 8, "over cap" = 5, "visible neutrals > gold" = 9, "empty gold" = 33, "repeats a kept answer" = 23}}, "constraint-date" = {"candidates" = 26, "kept" = 7, "verdicts" = {"empty gold" = 8, "visible neutrals > gold" = 6, "kept" = 7, "repeats a kept answer" = 5}}, "constraint-region" = {"candidates" = 39, "kept" = 6, "verdicts" = {"empty gold" = 25, "kept" = 6, "repeats a kept answer" = 7, "visible neutrals > gold" = 1}}, "count" = {"candidates" = 91, "kept" = 5, "verdicts" = {"count: a visible neutral" = 34, "kept" = 5, "repeats a kept answer" = 19, "empty gold" = 33}}, "superlative" = {"candidates" = 40, "kept" = 6, "verdicts" = {"kept" = 6, "winner changes in the text reading" = 16, "one candidate" = 18}}, "co-occurrence" = {"candidates" = 13, "kept" = 8, "verdicts" = {"kept" = 8, "over cap" = 4, "visible neutrals > gold" = 1}}, "uncertainty" = {"candidates" = 6, "kept" = 0, "verdicts" = {"empty gold" = 6}}, "negation" = {"candidates" = 195, "kept" = 8, "verdicts" = {"kept" = 8, "negated mint rare in scope" = 87, "empty gold" = 63, "repeats a kept answer" = 4, "visible neutrals > gold" = 18, "over cap" = 15}}}
+spans = {"intersection" = {"questions" = 8, "distinct_hoards" = 9, "distinct_sections" = 17, "distinct_chunks" = 17, "hoards" = ["igch0410", "igch0774", "igch0866", "igch1444", "igch1472", "igch1516", "igch1664", "igch1670", "igch1678"], "top_hoard" = "igch1664", "top_hoard_share" = 0.18}, "constraint-date" = {"questions" = 7, "distinct_hoards" = 6, "distinct_sections" = 9, "distinct_chunks" = 9, "hoards" = ["igch0774", "igch1444", "igch1472", "igch1516", "igch1664", "igch1678"], "top_hoard" = "igch1516", "top_hoard_share" = 0.23}, "constraint-region" = {"questions" = 6, "distinct_hoards" = 6, "distinct_sections" = 10, "distinct_chunks" = 12, "hoards" = ["igch0176", "igch1438", "igch1444", "igch1664", "igch1668", "igch1678"], "top_hoard" = "igch1664", "top_hoard_share" = 0.3}, "count" = {"questions" = 5, "distinct_hoards" = 6, "distinct_sections" = 6, "distinct_chunks" = 6, "hoards" = ["igch0774", "igch1444", "igch1516", "igch1664", "igch1670", "igch1678"], "top_hoard" = "igch1664", "top_hoard_share" = 0.31}, "superlative" = {"questions" = 6, "distinct_hoards" = 12, "distinct_sections" = 20, "distinct_chunks" = 22, "hoards" = ["igch0176", "igch0410", "igch0774", "igch0866", "igch0958", "igch1438", "igch1472", "igch1516", "igch1664", "igch1668", "igch1670", "igch1678"], "top_hoard" = "igch1664", "top_hoard_share" = 0.34}, "co-occurrence" = {"questions" = 8, "distinct_hoards" = 11, "distinct_sections" = 19, "distinct_chunks" = 19, "hoards" = ["igch0410", "igch0774", "igch0866", "igch0958", "igch1438", "igch1444", "igch1472", "igch1516", "igch1664", "igch1670", "igch1678"], "top_hoard" = "igch1664", "top_hoard_share" = 0.24}, "uncertainty" = {"questions" = 0, "distinct_hoards" = 0, "distinct_sections" = 0, "distinct_chunks" = 0, "hoards" = []}, "negation" = {"questions" = 8, "distinct_hoards" = 9, "distinct_sections" = 16, "distinct_chunks" = 33, "hoards" = ["igch0176", "igch0410", "igch0774", "igch0958", "igch1438", "igch1664", "igch1668", "igch1670", "igch1678"], "top_hoard" = "igch1668", "top_hoard_share" = 0.19}}
+
+[[hoards]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+role = "holdout"
+match = ["igch 1437"]
+chunks = [8, 9, 10, 11, 12, 24]
+
+[[hoards]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+role = "dev"
+match = ["igch 1438"]
+chunks = [25]
+
+[[hoards]]
+id = "igch1441"
+name = "Asia Minor 1964 (IGCH 1441)"
+role = "holdout"
+match = ["igch 1441"]
+chunks = [2, 20]
+
+[[hoards]]
+id = "igch1444"
+name = "Asia Minor 1961"
+role = "dev"
+match = ["igch 1444", "asia minor 1961"]
+chunks = [15, 30]
+
+[[hoards]]
+id = "igch1472"
+name = "Larnaca"
+role = "dev"
+match = ["igch 1472", "larnaca"]
+chunks = [5, 22]
+
+[[hoards]]
+id = "igch1516"
+name = "Aleppo"
+role = "dev"
+match = ["igch 1516", "aleppo"]
+chunks = [17, 28]
+
+[[hoards]]
+id = "igch1664"
+name = "Demanhur"
+role = "dev"
+match = ["igch 1664", "demanhur"]
+chunks = [13, 26, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
+
+[[hoards]]
+id = "igch1668"
+name = "Egypt 1912"
+role = "dev"
+match = ["igch 1668", "egypt 1912"]
+chunks = [27]
+
+[[hoards]]
+id = "igch1670"
+name = "Kuft"
+role = "dev"
+match = ["igch 1670", "kuft"]
+chunks = [14, 29]
+
+[[hoards]]
+id = "igch1678"
+name = "Phacous"
+role = "dev"
+match = ["igch 1678", "phacous"]
+chunks = [16, 31]
+
+[[hoards]]
+id = "igch0176"
+name = "Olympia"
+role = "dev"
+match = ["igch 176", "olympia"]
+chunks = [32, 33, 34]
+
+[[hoards]]
+id = "igch0410"
+name = "Paeonia"
+role = "dev"
+match = ["igch 410", "paeonia"]
+chunks = [3, 21]
+
+[[hoards]]
+id = "igch0774"
+name = "Gîldau"
+role = "dev"
+match = ["igch 774", "gildau"]
+chunks = [1, 19]
+
+[[hoards]]
+id = "igch0777"
+name = "Jasna poljana"
+role = "holdout"
+match = ["igch 777", "jasna poljana"]
+chunks = [3, 4]
+
+[[hoards]]
+id = "igch0801"
+name = "Greece"
+role = "holdout"
+match = ["igch 801", "greece"]
+chunks = [6]
+
+[[hoards]]
+id = "igch0866"
+name = "Anadol"
+role = "dev"
+match = ["igch 866", "anadol"]
+chunks = [7]
+
+[[hoards]]
+id = "igch0958"
+name = "Marasesti"
+role = "dev"
+match = ["igch 958", "marasesti"]
+chunks = [23]
+
+[[hoards]]
+id = "sec_00012"
+name = "Asia Minor 1970"
+role = "pseudo"
+match = ["asia minor 1970"]
+chunks = [18]
+
+[[mints]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+
+[[mints]]
+id = "Aegina"
+name = "Aegina"
+match = ["aegina"]
+
+[[mints]]
+id = "Aenianes"
+name = "Aenianes"
+match = ["aenianes"]
+
+[[mints]]
+id = "Aenus"
+name = "Aenus"
+match = ["aenus"]
+
+[[mints]]
+id = "Alabanda"
+name = "Alabanda"
+match = ["alabanda"]
+
+[[mints]]
+id = "Alexandreia Troas"
+name = "Alexandreia Troas"
+match = ["alexandreia troas"]
+
+[[mints]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+
+[[mints]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+
+[[mints]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+
+[[mints]]
+id = "Andros"
+name = "Andros"
+match = ["andros"]
+
+[[mints]]
+id = "Antioch, Syria"
+name = "Antioch"
+match = ["antioch"]
+
+[[mints]]
+id = "Apameia in Syria"
+name = "Apameia"
+match = ["apameia"]
+
+[[mints]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+
+[[mints]]
+id = "Argos"
+name = "Argos"
+match = ["argos"]
+
+[[mints]]
+id = "Athens"
+name = "Athens"
+match = ["athens"]
+
+[[mints]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+
+[[mints]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+
+[[mints]]
+id = "Bishapur"
+name = "Bishapur"
+match = ["bishapur"]
+
+[[mints]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+
+[[mints]]
+id = "Byzantium"
+name = "Byzantium"
+match = ["byzantium"]
+
+[[mints]]
+id = "Calchedon"
+name = "Calchedon"
+match = ["calchedon"]
+
+[[mints]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+
+[[mints]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+
+[[mints]]
+id = "Carrhae"
+name = "Carrhae"
+match = ["carrhae"]
+
+[[mints]]
+id = "Carystus"
+name = "Carystus"
+match = ["carystus"]
+
+[[mints]]
+id = "Caunus"
+name = "Caunus"
+match = ["caunus"]
+
+[[mints]]
+id = "Chalcis"
+name = "Chalcis"
+match = ["chalcis"]
+
+[[mints]]
+id = "Charax Spasinou"
+name = "Charax Spasinou"
+match = ["charax spasinou"]
+
+[[mints]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+
+[[mints]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+
+[[mints]]
+id = "Cius"
+name = "Cius"
+match = ["cius"]
+
+[[mints]]
+id = "Clazomenae"
+name = "Clazomenae"
+match = ["clazomenae"]
+
+[[mints]]
+id = "Cleonae"
+name = "Cleonae"
+match = ["cleonae"]
+
+[[mints]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+
+[[mints]]
+id = "Corinth"
+name = "Corinth"
+match = ["corinth"]
+
+[[mints]]
+id = "Cyme"
+name = "Cyme"
+match = ["cyme"]
+
+[[mints]]
+id = "Cyrene"
+name = "Cyrene"
+match = ["cyrene"]
+
+[[mints]]
+id = "Cyzicus"
+name = "Cyzicus"
+match = ["cyzicus"]
+
+[[mints]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+
+[[mints]]
+id = "Damastium"
+name = "Damastium"
+match = ["damastium"]
+
+[[mints]]
+id = "Dyrrhachium"
+name = "Dyrrhachium"
+match = ["dyrrhachium"]
+
+[[mints]]
+id = "Ecbatana"
+name = "Ecbatana"
+match = ["ecbatana"]
+
+[[mints]]
+id = "Ephesus"
+name = "Ephesus"
+match = ["ephesus"]
+
+[[mints]]
+id = "Epidaurus"
+name = "Epidaurus"
+match = ["epidaurus"]
+
+[[mints]]
+id = "Eretria"
+name = "Eretria"
+match = ["eretria"]
+
+[[mints]]
+id = "Gaza"
+name = "Gaza"
+match = ["gaza"]
+
+[[mints]]
+id = "Haliartus"
+name = "Haliartus"
+match = ["haliartus"]
+
+[[mints]]
+id = "Heracleia Pontica"
+name = "Heracleia Pontica"
+match = ["heracleia pontica"]
+
+[[mints]]
+id = "Herakleia ad Latmum"
+name = "Herakleia ad Latmum"
+match = ["herakleia ad latmum"]
+
+[[mints]]
+id = "Hermione"
+name = "Hermione"
+match = ["hermione"]
+
+[[mints]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+
+[[mints]]
+id = "Histiaea"
+name = "Histiaea"
+match = ["histiaea"]
+
+[[mints]]
+id = "Idalium"
+name = "Idalium"
+match = ["idalium"]
+
+[[mints]]
+id = "Istrus"
+name = "Istrus"
+match = ["istrus"]
+
+[[mints]]
+id = "Lacedaemon"
+name = "Lacedaemon"
+match = ["lacedaemon"]
+
+[[mints]]
+id = "Lamia"
+name = "Lamia"
+match = ["lamia"]
+
+[[mints]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+
+[[mints]]
+id = "Laodicea ad Mare"
+name = "Laodicea ad Mare"
+match = ["laodicea ad mare"]
+
+[[mints]]
+id = "Lapethus"
+name = "Lapethus"
+match = ["lapethus"]
+
+[[mints]]
+id = "Larissa, Thessaly"
+name = "Larissa"
+match = ["larissa"]
+
+[[mints]]
+id = "Lebedus"
+name = "Lebedus"
+match = ["lebedus"]
+
+[[mints]]
+id = "Lysimachia"
+name = "Lysimachia"
+match = ["lysimachia"]
+
+[[mints]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+
+[[mints]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+
+[[mints]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+
+[[mints]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+
+[[mints]]
+id = "Megalopolis"
+name = "Megalopolis"
+match = ["megalopolis"]
+
+[[mints]]
+id = "Megara"
+name = "Megara"
+match = ["megara"]
+
+[[mints]]
+id = "Mesembria"
+name = "Mesembria"
+match = ["mesembria"]
+
+[[mints]]
+id = "Messene"
+name = "Messene"
+match = ["messene"]
+
+[[mints]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+
+[[mints]]
+id = "Mylasa"
+name = "Mylasa"
+match = ["mylasa"]
+
+[[mints]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+
+[[mints]]
+id = "Myrina"
+name = "Myrina"
+match = ["myrina"]
+
+[[mints]]
+id = "Mytilene"
+name = "Mytilene"
+match = ["mytilene"]
+
+[[mints]]
+id = "Naxos, Aegean"
+name = "Naxos"
+match = ["naxos"]
+
+[[mints]]
+id = "Nisibis"
+name = "Nisibis"
+match = ["nisibis"]
+
+[[mints]]
+id = "Odessus"
+name = "Odessus"
+match = ["odessus"]
+
+[[mints]]
+id = "Oeta"
+name = "Oeta"
+match = ["oeta"]
+
+[[mints]]
+id = "Orchomenus"
+name = "Orchomenus"
+match = ["orchomenus"]
+
+[[mints]]
+id = "Panticapaeum"
+name = "Panticapaeum"
+match = ["panticapaeum"]
+
+[[mints]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+
+[[mints]]
+id = "Parium"
+name = "Parium"
+match = ["parium"]
+
+[[mints]]
+id = "Paros"
+name = "Paros"
+match = ["paros"]
+
+[[mints]]
+id = "Patrae"
+name = "Patrae"
+match = ["patrae"]
+
+[[mints]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+
+[[mints]]
+id = "Pergamum"
+name = "Pergamum"
+match = ["pergamum"]
+
+[[mints]]
+id = "Perinthus"
+name = "Perinthus"
+match = ["perinthus"]
+
+[[mints]]
+id = "Pharae"
+name = "Pharae"
+match = ["pharae"]
+
+[[mints]]
+id = "Phaselis"
+name = "Phaselis"
+match = ["phaselis"]
+
+[[mints]]
+id = "Philippi"
+name = "Philippi"
+match = ["philippi"]
+
+[[mints]]
+id = "Philisto-Arabian issues"
+name = "Philisto-Arabian issues"
+match = ["philisto-arabian issues"]
+
+[[mints]]
+id = "Priene"
+name = "Priene"
+match = ["priene"]
+
+[[mints]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+
+[[mints]]
+id = "Rhodes"
+name = "Rhodes"
+match = ["rhodes"]
+
+[[mints]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+
+[[mints]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+
+[[mints]]
+id = "Seleuceia Pieria"
+name = "Seleuceia Pieria"
+match = ["seleuceia pieria"]
+
+[[mints]]
+id = "Seleuceia ad Tigrim"
+name = "Seleuceia ad Tigrim"
+match = ["seleuceia ad tigrim"]
+
+[[mints]]
+id = "Sestos"
+name = "Sestos"
+match = ["sestos"]
+
+[[mints]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+
+[[mints]]
+id = "Side"
+name = "Side"
+match = ["side"]
+
+[[mints]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+
+[[mints]]
+id = "Sinope"
+name = "Sinope"
+match = ["sinope"]
+
+[[mints]]
+id = "Siphnos"
+name = "Siphnos"
+match = ["siphnos"]
+
+[[mints]]
+id = "Smyrna"
+name = "Smyrna"
+match = ["smyrna"]
+
+[[mints]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+
+[[mints]]
+id = "Stratoniceia"
+name = "Stratoniceia"
+match = ["stratoniceia"]
+
+[[mints]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+
+[[mints]]
+id = "Syros"
+name = "Syros"
+match = ["syros"]
+
+[[mints]]
+id = "Tanagra"
+name = "Tanagra"
+match = ["tanagra"]
+
+[[mints]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+
+[[mints]]
+id = "Tegea"
+name = "Tegea"
+match = ["tegea"]
+
+[[mints]]
+id = "Tenedos"
+name = "Tenedos"
+match = ["tenedos"]
+
+[[mints]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+
+[[mints]]
+id = "Thebae"
+name = "Thebae"
+match = ["thebae"]
+
+[[mints]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+
+[[mints]]
+id = "Tomis"
+name = "Tomis"
+match = ["tomis"]
+
+[[mints]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+
+[[questions]]
+id = "k2-int-lampsacus-miletus"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Lampsacus and Miletus?"
+expected_facts = ["Larnaca", "Aleppo", "Demanhur", "Kuft", "Phacous", "Paeonia", "Gîldau", "Anadol"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Lampsacus", "Miletus"]}
+notes = "intersection; gold 8; neutral 5"
+answer = ["igch1472", "igch1516", "igch1664", "igch1670", "igch1678", "igch0410", "igch0774", "igch0866"]
+neutral = ["igch1437", "igch1441", "igch1444", "igch0801", "igch0958"]
+[[questions.gold_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+witnesses = [[{"fact" = "contains igch1472 Lampsacus", "chunks" = [22]}, {"fact" = "contains igch1472 Miletus", "chunks" = [5]}]]
+[[questions.gold_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+witnesses = [[{"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Miletus", "chunks" = [17]}]]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}]]
+[[questions.gold_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+witnesses = [[{"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}, {"fact" = "contains igch1670 Miletus", "chunks" = [14]}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "igch0410"
+name = "Paeonia"
+match = ["igch 410", "paeonia"]
+witnesses = [[{"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Miletus", "chunks" = [3]}]]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "contains igch0774 Miletus", "chunks" = [1]}]]
+[[questions.gold_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+witnesses = [[{"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}, {"fact" = "contains igch0866 Miletus", "chunks" = [7]}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1441"
+name = "Asia Minor 1964 (IGCH 1441)"
+match = ["igch 1441"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+visible = true
+why = "contains igch1444 Lampsacus: text T truth F; contains igch1444 Miletus: text T truth F"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+visible = false
+why = "contains igch0958 Miletus: text ? truth T"
+
+[[questions]]
+id = "k2-int-miletus-sardes"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Miletus and Sardes?"
+expected_facts = ["Larnaca", "Aleppo", "Demanhur", "Kuft", "Phacous", "Paeonia", "Anadol"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Miletus", "Sardis"]}
+notes = "intersection; gold 7; neutral 4"
+answer = ["igch1472", "igch1516", "igch1664", "igch1670", "igch1678", "igch0410", "igch0866"]
+neutral = ["igch1437", "igch1441", "igch1444", "igch0801"]
+[[questions.gold_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+witnesses = [[{"fact" = "contains igch1472 Miletus", "chunks" = [5]}, {"fact" = "contains igch1472 Sardes", "chunks" = [5]}]]
+[[questions.gold_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+witnesses = [[{"fact" = "contains igch1516 Miletus", "chunks" = [17]}, {"fact" = "contains igch1516 Sardes", "chunks" = [17, 28]}]]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}]]
+[[questions.gold_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+witnesses = [[{"fact" = "contains igch1670 Miletus", "chunks" = [14]}, {"fact" = "contains igch1670 Sardes", "chunks" = [14]}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "contains igch1678 Sardes", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "igch0410"
+name = "Paeonia"
+match = ["igch 410", "paeonia"]
+witnesses = [[{"fact" = "contains igch0410 Miletus", "chunks" = [3]}, {"fact" = "contains igch0410 Sardes", "chunks" = [3]}]]
+[[questions.gold_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+witnesses = [[{"fact" = "contains igch0866 Miletus", "chunks" = [7]}, {"fact" = "contains igch0866 Sardes", "chunks" = [7]}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1441"
+name = "Asia Minor 1964 (IGCH 1441)"
+match = ["igch 1441"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+visible = true
+why = "contains igch1444 Miletus: text T truth F; contains igch1444 Sardes: text T truth F"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-int-ake-sidon"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Ake and Sidon?"
+expected_facts = ["Aleppo", "Demanhur", "Kuft", "Phacous"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 2
+params = {"mints" = ["Ptolemais-Ake", "Sidon"]}
+notes = "intersection; gold 4; neutral 6; IMPLIED_FACTS 2"
+answer = ["igch1516", "igch1664", "igch1670", "igch1678"]
+neutral = ["igch1438", "igch1472", "igch1668", "igch0410", "igch0866", "igch0958"]
+[[questions.gold_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+witnesses = [[{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Sidon", "chunks" = [17]}]]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+witnesses = [[{"fact" = "contains igch1670 Ake", "chunks" = [14]}, {"fact" = "contains igch1670 Sidon", "chunks" = [14]}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "contains igch1438 Ake: text ? truth T; contains igch1438 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Ake: text ? truth T; contains igch1472 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+visible = false
+why = "contains igch1668 Ake: text ? truth T; contains igch1668 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0410"
+name = "Paeonia"
+match = ["igch 410", "paeonia"]
+visible = false
+why = "contains igch0410 Ake: text ? truth T; contains igch0410 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = false
+why = "contains igch0866 Ake: text ? truth T; contains igch0866 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+visible = false
+why = "contains igch0958 Ake: text ? truth T; contains igch0958 Sidon: text ? truth T"
+
+[[questions]]
+id = "k2-int-lampsacus-tarsus"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Lampsacus and Tarsus?"
+expected_facts = ["Demanhur", "Gîldau"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 1
+params = {"mints" = ["Lampsacus", "Tarsus"]}
+notes = "intersection; gold 2; neutral 6; IMPLIED_FACTS 1"
+answer = ["igch1664", "igch0774"]
+neutral = ["igch1438", "igch1472", "igch1516", "igch1670", "igch1678", "igch0866"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "contains igch0774 Tarsus", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "contains igch1438 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = false
+why = "contains igch1516 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "contains igch1670 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+visible = false
+why = "contains igch1678 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = false
+why = "contains igch0866 Tarsus: text ? truth T"
+
+[[questions]]
+id = "k2-int-abydus-magnesia"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Abydus and Magnesia?"
+expected_facts = ["Asia Minor 1961", "Paeonia", "Anadol"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Abydus", "Magnesia ad Maeandrum"]}
+notes = "intersection; gold 3; neutral 6"
+answer = ["igch1444", "igch0410", "igch0866"]
+neutral = ["igch1437", "igch1441", "igch1472", "igch1516", "igch0777", "igch0801"]
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "contains igch1444 Abydus", "chunks" = [15]}, {"fact" = "contains igch1444 Magnesia", "chunks" = [15]}]]
+[[questions.gold_items]]
+id = "igch0410"
+name = "Paeonia"
+match = ["igch 410", "paeonia"]
+witnesses = [[{"fact" = "contains igch0410 Abydus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Magnesia", "chunks" = [3]}]]
+[[questions.gold_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+witnesses = [[{"fact" = "contains igch0866 Abydus", "chunks" = [7]}, {"fact" = "contains igch0866 Magnesia", "chunks" = [7]}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1441"
+name = "Asia Minor 1964 (IGCH 1441)"
+match = ["igch 1441"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Magnesia: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = false
+why = "contains igch1516 Magnesia: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0777"
+name = "Jasna poljana"
+match = ["igch 777", "jasna poljana"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-int-abydus-colophon"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Abydus and Colophon?"
+expected_facts = ["Asia Minor 1961", "Anadol"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Abydus", "Colophon"]}
+notes = "intersection; gold 2; neutral 4"
+answer = ["igch1444", "igch0866"]
+neutral = ["igch1437", "igch1472", "igch1516", "igch0801"]
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "contains igch1444 Abydus", "chunks" = [15]}, {"fact" = "contains igch1444 Colophon", "chunks" = [15]}]]
+[[questions.gold_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+witnesses = [[{"fact" = "contains igch0866 Abydus", "chunks" = [7]}, {"fact" = "contains igch0866 Colophon", "chunks" = [7]}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Colophon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = false
+why = "contains igch1516 Colophon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-int-abydus-cius"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Abydus and Cius?"
+expected_facts = ["Asia Minor 1961"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Abydus", "Cius"]}
+notes = "intersection; gold 1; neutral 0"
+answer = ["igch1444"]
+neutral = []
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "contains igch1444 Abydus", "chunks" = [15]}, {"fact" = "contains igch1444 Cius", "chunks" = [15]}]]
+
+[[questions]]
+id = "k2-int-ake-tarsus"
+category = "k2_intersection"
+class = "intersection"
+question = "Which hoards contain coins of both Ake and Tarsus?"
+expected_facts = ["Demanhur"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 2
+params = {"mints" = ["Ptolemais-Ake", "Tarsus"]}
+notes = "intersection; gold 1; neutral 6; IMPLIED_FACTS 2"
+answer = ["igch1664"]
+neutral = ["igch1438", "igch1472", "igch1516", "igch1670", "igch1678", "igch0866"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "contains igch1438 Ake: text ? truth T; contains igch1438 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Ake: text ? truth T; contains igch1472 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = false
+why = "contains igch1516 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "contains igch1670 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+visible = false
+why = "contains igch1678 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = false
+why = "contains igch0866 Ake: text ? truth T; contains igch0866 Tarsus: text ? truth T"
+
+[[questions]]
+id = "k2-date-before310-tarsus"
+category = "k2_constraint_date"
+class = "constraint-date"
+question = "Which hoards buried before 310 B.C. contain coins of Tarsus?"
+expected_facts = ["Demanhur", "Gîldau"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 1
+params = {"mints" = ["Tarsus"], "burial" = ["before", 310]}
+notes = "constraint-date; gold 2; neutral 2; IMPLIED_FACTS 1"
+answer = ["igch1664", "igch0774"]
+neutral = ["igch1438", "igch1670"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "burial igch1664 before 310 B.C.", "chunks" = [13]}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "burial igch0774 before 310 B.C.", "chunks" = [1]}, {"fact" = "contains igch0774 Tarsus", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "burial igch1438 before 310 B.C.: text ? truth T; contains igch1438 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "burial igch1670 before 310 B.C.: text A truth ?; contains igch1670 Tarsus: text ? truth T"
+
+[[questions]]
+id = "k2-date-after310-abydus"
+category = "k2_constraint_date"
+class = "constraint-date"
+question = "Which hoards buried after 310 B.C. contain coins of Abydus?"
+expected_facts = ["Asia Minor 1961", "Larnaca", "Aleppo"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Abydus"], "burial" = ["after", 310]}
+notes = "constraint-date; gold 3; neutral 4"
+answer = ["igch1444", "igch1472", "igch1516"]
+neutral = ["igch1670", "igch0801", "igch0866", "igch0958"]
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "burial igch1444 after 310 B.C.", "chunks" = [15]}, {"fact" = "contains igch1444 Abydus", "chunks" = [15]}]]
+[[questions.gold_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+witnesses = [[{"fact" = "burial igch1472 after 310 B.C.", "chunks" = [5]}, {"fact" = "contains igch1472 Abydus", "chunks" = [22]}]]
+[[questions.gold_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+witnesses = [[{"fact" = "burial igch1516 after 310 B.C.", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}]]
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = true
+why = "burial igch1670 after 310 B.C.: text A truth ?; contains igch1670 Abydus: text T truth F"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = true
+why = "burial igch0866 after 310 B.C.: text T truth ?"
+[[questions.neutral_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+visible = false
+why = "burial igch0958 after 310 B.C.: text ? truth ?"
+
+[[questions]]
+id = "k2-date-after310-ake"
+category = "k2_constraint_date"
+class = "constraint-date"
+question = "Which hoards buried after 310 B.C. contain coins of Ake?"
+expected_facts = ["Aleppo", "Phacous"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Ptolemais-Ake"], "burial" = ["after", 310]}
+notes = "constraint-date; gold 2; neutral 6"
+answer = ["igch1516", "igch1678"]
+neutral = ["igch1472", "igch1668", "igch1670", "igch0801", "igch0866", "igch0958"]
+[[questions.gold_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+witnesses = [[{"fact" = "burial igch1516 after 310 B.C.", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Ake", "chunks" = [17]}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "burial igch1678 after 310 B.C.", "chunks" = [16]}, {"fact" = "contains igch1678 Ake", "chunks" = [16]}]]
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Ake: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+visible = false
+why = "burial igch1668 after 310 B.C.: text ? truth ?; contains igch1668 Ake: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = true
+why = "burial igch1670 after 310 B.C.: text A truth ?"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = false
+why = "burial igch0866 after 310 B.C.: text T truth ?; contains igch0866 Ake: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+visible = false
+why = "burial igch0958 after 310 B.C.: text ? truth ?; contains igch0958 Ake: text ? truth T"
+
+[[questions]]
+id = "k2-date-after310-cius"
+category = "k2_constraint_date"
+class = "constraint-date"
+question = "Which hoards buried after 310 B.C. contain coins of Cius?"
+expected_facts = ["Asia Minor 1961"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Cius"], "burial" = ["after", 310]}
+notes = "constraint-date; gold 1; neutral 0"
+answer = ["igch1444"]
+neutral = []
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "burial igch1444 after 310 B.C.", "chunks" = [15]}, {"fact" = "contains igch1444 Cius", "chunks" = [15]}]]
+
+[[questions]]
+id = "k2-date-before310-myriandrus"
+category = "k2_constraint_date"
+class = "constraint-date"
+question = "Which hoards buried before 310 B.C. contain coins of Myriandrus?"
+expected_facts = ["Demanhur"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 1
+params = {"mints" = ["Myriandrus"], "burial" = ["before", 310]}
+notes = "constraint-date; gold 1; neutral 2; IMPLIED_FACTS 1"
+answer = ["igch1664"]
+neutral = ["igch1438", "igch1670"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "burial igch1664 before 310 B.C.", "chunks" = [13]}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "burial igch1438 before 310 B.C.: text ? truth T; contains igch1438 Myriandrus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "burial igch1670 before 310 B.C.: text A truth ?; contains igch1670 Myriandrus: text ? truth T"
+
+[[questions]]
+id = "k2-date-before310-salamis"
+category = "k2_constraint_date"
+class = "constraint-date"
+question = "Which hoards buried before 310 B.C. contain coins of Salamis?"
+expected_facts = ["Gîldau"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Salamis"], "burial" = ["before", 310]}
+notes = "constraint-date; gold 1; neutral 2"
+answer = ["igch0774"]
+neutral = ["igch1438", "igch1664"]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "burial igch0774 before 310 B.C.", "chunks" = [1]}, {"fact" = "contains igch0774 Salamis", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "burial igch1438 before 310 B.C.: text ? truth T; contains igch1438 Salamis: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+visible = false
+why = "contains igch1664 Salamis: text ? truth T"
+
+[[questions]]
+id = "k2-date-after310-miletus"
+category = "k2_constraint_date"
+class = "constraint-date"
+question = "Which hoards buried after 310 B.C. contain coins of Miletus?"
+expected_facts = ["Larnaca", "Aleppo", "Phacous"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Miletus"], "burial" = ["after", 310]}
+notes = "constraint-date; gold 3; neutral 5"
+answer = ["igch1472", "igch1516", "igch1678"]
+neutral = ["igch1444", "igch1670", "igch0801", "igch0866", "igch0958"]
+[[questions.gold_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+witnesses = [[{"fact" = "burial igch1472 after 310 B.C.", "chunks" = [5]}, {"fact" = "contains igch1472 Miletus", "chunks" = [5]}]]
+[[questions.gold_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+witnesses = [[{"fact" = "burial igch1516 after 310 B.C.", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Miletus", "chunks" = [17]}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "burial igch1678 after 310 B.C.", "chunks" = [16]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}]]
+[[questions.neutral_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+visible = true
+why = "contains igch1444 Miletus: text T truth F"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = true
+why = "burial igch1670 after 310 B.C.: text A truth ?"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = true
+why = "burial igch0866 after 310 B.C.: text T truth ?"
+[[questions.neutral_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+visible = false
+why = "burial igch0958 after 310 B.C.: text ? truth ?; contains igch0958 Miletus: text ? truth T"
+
+[[questions]]
+id = "k2-region-egypt-lampsacus"
+category = "k2_constraint_region"
+class = "constraint-region"
+question = "Which hoards found in Egypt contain coins of Lampsacus?"
+expected_facts = ["Demanhur", "Egypt 1912", "Phacous"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Lampsacus"], "region" = "Egypt"}
+notes = "constraint-region; gold 3; neutral 1"
+answer = ["igch1664", "igch1668", "igch1678"]
+neutral = ["igch1670"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}]]
+[[questions.gold_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+witnesses = [[{"fact" = "region igch1668 Egypt", "chunks" = [27]}, {"fact" = "contains igch1668 Lampsacus", "chunks" = [27]}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "region igch1678 Egypt", "chunks" = [16]}, {"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}]]
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "region igch1670 Egypt: text ? truth T"
+
+[[questions]]
+id = "k2-region-egypt-ake"
+category = "k2_constraint_region"
+class = "constraint-region"
+question = "Which hoards found in Egypt contain coins of Ake?"
+expected_facts = ["Demanhur", "Phacous"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 1
+params = {"mints" = ["Ptolemais-Ake"], "region" = "Egypt"}
+notes = "constraint-region; gold 2; neutral 2; IMPLIED_FACTS 1"
+answer = ["igch1664", "igch1678"]
+neutral = ["igch1668", "igch1670"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "region igch1678 Egypt", "chunks" = [16]}, {"fact" = "contains igch1678 Ake", "chunks" = [16]}]]
+[[questions.neutral_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+visible = false
+why = "contains igch1668 Ake: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "region igch1670 Egypt: text ? truth T"
+
+[[questions]]
+id = "k2-region-asia-minor-cius"
+category = "k2_constraint_region"
+class = "constraint-region"
+question = "Which hoards found in Asia Minor contain coins of Cius?"
+expected_facts = ["Asia Minor 1961"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Cius"], "region" = "Asia Minor"}
+notes = "constraint-region; gold 1; neutral 0"
+answer = ["igch1444"]
+neutral = []
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "region igch1444 Asia Minor", "chunks" = [15, 30]}, {"fact" = "contains igch1444 Cius", "chunks" = [15]}]]
+
+[[questions]]
+id = "k2-region-egypt-myriandrus"
+category = "k2_constraint_region"
+class = "constraint-region"
+question = "Which hoards found in Egypt contain coins of Myriandrus?"
+expected_facts = ["Demanhur"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 1
+params = {"mints" = ["Myriandrus"], "region" = "Egypt"}
+notes = "constraint-region; gold 1; neutral 2; IMPLIED_FACTS 1"
+answer = ["igch1664"]
+neutral = ["igch1670", "igch1678"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "region igch1670 Egypt: text ? truth T; contains igch1670 Myriandrus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+visible = false
+why = "contains igch1678 Myriandrus: text ? truth T"
+
+[[questions]]
+id = "k2-region-peloponnese-lampsacus"
+category = "k2_constraint_region"
+class = "constraint-region"
+question = "Which hoards found in the Peloponnese contain coins of Lampsacus?"
+expected_facts = ["Olympia"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Lampsacus"], "region" = "Peloponnese"}
+notes = "constraint-region; gold 1; neutral 0"
+answer = ["igch0176"]
+neutral = []
+[[questions.gold_items]]
+id = "igch0176"
+name = "Olympia"
+match = ["igch 176", "olympia"]
+witnesses = [[{"fact" = "region igch0176 Peloponnese", "chunks" = [34]}, {"fact" = "contains igch0176 Lampsacus", "chunks" = [32]}]]
+
+[[questions]]
+id = "k2-region-asia-minor-abydus"
+category = "k2_constraint_region"
+class = "constraint-region"
+question = "Which hoards found in Asia Minor contain coins of Abydus?"
+expected_facts = ["Asia Minor 1964 (IGCH 1438)", "Asia Minor 1961"]
+answer_type = "hoards"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Abydus"], "region" = "Asia Minor"}
+notes = "constraint-region; gold 2; neutral 2"
+answer = ["igch1438", "igch1444"]
+neutral = ["igch1437", "igch1441"]
+[[questions.gold_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+witnesses = [[{"fact" = "region igch1438 Asia Minor", "chunks" = [25]}, {"fact" = "contains igch1438 Abydus", "chunks" = [25]}]]
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "region igch1444 Asia Minor", "chunks" = [15, 30]}, {"fact" = "contains igch1444 Abydus", "chunks" = [15]}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1441"
+name = "Asia Minor 1964 (IGCH 1441)"
+match = ["igch 1441"]
+visible = true
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-count-tarsus"
+category = "k2_count"
+class = "count"
+question = "How many hoards contain coins struck at Tarsus?"
+expected_facts = ["2"]
+answer_type = "int"
+open_world_sensitive = true
+implied_facts = 2
+params = {"mints" = ["Tarsus"]}
+notes = "count; answer 2; neutral 6; OPEN_WORLD_SENSITIVE; IMPLIED_FACTS 2"
+answer = 2
+needed_facts = [{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch0774 Tarsus", "chunks" = [1]}]
+neutral = ["igch1438", "igch1472", "igch1516", "igch1670", "igch1678", "igch0866"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "contains igch0774 Tarsus", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "contains igch1438 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = false
+why = "contains igch1516 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "contains igch1670 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+visible = false
+why = "contains igch1678 Tarsus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = false
+why = "contains igch0866 Tarsus: text ? truth T"
+
+[[questions]]
+id = "k2-count-cius"
+category = "k2_count"
+class = "count"
+question = "How many hoards contain coins struck at Cius?"
+expected_facts = ["1"]
+answer_type = "int"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Cius"]}
+notes = "count; answer 1; neutral 0"
+answer = 1
+needed_facts = [{"fact" = "contains igch1444 Cius", "chunks" = [15]}]
+neutral = []
+[[questions.gold_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+witnesses = [[{"fact" = "contains igch1444 Cius", "chunks" = [15]}]]
+
+[[questions]]
+id = "k2-count-myriandrus"
+category = "k2_count"
+class = "count"
+question = "How many hoards contain coins struck at Myriandrus?"
+expected_facts = ["1"]
+answer_type = "int"
+open_world_sensitive = true
+implied_facts = 2
+params = {"mints" = ["Myriandrus"]}
+notes = "count; answer 1; neutral 4; OPEN_WORLD_SENSITIVE; IMPLIED_FACTS 2"
+answer = 1
+needed_facts = [{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]
+neutral = ["igch1438", "igch1516", "igch1670", "igch1678"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "contains igch1438 Myriandrus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = false
+why = "contains igch1516 Myriandrus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "contains igch1670 Myriandrus: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+visible = false
+why = "contains igch1678 Myriandrus: text ? truth T"
+
+[[questions]]
+id = "k2-count-salamis"
+category = "k2_count"
+class = "count"
+question = "How many hoards contain coins struck at Salamis?"
+expected_facts = ["1"]
+answer_type = "int"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Salamis"]}
+notes = "count; answer 1; neutral 5; OPEN_WORLD_SENSITIVE"
+answer = 1
+needed_facts = [{"fact" = "contains igch0774 Salamis", "chunks" = [1]}]
+neutral = ["igch1438", "igch1472", "igch1516", "igch1664", "igch1678"]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "contains igch0774 Salamis", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "contains igch1438 Salamis: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Salamis: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = false
+why = "contains igch1516 Salamis: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+visible = false
+why = "contains igch1664 Salamis: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+visible = false
+why = "contains igch1678 Salamis: text ? truth T"
+
+[[questions]]
+id = "k2-count-ake-sidon"
+category = "k2_count"
+class = "count"
+question = "In how many hoards do coins of Ake and Sidon occur together?"
+expected_facts = ["4"]
+answer_type = "int"
+open_world_sensitive = true
+implied_facts = 4
+params = {"mints" = ["Ptolemais-Ake", "Sidon"]}
+notes = "count; answer 4; neutral 6; OPEN_WORLD_SENSITIVE; IMPLIED_FACTS 4"
+answer = 4
+needed_facts = [{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Sidon", "chunks" = [17]}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1670 Ake", "chunks" = [14]}, {"fact" = "contains igch1670 Sidon", "chunks" = [14]}, {"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}]
+neutral = ["igch1438", "igch1472", "igch1668", "igch0410", "igch0866", "igch0958"]
+[[questions.gold_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+witnesses = [[{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Sidon", "chunks" = [17]}]]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+witnesses = [[{"fact" = "contains igch1670 Ake", "chunks" = [14]}, {"fact" = "contains igch1670 Sidon", "chunks" = [14]}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}]]
+[[questions.neutral_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+visible = false
+why = "contains igch1438 Ake: text ? truth T; contains igch1438 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = false
+why = "contains igch1472 Ake: text ? truth T; contains igch1472 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+visible = false
+why = "contains igch1668 Ake: text ? truth T; contains igch1668 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0410"
+name = "Paeonia"
+match = ["igch 410", "paeonia"]
+visible = false
+why = "contains igch0410 Ake: text ? truth T; contains igch0410 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0866"
+name = "Anadol"
+match = ["igch 866", "anadol"]
+visible = false
+why = "contains igch0866 Ake: text ? truth T; contains igch0866 Sidon: text ? truth T"
+[[questions.neutral_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+visible = false
+why = "contains igch0958 Ake: text ? truth T; contains igch0958 Sidon: text ? truth T"
+
+[[questions]]
+id = "k2-sup-earliest-egypt"
+category = "k2_superlative"
+class = "superlative"
+question = "Which hoard found in Egypt was buried earliest?"
+expected_facts = ["Demanhur"]
+answer_type = "hoard"
+open_world_sensitive = true
+implied_facts = 0
+params = {"region" = "Egypt", "way" = "earliest"}
+notes = "superlative; answer Demanhur; neutral 0; OPEN_WORLD_SENSITIVE"
+answer = "igch1664"
+answer_match = ["igch 1664", "demanhur"]
+needed_facts = [{"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "region igch1678 Egypt", "chunks" = [16]}, {"fact" = "burial igch1664 date", "chunks" = [13]}, {"fact" = "burial igch1678 date", "chunks" = [16]}]
+readings = {"gold" = {"Demanhur" = [318, 318], "Phacous" = [283, 283]}, "text" = {"Demanhur" = [318, 318], "Phacous" = [307, 295]}}
+neutral = []
+
+[[questions]]
+id = "k2-sup-earliest-sidon"
+category = "k2_superlative"
+class = "superlative"
+question = "Which is the earliest-buried hoard containing coins of Sidon?"
+expected_facts = ["Demanhur"]
+answer_type = "hoard"
+open_world_sensitive = true
+implied_facts = 1
+params = {"mint" = "Sidon", "way" = "earliest"}
+notes = "superlative; answer Demanhur; neutral 0; OPEN_WORLD_SENSITIVE; IMPLIED_FACTS 1"
+answer = "igch1664"
+answer_match = ["igch 1664", "demanhur"]
+needed_facts = [{"fact" = "contains igch1516 Sidon", "chunks" = [17]}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}, {"fact" = "burial igch1516 date", "chunks" = [17, 28]}, {"fact" = "burial igch1664 date", "chunks" = [13]}, {"fact" = "burial igch1678 date", "chunks" = [16]}]
+readings = {"gold" = {"Aleppo" = [305, 305], "Demanhur" = [318, 318], "Phacous" = [283, 283]}, "text" = {"Asia Minor 1964 (IGCH 1441)" = [317, 313], "Aleppo" = [307, 295], "Demanhur" = [318, 318], "Kuft" = [312, 303], "Phacous" = [307, 295]}}
+neutral = []
+
+[[questions]]
+id = "k2-sup-hoard-most-mints-egypt"
+category = "k2_superlative"
+class = "superlative"
+question = "Which hoard found in Egypt contains coins from the most mints?"
+expected_facts = ["Demanhur"]
+answer_type = "hoard"
+open_world_sensitive = true
+implied_facts = 4
+params = {"region" = "Egypt"}
+notes = "superlative; answer Demanhur; neutral 0; OPEN_WORLD_SENSITIVE; IMPLIED_FACTS 4"
+answer = "igch1664"
+answer_match = ["igch 1664", "demanhur"]
+needed_facts = [{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Sardes", "chunks" = [16]}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}, {"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "region igch1668 Egypt", "chunks" = [27]}, {"fact" = "region igch1678 Egypt", "chunks" = [16]}]
+readings = {"gold" = {"Demanhur" = 7, "Egypt 1912" = 1, "Phacous" = 5}, "text" = {"Demanhur" = 8, "Egypt 1912" = 1, "Phacous" = 5}}
+neutral = []
+
+[[questions]]
+id = "k2-sup-latest-egypt"
+category = "k2_superlative"
+class = "superlative"
+question = "Which hoard found in Egypt was buried latest?"
+expected_facts = ["Phacous"]
+answer_type = "hoard"
+open_world_sensitive = true
+implied_facts = 0
+params = {"region" = "Egypt", "way" = "latest"}
+notes = "superlative; answer Phacous; neutral 0; OPEN_WORLD_SENSITIVE"
+answer = "igch1678"
+answer_match = ["igch 1678", "phacous"]
+needed_facts = [{"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "region igch1678 Egypt", "chunks" = [16]}, {"fact" = "burial igch1664 date", "chunks" = [13]}, {"fact" = "burial igch1678 date", "chunks" = [16]}]
+readings = {"gold" = {"Demanhur" = [318, 318], "Phacous" = [283, 283]}, "text" = {"Demanhur" = [318, 318], "Phacous" = [307, 295]}}
+neutral = []
+
+[[questions]]
+id = "k2-sup-mint-most-hoards"
+category = "k2_superlative"
+class = "superlative"
+question = "Which mint is represented in the most hoards?"
+expected_facts = ["Lampsacus"]
+answer_type = "mint"
+open_world_sensitive = true
+implied_facts = 0
+params = {}
+notes = "superlative; answer Lampsacus; neutral 0; OPEN_WORLD_SENSITIVE"
+answer = "Lampsacus"
+answer_match = ["lampsacus", "lampsacene"]
+needed_facts = [{"fact" = "contains igch1438 Lampsacus", "chunks" = [25]}, {"fact" = "contains igch1472 Lampsacus", "chunks" = [22]}, {"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1668 Lampsacus", "chunks" = [27]}, {"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}, {"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "contains igch0176 Lampsacus", "chunks" = [32]}, {"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}, {"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}, {"fact" = "contains igch0958 Lampsacus", "chunks" = [23]}, {"fact" = "contains igch1472 Miletus", "chunks" = [5]}, {"fact" = "contains igch1516 Miletus", "chunks" = [17]}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1670 Miletus", "chunks" = [14]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "contains igch0410 Miletus", "chunks" = [3]}, {"fact" = "contains igch0774 Miletus", "chunks" = [1]}, {"fact" = "contains igch0866 Miletus", "chunks" = [7]}]
+readings = {"gold" = {"Abydus" = 7, "Cius" = 1, "Colophon" = 2, "Lampsacus" = 12, "Magnesia" = 3, "Miletus" = 8, "Myriandrus" = 1, "Ake" = 4, "Salamis" = 1, "Sardes" = 7, "Sidon" = 4, "Tarsus" = 2, "Teos" = 1}, "text" = {"Abydus" = 12, "Alexandria" = 1, "Amphipolis" = 4, "Babylon" = 2, "Citium" = 1, "Cius" = 1, "Colophon" = 4, "Lampsacus" = 16, "Magnesia" = 5, "Miletus" = 11, "Myriandrus" = 1, "Pella" = 4, "Ake" = 5, "Salamis" = 1, "Sardes" = 11, "Side" = 1, "Sidon" = 5, "Tarsus" = 2, "Teos" = 2}}
+neutral = []
+
+[[questions]]
+id = "k2-sup-mint-most-hoards-egypt"
+category = "k2_superlative"
+class = "superlative"
+question = "Which mint is represented in the most hoards found in Egypt?"
+expected_facts = ["Lampsacus"]
+answer_type = "mint"
+open_world_sensitive = true
+implied_facts = 0
+params = {"region" = "Egypt"}
+notes = "superlative; answer Lampsacus; neutral 0; OPEN_WORLD_SENSITIVE"
+answer = "Lampsacus"
+answer_match = ["lampsacus", "lampsacene"]
+needed_facts = [{"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "region igch1668 Egypt", "chunks" = [27]}, {"fact" = "contains igch1668 Lampsacus", "chunks" = [27]}, {"fact" = "region igch1678 Egypt", "chunks" = [16]}, {"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "region igch1664 Egypt", "chunks" = [35, 37]}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "region igch1678 Egypt", "chunks" = [16]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}]
+readings = {"gold" = {"Lampsacus" = 3, "Miletus" = 2, "Myriandrus" = 1, "Ake" = 2, "Sardes" = 2, "Sidon" = 2, "Tarsus" = 1}, "text" = {"Abydus" = 1, "Lampsacus" = 3, "Miletus" = 2, "Myriandrus" = 1, "Ake" = 2, "Sardes" = 2, "Sidon" = 2, "Tarsus" = 1}}
+neutral = []
+
+[[questions]]
+id = "k2-cooc-tarsus"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Tarsus?"
+expected_facts = ["Lampsacus", "Miletus", "Myriandrus", "Ake", "Salamis", "Sardes", "Sidon"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 9
+params = {"mints" = ["Tarsus"]}
+notes = "co-occurrence; gold 7; neutral 47; IMPLIED_FACTS 9"
+answer = ["Lampsacus", "Miletus", "Myriandrus", "Ptolemais-Ake", "Salamis", "Sardis", "Sidon"]
+neutral = ["Abydus", "Aenus", "Alexandreia Troas", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Byzantium", "Calchedon", "Callatis", "Carne", "Carrhae", "Chios", "Citium", "Colophon", "Cyrene", "Cyzicus", "Damascus", "Ecbatana", "Ephesus", "Heracleia Pontica", "Hierapolis Bambyce", "Istrus", "Lysimachia", "Lyttus", "Magnesia ad Maeandrum", "Marathus", "Marium", "Mesembria", "Mytilene", "Odessus", "Paphos", "Pella", "Perinthus", "Sestos", "Sicyon", "Side", "Sinope", "Soli", "Susa", "Teos", "Thebes", "Tomis", "Tyre"]
+[[questions.gold_items]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+witnesses = [[{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}], [{"fact" = "contains igch0774 Tarsus", "chunks" = [1]}, {"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}]]
+[[questions.gold_items]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+witnesses = [[{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}], [{"fact" = "contains igch0774 Tarsus", "chunks" = [1]}, {"fact" = "contains igch0774 Miletus", "chunks" = [1]}]]
+[[questions.gold_items]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+witnesses = [[{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+witnesses = [[{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+witnesses = [[{"fact" = "contains igch0774 Tarsus", "chunks" = [1]}, {"fact" = "contains igch0774 Salamis", "chunks" = [1]}]]
+[[questions.gold_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+witnesses = [[{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}]]
+[[questions.gold_items]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+witnesses = [[{"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch0866']"
+[[questions.neutral_items]]
+id = "Aenus"
+name = "Aenus"
+match = ["aenus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Alexandreia Troas"
+name = "Alexandreia Troas"
+match = ["alexandreia troas"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0774', 'igch0866']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Byzantium"
+name = "Byzantium"
+match = ["byzantium"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Calchedon"
+name = "Calchedon"
+match = ["calchedon"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch0866']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Carrhae"
+name = "Carrhae"
+match = ["carrhae"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+visible = true
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch0774', 'igch0866']"
+[[questions.neutral_items]]
+id = "Cyrene"
+name = "Cyrene"
+match = ["cyrene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Cyzicus"
+name = "Cyzicus"
+match = ["cyzicus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Ecbatana"
+name = "Ecbatana"
+match = ["ecbatana"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Ephesus"
+name = "Ephesus"
+match = ["ephesus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Heracleia Pontica"
+name = "Heracleia Pontica"
+match = ["heracleia pontica"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Istrus"
+name = "Istrus"
+match = ["istrus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Lysimachia"
+name = "Lysimachia"
+match = ["lysimachia"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch0866']"
+[[questions.neutral_items]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Mesembria"
+name = "Mesembria"
+match = ["mesembria"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Mytilene"
+name = "Mytilene"
+match = ["mytilene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Odessus"
+name = "Odessus"
+match = ["odessus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Perinthus"
+name = "Perinthus"
+match = ["perinthus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Sestos"
+name = "Sestos"
+match = ["sestos"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Sinope"
+name = "Sinope"
+match = ["sinope"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0866']"
+[[questions.neutral_items]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Tomis"
+name = "Tomis"
+match = ["tomis"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0866']"
+
+[[questions]]
+id = "k2-cooc-myriandrus"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Myriandrus?"
+expected_facts = ["Lampsacus", "Miletus", "Ake", "Sardes", "Sidon", "Tarsus"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 9
+params = {"mints" = ["Myriandrus"]}
+notes = "co-occurrence; gold 6; neutral 26; IMPLIED_FACTS 9"
+answer = ["Lampsacus", "Miletus", "Ptolemais-Ake", "Sardis", "Sidon", "Tarsus"]
+neutral = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Callatis", "Carne", "Chios", "Citium", "Colophon", "Damascus", "Hierapolis Bambyce", "Lyttus", "Magnesia ad Maeandrum", "Marathus", "Marium", "Paphos", "Pella", "Salamis", "Sicyon", "Side", "Soli", "Susa"]
+[[questions.gold_items]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+witnesses = [[{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}]]
+[[questions.gold_items]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+witnesses = [[{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}]]
+[[questions.gold_items]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+witnesses = [[{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+witnesses = [[{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}]]
+[[questions.gold_items]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+witnesses = [[{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+witnesses = [[{"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1670', 'igch1678']"
+
+[[questions]]
+id = "k2-cooc-miletus"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Miletus?"
+expected_facts = ["Abydus", "Colophon", "Lampsacus", "Magnesia", "Myriandrus", "Ake", "Salamis", "Sardes", "Sidon", "Tarsus"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 4
+params = {"mints" = ["Miletus"]}
+notes = "co-occurrence; gold 10; neutral 46; IMPLIED_FACTS 4"
+answer = ["Abydus", "Colophon", "Lampsacus", "Magnesia ad Maeandrum", "Myriandrus", "Ptolemais-Ake", "Salamis", "Sardis", "Sidon", "Tarsus"]
+neutral = ["Aenus", "Alexandreia Troas", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Byzantium", "Calchedon", "Callatis", "Carne", "Carrhae", "Chios", "Citium", "Cius", "Cyrene", "Cyzicus", "Damascus", "Ecbatana", "Ephesus", "Heracleia Pontica", "Hierapolis Bambyce", "Istrus", "Lysimachia", "Lyttus", "Marathus", "Marium", "Mesembria", "Mytilene", "Odessus", "Paphos", "Pella", "Perinthus", "Phaselis", "Sestos", "Sicyon", "Side", "Sinope", "Soli", "Susa", "Teos", "Thebes", "Tomis", "Tyre"]
+[[questions.gold_items]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+witnesses = [[{"fact" = "contains igch1472 Miletus", "chunks" = [5]}, {"fact" = "contains igch1472 Abydus", "chunks" = [22]}], [{"fact" = "contains igch1516 Miletus", "chunks" = [17]}, {"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}], [{"fact" = "contains igch0410 Miletus", "chunks" = [3]}, {"fact" = "contains igch0410 Abydus", "chunks" = [3, 21]}], [{"fact" = "contains igch0866 Miletus", "chunks" = [7]}, {"fact" = "contains igch0866 Abydus", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+witnesses = [[{"fact" = "contains igch0866 Miletus", "chunks" = [7]}, {"fact" = "contains igch0866 Colophon", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+witnesses = [[{"fact" = "contains igch1472 Miletus", "chunks" = [5]}, {"fact" = "contains igch1472 Lampsacus", "chunks" = [22]}], [{"fact" = "contains igch1516 Miletus", "chunks" = [17]}, {"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}], [{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}], [{"fact" = "contains igch1670 Miletus", "chunks" = [14]}, {"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}], [{"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}], [{"fact" = "contains igch0410 Miletus", "chunks" = [3]}, {"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}], [{"fact" = "contains igch0774 Miletus", "chunks" = [1]}, {"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}], [{"fact" = "contains igch0866 Miletus", "chunks" = [7]}, {"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+witnesses = [[{"fact" = "contains igch0410 Miletus", "chunks" = [3]}, {"fact" = "contains igch0410 Magnesia", "chunks" = [3]}], [{"fact" = "contains igch0866 Miletus", "chunks" = [7]}, {"fact" = "contains igch0866 Magnesia", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+witnesses = [[{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+witnesses = [[{"fact" = "contains igch1516 Miletus", "chunks" = [17]}, {"fact" = "contains igch1516 Ake", "chunks" = [17]}], [{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch1670 Miletus", "chunks" = [14]}, {"fact" = "contains igch1670 Ake", "chunks" = [14]}], [{"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "contains igch1678 Ake", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+witnesses = [[{"fact" = "contains igch0774 Miletus", "chunks" = [1]}, {"fact" = "contains igch0774 Salamis", "chunks" = [1]}]]
+[[questions.gold_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+witnesses = [[{"fact" = "contains igch1472 Miletus", "chunks" = [5]}, {"fact" = "contains igch1472 Sardes", "chunks" = [5]}], [{"fact" = "contains igch1516 Miletus", "chunks" = [17]}, {"fact" = "contains igch1516 Sardes", "chunks" = [17, 28]}], [{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}], [{"fact" = "contains igch1670 Miletus", "chunks" = [14]}, {"fact" = "contains igch1670 Sardes", "chunks" = [14]}], [{"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "contains igch1678 Sardes", "chunks" = [16]}], [{"fact" = "contains igch0410 Miletus", "chunks" = [3]}, {"fact" = "contains igch0410 Sardes", "chunks" = [3]}], [{"fact" = "contains igch0866 Miletus", "chunks" = [7]}, {"fact" = "contains igch0866 Sardes", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+witnesses = [[{"fact" = "contains igch1516 Miletus", "chunks" = [17]}, {"fact" = "contains igch1516 Sidon", "chunks" = [17]}], [{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch1670 Miletus", "chunks" = [14]}, {"fact" = "contains igch1670 Sidon", "chunks" = [14]}], [{"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+witnesses = [[{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch0774 Miletus", "chunks" = [1]}, {"fact" = "contains igch0774 Tarsus", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "Aenus"
+name = "Aenus"
+match = ["aenus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Alexandreia Troas"
+name = "Alexandreia Troas"
+match = ["alexandreia troas"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0801']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0410', 'igch0774', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = true
+why = "co-occurs only in ['igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0410', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Byzantium"
+name = "Byzantium"
+match = ["byzantium"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Calchedon"
+name = "Calchedon"
+match = ["calchedon"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Carrhae"
+name = "Carrhae"
+match = ["carrhae"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Cius"
+name = "Cius"
+match = ["cius"]
+visible = true
+why = "co-occurs only in ['igch1444']"
+[[questions.neutral_items]]
+id = "Cyrene"
+name = "Cyrene"
+match = ["cyrene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Cyzicus"
+name = "Cyzicus"
+match = ["cyzicus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Ecbatana"
+name = "Ecbatana"
+match = ["ecbatana"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Ephesus"
+name = "Ephesus"
+match = ["ephesus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Heracleia Pontica"
+name = "Heracleia Pontica"
+match = ["heracleia pontica"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Istrus"
+name = "Istrus"
+match = ["istrus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Lysimachia"
+name = "Lysimachia"
+match = ["lysimachia"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Mesembria"
+name = "Mesembria"
+match = ["mesembria"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Mytilene"
+name = "Mytilene"
+match = ["mytilene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Odessus"
+name = "Odessus"
+match = ["odessus"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1441', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Perinthus"
+name = "Perinthus"
+match = ["perinthus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Phaselis"
+name = "Phaselis"
+match = ["phaselis"]
+visible = false
+why = "co-occurs only in ['igch0801']"
+[[questions.neutral_items]]
+id = "Sestos"
+name = "Sestos"
+match = ["sestos"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch0410']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = true
+why = "co-occurs only in ['igch1444', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0410', 'igch0866']"
+[[questions.neutral_items]]
+id = "Sinope"
+name = "Sinope"
+match = ["sinope"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+visible = true
+why = "co-occurs only in ['igch1441', 'igch1444', 'igch1472', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Tomis"
+name = "Tomis"
+match = ["tomis"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0866']"
+
+[[questions]]
+id = "k2-cooc-sidon"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Sidon?"
+expected_facts = ["Abydus", "Lampsacus", "Miletus", "Myriandrus", "Ake", "Sardes", "Tarsus"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 9
+params = {"mints" = ["Sidon"]}
+notes = "co-occurrence; gold 7; neutral 47; IMPLIED_FACTS 9"
+answer = ["Abydus", "Lampsacus", "Miletus", "Myriandrus", "Ptolemais-Ake", "Sardis", "Tarsus"]
+neutral = ["Aenus", "Alexandreia Troas", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Byzantium", "Calchedon", "Callatis", "Carne", "Carrhae", "Chios", "Citium", "Colophon", "Cyrene", "Cyzicus", "Damascus", "Ecbatana", "Ephesus", "Heracleia Pontica", "Hierapolis Bambyce", "Istrus", "Lysimachia", "Lyttus", "Magnesia ad Maeandrum", "Marathus", "Marium", "Mesembria", "Mytilene", "Odessus", "Paphos", "Pella", "Perinthus", "Salamis", "Sestos", "Sicyon", "Side", "Sinope", "Soli", "Susa", "Teos", "Thebes", "Tomis", "Tyre"]
+[[questions.gold_items]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+witnesses = [[{"fact" = "contains igch1516 Sidon", "chunks" = [17]}, {"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}]]
+[[questions.gold_items]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+witnesses = [[{"fact" = "contains igch1516 Sidon", "chunks" = [17]}, {"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}], [{"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}], [{"fact" = "contains igch1670 Sidon", "chunks" = [14]}, {"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}], [{"fact" = "contains igch1678 Sidon", "chunks" = [16]}, {"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}]]
+[[questions.gold_items]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+witnesses = [[{"fact" = "contains igch1516 Sidon", "chunks" = [17]}, {"fact" = "contains igch1516 Miletus", "chunks" = [17]}], [{"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}], [{"fact" = "contains igch1670 Sidon", "chunks" = [14]}, {"fact" = "contains igch1670 Miletus", "chunks" = [14]}], [{"fact" = "contains igch1678 Sidon", "chunks" = [16]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+witnesses = [[{"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+witnesses = [[{"fact" = "contains igch1516 Sidon", "chunks" = [17]}, {"fact" = "contains igch1516 Ake", "chunks" = [17]}], [{"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch1670 Sidon", "chunks" = [14]}, {"fact" = "contains igch1670 Ake", "chunks" = [14]}], [{"fact" = "contains igch1678 Sidon", "chunks" = [16]}, {"fact" = "contains igch1678 Ake", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+witnesses = [[{"fact" = "contains igch1516 Sidon", "chunks" = [17]}, {"fact" = "contains igch1516 Sardes", "chunks" = [17, 28]}], [{"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}], [{"fact" = "contains igch1670 Sidon", "chunks" = [14]}, {"fact" = "contains igch1670 Sardes", "chunks" = [14]}], [{"fact" = "contains igch1678 Sidon", "chunks" = [16]}, {"fact" = "contains igch1678 Sardes", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+witnesses = [[{"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "Aenus"
+name = "Aenus"
+match = ["aenus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Alexandreia Troas"
+name = "Alexandreia Troas"
+match = ["alexandreia troas"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Byzantium"
+name = "Byzantium"
+match = ["byzantium"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Calchedon"
+name = "Calchedon"
+match = ["calchedon"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Carrhae"
+name = "Carrhae"
+match = ["carrhae"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1678']"
+[[questions.neutral_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch0866']"
+[[questions.neutral_items]]
+id = "Cyrene"
+name = "Cyrene"
+match = ["cyrene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Cyzicus"
+name = "Cyzicus"
+match = ["cyzicus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Ecbatana"
+name = "Ecbatana"
+match = ["ecbatana"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Ephesus"
+name = "Ephesus"
+match = ["ephesus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Heracleia Pontica"
+name = "Heracleia Pontica"
+match = ["heracleia pontica"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Istrus"
+name = "Istrus"
+match = ["istrus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Lysimachia"
+name = "Lysimachia"
+match = ["lysimachia"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+visible = false
+why = "co-occurs only in ['igch1441', 'igch1472', 'igch1516', 'igch0410', 'igch0866']"
+[[questions.neutral_items]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Mesembria"
+name = "Mesembria"
+match = ["mesembria"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Mytilene"
+name = "Mytilene"
+match = ["mytilene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Odessus"
+name = "Odessus"
+match = ["odessus"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = true
+why = "co-occurs only in ['igch1441', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Perinthus"
+name = "Perinthus"
+match = ["perinthus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Sestos"
+name = "Sestos"
+match = ["sestos"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch0410']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0866']"
+[[questions.neutral_items]]
+id = "Sinope"
+name = "Sinope"
+match = ["sinope"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+visible = false
+why = "co-occurs only in ['igch1441', 'igch1472', 'igch0866']"
+[[questions.neutral_items]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Tomis"
+name = "Tomis"
+match = ["tomis"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0866']"
+
+[[questions]]
+id = "k2-cooc-ake"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Ake?"
+expected_facts = ["Abydus", "Lampsacus", "Miletus", "Myriandrus", "Sardes", "Sidon", "Tarsus"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 9
+params = {"mints" = ["Ptolemais-Ake"]}
+notes = "co-occurrence; gold 7; neutral 48; IMPLIED_FACTS 9"
+answer = ["Abydus", "Lampsacus", "Miletus", "Myriandrus", "Sardis", "Sidon", "Tarsus"]
+neutral = ["Aenus", "Alexandreia Troas", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Byzantium", "Calchedon", "Callatis", "Carne", "Carrhae", "Chios", "Citium", "Colophon", "Cyrene", "Cyzicus", "Damascus", "Ecbatana", "Ephesus", "Heracleia Pontica", "Hierapolis Bambyce", "Istrus", "Lysimachia", "Lyttus", "Magnesia ad Maeandrum", "Marathus", "Marium", "Mesembria", "Mytilene", "Odessus", "Paphos", "Pella", "Perinthus", "Phaselis", "Salamis", "Sestos", "Sicyon", "Side", "Sinope", "Soli", "Susa", "Teos", "Thebes", "Tomis", "Tyre"]
+[[questions.gold_items]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+witnesses = [[{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}]]
+[[questions.gold_items]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+witnesses = [[{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}], [{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}], [{"fact" = "contains igch1670 Ake", "chunks" = [14]}, {"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}], [{"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}]]
+[[questions.gold_items]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+witnesses = [[{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Miletus", "chunks" = [17]}], [{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}], [{"fact" = "contains igch1670 Ake", "chunks" = [14]}, {"fact" = "contains igch1670 Miletus", "chunks" = [14]}], [{"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+witnesses = [[{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+witnesses = [[{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Sardes", "chunks" = [17, 28]}], [{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}], [{"fact" = "contains igch1670 Ake", "chunks" = [14]}, {"fact" = "contains igch1670 Sardes", "chunks" = [14]}], [{"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Sardes", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+witnesses = [[{"fact" = "contains igch1516 Ake", "chunks" = [17]}, {"fact" = "contains igch1516 Sidon", "chunks" = [17]}], [{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch1670 Ake", "chunks" = [14]}, {"fact" = "contains igch1670 Sidon", "chunks" = [14]}], [{"fact" = "contains igch1678 Ake", "chunks" = [16]}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+witnesses = [[{"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}]]
+[[questions.neutral_items]]
+id = "Aenus"
+name = "Aenus"
+match = ["aenus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Alexandreia Troas"
+name = "Alexandreia Troas"
+match = ["alexandreia troas"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0801']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Byzantium"
+name = "Byzantium"
+match = ["byzantium"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Calchedon"
+name = "Calchedon"
+match = ["calchedon"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Carrhae"
+name = "Carrhae"
+match = ["carrhae"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1678']"
+[[questions.neutral_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1472', 'igch1516', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Cyrene"
+name = "Cyrene"
+match = ["cyrene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Cyzicus"
+name = "Cyzicus"
+match = ["cyzicus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Ecbatana"
+name = "Ecbatana"
+match = ["ecbatana"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Ephesus"
+name = "Ephesus"
+match = ["ephesus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Heracleia Pontica"
+name = "Heracleia Pontica"
+match = ["heracleia pontica"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Istrus"
+name = "Istrus"
+match = ["istrus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Lysimachia"
+name = "Lysimachia"
+match = ["lysimachia"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1472', 'igch1516', 'igch0410', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Mesembria"
+name = "Mesembria"
+match = ["mesembria"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Mytilene"
+name = "Mytilene"
+match = ["mytilene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Odessus"
+name = "Odessus"
+match = ["odessus"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1516', 'igch1664', 'igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Perinthus"
+name = "Perinthus"
+match = ["perinthus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Phaselis"
+name = "Phaselis"
+match = ["phaselis"]
+visible = false
+why = "co-occurs only in ['igch0801']"
+[[questions.neutral_items]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Sestos"
+name = "Sestos"
+match = ["sestos"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch0410']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0866']"
+[[questions.neutral_items]]
+id = "Sinope"
+name = "Sinope"
+match = ["sinope"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Tomis"
+name = "Tomis"
+match = ["tomis"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0866']"
+
+[[questions]]
+id = "k2-cooc-lampsacus"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Lampsacus?"
+expected_facts = ["Abydus", "Colophon", "Magnesia", "Miletus", "Myriandrus", "Ake", "Salamis", "Sardes", "Sidon", "Tarsus"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 4
+params = {"mints" = ["Lampsacus"]}
+notes = "co-occurrence; gold 10; neutral 48; IMPLIED_FACTS 4"
+answer = ["Abydus", "Colophon", "Magnesia ad Maeandrum", "Miletus", "Myriandrus", "Ptolemais-Ake", "Salamis", "Sardis", "Sidon", "Tarsus"]
+neutral = ["Aenus", "Alexandreia Troas", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Athens", "Babylon", "Berytus", "Byblus", "Byzantium", "Calchedon", "Callatis", "Carne", "Carrhae", "Chalcis", "Chios", "Citium", "Cius", "Cyrene", "Cyzicus", "Damascus", "Ecbatana", "Ephesus", "Heracleia Pontica", "Hierapolis Bambyce", "Istrus", "Lysimachia", "Lyttus", "Marathus", "Marium", "Mesembria", "Mytilene", "Odessus", "Paphos", "Pella", "Perinthus", "Phaselis", "Sestos", "Sicyon", "Side", "Sinope", "Soli", "Susa", "Teos", "Thebes", "Tomis", "Tyre"]
+[[questions.gold_items]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+witnesses = [[{"fact" = "contains igch1438 Lampsacus", "chunks" = [25]}, {"fact" = "contains igch1438 Abydus", "chunks" = [25]}], [{"fact" = "contains igch1472 Lampsacus", "chunks" = [22]}, {"fact" = "contains igch1472 Abydus", "chunks" = [22]}], [{"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}], [{"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Abydus", "chunks" = [3, 21]}], [{"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}, {"fact" = "contains igch0866 Abydus", "chunks" = [7]}], [{"fact" = "contains igch0958 Lampsacus", "chunks" = [23]}, {"fact" = "contains igch0958 Abydus", "chunks" = [23]}]]
+[[questions.gold_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+witnesses = [[{"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}, {"fact" = "contains igch0866 Colophon", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+witnesses = [[{"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Magnesia", "chunks" = [3]}], [{"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}, {"fact" = "contains igch0866 Magnesia", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+witnesses = [[{"fact" = "contains igch1472 Lampsacus", "chunks" = [22]}, {"fact" = "contains igch1472 Miletus", "chunks" = [5]}], [{"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Miletus", "chunks" = [17]}], [{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Miletus", "chunks" = [13]}], [{"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}, {"fact" = "contains igch1670 Miletus", "chunks" = [14]}], [{"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "contains igch1678 Miletus", "chunks" = [16]}], [{"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Miletus", "chunks" = [3]}], [{"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "contains igch0774 Miletus", "chunks" = [1]}], [{"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}, {"fact" = "contains igch0866 Miletus", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+witnesses = [[{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Myriandrus", "chunks" = [49], "implied" = true}]]
+[[questions.gold_items]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+witnesses = [[{"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Ake", "chunks" = [17]}], [{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Ake", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}, {"fact" = "contains igch1670 Ake", "chunks" = [14]}], [{"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "contains igch1678 Ake", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+witnesses = [[{"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "contains igch0774 Salamis", "chunks" = [1]}]]
+[[questions.gold_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+witnesses = [[{"fact" = "contains igch1472 Lampsacus", "chunks" = [22]}, {"fact" = "contains igch1472 Sardes", "chunks" = [5]}], [{"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Sardes", "chunks" = [17, 28]}], [{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Sardes", "chunks" = [13]}], [{"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}, {"fact" = "contains igch1670 Sardes", "chunks" = [14]}], [{"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "contains igch1678 Sardes", "chunks" = [16]}], [{"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Sardes", "chunks" = [3]}], [{"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}, {"fact" = "contains igch0866 Sardes", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+witnesses = [[{"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Sidon", "chunks" = [17]}], [{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Sidon", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch1670 Lampsacus", "chunks" = [29]}, {"fact" = "contains igch1670 Sidon", "chunks" = [14]}], [{"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "contains igch1678 Sidon", "chunks" = [16]}]]
+[[questions.gold_items]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+witnesses = [[{"fact" = "contains igch1664 Lampsacus", "chunks" = [26]}, {"fact" = "contains igch1664 Tarsus", "chunks" = [49], "implied" = true}], [{"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "contains igch0774 Tarsus", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "Aenus"
+name = "Aenus"
+match = ["aenus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Alexandreia Troas"
+name = "Alexandreia Troas"
+match = ["alexandreia troas"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = true
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0777', 'igch0801']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1438', 'igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0774', 'igch0777', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Athens"
+name = "Athens"
+match = ["athens"]
+visible = false
+why = "co-occurs only in ['igch0176']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0176', 'igch0410', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0176', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Byzantium"
+name = "Byzantium"
+match = ["byzantium"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Calchedon"
+name = "Calchedon"
+match = ["calchedon"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Carrhae"
+name = "Carrhae"
+match = ["carrhae"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Chalcis"
+name = "Chalcis"
+match = ["chalcis"]
+visible = false
+why = "co-occurs only in ['igch0176']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1668', 'igch1678', 'igch0777']"
+[[questions.neutral_items]]
+id = "Cius"
+name = "Cius"
+match = ["cius"]
+visible = true
+why = "co-occurs only in ['igch1444']"
+[[questions.neutral_items]]
+id = "Cyrene"
+name = "Cyrene"
+match = ["cyrene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Cyzicus"
+name = "Cyzicus"
+match = ["cyzicus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0866']"
+[[questions.neutral_items]]
+id = "Ecbatana"
+name = "Ecbatana"
+match = ["ecbatana"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Ephesus"
+name = "Ephesus"
+match = ["ephesus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Heracleia Pontica"
+name = "Heracleia Pontica"
+match = ["heracleia pontica"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Istrus"
+name = "Istrus"
+match = ["istrus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Lysimachia"
+name = "Lysimachia"
+match = ["lysimachia"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1670', 'igch1678']"
+[[questions.neutral_items]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Mesembria"
+name = "Mesembria"
+match = ["mesembria"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Mytilene"
+name = "Mytilene"
+match = ["mytilene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Odessus"
+name = "Odessus"
+match = ["odessus"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1441', 'igch1516', 'igch1664', 'igch1670', 'igch1678', 'igch0176', 'igch0777']"
+[[questions.neutral_items]]
+id = "Perinthus"
+name = "Perinthus"
+match = ["perinthus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Phaselis"
+name = "Phaselis"
+match = ["phaselis"]
+visible = false
+why = "co-occurs only in ['igch0801']"
+[[questions.neutral_items]]
+id = "Sestos"
+name = "Sestos"
+match = ["sestos"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch0176', 'igch0410']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = true
+why = "co-occurs only in ['igch1444', 'igch1516', 'igch1664', 'igch1668', 'igch1670', 'igch1678', 'igch0410', 'igch0866']"
+[[questions.neutral_items]]
+id = "Sinope"
+name = "Sinope"
+match = ["sinope"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1670', 'igch1678', 'igch0176', 'igch0866']"
+[[questions.neutral_items]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+visible = true
+why = "co-occurs only in ['igch1441', 'igch1444', 'igch1472', 'igch0777', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Tomis"
+name = "Tomis"
+match = ["tomis"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0866']"
+
+[[questions]]
+id = "k2-cooc-salamis"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Salamis?"
+expected_facts = ["Lampsacus", "Miletus", "Tarsus"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Salamis"]}
+notes = "co-occurrence; gold 3; neutral 32"
+answer = ["Lampsacus", "Miletus", "Tarsus"]
+neutral = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Callatis", "Carne", "Chios", "Citium", "Colophon", "Damascus", "Hierapolis Bambyce", "Lyttus", "Magnesia ad Maeandrum", "Marathus", "Marium", "Myriandrus", "Paphos", "Pella", "Ptolemais-Ake", "Sardis", "Sicyon", "Side", "Sidon", "Soli", "Susa", "Teos", "Thebes", "Tyre"]
+[[questions.gold_items]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+witnesses = [[{"fact" = "contains igch0774 Salamis", "chunks" = [1]}, {"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}]]
+[[questions.gold_items]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+witnesses = [[{"fact" = "contains igch0774 Salamis", "chunks" = [1]}, {"fact" = "contains igch0774 Miletus", "chunks" = [1]}]]
+[[questions.gold_items]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+witnesses = [[{"fact" = "contains igch0774 Salamis", "chunks" = [1]}, {"fact" = "contains igch0774 Tarsus", "chunks" = [1]}]]
+[[questions.neutral_items]]
+id = "Abydus"
+name = "Abydus"
+match = ["abydus", "abydene"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678', 'igch0774']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+visible = true
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch0774']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516']"
+[[questions.neutral_items]]
+id = "Marathus"
+name = "Marathus"
+match = ["marathus"]
+visible = false
+why = "co-occurs only in ['igch1678']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1678']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1678']"
+[[questions.neutral_items]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+
+[[questions]]
+id = "k2-cooc-abydus"
+category = "k2_co_occurrence"
+class = "co-occurrence"
+question = "Which mints are represented in hoards alongside coins of Abydus?"
+expected_facts = ["Cius", "Colophon", "Lampsacus", "Magnesia", "Miletus", "Ake", "Sardes", "Sidon", "Teos"]
+answer_type = "mints"
+open_world_sensitive = false
+implied_facts = 0
+params = {"mints" = ["Abydus"]}
+notes = "co-occurrence; gold 9; neutral 46"
+answer = ["Cius", "Colophon", "Lampsacus", "Magnesia ad Maeandrum", "Miletus", "Ptolemais-Ake", "Sardis", "Sidon", "Teos"]
+neutral = ["Aenus", "Alexandreia Troas", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Byzantium", "Calchedon", "Callatis", "Carne", "Carrhae", "Chios", "Citium", "Cyrene", "Cyzicus", "Damascus", "Ecbatana", "Ephesus", "Heracleia Pontica", "Hierapolis Bambyce", "Istrus", "Lysimachia", "Lyttus", "Marium", "Mesembria", "Myriandrus", "Mytilene", "Odessus", "Paphos", "Pella", "Perinthus", "Phaselis", "Salamis", "Sestos", "Sicyon", "Side", "Sinope", "Soli", "Susa", "Tarsus", "Thebes", "Tomis", "Tyre"]
+[[questions.gold_items]]
+id = "Cius"
+name = "Cius"
+match = ["cius"]
+witnesses = [[{"fact" = "contains igch1444 Abydus", "chunks" = [15]}, {"fact" = "contains igch1444 Cius", "chunks" = [15]}]]
+[[questions.gold_items]]
+id = "Colophon"
+name = "Colophon"
+match = ["colophon", "colophonian"]
+witnesses = [[{"fact" = "contains igch1444 Abydus", "chunks" = [15]}, {"fact" = "contains igch1444 Colophon", "chunks" = [15]}], [{"fact" = "contains igch0866 Abydus", "chunks" = [7]}, {"fact" = "contains igch0866 Colophon", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Lampsacus"
+name = "Lampsacus"
+match = ["lampsacus", "lampsacene"]
+witnesses = [[{"fact" = "contains igch1438 Abydus", "chunks" = [25]}, {"fact" = "contains igch1438 Lampsacus", "chunks" = [25]}], [{"fact" = "contains igch1472 Abydus", "chunks" = [22]}, {"fact" = "contains igch1472 Lampsacus", "chunks" = [22]}], [{"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Lampsacus", "chunks" = [17, 28]}], [{"fact" = "contains igch0410 Abydus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Lampsacus", "chunks" = [3, 21]}], [{"fact" = "contains igch0866 Abydus", "chunks" = [7]}, {"fact" = "contains igch0866 Lampsacus", "chunks" = [7]}], [{"fact" = "contains igch0958 Abydus", "chunks" = [23]}, {"fact" = "contains igch0958 Lampsacus", "chunks" = [23]}]]
+[[questions.gold_items]]
+id = "Magnesia ad Maeandrum"
+name = "Magnesia"
+match = ["magnesia ad maeandrum", "magnesia", "magnesian"]
+witnesses = [[{"fact" = "contains igch1444 Abydus", "chunks" = [15]}, {"fact" = "contains igch1444 Magnesia", "chunks" = [15]}], [{"fact" = "contains igch0410 Abydus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Magnesia", "chunks" = [3]}], [{"fact" = "contains igch0866 Abydus", "chunks" = [7]}, {"fact" = "contains igch0866 Magnesia", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Miletus"
+name = "Miletus"
+match = ["miletus", "milesian"]
+witnesses = [[{"fact" = "contains igch1472 Abydus", "chunks" = [22]}, {"fact" = "contains igch1472 Miletus", "chunks" = [5]}], [{"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Miletus", "chunks" = [17]}], [{"fact" = "contains igch0410 Abydus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Miletus", "chunks" = [3]}], [{"fact" = "contains igch0866 Abydus", "chunks" = [7]}, {"fact" = "contains igch0866 Miletus", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Ptolemais-Ake"
+name = "Ake"
+match = ["ptolemais-ake", "ake"]
+witnesses = [[{"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Ake", "chunks" = [17]}]]
+[[questions.gold_items]]
+id = "Sardis"
+name = "Sardes"
+match = ["sardis", "sardes", "sardian"]
+witnesses = [[{"fact" = "contains igch1472 Abydus", "chunks" = [22]}, {"fact" = "contains igch1472 Sardes", "chunks" = [5]}], [{"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Sardes", "chunks" = [17, 28]}], [{"fact" = "contains igch0410 Abydus", "chunks" = [3, 21]}, {"fact" = "contains igch0410 Sardes", "chunks" = [3]}], [{"fact" = "contains igch0866 Abydus", "chunks" = [7]}, {"fact" = "contains igch0866 Sardes", "chunks" = [7]}]]
+[[questions.gold_items]]
+id = "Sidon"
+name = "Sidon"
+match = ["sidon", "sidonian"]
+witnesses = [[{"fact" = "contains igch1516 Abydus", "chunks" = [17, 28]}, {"fact" = "contains igch1516 Sidon", "chunks" = [17]}]]
+[[questions.gold_items]]
+id = "Teos"
+name = "Teos"
+match = ["teos"]
+witnesses = [[{"fact" = "contains igch1444 Abydus", "chunks" = [15]}, {"fact" = "contains igch1444 Teos", "chunks" = [15]}]]
+[[questions.neutral_items]]
+id = "Aenus"
+name = "Aenus"
+match = ["aenus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Alexandreia Troas"
+name = "Alexandreia Troas"
+match = ["alexandreia troas"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Alexandria"
+name = "Alexandria"
+match = ["alexandria"]
+visible = true
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch0777', 'igch0801']"
+[[questions.neutral_items]]
+id = "Amathus"
+name = "Amathus"
+match = ["amathus"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Amphipolis"
+name = "Amphipolis"
+match = ["amphipolis"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1438', 'igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch0410', 'igch0777', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Aradus"
+name = "Aradus"
+match = ["aradus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Babylon"
+name = "Babylon"
+match = ["babylon"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1441', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch0410', 'igch0801', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Berytus"
+name = "Berytus"
+match = ["berytus"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Byblus"
+name = "Byblus"
+match = ["byblus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch0801', 'igch0866']"
+[[questions.neutral_items]]
+id = "Byzantium"
+name = "Byzantium"
+match = ["byzantium"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Calchedon"
+name = "Calchedon"
+match = ["calchedon"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Callatis"
+name = "Callatis"
+match = ["callatis"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Carne"
+name = "Carne"
+match = ["carne"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Carrhae"
+name = "Carrhae"
+match = ["carrhae"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Chios"
+name = "Chios"
+match = ["chios"]
+visible = false
+why = "co-occurs only in ['igch1516']"
+[[questions.neutral_items]]
+id = "Citium"
+name = "Citium"
+match = ["citium"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch0777']"
+[[questions.neutral_items]]
+id = "Cyrene"
+name = "Cyrene"
+match = ["cyrene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Cyzicus"
+name = "Cyzicus"
+match = ["cyzicus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Damascus"
+name = "Damascus"
+match = ["damascus"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670', 'igch0866']"
+[[questions.neutral_items]]
+id = "Ecbatana"
+name = "Ecbatana"
+match = ["ecbatana"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Ephesus"
+name = "Ephesus"
+match = ["ephesus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Heracleia Pontica"
+name = "Heracleia Pontica"
+match = ["heracleia pontica"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Hierapolis Bambyce"
+name = "Hierapolis Bambyce"
+match = ["hierapolis bambyce"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Istrus"
+name = "Istrus"
+match = ["istrus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Lysimachia"
+name = "Lysimachia"
+match = ["lysimachia"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Lyttus"
+name = "Lyttus"
+match = ["lyttus"]
+visible = false
+why = "co-occurs only in ['igch1670']"
+[[questions.neutral_items]]
+id = "Marium"
+name = "Marium"
+match = ["marium"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Mesembria"
+name = "Mesembria"
+match = ["mesembria"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Myriandrus"
+name = "Myriandrus"
+match = ["myriandrus"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1516', 'igch1664', 'igch1670']"
+[[questions.neutral_items]]
+id = "Mytilene"
+name = "Mytilene"
+match = ["mytilene"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Odessus"
+name = "Odessus"
+match = ["odessus"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Paphos"
+name = "Paphos"
+match = ["paphos"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Pella"
+name = "Pella"
+match = ["pella"]
+visible = true
+why = "co-occurs only in ['igch1437', 'igch1441', 'igch1516', 'igch1664', 'igch1670', 'igch0777']"
+[[questions.neutral_items]]
+id = "Perinthus"
+name = "Perinthus"
+match = ["perinthus"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Phaselis"
+name = "Phaselis"
+match = ["phaselis"]
+visible = false
+why = "co-occurs only in ['igch0801']"
+[[questions.neutral_items]]
+id = "Salamis"
+name = "Salamis"
+match = ["salamis"]
+visible = false
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664']"
+[[questions.neutral_items]]
+id = "Sestos"
+name = "Sestos"
+match = ["sestos"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Sicyon"
+name = "Sicyon"
+match = ["sicyon"]
+visible = false
+why = "co-occurs only in ['igch1516', 'igch1664', 'igch0410']"
+[[questions.neutral_items]]
+id = "Side"
+name = "Side"
+match = ["side"]
+visible = true
+why = "co-occurs only in ['igch1444', 'igch1516', 'igch1664', 'igch1670', 'igch0410', 'igch0866']"
+[[questions.neutral_items]]
+id = "Sinope"
+name = "Sinope"
+match = ["sinope"]
+visible = false
+why = "co-occurs only in ['igch0866']"
+[[questions.neutral_items]]
+id = "Soli"
+name = "Soli"
+match = ["soli"]
+visible = false
+why = "co-occurs only in ['igch1664']"
+[[questions.neutral_items]]
+id = "Susa"
+name = "Susa"
+match = ["susa"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch1670', 'igch0866']"
+[[questions.neutral_items]]
+id = "Tarsus"
+name = "Tarsus"
+match = ["tarsus"]
+visible = true
+why = "co-occurs only in ['igch1438', 'igch1472', 'igch1516', 'igch1664', 'igch1670', 'igch0866']"
+[[questions.neutral_items]]
+id = "Thebes"
+name = "Thebes"
+match = ["thebes"]
+visible = false
+why = "co-occurs only in ['igch1472']"
+[[questions.neutral_items]]
+id = "Tomis"
+name = "Tomis"
+match = ["tomis"]
+visible = false
+why = "co-occurs only in ['igch0866', 'igch0958']"
+[[questions.neutral_items]]
+id = "Tyre"
+name = "Tyre"
+match = ["tyre"]
+visible = false
+why = "co-occurs only in ['igch1472', 'igch0866']"
+
+[[questions]]
+id = "k2-neg-egypt-abydus"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards found in Egypt contain no coins of Abydus?"
+expected_facts = ["Egypt 1912", "Phacous"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Abydus"], "region" = "Egypt"}
+notes = "negation; gold 2; neutral 2; OPEN_WORLD_SENSITIVE"
+answer = ["igch1668", "igch1678"]
+neutral = ["igch1664", "igch1670"]
+[[questions.gold_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+witnesses = [[{"fact" = "region igch1668 Egypt", "chunks" = [27]}, {"fact" = "lacks igch1668 Abydus", "chunks" = [27], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "region igch1678 Egypt", "chunks" = [16]}, {"fact" = "lacks igch1678 Abydus", "chunks" = [16, 31], "all_chunks" = true}]]
+[[questions.neutral_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+visible = false
+why = "lacks igch1664 Abydus: text F truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "region igch1670 Egypt: text ? truth T; lacks igch1670 Abydus: text F truth T"
+
+[[questions]]
+id = "k2-neg-egypt-miletus"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards found in Egypt contain no coins of Miletus?"
+expected_facts = ["Egypt 1912"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Miletus"], "region" = "Egypt"}
+notes = "negation; gold 1; neutral 0; OPEN_WORLD_SENSITIVE"
+answer = ["igch1668"]
+neutral = []
+[[questions.gold_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+witnesses = [[{"fact" = "region igch1668 Egypt", "chunks" = [27]}, {"fact" = "lacks igch1668 Miletus", "chunks" = [27], "all_chunks" = true}]]
+
+[[questions]]
+id = "k2-neg-asia-minor-miletus"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards found in Asia Minor contain no coins of Miletus?"
+expected_facts = ["Asia Minor 1964 (IGCH 1438)"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Miletus"], "region" = "Asia Minor"}
+notes = "negation; gold 1; neutral 3; OPEN_WORLD_SENSITIVE"
+answer = ["igch1438"]
+neutral = ["igch1437", "igch1444", "sec_00012"]
+[[questions.gold_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+witnesses = [[{"fact" = "region igch1438 Asia Minor", "chunks" = [25]}, {"fact" = "lacks igch1438 Miletus", "chunks" = [25], "all_chunks" = true}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+visible = false
+why = "lacks igch1444 Miletus: text F truth T"
+[[questions.neutral_items]]
+id = "sec_00012"
+name = "Asia Minor 1970"
+match = ["asia minor 1970"]
+visible = true
+why = "pseudo-hoard (no truth row)"
+
+[[questions]]
+id = "k2-neg-lampsacus-not-sardes"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards contain coins of Lampsacus but none of Sardes?"
+expected_facts = ["Asia Minor 1964 (IGCH 1438)", "Egypt 1912", "Olympia", "Gîldau", "Marasesti"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Lampsacus", "Sardis"]}
+notes = "negation; gold 5; neutral 4; OPEN_WORLD_SENSITIVE"
+answer = ["igch1438", "igch1668", "igch0176", "igch0774", "igch0958"]
+neutral = ["igch1437", "igch1444", "igch0777", "igch0801"]
+[[questions.gold_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+witnesses = [[{"fact" = "contains igch1438 Lampsacus", "chunks" = [25]}, {"fact" = "lacks igch1438 Sardes", "chunks" = [25], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+witnesses = [[{"fact" = "contains igch1668 Lampsacus", "chunks" = [27]}, {"fact" = "lacks igch1668 Sardes", "chunks" = [27], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0176"
+name = "Olympia"
+match = ["igch 176", "olympia"]
+witnesses = [[{"fact" = "contains igch0176 Lampsacus", "chunks" = [32]}, {"fact" = "lacks igch0176 Sardes", "chunks" = [32, 33, 34], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "lacks igch0774 Sardes", "chunks" = [1, 19], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+witnesses = [[{"fact" = "contains igch0958 Lampsacus", "chunks" = [23]}, {"fact" = "lacks igch0958 Sardes", "chunks" = [23], "all_chunks" = true}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+visible = false
+why = "contains igch1444 Lampsacus: text T truth F; lacks igch1444 Sardes: text F truth T"
+[[questions.neutral_items]]
+id = "igch0777"
+name = "Jasna poljana"
+match = ["igch 777", "jasna poljana"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-neg-lampsacus-not-abydus"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards contain coins of Lampsacus but none of Abydus?"
+expected_facts = ["Egypt 1912", "Phacous", "Olympia", "Gîldau"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Lampsacus", "Abydus"]}
+notes = "negation; gold 4; neutral 4; OPEN_WORLD_SENSITIVE"
+answer = ["igch1668", "igch1678", "igch0176", "igch0774"]
+neutral = ["igch1664", "igch1670", "igch0777", "igch0801"]
+[[questions.gold_items]]
+id = "igch1668"
+name = "Egypt 1912"
+match = ["igch 1668", "egypt 1912"]
+witnesses = [[{"fact" = "contains igch1668 Lampsacus", "chunks" = [27]}, {"fact" = "lacks igch1668 Abydus", "chunks" = [27], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "contains igch1678 Lampsacus", "chunks" = [16, 31]}, {"fact" = "lacks igch1678 Abydus", "chunks" = [16, 31], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0176"
+name = "Olympia"
+match = ["igch 176", "olympia"]
+witnesses = [[{"fact" = "contains igch0176 Lampsacus", "chunks" = [32]}, {"fact" = "lacks igch0176 Abydus", "chunks" = [32, 33, 34], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "contains igch0774 Lampsacus", "chunks" = [1, 19]}, {"fact" = "lacks igch0774 Abydus", "chunks" = [1, 19], "all_chunks" = true}]]
+[[questions.neutral_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+visible = false
+why = "lacks igch1664 Abydus: text F truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "lacks igch1670 Abydus: text F truth T"
+[[questions.neutral_items]]
+id = "igch0777"
+name = "Jasna poljana"
+match = ["igch 777", "jasna poljana"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-neg-abydus-not-sardes"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards contain coins of Abydus but none of Sardes?"
+expected_facts = ["Asia Minor 1964 (IGCH 1438)", "Marasesti"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Abydus", "Sardis"]}
+notes = "negation; gold 2; neutral 4; OPEN_WORLD_SENSITIVE"
+answer = ["igch1438", "igch0958"]
+neutral = ["igch1437", "igch1444", "igch0777", "igch0801"]
+[[questions.gold_items]]
+id = "igch1438"
+name = "Asia Minor 1964 (IGCH 1438)"
+match = ["igch 1438"]
+witnesses = [[{"fact" = "contains igch1438 Abydus", "chunks" = [25]}, {"fact" = "lacks igch1438 Sardes", "chunks" = [25], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+witnesses = [[{"fact" = "contains igch0958 Abydus", "chunks" = [23]}, {"fact" = "lacks igch0958 Sardes", "chunks" = [23], "all_chunks" = true}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1444"
+name = "Asia Minor 1961"
+match = ["igch 1444", "asia minor 1961"]
+visible = false
+why = "lacks igch1444 Sardes: text F truth T"
+[[questions.neutral_items]]
+id = "igch0777"
+name = "Jasna poljana"
+match = ["igch 777", "jasna poljana"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-neg-miletus-not-abydus"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards contain coins of Miletus but none of Abydus?"
+expected_facts = ["Phacous", "Gîldau"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Miletus", "Abydus"]}
+notes = "negation; gold 2; neutral 3; OPEN_WORLD_SENSITIVE"
+answer = ["igch1678", "igch0774"]
+neutral = ["igch1664", "igch1670", "igch0801"]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "lacks igch1678 Abydus", "chunks" = [16, 31], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+witnesses = [[{"fact" = "contains igch0774 Miletus", "chunks" = [1]}, {"fact" = "lacks igch0774 Abydus", "chunks" = [1, 19], "all_chunks" = true}]]
+[[questions.neutral_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+visible = false
+why = "lacks igch1664 Abydus: text F truth T"
+[[questions.neutral_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+visible = false
+why = "lacks igch1670 Abydus: text F truth T"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+
+[[questions]]
+id = "k2-neg-miletus-not-colophon"
+category = "k2_negation"
+class = "negation"
+question = "Which hoards contain coins of Miletus but none of Colophon?"
+expected_facts = ["Demanhur", "Kuft", "Phacous", "Paeonia"]
+answer_type = "hoards"
+open_world_sensitive = true
+implied_facts = 0
+params = {"mints" = ["Miletus", "Colophon"]}
+notes = "negation; gold 4; neutral 7; OPEN_WORLD_SENSITIVE"
+answer = ["igch1664", "igch1670", "igch1678", "igch0410"]
+neutral = ["igch1437", "igch1441", "igch1472", "igch1516", "igch0774", "igch0801", "igch0958"]
+[[questions.gold_items]]
+id = "igch1664"
+name = "Demanhur"
+match = ["igch 1664", "demanhur"]
+witnesses = [[{"fact" = "contains igch1664 Miletus", "chunks" = [13]}, {"fact" = "lacks igch1664 Colophon", "chunks" = [13, 26, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch1670"
+name = "Kuft"
+match = ["igch 1670", "kuft"]
+witnesses = [[{"fact" = "contains igch1670 Miletus", "chunks" = [14]}, {"fact" = "lacks igch1670 Colophon", "chunks" = [14, 29], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch1678"
+name = "Phacous"
+match = ["igch 1678", "phacous"]
+witnesses = [[{"fact" = "contains igch1678 Miletus", "chunks" = [16]}, {"fact" = "lacks igch1678 Colophon", "chunks" = [16, 31], "all_chunks" = true}]]
+[[questions.gold_items]]
+id = "igch0410"
+name = "Paeonia"
+match = ["igch 410", "paeonia"]
+witnesses = [[{"fact" = "contains igch0410 Miletus", "chunks" = [3]}, {"fact" = "lacks igch0410 Colophon", "chunks" = [3, 21], "all_chunks" = true}]]
+[[questions.neutral_items]]
+id = "igch1437"
+name = "Asia Minor 1964 (IGCH 1437)"
+match = ["igch 1437"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1441"
+name = "Asia Minor 1964 (IGCH 1441)"
+match = ["igch 1441"]
+visible = true
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch1472"
+name = "Larnaca"
+match = ["igch 1472", "larnaca"]
+visible = true
+why = "lacks igch1472 Colophon: text T truth F"
+[[questions.neutral_items]]
+id = "igch1516"
+name = "Aleppo"
+match = ["igch 1516", "aleppo"]
+visible = true
+why = "lacks igch1516 Colophon: text T truth F"
+[[questions.neutral_items]]
+id = "igch0774"
+name = "Gîldau"
+match = ["igch 774", "gildau"]
+visible = false
+why = "lacks igch0774 Colophon: text F truth T"
+[[questions.neutral_items]]
+id = "igch0801"
+name = "Greece"
+match = ["igch 801", "greece"]
+visible = false
+why = "holdout hoard"
+[[questions.neutral_items]]
+id = "igch0958"
+name = "Marasesti"
+match = ["igch 958", "marasesti"]
+visible = false
+why = "contains igch0958 Miletus: text ? truth T"

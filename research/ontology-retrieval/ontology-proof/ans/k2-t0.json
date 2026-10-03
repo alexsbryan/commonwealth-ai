@@ -1,0 +1,4374 @@
+{
+ "bank": "bank-k2-dev.toml",
+ "corpus": "ft-ans-dev-b",
+ "chunks": 51,
+ "ks": [
+  5,
+  10,
+  20,
+  80
+ ],
+ "per_class": {
+  "intersection": {
+   "n": 8,
+   "metric": "set F1",
+   "records": 0.395,
+   "records_made_up": 1,
+   "records_exact_without_support": 0,
+   "rag@5": 0.283,
+   "rag@10": 0.436,
+   "rag@20": 0.585,
+   "rag@80": 1.0
+  },
+  "constraint-date": {
+   "n": 7,
+   "metric": "set F1",
+   "records": 0.229,
+   "records_made_up": 0,
+   "records_exact_without_support": 0,
+   "rag@5": 0.567,
+   "rag@10": 0.61,
+   "rag@20": 0.781,
+   "rag@80": 1.0
+  },
+  "constraint-region": {
+   "n": 6,
+   "metric": "set F1",
+   "records": 0.133,
+   "records_made_up": 0,
+   "records_exact_without_support": 0,
+   "rag@5": 0.333,
+   "rag@10": 0.417,
+   "rag@20": 0.528,
+   "rag@80": 1.0
+  },
+  "count": {
+   "n": 5,
+   "metric": "exact",
+   "records": 0.0,
+   "records_made_up": 0,
+   "records_exact_without_support": 0,
+   "rag@5": 0.2,
+   "rag@10": 0.6,
+   "rag@20": 0.8,
+   "rag@80": 1.0
+  },
+  "superlative": {
+   "n": 6,
+   "metric": "exact",
+   "records": 0.5,
+   "records_made_up": 0,
+   "records_exact_without_support": 3,
+   "rag@5": 0.0,
+   "rag@10": 0.0,
+   "rag@20": 0.0,
+   "rag@80": 1.0
+  },
+  "co-occurrence": {
+   "n": 8,
+   "metric": "set F1",
+   "records": 0.378,
+   "records_made_up": 0,
+   "records_exact_without_support": 0,
+   "rag@5": 0.119,
+   "rag@10": 0.393,
+   "rag@20": 0.784,
+   "rag@80": 1.0
+  },
+  "negation": {
+   "n": 8,
+   "metric": "set F1",
+   "records": 0.707,
+   "records_made_up": 1,
+   "records_exact_without_support": 0,
+   "rag@5": 0.0,
+   "rag@10": 0.125,
+   "rag@20": 0.371,
+   "rag@80": 1.0
+  }
+ },
+ "record_stage_split": {
+  "intersection": {
+   "link: mint not linked to the hoard": 9,
+   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 3
+  },
+  "constraint-date": {
+   "attribute: burial date on a Claim with no hoard subject": 2,
+   "attribute: burial date only in Claim prose": 4,
+   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 2,
+   "link: mint not linked to the hoard": 1
+  },
+  "constraint-region": {
+   "attribute: findspot does not name the region": 3,
+   "link: mint not linked to the hoard": 2,
+   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 2,
+   "hoard: no hoard entity": 1
+  },
+  "count": {
+   "link: mint not linked to the hoard": 12,
+   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 1
+  },
+  "superlative": {
+   "attribute: findspot does not name the region": 2,
+   "attribute: burial date on a Claim with no hoard subject": 3,
+   "attribute: burial date only in Claim prose": 3,
+   "link: mint not linked to the hoard": 3
+  },
+  "co-occurrence": {
+   "link: mint not linked to the hoard": 35,
+   "hoard: merged into 'Asia Minor 1964 (IGCH 1441)'": 2
+  },
+  "negation": {
+   "attribute: findspot does not name the region": 1,
+   "hoard: no hoard entity": 3,
+   "link: mint not linked to the hoard": 2
+  }
+ },
+ "records_vs_rag20": {
+  "intersection": {
+   "records_beat_rag20": [
+    "k2-int-lampsacus-miletus"
+   ],
+   "rag20_beat_records": [
+    "k2-int-miletus-sardes",
+    "k2-int-ake-sidon",
+    "k2-int-abydus-colophon",
+    "k2-int-abydus-cius"
+   ]
+  },
+  "constraint-date": {
+   "records_beat_rag20": [],
+   "rag20_beat_records": [
+    "k2-date-before310-tarsus",
+    "k2-date-after310-ake",
+    "k2-date-after310-cius",
+    "k2-date-before310-salamis",
+    "k2-date-after310-miletus"
+   ]
+  },
+  "constraint-region": {
+   "records_beat_rag20": [
+    "k2-region-egypt-lampsacus"
+   ],
+   "rag20_beat_records": [
+    "k2-region-egypt-ake",
+    "k2-region-asia-minor-cius",
+    "k2-region-asia-minor-abydus"
+   ]
+  },
+  "count": {
+   "records_beat_rag20": [],
+   "rag20_beat_records": [
+    "k2-count-tarsus",
+    "k2-count-cius",
+    "k2-count-myriandrus",
+    "k2-count-salamis"
+   ]
+  },
+  "superlative": {
+   "records_beat_rag20": [
+    "k2-sup-hoard-most-mints-egypt",
+    "k2-sup-mint-most-hoards",
+    "k2-sup-mint-most-hoards-egypt"
+   ],
+   "rag20_beat_records": []
+  },
+  "co-occurrence": {
+   "records_beat_rag20": [
+    "k2-cooc-ake",
+    "k2-cooc-lampsacus"
+   ],
+   "rag20_beat_records": [
+    "k2-cooc-tarsus",
+    "k2-cooc-myriandrus",
+    "k2-cooc-miletus",
+    "k2-cooc-sidon",
+    "k2-cooc-salamis",
+    "k2-cooc-abydus"
+   ]
+  },
+  "negation": {
+   "records_beat_rag20": [
+    "k2-neg-egypt-abydus",
+    "k2-neg-egypt-miletus",
+    "k2-neg-lampsacus-not-sardes",
+    "k2-neg-lampsacus-not-abydus",
+    "k2-neg-miletus-not-abydus",
+    "k2-neg-miletus-not-colophon"
+   ],
+   "rag20_beat_records": [
+    "k2-neg-asia-minor-miletus",
+    "k2-neg-abydus-not-sardes"
+   ]
+  }
+ },
+ "census": {
+  "hoard_groups": {
+   "entity-0001": {
+    "name": "Demanhur hoard",
+    "resolves_to": "igch1664",
+    "mints": [
+     "Abydus",
+     "Lampsacus",
+     "Miletus",
+     "Sardis"
+    ],
+    "findspot": "Egypt (vicinity of Demanhur)",
+    "burial": null
+   },
+   "entity-0013": {
+    "name": "Olympia Hoard",
+    "resolves_to": "igch0176",
+    "mints": [],
+    "findspot": "near Olympia",
+    "burial": null
+   },
+   "igch0866": {
+    "name": "Anadol (IGCH 866)",
+    "resolves_to": "igch0866",
+    "mints": [
+     "Abydus",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Sardis"
+    ],
+    "findspot": "Anadol",
+    "burial": [
+     228,
+     220
+    ]
+   },
+   "igch1441": {
+    "name": "Asia Minor 1964 (IGCH 1441)",
+    "resolves_to": "igch1441",
+    "mints": [
+     "Abydus",
+     "Amphipolis",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Ptolemais-Ake",
+     "Sardis"
+    ],
+    "findspot": "Asia Minor",
+    "burial": null
+   },
+   "entity-0032": {
+    "name": "Gîldău hoard",
+    "resolves_to": "igch0774",
+    "mints": [
+     "Colophon",
+     "Lampsacus",
+     "Miletus"
+    ],
+    "findspot": "Gîldău",
+    "burial": null
+   },
+   "entity-0036": {
+    "name": "Larnaca hoard",
+    "resolves_to": "igch1472",
+    "mints": [
+     "Abydus",
+     "Lampsacus",
+     "Miletus",
+     "Sardis"
+    ],
+    "findspot": "Larnaca",
+    "burial": [
+     300,
+     300
+    ]
+   },
+   "entity-0039": {
+    "name": "No. Greece Hoard",
+    "resolves_to": "igch0801",
+    "mints": [],
+    "findspot": "northern Greece",
+    "burial": null
+   },
+   "entity-0041": {
+    "name": "Maeander Valley interment",
+    "resolves_to": "unresolved:Maeander Valley interment",
+    "mints": [],
+    "findspot": "Maeander Valley",
+    "burial": null
+   },
+   "igch0410": {
+    "name": "Paeonia hoard (IGCH 410)",
+    "resolves_to": "igch0410",
+    "mints": [
+     "Abydus",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Sardis"
+    ],
+    "findspot": "Paeonia",
+    "burial": null
+   },
+   "igch0777": {
+    "name": "Jasna Poljana hoard (IGCH 777)",
+    "resolves_to": "igch0777",
+    "mints": [],
+    "findspot": "Jasna Poljana",
+    "burial": null
+   },
+   "igch1516": {
+    "name": "Aleppo Hoard (IGCH 1516)",
+    "resolves_to": "igch1516",
+    "mints": [
+     "Abydus",
+     "Lampsacus",
+     "Miletus",
+     "Sardis"
+    ],
+    "findspot": "Aleppo ; Aleppo",
+    "burial": [
+     300,
+     300
+    ]
+   },
+   "entity-0074": {
+    "name": "Sinan Pascha Hoard",
+    "resolves_to": "unresolved:Sinan Pascha Hoard",
+    "mints": [],
+    "findspot": "",
+    "burial": null
+   },
+   "entity-0077": {
+    "name": "Kuft Hoard",
+    "resolves_to": "igch1670",
+    "mints": [
+     "Abydus",
+     "Lampsacus",
+     "Miletus",
+     "Sardis"
+    ],
+    "findspot": "Kuft",
+    "burial": [
+     310,
+     305
+    ]
+   },
+   "igch1678": {
+    "name": "Phacous hoard (IGCH 1678)",
+    "resolves_to": "igch1678",
+    "mints": [
+     "Lampsacus"
+    ],
+    "findspot": "Phacous",
+    "burial": null
+   },
+   "entity-0083": {
+    "name": "Cavalla Hoard",
+    "resolves_to": "unresolved:Cavalla Hoard",
+    "mints": [],
+    "findspot": "unknown",
+    "burial": null
+   },
+   "entity-0092": {
+    "name": "Mărăşeşti hoard",
+    "resolves_to": "igch0958",
+    "mints": [
+     "Abydus",
+     "Lampsacus"
+    ],
+    "findspot": "Mărăşeşti",
+    "burial": null
+   },
+   "igch1668": {
+    "name": "Egypt 1912: IGCH 1668",
+    "resolves_to": "igch1668",
+    "mints": [
+     "Lampsacus"
+    ],
+    "findspot": "Egypt",
+    "burial": null
+   },
+   "igch0176": {
+    "name": "Olympia: IGCH 176; Sardes and Miletus, p. 97",
+    "resolves_to": "igch0176",
+    "mints": [
+     "Lampsacus"
+    ],
+    "findspot": "Olympia",
+    "burial": null
+   }
+  }
+ },
+ "questions": [
+  {
+   "id": "k2-int-lampsacus-miletus",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Lampsacus and Miletus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.9333333333333333,
+    "precision": 1.0,
+    "recall": 0.875,
+    "found": [
+     "igch0410",
+     "igch0774",
+     "igch0866",
+     "igch1472",
+     "igch1516",
+     "igch1664",
+     "igch1670"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "igch1441"
+    ],
+    "missed": [
+     {
+      "id": "igch1678",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": [
+     "igch0410",
+     "igch0774",
+     "igch0866",
+     "igch1441",
+     "igch1472",
+     "igch1516",
+     "igch1664",
+     "igch1670"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.375,
+     "f1": 0.5454545454545454,
+     "answerable": [
+      "igch1664",
+      "igch1678",
+      "igch0410"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1472",
+      "igch1516",
+      "igch1664",
+      "igch1670",
+      "igch1678",
+      "igch0410",
+      "igch0774",
+      "igch0866"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    31,
+    22,
+    15,
+    28,
+    32,
+    19,
+    24,
+    20,
+    25,
+    3,
+    16,
+    21,
+    29,
+    23,
+    26,
+    11,
+    13,
+    8,
+    18
+   ]
+  },
+  {
+   "id": "k2-int-miletus-sardes",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Miletus and Sardes?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.923076923076923,
+    "precision": 1.0,
+    "recall": 0.8571428571428571,
+    "found": [
+     "igch0410",
+     "igch0866",
+     "igch1472",
+     "igch1516",
+     "igch1664",
+     "igch1670"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "igch1441"
+    ],
+    "missed": [
+     {
+      "id": "igch1678",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": [
+     "igch0410",
+     "igch0866",
+     "igch1441",
+     "igch1472",
+     "igch1516",
+     "igch1664",
+     "igch1670"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.42857142857142855,
+     "f1": 0.6,
+     "answerable": [
+      "igch1472",
+      "igch1664",
+      "igch1678"
+     ]
+    },
+    "10": {
+     "recall": 0.8571428571428571,
+     "f1": 0.923076923076923,
+     "answerable": [
+      "igch1472",
+      "igch1516",
+      "igch1664",
+      "igch1670",
+      "igch1678",
+      "igch0410"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1472",
+      "igch1516",
+      "igch1664",
+      "igch1670",
+      "igch1678",
+      "igch0410",
+      "igch0866"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1472",
+      "igch1516",
+      "igch1664",
+      "igch1670",
+      "igch1678",
+      "igch0410",
+      "igch0866"
+     ]
+    }
+   },
+   "top20": [
+    13,
+    16,
+    30,
+    5,
+    15,
+    17,
+    3,
+    14,
+    2,
+    1,
+    11,
+    8,
+    28,
+    31,
+    7,
+    6,
+    22,
+    12,
+    20,
+    19
+   ]
+  },
+  {
+   "id": "k2-int-ake-sidon",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Ake and Sidon?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1516",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "igch1664",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "igch1670",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "igch1678",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.25,
+     "f1": 0.4,
+     "answerable": [
+      "igch1516"
+     ]
+    },
+    "20": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch1516",
+      "igch1678"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1516",
+      "igch1664",
+      "igch1670",
+      "igch1678"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    11,
+    9,
+    15,
+    12,
+    8,
+    17,
+    25,
+    10,
+    3,
+    13,
+    5,
+    16,
+    22,
+    2,
+    45,
+    21,
+    4,
+    42,
+    6
+   ]
+  },
+  {
+   "id": "k2-int-lampsacus-tarsus",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Lampsacus and Tarsus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1664",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "igch0774",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664",
+      "igch0774"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    25,
+    31,
+    22,
+    32,
+    21,
+    19,
+    23,
+    28,
+    15,
+    20,
+    24,
+    26,
+    29,
+    11,
+    8,
+    18,
+    27,
+    3,
+    16
+   ]
+  },
+  {
+   "id": "k2-int-abydus-magnesia",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Abydus and Magnesia?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "found": [
+     "igch0410",
+     "igch0866"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "igch1441"
+    ],
+    "missed": [
+     {
+      "id": "igch1444",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": [
+     "igch0410",
+     "igch0866",
+     "igch1441"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.3333333333333333,
+     "f1": 0.5,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "20": {
+     "recall": 0.6666666666666666,
+     "f1": 0.8,
+     "answerable": [
+      "igch1444",
+      "igch0410"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444",
+      "igch0410",
+      "igch0866"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    21,
+    10,
+    22,
+    15,
+    8,
+    25,
+    6,
+    20,
+    23,
+    28,
+    3,
+    4,
+    24,
+    18,
+    9,
+    12,
+    48,
+    29
+   ]
+  },
+  {
+   "id": "k2-int-abydus-colophon",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Abydus and Colophon?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.5,
+    "precision": 0.5,
+    "recall": 0.5,
+    "found": [
+     "igch0866"
+    ],
+    "made_up": [
+     "igch1441"
+    ],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1444",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": [
+     "igch0866",
+     "igch1441"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "10": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "20": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444",
+      "igch0866"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    15,
+    21,
+    8,
+    10,
+    22,
+    25,
+    28,
+    12,
+    6,
+    3,
+    9,
+    23,
+    4,
+    20,
+    45,
+    18,
+    42,
+    24
+   ]
+  },
+  {
+   "id": "k2-int-abydus-cius",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Abydus and Cius?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1444",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "10": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    15,
+    21,
+    10,
+    25,
+    23,
+    28,
+    22,
+    8,
+    20,
+    24,
+    3,
+    6,
+    29,
+    4,
+    12,
+    26,
+    18,
+    7
+   ]
+  },
+  {
+   "id": "k2-int-ake-tarsus",
+   "class": "intersection",
+   "question": "Which hoards contain coins of both Ake and Tarsus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1664",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    15,
+    8,
+    25,
+    11,
+    9,
+    22,
+    17,
+    12,
+    13,
+    3,
+    10,
+    31,
+    20,
+    16,
+    18,
+    1,
+    21,
+    28,
+    4
+   ]
+  },
+  {
+   "id": "k2-date-before310-tarsus",
+   "class": "constraint-date",
+   "question": "Which hoards buried before 310 B.C. contain coins of Tarsus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1664",
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
+     },
+     {
+      "id": "igch0774",
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch0774"
+     ]
+    },
+    "10": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch0774"
+     ]
+    },
+    "20": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch0774"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664",
+      "igch0774"
+     ]
+    }
+   },
+   "top20": [
+    13,
+    15,
+    30,
+    1,
+    17,
+    28,
+    14,
+    8,
+    16,
+    12,
+    10,
+    25,
+    9,
+    11,
+    3,
+    6,
+    22,
+    4,
+    18,
+    7
+   ]
+  },
+  {
+   "id": "k2-date-after310-abydus",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Abydus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "found": [
+     "igch1472",
+     "igch1516"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "igch0866"
+    ],
+    "missed": [
+     {
+      "id": "igch1444",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": [
+     "igch0866",
+     "igch1472",
+     "igch1516"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.6666666666666666,
+     "f1": 0.8,
+     "answerable": [
+      "igch1444",
+      "igch1516"
+     ]
+    },
+    "10": {
+     "recall": 0.6666666666666666,
+     "f1": 0.8,
+     "answerable": [
+      "igch1444",
+      "igch1516"
+     ]
+    },
+    "20": {
+     "recall": 0.6666666666666666,
+     "f1": 0.8,
+     "answerable": [
+      "igch1444",
+      "igch1516"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444",
+      "igch1472",
+      "igch1516"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    11,
+    28,
+    10,
+    15,
+    6,
+    21,
+    8,
+    4,
+    9,
+    25,
+    3,
+    7,
+    13,
+    12,
+    17,
+    1,
+    22,
+    20,
+    18
+   ]
+  },
+  {
+   "id": "k2-date-after310-ake",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Ake?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1516",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "igch1678",
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1516",
+      "igch1678"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1516",
+      "igch1678"
+     ]
+    }
+   },
+   "top20": [
+    9,
+    30,
+    15,
+    10,
+    13,
+    1,
+    6,
+    28,
+    11,
+    8,
+    14,
+    12,
+    16,
+    17,
+    34,
+    3,
+    25,
+    4,
+    7,
+    22
+   ]
+  },
+  {
+   "id": "k2-date-after310-cius",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Cius?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1444",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "10": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    }
+   },
+   "top20": [
+    15,
+    13,
+    10,
+    30,
+    1,
+    14,
+    11,
+    6,
+    3,
+    28,
+    16,
+    8,
+    12,
+    4,
+    7,
+    9,
+    34,
+    17,
+    2,
+    25
+   ]
+  },
+  {
+   "id": "k2-date-before310-myriandrus",
+   "class": "constraint-date",
+   "question": "Which hoards buried before 310 B.C. contain coins of Myriandrus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1664",
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664"
+     ]
+    }
+   },
+   "top20": [
+    15,
+    13,
+    30,
+    10,
+    1,
+    8,
+    6,
+    12,
+    9,
+    14,
+    3,
+    11,
+    17,
+    28,
+    4,
+    7,
+    16,
+    18,
+    2,
+    42
+   ]
+  },
+  {
+   "id": "k2-date-before310-salamis",
+   "class": "constraint-date",
+   "question": "Which hoards buried before 310 B.C. contain coins of Salamis?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch0774",
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch0774"
+     ]
+    },
+    "10": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch0774"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch0774"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch0774"
+     ]
+    }
+   },
+   "top20": [
+    13,
+    1,
+    15,
+    30,
+    17,
+    14,
+    10,
+    8,
+    28,
+    16,
+    12,
+    9,
+    7,
+    3,
+    4,
+    6,
+    11,
+    5,
+    2,
+    18
+   ]
+  },
+  {
+   "id": "k2-date-after310-miletus",
+   "class": "constraint-date",
+   "question": "Which hoards buried after 310 B.C. contain coins of Miletus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "found": [
+     "igch1472",
+     "igch1516"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "igch0866"
+    ],
+    "missed": [
+     {
+      "id": "igch1678",
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     }
+    ],
+    "answer": [
+     "igch0866",
+     "igch1472",
+     "igch1516"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.3333333333333333,
+     "f1": 0.5,
+     "answerable": [
+      "igch1678"
+     ]
+    },
+    "10": {
+     "recall": 0.6666666666666666,
+     "f1": 0.8,
+     "answerable": [
+      "igch1472",
+      "igch1678"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1472",
+      "igch1516",
+      "igch1678"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1472",
+      "igch1516",
+      "igch1678"
+     ]
+    }
+   },
+   "top20": [
+    13,
+    14,
+    16,
+    15,
+    1,
+    30,
+    5,
+    3,
+    6,
+    2,
+    17,
+    28,
+    7,
+    10,
+    9,
+    12,
+    11,
+    8,
+    18,
+    4
+   ]
+  },
+  {
+   "id": "k2-region-egypt-lampsacus",
+   "class": "constraint-region",
+   "question": "Which hoards found in Egypt contain coins of Lampsacus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "found": [
+     "igch1664",
+     "igch1668"
+    ],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1678",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     }
+    ],
+    "answer": [
+     "igch1664",
+     "igch1668"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.3333333333333333,
+     "f1": 0.5,
+     "answerable": [
+      "igch1668"
+     ]
+    },
+    "20": {
+     "recall": 0.3333333333333333,
+     "f1": 0.5,
+     "answerable": [
+      "igch1668"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664",
+      "igch1668",
+      "igch1678"
+     ]
+    }
+   },
+   "top20": [
+    22,
+    30,
+    31,
+    25,
+    21,
+    32,
+    28,
+    19,
+    27,
+    20,
+    23,
+    24,
+    15,
+    26,
+    29,
+    11,
+    18,
+    8,
+    7,
+    3
+   ]
+  },
+  {
+   "id": "k2-region-egypt-ake",
+   "class": "constraint-region",
+   "question": "Which hoards found in Egypt contain coins of Ake?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1664",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "igch1678",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch1678"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664",
+      "igch1678"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    9,
+    22,
+    15,
+    8,
+    11,
+    25,
+    34,
+    17,
+    12,
+    42,
+    16,
+    10,
+    38,
+    36,
+    21,
+    4,
+    6,
+    37,
+    41
+   ]
+  },
+  {
+   "id": "k2-region-asia-minor-cius",
+   "class": "constraint-region",
+   "question": "Which hoards found in Asia Minor contain coins of Cius?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1444",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "10": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1444"
+     ]
+    }
+   },
+   "top20": [
+    15,
+    30,
+    5,
+    12,
+    11,
+    18,
+    8,
+    10,
+    2,
+    9,
+    25,
+    3,
+    14,
+    16,
+    13,
+    1,
+    6,
+    44,
+    20,
+    24
+   ]
+  },
+  {
+   "id": "k2-region-egypt-myriandrus",
+   "class": "constraint-region",
+   "question": "Which hoards found in Egypt contain coins of Myriandrus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1664",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    15,
+    8,
+    42,
+    38,
+    37,
+    22,
+    36,
+    25,
+    17,
+    18,
+    12,
+    11,
+    41,
+    39,
+    4,
+    35,
+    3,
+    9,
+    10
+   ]
+  },
+  {
+   "id": "k2-region-peloponnese-lampsacus",
+   "class": "constraint-region",
+   "question": "Which hoards found in the Peloponnese contain coins of Lampsacus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch0176",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch0176"
+     ]
+    }
+   },
+   "top20": [
+    22,
+    30,
+    32,
+    31,
+    25,
+    28,
+    24,
+    21,
+    23,
+    19,
+    20,
+    15,
+    29,
+    26,
+    3,
+    8,
+    18,
+    27,
+    6,
+    7
+   ]
+  },
+  {
+   "id": "k2-region-asia-minor-abydus",
+   "class": "constraint-region",
+   "question": "Which hoards found in Asia Minor contain coins of Abydus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [
+     "igch1441"
+    ],
+    "missed": [
+     {
+      "id": "igch1438",
+      "stage": "hoard",
+      "why": "no hoard entity"
+     },
+     {
+      "id": "igch1444",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": [
+     "igch1441"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438",
+      "igch1444"
+     ]
+    },
+    "10": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438",
+      "igch1444"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438",
+      "igch1444"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438",
+      "igch1444"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    11,
+    10,
+    15,
+    25,
+    18,
+    8,
+    5,
+    12,
+    20,
+    9,
+    24,
+    21,
+    2,
+    3,
+    28,
+    22,
+    6,
+    23,
+    4
+   ]
+  },
+  {
+   "id": "k2-count-tarsus",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Tarsus?",
+   "answer_type": "int",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 0.0,
+    "answer": 0,
+    "gold": 2,
+    "missed": [
+     {
+      "fact": "contains igch1664 Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch0774 Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 1.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    30,
+    8,
+    15,
+    25,
+    11,
+    13,
+    17,
+    22,
+    12,
+    18,
+    3,
+    16,
+    4,
+    10,
+    41,
+    34,
+    42,
+    31,
+    49,
+    1
+   ]
+  },
+  {
+   "id": "k2-count-cius",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Cius?",
+   "answer_type": "int",
+   "open_world_sensitive": false,
+   "records": {
+    "exact": 0.0,
+    "answer": 0,
+    "gold": 1,
+    "missed": [
+     {
+      "fact": "contains igch1444 Cius",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 1.0
+    },
+    "10": {
+     "exact": 1.0
+    },
+    "20": {
+     "exact": 1.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    15,
+    30,
+    11,
+    8,
+    10,
+    25,
+    42,
+    41,
+    13,
+    48,
+    34,
+    22,
+    49,
+    40,
+    12,
+    6,
+    3,
+    4,
+    33,
+    51
+   ]
+  },
+  {
+   "id": "k2-count-myriandrus",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Myriandrus?",
+   "answer_type": "int",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 0.0,
+    "answer": 0,
+    "gold": 1,
+    "missed": [
+     {
+      "fact": "contains igch1664 Myriandrus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 1.0
+    },
+    "20": {
+     "exact": 1.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    30,
+    8,
+    11,
+    15,
+    42,
+    10,
+    12,
+    3,
+    49,
+    25,
+    6,
+    48,
+    17,
+    22,
+    4,
+    34,
+    9,
+    36,
+    41,
+    40
+   ]
+  },
+  {
+   "id": "k2-count-salamis",
+   "class": "count",
+   "question": "How many hoards contain coins struck at Salamis?",
+   "answer_type": "int",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 0.0,
+    "answer": 0,
+    "gold": 1,
+    "missed": [
+     {
+      "fact": "contains igch0774 Salamis",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 1.0
+    },
+    "20": {
+     "exact": 1.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    30,
+    15,
+    8,
+    17,
+    13,
+    1,
+    34,
+    11,
+    41,
+    3,
+    4,
+    25,
+    12,
+    22,
+    10,
+    16,
+    5,
+    18,
+    6,
+    40
+   ]
+  },
+  {
+   "id": "k2-count-ake-sidon",
+   "class": "count",
+   "question": "In how many hoards do coins of Ake and Sidon occur together?",
+   "answer_type": "int",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 0.0,
+    "answer": 0,
+    "gold": 4,
+    "missed": [
+     {
+      "fact": "contains igch1516 Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1516 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1664 Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1664 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1670 Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1670 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1678 Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1678 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 0.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    30,
+    11,
+    9,
+    15,
+    12,
+    8,
+    10,
+    17,
+    25,
+    3,
+    13,
+    21,
+    5,
+    16,
+    2,
+    22,
+    42,
+    45,
+    34,
+    4
+   ]
+  },
+  {
+   "id": "k2-sup-earliest-egypt",
+   "class": "superlative",
+   "question": "Which hoard found in Egypt was buried earliest?",
+   "answer_type": "hoard",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 0.0,
+    "answer": null,
+    "gold": "igch1664",
+    "missed": [
+     {
+      "fact": "region igch1678 Egypt",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     },
+     {
+      "fact": "burial igch1664 date",
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
+     },
+     {
+      "fact": "burial igch1678 date",
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 0.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    38,
+    12,
+    15,
+    17,
+    30,
+    9,
+    41,
+    7,
+    4,
+    10,
+    42,
+    6,
+    25,
+    8,
+    36,
+    28,
+    22,
+    11,
+    18,
+    34
+   ]
+  },
+  {
+   "id": "k2-sup-earliest-sidon",
+   "class": "superlative",
+   "question": "Which is the earliest-buried hoard containing coins of Sidon?",
+   "answer_type": "hoard",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 0.0,
+    "answer": null,
+    "gold": "igch1664",
+    "missed": [
+     {
+      "fact": "contains igch1516 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1664 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1678 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "burial igch1664 date",
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
+     },
+     {
+      "fact": "burial igch1678 date",
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 0.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    30,
+    12,
+    17,
+    13,
+    15,
+    10,
+    9,
+    11,
+    14,
+    8,
+    7,
+    16,
+    5,
+    2,
+    3,
+    1,
+    6,
+    45,
+    28,
+    18
+   ]
+  },
+  {
+   "id": "k2-sup-hoard-most-mints-egypt",
+   "class": "superlative",
+   "question": "Which hoard found in Egypt contains coins from the most mints?",
+   "answer_type": "hoard",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 1.0,
+    "answer": "igch1664",
+    "gold": "igch1664",
+    "missed": [],
+    "missing_support": [
+     {
+      "fact": "contains igch1664 Myriandrus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1664 Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1664 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1664 Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1678 Miletus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1678 Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1678 Sardes",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "contains igch1678 Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "fact": "region igch1678 Egypt",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     }
+    ]
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 0.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    11,
+    42,
+    36,
+    41,
+    8,
+    30,
+    48,
+    38,
+    15,
+    37,
+    35,
+    18,
+    34,
+    40,
+    12,
+    17,
+    22,
+    4,
+    49,
+    25
+   ]
+  },
+  {
+   "id": "k2-sup-latest-egypt",
+   "class": "superlative",
+   "question": "Which hoard found in Egypt was buried latest?",
+   "answer_type": "hoard",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 0.0,
+    "answer": null,
+    "gold": "igch1678",
+    "missed": [
+     {
+      "fact": "region igch1678 Egypt",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     },
+     {
+      "fact": "burial igch1664 date",
+      "stage": "attribute",
+      "why": "burial date on a Claim with no hoard subject"
+     },
+     {
+      "fact": "burial igch1678 date",
+      "stage": "attribute",
+      "why": "burial date only in Claim prose"
+     }
+    ],
+    "missing_support": []
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 0.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    17,
+    38,
+    41,
+    30,
+    12,
+    15,
+    10,
+    42,
+    7,
+    9,
+    25,
+    36,
+    4,
+    6,
+    18,
+    28,
+    34,
+    37,
+    35,
+    11
+   ]
+  },
+  {
+   "id": "k2-sup-mint-most-hoards",
+   "class": "superlative",
+   "question": "Which mint is represented in the most hoards?",
+   "answer_type": "mint",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 1.0,
+    "answer": "Lampsacus",
+    "gold": "Lampsacus",
+    "missed": [],
+    "missing_support": [
+     {
+      "fact": "contains igch1438 Lampsacus",
+      "stage": "hoard",
+      "why": "no hoard entity"
+     },
+     {
+      "fact": "contains igch1678 Miletus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ]
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 0.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    11,
+    48,
+    8,
+    30,
+    47,
+    42,
+    49,
+    25,
+    15,
+    4,
+    36,
+    12,
+    37,
+    40,
+    34,
+    46,
+    22,
+    41,
+    35,
+    17
+   ]
+  },
+  {
+   "id": "k2-sup-mint-most-hoards-egypt",
+   "class": "superlative",
+   "question": "Which mint is represented in the most hoards found in Egypt?",
+   "answer_type": "mint",
+   "open_world_sensitive": true,
+   "records": {
+    "exact": 1.0,
+    "answer": "Lampsacus",
+    "gold": "Lampsacus",
+    "missed": [],
+    "missing_support": [
+     {
+      "fact": "region igch1678 Egypt",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     },
+     {
+      "fact": "region igch1678 Egypt",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     },
+     {
+      "fact": "contains igch1678 Miletus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ]
+   },
+   "rag": {
+    "5": {
+     "exact": 0.0
+    },
+    "10": {
+     "exact": 0.0
+    },
+    "20": {
+     "exact": 0.0
+    },
+    "80": {
+     "exact": 1.0
+    }
+   },
+   "top20": [
+    11,
+    30,
+    8,
+    42,
+    48,
+    38,
+    36,
+    4,
+    15,
+    41,
+    37,
+    22,
+    12,
+    17,
+    18,
+    25,
+    35,
+    34,
+    47,
+    6
+   ]
+  },
+  {
+   "id": "k2-cooc-tarsus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Tarsus?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "Lampsacus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Miletus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Myriandrus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Ptolemais-Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Salamis",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sardis",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.7142857142857143,
+     "f1": 0.8333333333333333,
+     "answerable": [
+      "Miletus",
+      "Myriandrus",
+      "Ptolemais-Ake",
+      "Sardis",
+      "Sidon"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Lampsacus",
+      "Miletus",
+      "Myriandrus",
+      "Ptolemais-Ake",
+      "Salamis",
+      "Sardis",
+      "Sidon"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    8,
+    15,
+    48,
+    5,
+    25,
+    18,
+    13,
+    12,
+    22,
+    3,
+    17,
+    16,
+    14,
+    4,
+    10,
+    49,
+    51,
+    31
+   ]
+  },
+  {
+   "id": "k2-cooc-myriandrus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Myriandrus?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "Lampsacus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Miletus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Ptolemais-Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sardis",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "Ptolemais-Ake",
+      "Sidon",
+      "Tarsus"
+     ]
+    },
+    "20": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "Ptolemais-Ake",
+      "Sidon",
+      "Tarsus"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Lampsacus",
+      "Miletus",
+      "Ptolemais-Ake",
+      "Sardis",
+      "Sidon",
+      "Tarsus"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    8,
+    30,
+    48,
+    15,
+    5,
+    10,
+    12,
+    3,
+    49,
+    4,
+    18,
+    25,
+    42,
+    22,
+    37,
+    6,
+    51,
+    9,
+    44
+   ]
+  },
+  {
+   "id": "k2-cooc-miletus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Miletus?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.7499999999999999,
+    "precision": 1.0,
+    "recall": 0.6,
+    "found": [
+     "Abydus",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Ptolemais-Ake",
+     "Sardis"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "Amphipolis"
+    ],
+    "missed": [
+     {
+      "id": "Myriandrus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Salamis",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": [
+     "Abydus",
+     "Amphipolis",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Ptolemais-Ake",
+     "Sardis"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.4,
+     "f1": 0.5714285714285715,
+     "answerable": [
+      "Lampsacus",
+      "Ptolemais-Ake",
+      "Sardis",
+      "Sidon"
+     ]
+    },
+    "10": {
+     "recall": 0.6,
+     "f1": 0.7499999999999999,
+     "answerable": [
+      "Abydus",
+      "Lampsacus",
+      "Magnesia ad Maeandrum",
+      "Ptolemais-Ake",
+      "Sardis",
+      "Sidon"
+     ]
+    },
+    "20": {
+     "recall": 0.8,
+     "f1": 0.888888888888889,
+     "answerable": [
+      "Abydus",
+      "Lampsacus",
+      "Magnesia ad Maeandrum",
+      "Ptolemais-Ake",
+      "Salamis",
+      "Sardis",
+      "Sidon",
+      "Tarsus"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Abydus",
+      "Colophon",
+      "Lampsacus",
+      "Magnesia ad Maeandrum",
+      "Myriandrus",
+      "Ptolemais-Ake",
+      "Salamis",
+      "Sardis",
+      "Sidon",
+      "Tarsus"
+     ]
+    }
+   },
+   "top20": [
+    5,
+    16,
+    11,
+    13,
+    30,
+    14,
+    15,
+    3,
+    8,
+    2,
+    6,
+    12,
+    1,
+    17,
+    18,
+    22,
+    48,
+    10,
+    9,
+    4
+   ]
+  },
+  {
+   "id": "k2-cooc-sidon",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Sidon?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "Abydus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Lampsacus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Miletus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Myriandrus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Ptolemais-Ake",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sardis",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.7142857142857143,
+     "f1": 0.8333333333333333,
+     "answerable": [
+      "Abydus",
+      "Lampsacus",
+      "Miletus",
+      "Ptolemais-Ake",
+      "Sardis"
+     ]
+    },
+    "20": {
+     "recall": 0.7142857142857143,
+     "f1": 0.8333333333333333,
+     "answerable": [
+      "Abydus",
+      "Lampsacus",
+      "Miletus",
+      "Ptolemais-Ake",
+      "Sardis"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Abydus",
+      "Lampsacus",
+      "Miletus",
+      "Myriandrus",
+      "Ptolemais-Ake",
+      "Sardis",
+      "Tarsus"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    5,
+    12,
+    8,
+    45,
+    48,
+    15,
+    17,
+    2,
+    46,
+    3,
+    10,
+    13,
+    4,
+    16,
+    18,
+    47,
+    14,
+    25
+   ]
+  },
+  {
+   "id": "k2-cooc-ake",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Ake?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.7272727272727273,
+    "precision": 1.0,
+    "recall": 0.5714285714285714,
+    "found": [
+     "Abydus",
+     "Lampsacus",
+     "Miletus",
+     "Sardis"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "Amphipolis",
+     "Colophon",
+     "Magnesia ad Maeandrum"
+    ],
+    "missed": [
+     {
+      "id": "Myriandrus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": [
+     "Abydus",
+     "Amphipolis",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Sardis"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.42857142857142855,
+     "f1": 0.6,
+     "answerable": [
+      "Myriandrus",
+      "Sidon",
+      "Tarsus"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Abydus",
+      "Lampsacus",
+      "Miletus",
+      "Myriandrus",
+      "Sardis",
+      "Sidon",
+      "Tarsus"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    9,
+    48,
+    8,
+    5,
+    10,
+    15,
+    47,
+    25,
+    12,
+    49,
+    22,
+    46,
+    21,
+    4,
+    42,
+    6,
+    34,
+    3
+   ]
+  },
+  {
+   "id": "k2-cooc-lampsacus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Lampsacus?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.7499999999999999,
+    "precision": 1.0,
+    "recall": 0.6,
+    "found": [
+     "Abydus",
+     "Colophon",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Ptolemais-Ake",
+     "Sardis"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "Amphipolis"
+    ],
+    "missed": [
+     {
+      "id": "Myriandrus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Salamis",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": [
+     "Abydus",
+     "Amphipolis",
+     "Colophon",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Ptolemais-Ake",
+     "Sardis"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.1,
+     "f1": 0.18181818181818182,
+     "answerable": [
+      "Abydus"
+     ]
+    },
+    "10": {
+     "recall": 0.1,
+     "f1": 0.18181818181818182,
+     "answerable": [
+      "Abydus"
+     ]
+    },
+    "20": {
+     "recall": 0.4,
+     "f1": 0.5714285714285715,
+     "answerable": [
+      "Abydus",
+      "Magnesia ad Maeandrum",
+      "Miletus",
+      "Sardis"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Abydus",
+      "Colophon",
+      "Magnesia ad Maeandrum",
+      "Miletus",
+      "Myriandrus",
+      "Ptolemais-Ake",
+      "Salamis",
+      "Sardis",
+      "Sidon",
+      "Tarsus"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    22,
+    21,
+    25,
+    31,
+    32,
+    19,
+    15,
+    20,
+    28,
+    23,
+    8,
+    29,
+    24,
+    18,
+    26,
+    3,
+    27,
+    10
+   ]
+  },
+  {
+   "id": "k2-cooc-salamis",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Salamis?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "Lampsacus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Miletus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Tarsus",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Lampsacus",
+      "Miletus",
+      "Tarsus"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Lampsacus",
+      "Miletus",
+      "Tarsus"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    8,
+    5,
+    15,
+    48,
+    4,
+    3,
+    13,
+    17,
+    12,
+    18,
+    10,
+    1,
+    16,
+    22,
+    2,
+    25,
+    14,
+    6
+   ]
+  },
+  {
+   "id": "k2-cooc-abydus",
+   "class": "co-occurrence",
+   "question": "Which mints are represented in hoards alongside coins of Abydus?",
+   "answer_type": "mints",
+   "open_world_sensitive": false,
+   "records": {
+    "f1": 0.8,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "found": [
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Ptolemais-Ake",
+     "Sardis"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "Amphipolis"
+    ],
+    "missed": [
+     {
+      "id": "Cius",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     },
+     {
+      "id": "Sidon",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     },
+     {
+      "id": "Teos",
+      "stage": "hoard",
+      "why": "merged into 'Asia Minor 1964 (IGCH 1441)'"
+     }
+    ],
+    "answer": [
+     "Amphipolis",
+     "Colophon",
+     "Lampsacus",
+     "Magnesia ad Maeandrum",
+     "Miletus",
+     "Ptolemais-Ake",
+     "Sardis"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.1111111111111111,
+     "f1": 0.19999999999999998,
+     "answerable": [
+      "Lampsacus"
+     ]
+    },
+    "10": {
+     "recall": 0.5555555555555556,
+     "f1": 0.7142857142857143,
+     "answerable": [
+      "Cius",
+      "Colophon",
+      "Lampsacus",
+      "Magnesia ad Maeandrum",
+      "Teos"
+     ]
+    },
+    "20": {
+     "recall": 0.7777777777777778,
+     "f1": 0.8750000000000001,
+     "answerable": [
+      "Cius",
+      "Colophon",
+      "Lampsacus",
+      "Magnesia ad Maeandrum",
+      "Miletus",
+      "Sardis",
+      "Teos"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "Cius",
+      "Colophon",
+      "Lampsacus",
+      "Magnesia ad Maeandrum",
+      "Miletus",
+      "Ptolemais-Ake",
+      "Sardis",
+      "Sidon",
+      "Teos"
+     ]
+    }
+   },
+   "top20": [
+    11,
+    30,
+    21,
+    10,
+    8,
+    25,
+    15,
+    22,
+    48,
+    20,
+    4,
+    5,
+    28,
+    45,
+    3,
+    23,
+    12,
+    18,
+    6,
+    46
+   ]
+  },
+  {
+   "id": "k2-neg-egypt-abydus",
+   "class": "negation",
+   "question": "Which hoards found in Egypt contain no coins of Abydus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "found": [
+     "igch1668"
+    ],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1678",
+      "stage": "attribute",
+      "why": "findspot does not name the region"
+     }
+    ],
+    "answer": [
+     "igch1668"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1668",
+      "igch1678"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    11,
+    21,
+    22,
+    25,
+    28,
+    10,
+    15,
+    18,
+    8,
+    20,
+    4,
+    23,
+    12,
+    17,
+    6,
+    42,
+    24,
+    48,
+    7
+   ]
+  },
+  {
+   "id": "k2-neg-egypt-miletus",
+   "class": "negation",
+   "question": "Which hoards found in Egypt contain no coins of Miletus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "found": [
+     "igch1668"
+    ],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [],
+    "answer": [
+     "igch1668"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1668"
+     ]
+    }
+   },
+   "top20": [
+    13,
+    16,
+    30,
+    14,
+    15,
+    5,
+    18,
+    17,
+    3,
+    1,
+    22,
+    11,
+    6,
+    8,
+    7,
+    12,
+    34,
+    2,
+    28,
+    31
+   ]
+  },
+  {
+   "id": "k2-neg-asia-minor-miletus",
+   "class": "negation",
+   "question": "Which hoards found in Asia Minor contain no coins of Miletus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 0.0,
+    "precision": 1.0,
+    "recall": 0.0,
+    "found": [],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1438",
+      "stage": "hoard",
+      "why": "no hoard entity"
+     }
+    ],
+    "answer": []
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438"
+     ]
+    }
+   },
+   "top20": [
+    5,
+    30,
+    18,
+    15,
+    14,
+    13,
+    2,
+    16,
+    12,
+    9,
+    11,
+    3,
+    8,
+    10,
+    1,
+    25,
+    6,
+    20,
+    17,
+    7
+   ]
+  },
+  {
+   "id": "k2-neg-lampsacus-not-sardes",
+   "class": "negation",
+   "question": "Which hoards contain coins of Lampsacus but none of Sardes?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 0.8000000000000002,
+    "precision": 0.8,
+    "recall": 0.8,
+    "found": [
+     "igch0176",
+     "igch0774",
+     "igch0958",
+     "igch1668"
+    ],
+    "made_up": [
+     "igch1678"
+    ],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1438",
+      "stage": "hoard",
+      "why": "no hoard entity"
+     }
+    ],
+    "answer": [
+     "igch0176",
+     "igch0774",
+     "igch0958",
+     "igch1668",
+     "igch1678"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.2,
+     "f1": 0.33333333333333337,
+     "answerable": [
+      "igch1438"
+     ]
+    },
+    "20": {
+     "recall": 0.4,
+     "f1": 0.5714285714285715,
+     "answerable": [
+      "igch1438",
+      "igch0958"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438",
+      "igch1668",
+      "igch0176",
+      "igch0774",
+      "igch0958"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    31,
+    32,
+    28,
+    19,
+    22,
+    21,
+    25,
+    20,
+    15,
+    24,
+    26,
+    23,
+    29,
+    11,
+    3,
+    18,
+    16,
+    8,
+    17
+   ]
+  },
+  {
+   "id": "k2-neg-lampsacus-not-abydus",
+   "class": "negation",
+   "question": "Which hoards contain coins of Lampsacus but none of Abydus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "found": [
+     "igch0176",
+     "igch0774",
+     "igch1668",
+     "igch1678"
+    ],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [],
+    "answer": [
+     "igch0176",
+     "igch0774",
+     "igch1668",
+     "igch1678"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.25,
+     "f1": 0.4,
+     "answerable": [
+      "igch1668"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1668",
+      "igch1678",
+      "igch0176",
+      "igch0774"
+     ]
+    }
+   },
+   "top20": [
+    21,
+    30,
+    28,
+    23,
+    22,
+    25,
+    24,
+    20,
+    11,
+    29,
+    26,
+    32,
+    31,
+    15,
+    19,
+    18,
+    8,
+    10,
+    3,
+    27
+   ]
+  },
+  {
+   "id": "k2-neg-abydus-not-sardes",
+   "class": "negation",
+   "question": "Which hoards contain coins of Abydus but none of Sardes?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "found": [
+     "igch0958"
+    ],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1438",
+      "stage": "hoard",
+      "why": "no hoard entity"
+     }
+    ],
+    "answer": [
+     "igch0958"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.5,
+     "f1": 0.6666666666666666,
+     "answerable": [
+      "igch1438"
+     ]
+    },
+    "20": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438",
+      "igch0958"
+     ]
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1438",
+      "igch0958"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    11,
+    21,
+    15,
+    28,
+    20,
+    17,
+    25,
+    22,
+    10,
+    8,
+    24,
+    3,
+    23,
+    18,
+    29,
+    4,
+    5,
+    6,
+    26
+   ]
+  },
+  {
+   "id": "k2-neg-miletus-not-abydus",
+   "class": "negation",
+   "question": "Which hoards contain coins of Miletus but none of Abydus?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 0.6666666666666666,
+    "precision": 1.0,
+    "recall": 0.5,
+    "found": [
+     "igch0774"
+    ],
+    "made_up": [],
+    "neutral_hits": [],
+    "missed": [
+     {
+      "id": "igch1678",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": [
+     "igch0774"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1678",
+      "igch0774"
+     ]
+    }
+   },
+   "top20": [
+    30,
+    11,
+    15,
+    13,
+    5,
+    3,
+    16,
+    14,
+    28,
+    6,
+    22,
+    20,
+    2,
+    18,
+    21,
+    10,
+    24,
+    8,
+    1,
+    25
+   ]
+  },
+  {
+   "id": "k2-neg-miletus-not-colophon",
+   "class": "negation",
+   "question": "Which hoards contain coins of Miletus but none of Colophon?",
+   "answer_type": "hoards",
+   "open_world_sensitive": true,
+   "records": {
+    "f1": 0.8571428571428571,
+    "precision": 1.0,
+    "recall": 0.75,
+    "found": [
+     "igch0410",
+     "igch1664",
+     "igch1670"
+    ],
+    "made_up": [],
+    "neutral_hits": [
+     "igch1472",
+     "igch1516"
+    ],
+    "missed": [
+     {
+      "id": "igch1678",
+      "stage": "link",
+      "why": "mint not linked to the hoard"
+     }
+    ],
+    "answer": [
+     "igch0410",
+     "igch1472",
+     "igch1516",
+     "igch1664",
+     "igch1670"
+    ]
+   },
+   "rag": {
+    "5": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "10": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "20": {
+     "recall": 0.0,
+     "f1": 0.0,
+     "answerable": []
+    },
+    "80": {
+     "recall": 1.0,
+     "f1": 1.0,
+     "answerable": [
+      "igch1664",
+      "igch1670",
+      "igch1678",
+      "igch0410"
+     ]
+    }
+   },
+   "top20": [
+    13,
+    30,
+    15,
+    16,
+    14,
+    5,
+    1,
+    3,
+    11,
+    2,
+    8,
+    6,
+    12,
+    18,
+    17,
+    34,
+    22,
+    7,
+    10,
+    9
+   ]
+  }
+ ]
+}
