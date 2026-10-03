@@ -13,6 +13,6 @@
 [[claim]]
 requirement = "FE-106"
 test = "sovereign-scheduler::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks"
-file = "sovereign/crates/sovereign-scheduler/src/yield_backoff.rs"
+file = "serve/crates/sovereign-scheduler/src/yield_backoff.rs"
 line = 195
 asserts = 1

@@ -131,7 +131,7 @@ PY
   --predicate)
     settle; edit sovereign/crates/sovereign-mesh/src/daemon.rs; wall $LOCK cargo build --workspace --features "$BUILDF" --timings >/dev/null
     cp target/cargo-timings/cargo-timing.html "$OUT/timings/predicate.mesh.build.html"; restore
-    edit sovereign/crates/sovereign-core/src/runtime/mod.rs; wall $LOCK cargo build --workspace --features "$BUILDF" --timings >/dev/null
+    edit svrn/crates/sovereign-core/src/runtime/mod.rs; wall $LOCK cargo build --workspace --features "$BUILDF" --timings >/dev/null
     cp target/cargo-timings/cargo-timing.html "$OUT/timings/predicate.core.build.html"; restore; settle
     m=$(python3 scripts/build-probe/critpath.py "$OUT/timings/predicate.mesh.build.html" | sed -n '/critical path/,/workspace units/p' | grep -c 'sovereign-cli-llm \[')
     c=$(python3 scripts/build-probe/critpath.py "$OUT/timings/predicate.core.build.html" | sed -n '/critical path/,/workspace units/p' | grep -c 'sovereign-tools \[')

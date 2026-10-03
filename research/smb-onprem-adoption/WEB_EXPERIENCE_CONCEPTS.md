@@ -15,8 +15,8 @@ claim on what to build first, and all four share the same substrate.
 
 - **`@sovereign/chat-ui`** — a transport-agnostic Svelte 5 chat render
   surface (components + FSM + utils), already shared by desktop and
-  mobile as *source* via Vite/tsconfig alias (`packages/chat-ui/package.json`).
-  The desktop (`sovereign/crates/sovereign-desktop/`) is Tauri + Svelte
+  mobile as *source* via Vite/tsconfig alias (`clients/chat-ui/package.json`).
+  The desktop (`clients/desktop/`) is Tauri + Svelte
   5 with `App.svelte`/`screens.ts` and Playwright harnesses for demo,
   real, and fault modes. A web app consuming the same package inherits
   the chat surface and the FSM discipline; the harness pattern ports

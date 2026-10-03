@@ -60,7 +60,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
 
 ## Premises (verified 2026-09-17, file:line)
 
-- **The funnel.** `gate_answer_with_progress` — sovereign/crates/sovereign-core/src/runtime/grounding/gate.rs:37;
+- **The funnel.** `gate_answer_with_progress` — svrn/crates/sovereign-core/src/runtime/grounding/gate.rs:37;
   `gate_answer` (:7) delegates to it, so all six production gate call sites go through it:
   streaming.rs:610 (shared by the KQ and deep spawns), collaboration.rs:656, attached_doc.rs:724,
   complex_task.rs:352, knowledge_query.rs:1784, simple.rs:204. Its doc already says it is "the ONE funnel
@@ -70,8 +70,8 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   at :270).
 - `GateOutcome { answer: kernel_types::Answer, meta: serde_json::Value, claims }` —
   grounding/mod.rs:559-582 (`answer` :572, `meta` :575). `Answer::judgement(&self) -> &Judgement`
-  kernel-types/src/answer.rs:389.
-- `Judgement` derives `Serialize, Deserialize` (kernel-types/src/judgement.rs:319-320); four constructors
+  shared/crates/kernel-types/src/answer.rs:389.
+- `Judgement` derives `Serialize, Deserialize` (shared/crates/kernel-types/src/judgement.rs:319-320); four constructors
   `passed`/`failed`/`could_not_judge`/`never_ran` at :346/:351/:357/:363, each taking a `Reason` by value;
   `Reason::literal(&'static str)` :245; `Verdict` is kebab-case on the wire (:91).
 - **Where the stamp is persisted.** Handlers write `outcome.meta` as `metadata["grounding_gate"]`:
@@ -91,9 +91,9 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   `Option`/`Vec` with `skip_serializing_if`). Production builds: serve.rs:306 (graceful guard), :425
   (`drive_stream_handle`), :506 (`serve_non_streaming_turn`) — the only three. Exhaustive destructures:
   serve.rs:554 (`Collector`), sovereign-turn-client/src/lib.rs:4256 (`drain_turn`),
-  sovereign-mobile/src-tauri/src/remote/stream.rs:279. Test builds:
+  clients/mobile/src-tauri/src/remote/stream.rs:279. Test builds:
   sovereign-contracts/tests/main/turn_wire_form.rs:61,76,133 and
-  sovereign-mobile/src-tauri/tests/turn_wire.rs:257,371,459. Every other `TurnFrame::Complete` match uses
+  clients/mobile/src-tauri/tests/turn_wire.rs:257,371,459. Every other `TurnFrame::Complete` match uses
   `..` (`git grep -n 'TurnFrame::Complete {' -- '*.rs'`, 32 hits).
 - **serve.rs already projects from the persisted metadata** after the stream ends: `message_metadata(…)`
   then `project_message_metadata` / `project_epistemic_state` / `project_task` / `project_turn_metadata`
@@ -131,12 +131,12 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   re-export precedent. `kernel-types` is also in `thin_surfaces.may_reach` (quality/ARCH_LAYERS.toml:1196-1204),
   so neither the re-export nor a direct dep is layer-blocked; the row uses the re-export (one accessor).
 - **Size.** arch-gate: `LINE_LIMIT = 1200`, `GROWTH_SLACK = 50` for oversized files, and the 800-1200
-  approach band is a COUNTER ratchet with **no slack** (corpus-engine/xtask/src/arch_gate.rs:14, :34, :38,
+  approach band is a COUNTER ratchet with **no slack** (quality/xtask/src/arch_gate.rs:14, :34, :38,
   :291-313); baseline `quality/baselines/approach_band.txt` = 207 files / 202,703 lines. `arch-gate` is
   `enforcement = "hard"`, `runs_in = ["prepush", …]` (quality/instruments.toml:200-211) and the `prepush`
   trigger is `on_fail = "block"` (:2473). With step 3 cut, **no file the two surviving rows touch is inside
   the band** — `collaboration.rs` at 885 was the only one, and it is now hd-10's
-  (`wc -l sovereign/crates/sovereign-core/src/runtime/collaboration.rs` = 885, re-checked 2026-09-17).
+  (`wc -l svrn/crates/sovereign-core/src/runtime/collaboration.rs` = 885, re-checked 2026-09-17).
   The rest are either under 800 (gate.rs 688, serve.rs 645, types/turn.rs 610,
   routes.rs 673, ask.rs 512, simple.rs 380, turn_approval.rs 747, turn_wire_form.rs 696, mobile
   stream.rs 458 / turn_wire.rs 598) or already oversized with slack — streaming.rs 4,673 vs baseline 4,689;
@@ -199,7 +199,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
      `judgement: _` (no new dep), and the byte pins in turn_wire_form.rs / turn_wire.rs.
    - Extend sovereign-mesh/tests/main/turn_surface.rs:104 to assert the frame's judgement, and add one turn
      over `install_corpus` (:176-190) asserting a retrieving turn's verdict is NOT `never-ran`.
-   - One sentence on the `sovereign-turn-client` line of sovereign/SYSTEM_OVERVIEW.md (:251).
+   - One sentence on the `sovereign-turn-client` line of docs/SYSTEM_OVERVIEW.md (:251).
 
 ## Seams
 
@@ -211,7 +211,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   clause in `quality/campaigns/handed.toml` `[[ability]] render` `not_covered` — without them `render`'s
   promise overclaims.
   - A THIRD `MessageResponse`, the desktop's own:
-    `sovereign/crates/sovereign-desktop/src-tauri/src/commands/mod.rs:13`, carrying
+    `clients/desktop/src-tauri/src/commands/mod.rs:13`, carrying
     `metadata: Option<serde_json::Value>` (:19). An untyped blob the compiler will NOT name when step 2
     converts the daemon's and the server's, so it ships with no verdict.
   - `ApprovalChannel::emit_message_refined` has a no-op DEFAULT body:
@@ -250,14 +250,14 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   line is visible only under `RUST_LOG`. hd-7's instrument is the in-process bench, so this is not needed;
   adding it is one entry plus one line in `daemon_filter_lists_grounding_targets` (:355) if a daemon-served
   DEMO is ever taken.
-- Files other rungs also touch: `sovereign/SYSTEM_OVERVIEW.md` (every rung);
+- Files other rungs also touch: `docs/SYSTEM_OVERVIEW.md` (every rung);
   `sovereign-server/src/routes.rs` (hd-2 converts sovereign-server in place — if hd-2 lands
   first, step 2's edit there is a field on the same struct, no conflict);
   `sovereign-mesh/tests/main/turn_surface.rs:181` passes `mesh_sharing` to `CorpusIndex::create`, whose
   signature hd-5 does not change (hd-5 changes a serde default, not the constructor).
-- Peer state: with both cut rows gone, the only file these rows share with a peer is `sovereign/SYSTEM_OVERVIEW.md`
+- Peer state: with both cut rows gone, the only file these rows share with a peer is `docs/SYSTEM_OVERVIEW.md`
   (step 2's one sentence) — no surviving row touches
-  `sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs`. Both were dirty when this order was
+  `clients/desktop/src-tauri/src/commands/chat.rs`. Both were dirty when this order was
   drafted and both are clean as of 2026-09-17. `git merge` refuses to overwrite a locally modified file and
   the pool turns that into a halt, so a peer's hunks in `SYSTEM_OVERVIEW.md` must be committed before a row
   that edits it runs.
@@ -276,13 +276,13 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   than the design, and it deletes no ambient path. One plant on this step, not two.)
 - `./scripts/sovereign-lint.sh --human --full` and `./scripts/sovereign-test.sh --human` exit 0.
 - The ambient path is gone — each returns NOTHING:
-  - `rg -U --type rust 'TurnFrame::Complete \{[^}]*\}' sovereign/crates/sovereign-core/src/runtime/serve.rs | rg -v judgement`
-  - `git grep -n 'metadata: None,' -- sovereign/crates/sovereign-core/src/runtime/serve.rs` returns only the
+  - `rg -U --type rust 'TurnFrame::Complete \{[^}]*\}' svrn/crates/sovereign-core/src/runtime/serve.rs | rg -v judgement`
+  - `git grep -n 'metadata: None,' -- svrn/crates/sovereign-core/src/runtime/serve.rs` returns only the
     graceful guard's line, and that build carries a `judgement`.
 - These FIND their subject (a required field is proven by its presence, not its absence):
-  `git grep -n 'judgement: Judgement' -- sovereign/crates/sovereign-contracts/src/types/turn.rs sovereign/crates/sovereign-contracts/src/types/mod.rs`
-  and `git grep -n '"judgement"' -- sovereign/crates/sovereign-core/src/runtime/grounding/gate.rs`.
-- `cd corpus-engine && cargo xtask arch-gate` exits 0. With step 3 cut, no surviving row touches
+  `git grep -n 'judgement: Judgement' -- shared/crates/sovereign-contracts/src/types/turn.rs shared/crates/sovereign-contracts/src/types/mod.rs`
+  and `git grep -n '"judgement"' -- svrn/crates/sovereign-core/src/runtime/grounding/gate.rs`.
+- `cargo xtask arch-gate` exits 0. With step 3 cut, no surviving row touches
   `collaboration.rs` and no file these rows touch is inside the no-slack 800-1200 band (Premises, Size);
   what this gate still judges is the growth of the already-oversized files against
   `quality/baselines/oversized.txt`.

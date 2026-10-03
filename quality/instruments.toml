@@ -2,13 +2,13 @@
 #
 # WHY IT EXISTS. Until 2026-09-04 the quality surface was ELEVEN private lists
 # that never read each other: `scripts/pre-push.sh` (a budget ledger in
-# comments), `scripts/pre-commit.sh`, `corpus-engine/xtask/src/quality_cmd.rs`
+# comments), `scripts/pre-commit.sh`, `quality/xtask/src/quality_cmd.rs`
 # (a Rust table of nine gates), the CI `gates` job (a shell loop of eight),
 # `.github/workflows/weekly.yml`, `scripts/sovereign-ci-bench.sh`,
 # `scripts/desktop-smoke.sh` (seven phases), `scripts/run-if-stale.sh`,
 # `sovereign-cli/src/posture_cmd.rs` (eight hand-written rows), the desktop
 # `package.json` (34 scripts), and the layer table in
-# `sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md`. None of them could
+# `clients/desktop/QUALITY_SURFACE.md`. None of them could
 # answer "what verifies this repo", so none could answer the question that
 # actually costs money: what verifies it NOWHERE.
 #
@@ -53,7 +53,7 @@
 #
 # Censused surfaces: `.github/workflows/{ci,weekly}.yml`,
 # `scripts/{pre-push,pre-commit,desktop-smoke,run-if-stale}.sh`, and
-# `sovereign/crates/sovereign-desktop/package.json`.
+# `clients/desktop/package.json`.
 #
 # ── Fields ──────────────────────────────────────────────────────────
 #
@@ -175,10 +175,10 @@ censused_surfaces = [
   "scripts/pre-commit.sh",
   "scripts/desktop-smoke.sh",
   "scripts/run-if-stale.sh",
-  "sovereign/crates/sovereign-desktop/package.json",
-  "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md",
-  "sovereign/docs/TESTING_SURFACE.md",
-  "sovereign/docs/specs/DAEMON_RESILIENCE.md",
+  "clients/desktop/package.json",
+  "clients/desktop/QUALITY_SURFACE.md",
+  "svrn/docs/TESTING_SURFACE.md",
+  "svrn/docs/specs/DAEMON_RESILIENCE.md",
 ]
 
 # ── xtask ratchets — the checks a diff cannot answer ─────────────────
@@ -195,7 +195,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/ARCH_PRINCIPLES.md §1.1"
+doc = "docs/ARCH_PRINCIPLES.md §1.1"
 
 [[instrument]]
 id = "arch-gate"
@@ -209,10 +209,10 @@ baseline = { kind = "count", path = "quality/baselines/oversized.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
 # when_changed: file sizes over `.rs`, plus the instruction surface it censuses (arch_gate.rs
-#               names AGENTS.md, .claude/CLAUDE.md, sovereign/SYSTEM_OVERVIEW.md) and its
+#               names AGENTS.md, .claude/CLAUDE.md, docs/SYSTEM_OVERVIEW.md) and its
 #               three baselines. Superset: a `.rs` anywhere re-selects it.
-when_changed = "(\\.rs$|^AGENTS\\.md$|^\\.claude/CLAUDE\\.md$|^sovereign/SYSTEM_OVERVIEW\\.md$|^quality/baselines/)"
-doc = "sovereign/ARCH_PRINCIPLES.md §3.1"
+when_changed = "(\\.rs$|^AGENTS\\.md$|^\\.claude/CLAUDE\\.md$|^docs/SYSTEM_OVERVIEW\\.md$|^quality/baselines/)"
+doc = "docs/ARCH_PRINCIPLES.md §3.1"
 
 [[instrument]]
 id = "boundary-gate"
@@ -238,7 +238,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/fan_in.tsv" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/ARCH_PRINCIPLES.md §8"
+doc = "docs/ARCH_PRINCIPLES.md §8"
 
 [[instrument]]
 id = "lifecycle-gate"
@@ -268,7 +268,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/lock_dups.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/ARCH_PRINCIPLES.md §8.2"
+doc = "docs/ARCH_PRINCIPLES.md §8.2"
 
 [[instrument]]
 id = "layout-gate"
@@ -284,7 +284,7 @@ runs_in = ["prepush", "ci:gates"]
 # when_changed: walks `.rs` under the declared crate trees against
 #               quality/baselines/corpus_layout.txt.
 when_changed = "(\\.rs$|^quality/baselines/)"
-doc = "sovereign/ARCH_PRINCIPLES.md §3"
+doc = "docs/ARCH_PRINCIPLES.md §3"
 
 [[instrument]]
 id = "env-gate"
@@ -318,7 +318,7 @@ negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
 # when_changed: scans `.rs` for direct clock reads against quality/baselines/clock_reads.txt.
 when_changed = "(\\.rs$|^quality/baselines/)"
-doc = "sovereign/ARCH_PRINCIPLES.md §9"
+doc = "docs/ARCH_PRINCIPLES.md §9"
 
 [[instrument]]
 id = "concept-gate"
@@ -356,7 +356,7 @@ negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
 # when_changed: per-crate `.rs` lines (crate roots found by Cargo.toml) plus the two
 #               script trees that are keys of their own (size_gate.rs:58).
-when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^scripts/|^sovereign/crates/sovereign-desktop/tests/e2e/scripts/|^quality/baselines/)"
+when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^scripts/|^clients/desktop/tests/e2e/scripts/|^quality/baselines/)"
 doc = "AGENTS.md §Definition of done"
 load_bearing = [
   { flag = "--tighten", why = "banks a real cut and never raises — always safe" },
@@ -378,7 +378,7 @@ negative_control = "none"
 runs_in = ["prepush"]
 # when_changed: tracked `.rs` under each workspace member's src/ (clone_gate.rs).
 when_changed = "(\\.rs$|^quality/baselines/)"
-doc = "corpus-engine/xtask/src/clone_gate.rs (module header)"
+doc = "quality/xtask/src/clone_gate.rs (module header)"
 load_bearing = [
   { flag = "--tighten", why = "banks a lower total by rewriting the snapshot; never raises it" },
 ]
@@ -409,7 +409,7 @@ baseline = { kind = "none" }
 # the control.
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header)"
+doc = "svrn/crates/sovereign-cli-llm/src/judge_replay.rs (module header)"
 load_bearing = [
   { flag = "--render-only", why = "the mechanical facet without a daemon, bit-stable across repeats — it is how a rendering change is proven not to have moved the register" },
   { flag = "--repeat N", why = "one run is not a measurement (ARCH §18.5); without it the verdict spread is unknown and a flip cannot be told from noise" },
@@ -419,7 +419,7 @@ load_bearing = [
 id = "judge-replay-report"
 kind = "check"
 claim = "judged"
-command = "python3 sovereign/bench/chaos_monkey/judge_replay_report.py"
+command = "python3 bench/lanes/chaos_monkey/judge_replay_report.py"
 # Pure scoring over jsonl; the two frozen 2026-08-14 arms score in well under a
 # second. A larger case set moves this linearly.
 cost_secs = 0.03
@@ -429,7 +429,7 @@ verdict = "judgement-line"
 baseline = { kind = "none" }
 negative_control = "judge-replay-control"
 runs_in = ["by-hand"]
-doc = "sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce)"
+doc = "bench/lanes/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce)"
 load_bearing = [
   { flag = "a second --verdicts arm", why = "ONE arm is a reading, not a trade — with no base to price against, the run reports never-ran rather than a pass" },
   { flag = "--tau", why = "the operating point the comparison is read at; a catch lost at 0.9 may not be lost at 0.6, and the trade is about the point production runs" },
@@ -439,7 +439,7 @@ load_bearing = [
 id = "judge-replay-control"
 kind = "control"
 claim = "invariant"
-command = "python3 sovereign/bench/chaos_monkey/judge_replay_report.py --self-test"
+command = "python3 bench/lanes/chaos_monkey/judge_replay_report.py --self-test"
 # 0.03s, n=3 (0.03 / 0.03 / 0.03 wall), 2026-09-12.
 cost_secs = 0.03
 enforcement = "hard"
@@ -448,7 +448,7 @@ verdict = "judgement-line"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/bench/chaos_monkey/judge_replay_report.py (CONTROL_* — commit 17ac931b8, a register candidate refused at the 3/3 should_flag bar and preserved for exactly this)"
+doc = "bench/lanes/chaos_monkey/judge_replay_report.py (CONTROL_* — commit 17ac931b8, a register candidate refused at the 3/3 should_flag bar and preserved for exactly this)"
 
 # ── is the replay's bank this week's? ────────────────────────────────────
 # Rung vl-4 of quality/campaigns/verifier-loop.toml. `judge-replay` above is
@@ -461,7 +461,7 @@ doc = "sovereign/bench/chaos_monkey/judge_replay_report.py (CONTROL_* — commit
 id = "judge-replay-bank"
 kind = "check"
 claim = "invariant"
-command = "python3 sovereign/bench/chaos_monkey/judge_replay_cases.py --bank-age"
+command = "python3 bench/lanes/chaos_monkey/judge_replay_cases.py --bank-age"
 # 0.13s, n=3 (0.13 / 0.13 / 0.13 wall), 2026-09-12 — it reads every forensics
 # ledger once.
 cost_secs = 0.13
@@ -481,7 +481,7 @@ doc = "quality/campaigns/verifier-loop.toml §vl-bank-live"
 id = "judge-replay-bank-feed"
 kind = "probe"
 claim = "invariant"
-command = "sovereign/bench/chaos_monkey/feed_replay_bank.sh"
+command = "bench/lanes/chaos_monkey/feed_replay_bank.sh"
 # 871s wall, n=1, 2026-09-12 — 8 questions of which one is a `present-maximal`
 # essay, which is the one that writes a replayable episode. ONE RUN IS NOT A
 # MEASUREMENT (ARCH §18.5): read this as a first actual. The short-path
@@ -502,7 +502,7 @@ negative_control = "none"
 # left off for a week feeds it once when it comes back. A cron cadence would
 # claim something these boxes cannot keep (scripts/run-if-stale.sh header).
 runs_in = ["run-if-stale"]
-doc = "sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header)"
+doc = "bench/lanes/chaos_monkey/feed_replay_bank.sh (module header)"
 load_bearing = [
   { flag = "SOVEREIGN_GATE_AUDIT_FORENSICS", why = "set by the script in the process that RUNS the gate. `svrn chat ask` will not do — its turn runs on the daemon, so the knob would have to be exported where the daemon is launched. The ledger stays on the machine that produced it; no privacy default moves" },
   { flag = "--limit", why = "the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode. The DEFAULT is derived from the bank (the position of the first `present-maximal-*` id) rather than hand-set, because a number here goes stale silently when the bank is reordered — the lane would report could-not-judge forever and read as a flaky daemon" },
@@ -814,7 +814,7 @@ kind = "gate"
 claim = "invariant"
 command = "python3 scripts/domains-census.py predicate"
 # 0.59s, n=3 (0.58 / 0.60 / 0.60 wall), 2026-09-14. Exits 1 (FALSE) while any
-# kept context names no package or any crate outside commonwealth/ defines a
+# kept context names no package or any crate outside cmnwlth/ defines a
 # Peer* type; the campaign `check` chains boundary-gate after it.
 cost_secs = 0.59
 enforcement = "advisory"
@@ -1005,7 +1005,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush"]
-when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^Cargo\\.lock$|^rust-toolchain\\.toml$|^\\.cargo/|^vendor/|^scripts/sovereign-test\\.sh$|^scripts/lib/|^sovereign/crates/sovereign-tools/src/code/test_adapters/|^sovereign/docs/cli-contract\\.toml$|^sovereign/scripts/cli-journey-.*\\.sh$|^sovereign/scripts/tests/)"
+when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^Cargo\\.lock$|^rust-toolchain\\.toml$|^\\.cargo/|^vendor/|^scripts/sovereign-test\\.sh$|^scripts/lib/|^svrn/crates/sovereign-tools/src/code/test_adapters/|^svrn/docs/cli-contract\\.toml$|^svrn/scripts/cli-journey-.*\\.sh$|^svrn/scripts/tests/)"
 # Exit 3 = the check could not RUN on this host: a third-party build script
 # failed and no first-party diagnostic was emitted, so nothing in the diff
 # can fix it (the native deps live in the dev toolbox). The script decides
@@ -1195,14 +1195,14 @@ load_bearing = [
 id = "cli-journey-selftest"
 kind = "control"
 claim = "invariant"
-command = "sovereign/scripts/tests/cli-journey-selftest.sh"
+command = "svrn/scripts/tests/cli-journey-selftest.sh"
 cost_secs = 3.0
 enforcement = "hard"
 fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["ci:test"]
-doc = "sovereign/docs/cli-contract.toml (journeys)"
+doc = "svrn/docs/cli-contract.toml (journeys)"
 load_bearing = [
   { flag = "(ten negative controls)", why = "it drives the real journey runner against a stub CLI and a loopback stub daemon and proves it FAILS a wrong exit code, a missing substring, a non-reversing mutation, and that it aborts a sequence after a failed step" },
 ]
@@ -1314,10 +1314,10 @@ cost_secs = 1745.0
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/bench/quality-check" }
+baseline = { kind = "metrics", path = "bench/lanes/quality-check" }
 negative_control = "none"
 runs_in = ["smoke:2", "by-hand"]
-doc = "sovereign/docs/CLI_REFERENCE.md#svrn-quality"
+doc = "svrn/docs/CLI_REFERENCE.md#svrn-quality"
 load_bearing = [
   { flag = "--mint", why = "without it a first run against a NEW stack fingerprint writes no baseline at all — deliberately, so a drifting stack cannot silently re-mint its own bar" },
   { flag = "--budget-secs", why = "a lane with under 60s of runway is could-not-judge, not a pass. `--budget-secs 0` is the cheap structural proof the journey drives" },
@@ -1332,10 +1332,10 @@ cost_secs = 2400.0
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary", "slot-decodes:embed"]
-baseline = { kind = "metrics", path = "sovereign/bench" }
+baseline = { kind = "metrics", path = "bench/lanes" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 load_bearing = [
   { flag = "the HARD/SOFT/TRACKED lane split", why = "a HARD lane breaks the build and a SOFT synth lane never does. Read lane KIND before reading a number: a TRACKED lane carries an ABSOLUTE verdict that is a finding about the system, not a regression signal" },
   { flag = "--update-baseline", why = "capture/refresh only on a healthy daemon; a baseline minted from a degraded run silently lowers every future bar" },
@@ -1350,10 +1350,10 @@ cost_secs = 1200.0
 enforcement = "hard"
 fidelity = "F2"
 preconditions = ["port-listening:9745"]
-baseline = { kind = "metrics", path = "sovereign/bench" }
+baseline = { kind = "metrics", path = "bench/lanes" }
 negative_control = "none"
 runs_in = ["smoke:3"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "inner-chaos-calibrate"
@@ -1364,10 +1364,10 @@ cost_secs = 300.0
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/bench/chaos_monkey" }
+baseline = { kind = "metrics", path = "bench/lanes/chaos_monkey" }
 negative_control = "none"
 runs_in = ["smoke:2"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
+doc = "clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
 load_bearing = [
   { flag = "sensitivity floor 0.85 / specificity floor 0.8", why = "no rubric or judge change may score runs without passing it — the judge-calibration gate (ARCH §18.6)" },
 ]
@@ -1384,7 +1384,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:5"]
-doc = "sovereign/bench/chaos_monkey/README.md"
+doc = "bench/lanes/chaos_monkey/README.md"
 
 # ── The desktop frontend surface ─────────────────────────────────────
 
@@ -1399,7 +1399,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["ci:desktop", "smoke:0"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "--fail-on-warnings", why = "without it svelte-check exits 0 on warnings and the gate passes while the app has accessibility and unused-export problems. `check:loose` is the no-gate variant — do not wire it into CI" },
 ]
@@ -1415,7 +1415,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "desktop-sabotage"
 runs_in = ["ci:desktop", "smoke:0"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-e2e-synthetic"
@@ -1429,7 +1429,7 @@ fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "desktop-sabotage"
 runs_in = ["ci:desktop", "smoke:0"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "playwright.config.ts (the default)", why = "spec selection is DIRECTORY-based: this config's testDir is tests/e2e/specs against a Tauri backend mocked by fixtures/tauri-shim.js. It cannot assert that any answer is correct — every answer is a string the test injected" },
 ]
@@ -1445,7 +1445,7 @@ fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["ci:desktop"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/NEGATIVE_CONTROLS.md"
+doc = "clients/desktop/tests/e2e/NEGATIVE_CONTROLS.md"
 load_bearing = [
   { flag = "--allow-dirty", why = "escape hatch only. The default refusal exists because the script rewrites TRACKED files and a SIGKILL mid-run would lose uncommitted work git cannot return" },
   { flag = "(runs after the suite)", why = "a red suite makes every verdict here meaningless, and the script refuses to start on a red baseline" },
@@ -1463,7 +1463,7 @@ preconditions = ["port-listening:9745", "binary:sovereign-desktop"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:4", "by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "-c playwright.real.config.ts", why = "bare `playwright test` silently runs the SYNTHETIC suite instead" },
   { flag = "SOVEREIGN_REAL_CHAT_MODEL / SOVEREIGN_REAL_EMBED_MODEL", why = "setup FAILS if these do not resolve — the GGUFs are not in the repo, which is the whole reason no CI job runs this" },
@@ -1482,7 +1482,7 @@ preconditions = ["port-listening:9751", "binary:sovereign-desktop"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:4", "by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "-c playwright.faults.config.ts", why = "a separate config because the fault specs kill processes and own ports — they cannot share a run with anything" },
 ]
@@ -1498,7 +1498,7 @@ fidelity = "F2"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-demo"
@@ -1512,7 +1512,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md"
+doc = "clients/desktop/tests/e2e/demo/DEMO_BEATS.md"
 load_bearing = [
   { flag = "(a failed beat exports no clip)", why = "the product reel is an acceptance suite: `demo:export` is what turns green beats into artifacts, so a broken beat cannot ship as a video" },
 ]
@@ -1528,7 +1528,7 @@ fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md"
+doc = "clients/desktop/tests/e2e/demo/DEMO_BEATS.md"
 
 [[instrument]]
 id = "desktop-a11y"
@@ -1541,7 +1541,7 @@ fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-soak"
@@ -1555,7 +1555,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-breaker"
@@ -1568,7 +1568,7 @@ fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-chaos"
@@ -1582,7 +1582,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "desktop-judge-calibration"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
+doc = "clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
 
 [[instrument]]
 id = "desktop-ttfi"
@@ -1592,10 +1592,10 @@ command = "npm run test:ttfi"
 cost_secs = 300.0
 enforcement = "tracked"
 fidelity = "F1"
-baseline = { kind = "metrics", path = "sovereign/crates/sovereign-desktop/tests/e2e/.ttfi-baseline.json" }
+baseline = { kind = "metrics", path = "clients/desktop/tests/e2e/.ttfi-baseline.json" }
 negative_control = "none"
 runs_in = ["smoke:1", "by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-ttfi"
@@ -1608,7 +1608,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-soak"
@@ -1621,7 +1621,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-breaker"
@@ -1634,7 +1634,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-journeys"
@@ -1647,7 +1647,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-invoke-coverage"
@@ -1660,7 +1660,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = "test-artifacts/ledger-synthetic.jsonl" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
+doc = "clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
 load_bearing = [
   { flag = "SOVEREIGN_INVOKE_COVERAGE=<path>", why = "off entirely when unset; a run with it unset produces no ledger and this reader then exits 3 as could-not-judge rather than reporting 0%" },
 ]
@@ -1676,7 +1676,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = "test-artifacts/ledger-real.jsonl" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
+doc = "clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
 
 [[instrument]]
 id = "desktop-invoke-coverage-gate"
@@ -1689,7 +1689,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = "test-artifacts/ledger-synthetic.jsonl" }
 negative_control = "none"
 runs_in = ["ci:desktop"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
+doc = "clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
 load_bearing = [
   { flag = "--min-percent 35", why = "the ratchet floor. RAISE it as coverage lands; setting it aspirationally high and muting the failure is how a floor stops being read" },
 ]
@@ -1703,10 +1703,10 @@ cost_secs = "unmeasured"
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/crates/sovereign-desktop/tests/e2e" }
+baseline = { kind = "metrics", path = "clients/desktop/tests/e2e" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
+doc = "clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
 load_bearing = [
   { flag = "sensitivity floor 0.85 / specificity floor 0.8", why = "no rubric or judge change may score runs without passing it (ARCH §18.6)" },
 ]
@@ -1725,7 +1725,7 @@ preconditions = ["binary:sovereign-desktop", "binary:timeout"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 load_bearing = [
   { flag = "SMOKE_P<n>_SECS", why = "per-phase soft budgets. A phase that runs out of budget SKIPs, and a SKIP verified nothing — read the scoreboard for SKIP rows, not just the final verdict" },
   { flag = "the timeout resolver", why = "run_capped shelled out to GNU `timeout` until 2026-07-28, which darwin does not ship, so every phase exited 127 and the whole gate was structurally incapable of passing on half the platforms it ships to. The start banner now names which of timeout/gtimeout/bash-fallback it resolved" },
@@ -1743,13 +1743,13 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "smoke-attach-mode"
 kind = "probe"
 claim = "invariant"
-command = "sovereign/scripts/smoke-attach-mode.sh"
+command = "svrn/scripts/smoke-attach-mode.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
@@ -1757,7 +1757,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:1"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "mtp-probe"
@@ -1771,7 +1771,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:1"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 
 # ── The login-triggered lanes (scripts/run-if-stale.sh) ──────────────
 
@@ -1796,7 +1796,7 @@ load_bearing = [
 id = "contract-nightly"
 kind = "suite"
 claim = "invariant"
-command = "sovereign/scripts/cli-journey-nightly.sh"
+command = "svrn/scripts/cli-journey-nightly.sh"
 cost_secs = "unmeasured"
 enforcement = "hard"
 fidelity = "F3"
@@ -1804,13 +1804,13 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "cli-journey-selftest"
 runs_in = ["run-if-stale", "nightly"]
-doc = "sovereign/docs/cli-contract.toml (journeys)"
+doc = "svrn/docs/cli-contract.toml (journeys)"
 
 [[instrument]]
 id = "cli-journey-verify"
 kind = "suite"
 claim = "invariant"
-command = "sovereign/scripts/cli-journey-verify.sh --tier 2"
+command = "svrn/scripts/cli-journey-verify.sh --tier 2"
 cost_secs = "unmeasured"
 enforcement = "hard"
 fidelity = "F3"
@@ -1818,7 +1818,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "cli-journey-selftest"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/cli-contract.toml (journeys)"
+doc = "svrn/docs/cli-contract.toml (journeys)"
 load_bearing = [
   { flag = "--mutating", why = "REFUSES unless SOVEREIGN_JOURNEY_ISOLATED=1 and the daemon URL is not the default :9741 — mutating steps install/remove corpora and join/leave meshes" },
 ]
@@ -1848,7 +1848,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "metrics", path = "quality/baselines/oicp" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row)"
 
 # ── The refresh commands behind `svrn posture`'s rows ────────────────
 
@@ -1864,7 +1864,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (drift_row)"
 
 [[instrument]]
 id = "arch-report"
@@ -1877,7 +1877,7 @@ fidelity = "F2"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (arch_row)"
 
 [[instrument]]
 id = "capability-map"
@@ -1890,7 +1890,7 @@ fidelity = "F2"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (capability_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (capability_row)"
 
 
 # ── The four the doc's "off the map" paragraph named ─────────────────
@@ -1915,7 +1915,7 @@ preconditions = ["binary:sovereign-desktop", "port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:6", "by-hand"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "SOVEREIGN_FORCE_LOCAL UNSET", why = "the coverage claim SURVIVED svt-2 and its mechanism did not. It used to read `SOVEREIGN_CLI_PATH UNSET`, because every other supervised lane pinned that and this one did not, so only this lane took resolve_daemon_child()'s `current_exe() --daemon-child` branch. Supervision and that function are gone (99a0b1520). What is left is the same shape one rung out: this script unsets SOVEREIGN_FORCE_LOCAL (wizard-verify.sh:109) and drives a fresh profile, so it is still the only thing exercising the DEFAULT wizard path — the sidecar beside the executable, resolved by daemon_binary::stable_daemon_binary and brought up detached by serving_host::ensure_reachable. journeys/first-launch-setup.journey.spec.ts:86 SETS the flag, which is why the journey covers the branch real users never take (GUEST_QA_DESIGN.md:31-40)" },
   { flag = "a private netns (Linux) / checked-free ports (macOS)", why = "there is no netns equivalent on darwin, so it REFUSES to start unless :9741 and :9745 are free — which desktop-smoke.sh Phase 6 arranges" },
@@ -1932,7 +1932,7 @@ fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
 id = "daemon-soak-report"
@@ -1945,7 +1945,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "daemon-soak-report-selftest"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "the daemon's own exit receipts, not supervisor.log", why = "the crash-loop FAIL counted restarts out of `logs/supervisor.log`, which only `scripts/daemon-supervised.sh` writes. On every launchd and systemd install the file is absent, the block emitted one WARN, and the headline verdict was unreachable by any input (ARCH §18.1). It counts `daemon: shutdown signal received` across the live log and the rotated `.bak` copies since 2026-09-08" },
   { flag = "exit 2 (WARN) renders `failed`, deliberately", why = "the script's contract is 0 PASS / 1 FAIL / 2 WARN and the registry has four verdicts, none of them `warn`. Read on the exit code, a WARN is a FAIL — the safe direction, because the other one hides. It IS red on this host today, and that is the finding rather than noise: the daemon logged five exits in the last 24 hours. If it ever goes red on something that does not deserve a look, raise the script's warn bar; do not add a verdict to make the row quiet" },
@@ -1965,7 +1965,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 
 # ── The concurrency lane (product-defects-batch entry 3) ─────────────
 #
@@ -1988,7 +1988,7 @@ baseline = { kind = "none" }
 negative_control = "daemon-concurrency-soak-control"
 could_not_judge_exits = [2]
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "NO host-quiet precondition", why = "contention is the condition to measure under, not one to wait out. The 1-minute load is recorded per turn and reported as a covariate; a soak that only runs on a quiet box measures a state that never occurs in use" },
   { flag = "the kernel corroboration on the jetsam class", why = "`log_shutdown_context` calls any SIGTERM above 24 GiB peak RSS a possible jetsam, and this daemon carries ~36 GiB three minutes after boot with `inference.resident = []` — so the daemon's own verdict fires on every operator stop here. Without `os_confirms_memory_kill` this lane scores a peer's `daemon stop` as the defect it was built to catch (ARCH §18.1: a guard asserting on a field the subject supplies)" },
@@ -2012,7 +2012,7 @@ preconditions = ["port-listening:9741", "corpus-installed:sep"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "it RESTORES the daemon it killed", why = "launchd here declares `KeepAlive { SuccessfulExit = false }` and did NOT relaunch after an injected SIGKILL, so a control that does not put the daemon back leaves the operator's box without one — and a negative control nobody dares schedule is one that never runs. `--no-restore` opts out for a deliberate teardown" },
 ]
@@ -2034,7 +2034,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
 id = "mesh-soak"
@@ -2048,7 +2048,7 @@ preconditions = ["binary:podman"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["weekly:soak", "by-hand"]
-doc = "commonwealth/docs/MESH_QA.md"
+doc = "cmnwlth/docs/MESH_QA.md"
 load_bearing = [
   { flag = "the podman backend", why = "real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled" },
   { flag = "`continue-on-error: true` on the weekly job", why = ".github/workflows/mesh-soak-nightly.yml:35 — the job is advisory, so a red soak does not fail the workflow. `runs_in` says it is scheduled and this says what the schedule can do about a failure, which is nothing" },
@@ -2071,7 +2071,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = ".github/mesh-slo-baseline.json" }
 negative_control = "none"
 runs_in = ["weekly:soak", "by-hand"]
-doc = "commonwealth/docs/MESH_QA.md"
+doc = "cmnwlth/docs/MESH_QA.md"
 load_bearing = [
   { flag = "BOTH of its invocations swallow the exit code", why = "mesh-soak.sh:1248 ends `|| true` and only runs under --gate, which the weekly workflow does not pass; mesh-soak-nightly.yml:107-108 runs it as its own step and also ends `|| true`. It is declared `advisory` because that is what it IS, not because someone decided it should be — `cmd_soak_gate` exits 1 on regression and nothing reads it" },
   { flag = "the baseline is named three different things and none is committed", why = "mesh-soak.sh looks for $ROOT/mesh-soak-baseline.json (gitignored, .gitignore:175), the workflow passes .github/mesh-slo-baseline.json, MESH_QA.md:132 says mesh-slo-baseline.json. A gate against a baseline that does not exist gates nothing" },
@@ -2090,7 +2090,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "corpus-engine/xtask/src/quality_cmd.rs"
+doc = "quality/xtask/src/quality_cmd.rs"
 load_bearing = [
   { flag = "check-mode only", why = "baseline mutations stay explicit per-gate, so a habit-run can never silently move a ratchet" },
   { flag = "four verdicts, not two", why = "a gate that could not reach its evidence did not pass, and one that never ran did not pass either — the summary keeps PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN apart" },
@@ -2105,10 +2105,10 @@ cost_secs = 400.0
 enforcement = "tracked"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/bench" }
+baseline = { kind = "metrics", path = "bench/lanes" }
 negative_control = "none"
 runs_in = ["smoke:1"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 
 [[instrument]]
 id = "clippy-json"
@@ -2121,7 +2121,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "corpus-engine/xtask/src/lint_gate.rs"
+doc = "quality/xtask/src/lint_gate.rs"
 load_bearing = [
   { flag = "--message-format=json", why = "lint-gate consumes the stream. A hand-rolled string scan mis-read diagnostics whose children precede the top-level `level` field, which is every clippy lint with a help child" },
 ]
@@ -2143,7 +2143,7 @@ doc = ".github/workflows/ci.yml (why the `dst` job is shelved: `dst` resolves in
 id = "cli-contract-live-verify"
 kind = "check"
 claim = "invariant"
-command = "sovereign/scripts/cli-contract-live-verify.sh"
+command = "svrn/scripts/cli-contract-live-verify.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
@@ -2151,20 +2151,20 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/TESTING_SURFACE.md"
+doc = "svrn/docs/TESTING_SURFACE.md"
 
 [[instrument]]
 id = "cli-journey-sandbox"
 kind = "suite"
 claim = "invariant"
-command = "sovereign/scripts/cli-journey-sandbox.sh"
+command = "svrn/scripts/cli-journey-sandbox.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "cli-journey-selftest"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/TESTING_SURFACE.md"
+doc = "svrn/docs/TESTING_SURFACE.md"
 load_bearing = [
   { flag = "an isolated HOME + a non-default daemon port", why = "the only way a MUTATING journey tier may run: its steps install/remove corpora and join/leave meshes, so on the operator's real root it would eat live state" },
 ]
@@ -2259,11 +2259,11 @@ preconditions = [
   "binary:sovereign-cli-llm",
   "binary:svrn-ingest",
 ]
-baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/chat-ask" }
-bank = "sovereign/bench/quality-check/chat-ask.toml"
+baseline = { kind = "fingerprint", path = "bench/lanes/quality-check/baselines/chat-ask" }
+bank = "bench/lanes/quality-check/chat-ask.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
+doc = "svrn/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
 
 # EVERY row of this lane is wall-clock (TTFT, decode tok/s), and this host
 # moves 2.8x under load — 50.7 tok/s at load 3.7 against 17.8 at load 32 (note
@@ -2288,8 +2288,8 @@ preconditions = [
   "slot-decodes:fast",
   "binary:python3",
 ]
-baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/throughput" }
-bank = "sovereign/bench/quality-check/throughput.toml"
+baseline = { kind = "fingerprint", path = "bench/lanes/quality-check/baselines/throughput" }
+bank = "bench/lanes/quality-check/throughput.toml"
 negative_control = "none"
 runs_in = ["check"]
 doc = "scripts/throughput_probe.py (the probe this lane wraps and finally compares)"
@@ -2303,7 +2303,7 @@ doc = "scripts/throughput_probe.py (the probe this lane wraps and finally compar
 # the verb UNCHANGED and reads the report it writes.
 #
 # `{report}` is the file the wrapper tells the verb to write; `{ids:<subset>}`
-# expands to the ids `sovereign/bench/smoke.toml` declares, each repeated after
+# expands to the ids `bench/lanes/smoke.toml` declares, each repeated after
 # the flag before it, so a curated list never lives in two files.
 #
 # HARD ON CATASTROPHE ONLY. At six probes and ten questions a one-item flip is
@@ -2322,7 +2322,7 @@ command = "svrn quality lane bench --id routing"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "routing", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--routing-only",
   "--filter", "routing/cells_v1",
   "--smoke-subset", "routing-v1",
@@ -2335,10 +2335,10 @@ fidelity = "F3"
 verdict = "judgement-line"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
-bank = "sovereign/bench/routing/cells_v1.toml"
+bank = "bench/lanes/routing/cells_v1.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 
 # Two commands, because no single `--filter` selects sep AND wikipedia and
 # inventing a filter language to make it one would be a worse trade than
@@ -2351,14 +2351,14 @@ command = "svrn quality lane bench --id retrieval-prod"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "retrieval-prod", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--filter", "sep/questions",
   "--prod-pipeline", "--isolate",
   "--smoke-subset", "retrieval-prod-v1",
   "--report", "{report}",
   "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--filter", "wikipedia/questions",
   "--prod-pipeline", "--isolate",
   "--smoke-subset", "retrieval-prod-v1",
@@ -2376,10 +2376,10 @@ preconditions = [
   "corpus-installed:wikipedia",
 ]
 baseline = { kind = "none" }
-bank = "sovereign/bench/sep/questions.toml"
+bank = "bench/lanes/sep/questions.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/sep/README.md"
+doc = "bench/lanes/sep/README.md"
 
 # In-process: this one reads the corpus's own atoms.json and runs no model,
 # which is why a full golden costs 30 s rather than minutes.
@@ -2391,7 +2391,7 @@ command = "svrn quality lane bench --id enrichment-f1"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "enrichment-f1", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--filter", "literary/bk-book-1",
   "--smoke-subset", "enrichment-f1-v1",
   "--report", "{report}",
@@ -2403,10 +2403,10 @@ fidelity = "F2"
 verdict = "judgement-line"
 preconditions = ["corpus-installed:brothers-karamazov-book-1"]
 baseline = { kind = "none" }
-bank = "sovereign/bench/literary/bk-book-1.toml"
+bank = "bench/lanes/literary/bk-book-1.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/literary/README.md"
+doc = "bench/lanes/literary/README.md"
 
 [[instrument]]
 id = "chaos-monkey"
@@ -2416,8 +2416,8 @@ command = "svrn quality lane bench --id chaos-monkey"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "chaos-monkey", "--reader", "chaos-monkey", "--",
   "svrn", "bench", "chaos-monkey", "run",
-  "--bank", "sovereign/bench/chaos_monkey/secret_agent.toml",
-  "--manifest", "sovereign/bench/chaos_monkey/manifest.toml",
+  "--bank", "bench/lanes/chaos_monkey/secret_agent.toml",
+  "--manifest", "bench/lanes/chaos_monkey/manifest.toml",
   "--corpus", "chaos-secret-agent",
   "--smoke-subset", "chaos-monkey-v2",
   "--out", "{report}",
@@ -2433,10 +2433,10 @@ preconditions = [
   "corpus-installed:chaos-secret-agent",
 ]
 baseline = { kind = "none" }
-bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
+bank = "bench/lanes/chaos_monkey/secret_agent.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/chaos_monkey/README.md"
+doc = "bench/lanes/chaos_monkey/README.md"
 
 # The one lane of the six that ALREADY selected by id (`--fixture <slug>`,
 # repeatable), so it gets no new flag — `{ids:…}` expands the declared slugs
@@ -2460,7 +2460,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/knowledge-gym/RUNBOOK.md"
+doc = "bench/lanes/knowledge-gym/RUNBOOK.md"
 
 [[instrument]]
 id = "synth"
@@ -2470,7 +2470,7 @@ command = "svrn quality lane bench --id synth"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "synth", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--synth",
   "--filter", "sep/questions",
   "--smoke-subset", "synth-v2",
@@ -2487,10 +2487,10 @@ preconditions = [
   "corpus-installed:sep",
 ]
 baseline = { kind = "none" }
-bank = "sovereign/bench/sep/questions.toml"
+bank = "bench/lanes/sep/questions.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/sep/README.md"
+doc = "bench/lanes/sep/README.md"
 
 
 # ── [[trigger]] — how each VENUE runs its selection ──────────────────
@@ -2763,7 +2763,7 @@ negative_control = "none"
 # instrument, and an in-run control is neither — it is not separately
 # addressable. Naming nothing is the accurate answer to the field as posed.
 runs_in = ["by-hand"]
-doc = "commonwealth/BOUNDARY.md"
+doc = "cmnwlth/BOUNDARY.md"
 # Verifies the four things `cargo tree` cannot see: whether the copied closure
 # resolves, whether a hand-spelled `path = "../.."` survives flattening, whether
 # it builds with none of this workspace's `.cargo/config.toml` / `clippy.toml` /
@@ -2790,7 +2790,7 @@ fidelity = "F4"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "commonwealth/BOUNDARY.md"
+doc = "cmnwlth/BOUNDARY.md"
 # The same closure property for the package's first BINARY, plus the half no
 # manifest gate reaches: that the lifted `cw-rails` JOINS a real mesh by invite,
 # converges a roster carrying another member, lists one offering a library, is

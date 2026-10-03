@@ -2,7 +2,7 @@
 
 > **Naming, 2026-09-20.** This document called its two traits by a `…Rail` name until
 > today. "Rail" now names ONE thing in this repo: the signed, per-actor log under
-> `commonwealth/crates/commonwealth-rail*` that ring apps, the work plane, KV and the work
+> `cmnwlth/crates/commonwealth-rail*` that ring apps, the work plane, KV and the work
 > atlas ride. What is sketched here is a ROUTER — it picks an endpoint and forwards a call —
 > so the traits read `CallRouter` and `JobRouter`. Nothing in code carried the old names
 > (a grep over `*.rs` read 0), so this is the whole rename.
@@ -11,7 +11,7 @@
 > **SUPERSEDED as a design, 2026-09-09 (cw-lift 5a). Kept as the ontology.**
 >
 > The live design for the work plane is
-> [`sovereign/deploy/mesh/WORK_PLANE.md`](../sovereign/deploy/mesh/WORK_PLANE.md).
+> [`cmnwlth/deploy/mesh/WORK_PLANE.md`](../cmnwlth/deploy/mesh/WORK_PLANE.md).
 > This document's ontology survives that rewrite — the nouns below map one-to-one
 > onto it — but its *mechanism* does not: `JobRouter` here is a trait over an HTTP
 > submit/lease/heartbeat/complete cycle, and the work plane now rides the ring
@@ -62,16 +62,16 @@ capabilities and interact through three shapes — calls, jobs, and sessions.**
 
 | Noun | Contract | Existing instance |
 |---|---|---|
-| **Ring** | A founded trust group: join key (BLAKE3, shared out of band) + Ed25519 proof-of-possession; membership converges by gossip; social trust, not cryptographic attestation. | `sovereign/crates/sovereign-mesh/src/join.rs`, `src/gossip.rs`, `commonwealth/crates/commonwealth-discovery/` |
+| **Ring** | A founded trust group: join key (BLAKE3, shared out of band) + Ed25519 proof-of-possession; membership converges by gossip; social trust, not cryptographic attestation. | `sovereign/crates/sovereign-mesh/src/join.rs`, `src/gossip.rs`, `cmnwlth/crates/commonwealth-discovery/` |
 | **Member** | A node in the ring. Durable (a machine you own) or **ephemeral** (a rented machine with a TTL and a Provider that minted it). Ephemeral members bootstrap with seed-derived keys and a cert thumbprint known to the owner *before* boot — no TOFU window. | `sovereign-contracts/src/worker_pod.rs` (`BootstrapBlob`; the shared contract leaf since domains REVIEW-build-serving-worker-port), `sovereign-pods/src/worker_controller.rs` (`WorkerProvider`) |
-| **Grant** | TTL'd, allowlisted authorization for a member to participate in a named scope. Dual-enforced (at enrollment and at lease), dual-teardown, never a standing share. | `commonwealth/crates/commonwealth-knowledge/src/ingest_grant.rs` (`EphemeralGrantStore`, corpus-typed today) |
+| **Grant** | TTL'd, allowlisted authorization for a member to participate in a named scope. Dual-enforced (at enrollment and at lease), dual-teardown, never a standing share. | `cmnwlth/crates/commonwealth-knowledge/src/ingest_grant.rs` (`EphemeralGrantStore`, corpus-typed today) |
 
 ### Capability plane
 
 | Noun | Contract | Existing instance |
 |---|---|---|
 | **Claim** | What a member advertises it can do: a typed capability descriptor plus live load/health observations. Additive; absence of a claim is a veto, never a default. | OICP manifests (`/oicp/v1/capabilities`), hardcoded to inference vocabulary |
-| **Selector** | Scored choice among claimants for a given need, with a glassbox decision log. Local wins ties; fallback to local on any error. | `oicp-types/src/scoring.rs` + `sovereign-mesh/src/peer_inference.rs` (`MeshInferenceProvider`), keyed on `InferenceRequirements` |
+| **Selector** | Scored choice among claimants for a given need, with a glassbox decision log. Local wins ties; fallback to local on any error. | `shared/crates/oicp-types/src/scoring.rs` + `sovereign-mesh/src/peer_inference.rs` (`MeshInferenceProvider`), keyed on `InferenceRequirements` |
 
 ### Work plane — three interaction shapes, not one
 
@@ -280,7 +280,7 @@ The separation is structural, not aspirational:
 | 4 | UC5 (test sharding) or a UC7-class demo as the LLM-free consumer | — (proof, not product) |
 
 Physical layout: crates under `cmnwlth/` (this directory), separable into an
-independent repo later. `commonwealth/crates/{transport,discovery,state}` are
+independent repo later. `cmnwlth/crates/{transport,discovery,state}` are
 not physically moved until the Phase 3 API settles — boundary-by-layer-map
 first, `git mv` as a mechanical final step.
 

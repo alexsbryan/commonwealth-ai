@@ -1,0 +1,21 @@
+# Bench data artifacts — regenerable from scripts in the same dir, too
+# large or session-specific to source-control. Scaffolding (README.md,
+# input .toml fixtures, run scripts) stays tracked; the campaign-level
+# findings are consolidated into HISTORY.md here. Only raw produced
+# data is ignored.
+atlas_retrieval/chunks-*.jsonl
+atlas_retrieval/bench-results-*.json
+atlas_retrieval/bench-report-*.md
+atlas_retrieval/brief-quality-*
+atlas_retrieval/regression-*.jsonl
+atlas_retrieval/regression-*.md
+atlas_retrieval/embedding-comparison.md
+atlas_retrieval/golden-gt-*.jsonl
+atlas_throughput/run-*.json
+atlas_throughput/run-*.log
+sep_atlas/logs/
+sep_eval/
+voice/baseline/*.json
+voice/baseline/*.txt
+voice/baseline/*.md
+voice/baseline/diff-*.txt

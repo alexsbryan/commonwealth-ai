@@ -1,0 +1,170 @@
+[package]
+name = "sovereign-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The assembled-host process (docs/internal/FIVE_PROGRAMS.md §11 step 10) — the
+# run path the `svrn daemon` verb `exec`s into, and the process
+# launchd/systemd units point at. `treesitter` because `daemon_cmd`
+# mounts `bootstrap` and `tool_registry`, both gated on the feature the
+# daemon binary enables unconditionally (see lib.rs).
+[[bin]]
+name = "sovereign-daemon"
+path = "src/bin/sovereign-daemon.rs"
+required-features = ["treesitter"]
+
+[dependencies]
+# cw-rails is the node's one mesh endpoint (pb-mesh-exit-transport): svrn links
+# no commonwealth-core, -discovery, -media or -transport, and reaches the mesh
+# through the ports its distribution composes (`hosted_mesh`).
+# Join-key hash + format check (fp-9): the pure leaf, not the bootstrap crate.
+mesh-join-vocab = { workspace = true }
+mesh-reach = { workspace = true, features = ["fanout"] }
+# The rail's VOCABULARY only (fp-54): the journals live at the serving
+# process, so the daemon names the shared leaf's types (Op, Roster,
+# Admission, RailAct) and dials `/v1/rail/*` through the port
+# (`rails_client::RailsRingRail`) — no journal crate.
+commonwealth-rail-core = { workspace = true }
+# The daemon-to-daemon wire bodies the ring-sync route receives and the loops
+# send; a leaf both may name (domains dm-daemon-api-edge (a)).
+sovereign-peer-wire = { workspace = true }
+sovereign-contracts = { workspace = true }
+# The data-root lock (`daemon_cmd/boot.rs`).
+host-kit = { workspace = true, features = ["shell", "http", "task", "jobs", "panic_hook", "memory"] }
+kernel-types = { workspace = true }
+oicp-types = { workspace = true }
+# The HTTP client to serve and to a terminal's entry node
+# (`SplitInferenceProvider`, a package leaf; pb-serve-distributes repointed it
+# from `sovereign_inference::remote`, which re-exported this crate).
+oicp-client = { workspace = true }
+sovereign-core = { workspace = true }
+sovereign-time = { workspace = true }
+# The bearer-token compare (client_auth.rs, client_tokens.rs). Already in the
+# lock through the TLS stack; named here so svrn does not reach into
+# commonwealth-core for a security primitive (pb-mesh-exit-core).
+subtle = "2.6"
+sovereign-tools = { workspace = true }
+sovereign-meshapp = { workspace = true }
+sovereign-store = { workspace = true }
+# The host cluster's own deps, arriving with sovereign-api's modules at
+# domains `dm-daemon-api-edge` (2026-09-18): the admission policy, the grant
+# store, the HTTP body seam, the canonical-sync
+# codec and the small leaves the edge reads.
+serving-policy-core = { workspace = true }
+sovereign-grants = { workspace = true }
+# No corpus-engine (pb-ingest-dial-daemon): ingest's engine is composed by a
+# distribution (`process::HostedIngest`) and reached through its ports.
+corpus-engine-scip = { workspace = true }
+# Ingest's ports and the leaf reader, spelled at their owner.
+corpus-index = { workspace = true }
+corpus-engine-atlas-reader = { workspace = true }
+corpus-engine-yield = { workspace = true }
+understanding-vocab = { workspace = true }
+oplog = { workspace = true }
+http-body = "1"
+arc-swap = { workspace = true }
+sha2 = { workspace = true }
+tar = "0.4"
+zstd = "0.13"
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
+dirs = "5"
+# The composition half of `sovereign-cli-daemon`'s `daemon_cmd` (domains
+# `dm-daemon-cli-composition`, DAEMON_CORE.md §4.1 row 4) reaches these
+# directly now: the watched-folder workflow runtime (`sovereign-workflow`,
+# `sovereign-workflow-host`). All at `runtime`/`knowledge`, below this
+# crate's `mesh-api`. The solve surface (`sovereign-tdd`) is code's since
+# pb-meshapp-solve.
+sovereign-workflow = { workspace = true }
+sovereign-workflow-host = { workspace = true }
+# The run path (`daemon_cmd`) commissions the ONE Runtime through the
+# shared recipe — the same one `svrn chat` uses, so the daemon cannot
+# acquire a private dialect of the retrieval stack — and names the
+# loopback knowledge source through the turn client. Neither depends on
+# this crate (leaf/tier below `mesh-api`), so the edges stay acyclic.
+sovereign-runtime-recipe = { workspace = true }
+sovereign-turn-client = { workspace = true }
+
+async-trait = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true, features = ["timeout"] }
+thiserror = { workspace = true }
+toml = { workspace = true }
+# fp-70's one-time media migration removes `[iroh] media_viewer_user` from a
+# person's config.toml in place, comments kept.
+toml_edit = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+# The bin's subscriber bootstrap (`init_tracing` twin) — the daemon
+# verb's filter allowlist, EnvFilter-driven.
+tracing-subscriber = { workspace = true }
+hex = "0.4"
+getrandom = "0.3"
+# The canonical pull's temp-dir suffix (moved from sovereign-mesh with it).
+rand = "0.9"
+sysinfo = "0.35"
+hostname = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+if-addrs = "0.13"
+chrono = { workspace = true }
+tempfile = "3"
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+# `listener_watch`'s self-SIGTERM on a lost client listener (moved here with
+# the composition half at domains `dm-daemon-cli-composition`).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+default = []
+# Gates `bootstrap` and `tool_registry`, and forwards to the crates whose
+# tree-sitter surfaces they reach. (It enabled `project_http`, the SCIP-graph
+# route shell, until that left with the code program at pb-code-daemon-exit.)
+treesitter = [
+    "sovereign-tools/treesitter",
+]
+# The headless OCR installer. The cfg gate moved here with the composition
+# half (domains `dm-daemon-cli-composition`); the binary's features forward
+# to these.
+ocr = ["sovereign-tools/paddle-ocr"]
+# `double`: roster members, a solo mesh, the bound router and a recording
+# ledger, for the tests of a root that drives a daemon route
+# (pb-serve-ranks-tests-stock). Off in every product build.
+test-doubles = []
+
+[dev-dependencies]
+# `code_server_via_mcp_client` builds a real `ScipGraph`.
+arc-swap = { workspace = true }
+corpus-engine-scip = { workspace = true }
+# The route tests drive routers with `tower::ServiceExt`.
+tower = { workspace = true, features = ["util"] }
+# The host cluster's own integration tests, moved from sovereign-api at
+# domains `dm-daemon-api-edge`: `rail_e2e` installs a real ring signer and
+# the loopback-vs-remote split drives the router with `tower::oneshot`.
+ed25519-dalek = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }
+http-body-util = "0.1"
+# `client_tokens_e2e` captures the admit line to prove it names the LABEL and
+# not the token (bar `tg-token-revoked-alone`, clause c).
+tracing-subscriber = { workspace = true }
+# Moved with turn_surface.rs from sovereign-mesh's test tree.
+tokio-tungstenite = "0.29"
+# The tests that only slot a corpus handle hold `IngestPortDouble`
+# (pb-ingest-dial-daemon-tests-slot).
+corpus-index = { workspace = true, features = ["test-doubles"] }
+# ...and hold `TestProvider` from the contracts leaf (pb-serve-ranks-tests-helpers).
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
+# ...and hold `AtlasPortDouble` as ingest's atlas port beside it
+# (pb-ingest-dial-daemon).
+corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
+# ...and this crate's own `double`, which `tests/main/common` re-exports.
+sovereign-daemon = { path = ".", features = ["test-doubles"] }
+
+[lints]
+workspace = true

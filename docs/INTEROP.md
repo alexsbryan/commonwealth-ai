@@ -139,7 +139,7 @@ this route will serve. `[models.fim]` is still accepted as a deprecated
 alias for the config key.
 
 **`POST /v1/edit_predictions` is Sovereign-native, not an OpenAI
-shape.** The next-edit lanes (`sovereign/docs/NEXT_EDIT.md`):
+shape.** The next-edit lanes (`svrn/docs/NEXT_EDIT.md`):
 send recent edit units + the document, get back a queue of
 `{start, end, new_text}` replacements — offsets in UTF-16 code
 units. An empty `edits` array is a healthy 200, not an error, and
@@ -296,7 +296,7 @@ rather than an empty ranking.
 ## 7. Inline completion in your editor
 
 `svrn setup --fim` configures the edit slot (writing `[models.edit]`),
-and `packages/vscode-sovereign` is the extension for VS Code, Cursor,
+and `clients/vscode` is the extension for VS Code, Cursor,
 and Windsurf. JetBrains is deferred. Under the hood it is `POST
 /v1/completions` (§1) — any editor plugin that can be pointed at an
 OpenAI-compatible FIM endpoint will work, whether or not we ship a
@@ -304,9 +304,9 @@ plugin for it.
 
 Next-edit suggestions ride the *other* lane on that same slot and have
 no coder-model requirement at all: see
-[../sovereign/docs/NEXT_EDIT.md](../sovereign/docs/NEXT_EDIT.md) §2a.
+[svrn/docs/NEXT_EDIT.md](../svrn/docs/NEXT_EDIT.md) §2a.
 
-Design notes and measured latency: [../sovereign/docs/INLINE_COMPLETION.md](../sovereign/docs/INLINE_COMPLETION.md).
+Design notes and measured latency: [svrn/docs/INLINE_COMPLETION.md](../svrn/docs/INLINE_COMPLETION.md).
 
 ## 8. Scripting from the shell
 

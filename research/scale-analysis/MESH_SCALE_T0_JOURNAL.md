@@ -11,7 +11,7 @@ the end (and once mid-branch if the diff grows risky).
 
 ## Item 2 — jitter the constant shed `retry_after_secs: 2`  ✅ LANDED
 
-**Site.** `commonwealth/crates/commonwealth-api/src/state.rs:2086` (`admit_peer_request`,
+**Site.** `cmnwlth/crates/commonwealth-api/src/state.rs:2086` (`admit_peer_request`,
 the `CeilingExceeded` arm). Verified by grep before editing — the doc's cited `:2082` had
 drifted by 4 lines.
 
@@ -42,7 +42,7 @@ Run with the pre-fix constant restored (`retry_after_secs: 2`):
 
 ```
 thread 'admission::tests::ceiling_shed_retry_after_is_jittered' panicked at
-  commonwealth/crates/commonwealth-api/src/admission.rs:449:9:
+  cmnwlth/crates/commonwealth-api/src/admission.rs:449:9:
   a shed hint with no spread is a synchronized-retry generator; got {2}
 pass: 1  fail: 1   cargo exit: 100
 ```
@@ -57,7 +57,7 @@ nothing to declare in `quality/env-flags.toml`.
 ## Item 6 — spawn `RetentionGc` in the sovereign daemon  ✅ LANDED (with one named change of shape)
 
 **Sites.** `grep -rn RetentionGc` confirmed the order's claim: the only construction was
-`commonwealth/crates/commonwealth-daemon/src/main.rs:789`. The sovereign daemon's
+`cmnwlth/crates/commonwealth-daemon/src/main.rs:789`. The sovereign daemon's
 `MeshStore` is built in `sovereign/crates/sovereign-mesh/src/daemon.rs:2300` and handed to
 `AppState`, so the spawn belongs there — next to the `StorageSnapshot` loop, which already
 carries the shutdown-channel pattern this reuses. (The order's Scope named
@@ -92,7 +92,7 @@ call removed — i.e. exactly what a verbatim copy of the prior art would have s
 
 ```
 thread 'gc::tests::scoped_gc_bounds_the_ledger_without_touching_other_apps' panicked at
-  commonwealth/crates/commonwealth-state/src/gc.rs:137:9:
+  cmnwlth/crates/commonwealth-state/src/gc.rs:137:9:
   assertion `left == right` failed: only the out-of-window ledger event is dead
 pass: 1  fail: 1   cargo exit: 100
 ```
@@ -133,14 +133,14 @@ hourly all-corpora scan is a textbook LRU-flusher.
 `index_cache_len()` is the new observability surface for "how many handles are resident",
 and is what the test asserts on.
 
-**Red-first evidence.** `corpus-engine/tests/index_cache_residency.rs`. Two tiny real
+**Red-first evidence.** `ingest/crates/corpus-engine/tests/index_cache_residency.rs`. Two tiny real
 LanceDB corpora are ingested with a mock 8-dim embedder, then a sweep tick is simulated
 over all of them. Run with `open_index_transient` wired to `CacheOnOpen::Yes` — i.e.
 byte-for-byte what the pre-fix sweep did:
 
 ```
 thread 'a_full_sweep_admits_no_handles_to_the_query_cache' panicked at
-  corpus-engine/tests/index_cache_residency.rs:140:5:
+  ingest/crates/corpus-engine/tests/index_cache_residency.rs:140:5:
   assertion `left == right` failed: a background sweep may read through the query
     cache but must never populate it
     left: 3   right: 0
@@ -271,7 +271,7 @@ effectively unbounded (the pre-fix shape, same code path, no reachable cap):
 
 ```
 thread '…::a_full_coalescer_sheds_instead_of_growing' panicked at
-  sovereign/crates/sovereign-inference/src/embedded/engine.rs:4107:14:
+  serve/crates/sovereign-inference/src/embedded/engine.rs:4107:14:
   a queue at its bound must shed, not grow: Receiver { … }
 pass: 0  fail: 1   cargo exit: 100
 ```
@@ -331,7 +331,7 @@ suffered. Run with `blocking_send` restored:
 
 ```
 thread '…::a_consumer_that_stops_reading_frees_the_slot_within_the_deadline' panicked at
-  sovereign/crates/sovereign-inference/src/embedded/model_slot.rs:5381:14:
+  serve/crates/sovereign-inference/src/embedded/model_slot.rs:5381:14:
   the send never returned — a half-open consumer is pinning the slot indefinitely, and
   the wall-clock deadline cannot fire because the generation loop is parked inside the
   send: Timeout

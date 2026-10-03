@@ -434,7 +434,7 @@ already declare invariants that no longer hold, and none of them knew.
 1. **Every falsifier becomes a test or an `xtask` gate.** A falsifier that is
    not executable marks its row a target.
 2. **`cargo xtask target-arch` joins the `quality` gate list.** It exists
-   (`corpus-engine/xtask/src/target_arch.rs`, `STALE = 1`) and is absent from
+   (`quality/xtask/src/target_arch.rs`, `STALE = 1`) and is absent from
    `quality_cmd.rs`'s gate table — which is precisely how §5's profiles reached
    zero adoption unnoticed.
 3. **The differential is the human-facing proof.** `svrn topology states`
@@ -455,9 +455,9 @@ Required, or the contradiction stands (ARCH §1.1):
 - `TARGET_ARCHITECTURE.md §5` profiles are unimplemented. Mark `target`; they
   currently read as description. **They are also the correct design** — §3 of
   this document is their implementation plan, not a replacement.
-- `corpus-engine/DECOMPOSITION.md` steps 5–8 never shipped, which is why 73.8k
+- `ingest/crates/corpus-engine/DECOMPOSITION.md` steps 5–8 never shipped, which is why 73.8k
   lines of `enrichment/` remain inside `corpus-engine`. Record the stall.
-- `corpus-engine-notes/src/notes.rs` was flagged in that plan at 2,781 lines.
+- `code/crates/corpus-engine-notes/src/notes.rs` was flagged in that plan at 2,781 lines.
   It is now 7,794 — a store, a vector index and a replication log in one file.
 - `SOVEREIGN_ENRICH_SKIP_INDEX` must be registered in `quality/env-flags.toml`
   regardless of what else happens, since it currently gates index corruption.
@@ -545,7 +545,7 @@ Phase 4 has two halves and they are ordered: **4a** kills the enrichment reach-t
 
 ### Phase 9, designed (2026-08-26)
 
-**The finding that sizes this phase: every type it needs is already minted, with the right doors.** `Evidence` has private fields, a `pub(crate)` constructor and deliberately no `Deserialize` (`corpus-engine/src/index/evidence.rs`). `Draft::release` cannot produce an `Answer` without `&[Judgement]`, and `kernel-types/tests/ui/answer_without_a_judgement.rs` is a compile-fail test proving it. `Citation` points into a sealed `EvidenceSet`. What is missing is **adoption** — which is exactly §6's point that `home = minted` is worth nothing while nine other doors are open. So Phase 9 is a door-closing program, and its unit of done is §6's `adopted` column reaching zero, not a new design.
+**The finding that sizes this phase: every type it needs is already minted, with the right doors.** `Evidence` has private fields, a `pub(crate)` constructor and deliberately no `Deserialize` (`ingest/crates/corpus-engine/src/index/evidence.rs`). `Draft::release` cannot produce an `Answer` without `&[Judgement]`, and `shared/crates/kernel-types/tests/ui/answer_without_a_judgement.rs` is a compile-fail test proving it. `Citation` points into a sealed `EvidenceSet`. What is missing is **adoption** — which is exactly §6's point that `home = minted` is worth nothing while nine other doors are open. So Phase 9 is a door-closing program, and its unit of done is §6's `adopted` column reaching zero, not a new design.
 
 Three rungs, ordered **9.2 -> 9.1 -> 9.3** and re-measured 2026-08-26 before starting. An earlier revision of this paragraph ordered them 9.3 -> 9.1 -> 9.2 on two claims that do not survive measurement, and both are recorded because a stated reason that is wrong is worse than none (§11.1). **(1) 9.3 is not the small one.** It reads that way because `EnrichProgressFn` already exists on both sides of the seam — but the in-process entry point (`enrich_cmd/build.rs:128 build_with_progress`) is 1,373 lines pulling twelve sibling modules out of a 34,122-line `enrich_cmd`, and making it reachable from the desktop means moving that subtree below `sovereign-tools`. That is a crate migration, so it goes last. **(2) 9.1 does not gate 9.2.** The claim was that re-typing the gate over `ScoredChunk` inputs means doing it twice; 9.2 changes the gate's OUTPUT type, and the one exit that already releases builds its `Draft` from `kernel_types::Citation` values (`grounding/mod.rs:1506`), not from the pool. They are independent, and 9.2 is the cheapest rung that forces a real invariant.
 
@@ -593,7 +593,7 @@ The seven are now named, and naming them is the finding. `atlas_context_entity`,
 
 **Falsifier:** `sovereign-core/tests/chunk_provenance_census.rs`, watched to fail — the manufacturers (seven, now six) are a ratchet that may shrink and not grow, and no crate outside corpus-engine may stamp an acquisition. **It grew the other half of the ledger 2026-08-26:** a `DOORS` list, because `Acquisition::stamped` being `pub(crate)` stops sovereign inventing a custody but does nothing about a door added INSIDE corpus-engine, and a door taking a `custody` argument is that public constructor wearing a door's name. Both new checks were watched to fail on real inputs — an undeclared `acquired_from_nowhere`, and the old needle list, which cannot see `manufactured_summary(` (the char after `manufactured` is `_`, not `(`) and reported a live producer as GONE. It caught two of its own instrument defects on the way in (a scan that missed a rustfmt line break and reported a live producer as gone, and a check that failed on its own source text). **Also to extend:** `evidence_pool_census.rs` — with `search` crate-private, `Evidence`'s `pub(crate)` constructor already holds the invariant, so the census only has to assert no caller outside corpus-engine. **Deletes:** `CorpusIndex::search` from the public API; `ScoredChunk`'s mutability from sovereign.
 
-**9.2 — an `Answer` cannot exist without a `Judgement` (hazard 2). LANDED 2026-08-26.** Canonical: `Draft::release(Attribution, &[Judgement]) -> Answer` (`kernel-types/src/answer.rs:310`), with `release_ungated` for the disarmed-gate case, which must name its reason. The door beside it is `GateOutcome { text: String }` — **16 construction sites in `grounding/mod.rs`**, exactly one of which releases (`:1645`), and that one flattens the `Answer` straight back to `String` at `:1665`. (The hazard table's "~15 gate exits" was close; a first count here said 21 by including the struct definition and the four `-> GateOutcome` signatures. `router_calibration::GateOutcome` shares the NAME and is a different type — router axis-gate counts — so it is not part of this rung, though one noun spelled two ways in one crate is its own §10.6 smell.)
+**9.2 — an `Answer` cannot exist without a `Judgement` (hazard 2). LANDED 2026-08-26.** Canonical: `Draft::release(Attribution, &[Judgement]) -> Answer` (`shared/crates/kernel-types/src/answer.rs:310`), with `release_ungated` for the disarmed-gate case, which must name its reason. The door beside it is `GateOutcome { text: String }` — **16 construction sites in `grounding/mod.rs`**, exactly one of which releases (`:1645`), and that one flattens the `Answer` straight back to `String` at `:1665`. (The hazard table's "~15 gate exits" was close; a first count here said 21 by including the struct definition and the four `-> GateOutcome` signatures. `router_calibration::GateOutcome` shares the NAME and is a different type — router axis-gate counts — so it is not part of this rung, though one noun spelled two ways in one crate is its own §10.6 smell.)
 
 The whole rung is one type change: `GateOutcome.text: String` becomes `GateOutcome.answer: Answer`. It is forcing rather than plumbing — each of the 16 exits must then name a `Judgement`, and the exits that cannot are precisely the ones releasing text nobody judged. Expect `CouldNotJudge` and `NeverRan` among them; both are honest and both already exist on `Verdict` (§18.1), so no new type is minted. **State made unrepresentable:** a released answer with no verdict attached.
 
@@ -603,7 +603,7 @@ Two exits turn out to have been releasing text under a passed answer's shape tha
 
 **One decider, including the site that was already right.** The exit at `:1645` was the one correct release before this rung, and leaving it alone would have made "one decider" mean "one decider plus the original" — so it goes through `release_held` like every other exit. The census below caught exactly that: its first run failed on the `Draft::composed` still standing at `:1822`.
 
-**Falsifier:** `sovereign-core/tests/gate_release_census.rs`, watched to fail — the four named doors are the only places a gate answer is minted, `GateOutcome` carries an `Answer` and not a `String`, and every `GateReach` has an arm in the dispatch. `kernel-types/tests/ui/answer_without_a_judgement.rs` already held the type half.
+**Falsifier:** `sovereign-core/tests/gate_release_census.rs`, watched to fail — the four named doors are the only places a gate answer is minted, `GateOutcome` carries an `Answer` and not a `String`, and every `GateReach` has an arm in the dispatch. `shared/crates/kernel-types/tests/ui/answer_without_a_judgement.rs` already held the type half.
 
 **Deletes:** `GateOutcome::text`; the prefix-matching derivation of the gate verdict from the action string.
 

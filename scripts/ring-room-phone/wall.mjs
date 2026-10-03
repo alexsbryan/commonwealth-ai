@@ -25,7 +25,7 @@ import { appendFileSync } from "node:fs";
 
 const { PA, REPO, OUT, KIND = "doc", APP_DIR = "", POLL_MS = "250", WATCH_S = "600" } = process.env;
 
-const A = KIND === "doc" ? await import(`file://${REPO}/sovereign/apps/ring-doc/adapter.js`) : null;
+const A = KIND === "doc" ? await import(`file://${REPO}/cmnwlth/apps/ring-doc/adapter.js`) : null;
 const E = KIND === "expenses" ? await import(`file://${APP_DIR}/expenses.js`) : null;
 const fold = (log, reducer, init) => {
   let acc = init;

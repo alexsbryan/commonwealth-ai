@@ -63,10 +63,10 @@ that upstream PR #24292 fixed on 2026-09-16.
 
 ## 1. The decision, precisely
 
-In scope: replace the in-process engine (`sovereign/crates/sovereign-inference/src/embedded/`
+In scope: replace the in-process engine (`serve/crates/sovereign-inference/src/embedded/`
 and `vendor/llama-cpp-4`, `vendor/llama-cpp-sys-4`) with a `llama-server`
 process per node that the daemon supervises, reached through the existing
-`[engine] kind="remote"` seam (`RemoteApiProvider`, `oicp-client/src/lib.rs`).
+`[engine] kind="remote"` seam (`RemoteApiProvider`, `shared/crates/oicp-client/src/lib.rs`).
 
 Out of scope: the daemon, the OpenAI-compatible gateway on `:9741`, routing,
 the grounding gate, retrieval, the mesh. Those consume the engine; they are
@@ -135,7 +135,7 @@ Embedding parity against the running daemon, same `qwen-embedding-0.6b.gguf`
 (F16), three fixed strings: raw text into llama-server gives cosine
 0.989 / 0.989 / 0.989 (max abs diff up to 0.0197); text with the literal
 `<|endoftext|>` appended, as `EmbedQuirks::qwen3_embedding` does
-(`sovereign/crates/sovereign-contracts/src/embed_quirks.rs:89`), gives
+(`shared/crates/sovereign-contracts/src/embed_quirks.rs:89`), gives
 0.999999 / 1.0 / 1.0 (max abs diff ≤ 0.00012). Both sides L2-normalize. So
 stored vectors carry over **only if the client keeps our quirks**. Note
 500f1229 measured the same effect independently (0.9956 raw, 0.9998 with EOS).
@@ -167,7 +167,7 @@ primary model, under sustained load.
 
 ## 5. First finding: the remote seam is dishonest today
 
-`RemoteApiProvider::build_request` (`oicp-client/src/lib.rs`, around 589-848)
+`RemoteApiProvider::build_request` (`shared/crates/oicp-client/src/lib.rs`, around 589-848)
 decides what survives the trip. Standard fields go through (`max_tokens`,
 `temperature`, `response_format`, `chat_template_kwargs`, `tools`). Private
 fields are sent under names no third-party server reads (`lark_grammar` at
@@ -181,7 +181,7 @@ The consequences, from the review pass, with the first re-checked by the author:
   sends `{"type":"string","enum":["A","B"],"x_forced_choice":true}` as
   structured output. A remote server returns a sampled string, and
   `serde_json::from_str(resp.text.trim()).ok()?`
-  (`sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs:166-167`)
+  (`svrn/crates/sovereign-core/src/runtime/grounding/judge.rs:166-167`)
   returns `None` with no log line, so the gate releases the answer unverified.
   The call sites are the KnowledgeQuery gate, the deep-research audit and the
   evidence-sufficiency loop.
@@ -272,7 +272,7 @@ Strix Halo box (Vulkan) and on macOS (Metal). Bars, fixed before any data:
 | Embedding space | Cosine ≥ 0.999 against stored vectors, document and query side; mesh `EmbedModelInfo` identical to embedded peers | gating |
 | Stability | 24-hour soak on Strix Halo with concurrent and aborted streams: zero server hangs, zero aborts outside router children | gating |
 | Lifecycle | No orphaned sidecar after daemon SIGKILL on macOS, Linux and Windows; crash-to-serving time recorded | gating |
-| Decode and TTFT | Interleaved embedded/sidecar arms at matched host load, load recorded per reading | TRACKED only: this host's decode moves 2.8x across its load range, so wall-clock bars do not gate (`sovereign/bench/quality-check/throughput.toml` header, since 2026-09-08) |
+| Decode and TTFT | Interleaved embedded/sidecar arms at matched host load, load recorded per reading | TRACKED only: this host's decode moves 2.8x across its load range, so wall-clock bars do not gate (`bench/lanes/quality-check/throughput.toml` header, since 2026-09-08) |
 | Build and release | Cold CI and each release leg's wall time recorded before and after | TRACKED |
 
 Kill conditions: judge fidelity cannot meet its bar through probabilities alone;
@@ -282,7 +282,7 @@ a sampler hook.
 
 ### Phase 2: ship dark
 
-Sidecar engine behind config, default off, with a `sovereign/DEFAULTS_LEDGER.md`
+Sidecar engine behind config, default off, with a `docs/DEFAULTS_LEDGER.md`
 row naming the flip condition (Phase 1 bars green on both hosts) and a
 review-by date. Nightly lanes run both engines.
 

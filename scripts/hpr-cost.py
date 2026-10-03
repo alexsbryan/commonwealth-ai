@@ -131,11 +131,11 @@ REPO = Path(__file__).resolve().parent.parent
 # Do not add to this list — the denominator is the bar's floor (5 x 2 = 10) and a
 # sixth specimen would silently redefine it.
 SPECIMENS = (
-    "sovereign/crates/sovereign-cli-llm/src/router_fit_cmd.rs",
-    "sovereign/crates/sovereign-cli/src/main.rs",
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs",
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs",
-    "sovereign/crates/sovereign-cli/src/notes_retrieval_cmd.rs",
+    "svrn/crates/sovereign-cli-llm/src/router_fit_cmd.rs",
+    "svrn/crates/sovereign-cli/src/main.rs",
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs",
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/all.rs",
+    "svrn/crates/sovereign-cli/src/notes_retrieval_cmd.rs",
 )
 
 # PRE-REGISTERED GROUND TRUTH (§18.1 — the falsifier exists before the data).
@@ -144,9 +144,9 @@ SPECIMENS = (
 # every hand-rolled file". A counter that cannot reproduce 4 / 3 / 2 here is
 # guessing, not counting, and gate zero fails rather than shipping a number.
 FIXTURE_HEAD_COST = {
-    "sovereign/crates/sovereign-cli-llm/src/router_fit_cmd.rs": 4,
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs": 3,
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs": 2,
+    "svrn/crates/sovereign-cli-llm/src/router_fit_cmd.rs": 4,
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/all.rs": 3,
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs": 2,
 }
 DERIVED_COST = 1        # the converted form: a struct field, and nothing else
 

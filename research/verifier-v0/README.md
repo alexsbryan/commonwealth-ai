@@ -1,6 +1,6 @@
 # verifier-v0 — M0 execution workspace
 
-Working directory for `sovereign/docs/specs/VERIFIER_V0.md` (train a small
+Working directory for `svrn/docs/specs/VERIFIER_V0.md` (train a small
 Qwen3.5 grounding verifier; parent: `VERIFICATION_COMMONS.md` §4/step 8).
 This dir holds the M0/M1 pipeline scripts, run manifests, and findings.
 Heavy assets (models, datasets) live in the HF cache, never in the repo.

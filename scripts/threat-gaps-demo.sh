@@ -182,7 +182,7 @@ json.dump(d, sys.stdout)" \
 # the cargo lock, so it goes through the one wrapper that serialises on it.
 leg_docsgate() {
   # Beside $D, never in it: the bring-up empties $D.
-  ( cd "$REPO/corpus-engine" && "$REPO/scripts/with-cargo-lock.sh" cargo xtask docs-gate ) \
+  ( cd "$REPO" && "$REPO/scripts/with-cargo-lock.sh" cargo xtask docs-gate ) \
     > "$D-docs-gate.log" 2>&1
   echo $? > "$D-docs-gate.rc"
 }
@@ -251,7 +251,7 @@ if adm is not None:
 # whose `/internal/*` members are EXACTLY join and gossip, named by an
 # identifier some `#[test]` in the crate reads. Prose about exemptions does
 # not count — a set nothing enumerates cannot be the set a gate consults.
-daemon_src = os.path.join(REPO, "sovereign/crates/sovereign-daemon/src")
+daemon_src = os.path.join(REPO, "svrn/crates/sovereign-daemon/src")
 daemon_rs = []
 for root, _dirs, files in os.walk(daemon_src):
     daemon_rs += [os.path.relpath(os.path.join(root, f), REPO)
@@ -300,10 +300,10 @@ else:
 
 # ── tg-rpc-port-not-on-lan ──────────────────────────────────────────────────
 BAR = "tg-rpc-port-not-on-lan"
-bs = src("sovereign/crates/sovereign-daemon/src/bootstrap.rs") or ""
+bs = src("svrn/crates/sovereign-daemon/src/bootstrap.rs") or ""
 m = re.search(r'DEFAULT_RPC_BIND[^=]*=\s*"([^"]+)"', bs)
 default_bind = m.group(1) if m else None
-launch = src("sovereign/crates/sovereign-contracts/src/launch.rs") or ""
+launch = src("shared/crates/sovereign-contracts/src/launch.rs") or ""
 me = re.search(r"pub enum RpcServe\s*\{(.*?)\n\}", launch, re.S)
 variants = re.findall(r"^\s{4}(\w+)", me.group(1), re.M) if me else []
 clauses = {
@@ -323,10 +323,12 @@ row(BAR, score(clauses),
 
 # ── tg-token-revoked-alone ──────────────────────────────────────────────────
 BAR = "tg-token-revoked-alone"
-node_state = src("sovereign/crates/sovereign-daemon/src/state/node.rs") or ""
+node_state = src("svrn/crates/sovereign-daemon/src/state/node.rs") or ""
 one_token = re.search(r"client_token:\s*Option<Arc<str>>", node_state) is not None
 token_verb = []
-for root, _dirs, files in os.walk(os.path.join(REPO, "sovereign/crates")):
+import tomllib
+members = tomllib.load(open(os.path.join(REPO, "Cargo.toml"), "rb"))["workspace"]["members"]
+for root, _dirs, files in (w for m in members for w in os.walk(os.path.join(REPO, m))):
     for f in files:
         if f.endswith(".rs") and "mesh token" in (src(os.path.relpath(os.path.join(root, f), REPO)) or ""):
             token_verb.append(os.path.relpath(os.path.join(root, f), REPO))
@@ -340,12 +342,12 @@ clause_tests = {
     "c": r"the_admitting_label_appears_in_the_log_line_and_the_token_does_not",
     "d": r"the_shared_token_admits_by_default_and_is_refused_under_named_only",
 }
-e2e_rel = "sovereign/crates/sovereign-daemon/tests/main/client_tokens_e2e.rs"
+e2e_rel = "svrn/crates/sovereign-daemon/tests/main/client_tokens_e2e.rs"
 e2e = src(e2e_rel) or ""
 clauses = {k: (bool(token_verb) and re.search(rf"async fn {name}\b", e2e) is not None)
            for k, name in clause_tests.items()}
 row(BAR, score(clauses),
-    f"`mesh token` appears in {len(token_verb)} .rs file(s) under sovereign/crates "
+    f"`mesh token` appears in {len(token_verb)} .rs file(s) in the workspace members "
     f"({token_verb}); the shared `client_token: Option<Arc<str>>` is still in state/node.rs "
     f"({one_token}) and is the default posture, beside the named set. {said(clauses)} — each "
     f"read from the test in {e2e_rel} that proves it.",
@@ -353,7 +355,7 @@ row(BAR, score(clauses),
 
 # ── tg-meshapp-window-bridge-only ───────────────────────────────────────────
 BAR = "tg-meshapp-window-bridge-only"
-dk = "sovereign/crates/sovereign-desktop/src-tauri"
+dk = "clients/desktop/src-tauri"
 shim = src(f"{dk}/src/meshapp_shim.js") or ""
 shim_names = sorted(set(re.findall(r"\bmeshapp_[a-z0-9_]+", shim)))
 main_rs = src(f"{dk}/src/main.rs") or ""

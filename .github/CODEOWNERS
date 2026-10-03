@@ -22,21 +22,27 @@
 /deny.toml                      @alexsbryan
 /rust-toolchain.toml            @alexsbryan
 
+# The programs, one top-level dir each, and what they share. Before the
+# top-level-programs move these were corpus-engine*/, sovereign/,
+# commonwealth/ and studio/ (quality/top-level-moves.toml).
+/svrn/                          @alexsbryan
+/serve/                         @alexsbryan
+/cmnwlth/                       @alexsbryan
+/ingest/                        @alexsbryan
+/code/                          @alexsbryan
+/bench/                         @alexsbryan
+/shared/                        @alexsbryan
+/clients/                       @alexsbryan
+/distributions/                 @alexsbryan
+
 # Knowledge layer — LanceDB + Tantivy + extractors + chunkers.
-/corpus-engine/                 @alexsbryan
-/corpus-engine-scip/            @alexsbryan
-/corpus-engine-atos/            @alexsbryan
-/corpus-engine-notes/           @alexsbryan
-/corpus-engine-archaeology/     @alexsbryan
-
-# Sovereign — local runtime, CLI, desktop, and server.
-/sovereign/                     @alexsbryan
-
-# Commonwealth — the symmetric mesh daemon.
-/commonwealth/                  @alexsbryan
+/ingest/crates/corpus-engine/                 @alexsbryan
+/shared/crates/corpus-engine-scip/            @alexsbryan
+/code/crates/corpus-engine-notes/           @alexsbryan
+/code/crates/corpus-engine-archaeology/     @alexsbryan
 
 # Wire-protocol types shared across the tree.
-/oicp-types/                    @alexsbryan
+/shared/crates/oicp-types/                    @alexsbryan
 
 # Release + CI machinery. Changes here affect every downstream user.
 /.github/                       @alexsbryan
@@ -45,12 +51,12 @@
 /Cargo.toml                     @alexsbryan
 
 # Architecture contracts — the compass documents. Review with extra care.
-/sovereign/SYSTEM_OVERVIEW.md   @alexsbryan
-/sovereign/ARCH_PRINCIPLES.md   @alexsbryan
+/docs/SYSTEM_OVERVIEW.md   @alexsbryan
+/docs/ARCH_PRINCIPLES.md   @alexsbryan
 
 # Recipes — open to outside pull requests (CONTRIBUTING.md). Review is mostly
 # mechanical (`svrn recipe validate` / `svrn recipe test`), with one thing that
 # is not: `license`, `mesh_sharing`, and `query_sharing` must match what the
 # source actually permits. That judgement is the reason this is still owned.
-/sovereign-recipes/             @alexsbryan
-/sovereign-recipes/registry.toml @alexsbryan
+/ingest/crates/sovereign-recipes/             @alexsbryan
+/ingest/crates/sovereign-recipes/registry.toml @alexsbryan

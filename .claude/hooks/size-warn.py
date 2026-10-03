@@ -45,7 +45,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Both from corpus-engine/xtask/src/arch_gate.rs — the gate this hook speaks
+# Both from quality/xtask/src/arch_gate.rs — the gate this hook speaks
 # for. If they drift there, tests/size-warn.sh fails on the parity case.
 LINE_LIMIT = 1200
 GROWTH_SLACK = 50

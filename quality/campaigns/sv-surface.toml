@@ -48,7 +48,7 @@ statement = "sovereign-desktop REACHES no crate that can assemble or host a daem
 # [[exception]] rows holding the door — a check green while the statement is
 # false (§5). The grep is the row count the operator named as the whole
 # scoreboard; it runs first and costs nothing. Watched red the day it landed.
-check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (cd corpus-engine && cargo xtask layer-gate && cargo xtask lifecycle-gate)"
+check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (cargo xtask layer-gate && cargo xtask lifecycle-gate)"
 
 
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
@@ -641,7 +641,7 @@ check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (c
 #   re-sample; daemon rebuilt at d51cd2b4c; box under peer load 3.6-8.2):
 #   routing, retrieval-prod, enrichment-f1, knowledge-gym, synth PASSED.
 #   throughput COULD-NOT-JUDGE: first `check` run for stack 4dd212fbca5f,
-#   baseline MINTED (sovereign/bench/quality-check/baselines/throughput/);
+#   baseline MINTED (bench/lanes/quality-check/baselines/throughput/);
 #   the two earlier runs today were prepush gates with no banks. So the
 #   RB delta itself is UNJUDGED by construction — no pre-change reading on
 #   this stack exists; this run is the pre-deletion baseline instead.
@@ -1081,7 +1081,7 @@ check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (c
 #   smoketest - meshapp webview auth - supervisor (process management).
 # OUT OF SCOPE: mobile SHIPPING (real keychain, iOS/Android project
 # generation, signing, TestFlight) - a product decision with an Apple
-# toolchain attached, not an architecture one (sovereign-mobile/HANDOFF.md).
+# toolchain attached, not an architecture one (clients/mobile/HANDOFF.md).
 #
 # ── LADDER ──────────────────────────────────────────────────────────────────
 #
@@ -1559,7 +1559,7 @@ status       = "open"
 # backends are SESSION-scoped: the launchd agent loads into `gui/<uid>`, the
 # Windows task is logon-triggered, the systemd unit is a user unit
 # (`WantedBy=default.target`) and NOTHING enables lingering — `grep -ri
-# linger sovereign/crates/sovereign-service sovereign/contrib` returns zero
+# linger svrn/crates/sovereign-service sovereign/contrib` returns zero
 # hits as of this amendment. So a Linux node leaves the mesh at logout and
 # does not return until someone logs in, and macOS/Windows come back at
 # login rather than at boot. On the machine most worth having in the mesh —
@@ -1699,7 +1699,7 @@ status       = "open"
 #   * half 1 — the five burn-down [[exception]] rows removed: 5 violations,
 #     one per crate the desktop reached, each naming its path.
 #   * half 2 — a retained `std::process::Child` + `try_wait` + respawn planted
-#     in sovereign-mobile/src-tauri/src/state.rs (a surface that was CLEAN):
+#     in clients/mobile/src-tauri/src/state.rs (a surface that was CLEAN):
 #     3 violations, one per rule. Same plant in the desktop's attach_watch.rs
 #     (the file the bar names as where a Down-triggered respawn would be
 #     written): 2 violations. Both restored byte-identical, git status clean.
@@ -1765,7 +1765,6 @@ direction    = "lower_is_better"
 # principle 6).
 instrument   = '''
 rows=$(grep -c 'from = "sovereign-desktop"' quality/ARCH_LAYERS.toml || true)
-cd corpus-engine || exit 1
 cargo xtask layer-gate >/dev/null 2>&1; layer_red=$?
 bd=$(cargo xtask lifecycle-gate 2>&1 | sed -n 's/.*ledger: \([0-9][0-9]*\) site(s) BURNING-DOWN.*/\1/p')
 [ -n "$bd" ] || exit 1

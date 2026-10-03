@@ -159,7 +159,7 @@ fi
 #
 # `svrn corpus ingest` (the shipped `notebook` workflow) never stamps
 # `indexes_built`. `mark_indexes_built()` is called only from the BESPOKE
-# ingest path (`corpus-engine/src/engine/ingest.rs:1709`) and from shard
+# ingest path (`ingest/crates/corpus-engine/src/engine/ingest.rs:1709`) and from shard
 # promotion (`sharding.rs:1407`); the workflow's `tool:corpus_store` has no
 # equivalent call. So a corpus built by the documented folder-ingest command
 # lands with `indexes_built: false` — and `corpus_search.rs` Filter 2 drops

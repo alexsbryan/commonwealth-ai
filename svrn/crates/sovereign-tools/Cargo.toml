@@ -1,0 +1,234 @@
+[package]
+name = "sovereign-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+# Recipe-author reads url_template / paths / json_to_toml from the contract
+# crate directly. The recipe schema descriptor and the bundled registry are
+# ingest's (`corpus_engine::recipe_schema`, `corpus_engine_recipes`) and are
+# INJECTED into recipe-author (its src/recipe_schema.rs), so it names no
+# corpus-engine (phase-b-48 corrected this comment).
+sovereign-contracts = { workspace = true }
+# The 11 pure workflow tools (shell, web, chunk, section, file/json/csv/zip/
+# vector, MCP client) were extracted here; re-exported at their old paths
+# (`sovereign_tools::{shell, web, mcp, rag::chunk, ...}`).
+sovereign-tools-base = { workspace = true }
+# Atlas peer-advice (Phase C3) reads `CorpusShardInfo`, the gossip capability
+# report's corpus-shard schema. It lived in `commonwealth-core` until
+# 2026-09-21; both sides name it, so it is in the protocol leaf now and this
+# crate no longer reaches into a cmnwlth package (quality/ARCH_LAYERS.toml).
+oicp-types = { workspace = true }
+# Ingest is reached only through its ports (corpus-index's `ingest_port`, the
+# atlas reader's `ports`); this crate links neither corpus-engine nor the
+# enrichment catalog (pb-ingest-dial-tools-close).
+# Leaf items the engine re-exports (`types::*`, `error`, `index`, `corpus`,
+# `recipe::DisplayMeta`) — spelled at their owner now.
+corpus-index = { workspace = true }
+# The atlas vocabulary + its read door (`read_atlas_atoms`/`read_atlas_edges`)
+# — a two-crate leaf closure, so a reader of atoms.json need not name the
+# engine that writes it (domains dm-vocab-bypass-tools).
+understanding-vocab = { workspace = true, features = ["read"] }
+# The atlas read leaf: the field-model and parcel readers the turn tools call
+# without the engine (pb-ingest-dial-tools).
+corpus-engine-atlas-reader = { workspace = true }
+# The section detectors `rag::section` runs — a `regex` + `tracing` leaf. The
+# module came back from `sovereign-tools-base` at sv-surface svt-7 and brought
+# its dependency with it. The leaf also holds the markup strippers the corpus
+# parsers call (`strip`, pb-ingest-dial-tools-close).
+corpus-engine-sections = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Name-matching normalization (fold) — see summary_verify.rs fold().
+unicode-normalization = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
+glob = "0.3"
+quick-xml = "0.37"
+flate2 = "1"
+bzip2 = "0.5"
+parquet = { workspace = true }
+arrow = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"], optional = true }
+# Code Intelligence tools (symbol_lookup / code_search / recent_changes)
+chrono = { version = "0.4", features = ["clock"] }
+# Document parsing (RAG pipeline)
+pdf-extract = "0.7"
+# `pdf-extract 0.7.12` writes "unknown glyph name" / "Unicode mismatch"
+# diagnostics with raw `println!` (lib.rs:461,479) — bypasses our
+# tracing layer and floods launchd's `daemon.out` (5MB+ per few hours
+# on a small folder). `safe_extract_pdf_text` swaps stdout to
+# `/dev/null` around the call via `libc::dup2` so the noise can't
+# escape. Unix-only; the daemon does not build for Windows.
+libc = "0.2"
+# HTML body-text extraction for `.html` / `.htm` / `.mhtml` watched
+# folders. Same version as `corpus-engine`'s recipe-driven HTML
+# extractor so the workspace resolves a single `scraper`.
+scraper = "0.20"
+# `scraper::Html.tree` is `ego_tree::Tree<Node>`; we walk it directly
+# in `html_body_text` to strip `<script>`/`<style>` subtrees. Already
+# a transitive dep via `scraper` — adding it explicitly so the
+# tree-walk types are nameable in the signatures.
+ego-tree = "0.6"
+# MIME parser for `.mhtml` (single-file web archive, e.g. SingleFile
+# output, Save Page As → Webpage Complete). We walk the multipart
+# body, take the first `text/html` part, and route it through the
+# same `html_body_text` routine as standalone HTML files.
+mail-parser = "0.10"
+# EPUB extractor. Apache-2.0 (workspace is MIT — compatible). Reads
+# zip + OPF in memory; no on-disk extraction, preserving the
+# watched-folder read-only-on-source invariant. We walk the spine,
+# pull each chapter's XHTML, and route it through `html_body_text`.
+# (`rbook` chosen over the GPL-3 `epub` crate for licence
+# compatibility, and over `lib-epub` for maintenance.)
+rbook = "0.7"
+# DOCX text extractor. Read-only, minimal-deps, MIT/Apache-2.0.
+# Chosen over `docx-rs` (writer-first, heavier surface) because v1
+# only needs paragraph text — header/footer/footnote handling is
+# deferred to v1.x.
+docx-lite = "0.2"
+# OCR pipeline for scanned PDFs in the folder-drop flow:
+#   pdfium-render rasterizes pages to images, the tesseract sidecar
+#   produces raw text, the daemon's fast slot cleans up via
+#   /v1/chat/completions. See `local_corpus::ocr` for the architecture.
+# pdfium-render binds to a runtime-loaded libpdfium.dylib; the desktop
+# bundles it as a Tauri resource and OcrCtx.pdfium_lib_path points at
+# it. `image_latest` matches the version of `image` we pull below.
+pdfium-render = { version = "0.9", features = ["thread_safe"] }
+image = "0.25"
+# Stable, cryptographic short-hash for deriving corpus IDs from a
+# canonicalised root path. Used by local_corpus::config.
+sha2 = { workspace = true }
+# Content-derived stable keys for atlas atoms in `atlas_view`. Lets
+# Phase 2's curation overlay key edits by content hash instead of the
+# volatile sequential AtomId — see decision note "Atlas inspector:
+# stable_key by content hash". Same major as corpus-engine's blake3
+# so the workspace resolves a single version.
+blake3 = "1"
+# Recursive directory walking for the PreScanner; keeps hidden-dir
+# filtering (`.obsidian`, `.git`) a single-call predicate.
+walkdir = "2"
+# Atomic config-file writes (write-to-temp + rename) in
+# `local_corpus::manager`.
+tempfile = { workspace = true }
+# YAML parsing for Obsidian frontmatter merge (M5 write-back). Uses
+# `indexmap` internally so key order round-trips.
+serde_yaml = "0.9"
+# KnowledgeView acquirers (SqliteAcquirer dumps rows to JSONL for the
+# existing Jsonl extractor). Uses the same `bundled` feature as
+# sovereign-store so both crates link against one libsqlite3.
+rusqlite = { version = "0.35", features = ["bundled"] }
+# Gitignore-syntax parser for the watched-folder `.sovereignignore`
+# file (spec §5.4 layer 2). Same version as sovereign-mesh so the
+# workspace resolves a single `ignore` across both crates.
+ignore = "0.4"
+# Conv-tiered provider (`conv_tiered_provider`) needs SqliteStateStore
+# for the conv_skeletons / conv_raptor_nodes / conv_motifs persistence
+# surface. Production dep, not test-only — promoted from
+# `[dev-dependencies]` 2026-05-22 when `CONV_TIERED_PORT.md` shipped.
+sovereign-store = { workspace = true }
+# GLiNER per-chunk entity extraction (gline-rs → orp → ort) was extracted
+# to the `sovereign-gliner` crate (2026-07-17). It lived here behind an
+# optional `gliner-ner` feature, but an optional feature on this widely-
+# shared crate meant Cargo unification compiled sovereign-tools two ways
+# and broke `-p` builds. The ONNX stack now lives in its own crate, a
+# mandatory dep of only the four binaries that need it.
+# ── PaddleOCR engine (feature `paddle-ocr`) ──────────────────────────
+# An in-process OCR engine that drives the SAME ONNX Runtime already
+# linked for GLiNER (`ort`), rather than the tesseract subprocess. We
+# pin `ort` to EXACTLY `=2.0.0-rc.9` to unify with orp's exact pin — a
+# single onnxruntime, GLiNER untouched. This is deliberate: the GLiNER
+# stack (orp/gline-rs) cannot move off rc.9 (build-verified that rc.10
+# throws 4 errors and rc.12 throws 60 — SessionOutputs lifetimes,
+# Session::run &mut self, ort::Error losing Send/Sync), so off-the-shelf
+# PaddleOCR crates (which want rc.10+) are unusable and we drive ort
+# directly at rc.9. `ndarray` feature for tensor I/O. `default-features`
+# left on to match orp (linking strategy + std unify across the graph).
+ort = { version = "=2.0.0-rc.9", optional = true, features = ["ndarray"] }
+# Tensor construction / extraction. 0.16 matches the version ort rc.9
+# resolves (the lockfile pins 0.16.1) — do NOT bump to 0.17 (rc.12 era).
+ndarray = { version = "0.16", optional = true }
+# DBNet detection post-processing: `find_contours` on the binarized
+# probability map. Same CV lib the off-the-shelf `oar-ocr` crate uses.
+imageproc = { version = "0.26", optional = true }
+# `i_overlay` (polygon offset for detection boxes) was declared here and never
+# named in code; `workspace-hack` already pins it at `4` for every member.
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[features]
+# `treesitter` is default-on since build-latency move bl-hakari: the gate
+# feature list (`corpus-engine/treesitter`) resolves it in every full build, so
+# default-on keeps a `-p` scope from compiling a second sovereign-tools
+# (quality/BUILD_LATENCY.md D1). `dev-tools` is NOT here, and was for one
+# uncommitted afternoon: it pulls back-of-house crates, and layer-gate
+# forbids those in the default build (quality/ARCH_LAYERS.toml, back-of-house).
+default = ["treesitter"]
+email = ["lettre"]
+# Empty since pb-ingest-dial-tools-close: it gates this crate's own
+# code-intel tools and forwards nothing (the daemon enables it).
+treesitter = []
+# PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
+# don't pull the OCR inference surface; the desktop enables it once the
+# bake-off greenlights swapping it in for tesseract.
+paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc"]
+
+[dev-dependencies]
+# Zip writer for hand-building minimal DOCX fixtures in
+# `extract_stage` tests. Adding `docx-rs` here was rejected because
+# it activates the `encoding` feature on quick-xml 0.36, which
+# breaks corpus-engine's `Attribute::unescape_value()` call via
+# workspace feature unification.
+zip = { version = "8", default-features = false, features = ["deflate"] }
+uuid = { workspace = true }
+futures = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+filetime = "0.2"
+# axum is the HTTP stub harness for `notes::diff_extract_backend`
+# tests — spins up `/v1/chat/completions` on an ephemeral port so
+# we can exercise `LocalLlmBackend` without a live daemon. Production
+# code does NOT depend on axum.
+axum = { workspace = true }
+# Levenshtein for the OCR bake-off's CER/WER scoring (examples/paddle_bakeoff).
+# Already in the tree (0.11.1); dev-only since only the example uses it.
+strsim = "0.11"
+# Glassbox tracing for the bake-off harness — surfaces the engine's
+# per-stage info!/debug! (session i/o names, box counts, shapes) so a
+# reader of the run can see inside the PP-OCR pipeline. RUST_LOG-gated.
+tracing-subscriber = { workspace = true }
+# The ingest ports' test doubles and the atlas store fixtures: this crate's
+# tests drive its own code against them, and each port's behaviour is proven
+# on its implementor in corpus-engine (phase-b-47/48).
+corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
+corpus-index = { workspace = true, features = ["test-doubles"] }
+# The leaf's `ForegroundSignal`, the one trait a turn's lease test needs.
+corpus-engine-yield = { workspace = true }
+
+# Examples that import treesitter-gated symbols (SymbolLookupTool,
+# ScipGraphHandle, etc.) only compile when the matching crate
+# feature is on. Declaring `required-features` lets `cargo test`
+# / `cargo check` skip them under the default feature set instead
+# of failing the workspace build.
+# Tesseract-vs-PaddleOCR bake-off harness. Compiles only with the
+# `paddle-ocr` feature; runs both engines on a scanned PDF and emits a
+# side-by-side quality/latency comparison (+ CER/WER if a ground-truth
+# .txt is supplied). See the OCR engine-swap plan.
+[[example]]
+name = "paddle_bakeoff"
+required-features = ["paddle-ocr"]
+
+# Headless PaddleOCR over per-case Blue Book page JPGs (UAP data-prep).
+[[example]]
+name = "ocr_images"
+required-features = ["paddle-ocr"]
+
+[lints]
+workspace = true

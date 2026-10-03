@@ -93,7 +93,7 @@ resident; generate first, then train). Recipe:
    `research/verifier-v0/out/chaos-secret-agent.named-clusters.json` → `EntityCluster[]`
    (`{etype, surfaces}`) and pass `--entities`. Distractor absorption needs
    `--distractors` (`DistractorDoc[]`): the meridian postmortem
-   (`sovereign/bench/attached_doc/meridian_postmortem.toml`) is the intended
+   (`bench/lanes/attached_doc/meridian_postmortem.toml`) is the intended
    adjacent-doc source. Without the tables those two kinds are silently
    skipped (by design — the smoke run shows the other eight carry on).
 3. `svrn bench verifier export --n <big> --seed 17` per corpus; then

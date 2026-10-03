@@ -60,7 +60,7 @@ FULL_PATH="$tmp/shim:$tmp/real:$tmp/mux:/usr/bin:/bin"
 echo "lspmux shim — argument pass-through and multiplex arms"
 
 # ── The SCIP export invocation, verbatim ────────────────────────────────
-# corpus-engine-scip/src/scip_export.rs spawns exactly this shape. It is the
+# shared/crates/corpus-engine-scip/src/scip_export.rs spawns exactly this shape. It is the
 # failing input the whole shim is designed around.
 out=$(PATH="$FULL_PATH" HOME="$tmp/nohome" "$tmp/shim/rust-analyzer" \
         scip . --config-path /tmp/cfg.json --output /tmp/out.scip 2>&1)

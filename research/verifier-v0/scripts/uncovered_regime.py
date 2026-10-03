@@ -49,7 +49,7 @@ import json, re, subprocess, time, tomllib, urllib.request
 from pathlib import Path
 
 ROOT = Path("/home/alexbryan/dev/commonwealth-ai")
-D = ROOT / "sovereign/bench/sep_atlas/map-conversion-rung6"
+D = ROOT / "bench/lanes/sep_atlas/map-conversion-rung6"
 GEN = "http://127.0.0.1:9741/v1/chat/completions"
 MODEL = "Qwen3.5-4B-UD-MTP-Q6_K_XL"
 NS = [10, 28, 80]
@@ -79,8 +79,8 @@ def evaluate(question, window):
     with urllib.request.urlopen(req, timeout=180) as r:
         return 0.0 if "NO" in json.load(r)["choices"][0]["message"]["content"].strip().upper() else 1.0
 
-sep = tomllib.load(open(ROOT / "sovereign/bench/sep/questions.toml", "rb"))["questions"]
-wik = tomllib.load(open(ROOT / "sovereign/bench/wikipedia/questions.toml", "rb"))["questions"]
+sep = tomllib.load(open(ROOT / "bench/lanes/sep/questions.toml", "rb"))["questions"]
+wik = tomllib.load(open(ROOT / "bench/lanes/wikipedia/questions.toml", "rb"))["questions"]
 cached = json.loads((D / "hyde_pools.json").read_text())
 
 CK = D / "uncovered_pools.json"

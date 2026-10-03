@@ -1,0 +1,59 @@
+[package]
+name = "sovereign-cli-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "bench's CLI (bench, eval, quality-lane): the evaluator's lanes, run apart from the programs they measure."
+
+# bench's own CLI (FIVE_PROGRAMS §11 "The cli-llm split", phase-b
+# pb-cli-llm-bench-move). The `sovereign` dispatcher execs this sibling for
+# `svrn bench|eval` and `svrn quality lane`. It measures svrn and ingest by
+# dialling them: turns over svrn's turn route, svrn's own internals and gate
+# primitives through `svrn __probe`, ingest's verbs through the dispatcher.
+# So it links none of their crates; the leaves it names are bench's
+# `leaf_budget` in quality/ARCH_LAYERS.toml.
+[lib]
+name = "sovereign_cli_bench"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sovereign-cli-bench"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { workspace = true }
+clap = { workspace = true }
+corpus-index = { workspace = true }
+futures = { workspace = true }
+hex = "0.4"
+host-kit = { workspace = true, features = ["shell"] }
+kernel-types = { workspace = true }
+libc = "0.2"
+oicp-client = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+serde = { workspace = true }
+# `preserve_order`: banked reports keep their authored key order, which
+# `json_keys_survive_the_rubric_extraction` asserts. Declared here, since a
+# lifted build has no workspace-hack to unify it in.
+serde_json = { workspace = true, features = ["preserve_order"] }
+sha2 = { workspace = true }
+sovereign-cli-base = { workspace = true }
+sovereign-contracts = { workspace = true }
+# The evaluator's pure scorers, banks and verdict types (bench's own member).
+sovereign-eval = { workspace = true }
+sovereign-time = { workspace = true }
+sovereign-turn-client = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[dev-dependencies]
+# `subject_tests` stands up a stub svrn turn route on loopback.
+axum = { workspace = true }
+
+[lints]
+workspace = true

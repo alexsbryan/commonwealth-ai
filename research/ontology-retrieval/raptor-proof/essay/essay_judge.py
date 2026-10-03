@@ -35,7 +35,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
-sys.path.insert(0, str(REPO / "sovereign/bench/sep_atlas/map-conversion-rung6"))
+sys.path.insert(0, str(REPO / "bench/lanes/sep_atlas/map-conversion-rung6"))
 sys.path.insert(0, str(HERE.parent.parent / "harness"))
 from compare import is_grounded_route, measured, route_of  # noqa: E402  one route rule, one error rule
 from run_arm import _ALIAS_RE  # noqa: E402  one reading of /v1/models `owned_by`

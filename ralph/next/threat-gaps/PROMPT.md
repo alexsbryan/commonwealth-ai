@@ -85,7 +85,7 @@ growth past a cap is a design finding, never a queue edit. Commit
 row `[x]`.
 
 **`REVIEW-audit-tg`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -130,9 +130,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   path is relative to the repo root, where every command already runs.
   opencode's permission check resolves `cd X && ../../y` against the wrong
   base, auto-rejects a path INSIDE this repo, and ends your session with the
-  unit half done (rd-1-scaffold lost a session to `/home/sovereign/apps/...`).
+  unit half done (rd-1-scaffold lost a session to `/home/cmnwlth/apps/...`).
   For a scratch build dir use `target/ralph/bundle/` by its repo-relative path
-  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=sovereign/apps/...`).
+  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=cmnwlth/apps/...`).
 - Change files with the Edit and Write tools, never with a shell heredoc
   (`cat >> f <<EOF`, `python3 - <<EOF`): edits inside the repo are accepted
   outright, a heredoc asks the operator and is denied after 600 s unattended.
@@ -150,11 +150,11 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   line in a package, never "the audit's", and never a re-pin.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
   `scripts/ralph*`, any file under `quality/campaigns/` (the five `tg-*` bars were
   pre-registered before any row ran; a clause, a floor or a goodhart line that seems wrong
-  is §6, never an edit), or ANYTHING under `commonwealth/crates/commonwealth-rail/`,
-  `commonwealth/crates/commonwealth-rail-core/` or `sovereign/crates/sovereign-scheduler/`
+  is §6, never an edit), or ANYTHING under `cmnwlth/crates/commonwealth-rail/`,
+  `shared/crates/commonwealth-rail-core/` or `serve/crates/sovereign-scheduler/`
   — out of this order's Scope; a row that seems to need one is §6. `commonwealth-rails/` is the rails DAEMON,
   not that rule.
 - The posture defaults (`internal_auth`, the RPC bind, `client_tokens`), the knob names, and
@@ -172,5 +172,5 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   nodes `scripts/threat-gaps-demo.sh` and `scripts/ring-room-demo.sh` (and `scripts/ring-doc-demo.sh`,
   which the room sources) start under their own `SOVEREIGN_DATA_DIR` are the script's to start
   and stop, exactly as `scripts/ring-offers-demo.sh` does.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

@@ -1,0 +1,1402 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// What's in sovereign-cli now (2026-05-22 split — slices 1-5):
+//   * dev_bin / llm_bin — exec dispatchers into the two sibling
+//     binaries (`sovereign-cli-dev`, `sovereign-cli-llm`).
+//   * Pure delegators that translate the new flat CLI surface
+//     (`svrn status`, `svrn drift detect`, etc.) into the
+//     legacy `project`/`code` handler arguments before exec'ing.
+//   * Light commands that touch only SQLite stores + filesystem
+//     (notes, claim, reflect, rough-edges, archaeology-eval,
+//     git-archaeology).
+//
+// Slice 2 → sovereign-cli-dev: project_cmd, code_cmd, amend, phases,
+//   observation, project_toml, plan_composer, plan_enricher,
+//   design_session, design_onboarding, audit_extract, audit_recover,
+//   drift_cmd_orchestrator. (`honesty`, `doc_fetcher` and `found` also
+//   moved in this slice and were deleted on 2026-08-26 — the first two
+//   unreachable since `de34eb36`, `found` retired to a `deprecation::RETIRED` row.)
+// Slice 3 → sovereign-cli-dev: tools_cmd.
+// Slice 4 → sovereign-cli-dev: daemon_cmd, doctor_cmd,
+//   install_service_cmd, service_install, setup_cmd, setup_config.
+// Slice 5 → sovereign-cli-llm: bench_cmd, chat_cmd, eval_cmd,
+//   voice_eval, reading_diag_cmd, knowledge_gym_cmd, search_gym_cmd,
+//   gym_judge, atlas_cmd, meta_atlas_cmd, enrich_cmd, newsworthy_cmd,
+//   recipe_cmd, recipe_agent_cmd, recipe_agent_live_trial,
+//   pipeline_cmd, mcp_cmd, alignment_cmd, mesh_cmd,
+//   corpus_catalog_cmd, corpus_scrub_cmd, corpus_snapshot_cmd,
+//   corpus_watch_cmd, worker_pod_provider, REPL Runtime construction.
+
+mod amend_cmd;
+mod audit_cmd;
+// `awareness_cmd` is NOT here any more (nc-26, 2026-08-21). It lives in
+// `sovereign-cli-llm`, which owns the `enrich_cmd::inference_client` two of
+// its files import — an import that had not resolved from this crate since
+// the 2026-05-22 split, because `crate::enrich_cmd` names nothing here. The
+// dispatch arm below execs the LLM sibling for it.
+mod cache_audit_cmd;
+mod charter_cmd;
+// `svrn init` / `svrn project init`. Same gate as the index path it drives —
+// init's whole job is to produce a corpus, so a build that cannot index has
+// nothing to offer it.
+#[cfg(feature = "dev-tools")]
+#[cfg(feature = "dev-tools")]
+mod agent_bench_bin;
+mod bench_bin;
+mod conformance_cmd;
+mod contract_cmd;
+mod daemon_bin;
+#[cfg(feature = "deep-research")]
+mod deep_research_cmd;
+mod dev_bin;
+mod drift_cmd;
+mod ingest_bin;
+mod init;
+mod journal_cmd;
+mod llm_bin;
+mod memory_cmd;
+mod mesh_bin;
+mod milestone_cmd;
+mod notes_retrieval_cmd;
+mod path_cmd;
+mod plan_cmd;
+#[cfg(feature = "dev-tools")]
+mod posture_cmd;
+#[cfg(feature = "code-intel")]
+mod project_init;
+#[cfg(feature = "dev-tools")]
+mod quality_check_cmd;
+#[cfg(feature = "dev-tools")]
+mod quality_map_cmd;
+// NOT feature-gated, deliberately: the daemon-facing project registry adds
+// zero dependencies and is the one thing a `curl | sh` user needs to reach
+// the code-intelligence pipeline the daemon already runs.
+mod project_registry;
+mod refresh_cmd;
+mod report_audit;
+mod seat_cmd;
+mod serve_bin;
+mod serve_cmd;
+mod session_cmd;
+mod session_lineage;
+mod sibling;
+mod status_cmd;
+mod stop_cmd;
+mod update_cmd;
+mod util;
+
+// ─── Globals ───────────────────────────────────────────────────
+
+/// The dispatcher's OWN flag surface — the only two flags `svrn` itself owns.
+///
+/// Everything else on the command line is a SUBCOMMAND and its flags belong to
+/// whichever sibling serves it. That is what `trailing_var_arg` +
+/// `allow_hyphen_values` express: parsing stops at the first non-flag token,
+/// and every token from there on lands in [`Globals::rest`] verbatim for the
+/// dispatch table in [`async_main`] to route. `svrn bench --version` therefore
+/// reaches `sovereign-cli-llm` with `--version` intact rather than being
+/// answered here — the property the hand-rolled `raw_args.first()` checks had,
+/// and the one a naive strict parse would have broken.
+///
+/// `disable_help_flag` / `disable_version_flag` because both are served by
+/// [`print_usage`] and [`version_line`] against rules clap does not express
+/// (see [`async_main`]): help answers only when it is the WHOLE command line,
+/// version answers whatever follows it.
+///
+/// What this REPLACED was not a dispatcher at all. Until 2026-08-23 this file
+/// carried an `Args` struct and a 50-line `parse_args` scanning nine flags
+/// (`--model`, `--data-dir`, `--ingest`, …) for the interactive REPL — a REPL
+/// that moved to `sovereign-cli-llm` in the 2026-05-22 slice-5 split. Nothing
+/// had called `parse_args` since; `cargo build` had been reporting `struct
+/// `Args` is never constructed` and `function `parse_args` is never used` the
+/// whole time. The flags were still advertised in [`HELP`], so the surface
+/// read as live while parsing nothing. Both are gone, and the surface that is
+/// actually reachable is the one declared here.
+#[derive(clap::Parser, Debug)]
+#[command(
+    // The `Usage:` line names the command the user typed, not the binary
+    // (`sovereign-cli`), which is not what anyone runs.
+    name = "svrn",
+    no_binary_name = true,
+    disable_help_flag = true,
+    disable_version_flag = true
+)]
+struct Globals {
+    #[arg(long, short = 'h')]
+    help: bool,
+    #[arg(long, short = 'V')]
+    version: bool,
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    rest: Vec<String>,
+}
+
+use crate::util::help::{Help, HelpSection};
+
+/// Top-level help: lists every subcommand plus the flags for the
+/// fall-through interactive REPL mode (what runs when no subcommand
+/// is given). The subcommand table points users at the modern flow
+/// (setup / project / mesh) rather than the legacy REPL.
+const HELP: Help = Help {
+    command: "svrn",
+    summary: "Local AI assistant with code intelligence, knowledge bases, and an optional mesh.",
+    sections: &[
+        HelpSection::Usage("svrn <subcommand> [flags]"),
+        HelpSection::Subcommands(&[
+            (
+                "setup",
+                "First-run: detect hardware, download models, start daemon",
+            ),
+            (
+                "init",
+                "Index this workspace for code intelligence, then start the MCP server",
+            ),
+            (
+                "project",
+                "Register a repo so the daemon indexes and watches it (init / register / list / watch)",
+            ),
+            (
+                "model",
+                "See/change the models the daemon loads; applies live (list / set / unset / context)",
+            ),
+            (
+                "chat",
+                "CLI mirror of the desktop chat flow (ask / session / inspect)",
+            ),
+            (
+                "solve",
+                "Give the daemon a coding goal; it makes the goal test-shaped and iterates to green",
+            ),
+            (
+                "deep-research",
+                "Multi-round research session; findings land in an estate corpus later sessions reuse",
+            ),
+            ("mesh", "Mesh management (create / join / rotate / status)"),
+            (
+                "publish",
+                "Put a localhost port in front of the house by name — housemates reach it by mesh key, with your identity on every request",
+            ),
+            (
+                "run",
+                "Run a local app and publish it for as long as it runs — nothing written to config, nothing left behind when it stops",
+            ),
+            (
+                "ring",
+                "Deploy an app to a trust ring — shared, signed, converging state (roster / dev / balances)",
+            ),
+            (
+                "job",
+                "Hand a unit of work to your ring and read the fold back (submit / status)",
+            ),
+            (
+                "mobile",
+                "Absent: the mobile host (sovereign-server) was deleted; no mobile host ships",
+            ),
+            (
+                "alignment",
+                "Mesh-replicated workspace migrate / status (~/.claude + notes.db)",
+            ),
+            ("corpus", "Knowledge corpus install / remove / status"),
+            (
+                "govern",
+                "Common-law governance over a corpus — tensions / resolve / ask",
+            ),
+            (
+                "journal",
+                "Your local next-edit record: stats / show / bundle / off / clear",
+            ),
+            ("doctor", "Diagnose setup and daemon health"),
+            (
+                "path",
+                "Print where per-user data lives (root / data / mesh-data / config)",
+            ),
+            (
+                "ingest",
+                "Build a corpus from a recipe (ingest's own CLI, svrn-ingest)",
+            ),
+            ("recipe", "Run a corpus ingestion recipe"),
+            (
+                "workflow",
+                "Run a Step·Artifact·Runner workflow TOML (run / list / copy / new)",
+            ),
+            (
+                "pipeline",
+                "Generic ingestion driver — durable worklist + retry + pause-resume",
+            ),
+            (
+                "bench",
+                "Throughput + correctness benchmarks for enrichment LLM tasks",
+            ),
+            (
+                "search-gym",
+                "Correctness harness for web-search-during-inference (mock-replay)",
+            ),
+            (
+                "knowledge-gym",
+                "Correctness harness for the unified knowledge_lookup tool (mock-replay)",
+            ),
+            (
+                "atlas",
+                "Atlas-style structural enrichment (Wikipedia link graph today)",
+            ),
+            (
+                "eval",
+                "Run a question bank against a corpus; measure retrieval quality",
+            ),
+            ("mcp", "MCP server diagnostics (list tools, proxy)"),
+            (
+                "daemon",
+                "(internal) Long-running service managed by launchd/systemd",
+            ),
+            (
+                "update",
+                "Check for and install a newer CLI release (--check to only report)",
+            ),
+        ]),
+        // The two flags the dispatcher itself owns — and the whole of
+        // `Globals`. The nine that stood above them until 2026-08-23
+        // (`--model`, `--data-dir`, `--ingest`, …) belonged to the interactive
+        // REPL, which moved to `svrn chat` in the 2026-05-22 split; their
+        // parser had been dead code ever since, so the help advertised nine
+        // flags that were read by nothing.
+        HelpSection::Flags(&[
+            ("--help, -h", "Show this message"),
+            ("--version, -V", "Print the version and exit"),
+        ]),
+        HelpSection::Notes("Run `svrn <subcommand> --help` for detail on any specific subcommand."),
+    ],
+};
+
+/// Verbs that belong to the **developer toolchain** — project lifecycle,
+/// code intelligence, git archaeology, agent benches.
+/// They are gated out of the default (end-user) build: most exec the
+/// `sovereign-cli-dev` sibling that a public build does not ship; the rest
+/// are in-process dev tooling kept off the product surface. A default build
+/// intercepts them (see `async_main`) and points the user at
+/// `--features dev-tools`. Kept disjoint from the public `HELP` subcommands
+/// by the `public_help_advertises_no_dev_verb` test.
+const DEV_VERBS: &[&str] = &[
+    // Neither `code` nor `project` is here. Every `code` subcommand execs the
+    // code program, `sovereign-cli-dev`, in every build (pb-code-index); a
+    // blanket intercept here would refuse `code index` in the shipped build.
+    // `project` is NOT here. Its registry subcommands ship in the default
+    // build (`project_registry`), so a blanket intercept would refuse verbs
+    // this binary can actually serve. The `project` dispatch arm does its own
+    // per-subcommand split; `refuse_workbench_subcommand` is the gate for the
+    // half that still needs the sibling.
+    // `deep-research` is NOT here (order deep-research-t3a graduated it
+    // into the DEFAULT feature set): a blanket intercept would refuse the
+    // verb in the shipped build that actually compiles and serves it. The
+    // dispatch arm is `#[cfg(feature = "deep-research")]`; a build without
+    // the feature falls to the unknown-verb catch-all, like the other
+    // feature-gated arms.
+    "tools",
+    "status",
+    "charter",
+    "plan",
+    "amend",
+    "milestone",
+    "drift",
+    "audit",
+    "serve",
+    // `init` left this list 2026-08-07: `cmd_init` ships in the dispatcher
+    // under `code-intel`, so a blanket intercept would refuse the one verb a
+    // fresh `curl | sh` user types first. The `init` arm handles the
+    // no-indexer build itself (init.rs), which is the same shape `code` and
+    // `project` already use.
+    "notes",
+    "reflect",
+    "rough-edges",
+    "git-archaeology",
+    "archaeology-eval",
+    "agent-bench",
+    "claim",
+    "nudge",
+    "conformance",
+    "contract",
+    "posture",
+    "quality",
+    // `seat watch` is the seat's notes-rail poller (order
+    // commons-fluency fix 8): ungated daemon access since item 11 —
+    // a code-intel-gated path shipped the runtime refusal in every
+    // dev-tools-only build (pinned by test in seat_cmd.rs), no
+    // end-user surface.
+    "seat",
+];
+
+/// Every top-level verb the dispatcher routes — the complete surface
+/// `svrn __dump-commands` reports for the CLI-contract reverse check.
+/// Independent of feature flags (it lists the dev-tools and awareness verbs
+/// too) so the contract sees the whole surface in any build. Kept sorted; the
+/// `all_verbs_is_complete_and_sorted` test pins it against `DEV_VERBS` + `HELP`
+/// so it cannot silently drift from the dispatch `match` arms.
+const ALL_VERBS: &[&str] = &[
+    "agent-bench",
+    "alignment",
+    "amend",
+    "archaeology-eval",
+    "atlas",
+    "audit",
+    "awareness",
+    "backlog",
+    "bench",
+    "cache-audit",
+    "charter",
+    "chat",
+    "claim",
+    "code",
+    "conformance",
+    "contract",
+    "corpus",
+    "daemon",
+    "deep-research",
+    "doctor",
+    "drift",
+    "enrich",
+    "eval",
+    "git-archaeology",
+    "govern",
+    "ingest",
+    "init",
+    "install-service",
+    "job",
+    "journal",
+    "knowledge-gym",
+    "maintainer",
+    "mcp",
+    "memory",
+    "mesh",
+    "meshapp",
+    "meta-atlas",
+    "milestone",
+    "mobile",
+    "model",
+    "newsworthy",
+    "notes",
+    "nudge",
+    "path",
+    "pipeline",
+    "plan",
+    "portfolio",
+    "posture",
+    "project",
+    "proxy",
+    "publish",
+    "quality",
+    "reading-diag",
+    "recipe",
+    "recipe-agent",
+    "reflect",
+    "refresh",
+    "ring",
+    "rough-edges",
+    "router-cache",
+    "run",
+    "search-gym",
+    "seat",
+    "serve",
+    "session",
+    "setup",
+    "solve",
+    "status",
+    "stop",
+    "tools",
+    "unpublish",
+    "update",
+    "voice",
+    "workflow",
+];
+
+/// The developer-toolchain verbs as a help table, appended to `--help`
+/// only under `--features dev-tools`. Help text is data (ARCH_PRINCIPLES §6).
+#[cfg(feature = "dev-tools")]
+const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
+    (
+        "project",
+        "Per-project code intelligence (init / serve / status / refresh)",
+    ),
+    (
+        "code",
+        "Code intelligence tooling (index / watch / mcp-status)",
+    ),
+    (
+        "tools",
+        "Invoke code-intelligence tools (list / describe / call)",
+    ),
+    ("status", "Project status report"),
+    ("charter", "Create or amend a project charter"),
+    ("plan", "Validate a project plan"),
+    ("amend", "Amend a charter or plan"),
+    ("milestone", "Close a project phase"),
+    ("drift", "Narrative-vs-code drift detection"),
+    ("audit", "Audit rollup / recover"),
+    ("refresh", "Rebuild the project code index"),
+    (
+        "seat",
+        "The seat's notes-rail poller (watch — order commons-fluency fix 8)",
+    ),
+    ("serve", "Run the code-intelligence MCP server"),
+    ("init", "Scaffold AI-assistant config in a project"),
+    ("notes", "Decision / invariant note store"),
+    ("reflect", "Review session reflections; retire fixed ones"),
+    ("rough-edges", "Surface rough edges from git history"),
+    ("git-archaeology", "Mine commit history for provenance"),
+    (
+        "archaeology-eval",
+        "Evaluate atom provenance vs git history",
+    ),
+    ("agent-bench", "Eight-problem agent-coding battery"),
+    ("claim", "Work-atlas scope claims (mesh coordination)"),
+    ("nudge", "Dismiss audit nudges"),
+    (
+        "conformance",
+        "Which spec requirements are proven — passed/failed/could-not-judge/never-ran",
+    ),
+    (
+        "contract",
+        "What the CLI promises, how much is proven, when it last ran",
+    ),
+    (
+        "posture",
+        "Artifact age + verdict per quality subsystem, one table",
+    ),
+    (
+        "quality",
+        "check — the curated 30-minute breakage check, four verdicts, persisted",
+    ),
+];
+
+fn print_usage() {
+    crate::util::help::print(&HELP);
+    // Developer builds additionally list the gated toolchain verbs so
+    // `--features dev-tools` users see the full surface. The default
+    // (public) build omits them — the product is the assistant + mesh.
+    #[cfg(feature = "dev-tools")]
+    crate::util::help::print_subcommands_titled("Developer toolchain", DEV_SUBCOMMANDS);
+}
+
+/// `svrn nudge dismiss <id>` — record a nudge id in
+/// `~/.svrnmesh/dismissed_nudges.json` so the audit / status
+/// surfaces stop showing it. The id can be a family name (e.g.
+/// `recipe-publish`) to dismiss every variant, or a specific
+/// instance (e.g. `recipe-publish:sec-investigation`) to dismiss
+/// just that one.
+async fn run_nudge(args: &[String]) -> i32 {
+    if args.is_empty() {
+        eprintln!("Usage: svrn nudge dismiss <id>");
+        eprintln!("Example: sovereign nudge dismiss recipe-publish");
+        return 2;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        println!(
+            "Usage: svrn nudge <subcommand> [args]\n\n\
+             Subcommands:\n\
+               dismiss <id>   Suppress a nudge id (family or specific instance).\n\n\
+             Examples:\n\
+               sovereign nudge dismiss recipe-publish\n\
+               sovereign nudge dismiss recipe-publish:sec-investigation\n"
+        );
+        return 0;
+    }
+    match args[0].as_str() {
+        "dismiss" => {
+            let Some(id) = args.get(1) else {
+                eprintln!("error: `nudge dismiss` requires a nudge id");
+                return 2;
+            };
+            match record_dismissed_nudge(id) {
+                Ok(_) => {
+                    println!("Dismissed nudge: `{id}`");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
+            }
+        }
+        other => {
+            eprintln!("Unknown nudge subcommand: {other}");
+            1
+        }
+    }
+}
+
+/// Append `id` to `~/.svrnmesh/dismissed_nudges.json`. Idempotent:
+/// re-dismissing an already-dismissed id is a no-op. The file is
+/// a flat JSON array of strings; created on first dismissal.
+fn record_dismissed_nudge(id: &str) -> std::io::Result<()> {
+    let root = crate::util::dirs::sovereign_root();
+    std::fs::create_dir_all(&root)?;
+    let path = root.join("dismissed_nudges.json");
+    let mut current: Vec<String> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    if !current.iter().any(|x| x == id) {
+        current.push(id.to_string());
+    }
+    let bytes = serde_json::to_vec_pretty(&current)?;
+    std::fs::write(&path, bytes)?;
+    Ok(())
+}
+
+// ─── Main ──────────────────────────────────────────────────────
+
+/// Entry point. Builds the tokio runtime explicitly (rather than via
+/// `#[tokio::main]`) so we can hand the multi-thread executor an 8 MiB
+/// per-worker stack and install a panic hook that survives a worker
+/// abort.
+///
+/// Why this matters: tokio spawns its worker threads through
+/// `pthread_create` with an explicit stack size that defaults to 2 MiB
+/// on macOS. `RUST_MIN_STACK` only influences `std::thread::Builder`,
+/// not pthread-created tokio workers. Drift-detect load reproducibly
+/// overflowed those 2 MiB stacks (77 overflows / 166 daemon starts on
+/// 2026-05-12) and the daemon died via SIGABRT with no backtrace
+/// because the panic hook ran on an already-corrupted stack frame.
+///
+/// The panic hook below routes panic info through both `tracing::error!`
+/// (so launchd/systemd log pipelines and the daemon.err tail see it)
+/// AND `eprintln!` (so it lands even if tracing isn't initialized yet,
+/// e.g. during the wizard or before `init_tracing`). Both paths print
+/// the full backtrace when `RUST_BACKTRACE=full` is set.
+fn main() {
+    // Set the diagnostic env vars BEFORE the tokio runtime is built —
+    // any worker thread spawned afterwards reads them at panic time.
+    // (`RUST_MIN_STACK` won't propagate to tokio workers but does help
+    // plain `std::thread::Builder::spawn` calls — rayon, blocking-pool
+    // threads, etc.)
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "full");
+    }
+    if std::env::var_os("RUST_MIN_STACK").is_none() {
+        std::env::set_var("RUST_MIN_STACK", "8388608");
+    }
+
+    // Global panic hook. Captured panic info goes through both
+    // `tracing::error!` and `eprintln!` so the line lands regardless
+    // of whether tracing-subscriber is wired yet. Without this hook
+    // tokio's default behaviour writes panic frames straight to stderr
+    // bypassing the structured-logging layer, and on a worker abort
+    // (e.g. stack overflow → SIGABRT) the line never appears at all.
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let payload: &str = if let Some(s) = info.payload().downcast_ref::<&'static str>() {
+            s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.as_str()
+        } else {
+            "<non-string panic payload>"
+        };
+        // eprintln first — survives before/after tracing setup.
+        eprintln!("svrn panic at {location}: {payload}\nbacktrace:\n{backtrace}");
+        tracing::error!(
+            location = %location,
+            payload = %payload,
+            backtrace = %backtrace,
+            "svrn panic — see backtrace above"
+        );
+        // Chain to the previous hook so any installed test harness /
+        // tracing layer still sees the panic.
+        prev_hook(info);
+    }));
+
+    // Explicit multi-thread runtime with 8 MiB worker stacks. 8 MiB is
+    // the same headroom Cargo's build worker threads use and matches
+    // what corpus-engine's tree-sitter path needs on deeply-nested
+    // wikitext templates. Use `enable_all` to match `#[tokio::main]`'s
+    // default feature set (IO + time drivers).
+    // Rebrand back-compat: bridge legacy SOVEREIGN_* env vars and migrate the
+    // ~/.sovereign data dirs to ~/.svrnmesh before any threads spawn or state
+    // is opened. Both are idempotent + non-destructive (see sovereign_core::rebrand).
+    sovereign_core::rebrand::promote_legacy_env();
+    sovereign_core::rebrand::run_startup_migration();
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 * 1024 * 1024)
+        .thread_name("sovereign-rt-worker")
+        .build()
+        .expect("failed to build tokio runtime");
+    runtime.block_on(async_main());
+}
+
+/// The `--version` line: program name + the workspace version the three
+/// product binaries share (each inherits it via `version.workspace = true`).
+/// It matches the `cli-vX.Y.Z` release tag, so it's the string a bug report
+/// should carry. Pure + testable; the dispatch below prints it and exits.
+fn version_line() -> String {
+    format!("sovereign {}", env!("CARGO_PKG_VERSION"))
+}
+
+async fn async_main() {
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+
+    // The dispatcher's own flags, off the front. Everything from the first
+    // non-flag token onward is the subcommand and its arguments, untouched —
+    // see [`Globals`].
+    //
+    // What reaches this Err arm is narrow, and measured rather than assumed:
+    // `allow_hyphen_values` means an UNRECOGNISED leading flag is handed to
+    // `rest` rather than refused, so `svrn --nope` still falls through the
+    // dispatch table to the banner exactly as it always did (pinned by
+    // `an_unrecognised_leading_flag_is_forwarded_not_rejected`). A malformed
+    // use of a flag the dispatcher DOES own is what lands here —
+    // `svrn --help=x` -> "unexpected value 'x' for '--help'". Either way the
+    // exit code is 1 with the banner, which is what an unusable leading token
+    // has always produced.
+    let globals = match sovereign_cli_shared::flag_surface::parse::<Globals>(&argv) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("svrn: {e}\n");
+            print_usage();
+            std::process::exit(1);
+        }
+    };
+    let raw_args = globals.rest;
+
+    // Top-level --help / -h / help. Help answers only when it is the WHOLE
+    // command line; `svrn mesh --help` belongs to `mesh` and never reaches
+    // here, because `mesh` closed flag parsing above.
+    //
+    // The one rule that changed shape: the old check read `raw_args.first()`,
+    // so it was positional. `Globals` is not — any `-h`/`--help` ahead of the
+    // subcommand sets the flag wherever it sits. The observable behaviour is
+    // the same for every single-flag command line, `svrn -h status` included:
+    // that exits 1 with the banner, as it did when `-h` fell through the
+    // dispatch table matching no subcommand.
+    if globals.help && raw_args.is_empty() {
+        print_usage();
+        std::process::exit(0);
+    }
+    if raw_args.len() == 1 && raw_args[0] == "help" {
+        print_usage();
+        std::process::exit(0);
+    }
+    if globals.help {
+        print_usage();
+        std::process::exit(1);
+    }
+
+    // Top-level --version / -V (or a lone `version`). A bug report needs a
+    // version string, and before this there was none — `svrn --version` fell
+    // through to the banner. `svrn <subcommand> --version` still routes to the
+    // subcommand dispatcher below, unshadowed.
+    if globals.version || (raw_args.len() == 1 && raw_args[0] == "version") {
+        println!("{}", version_line());
+        std::process::exit(0);
+    }
+
+    // Hidden introspection: `svrn __dump-commands` prints every top-level
+    // verb the CLI dispatches (one per line) for the cli_contract_code reverse
+    // check. Not advertised in HELP; runs in any build (before the dev-tools
+    // gate) so the contract sees the whole surface regardless of features.
+    if raw_args.first().map(String::as_str) == Some("__dump-commands") {
+        for verb in ALL_VERBS {
+            println!("{verb}");
+        }
+        std::process::exit(0);
+    }
+
+    // Hidden introspection: `svrn __contract-smoke` prints the manifest's
+    // read-only smoke probes as TSV (`<expect_exit>\t<args>\t<expect_substr>`)
+    // for the cli-contract-live-verify.sh harness. Reads docs/cli-contract.toml
+    // (present in a dev checkout only); a no-op in the shipped binary.
+    if raw_args.first().map(String::as_str) == Some("__contract-smoke") {
+        match sovereign_cli_shared::cli_contract::Contract::load_default() {
+            Ok(contract) => {
+                for cmd in &contract.commands {
+                    if let Some(smoke) = &cmd.smoke {
+                        println!(
+                            "{}\t{}\t{}",
+                            smoke.expect_exit,
+                            smoke.args.join(" "),
+                            smoke.expect_stdout_contains.clone().unwrap_or_default()
+                        );
+                    }
+                }
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("__contract-smoke: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Hidden introspection: `svrn __journey-plan` prints the manifest's
+    // JOURNEYS — the sequenced use cases — for the cli-journey-verify.sh
+    // harness. Two record kinds, tab-separated, journeys emitted hardest-
+    // hitting first (tier ascending) and each immediately followed by its
+    // steps in order:
+    //
+    //   J <id> <tier> <persona> <visibility> <live|skip:reason> <title>
+    //     <experience> <needs,comma-joined|->
+    //   S <id> <idx> <mut|ro> <exit|-> <contains|-> <absent|-> <1|0 non-empty>
+    //     <live|skip:reason> <run>
+    //
+    // The two J columns added by the experience axis go AFTER `title`, which
+    // looks backwards next to the S row's "a new column goes before `run`,
+    // never after". The reason is the shell side: `read` gives its LAST
+    // variable the remainder of the line, so a field that may contain
+    // whitespace has to be last — `run` does, and it is. `title` also
+    // contains whitespace but is NOT the runner's last variable (the read
+    // declares enough names for the wider S row), so appending past it is
+    // safe. Appending also keeps every hand-written plan in
+    // scripts/tests/cli-journey-selftest.sh valid: those 18 J rows are the
+    // runner's negative controls, and a layout change that silently shifted
+    // their `title` into `experience` would weaken the one harness that
+    // proves this runner can fail.
+    //
+    // `-` means "not asserted" so a bash `while IFS=$'\t' read` never sees a
+    // collapsed empty field. `run` is last because it is the only field that
+    // may contain spaces. Reads docs/cli-contract.toml (a dev checkout only);
+    // a no-op in the shipped binary, like __contract-smoke above.
+    if raw_args.first().map(String::as_str) == Some("__journey-plan") {
+        match sovereign_cli_shared::cli_contract::Contract::load_default() {
+            Ok(contract) => {
+                let mut journeys: Vec<_> = contract.journeys.iter().collect();
+                journeys.sort_by(|a, b| a.tier.cmp(&b.tier).then_with(|| a.id.cmp(&b.id)));
+                let dash = |o: &Option<String>| o.clone().unwrap_or_else(|| "-".into());
+                let live = |o: &Option<String>| {
+                    o.as_ref()
+                        .map(|r| format!("skip:{r}"))
+                        .unwrap_or_else(|| "live".into())
+                };
+                for j in journeys {
+                    // `token:why` pairs joined by `;`. The WHY travels with the
+                    // token so the shell runner can explain a skipped journey
+                    // without restating the sentence — one source of truth
+                    // (Need::why), printed by whoever needs it.
+                    //
+                    // `;` and NOT `,`: the reasons are prose and contain commas
+                    // ("Claude transcripts, notes, drift report"), so a
+                    // comma-joined list truncated every reason at its first
+                    // comma when the runner split it. `needs_are_delimiter_safe`
+                    // in cli_contract.rs pins the separator against the text.
+                    let needs = if j.needs.is_empty() {
+                        "-".to_string()
+                    } else {
+                        j.needs
+                            .iter()
+                            .map(|n| format!("{}:{}", n.as_str(), n.why()))
+                            .collect::<Vec<_>>()
+                            .join(";")
+                    };
+                    println!(
+                        "J\t{}\t{}\t{:?}\t{:?}\t{}\t{}\t{}\t{}",
+                        j.id,
+                        j.tier,
+                        j.persona,
+                        j.visibility,
+                        live(&j.skip_live),
+                        j.title,
+                        j.experience,
+                        needs
+                    );
+                    for (i, s) in j.steps.iter().enumerate() {
+                        let e = s.expect.clone().unwrap_or_default();
+                        // `run` stays LAST: it is the only field that may
+                        // contain whitespace, and the shell runner reads it as
+                        // the remainder of the line. A new column goes before
+                        // it, never after.
+                        println!(
+                            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                            j.id,
+                            i,
+                            if s.mutates { "mut" } else { "ro" },
+                            e.exit.map(|c| c.to_string()).unwrap_or_else(|| "-".into()),
+                            dash(&e.stdout_contains),
+                            dash(&e.stdout_absent),
+                            u8::from(e.stdout_non_empty),
+                            live(&s.skip_live),
+                            s.settle_secs.unwrap_or(0),
+                            s.run
+                        );
+                    }
+                }
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("__journey-plan: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // A dev checkout running a dispatcher built without `--features
+    // dev-tools` has silently lost the developer verbs. Warn on EVERY verb,
+    // not only the gated ones: the whole failure mode is that the loss
+    // surfaces later, on an unrelated command, long after the build that
+    // caused it. Warn-only; never blocks. (After the hidden introspection
+    // verbs above, which must stay machine-parseable on stdout.)
+    sibling::warn_if_dev_tools_missing(cfg!(feature = "dev-tools"));
+
+    // Gate the developer toolchain out of the default build. `cfg!` (not
+    // `#[cfg]`) so `DEV_VERBS` stays referenced — and thus warning-free —
+    // in both feature states; the optimizer drops this block when the
+    // feature is on, letting the dev verbs fall through to the dispatch
+    // table below.
+    if !cfg!(feature = "dev-tools") {
+        if let Some(first) = raw_args.first() {
+            if DEV_VERBS.contains(&first.as_str()) {
+                eprintln!(
+                    "{first}: part of the Sovereign developer toolchain (project \
+                     lifecycle, code intelligence). It is not \
+                     in the default build. Restore it with `cargo build -p \
+                     sovereign-cli --features dev-tools` (the `-p` matters — \
+                     without it you rebuild the workspace default, not this \
+                     dispatcher), plus `cargo build -p sovereign-cli-dev` for the \
+                     sibling that actually runs the verb."
+                );
+                std::process::exit(2);
+            }
+        }
+    }
+
+    if let Some(first) = raw_args.first() {
+        match first.as_str() {
+            // ── LLM / bench / corpus / mesh cluster → sovereign-cli-llm ──
+            // All these moved to the LLM sibling in slice 5. The shim
+            // execs into it without setting up a tracing subscriber —
+            // the sibling's main() installs the appropriate filter for
+            // each verb.
+            // ingest's own CLI (pb-cli-llm-ingest-move): its verbs, except
+            // svrn's sub-verbs under those spellings, which fall through to
+            // sovereign-cli-llm below (one table, `ingest_bin::owns`).
+            "enrich" | "corpus" | "atlas" | "meta-atlas" | "recipe" | "pipeline" | "alignment"
+            | "bench"
+                if ingest_bin::owns(first, &raw_args[1..]) =>
+            {
+                let code = ingest_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "mobile" | "corpus" | "mcp" | "recipe-agent" | "maintainer" | "meshapp" => {
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // ingest's own CLI (phase-b pb-ingest-cli).
+            "ingest" => {
+                let code = ingest_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // cmnwlth's verbs — the mesh sibling (FIVE_PROGRAMS §9).
+            // serve's weight verbs keep their `svrn mesh` spelling (phase-b-22).
+            "mesh" | "ring" | "job" | "publish" | "unpublish" | "run" => {
+                let code = match serve_bin::mesh_verb(first, &raw_args[1..]) {
+                    Some(verb) => serve_bin::exec(verb, &raw_args[2..]),
+                    None => mesh_bin::exec(first, &raw_args[1..]),
+                };
+                std::process::exit(code);
+            }
+            "code" => {
+                // Every `svrn code` subcommand is the code program's, `code
+                // index` included (pb-code-index): exec `sovereign-cli-dev`,
+                // which names itself when it is not installed.
+                let code = dev_bin::exec("code", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "init" => {
+                // Top-level `svrn init` — replaces
+                // `svrn project init`. The old name continues
+                // to work via the alias arm in
+                // `project_cmd::run_project`.
+                let code = init::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "status" => {
+                let code = status_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "audit" => {
+                let code = audit_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "cache-audit" => {
+                // In-process telemetry over Claude Code transcripts — reads
+                // only local ~/.claude/projects/*.jsonl, no daemon/network.
+                let code = cache_audit_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "session" => {
+                // Session continuity — distill a transcript into a session
+                // frame (docs/specs/SESSION_CONTINUITY.md). Reads the same
+                // local transcripts as cache-audit; the synthesis stage
+                // talks to the local daemon only.
+                let code = session_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "milestone" => {
+                let code = milestone_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "notes" => {
+                // Code's verb over code's notes store (pb-notes-verbs): exec
+                // `sovereign-cli-dev`. `retrieval-audit` is not code's and
+                // stays in this process.
+                let code = match raw_args.get(1).map(String::as_str) {
+                    Some("retrieval-audit") => notes_retrieval_cmd::run(&raw_args[2..]).await,
+                    _ => dev_bin::exec("notes", &raw_args[1..]),
+                };
+                std::process::exit(code);
+            }
+            "seat" => {
+                // The seat's coordination-rail instrument (order
+                // commons-fluency fix 8). `seat watch` polls the daemon
+                // notes rail; subcommand parsing lives in seat_cmd.rs.
+                let code = seat_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "path" => {
+                // Read-only path resolution from the SSOT. Public (not
+                // dev-gated) on purpose: shell scripts and end-user
+                // troubleshooting both need "where does my data live?",
+                // and hard-coding the answer is what strands data roots.
+                let code = path_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "drift" => {
+                let code = drift_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "conformance" => {
+                // Joins the requirement registry, the per-crate covers: manifests
+                // and the newest nextest JUnit report. Reads only; runs nothing.
+                let code = conformance_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "contract" => {
+                // The CLI's own quality surface. In-process and dev-gated: it
+                // reads docs/cli-contract.toml, which only a source checkout has.
+                let code = contract_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "deep-research")]
+            "deep-research" => {
+                // The thin local-only research loop (T1): gated corpus +
+                // web search, custody-stamped fetch, gap-audited rounds.
+                // In the DEFAULT build since deep-research-t3a (order
+                // deep-research-t3a graduated the verb out of the
+                // dev-tools-only surface — oicp client + tools-base web
+                // backend, not the daemon).
+                //
+                // --resume DIR restores an interrupted run from its
+                // checkpoint (continuing at the next round, ledger
+                // continuity included); run close ingests the fetched
+                // evidence into dr-estate-<run_id>, the local cache a
+                // later run's --corpora reads before the web leg.
+                //
+                // The egress boundary's glassbox contract (order
+                // deep-research-t2a): every egress decision — released
+                // or refused — is traced at debug under
+                // `sovereign_core::egress`; the loop only shows them
+                // if a subscriber exists, so the verb installs one.
+                // RUST_LOG still overrides the default filter.
+                util::tracing_init::init_tracing("sovereign_cli=info,sovereign_core::egress=debug");
+                let code = deep_research_cmd::cmd_deep_research(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "posture" => {
+                // Read-only roll-up of every posture-bearing subsystem's
+                // artifact age (drift/arch/capability/nightly/watchers/…).
+                let code = posture_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            // `map` RENDERS quality/instruments.toml and runs nothing, so it
+            // is intercepted before the lane runner rather than costing a
+            // tracing subscriber and a lane-table parse.
+            #[cfg(feature = "dev-tools")]
+            "quality" if raw_args.get(1).map(String::as_str) == Some("map") => {
+                std::process::exit(quality_map_cmd::run(&raw_args[2..]));
+            }
+            #[cfg(feature = "dev-tools")]
+            "quality" => {
+                // The curated breakage check. `posture` reads artifacts other
+                // commands wrote; this one RUNS the lanes and writes the
+                // table. Glassbox: every decision the runner makes — the
+                // fingerprint inputs, each precondition probe, each lane's
+                // cap and exit — is a debug event under `sovereign_cli`.
+                util::tracing_init::init_tracing("sovereign_cli=info");
+                // `quality lane` is bench's (pb-cli-llm-bench-move).
+                let code = quality_check_cmd::run_verb(&raw_args[1..], bench_bin::exec).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "rough-edges" => {
+                let code = dev_bin::exec("rough-edges", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "git-archaeology" => {
+                let code = dev_bin::exec("git-archaeology", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "archaeology-eval" => {
+                let code = dev_bin::exec("archaeology-eval", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "charter" => {
+                let code = charter_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "claim" => {
+                // Moved to sovereign-cli-llm (uses sovereign-mesh +
+                // sovereign-work-atlas, both heavy).
+                let code = dev_bin::exec("claim", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "solve" => {
+                // Daemon-hosted TDD solver client (docs/specs/SOLVE_UX.md).
+                // Lives in sovereign-cli-llm with the other daemon-HTTP
+                // clients (chat, claim).
+                let code = dev_bin::exec("solve", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "amend" => {
+                let code = amend_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "plan" => {
+                let code = plan_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "serve" => {
+                let code = serve_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "stop" => {
+                let code = stop_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "install-service" => {
+                // Lives in sovereign-cli-daemon alongside
+                // setup_cmd + service_install.
+                let code = daemon_bin::exec("install-service", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "refresh" => {
+                let code = refresh_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "update" => {
+                // Self-update: check the release shelf + re-run the canonical
+                // installer. In-process (owned by the dispatcher) because it
+                // must replace ALL sibling binaries, not just one.
+                let code = update_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "project" => {
+                // Split surface. `register` / `unregister` / `list` / `watch`
+                // run HERE, in the shipped dispatcher, because they are pure
+                // loopback HTTP and the daemon already owns the indexing
+                // pipeline they drive. The heavier lifecycle subcommands
+                // (`init`, `serve`, `status`, `found`, …) still live in the
+                // workbench sibling.
+                let retired =
+                    sovereign_cli_shared::deprecation::refuse_retired(&["project"], &raw_args[1..]);
+                let code = match retired {
+                    Some(c) => c,
+                    None => match project_registry::try_run(&raw_args[1..]).await {
+                        Some(c) => c,
+                        None if cfg!(feature = "dev-tools") => {
+                            dev_bin::exec("project", &raw_args[1..])
+                        }
+                        None => project_registry::refuse_workbench_subcommand(
+                            raw_args.get(1).map(String::as_str),
+                        ),
+                    },
+                };
+                std::process::exit(code);
+            }
+            "reflect" => {
+                let code = dev_bin::exec("reflect", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "journal" => {
+                // Reads and writes files under `~/.sovereign/journal`
+                // only — no daemon, no notes db, no network. Ships in the
+                // DEFAULT build on purpose: it is the consent surface for
+                // data the daemon is already writing, and an end-user
+                // build that recorded episodes with no way to read,
+                // bundle, or switch them off would be indefensible.
+                let code = journal_cmd::run(&raw_args[1..]);
+                std::process::exit(code);
+            }
+            "memory" => {
+                util::tracing_init::init_tracing("sovereign_cli=info,sovereign_store=info");
+                let code = memory_cmd::run_memory(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "awareness" => {
+                // Exec'd into the composed LLM sibling, which holds ingest's
+                // atlas port for the subcommands that write an atlas
+                // (pb-cli-llm-ingest-move-remainder); the sibling gates the
+                // verb on its own `awareness` feature.
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "tools" => {
+                // Moved to the sovereign-cli-dev sibling.
+                let code = dev_bin::exec("tools", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // bench's own CLI (pb-cli-llm-bench-move): `bench` and `eval`,
+            // except svrn's white-box lanes under those spellings, which fall
+            // through to sovereign-cli-llm below.
+            "bench" | "eval" if bench_bin::owns(first, &raw_args[1..]) => {
+                let code = bench_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // ── LLM cluster (continued) → sovereign-cli-llm ──
+            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
+            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" | "proxy"
+            | "portfolio" | "workflow" => {
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // Hidden, like the introspection verbs above: svrn's probe of its
+            // own internals, which `eval run`'s white-box modes exec and score
+            // (phase-b-58). Not in HELP or ALL_VERBS.
+            "__probe" => {
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // `backlog` is `svrn code`'s: its items are notes-store todos.
+            "backlog" => {
+                let code = dev_bin::exec("backlog", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "agent-bench" => {
+                // Eleven-problem coding battery; subprocess-driven
+                // pi / opencode / codex runners. See SYSTEM_OVERVIEW §4
+                // and `code/crates/sovereign-agent-bench/`.
+                let code = agent_bench_bin::exec(&raw_args[1..]);
+                std::process::exit(code);
+            }
+            "nudge" => {
+                let code = run_nudge(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "doctor" => {
+                // ScipGraph integrity probe + health check lives in
+                // sovereign-cli-daemon alongside the daemon it
+                // diagnoses.
+                let code = daemon_bin::exec("doctor", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "setup" => {
+                // Hardware planner + model manifest live in
+                // sovereign-cli-daemon — same binary that hosts the
+                // daemon they configure.
+                let code = daemon_bin::exec("setup", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "model" => {
+                // Reads/writes the [models] config and hot-applies via the
+                // daemon's admin reload — lives in sovereign-cli-daemon next
+                // to setup (shares the config type) and the daemon it reloads.
+                let code = daemon_bin::exec("model", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "daemon" => {
+                // Long-running host process. Its main() applies the
+                // structured-tracing filter for launchd / systemd
+                // before dispatch.
+                let code = daemon_bin::exec("daemon", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            _ => {}
+        }
+    }
+
+    // No recognised subcommand. Pre-2026-05-22 sovereign-cli used to
+    // fall through here into a full REPL loop that constructed an
+    // EmbeddedLlamaCpp, the KnowledgeView manager, the tool registry,
+    // etc. — about 380 lines of Runtime construction. That path moved
+    // to `sovereign-cli-llm` (the `chat` subcommand) along with every
+    // other LLM-touching surface, so the dispatcher binary stops
+    // linking llama-cpp-2 + lance.
+    //
+    // Bare `sovereign` now prints usage and exits. Users who want the
+    // interactive shell type `svrn chat`. A removed verb (`atos`,
+    // `design`) is refused by name first, never answered with usage.
+    if let Some(code) = sovereign_cli_shared::deprecation::refuse_retired(&[], &raw_args) {
+        std::process::exit(code);
+    }
+    print_usage();
+    std::process::exit(1);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── the dispatcher's own flag surface ───────────────────────────────
+    // `Globals` sits in front of EVERY `svrn` invocation, so the property that
+    // matters is not which flags it accepts but which it REFUSES to touch: a
+    // subcommand's flags must reach the subcommand verbatim. Nothing tested
+    // the argv split before the conversion, because there was nothing to call
+    // — the hand-rolled checks read `raw_args.first()` inline in `async_main`,
+    // which exits the process and cannot be driven from a test.
+
+    // `std::result::Result` spelled out: this module's `use super::*` pulls in
+    // `sovereign_core::error::Result`, which takes one generic parameter.
+    fn globals(argv: &[&str]) -> std::result::Result<Globals, String> {
+        sovereign_cli_shared::flag_surface::parse::<Globals>(
+            &argv.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        )
+    }
+
+    /// THE forwarding property. `trailing_var_arg` + `allow_hyphen_values`
+    /// mean parsing stops at the first non-flag token, so a flag the
+    /// dispatcher also owns (`--version`) still belongs to the subcommand
+    /// once a subcommand has been named. A strict parse would answer here
+    /// instead and every sibling would stop receiving its own arguments.
+    #[test]
+    fn a_subcommands_flags_are_never_eaten_by_the_globals() {
+        let g = globals(&["bench", "--version"]).unwrap();
+        assert!(!g.version, "`svrn bench --version` must not answer here");
+        assert_eq!(g.rest, ["bench", "--version"]);
+
+        let g = globals(&["mesh", "status", "--json", "-n", "5"]).unwrap();
+        assert!(!g.help && !g.version);
+        assert_eq!(g.rest, ["mesh", "status", "--json", "-n", "5"]);
+
+        // The hidden introspection verbs route on `rest[0]` too.
+        assert_eq!(
+            globals(&["__dump-commands"]).unwrap().rest,
+            ["__dump-commands"]
+        );
+    }
+
+    /// The globals themselves, and the split that decides whether help is the
+    /// WHOLE command line — the rule `async_main` reads to choose exit 0
+    /// (`svrn -h`) over exit 1 (`svrn -h status`, which matched no subcommand
+    /// before the conversion either).
+    #[test]
+    fn the_globals_are_set_only_ahead_of_the_subcommand() {
+        let g = globals(&["--version"]).unwrap();
+        assert!(g.version && g.rest.is_empty());
+        assert!(globals(&["-V"]).unwrap().version);
+
+        let g = globals(&["--help"]).unwrap();
+        assert!(g.help && g.rest.is_empty());
+
+        let g = globals(&["-h", "status"]).unwrap();
+        assert!(g.help, "the flag is still seen");
+        assert_eq!(g.rest, ["status"], "...but it is not a bare help request");
+
+        // `help` / `version` as WORDS are subcommands, not flags; `async_main`
+        // matches them out of `rest` by length.
+        let g = globals(&["help"]).unwrap();
+        assert!(!g.help);
+        assert_eq!(g.rest, ["help"]);
+    }
+
+    /// An upstream property this dispatcher DEPENDS on and does not control,
+    /// so it is pinned rather than trusted (ARCH §18.4). `allow_hyphen_values`
+    /// makes clap hand an unrecognised leading `--flag` to `rest` instead of
+    /// erroring, which is what keeps `svrn --nope` on its historical path:
+    /// no subcommand matches, so the banner prints and the exit is 1. If a
+    /// clap upgrade starts rejecting it, this goes red — rather than the
+    /// dispatcher quietly starting to refuse arguments it used to forward.
+    #[test]
+    fn an_unrecognised_leading_flag_is_forwarded_not_rejected() {
+        let g = globals(&["--nope"]).expect(
+            "clap changed: an unknown leading flag now errors instead of              landing in `rest`. `async_main`'s parse-error arm already prints              the banner and exits 1, so the observable behaviour is unchanged              — update this test to assert the Err.",
+        );
+        assert_eq!(g.rest, ["--nope"]);
+        assert!(!g.help && !g.version);
+    }
+
+    /// `--version` must carry the real workspace version — the string a bug
+    /// report should include. Guards against the earlier regression where
+    /// `svrn --version` printed the banner with no version at all.
+    #[test]
+    fn version_line_carries_the_workspace_version() {
+        let v = version_line();
+        assert_eq!(v, format!("sovereign {}", env!("CARGO_PKG_VERSION")));
+        let num = v
+            .strip_prefix("sovereign ")
+            .expect("version line is prefixed with `sovereign `");
+        assert!(
+            num.split('.').count() >= 3 && num.starts_with(|c: char| c.is_ascii_digit()),
+            "version_line() should be `sovereign <semver>`, got `{v}`"
+        );
+    }
+
+    /// The public `--help` must never advertise a verb the default build
+    /// rejects. Pins the gating invariant: every `Subcommands` entry in
+    /// `HELP` is absent from `DEV_VERBS` (ARCH_PRINCIPLES §7.2 — an
+    /// invariant as a test, not a comment).
+    #[test]
+    fn public_help_advertises_no_dev_verb() {
+        let mut saw_subcommands = false;
+        for section in HELP.sections {
+            if let HelpSection::Subcommands(entries) = section {
+                saw_subcommands = true;
+                for (name, _) in *entries {
+                    assert!(
+                        !DEV_VERBS.contains(name),
+                        "public help advertises gated dev-toolchain verb `{name}`"
+                    );
+                }
+            }
+        }
+        assert!(saw_subcommands, "HELP is missing its Subcommands section");
+    }
+
+    /// `ALL_VERBS` (what `__dump-commands` reports) must list every dispatched
+    /// top-level verb. Cross-checked against the two existing authoritative
+    /// lists — `DEV_VERBS` and the `HELP` subcommand table — so the dump
+    /// cannot drift from the `match` arms without a test going red. Also pins
+    /// sorted + dedup so the reverse check's output is stable.
+    /// `svrn __probe` is wire between svrn and bench, not a verb a user types.
+    #[test]
+    fn the_probe_verb_is_hidden() {
+        assert!(!ALL_VERBS.contains(&"__probe"));
+        for section in HELP.sections {
+            if let HelpSection::Subcommands(entries) = section {
+                assert!(entries.iter().all(|(name, _)| !name.contains("probe")));
+            }
+        }
+    }
+
+    #[test]
+    fn all_verbs_is_complete_and_sorted() {
+        for v in DEV_VERBS {
+            assert!(
+                ALL_VERBS.contains(v),
+                "DEV_VERBS lists `{v}` but ALL_VERBS does not (update ALL_VERBS)"
+            );
+        }
+        for section in HELP.sections {
+            if let HelpSection::Subcommands(entries) = section {
+                for (name, _) in *entries {
+                    assert!(
+                        ALL_VERBS.contains(name),
+                        "HELP advertises `{name}` but ALL_VERBS does not (update ALL_VERBS)"
+                    );
+                }
+            }
+        }
+        let mut sorted = ALL_VERBS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), ALL_VERBS.len(), "ALL_VERBS has duplicates");
+        assert_eq!(
+            sorted.as_slice(),
+            ALL_VERBS,
+            "ALL_VERBS must be kept sorted"
+        );
+    }
+}

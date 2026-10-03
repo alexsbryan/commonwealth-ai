@@ -323,8 +323,8 @@ settling a real month.
 | The rail routes | `POST /v1/rail/append`, `GET /v1/rail/log` on `:9743` |
 | The app | wherever you scaffolded it |
 
-Reference: [MESHAPP_AUTHORING.md](../sovereign/docs/MESHAPP_AUTHORING.md) for
-the authoring contract, [CLI_REFERENCE.md](../sovereign/docs/CLI_REFERENCE.md)
+Reference: [MESHAPP_AUTHORING.md](../svrn/docs/MESHAPP_AUTHORING.md) for
+the authoring contract, [CLI_REFERENCE.md](../svrn/docs/CLI_REFERENCE.md)
 for every `svrn ring` flag, and
 [INTEGRATION_SURFACES.md](./INTEGRATION_SURFACES.md) for what is a contract and
 what is not.

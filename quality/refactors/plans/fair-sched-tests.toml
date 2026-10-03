@@ -5,14 +5,14 @@
 # commonwealth-core into this crate. Same recipe as citation-tests.toml:
 # move the body, patch the opener into a declaration.
 [plan]
-subject = "serving-policy/src/fair_sched.rs"
+subject = "serve/crates/serving-policy/src/fair_sched.rs"
 verify_cmd = "cargo test -p serving-policy --lib"
 
 [[move]]
 # tests body: everything between `mod tests {` and its closing brace
 start = 563
 end = 986
-dest = "serving-policy/src/fair_sched/tests.rs"
+dest = "serve/crates/serving-policy/src/fair_sched/tests.rs"
 
 [[patch]]
 # the `#[cfg(test)] mod tests {` opener + closing brace become a declaration

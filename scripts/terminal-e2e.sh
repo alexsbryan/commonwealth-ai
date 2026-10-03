@@ -24,7 +24,7 @@
 # WHAT IT CANNOT PROVE. Both daemons are on this host, so every forward is
 # on-box. `ServingLocus::ForwardsOffBox` and the off-box `local_only` refusal
 # need a second MACHINE and stay unit-tested until one exists
-# (`sovereign/docs/specs/MESH_N4_TOPOLOGY.md` §4.5). Note the PEER TALLY is not
+# (`svrn/docs/specs/MESH_N4_TOPOLOGY.md` §4.5). Note the PEER TALLY is not
 # in that set: `/status.inference.peer_requests` is keyed on the `X-Node-Id`
 # header, not on locality, so it is fully checkable on one box — the tn-2 order
 # assumed otherwise and steps 13/14 below are the counter-example.

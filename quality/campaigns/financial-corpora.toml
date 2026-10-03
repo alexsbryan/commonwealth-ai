@@ -3,7 +3,7 @@
 # Defer/descope = edit a bar's `status`; git history is the ledger.
 id        = "financial-corpora"
 objective = "Financial corpora answer figure questions with basis or refuse"
-spec      = "sovereign/docs/specs/FINANCIAL_CORPORA.md"
+spec      = "svrn/docs/specs/FINANCIAL_CORPORA.md"
 declared  = "2026-08-14"
 status    = "active"
 
@@ -26,7 +26,7 @@ target       = 1.0
 direction    = "higher_is_better"
 kill         = "if the zero bar must become a rate to render green, that is a product defect, not a threshold to tune"
 # READ-TIER by operator decision (same directive): parses the newest COMMITTED
-# frozen-set verdicts in sovereign/bench/sec-filings/results/, aggregating
+# frozen-set verdicts in bench/lanes/sec-filings/results/, aggregating
 # EVERY artifact of that newest commit (an n=3 session counts all 27 items —
 # a zero bar is not an average, and picking the cleanest run would be).
 # ref = the commit that landed the artifact, so a value can never be stamped
@@ -37,7 +37,7 @@ instrument   = '''python3 - <<'PY'
 import glob, json, subprocess, sys
 best = None  # (commit_time, sha) -> newest committed run
 cands = {}
-for p in sorted(glob.glob("sovereign/bench/sec-filings/results/aapl-fabrication-*.jsonl")):
+for p in sorted(glob.glob("bench/lanes/sec-filings/results/aapl-fabrication-*.jsonl")):
     out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],
                          capture_output=True, text=True).stdout.split()
     if len(out) != 2:
@@ -58,7 +58,7 @@ print("aggregated:", ", ".join(cands[best]), file=sys.stderr)
 # artifact = the results DIR: its mtime moves exactly when a new result
 # lands, which is what arms the render's static-artifact tell.
 print(json.dumps({"value": round(n / len(rows), 4), "commit": best[1],
-                  "artifact": "sovereign/bench/sec-filings/results"}))
+                  "artifact": "bench/lanes/sec-filings/results"}))
 PY'''
 
 [[bar]]

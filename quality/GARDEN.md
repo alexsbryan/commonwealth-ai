@@ -150,7 +150,7 @@ than having no row. The 2026-08-26 session found the auto-collaborate loop dark
 since July — under a control plane that kept reporting healthy.
 
 **The rearrangement.** A signal standing unactioned past its review-by is
-**deleted or fixed, never renewed**. `sovereign/DEFAULTS_LEDGER.md` already
+**deleted or fixed, never renewed**. `docs/DEFAULTS_LEDGER.md` already
 encodes this contract for dark capabilities ("a row past its review-by date is
 not noise: it is the signal"). Apply the same rule to every standing counter.
 

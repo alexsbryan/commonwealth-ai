@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fim-smoke.sh — weight-gated FIM vertical-slice smoke
-# (sovereign/docs/INLINE_COMPLETION.md, plan F0 exit criterion).
+# (svrn/docs/INLINE_COMPLETION.md, plan F0 exit criterion).
 #
 # Boots a REAL daemon on an isolated $HOME (scratch ports, scratch
 # data dir) against a real coder GGUF, then exercises

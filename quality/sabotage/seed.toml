@@ -25,7 +25,7 @@
 [[mutant]]
 id          = "gr19-evidence-pool-loses-the-chunks"
 requirement = "GR-19"
-target      = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+target      = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find        = "    sources.extend(chunks.iter().cloned());\n"
 replace     = ""
 mustFail    = ["sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"]
@@ -39,7 +39,7 @@ expected    = "CAUGHT"
 [[mutant]]
 id          = "self-control-doc-comment-only"
 requirement = "GR-19"
-target      = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+target      = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find        = "/// Fold text for substring comparison."
 replace     = "/// Fold the text for substring comparison."
 mustFail    = ["sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"]

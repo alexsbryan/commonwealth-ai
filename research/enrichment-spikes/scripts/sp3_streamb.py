@@ -3,7 +3,7 @@
 
 One output row per scored claim: (member_chunks, claim, verdict) plus
 provenance (corpus, model, node_id, level, max_support) — the faithfulness
-lane's training-seed shape (sizing doc: lives at sovereign/bench/faithfulness/).
+lane's training-seed shape (sizing doc: lives at bench/lanes/faithfulness/).
 
 Usage:
     python3 scripts/sp3_streamb.py \

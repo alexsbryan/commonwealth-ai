@@ -34,7 +34,7 @@ set -euo pipefail
 # Repo root is derived from this script's own location — no hardcoded paths.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DESKTOP_CRATE="$REPO_ROOT/sovereign/crates/sovereign-desktop"
+DESKTOP_CRATE="$REPO_ROOT/clients/desktop"
 
 FORCE_FIRST_RUN=1
 PASSTHRU=()

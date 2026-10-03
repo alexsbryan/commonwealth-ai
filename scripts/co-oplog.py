@@ -2125,7 +2125,7 @@ def cmd_counts(a) -> int:
     Reuse, not a new harness (ARCH 11). `sovereign-tdd` already defines the
     one-`f` contract — a command prefixed `counts:` whose stdout is
     `PASS <name>` / `FAIL <name>`, parsed at
-    `sovereign/crates/sovereign-tdd/src/shared/parser.rs:56`, with zero lines
+    `code/crates/sovereign-tdd/src/shared/parser.rs:56`, with zero lines
     plus an `error` folding to one failing `<suite error>` and zero lines
     without one staying 0/0/0 so `NoBaseline` keeps meaning "nothing to steer
     by". Emitting it makes this pipeline steerable by the existing solve loop
@@ -6201,7 +6201,7 @@ def cmd_self_test(_a) -> int:
                       ("a ledger of plans", "sorry"), ("svrn setup --terminal", "sorry")):
         eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": f"a new {_n}"})[0], _want, f"Proposes {_n}")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "NodeId", "span": "x"})[0], "refuted", "Proposes: a macro-defined type is defined (define_id!(NodeId, ..))")
-    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "docs/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `docs/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
     eq(anchored("Outcome", "pub(crate) struct Outcome {\n local: Option<Scored>"), True, "anchored: the name is a token in the text")
     eq(anchored("come", "pub(crate) struct Outcome {"), False, "anchored: not a substring of a longer token")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "summaries", "shape": "fn", "span": "`pub fn summaries(&self, before: int)`"})[0], "sorry", "Proposes: a &self method belongs to its type")
@@ -6221,7 +6221,7 @@ def cmd_self_test(_a) -> int:
     eq(_kh.plan_cites("co-oplog") is not None, True, "plan_cites: name.rs in a table cites the module")
     _kh.text = 'Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],'
     eq(_kh.plan_cites("Scope"), None, "plan_cites: a route in the plan's own code is no citation (62d5846b)")
-    _kh.text = "- **`SplitInferenceProvider`** (`oicp-client/src/lib.rs:1258`) is the provider."
+    _kh.text = "- **`SplitInferenceProvider`** (`shared/crates/oicp-client/src/lib.rs:1258`) is the provider."
     eq(_kh.plan_cites("SplitInferenceProvider", git("rev-parse", "HEAD").strip()) is not None, True, "plan_cites: a backticked name beside file:line is a citation")
     _kh.text = "1. `no_such_new_file_xyz.rs` — one `Scope` variant, one `paths()` arm"
     eq(_kh.plan_cites("Scope", git("rev-parse", "HEAD").strip()), None, "plan_cites: an anchor the plan itself will write is no citation (62d5846b)")

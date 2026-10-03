@@ -3,7 +3,7 @@
 #
 # serving-lift.sh — the instrument for the serving package's physical lift.
 # The package is `[[package]] name = "serving"` in quality/ARCH_LAYERS.toml and
-# the design is `sovereign/SERVING_BOUNDARY.md`, "What is enforced, and what is
+# the design is `serve/SERVING_BOUNDARY.md`, "What is enforced, and what is
 # not" Tier 2. The campaign rung that names this verdict is `dm-mesh-serving`
 # (quality/campaigns/domains.toml), whose done condition is "serving-lift
 # verdict 1"; the `[[bar]]` row that measures it is owed by that rung.

@@ -31,7 +31,7 @@ from jlens_common import DEVICE, Injector, OUT_DIR, chat_prompt, load_model, sav
 from phase2_outcome_vector import BAND, answer_resids, batch_generate, _null
 from synth_items import ABSTAIN_MARKERS
 
-BANK = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/chaos_monkey/secret_agent.toml"
+BANK = "/Users/alexsbryan/dev/commonwealth-ai/bench/lanes/chaos_monkey/secret_agent.toml"
 TRANSCRIPTS = os.path.join(OUT_DIR, "chaos_baseline_transcripts.jsonl")
 CACHE = os.path.join(OUT_DIR, "phase3_samples.pt")
 VEC_PATH = os.path.join(OUT_DIR, "bank_outcome_qwen3-8b.f32")

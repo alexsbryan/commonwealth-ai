@@ -20,7 +20,7 @@ reach back into the monolith. This document is the contract;
 `cargo run -p xtask -- boundary-gate` enforces it in CI (blocking).
 
 It is the second package to be cut this way. The first is `studio/`
-([studio/BOUNDARY.md](../studio/BOUNDARY.md)), and everything structural here —
+([clients/studio/BOUNDARY.md](../clients/studio/BOUNDARY.md)), and everything structural here —
 the two tiers, the shared-leaf budget, the dev/build-dependency rule — is that
 document's pattern applied a second time. Where the two differ, the difference
 is noted.
@@ -44,7 +44,7 @@ entry is `code map <path> [--spec <file>]`.
 call graphs, a deterministic tree-sitter fact base, live lint/test status,
 durable cross-session notes, and index-health posture — so a coding agent stops
 guessing from grep. The design record is
-[CODE_INTEL_CHAT.md](../sovereign/docs/specs/CODE_INTEL_CHAT.md).
+[CODE_INTEL_CHAT.md](../svrn/docs/specs/CODE_INTEL_CHAT.md).
 
 Both run on the same four layers:
 
@@ -60,9 +60,9 @@ as the softer answer in every report that prints them
 (CHECK_CODE_AGAINST_SPEC "Two kinds of answer, honestly labeled").
 
 **The LLM layers ship.** They are the product, not an internal convenience, and
-they are already injectable: `corpus-engine/src/enrichment/code_intel/mod.rs`
+they are already injectable: `ingest/crates/corpus-engine/src/enrichment/code_intel/mod.rs`
 takes a `ChatCompletionFn` and knows nothing about where it points. The prior
-posture recorded in `sovereign/SYSTEM_OVERVIEW.md` §4 — "the LLM-bound layers
+posture recorded in `docs/SYSTEM_OVERVIEW.md` §4 — "the LLM-bound layers
 stay mesh-side" — was a statement about which gates run in *this repo's public
 CI*, and is not a distribution constraint. Update that sentence when Phase 6
 lands so the two documents do not disagree.
@@ -77,11 +77,11 @@ lands so the two documents do not disagree.
 |---|---|---|---|
 | `yield-hook` | The cooperative foreground-yield contract — one trait, zero deps | `corpus-engine-yield` | 110 |
 | `scip-graph` | SCIP call-graph store, per-language exporter dispatch, the read-only trace builder, capability map, arch metrics | `corpus-engine-scip` | 7,093 |
-| `code-facts` | The deterministic tree-sitter fact base + fact store + claim checks | `corpus-engine/src/{facts,facts_check,facts_store}.rs` | 1,710 |
+| `code-facts` | The deterministic tree-sitter fact base + fact store + claim checks | `ingest/crates/corpus-engine/src/{facts,facts_check,facts_store}.rs` | 1,710 |
 | `code-notes` | NoteStore + project-docs index | `corpus-engine-notes` | 8,981 |
 | `code-watchers` | Lint/test watchers, their SQLite result stores, the coordinator + heartbeat | `corpus-engine-watchers` | 3,294 |
 | `code-archaeology` | Git history mining, rough-edge surfacing, provenance eval | `corpus-engine-archaeology` | 2,514 |
-| `code-enrich` | Intent-forced symbol summarisation, incremental pass, body-hash cache | `corpus-engine/src/enrichment/code_intel/` | 1,776 |
+| `code-enrich` | Intent-forced symbol summarisation, incremental pass, body-hash cache | `ingest/crates/corpus-engine/src/enrichment/code_intel/` | 1,776 |
 | `code-tools` | The `Tool` implementations + registry assembly + MCP surface | `sovereign-tools/src/code/` minus §4 | 16,550 |
 | `code-intel-cli` | `code map`, `check-spec`, `spec-intel`, `spec-reconcile`, `capability-doc`, `capability-reconcile`, the MCP server entry | `sovereign-cli-dev/src/code_*.rs` + `sovereign-cli-llm/src/enrich_cmd/{spec_*,capability_*,code_intel}.rs` | 8,734 |
 
@@ -286,7 +286,7 @@ extraction look impossible.
 | Contents | One row per function: the intent-forced summary + ASKS | Every chunk of source text |
 | Size (this repo, measured 2026-06-25 / 2026-07-25) | 279 rows for the 5-file inference subsystem, 260 after test pruning — one per function | **41,691 chunks** for `commonwealth-ai` |
 | Who needs it | The conceptual→symbol bridge. CODE_INTEL_CHAT's entire thesis | `code_search` |
-| Backing | Anything. A flat cosine scan is milliseconds at this scale | LanceDB IVF-PQ + Tantivy FTS, 6,956 LOC in `corpus-engine/src/index/` |
+| Backing | Anything. A flat cosine scan is milliseconds at this scale | LanceDB IVF-PQ + Tantivy FTS, 6,956 LOC in `ingest/crates/corpus-engine/src/index/` |
 | Verdict | **The package owns it** | **Host-only** |
 
 The summary index is the one that matters and it is *tiny* — a 5,000-function

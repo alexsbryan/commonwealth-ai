@@ -3,7 +3,7 @@
 fixture — the conformance proof the golden vectors exist for.
 
 Written from the FORMULA in the fixture and in the module docs of
-`commonwealth/crates/commonwealth-rail-core/src/view.rs`, deliberately
+`shared/crates/commonwealth-rail-core/src/view.rs`, deliberately
 without reading that crate's code: if a second party cannot implement the
 fold from the spec text, the spec is not a spec. What this proves is the
 folding rule and its edge cases (an empty window folds to the domain hash;
@@ -45,7 +45,7 @@ def fold(actor: str, frm: int, mark: int, pairs) -> str:
 
 def main() -> int:
     path = sys.argv[1] if len(sys.argv) > 1 else (
-        "commonwealth/crates/commonwealth-rail-core/fixtures/view_golden.json"
+        "shared/crates/commonwealth-rail-core/fixtures/view_golden.json"
     )
     doc = json.load(open(path))
     failures = 0

@@ -1,0 +1,83 @@
+[package]
+name = "commonwealth-rails"
+description = "The minimal rails daemon — the process that IS your address on the mesh, with media registered on it and nothing else. Package-closure clean: no sovereign runtime, no corpus engine, no api crate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cw-rails"
+path = "src/main.rs"
+
+[dependencies]
+# The data-root lock (`claim_root`): the host kit's one RunLock (phase-b
+# pb-hostkit). A neutral leaf, so neither [[forbid]] row above it matches.
+host-kit = { workspace = true, features = ["shell"] }
+commonwealth-core = { workspace = true }
+# `iroh` for the endpoint, the acceptor and the dial-by-key transport;
+# `fanout` because the media catalogue half runs on it.
+commonwealth-transport = { workspace = true, features = ["iroh", "fanout"] }
+commonwealth-media = { workspace = true }
+# The reach door's wire (`/v1/mesh/reach`, pb-rails-reach). A contract leaf,
+# so neither [[forbid]] row above it matches.
+mesh-reach = { workspace = true, features = ["wire"] }
+# `deep_link::parse_join_argument` for the invite, and
+# `membership::validate_join_key_format` for the bare-key form.
+commonwealth-discovery = { workspace = true }
+# The ring rail's journal half (five-programs fp-44): `/v1/rail/{append,log,
+# live}` are DURABLE doors — seq/signature/timestamp/id assigned on disk — and
+# rail-core performs no I/O by its own oath, so the journal crate is the one
+# to name. The lift is exactly three packages (rail, rail-core, oplog; comm
+# over the two `cargo tree --edges normal` closures); the forbid row for this
+# daemon carries the exception with the same commit.
+commonwealth-rail = { workspace = true }
+# The ring round's wire (`/internal/ring/sync` bodies; pb-rails-parity moved
+# the round here). A shared leaf of serde and rail-core, both already in this
+# closure; the forbid row's except names it.
+sovereign-peer-wire = { workspace = true }
+# The `work` fold (fp-45): `/v1/work/projection` folds the journal this
+# daemon owns. `process` since pb-work-doors: the attribution door runs
+# `attribution::of_sandbox` over `Sandbox::probe`, both behind it; the
+# forbid row's except carries the measured cost.
+commonwealth-work = { workspace = true, features = ["process"] }
+# The mesh store (fp-77): one `MeshStore::in_memory()` projected from this
+# daemon's journals, served at `/v1/mesh/kv/*`. Default features only —
+# `sqlite` stays off, so the closure gains this crate and nothing else (the
+# forbid row's except carries the census).
+commonwealth-state = { workspace = true }
+# The job vocabulary the work doors decode (pb-work-doors). A shared leaf,
+# already in this closure through commonwealth-work.
+oicp-types = { workspace = true }
+# The verdict an execute origin answers (`Judgement`, pb-work-donor). A
+# shared leaf, already in this closure through commonwealth-core.
+kernel-types = { workspace = true }
+# The `/v1/mesh/kv` wire encodes a value as base64 — already in the closure
+# through commonwealth-state, at the one version the workspace holds.
+base64 = "0.22"
+bytes = { workspace = true }
+# The node key's type. Already in commonwealth-transport's closure, so
+# naming it here adds nothing a lift has to carry.
+ed25519-dalek = { workspace = true }
+axum = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+# The reachability watchdog's relay-status stream (pb-rails-parity moved it
+# here); already in this closure through iroh.
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+hostname = { workspace = true }
+hex = "0.4"
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# The reach proof dials through RailsTransport, as svrn and serve will.
+mesh-reach = { workspace = true, features = ["rails"] }
+
+[lints]
+workspace = true

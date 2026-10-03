@@ -3,7 +3,7 @@
 #
 # The output is ONE directory to upload to the guest runtime's static origin
 # (today svrnme.sh): index.html + the wasm module and its glue. No server, no
-# certificate, no data; see sovereign/apps/ring-runtime/README.md.
+# certificate, no data; see cmnwlth/apps/ring-runtime/README.md.
 #
 #   target/ring-runtime/site/   <- upload this
 #
@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # The output directory is the deployable static site. Overridable so a consumer
-# (landing/scripts/build-ring-runtime.sh → landing/ring/) can place it where
+# (clients/landing/scripts/build-ring-runtime.sh → clients/landing/ring/) can place it where
 # its host serves it; default is this repo's target/.
 OUT="target/ring-runtime/site"
 while [ $# -gt 0 ]; do
@@ -25,7 +25,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-APP="sovereign/apps/ring-runtime"
+APP="cmnwlth/apps/ring-runtime"
 WASM_BINDGEN_MIN="0.2.128"
 
 if ! rustup target list --installed 2>/dev/null | grep -q '^wasm32-unknown-unknown$'; then
@@ -98,7 +98,7 @@ fi
 
 # The version is the module's content hash, stamped into every shell URL and
 # the service-worker cache name, so a rebuild invalidates a guest's cache
-# instead of serving a stale runtime (sovereign/apps/ring-runtime/web/sw.js).
+# instead of serving a stale runtime (cmnwlth/apps/ring-runtime/web/sw.js).
 # sha256sum is GNU coreutils; stock macOS has only shasum. Either works.
 if command -v sha256sum >/dev/null; then SHA_CMD="sha256sum"; else SHA_CMD="shasum -a 256"; fi
 VERSION="$(cat "$OUT/wasm/ring_runtime_bg.wasm" "$OUT/wasm/ring_runtime.js" | $SHA_CMD | cut -c1-12)"

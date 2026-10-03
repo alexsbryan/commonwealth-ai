@@ -18,7 +18,7 @@
 #   3. enrich init          — the ontology reaches the enrichment config
 #   4. enrich build --full  — a live model extracts, resolves and backfills
 #   5. atoms.json           — THE PAYLOAD, scored against
-#                             sovereign-recipes/wessex-hoard/truth.json: every
+#                             ingest/crates/sovereign-recipes/wessex-hoard/truth.json: every
 #                             catalogued coin present under its declared
 #                             identity key, the enumeration probe's count over
 #                             the declared family, every named mint and ruler,
@@ -28,7 +28,7 @@
 # how the chain LOOKED healthy while nothing had been demonstrated.
 #
 # STEPS 1-4 ARE NO LONGER THIS SCRIPT'S CLAIM. They are declared as the
-# `ontology-author` journey in sovereign/docs/cli-contract.toml, so `svrn
+# `ontology-author` journey in svrn/docs/cli-contract.toml, so `svrn
 # contract census` and pre-push can see them and a step that stops asserting
 # turns a lane red. They stay here because this is also how the hoard gets
 # REBUILT, and a rebuild that skipped its own chain would be a second path.

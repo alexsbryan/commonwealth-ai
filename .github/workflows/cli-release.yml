@@ -12,7 +12,7 @@ name: CLI release
 #   1. Build the BINS per platform, with `cargo build --release --locked`.
 #   2. Package them as sovereign-<target>.tar.gz + a .sha256 sidecar.
 #   3. Upload everything to a DRAFT GitHub Release (+ a combined SHA256SUMS),
-#      which `landing/install.sh` downloads and verifies.
+#      which `clients/landing/install.sh` downloads and verifies.
 #
 # Code signing / notarization are OFF in v1. A CLI tarball downloaded with curl
 # and run from the terminal is NOT quarantined by Gatekeeper, so notarization

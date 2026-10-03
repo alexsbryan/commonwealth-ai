@@ -6,7 +6,7 @@ SPIKE for order bs-1-oplog. Nothing in this repo reads Claude Code's own
 extractor reads the claude.ai WEB export, a different schema. Rather than
 write a Rust extractor before we know the corpus is worth having, this
 converts to the `### [ts] role` turn-block format the shipped
-`threaded_turns` chunker already parses (corpus-engine/src/chunkers/
+`threaded_turns` chunker already parses (ingest/crates/corpus-engine/src/chunkers/
 threaded_turns.rs:1-20), so the spike rides `plaintext` + `threaded_turns`
 + tiered enrichment with no engine change. Promote to a real extractor
 only if the spike earns it.

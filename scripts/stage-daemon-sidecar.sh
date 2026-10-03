@@ -54,7 +54,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-DESKTOP_BIN_DIR="${REPO_ROOT}/sovereign/crates/sovereign-desktop/src-tauri/binaries"
+DESKTOP_BIN_DIR="${REPO_ROOT}/clients/desktop/src-tauri/binaries"
 
 # Must equal `daemon_binary::SIDECAR_BINARY` and the `externalBin` entry in
 # tauri.release.conf.json. A Rust test asserts the latter two agree
@@ -148,5 +148,5 @@ stage sovereign-cli-daemon "$SIDECAR_NAME"
 stage sovereign-stock "$LOADER_NAME" "${SOVEREIGN_SIDECAR_FEATURES:-}"
 echo
 echo "Next:"
-echo "  cd sovereign/crates/sovereign-desktop"
+echo "  cd clients/desktop"
 echo "  cargo tauri build --config src-tauri/tauri.release.conf.json"

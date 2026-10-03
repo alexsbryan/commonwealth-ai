@@ -349,7 +349,7 @@ banked on the fresh column against `2026-09-17-baseline-29/`):
 
 `cargo hakari` wires `workspace-hack` into every member except the eight
 `[[package_leaf]]` crates, with three member features pinned default
-(sovereign-tools/treesitter, sovereign-cli-shared's five, kernel-types/
+(sovereign-tools/treesitter, sovereign-cli-shared's five, shared/crates/kernel-types/
 wire-fixture). Scope drift 316 → 118, and 80 of the 118 sit in the four leaf
 probe scopes that deliberately do not link the hack (their fresh rows moved
 by 0.3–5 s). The top of the stack is where the seconds were: api 190 → 18,

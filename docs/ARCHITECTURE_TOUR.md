@@ -15,17 +15,17 @@ measured by adversarial benches — *gates, not vibes*.
 
 | | |
 |---|---|
-| Workspace | 4 projects, one Rust workspace |
+| Workspace | 6 programs, one Rust workspace, one top-level directory each |
 | Tests | thousands — none require GPU, network, or model weights |
 | Knowledge pipeline | 24 extractors · 7 chunkers, all recipe-declared |
 | CLI | 55 verbs behind one `svrm` dispatcher |
 | Telemetry | none — nothing phones home |
 
 > This tour is a *rendering* for newcomers (figures as of July 2026).
-> The verifiable contract is [`sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) —
+> The verifiable contract is [`docs/SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) —
 > when they disagree, the contract wins. Rules of engagement:
-> [`sovereign/ARCH_PRINCIPLES.md`](../sovereign/ARCH_PRINCIPLES.md).
-> How it came to be this shape: [`sovereign/HISTORY.md`](../sovereign/HISTORY.md).
+> [`docs/ARCH_PRINCIPLES.md`](ARCH_PRINCIPLES.md).
+> How it came to be this shape: [`docs/HISTORY.md`](HISTORY.md).
 
 ---
 
@@ -56,7 +56,7 @@ and check every claim yourself.
 
 <sub>Surfaces: `sovereign-cli` (+ 3 sibling binaries), `sovereign-desktop` (Tauri 2 + Svelte), `sovereign-server` (`:8080`, multi-tenant, the phone's host), `sovereign-mobile` (thin client). The runtime is `router → policy → retrieval → synthesis → grounding gate` over `sovereign-core · -inference (llama.cpp) · -tools · -store · -mesh · -eval`; the wire types live in `oicp-types`.</sub>
 
-*Deep dive: SYSTEM_OVERVIEW §1–§2 (project map, per-crate table).*
+*Deep dive: SYSTEM_OVERVIEW §1–§2 (the programs, and every crate under its program's directory).*
 
 ## 2. One message's journey: nothing ships unverified
 
@@ -107,7 +107,7 @@ code paths:
 SEP ships `query_sharing = true, mesh_sharing = false`: queryable,
 never copied.
 
-*Deep dive: SYSTEM_OVERVIEW §3. Schema SSOT: `corpus-engine/src/recipe.rs`.
+*Deep dive: SYSTEM_OVERVIEW §3. Schema SSOT: `ingest/crates/corpus-engine/src/recipe.rs`.
 Try it: `svrn corpus install sep` — or put your own inbox in:
 export from Gmail (Google Takeout) or Apple Mail (File → Export Mailbox),
 then `svrn corpus install email-archive --params path=~/inbox.mbox`.
@@ -163,15 +163,15 @@ work.
 **To check whether your own change regressed any of this:
 `./scripts/sovereign-ci-bench.sh --quick` (~35-40m) — the one bench that
 composes every lane above into a single verdict. Start at
-[`sovereign/bench/README.md`](../sovereign/bench/README.md); read a
-verdict with [`sovereign/docs/RUNBOOK.md`](../sovereign/docs/RUNBOOK.md)
+[`bench/lanes/README.md`](../bench/lanes/README.md); read a
+verdict with [`svrn/docs/RUNBOOK.md`](../svrn/docs/RUNBOOK.md)
 §6. The workspace lint/test scripts are the *build* gate and never run a
 model against a question bank — they stay green through an
 answer-quality regression.**
 
 *Deep dive: SYSTEM_OVERVIEW §4 (gate) and §7 (build/test); benches under
-[`sovereign/bench/`](../sovereign/bench/README.md); CI gates in
-`corpus-engine/xtask/`.*
+[`bench/lanes/`](../bench/lanes/README.md); CI gates in
+`quality/xtask/`.*
 
 ## 6. Surfaces and ports: who can reach what
 
@@ -187,7 +187,7 @@ answer-quality regression.**
 
 **Configuration & state, in one breath.** Everything mutable lives on four
 roots: committed contracts in the repo (`quality/*.toml`,
-`sovereign/docs/cli-contract.toml`, `sovereign/crates/sovereign-contracts/data/models.toml` — reviewed like
+`svrn/docs/cli-contract.toml`, `shared/crates/sovereign-contracts/data/models.toml` — reviewed like
 code, several machine-enforced); the per-checkout `.sovereign/` dir (project
 identity, notes, ATOS state); the per-user root `~/.svrnmesh` (legacy
 `~/.svrnmesh` symlink) holding `config.toml` and every index, model, and
@@ -196,7 +196,7 @@ keep it coherent: paths are derived only through the
 `sovereign_contracts::rebrand` / `sovereign_cli_shared::dirs` accessors
 (clippy-banned otherwise), and every env-var knob is declared in
 `quality/env-flags.toml` (gate-enforced; rendered at `docs/ENV_FLAGS.md`).
-The full map: [`sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) §8.1.
+The full map: [`docs/SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) §8.1.
 
 ## 7. Where to start
 
@@ -205,9 +205,9 @@ The full map: [`sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) 
    corpus in one sitting.
 2. **Feel the mesh.** [`docs/TWO_NODE_QUICKSTART.md`](./TWO_NODE_QUICKSTART.md) —
    a corpus that answers from another machine without ever leaving it.
-3. **Read the contract.** [`sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) —
+3. **Read the contract.** [`docs/SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) —
    the full map this tour compresses; its §8 is the "where do I look for X" index.
-4. **Learn the rules.** [`sovereign/ARCH_PRINCIPLES.md`](../sovereign/ARCH_PRINCIPLES.md) —
+4. **Learn the rules.** [`docs/ARCH_PRINCIPLES.md`](ARCH_PRINCIPLES.md) —
    how design trade-offs get decided here.
 5. **Make your first change.** A **recipe** for a data source you care
    about is the designed on-ramp: TOML only, tested by

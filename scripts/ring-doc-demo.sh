@@ -4,7 +4,7 @@
 # Three throwaway daemons on ONE host under their own `SOVEREIGN_DATA_DIR`, on
 # real iroh, one mesh, the three keys rostered on all three. Each daemon gets
 # its own `svrn ring show` proxy, and a node driver runs the ring-doc PAGE's
-# loop three times over (sovereign/apps/ring-doc/adapter.js — the same
+# loop three times over (cmnwlth/apps/ring-doc/adapter.js — the same
 # functions app.js calls, with app.js's own debounce and poll constants read
 # out of app.js) against the three proxies. Headless because the bars are
 # about what the rail and the adapter do, not about the DOM.
@@ -19,7 +19,7 @@
 #   4. presence only, then a stop/start of B's daemon → the live lane kept
 #      nothing.
 # Plus two legs that are not the session's: the replication-sender census
-# test, and `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*`.
+# test, and `git diff --stat origin/main -- cmnwlth/crates/commonwealth-rail*`.
 #
 # TOPOLOGY, named because the goodhart asks for it: three daemons on one host.
 # One clock, so latencies need no NTP — and they say nothing about the
@@ -67,7 +67,7 @@ SCRIPT="$REPO/scripts/ring-doc-demo.sh"
 D="${RING_DOC_DIR:-$REPO/target/ring-doc-demo}"
 DAEMON="$REPO/target/debug/sovereign-cli-daemon"
 CLI="$REPO/target/debug/sovereign-cli"
-APP="$REPO/sovereign/apps/ring-doc"
+APP="$REPO/cmnwlth/apps/ring-doc"
 CAMPAIGN="$REPO/quality/campaigns/ring-doc.toml"
 RING=ring-doc
 export SOVEREIGN_NO_STALE_WARN=1
@@ -216,12 +216,12 @@ start_forwarder() { # node [port]
 # could-not-judge, never a failed bar.
 stale_binaries() {
   local newest src_s src_f bin_s
-  # `sovereign/apps/` is excluded: those pages are SERVED from the repo mount by
+  # `cmnwlth/apps/` is excluded: those pages are SERVED from the repo mount by
   # `svrn ring show`, never compiled in (no include_str! names that tree), so a
   # page-only edit is already what the run reads, and no rebuild can move the
   # binary's mtime past it. Compiled-in JS (ring_cmd/templates, the door's
   # shim) stays covered.
-  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' ':!sovereign/apps/' 2>/dev/null \
+  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' ':!cmnwlth/apps/' 2>/dev/null \
     | xargs -0 -r stat -c '%Y %n' 2>/dev/null | sort -rn | head -1)
   [ -n "$newest" ] || return 0
   src_s=${newest%% *}; src_f=${newest#* }
@@ -546,7 +546,7 @@ journals() {
 
 driver_js() {
   cat > "$D/driver.mjs" <<'JS'
-// The page's loop, three times, headless. Mirrors sovereign/apps/ring-doc/app.js
+// The page's loop, three times, headless. Mirrors cmnwlth/apps/ring-doc/app.js
 // line for line where app.js decides something; adds only the stamps a
 // measurement needs (a ledger of which act carried which paragraph, and a
 // wall-clock `t` on the cursor state).
@@ -554,13 +554,13 @@ import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const { REPO, D, SCRIPT } = process.env;
-const A = await import(`file://${REPO}/sovereign/apps/ring-doc/adapter.js`);
-const { Y } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
-const { awarenessProtocol } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
+const A = await import(`file://${REPO}/cmnwlth/apps/ring-doc/adapter.js`);
+const { Y } = await import(`file://${REPO}/cmnwlth/apps/ring-doc/vendor/ring-doc-bundle.js`);
+const { awarenessProtocol } = await import(`file://${REPO}/cmnwlth/apps/ring-doc/vendor/ring-doc-bundle.js`);
 
 // app.js's constants, read from app.js: rd-1-tune edits them there, and a run
 // that hardcoded them here would measure the page before the tune.
-const APP_JS = readFileSync(`${REPO}/sovereign/apps/ring-doc/app.js`, "utf8");
+const APP_JS = readFileSync(`${REPO}/cmnwlth/apps/ring-doc/app.js`, "utf8");
 const T = {};
 for (const k of ["DEBOUNCE_MS", "POLL_MS", "PRESENCE_THROTTLE_MS", "LIVE_POLL_MS"]) {
   const m = APP_JS.match(new RegExp(`const ${k} = (\\d+);`));
@@ -959,8 +959,8 @@ run_census() {
   echo $? > "$CENSUS/census.rc"
   git -C "$REPO" diff --quiet origin/main -- sovereign/crates/sovereign-mesh/tests/main/replication_sender_census.rs
   echo $? > "$CENSUS/census.diff"
-  git -C "$REPO" diff --stat origin/main -- 'commonwealth/crates/commonwealth-rail*' > "$CENSUS/rail.diff"
-  git -C "$REPO" log --format='%h %s' origin/main..HEAD -- 'commonwealth/crates/commonwealth-rail*' > "$CENSUS/rail.commits"
+  git -C "$REPO" diff --stat origin/main -- 'cmnwlth/crates/commonwealth-rail*' > "$CENSUS/rail.diff"
+  git -C "$REPO" log --format='%h %s' origin/main..HEAD -- 'cmnwlth/crates/commonwealth-rail*' > "$CENSUS/rail.commits"
 }
 
 report() { # bar|all

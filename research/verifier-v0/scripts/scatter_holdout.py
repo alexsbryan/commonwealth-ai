@@ -114,8 +114,8 @@ for qid, q, facts in COVERED:
 print(f"positives after grep verification: {len(kept)}/{len(COVERED)}")
 
 import tomllib
-sep = tomllib.load(open(ROOT / "sovereign/bench/sep/questions.toml", "rb"))["questions"]
-wik = tomllib.load(open(ROOT / "sovereign/bench/wikipedia/questions.toml", "rb"))["questions"]
+sep = tomllib.load(open(ROOT / "bench/lanes/sep/questions.toml", "rb"))["questions"]
+wik = tomllib.load(open(ROOT / "bench/lanes/wikipedia/questions.toml", "rb"))["questions"]
 units = ([{"id": i, "q": q, "label": 1, "src": "repo"} for i, q in kept]
        + [{"id": s["id"], "q": s["question"], "label": 0, "src": "sep"} for s in sep]
        + [{"id": w["id"], "q": w["question"], "label": 0, "src": "wikipedia"} for w in wik])
@@ -132,7 +132,7 @@ for i, u in enumerate(units, 1):
         print(f"  eval failed {u['id']}: {str(e)[:60]}"); u["model"] = None
     if i % 10 == 0: print(f"  {i}/{len(units)}", flush=True)
 
-(ROOT / "sovereign/bench/sep_atlas/map-conversion-rung6/scatter_holdout.json").write_text(json.dumps(units, indent=1))
+(ROOT / "bench/lanes/sep_atlas/map-conversion-rung6/scatter_holdout.json").write_text(json.dumps(units, indent=1))
 
 def auc(pairs):
     pos = [s for s, l in pairs if l == 1]; neg = [s for s, l in pairs if l == 0]

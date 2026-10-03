@@ -22,7 +22,7 @@ BOOK="$PWD/$HERE/books/$SLUG.txt"
 INDEX_DIR="${SOVEREIGN_DATA_DIR:-$HOME/.svrnmesh}/indexes/$CORPUS"
 RUNS="$HERE/runs/$SLUG"
 RUN_ARM=research/ontology-retrieval/harness/run_arm.py
-COMPARE=sovereign/bench/sep_atlas/map-conversion-rung6/compare.py
+COMPARE=bench/lanes/sep_atlas/map-conversion-rung6/compare.py
 SVRN="${SVRN:-$(command -v svrn || command -v sovereign)}"
 RUNS_PER_ARM="${RAPTOR_RUNS:-3}"
 step() { printf '\n== %s  [%s]\n' "$1" "$(date -u +%T)"; }

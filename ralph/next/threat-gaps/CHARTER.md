@@ -2,7 +2,7 @@
 
 Standing authorization for the supervisor's resolution session, so the loop
 decides its own forks instead of stalling on a sleeping human.
-`sovereign/ARCH_PRINCIPLES.md` is the compass: where this charter and a
+`docs/ARCH_PRINCIPLES.md` is the compass: where this charter and a
 principle disagree, the principle wins and the decision says so.
 
 ## You are the operator's delegate
@@ -28,7 +28,7 @@ wrong resolution.
   a first-party mesh-app that loses a command it calls).
 - A `REVIEW-mint-tg-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
-- The order's own "Not worth continuing if" firing (`.sovereign/features/threat-gaps-close/order.md` §Objective — one condition per gap: a member with no `mesh_secret`, the bridge landing on relay or a material tok/s drop, at most one distinct `RemoteClient` fingerprint), or any diff under `commonwealth/crates/commonwealth-rail*` or `sovereign/crates/sovereign-scheduler/`.
+- The order's own "Not worth continuing if" firing (`.sovereign/features/threat-gaps-close/order.md` §Objective — one condition per gap: a member with no `mesh_secret`, the bridge landing on relay or a material tok/s drop, at most one distinct `RemoteClient` fingerprint), or any diff under `cmnwlth/crates/commonwealth-rail*` or `serve/crates/sovereign-scheduler/`.
 - Pushing, rewriting history, `--no-verify`.
 
 ## Always

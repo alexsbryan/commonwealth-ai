@@ -143,14 +143,14 @@ The cog-sci map from the design conversation holds up under measurement:
    needed.*
    **DONE 2026-08-13** (operator-approved, committed `f240c201`): three
    registrations found and removed (root `settings.json`, plus sibling
-   `sovereign/` and `commonwealth/` settings — all three `.sh` copies
+   `sovereign/` and `cmnwlth/` settings — all three `.sh` copies
    deleted), `SYSTEM_OVERVIEW.md` frame-injection sentence corrected
    (it described the deleted script as the frame injector), `session-boot.sh`
    comment updated. Propagation to peer machines is by commit + pull
    (repo-tracked); machine-local `~/.claude/settings.json` checked on this
    host — no registration. Two leftovers carried into the R2 order: the
    scaffold generator still emits the firehose for every new project
-   (`sovereign/crates/sovereign-cli/src/project_init/scaffold.rs:432`), and
+   (`svrn/crates/sovereign-cli/src/project_init/scaffold.rs:432`), and
    `notes_retrieval_cmd.rs:4` still documents the 10–14KB block.
 2. **Structural seat boot block** — one script assembling the rail reads
    the skill's boot step already prescribes (anchor todos first, then

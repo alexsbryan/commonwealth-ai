@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # release-vsix-local.sh — build + package + upload the VS Code extension
-# (`packages/vscode-sovereign`) to the public shelf repo.
+# (`clients/vscode`) to the public shelf repo.
 #
 # The extension is pure TypeScript bundled by esbuild — one platform-neutral
 # .vsix, no cross-compilation, no containers. So unlike release-cli-local.sh
 # and release-desktop-local.sh there is no CI pipeline to mirror: this script
 # IS the release path.
 #
-# The extension carries its OWN version (packages/vscode-sovereign/package.json)
+# The extension carries its OWN version (clients/vscode/package.json)
 # and is NOT pinned to the workspace version — it ships on its own cadence.
 # Tag is vscode-v<that version>.
 #
@@ -24,7 +24,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-EXT_DIR="$REPO_ROOT/packages/vscode-sovereign"
+EXT_DIR="$REPO_ROOT/clients/vscode"
 
 log() { printf '\n[release-vsix-local] %s\n' "$*"; }
 die() { log "ERROR: $*"; exit 1; }

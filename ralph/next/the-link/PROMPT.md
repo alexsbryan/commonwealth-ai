@@ -15,7 +15,7 @@ these substitutions and none other:
 - Regression sets, never edited from this queue: `quality/campaigns/ring-room.toml`
   (six rr-2 bars) and `quality/campaigns/ring-guest.toml` (five rg bars).
 - One absolute this campaign adds to the shared protocol:
-  `commonwealth/crates/commonwealth-rail-core` is READ-ONLY (charter,
+  `shared/crates/commonwealth-rail-core` is READ-ONLY (charter,
   invariant `c3fed9c3`). If a row seems to need an edit there, you have found
   the order's exit condition — stop (§6) and say so; never improvise around it.
 

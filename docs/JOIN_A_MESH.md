@@ -61,7 +61,7 @@ svrn mesh join "sovereign://join/cwth-XXXX-XXXX-XXXX?relay=<host-ip>:9742"
 
 Cross-network setups (relays, tailnets, firewalls between sites) are
 walked through in
-[running a mesh across networks](../commonwealth/docs/getting-started.md).
+[running a mesh across networks](../cmnwlth/docs/getting-started.md).
 
 ## Verify you have it
 
@@ -129,4 +129,4 @@ the demo.
 - **macOS firewall prompt** for the daemon listening on `0.0.0.0:9742` —
   allow it; that's the mesh-internal port.
 - Anything else: `svrn doctor` on each machine, then the
-  [troubleshooting guide](../sovereign/docs/TROUBLESHOOTING.md).
+  [troubleshooting guide](../svrn/docs/TROUBLESHOOTING.md).

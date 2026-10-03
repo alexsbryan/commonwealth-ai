@@ -26,7 +26,7 @@ separation + rc.9 verdict.
 
 ```
 .venv/bin/python scripts/p52a_fixture.py \
-  --questions ~/dev/commonwealth-ai/sovereign/bench/sep/questions.toml \
+  --questions ~/dev/commonwealth-ai/bench/lanes/sep/questions.toml \
   --parquet ~/.svrnmesh/indexes/_downloads/sep.parquet \
   --out-dir data/p52a --pages 16
 .venv/bin/python scripts/p52a_score.py --fixture data/p52a --out runs/p52a/scores.json

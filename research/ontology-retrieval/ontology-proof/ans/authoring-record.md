@@ -14,7 +14,7 @@ pre-reg's Deviations rather than smoothed over.
 | Commits | `6423999ad` 2026-09-20T23:47:18-07:00 — "ANS corpus + frozen bank — 34 K1 hoard-contents lists, 15 K0, truth held out in IGCH"; `dfbaa81f5` 2026-09-20T23:59:33-07:00 — "ANS corpus cut to the nine-work subset — 32 K1 + 15 K0, bank.toml written" |
 | Edit span | 12m15s between the two commits (the recordable lower bound; authoring thought time is not recoverable from git) |
 | Declaration line count | 116 |
-| Derived from | the numismatics template (`sovereign-recipes/_templates/ontology-v1/numismatics/recipe.toml`) plus: added `hoard`, `coin.hoard`; dropped `sceatta` |
+| Derived from | the numismatics template (`ingest/crates/sovereign-recipes/_templates/ontology-v1/numismatics/recipe.toml`) plus: added `hoard`, `coin.hoard`; dropped `sceatta` |
 | Types declared | `hoard` (entity: findspot, found, buried) · `coin` (entity: ruler ref, mint ref, hoard ref, denomination, metal, weight, struck) · `ruler` (role of person) · `mint` (entity) · `attribution` (claim: subject coin, proposed_date, grades die-link / hoard-context / stylistic / metrological) |
 | `svrn recipe validate` output (2026-09-23, current recipe) | `✓ Validation passed` — identity keys: hoard, coin, ruler, mint → canonical name (defaults); question shapes: enumerate [hoard, coin, ruler, mint]; relations and events: none declared; aggregate: none |
 

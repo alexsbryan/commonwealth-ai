@@ -8,12 +8,18 @@
 # ── Build artefacts ───────────────────────────────────────────────────────
 /target/
 
-# Nested cargo/wasm-pack output under the app tree. `sovereign/apps/ring-runtime`
+# What stays under sovereign/ now that every program has its own dir: the
+# local models tree and an old build dir. Nothing under sovereign/ is tracked.
+/sovereign/models/
+/sovereign/target/
+/sovereign/data/
+
+# Nested cargo/wasm-pack output under the app tree. `cmnwlth/apps/ring-runtime`
 # is 2009 untracked files, ALL of them build output with no source beside them
 # (the crate lives elsewhere) — every worker session read it in `git status` and
 # one `git add -A` would have committed it. The anchored `/target/` above does not
 # reach a nested one. 2026-09-23.
-sovereign/apps/*/target/
+cmnwlth/apps/*/target/
 
 # Local desktop-release container rehearsal (scripts/build-desktop-linux.sh):
 # isolated cargo/npm caches + a separate CARGO_TARGET_DIR so container
@@ -79,15 +85,15 @@ docs/internal
 # (distilled from the author's private essays) and the `alignment` recipe
 # (syncs the author's ~/.claude plans/memory). The CLI verbs that use them
 # stay in the tree; they no-op without this local data.
-sovereign/bench/obsidian/
-sovereign-recipes/alignment/
+bench/lanes/obsidian/
+ingest/crates/sovereign-recipes/alignment/
 # Answer-keys over the author's real imported Anthropic conversation history.
-# The committed scaffold at sovereign/bench/conversation/ stays public and
+# The committed scaffold at bench/lanes/conversation/ stays public and
 # stays fictional; this is the one with real conversation titles in it, so it
 # never leaves the box. Added 2026-08-03 because the scaffold cannot score
 # (its expected_sources name conversations the corpus does not contain, so
 # the control arm reads 0/12 at exit 0).
-sovereign/bench/conversation-private/
+bench/lanes/conversation-private/
 
 # ── Bench run OUTPUTS (kept local; banks + gold + fixtures stay tracked) ──
 # The house convention, stated twice above ("runs are local, headline numbers
@@ -97,21 +103,21 @@ sovereign/bench/conversation-private/
 # judge exemplars -- stays tracked (27 files / 14 MB). What a run EMITTED does
 # not: transcripts, verdicts, judge_output, raw_results, scored sidecars.
 # These are regenerable by re-running the bench, so they are exhaust, not source.
-sovereign/bench/*/results/*.jsonl
-sovereign/bench/sd/results_*.jsonl
-sovereign/bench/calibration/loop/*.jsonl
-sovereign/bench/calibration/ab/*.jsonl
-sovereign/bench/calibration/h1-port/*.jsonl
+bench/lanes/*/results/*.jsonl
+bench/lanes/sd/results_*.jsonl
+bench/lanes/calibration/loop/*.jsonl
+bench/lanes/calibration/ab/*.jsonl
+bench/lanes/calibration/h1-port/*.jsonl
 # ...except h1_scores.jsonl, which sovereign-core `include_str!`s at COMPILE
 # time (admission.rs, the frozen honesty-recall operating-point test). It is a
 # build input, not run exhaust — untracking it stops the workspace compiling.
-!sovereign/bench/calibration/h1-port/h1_scores.jsonl
-sovereign/bench/calibration/resolver-precision/*.jsonl
-sovereign/bench/calibration/step3/*.jsonl
+!bench/lanes/calibration/h1-port/h1_scores.jsonl
+bench/lanes/calibration/resolver-precision/*.jsonl
+bench/lanes/calibration/step3/*.jsonl
 # ...except the failure corpus, which is a BANK the step3 arms read, not output.
 # Negation targets the file because the directory above is not excluded -- a
 # directory exclusion would make this line dead (same trap as models/ below).
-!sovereign/bench/calibration/step3/failure_corpus.jsonl
+!bench/lanes/calibration/step3/failure_corpus.jsonl
 research/deep-research/drb/overall-derivation/flights*/**/*.jsonl
 research/deep-research/drb/overall-derivation/inputs/perplexity-*.jsonl
 
@@ -134,11 +140,11 @@ research/clean-room/*
 research/deep-research/drb/vendor/fixture-validated.jsonl
 
 # Vault-derived faithfulness seeds. These are the same category as
-# sovereign/bench/obsidian/ above -- claims distilled from the author's
+# bench/lanes/obsidian/ above -- claims distilled from the author's
 # private Obsidian vault (corpus obsidian-vault-959ee8a8f330) -- but they
 # live under bench/faithfulness/, which that rule never covered, so 1,156
 # claim rows stayed tracked. Closed 2026-08-27.
-sovereign/bench/faithfulness/obsidian_*.jsonl
+bench/lanes/faithfulness/obsidian_*.jsonl
 
 # ── macOS noise ───────────────────────────────────────────────────────────
 .DS_Store
@@ -188,24 +194,24 @@ test-artifacts/
 # Generated research/bench artifacts — keep source scripts, ignore heavy outputs
 # Bench run outputs (.artifacts/ next to any bench bank: agent transcripts,
 # judge trials, per-run report JSONs). The bank sources stay tracked.
-sovereign/bench/**/.artifacts/
+bench/lanes/**/.artifacts/
 research/**/out/
 research/**/out-v2/
 *.npz
 
 
 dist/
-# ── Node packages (packages/vscode-sovereign, future npm packages) ────────
+# ── Node packages (clients/vscode, future npm packages) ────────
 # node_modules is per-host; package-lock.json IS tracked (reproducible
 # installs). The .vsix is a build artifact — regenerate with
 # `npm run package`; releases attach it on GitHub instead of tracking it.
 node_modules/
-packages/vscode-sovereign/*.vsix
-packages/vscode-sovereign/*.vsix.sha256
+clients/vscode/*.vsix
+clients/vscode/*.vsix.sha256
 
 
 .cargo-container-arm64/
-sovereign/container/Containerfile.cli-arm64
+serve/container/Containerfile.cli-arm64
 target-container-linux-arm64/
 
 # Sovereign code intelligence

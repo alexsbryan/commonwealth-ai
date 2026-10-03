@@ -55,6 +55,7 @@ REPO = Path(__file__).resolve().parent.parent
 # The four-verdict line a judging run ends with (`scripts/lib/judgement.py`).
 sys.path.insert(0, str(REPO / "scripts" / "lib"))
 from judgement import emit as emit_judgement  # noqa: E402
+from top_level_moves import Moves  # noqa: E402
 
 DT = REPO / "quality" / "DOMAINS.toml"
 
@@ -404,7 +405,7 @@ def cmd_peer_outside(args: list[str]) -> int:
     by_crate: dict[str, int] = {}
     for h in found:
         by_crate[h["crate"]] = by_crate.get(h["crate"], 0) + 1
-    print("peer-outside — Peer* definitions outside commonwealth/crates/ "
+    print("peer-outside — Peer* definitions outside cmnwlth/crates/ "
           "(the word anywhere in the name; prefix mode refused)\n")
     for crate in sorted(by_crate):
         print(f"  {crate:<46} {by_crate[crate]:>3}")
@@ -899,7 +900,7 @@ def _atom_registry(root: Path) -> None:
         'id = "understanding"\n'
         'kind = "core"\n'
         'owns = ["Atom"]\n'
-        'vocab_roots = ["understanding-vocab", "corpus-engine/src/enrichment"]\n'
+        'vocab_roots = ["understanding-vocab", "ingest/crates/corpus-engine/src/enrichment"]\n'
         '\n'
         '[[noun]]\n'
         'name = "AtomFixture"\n'
@@ -938,9 +939,9 @@ def _atom_negative(root: Path) -> None:
     (root / "understanding-vocab" / "src").mkdir(parents=True, exist_ok=True)
     (root / "understanding-vocab" / "src" / "atoms.rs").write_text(
         "pub struct AtomInVocab;\n", encoding="utf-8")
-    (root / "corpus-engine" / "src" / "enrichment").mkdir(parents=True,
+    (root / "ingest/crates/corpus-engine" / "src" / "enrichment").mkdir(parents=True,
                                                           exist_ok=True)
-    (root / "corpus-engine" / "src" / "enrichment" / "writer.rs").write_text(
+    (root / "ingest/crates/corpus-engine" / "src" / "enrichment" / "writer.rs").write_text(
         "pub struct AtomInEnrichment;\n", encoding="utf-8")
 
 
@@ -960,8 +961,8 @@ def cmd_atom_outside(args: list[str]) -> int:
     if "--json" in args:
         emit_measurement(len(found))
         return EXIT_OK
-    print("atom-outside — pub Atom* definitions outside understanding-vocab/ and "
-          "corpus-engine/src/enrichment/\n  (Understanding's word; the registry's "
+    print("atom-outside — pub Atom* definitions outside shared/crates/understanding-vocab/ and "
+          "ingest/crates/corpus-engine/src/enrichment/\n  (Understanding's word; the registry's "
           "kept Atom* rows are the allow-list)\n")
     for d in sorted(found, key=lambda d: (d["file"], d["line"])):
         print(f"  {d['name']:<22} {d['file']}:{d['line']}")
@@ -1423,11 +1424,19 @@ def cmd_queue(args: list[str]) -> int:
 # now is always inside its own window.
 #
 # A FILE WITH NO MODULE ROW IS UNTAGGED, NEVER GUESSED. The registry tags the
-# CURRENT tree; a path that has since moved or been deleted has no row, so a
-# commit's distinct-context count is over its tagged files and the untagged
-# count is reported beside the value (ARCH principle 6 — absence is reported,
-# never defaulted). This UNDER-counts historical congestion, which is the
-# direction a hold-bar can tolerate: it can never manufacture a pass.
+# CURRENT tree; a path that has since been deleted has no row, so a commit's
+# distinct-context count is over its tagged files and the untagged count is
+# reported beside the value (ARCH principle 6 — absence is reported, never
+# defaulted). This UNDER-counts historical congestion, which is the direction a
+# hold-bar can tolerate: it can never manufacture a pass.
+#
+# A PATH THE TOP-LEVEL-PROGRAMS MOVE RELOCATED IS READ IN ITS CURRENT SPELLING
+# (`quality/top-level-moves.toml`, `forward`), so history from before the move
+# meets the registry that describes the tree now. Without it every pre-move file
+# was untagged and the value fell from 2.41 to 0.87 with nothing decoupled. And
+# a rename the table accounts for (`forward(old) == new`) relocated a file
+# without changing what it couples to, so it is not a touch; the count of those
+# is reported beside the value.
 #
 # TWO CONSTANTS THE REGISTRY CANNOT SUPPLY, the same standing as peer-outside's
 # word and atom-outside's roots: the window length (90 days, spelled in the
@@ -1437,25 +1446,29 @@ _WINDOW_DAYS = 90
 _CONGESTION_HEADER = re.compile(r"^([0-9a-f]{40}) (\S+)$")
 
 
-def _git_congestion_rows(root: Path, cutoff: str) -> list[tuple]:
-    """[(sha, month, {contexts}, untagged_files, rs_files)] per `.rs` commit.
+def _git_congestion_rows(root: Path, cutoff: str) -> tuple[list[tuple], int]:
+    """([(sha, month, {contexts}, untagged_files, rs_files)] per `.rs` commit,
+    relocations left out).
 
     One row per commit that touches a tracked `*.rs` file and whose AUTHOR date
     is on or after `cutoff`. A commit whose every changed `.rs` file is
     untagged still yields a row (with an empty context set and every file
-    untagged), so absence is reported rather than dropped.
+    untagged), so absence is reported rather than dropped. A commit whose every
+    `.rs` change is a relocation yields none.
     """
     root = Path(root)
     try:
         r = subprocess.run(
             ["git", "log", f"--since={cutoff}", "--pretty=format:%H %aI",
-             "--name-only", "--", "*.rs"],
+             "--name-status", "--", "*.rs"],
             cwd=root, capture_output=True, text=True)
     except OSError:
-        return []
+        return [], 0
     if r.returncode != 0:
-        return []
+        return [], 0
     reg = registry_for(root)
+    moves = Moves.at(root)
+    relocated = 0
     rows: list[tuple] = []
     state: dict = {"sha": None, "month": None, "author": None, "files": set()}
 
@@ -1467,7 +1480,7 @@ def _git_congestion_rows(root: Path, cutoff: str) -> list[tuple]:
         ctxs: set[str] = set()
         untagged = 0
         for f in files:
-            c = _module_context(reg, f)
+            c = _module_context(reg, moves.forward(f))
             if c is None:
                 untagged += 1
             else:
@@ -1484,9 +1497,14 @@ def _git_congestion_rows(root: Path, cutoff: str) -> list[tuple]:
             state = {"sha": m.group(1), "author": m.group(2),
                      "month": m.group(2)[:7], "files": set()}
             continue
-        state["files"].add(line)
+        status, *paths = line.split("\t")
+        if status.startswith("R") and len(paths) == 2 and moves.forward(paths[0]) == paths[1]:
+            if state["author"] is not None and state["author"][:10] >= cutoff:
+                relocated += 1
+            continue
+        state["files"].add(paths[-1])
     flush()
-    return rows
+    return rows, relocated
 
 
 def congestion(root: Path, since_days: int = _WINDOW_DAYS) -> dict | None:
@@ -1498,7 +1516,7 @@ def congestion(root: Path, since_days: int = _WINDOW_DAYS) -> dict | None:
     contexts — the axis's own positive.
     """
     cutoff = (_dt.date.today() - _dt.timedelta(days=since_days)).isoformat()
-    rows = _git_congestion_rows(root, cutoff)
+    rows, relocated = _git_congestion_rows(root, cutoff)
     if not rows:
         return None
     per_month: dict[str, list[tuple]] = {}
@@ -1517,7 +1535,8 @@ def congestion(root: Path, since_days: int = _WINDOW_DAYS) -> dict | None:
     congested = [{"sha": s, "month": mo, "contexts": len(c), "files": n}
                  for s, mo, c, _u, n in rows if len(c) >= 2]
     return {"months": months, "value": round(value, 2), "commits": len(rows),
-            "congested": congested, "cutoff": cutoff}
+            "congested": congested, "cutoff": cutoff,
+            "relocations_excluded": relocated}
 
 
 def _congestion_detect(root: Path) -> list[dict]:
@@ -1526,13 +1545,23 @@ def _congestion_detect(root: Path) -> list[dict]:
     return c["congested"] if c else []
 
 
-def _congestion_fixture(root: Path, cross_context: bool) -> None:
-    """A one-commit git repo; the commit crosses contexts or stays in one.
+def _congestion_git(root: Path, *args: str) -> None:
+    subprocess.run(["git", "-c", "user.email=census@test", "-c", "user.name=census",
+                    "-c", "commit.gpgsign=false", *args], cwd=root, check=True)
 
-    `alpha` tags two files and `beta` one. The cross-context commit stages one
-    `alpha` file and the `beta` file (two contexts); the single-context commit
-    stages BOTH `alpha` files — so the negative catches a distinct-count that
-    counts files rather than contexts.
+
+def _congestion_fixture(root: Path, cross_context: bool) -> None:
+    """A git repo whose history crosses contexts or stays in one, under a
+    one-row move table (`pre/` became `fixture/`).
+
+    `alpha` tags two files and `beta` one, by their CURRENT paths. The
+    cross-context history is one commit spelled as before the move (`pre/a.rs`,
+    `pre/b.rs`): it is caught only if history is read forward through the
+    table. The single-context history commits `pre/b.rs` alone, then relocates
+    it (`pre/b.rs` -> `fixture/b.rs`, a rename the table accounts for) in the
+    same commit as both `alpha` files: it is refused only if a relocation is
+    not a touch. Its two `alpha` files also catch a distinct-count that counts
+    files rather than contexts.
     """
     (root / "quality").mkdir(parents=True, exist_ok=True)
     (root / "quality" / "DOMAINS.toml").write_text(
@@ -1545,26 +1574,38 @@ def _congestion_fixture(root: Path, cross_context: bool) -> None:
         '[[module]]\n'
         'path = "fixture/b.rs"\n'
         'context = "beta"\n', encoding="utf-8")
+    (root / "quality" / "top-level-moves.toml").write_text(
+        '[[move]]\nfrom = "pre"\nto = "fixture"\n', encoding="utf-8")
+    _congestion_git(root, "init", "-q")
+    # distinct bodies, so rename detection cannot pair the wrong two files
+    def put(rel: str) -> None:
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(f"pub struct S_{rel.replace('/', '_').replace('.', '_')};\n",
+                               encoding="utf-8")
+    if cross_context:
+        for rel in ("pre/a.rs", "pre/b.rs"):
+            put(rel)
+        _congestion_git(root, "add", "pre")
+        _congestion_git(root, "commit", "-q", "-m", "fixture: before the move")
+        return
+    put("pre/b.rs")
+    _congestion_git(root, "add", "pre")
+    _congestion_git(root, "commit", "-q", "-m", "fixture: one context")
     (root / "fixture").mkdir(parents=True, exist_ok=True)
-    for name in ("a.rs", "a2.rs", "b.rs"):
-        (root / "fixture" / name).write_text("pub struct A;\n", encoding="utf-8")
-    subprocess.run(["git", "init", "-q"], cwd=root)
-    touched = (["fixture/a.rs", "fixture/b.rs"] if cross_context
-               else ["fixture/a.rs", "fixture/a2.rs"])
-    subprocess.run(["git", "add", *touched], cwd=root)
-    subprocess.run(
-        ["git", "-c", "user.email=census@test", "-c", "user.name=census",
-         "-c", "commit.gpgsign=false", "commit", "-q", "-m", "fixture"],
-        cwd=root)
+    _congestion_git(root, "mv", "pre/b.rs", "fixture/b.rs")
+    for rel in ("fixture/a.rs", "fixture/a2.rs"):
+        put(rel)
+    _congestion_git(root, "add", "fixture")
+    _congestion_git(root, "commit", "-q", "-m", "fixture: the move, and one context")
 
 
 def _congestion_positive(root: Path) -> None:
-    """A commit touching two contexts: caught as congested."""
+    """A pre-move commit touching two contexts: caught as congested."""
     _congestion_fixture(root, cross_context=True)
 
 
 def _congestion_negative(root: Path) -> None:
-    """A commit touching two files of ONE context: refused."""
+    """One context per commit once a relocation is not a touch: refused."""
     _congestion_fixture(root, cross_context=False)
 
 
@@ -1597,6 +1638,8 @@ def cmd_congestion(args: list[str]) -> int:
     print(f"\n  value: {c['value']} (author-month mean over "
           f"{len(c['months'])} months, {c['commits']} commits; "
           f"{len(c['congested'])} commits touched 2+ contexts)")
+    print(f"  {c['relocations_excluded']} renames the top-level move accounts "
+          "for are not counted as touches")
     return EXIT_OK
 
 
@@ -1629,7 +1672,7 @@ def cmd_congestion(args: list[str]) -> int:
 # drops the value, which is the goodhart made arithmetic.
 #
 # THE LIFT SCRIPTS ARE INVENTORY THAT CAN ONLY ABSTAIN WITHOUT AN INVITE
-# (commonwealth/BOUNDARY.md "Tier 2"), so the read tier is the default: a live
+# (cmnwlth/BOUNDARY.md "Tier 2"), so the read tier is the default: a live
 # run happens only when the campaign row sets a `timeout_s` (the bar's own
 # `timeout_s` decides, and `--no-lift` forces the read tier regardless).
 _DEFAULT_LIFT_TIMEOUT_S = 120
@@ -1954,17 +1997,17 @@ def cmd_predicate(args: list[str]) -> int:
     ok = not ungated and not peers
     if ok:
         print("predicate — every kept context names an ARCH_LAYERS package and "
-              "no crate outside commonwealth/ defines a Peer* type")
+              "no crate outside cmnwlth/ defines a Peer* type")
     else:
         print(f"predicate FALSE — {len(ungated)} kept contexts name no package; "
-              f"{len(peers)} Peer* definitions outside commonwealth/")
+              f"{len(peers)} Peer* definitions outside cmnwlth/")
         if ungated:
             print(f"\n  kept contexts with no ARCH_LAYERS [[package]] "
                   f"({len(ungated)}):")
             for c in ungated:
                 print(f"    {c}")
         if peers:
-            print(f"\n  Peer* definitions outside commonwealth/ "
+            print(f"\n  Peer* definitions outside cmnwlth/ "
                   f"({len(peers)} in {len(by_crate)} crates):")
             for crate in sorted(by_crate):
                 print(f"    {crate}: {by_crate[crate]}")
@@ -1972,12 +2015,12 @@ def cmd_predicate(args: list[str]) -> int:
         emit_judgement(
             "domains-census", "passed",
             "every kept context names an ARCH_LAYERS package and no crate "
-            "outside commonwealth/ defines a Peer* type")
+            "outside cmnwlth/ defines a Peer* type")
         return EXIT_OK
     emit_judgement(
         "domains-census", "failed",
         f"{len(ungated)} kept contexts name no package; {len(peers)} Peer* "
-        f"definitions outside commonwealth/ in {len(by_crate)} crates")
+        f"definitions outside cmnwlth/ in {len(by_crate)} crates")
     return 1
 
 

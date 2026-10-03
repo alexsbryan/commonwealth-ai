@@ -29,7 +29,7 @@
 #      EXPECT: `ledger present` = could-not-judge, and every row that reads
 #      the ledger (route, per-stage ceilings, per-stage baseline) with it.
 #      NEVER a pass — an absent ledger is not evidence that the turn was fast.
-#   5. git checkout sovereign/crates/sovereign-core/src/runtime/streaming.rs
+#   5. git checkout svrn/crates/sovereign-core/src/runtime/streaming.rs
 #   6. rebuild + restart, and re-run to confirm the lane comes back.
 #
 # The two `find` strings are byte-identical in their call expression — the
@@ -41,7 +41,7 @@
 [[mutant]]
 id = "qc-ledger-suppressed-knowledge-stream"
 requirement = "quality-check/chat-ask#ledger-present"
-target = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
+target = "svrn/crates/sovereign-core/src/runtime/streaming.rs"
 find = "                // any surface that did not open a ledger — never an empty\n                // ledger, so \"not measured\" stays distinguishable from\n                // \"measured, nothing to report\". DISPLAY ONLY.\n                \"stage_attribution\": crate::runtime::stage_ledger::seal_ambient(\n                    turn_started.elapsed().as_millis() as u64,\n                ),"
 replace = "                // SABOTAGE: the seal is suppressed. The key stays, the\n                // ledger does not.\n                \"stage_attribution\": Option::<sovereign_contracts::types::TurnStageLedger>::None,"
 mustFail = ["quality-check:chat-ask/ledger present"]
@@ -52,7 +52,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "qc-ledger-suppressed-reasoning-stream"
 requirement = "quality-check/chat-ask#ledger-present"
-target = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
+target = "svrn/crates/sovereign-core/src/runtime/streaming.rs"
 find = "                // any surface that opened no ledger — never an empty\n                // ledger, so \"not measured\" stays distinguishable from\n                // \"measured, nothing to report\". DISPLAY ONLY.\n                \"stage_attribution\": crate::runtime::stage_ledger::seal_ambient(\n                    turn_started.elapsed().as_millis() as u64,\n                ),"
 replace = "                // SABOTAGE: the seal is suppressed. The key stays, the\n                // ledger does not.\n                \"stage_attribution\": Option::<sovereign_contracts::types::TurnStageLedger>::None,"
 mustFail = ["quality-check:chat-ask/ledger present"]

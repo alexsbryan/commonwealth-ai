@@ -34,7 +34,7 @@ network by policy, so `svrn mesh grant` puts an iroh dial string in the
 link instead of an address. Accepting it opens a QUIC tunnel that binds
 a local port — but that tunnel is parked in a process-lifetime slot, and
 dropping it shuts the port (`open_route`, in
-`sovereign/crates/sovereign-cli-llm/src/guest_link.rs`). It lives as
+`svrn/crates/sovereign-cli-llm/src/guest_link.rs`). It lives as
 long as the `svrn chat` process and no longer. There is no persistent guest
 proxy command; `GuestTunnel` has exactly two callers, `open_route` and
 its tests.
@@ -69,7 +69,7 @@ teammates put in their editor config, and they are what makes this work:
 requests naming them are passed to the mesh layer **unresolved**, so the
 load balancer picks whichever node advertising the alias is least busy
 rather than pinning to one machine's GGUF filename
-(`commonwealth/crates/commonwealth-api/src/routes_inference.rs`). A
+(`cmnwlth/crates/commonwealth-api/src/routes_inference.rs`). A
 teammate who names a concrete quant instead gets pinned to whoever has
 that exact file, and loses the anchor the day you swap quants.
 
@@ -243,7 +243,7 @@ work.
 
 An anchor serves other people's tools, so it is worth knowing what the
 daemon changes about a turn before it reaches the model. Two switches govern
-all of it (`commonwealth/crates/commonwealth-api/src/turn_fidelity.rs`);
+all of it (`cmnwlth/crates/commonwealth-api/src/turn_fidelity.rs`);
 both are documented per-flag in [ENV_FLAGS.md](./ENV_FLAGS.md).
 
 - **`SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST`** (default **off**) — when on,
@@ -277,7 +277,7 @@ except the serialization.
 - **Two members show one endpoint key** — `svrn mesh forget-member
   <node>` is the repair; see [join a mesh](./JOIN_A_MESH.md#when-it-breaks).
 - Anything else: `svrn doctor` on both machines, then the
-  [troubleshooting guide](../sovereign/docs/TROUBLESHOOTING.md).
+  [troubleshooting guide](../svrn/docs/TROUBLESHOOTING.md).
 
 ## Related
 

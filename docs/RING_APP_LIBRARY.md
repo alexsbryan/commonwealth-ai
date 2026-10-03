@@ -38,7 +38,7 @@ what the state is. Each node folds its own copy.
 As built, ordering and voiding are decided once, in `commonwealth-rail-core`'s
 `admit`. The client's `fold` only traverses: it skips voided acts and
 replacement-less corrections and walks the rest in the rail's order
-(`sovereign/crates/sovereign-daemon/src/guest_door.rs:323`). The library sits
+(`svrn/crates/sovereign-daemon/src/guest_door.rs:323`). The library sits
 on top of that traversal and never re-derives what is beneath it.
 
 ## 2. What the givens force
@@ -367,7 +367,7 @@ node.
   and `mio` refuses the target — the in-workspace check fails there; and
   `kernel-types` takes `getrandom 0.3` unconditionally, which needs the
   `wasm_js` feature plus `--cfg getrandom_backend="wasm_js"`. `oplog` reads
-  files (`oplog/src/lib.rs:89`); that compiles and cannot work in a tab, so
+  files (`shared/crates/oplog/src/lib.rs:89`); that compiles and cannot work in a tab, so
   the browser supplies its own log storage and hands ops to `admit`.
   `ingest`'s contract is as assumed: "No validation and no re-signing … anything
   wrong with it becomes a gap when `admit` reads it back." The consequence for
@@ -375,7 +375,7 @@ node.
   until that key is its roster seed, and the amendment forbids a roster route
   — so adopting a journal is a confirmation the person gives on their own
   node, not something the phone can write. The answer schema is
-  `kernel_types::Answer` and `Citation` (`kernel-types/src/answer.rs:351`,
+  `kernel_types::Answer` and `Citation` (`shared/crates/kernel-types/src/answer.rs:351`,
   `:197`) with the four-way `Verdict` (`judgement.rs:91`), and `kernel-types`
   is already in this wasm tree; there is no `Claim` of the shape
   `FIVE_PROGRAMS.md` §3 sketches. Not needed by this tier and still
@@ -765,11 +765,11 @@ lent to?** Today seven things answer it separately:
 - `allowed_peers` on peer-assisted ingest;
 - the `inference` namespace's roster, derived from mesh membership
   (`sovereign-mesh/src/ring_roster.rs:82`);
-- the work plane's hand-written `roster.json` (`sovereign/deploy/mesh/WORK_PLANE.md`,
+- the work plane's hand-written `roster.json` (`cmnwlth/deploy/mesh/WORK_PLANE.md`,
   "One namespace").
 
 `OriginKind`'s separate trust classes are right — lending the chore app is not
-lending the film library (`oicp-types/src/origin.rs:26`) — so the change is not
+lending the film library (`shared/crates/oicp-types/src/origin.rs:26`) — so the change is not
 one list. Each lend names the rings it goes to, and the membership function
 `admit` already calls says who is in them (ARCH principle 8). That depends on
 §15: a server lending to a house, a band and a friend group needs every ring
@@ -798,7 +798,7 @@ live at once and `member_check` widened to any roster the node holds.
 engine and a relay each run on some member's node. `RING_APPLICATIONS.md`
 already says "a club mints on its always-on member" and "a relay is a member
 whose machine stays on." Choosing among awake members is a candidate for
-`kernel_types::partition::rendezvous_owner` (`kernel-types/src/partition.rs:65`)
+`kernel_types::partition::rendezvous_owner` (`shared/crates/kernel-types/src/partition.rs:65`)
 over the awake set; unmeasured. A server wins by staying awake and is
 replaceable in each.
 
@@ -816,7 +816,7 @@ never the turns.
 - *The ring's memory is held.* A corpus built from the journal is a cache of a
   fold — a function of the journal, a recipe and an embedding model — so any
   member with a model can rebuild it and nobody owns it. It needs the journal
-  acquirer `STRATEGY_RINGS.md` names; nothing under `corpus-engine/src` reads a
+  acquirer `STRATEGY_RINGS.md` names; nothing under `ingest/crates/corpus-engine/src` reads a
   `RingJournal` (checked 2026-10-01). The acquirer indexes what the fold shows:
   a corrected act appears corrected, and the struck-through original is reached
   only when someone asks what happened. Acts are typed records already (§4), so
@@ -898,7 +898,7 @@ introduction, congratulation — say so in their one declaration (§4), and an a
 of a gesture kind carries a person's confirmation in its provenance. An act a
 model proposed and no person confirmed is refused, not flagged, beside
 `GovernanceIssue::UnattendedAct`
-(`corpus-engine/src/enrichment/governance_view.rs:611`). Watched failing first
+(`ingest/crates/corpus-engine/src/enrichment/governance_view.rs:611`). Watched failing first
 with a planted auto-confirmed vouch. Guest grade passes, because the bridge
 signs what a person tapped (`RING_ENTRY.md`, decision 2). `Admit` is not an app
 kind and is not covered here: §9's one rule already makes it a member's act,

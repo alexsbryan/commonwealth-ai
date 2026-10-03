@@ -78,7 +78,7 @@ hard = json.load(open(SCRATCH / "hardcore.json"))
 hard_facts = [(q, f) for q, fs in hard.items() for f in fs]
 
 # control: facts every arm matched, one per question, same questions where possible
-D = Path("/home/alexbryan/dev/commonwealth-ai/sovereign/bench/sep_atlas/map-conversion-rung6")
+D = Path("/home/alexbryan/dev/commonwealth-ai/bench/lanes/sep_atlas/map-conversion-rung6")
 R = {a: {r["question_id"]: r for r in json.load(open(D / f"{a}.json"))["results"]}
      for a in ("armA", "armA2", "armB", "armB2")}
 ctrl = []

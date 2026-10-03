@@ -48,6 +48,6 @@ variant = "medium"
 [checks]
 # clone-gate rides on boundary (phase-b-99): a copy that closes an edge lowers
 # the boundary count, and the same reading shows the clone-gate red.
-boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; cargo xtask clone-gate; true'"]
+boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cargo xtask boundary-gate; cargo xtask clone-gate; true'"]
 compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]
 lift = ['bash', '-c', 'mkdir -p "$HOME/.cache/program-lift" && toolbox run -c sovereign-vulkan bash -lc "TMPDIR=$HOME/.cache/program-lift ./scripts/program-lift.sh --sandbox $0 --dir $HOME/.cache/program-lift/sandbox-$0 --target-dir $HOME/.cache/program-lift/target"']

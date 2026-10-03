@@ -29,7 +29,7 @@ script installs everything: the Xcode command-line tools, the Homebrew packages,
 Rust with the components the build needs, and a persisted `SDKROOT`.
 
 ```sh
-./sovereign/scripts/bootstrap-mac.sh
+./svrn/scripts/bootstrap-mac.sh
 ```
 
 It's idempotent — safe to re-run after a pull. Prefer to do it by hand? It's the
@@ -55,8 +55,8 @@ crash). One script installs everything — Rust, the native libraries, the
 linker, and the Vulkan build deps — for Fedora (dnf) or Ubuntu/Debian (apt):
 
 ```sh
-./sovereign/scripts/bootstrap-linux.sh                    # autodetects the GPU backend
-# ./sovereign/scripts/bootstrap-linux.sh --backend=vulkan # force it on a generic dev box
+./svrn/scripts/bootstrap-linux.sh                    # autodetects the GPU backend
+# ./svrn/scripts/bootstrap-linux.sh --backend=vulkan # force it on a generic dev box
 ```
 
 It's idempotent — safe to re-run after a pull. It installs clang, cmake, `mold`
@@ -180,5 +180,5 @@ frames simply stop banking and nobody notices until a split loses state.
 
 Built, tested, and the tools answer? You're ready to change things.
 [CONTRIBUTING.md](./CONTRIBUTING.md) covers the review flow;
-[sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) is the verifiable
+[docs/SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md) is the verifiable
 map of what lives where.

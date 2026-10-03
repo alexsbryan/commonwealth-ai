@@ -13,10 +13,10 @@ one config block pointing at `http://localhost:9741/mcp`, covered (with
 the transport constraints) in [INTEROP §4](./INTEROP.md#4-mcp--give-your-existing-agent-our-code-intelligence).
 The code-intelligence tools themselves — `symbols`, `callers`, `blast`,
 compiler-resolved from a SCIP graph — are covered in
-[code intelligence](../sovereign/docs/CODE_INTELLIGENCE.md).
+[code intelligence](../svrn/docs/CODE_INTELLIGENCE.md).
 
 **You need:** [a running daemon](./START_THE_DAEMON.md), and for the code
-tools [an indexed repository](../sovereign/docs/CODE_INTELLIGENCE.md).
+tools [an indexed repository](../svrn/docs/CODE_INTELLIGENCE.md).
 
 ## Boot informed
 
@@ -68,7 +68,7 @@ Before non-trivial work on a shared file or symbol:
 - `release_scope(claim_id)` when done.
 
 The machinery — observation grades, privacy, gossip — is in
-[the work atlas](../sovereign/docs/WORK_ATLAS.md).
+[the work atlas](../svrn/docs/WORK_ATLAS.md).
 
 ## Session continuity
 
@@ -87,7 +87,7 @@ Write the frame at transitions (task start, step done, blocker hit), not
 just at the end — a frame written while the state is in your hands is the
 one a successor can actually resume from. The contract, budgets, and
 grading live in the
-[session-continuity spec](../sovereign/docs/specs/SESSION_CONTINUITY.md).
+[session-continuity spec](../svrn/docs/specs/SESSION_CONTINUITY.md).
 
 ## Context spend
 

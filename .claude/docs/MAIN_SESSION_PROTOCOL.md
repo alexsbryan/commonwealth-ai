@@ -288,7 +288,7 @@ Use `note` to leave durable context for future sessions. **Do not wait until the
 - **`todo`** — when you identify follow-up work that won't be done in this session
 - **`attempt`** — when an approach was tried and failed, so future-you doesn't repeat it
 
-**Shipping anything default-off or dark additionally requires a row in `sovereign/DEFAULTS_LEDGER.md` — in the same commit.** The row names the falsifiable flip condition, which plan item settles it, and a review-by date. Flipping or rejecting a default moves its row (Graduated/Rejected), never deletes it. If you touch an area whose ledger row is past its review-by date, raise it to the operator: flip it, kill it, or re-date it with a reason — "still waiting" without a named blocker is not a valid state. This exists because proven-but-dark capabilities were withering: the flip condition lived only in a session summary nobody re-read (operator directive 2026-07-31).
+**Shipping anything default-off or dark additionally requires a row in `docs/DEFAULTS_LEDGER.md` — in the same commit.** The row names the falsifiable flip condition, which plan item settles it, and a review-by date. Flipping or rejecting a default moves its row (Graduated/Rejected), never deletes it. If you touch an area whose ledger row is past its review-by date, raise it to the operator: flip it, kill it, or re-date it with a reason — "still waiting" without a named blocker is not a valid state. This exists because proven-but-dark capabilities were withering: the flip condition lived only in a session summary nobody re-read (operator directive 2026-07-31).
 
 ### Session reflection — at task end
 
@@ -347,7 +347,7 @@ svrn quality check                           # ~30m — the curated pre-push bre
 
 The lean tier is no longer a flag on this script. `--quick` down-sampled by
 COUNT and wrote nothing durable; `svrn quality check` declares its item subsets
-by id in `sovereign/bench/smoke.toml`, says four verdicts per lane, and persists
+by id in `bench/lanes/smoke.toml`, says four verdicts per lane, and persists
 `target/quality-check/<stamp>/summary.json`.
 
 **Read the lane KIND before you read the verdict** (gate policy at `scripts/sovereign-ci-bench.sh:10-30`):
@@ -364,13 +364,13 @@ by id in `sovereign/bench/smoke.toml`, says four verdicts per lane, and persists
 
 | Question | Doc |
 |---|---|
-| How do I run the gate, or drill into a flagged lane? | `sovereign/bench/README.md` — the canonical entry point |
-| A bench says regressed — is it real? Noise bands, baseline age, the legitimate re-mint path | `sovereign/docs/RUNBOOK.md` §6 |
-| How do I re-baseline every CI lane from scratch? | `sovereign/bench/CI_GATE_HANDOFF.md` |
-| How do I iterate a prompt or scorer without overfitting the golden? | `sovereign/bench/BENCH_LOOP.md` |
-| What does lane X actually measure? | `sovereign/bench/<lane>/README.md` (24 of 42 banks carry one) |
+| How do I run the gate, or drill into a flagged lane? | `bench/lanes/README.md` — the canonical entry point |
+| A bench says regressed — is it real? Noise bands, baseline age, the legitimate re-mint path | `svrn/docs/RUNBOOK.md` §6 |
+| How do I re-baseline every CI lane from scratch? | `bench/lanes/CI_GATE_HANDOFF.md` |
+| How do I iterate a prompt or scorer without overfitting the golden? | `bench/lanes/BENCH_LOOP.md` |
+| What does lane X actually measure? | `bench/lanes/<lane>/README.md` (24 of 42 banks carry one) |
 
-`sovereign/docs/BENCHMARKING.md` is **throughput** (embed/decode across Metal/Vulkan/ROCm), not answer quality. It is the top grep hit for "benchmarking" and is not what you want here.
+`svrn/docs/BENCHMARKING.md` is **throughput** (embed/decode across Metal/Vulkan/ROCm), not answer quality. It is the top grep hit for "benchmarking" and is not what you want here.
 
 **On this host:** neither `timeout` nor `gtimeout` is installed, so the per-lane caps at `sovereign-ci-bench.sh:167-170` are inert — only the coarse inter-lane budget guard bounds a run. `brew install coreutils` restores them.
 

@@ -62,7 +62,7 @@ serving. Same protocol, same port, same devices, same tensor cache — the child
 is passed `--cache-dir` explicitly so warm-cache hits are unaffected.
 
 The child path is **experimental and off by default**: its parity has not yet
-been measured on a two-node run. `sovereign/DEFAULTS_LEDGER.md` carries the
+been measured on a two-node run. `docs/DEFAULTS_LEDGER.md` carries the
 three checks that would flip it (warm-cache hit across the boundary, no orphan
 holding the port after `kill -9`, and no hybrid host+worker OOM regression).
 

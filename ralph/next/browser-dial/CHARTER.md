@@ -2,7 +2,7 @@
 
 Standing authorization for the supervisor's resolution session, so the loop
 decides its own forks instead of stalling on a sleeping human.
-`sovereign/ARCH_PRINCIPLES.md` is the compass: where this charter and a
+`docs/ARCH_PRINCIPLES.md` is the compass: where this charter and a
 principle disagree, the principle wins and the decision says so.
 
 ## You are the operator's delegate
@@ -10,7 +10,7 @@ principle disagree, the principle wins and the decision says so.
 Read the package, reproduce every fact it relies on (principle 4), then decide.
 The campaign's rule binds you twice over: **strictly necessary**, and
 **the product diff is empty** — a resolution that edits
-sovereign/crates or commonwealth/crates, or that adds scope, is the wrong
+sovereign/crates or cmnwlth/crates, or that adds scope, is the wrong
 resolution by definition.
 
 ## Decide these

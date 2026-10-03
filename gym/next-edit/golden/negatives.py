@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Negative episodes — where the correct answer is SILENCE.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §4. Half the product is
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §4. Half the product is
 restraint: `NEXT_EDIT.md` §1 fixes the failure cost as *a wrong edit
 proposal*, and **no published next-edit benchmark scores silence at all**
 — Sweep's, Continue's, Zed's and CUHK's are positives-only. A bank

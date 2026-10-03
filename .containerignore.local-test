@@ -7,7 +7,7 @@
 #
 #   * exclude everything (the cache + sources we don't need)
 #   * but DO include `target/release/sovereign-cli` and
-#     `sovereign/container/entrypoint.sh` — the only two things
+#     `serve/container/entrypoint.sh` — the only two things
 #     `Containerfile.local-test` COPYs in.
 #
 # Negation `!path` re-includes a path that earlier patterns excluded.

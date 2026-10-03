@@ -12,7 +12,7 @@ statement = "Each of fi-raptor-whole-work, fi-ontology-list and fi-gliner-declar
 check     = '''python3 - <<'PY'
 import json, pathlib, sys
 rows = [json.loads(l) for l in (pathlib.Path.home() / ".sovereign/comaintainer/bar-measurements.jsonl").read_text().splitlines() if l.strip()]
-ledger = pathlib.Path("sovereign/DEFAULTS_LEDGER.md").read_text()
+ledger = pathlib.Path("docs/DEFAULTS_LEDGER.md").read_text()
 ok = True
 for bar in ("fi-raptor-whole-work", "fi-ontology-list", "fi-gliner-declared-labels"):
     mine = [r for r in rows if r.get("campaign") == "feature-fidelity" and r.get("bar") == bar]
@@ -27,7 +27,7 @@ id           = "fi-ontology-records"
 demo         = "D2's inner loop: K1 recall read straight from the typed atlas, no model, 0.1 s"
 rung         = "O-T0"
 one_line     = "Share of text-attested K1 members (gold members_local) that the ei7-ans typed records carry: hoard resolved, coins linked to it, their mint/ruler/denomination named"
-derives_from = "records_recall.py first run 2026-10-02: 31/32 hoards resolve, 23/32 rows have no coin linked (49 of 362 coins carry a hoard ref), mean 0.031 of the local ceiling; ref snaps are type-unchecked by design (corpus-engine/src/enrichment/atlas/resolution_ontology.rs:16-23) and land coin.mint on hoard entities"
+derives_from = "records_recall.py first run 2026-10-02: 31/32 hoards resolve, 23/32 rows have no coin linked (49 of 362 coins carry a hoard ref), mean 0.031 of the local ceiling; ref snaps are type-unchecked by design (ingest/crates/corpus-engine/src/enrichment/atlas/resolution_ontology.rs:16-23) and land coin.mint on hoard entities"
 status       = "open"
 direction    = "higher_is_better"
 floor        = 0.014
@@ -81,7 +81,7 @@ id           = "fi-kit"
 demo         = "D4: each passing demo through corpus-mcp on a bare llama-server, Open WebUI (hybrid + reranker) on the same questions"
 rung         = "K1"
 one_line     = "Count of features passing their T2 bar in the daemon that reproduce the same T1 direction through corpus-mcp on a bare llama-server"
-derives_from = "corpus-mcp/README.md: tier-1 search only, no GLiNER, 0 claims on a bare endpoint before O0"
+derives_from = "svrn/crates/corpus-mcp/README.md: tier-1 search only, no GLiNER, 0 claims on a bare endpoint before O0"
 status       = "open"
 direction    = "higher_is_better"
 floor        = 0.0

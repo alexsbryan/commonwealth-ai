@@ -25,12 +25,12 @@ file is that record.
 
 | piece | where | shape |
 |---|---|---|
-| `Workflow`/`StepRegistry` | `studio/crates/sovereign-workflow/src/model.rs`, `runner.rs` | TOML DAG of typed steps, per-item `for_each` semantics |
+| `Workflow`/`StepRegistry` | `shared/crates/sovereign-workflow/src/model.rs`, `runner.rs` | TOML DAG of typed steps, per-item `for_each` semantics |
 | `Runner::run` | `sovereign-workflow/src/runner.rs:102` | `run(&self, wf, concurrency) -> Result<RunReport>`; `RunReport { workflow, items: Vec<ItemReport> }` with `ok_count`/`failed_count` |
 | `FileArtifactCache` | `sovereign-workflow/src/cache.rs:59` | step-output cache, keyed `cache_key(uses, step_id, args, item_fingerprint)` |
 | `StepObserver` / `WorkflowProgress` | `sovereign-workflow/src/progress.rs:17,33` | `Arc<dyn Fn(WorkflowProgress)>`; events `RunStarted` / `StepDone` / `ElementSkipped` / `ItemDone` / `RunFinished` — per-step, per-item, display-ready |
 | `run_workflow_with_provider` | `sovereign-workflow-host/src/lib.rs:418` | the embedding entry: `(wf, inference?, installer?, concurrency, no_cache, params, extra_tools, observer?) -> Result<RunReport>`; `standard_registry` includes `corpus_store`; `HttpCorpusInstaller` |
-| CLI surface | `sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs` | `svrn workflow`; `notebook` starter scaffolds a workflow whose `tool:corpus_store` step hands off a built corpus (workflow_cmd.rs:593-596) |
+| CLI surface | `svrn/crates/sovereign-cli-llm/src/workflow_cmd.rs` | `svrn workflow`; `notebook` starter scaffolds a workflow whose `tool:corpus_store` step hands off a built corpus (workflow_cmd.rs:593-596) |
 
 The notebook precedent is real and shipped: a TOML workflow already runs
 `corpus_store` as a step and the CLI detects the built corpus for

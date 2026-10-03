@@ -1,6 +1,6 @@
 # GAP-2 — the corroboration floor (two-source rule as a verdict dimension)
 
-Order deep-research-t1b. Spec: `sovereign/docs/specs/DEEP_RESEARCH.md`
+Order deep-research-t1b. Spec: `svrn/docs/specs/DEEP_RESEARCH.md`
 ("GAP-2 — Corroboration", lines ~414-426). FMEA row: F22 (near-duplicate
 inflation). Gate bars: `dr-corroboration` in quality/initiative-bars.toml.
 
@@ -134,15 +134,15 @@ any run; the execution read appended after, timestamped.
 
 ## Files touched
 
-- sovereign/crates/sovereign-core/src/deep_research/icd.rs — GateAction
+- svrn/crates/sovereign-core/src/deep_research/icd.rs — GateAction
   variant, CorroborationRecord, ClaimVerdict + FinalClaim fields
-- sovereign/crates/sovereign-core/src/deep_research/audit.rs — floor in
+- svrn/crates/sovereign-core/src/deep_research/audit.rs — floor in
   assess_claim, ClaimAudit field, all constructions, red-first tests
-- sovereign/crates/sovereign-core/src/deep_research/render.rs —
+- svrn/crates/sovereign-core/src/deep_research/render.rs —
   final_claims carries the record, report flag, test constructions
-- sovereign/crates/sovereign-core/src/deep_research/gym.rs — F22 Watched
+- svrn/crates/sovereign-core/src/deep_research/gym.rs — F22 Watched
   + f22_corroboration_floor fixture
-- sovereign/crates/sovereign-core/tests/golden_fixtures.rs — regenerated
+- svrn/crates/sovereign-core/tests/golden_fixtures.rs — regenerated
   assertions + reconstructions
 - research/deep-research/notes/icd-schemas.md — the record on the wire
 - research/deep-research/adversarial/pre-registration.md — §18.6 append
@@ -151,7 +151,7 @@ any run; the execution read appended after, timestamped.
 
 - Red-first: `single_origin_support_caps_at_could_not_judge` (+ the
   two-origin pass twin) watched red before implementation.
-- Full loop: `sovereign/crates/sovereign-core/tests/gym_deck.rs` —
+- Full loop: `svrn/crates/sovereign-core/tests/gym_deck.rs` —
   poisoned decks + clean twins; the poisoned deck's claims can no longer
   pass on a single planted source.
 - Goldens: re-render byte-pins the regenerated meridian report.

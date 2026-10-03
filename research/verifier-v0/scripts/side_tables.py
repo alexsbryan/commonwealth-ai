@@ -30,7 +30,7 @@ stderr so the table stays inspectable.
 
 Usage:
   side_tables.py entities --corpus chaos-saltgrass --out data/stream_b/chaos-saltgrass/entities.json
-  side_tables.py distractors --doc sovereign/bench/attached_doc/corpora/meridian_postmortem.txt \\
+  side_tables.py distractors --doc bench/lanes/attached_doc/corpora/meridian_postmortem.txt \\
                              --out data/stream_b/distractors.json
 """
 

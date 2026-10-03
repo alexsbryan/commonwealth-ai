@@ -74,7 +74,7 @@ whose GEOMETRY is incompatible — a vector width the loaded model does not
 produce — MUST fail loudly, never coerce. A difference in the recorded model
 NAME alone MUST NOT refuse the open: the same model appears under different
 file names and quantisations, and those vectors are comparable.'''
-target = '''corpus-engine/src/engine/mod.rs::geometry_verdict'''
+target = '''ingest/crates/corpus-engine/src/engine/mod.rs::geometry_verdict'''
 asserts = '''open_index (on the cache-MISS and cache-HIT paths alike) returns Err
 when the corpus's recorded embedding width differs from the width the loaded
 model produces, naming the corpus and both widths; and returns Ok with a warning
@@ -108,10 +108,10 @@ id = "FE-100"
 family = "FE"
 status = "landed"
 clause = '''Traffic that names an origin and traffic that does not MUST be gated by **disjoint** mechanisms — one returning early when the other applies — so a request meets exactly one and is never double-gated.'''
-target = '''commonwealth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
+target = '''cmnwlth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
 asserts = '''a request carrying X-Node-Id moves only peer_admission_layer's counters and never consumes a client_fairness_layer share slot, and vice versa for a request without it.'''
 catches = '''the two gates' early-return conditions drifting apart, so one request is charged against both the peer ceiling and the client fair-share cap, or against neither.'''
-destination = '''commonwealth/crates/commonwealth-api/src/admission.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-api/src/admission.rs (mod tests)'''
 kind = '''rust-unit; drive both middleware layers over a tower stack'''
 landed = '''commonwealth-api::admission::tests::peer_traffic_and_client_traffic_never_consume_each_others_budget'''
 
@@ -120,10 +120,10 @@ id = "FE-105"
 family = "FE"
 status = "landed"
 clause = '''A refusal produced by *this* gate MUST be exempted from peer health tracking — a busy response is a healthy peer declining, and booking it as a fault quarantines that peer.'''
-target = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs:1049::book_peer_failure'''
+target = '''serve/crates/sovereign-serving-host/src/peer_inference.rs:1049::book_peer_failure'''
 asserts = '''book_peer_failure(peer, err, shed=true) repeated past FAILURE_THRESHOLD leaves is_quarantined(peer) false; the same calls with shed=false quarantine it.'''
 catches = '''dropping the shed early-exit so our own busy/shed refusals are booked as peer faults, quarantining a healthy peer after a few concurrent turns.'''
-destination = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs (mod tests)'''
+destination = '''serve/crates/sovereign-serving-host/src/peer_inference.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-serving-host::peer_inference::tests::our_own_shed_refusals_never_quarantine_the_peer_that_shed'''
 
@@ -132,10 +132,10 @@ id = "FE-119"
 family = "FE"
 status = "landed"
 clause = '''A replicated namespaced key-value store MUST exist with last-writer-wins resolution, per-namespace isolation, and time-to-live garbage collection. Namespaces MUST be excludable from replication.'''
-target = '''commonwealth/crates/commonwealth-state/src/store.rs:188::gc'''
+target = '''cmnwlth/crates/commonwealth-state/src/store.rs:188::gc'''
 asserts = '''gc_app(app, ttl) removes only entries older than now-ttl within that namespace, leaving other namespaces and newer entries intact; gc(ttl) spans all apps. Return value equals the number deleted.'''
 catches = '''an off-by-one on the cutoff, gc_app deleting across all namespaces, or a silent no-op letting stale entries accumulate forever. Neither function has any test.'''
-destination = '''commonwealth/crates/commonwealth-state/src/store.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-state/src/store.rs (mod tests)'''
 kind = '''rust-unit; MeshStore::in_memory'''
 landed = '''commonwealth-state::store::tests::gc_is_bounded_by_both_the_cutoff_and_the_namespace'''
 
@@ -144,10 +144,10 @@ id = "FE-139"
 family = "FE"
 status = "subject-deleted"
 clause = '''Managed subordinate processes MUST have an explicit lifecycle state machine (starting / running / unhealthy / failed / stopped), graceful termination with a timeout before forced termination, periodic health polling with a sampled latency window and an unresponsive threshold, a **graceful departure** countdown state machine (announced → rebalancing → draining → complete), and a fault detector collapsing health changes into events.'''
-target = '''sovereign/crates/sovereign-compute/src/supervisor.rs:199::SupervisorState'''
+target = '''serve/crates/sovereign-compute/src/supervisor.rs:199::SupervisorState'''
 asserts = '''a subordinate's observed SupervisorState sequence is Starting -> Healthy -> Unhealthy -> Failed on repeated crashes, AND separately a departure sequence announced -> rebalancing -> draining -> complete.'''
 catches = '''DUE DILIGENCE 2026-09-02 — ALL THREE PARTS EXIST AS CODE AND NONE IS WIRED. SupervisorState (sovereign-compute/src/supervisor.rs:199), GracefulDeparture Announced->Rebalancing->Draining->Complete (commonwealth-inference/src/orchestrator/departure.rs:11-83) and FaultDetector (orchestrator/fault.rs:34-213) are each self-contained and unit-tested, but neither departure nor fault is ever constructed or called from orchestrator.rs, process.rs or any handler. Orchestrator::stop_all (orchestrator.rs:161), itself commented 'graceful departure', SIGTERMs every process directly and bypasses both. This is dead orchestration code that reads as compliance. The requirement is UNMET: wire it, then test it. A test written against the modules alone would pass while the product still kills processes abruptly.'''
-destination = '''sovereign/crates/sovereign-compute/src/supervisor.rs'''
+destination = '''serve/crates/sovereign-compute/src/supervisor.rs'''
 kind = '''rust-integration; but WIRING COMES FIRST — see catches'''
 # 2026-09-03: `commonwealth-inference/src/orchestrator/` (1,904 lines) was
 # deleted. `Orchestrator::new` was called from NOTHING but the two tests below,
@@ -170,10 +170,10 @@ id = "FE-22"
 family = "FE"
 status = "landed"
 clause = '''Hardware capability MUST be detected, not configured, with a fallback chain across accelerator vendors.'''
-target = '''commonwealth/crates/commonwealth-discovery/src/hardware.rs:35::detect_gpus'''
+target = '''cmnwlth/crates/commonwealth-discovery/src/hardware.rs:35::detect_gpus'''
 asserts = '''detect_gpus() with NVIDIA present returns only NVIDIA GpuInfos and never invokes the ROCm or Metal probes; with NVIDIA absent and ROCm present it falls through to ROCm and stops.'''
 catches = '''a reorder or a probe chain that keeps querying after a vendor returned results, duplicating GPUs. The existing hardware test asserts only ram/cores/storage and never inspects profile.gpus or probe order.'''
-destination = '''commonwealth/crates/commonwealth-discovery/src/hardware.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-discovery/src/hardware.rs (mod tests)'''
 kind = '''rust-unit; needs a probe seam — detect_gpus shells out today, so extracting the per-vendor probe is part of this spec'''
 landed = '''commonwealth-discovery::hardware::tests::the_vendor_chain_stops_at_the_first_vendor_that_answers'''
 
@@ -182,10 +182,10 @@ id = "FE-77"
 family = "FE"
 status = "landed"
 clause = '''An overflow refusal MUST be a **new** typed variant, not a reuse of "insufficient cluster" — pooling more memory does not fix an overflow, and the wrong message sends the operator looking for a peer that is already there. The refusal MUST advise *lowering* the headroom factor and MUST name the one legitimate override.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1328::WorkerOverflow'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1328::WorkerOverflow'''
 asserts = '''first_worker_overflow on a plan with one non-fitting device returns Some(WorkerOverflow), distinct from InsufficientCluster; refusal() text contains LOWER (not raise) and names SOVEREIGN_SKIP_PER_DEVICE_FIT=1.'''
 catches = '''collapsing per-device overflow into InsufficientCluster (which self-resolves as anchors settle), sending an operator hunting a peer that is already there; or advising raising headroom, which makes the overflow worse.'''
-destination = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs (mod tests)'''
+destination = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-inference::embedded::rpc_distribution::rpc_prune_tests::a_per_device_overflow_is_its_own_refusal_and_advises_lowering_headroom'''
 
@@ -194,10 +194,10 @@ id = "IN-19"
 family = "IN"
 status = "landed"
 clause = '''Crash records MUST be local-first and never auto-uploaded (X-PV-6), with a redacted export the user can review and send deliberately.'''
-target = '''sovereign/crates/sovereign-desktop/src-tauri/src/crash_report.rs:261::render_shareable_markdown'''
+target = '''clients/desktop/src-tauri/src/crash_report.rs:261::render_shareable_markdown'''
 asserts = '''render_shareable_markdown for a CrashRecord whose model_path is an absolute path under the user's home emits only the basename, never the full path or username.'''
 catches = '''a new CrashRecord field, or a change to the renderer, leaking an absolute path and therefore the user's identity into a crash export the user is invited to send.'''
-destination = '''sovereign/crates/sovereign-desktop/src-tauri/src/crash_report.rs (mod tests)'''
+destination = '''clients/desktop/src-tauri/src/crash_report.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-desktop::crash_report::tests::a_shared_crash_report_carries_the_model_name_not_the_users_home_path'''
 
@@ -206,10 +206,10 @@ id = "IN-27"
 family = "IN"
 status = "landed"
 clause = '''Outcome reporting MUST add zero user-visible surface: fire-and-forget, short deadline, every failure swallowed including an older-server rejection.'''
-target = '''commonwealth/crates/commonwealth-api/src/next_edit_journal.rs:144::edit_prediction_outcome'''
+target = '''cmnwlth/crates/commonwealth-api/src/next_edit_journal.rs:144::edit_prediction_outcome'''
 asserts = '''POST edit_prediction_outcome with a recognised outcome and non-empty episode_id returns 204; an unrecognised outcome or empty episode_id returns 400 — never 5xx, never blocking.'''
 catches = '''a change that panics, hangs, or returns a status the editor extension does not already treat as ignorable, turning an advisory journal write into a visible editor failure.'''
-destination = '''commonwealth/crates/commonwealth-api/src/next_edit_journal.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-api/src/next_edit_journal.rs (mod tests)'''
 kind = '''rust-unit; axum handler over a test router'''
 landed = '''commonwealth-api::next_edit_journal::tests::the_outcome_route_answers_204_or_400_and_never_5xx'''
 
@@ -218,10 +218,10 @@ id = "ST-15"
 family = "ST"
 status = "landed"
 clause = '''Compaction is non-destructive, so storage grows until pruning. Pruning is destructive and irreversible: the operator surface MUST have no default and MUST refuse a zero-retention prune; the automatic sweep MUST use a retention window far outside any plausible in-flight reader.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs:80::run_optimize'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs:80::run_optimize'''
 asserts = '''`corpus optimize <id> --prune-days 0` (or a non-integer) writes an error naming the constraint to stderr and exits 2 without ever calling CorpusIndex::prune.'''
 catches = '''letting a zero or unparsed retention through to the destructive prune path, deleting every superseded version regardless of what an in-flight reader still holds.'''
-destination = '''sovereign/docs/cli-contract.toml (journey) + optimize.rs mod tests'''
+destination = '''svrn/docs/cli-contract.toml (journey) + optimize.rs mod tests'''
 kind = '''cli-journey; the refusal is an operator-facing surface, so assert stderr+exit in a journey'''
 landed = '''sovereign-cli-llm::corpus_cmd::optimize::tests::* + cli-contract journey `corpus-prune-refusal`'''
 
@@ -230,11 +230,11 @@ id = "ST-41"
 family = "ST"
 status = "landed"
 clause = '''Per-document recency MUST be **source-agnostic and emergent from indexing**: one sidecar mapping document identity → last-indexed time, stamped at the single point where every re-index path converges. Any source that re-indexes content — a freshness updater, a watched-folder edit, an incremental delta — MUST therefore make that content "fresh" with **no per-source code**.'''
-target = '''corpus-engine/src/engine/reindex.rs:323::reindex_by_source_doc_id'''
-existing = '''partial: corpus-engine/src/freshness.rs:79::stamp_then_load_round_trips'''
+target = '''ingest/crates/corpus-engine/src/engine/reindex.rs:323::reindex_by_source_doc_id'''
+existing = '''partial: ingest/crates/corpus-engine/src/freshness.rs:79::stamp_then_load_round_trips'''
 asserts = '''after reindex_by_source_doc_id, freshness::load_doc_freshness(index_dir) contains that source_doc_id with a timestamp >= the call start.'''
 catches = '''a new content source's reindex path inserting chunks but never calling the shared stamp, so its documents never sort fresh-first. The existing freshness test covers stamp/load in isolation, not that the reindex path calls them.'''
-destination = '''corpus-engine/tests/main/'''
+destination = '''ingest/crates/corpus-engine/tests/main/'''
 kind = '''rust-integration; needs a real index dir'''
 landed = '''corpus-engine::main::reindex_stamps_freshness::reindexing_a_document_stamps_its_recency_at_the_shared_convergence_point'''
 
@@ -243,19 +243,19 @@ id = "UI-10"
 family = "UI"
 status = "landed"
 clause = '''Accessibility seams MUST be shared across surfaces: per-turn completion announcement (announced on completion, never per token) and modal focus trapping with restore. Dynamic accessibility behaviour MUST be verified by assistive-technology testing, not only by automated scanning.'''
-target = '''packages/chat-ui/src/announce.ts::completionAnnouncement (SEAM DOES NOT EXIST)'''
+target = '''clients/chat-ui/src/announce.ts::completionAnnouncement (SEAM DOES NOT EXIST)'''
 asserts = '''the live region's text changes exactly once on the streaming->idle transition and never on a MESSAGE_CHUNK; a modal traps focus and restores it to the trigger on close. Instrument: vitest.'''
-catches = '''DUE DILIGENCE 2026-09-02 — RECLASSIFIED. The seam DOES exist and IS wired: completionAnnouncement (packages/chat-ui/src/announce.ts:26), a role=status aria-live=polite region (ChatView.svelte:1635), fired only on the streaming->idle falling edge (ChatView.svelte:633-661, explicitly not per chunk), and dialogFocus (packages/chat-ui/src/actions/dialog-focus.ts:46-116) provides both the Tab-cycle trap and focus restore, used by five dialogs. The gap is purely test coverage: packages/chat-ui/src contains NO test file at all. This is an ordinary test gap, not missing capability.'''
-destination = '''packages/chat-ui/src/announce.test.ts (new) + a ChatView vitest'''
-kind = '''vitest; packages/chat-ui/src currently has NO test file at all'''
-landed = '''packages/chat-ui/src/announce.test.ts (vitest) — NO CLAIM ROUTE, see header'''
+catches = '''DUE DILIGENCE 2026-09-02 — RECLASSIFIED. The seam DOES exist and IS wired: completionAnnouncement (clients/chat-ui/src/announce.ts:26), a role=status aria-live=polite region (ChatView.svelte:1635), fired only on the streaming->idle falling edge (ChatView.svelte:633-661, explicitly not per chunk), and dialogFocus (clients/chat-ui/src/actions/dialog-focus.ts:46-116) provides both the Tab-cycle trap and focus restore, used by five dialogs. The gap is purely test coverage: clients/chat-ui/src contains NO test file at all. This is an ordinary test gap, not missing capability.'''
+destination = '''clients/chat-ui/src/announce.test.ts (new) + a ChatView vitest'''
+kind = '''vitest; clients/chat-ui/src currently has NO test file at all'''
+landed = '''clients/chat-ui/src/announce.test.ts (vitest) — NO CLAIM ROUTE, see header'''
 
 [[spec]]
 id = "UI-22"
 family = "UI"
 status = "landed"
 clause = '''Secure by default: bind to the loopback interface, and refuse at start-up a non-loopback bind with authentication disabled, with an explicit opt-out.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2831::start_daemon'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:2831::start_daemon'''
 asserts = '''with a non-loopback client_bind and no resolvable token, startup either refuses to bind or installs no token layer and every remote request 401s.'''
 catches = '''an edit flipping the loopback branch shipping an unauthenticated non-loopback listener. The entire posture lives inline in a ~4700-line async fn with no extracted decision function and zero tests — extracting it is part of this spec.'''
 destination = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs'''
@@ -267,10 +267,10 @@ id = "UI-4"
 family = "UI"
 status = "landed"
 clause = '''The graphical application MUST be organised around **user intent**, not around system structure. A workable top-level shape is: **Ask** (grounded conversation, the landing surface), **Library** (knowledge home), **Workshop** (making things), **Reflect** (personal/wellbeing lane), and **Settings**.'''
-target = '''sovereign/crates/sovereign-desktop/src/lib/components/NavRail.svelte:24'''
+target = '''clients/desktop/src/lib/components/NavRail.svelte:24'''
 asserts = '''the nav rail renders exactly five items with testids nav-ask, nav-library, nav-reflect, nav-workshop, nav-settings and their labels, in order. Instrument: Playwright.'''
 catches = '''a surface silently dropped, renamed or reordered out of the intent-based shape. No spec currently references nav-ask at all.'''
-destination = '''sovereign/crates/sovereign-desktop/tests/e2e/'''
+destination = '''clients/desktop/tests/e2e/'''
 kind = '''playwright'''
 landed = '''tests/e2e/specs/nav-rail-intent.spec.ts (playwright, @UI-4)'''
 
@@ -279,11 +279,11 @@ id = "UI-9"
 family = "UI"
 status = "landed"
 clause = '''Chat dispatch MUST be single-flight, with the in-flight user message preserved across binding transitions.'''
-target = '''sovereign/crates/sovereign-desktop/src/lib/machines/chat.machine.ts:315'''
-existing = '''partial: sovereign/crates/sovereign-desktop/src/lib/machines/chat.machine.test.ts:259'''
+target = '''clients/desktop/src/lib/machines/chat.machine.ts:315'''
+existing = '''partial: clients/desktop/src/lib/machines/chat.machine.test.ts:259'''
 asserts = '''a second SEND_INITIATED while the machine is in turn:preparing or turn:streaming appends exactly one user message and starts no second turn. Instrument: vitest.'''
 catches = '''a refactor of the nested turn region that lets a fast double-click fire two turns. The existing machine test covers only the conversation-binding half.'''
-destination = '''sovereign/crates/sovereign-desktop/src/lib/machines/chat.machine.test.ts'''
+destination = '''clients/desktop/src/lib/machines/chat.machine.test.ts'''
 kind = '''vitest; extend the existing file'''
 landed = '''src/lib/machines/chat.machine.test.ts (vitest) — NO CLAIM ROUTE, see header'''
 
@@ -292,10 +292,10 @@ id = "EN-16"
 family = "EN"
 status = "landed"
 clause = '''A reversible operation MUST actually be reversible. Where an operation log claims to support undo, the log envelope MUST carry the identity, version, actor, and timestamp needed to find the matching forward operation.'''
-target = '''corpus-engine/src/enrichment/reconciliation/multi_origin.rs:258::split_atom'''
+target = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/multi_origin.rs:258::split_atom'''
 asserts = '''given a Merge op id, a reversal reads that op's recorded inputs from the log and produces a Split whose outputs equal them — with no operator-supplied `into` list.'''
-catches = '''DUE DILIGENCE 2026-09-02 — CONFIRMED ABSENT for reconciliation, and there is a working pattern to copy. governance.rs:296 (derive_active) already does exactly this for the governance tenant: it matches Revert{targets: Vec<OpId>} against op.id to find and tombstone the forward op. Reconciliation never got that wiring: split_atom(canonical_id, into, rationale) takes a caller-supplied output list, never looks up the Merge by OpId to read its recorded inputs, and its ONLY call site is its own test (multi_origin.rs:471) — no production path calls it. corpus-engine/src/oplog.rs:24-26 documents the reversibility this code does not implement.'''
-destination = '''corpus-engine/src/enrichment/reconciliation/multi_origin.rs (mod tests)'''
+catches = '''DUE DILIGENCE 2026-09-02 — CONFIRMED ABSENT for reconciliation, and there is a working pattern to copy. governance.rs:296 (derive_active) already does exactly this for the governance tenant: it matches Revert{targets: Vec<OpId>} against op.id to find and tombstone the forward op. Reconciliation never got that wiring: split_atom(canonical_id, into, rationale) takes a caller-supplied output list, never looks up the Merge by OpId to read its recorded inputs, and its ONLY call site is its own test (multi_origin.rs:471) — no production path calls it. ingest/crates/corpus-engine/src/oplog.rs:24-26 documents the reversibility this code does not implement.'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/multi_origin.rs (mod tests)'''
 kind = '''rust-unit; BUILD THE REVERSAL FIRST — see catches'''
 landed = '''corpus-engine::enrichment::reconciliation::oplog::tests::a_merge_is_reversed_from_the_log_with_no_operator_supplied_output_list (+ a_reversal_the_log_cannot_support_is_refused_not_guessed)'''
 
@@ -304,10 +304,10 @@ id = "EN-20"
 family = "EN"
 status = "landed"
 clause = '''Retrieval MUST drop passages from superseded rules — **no dead law** — and the answer path MUST run the same cite-or-abstain discipline as every other grounded surface.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs:807::step_governance_active_set'''
+target = '''svrn/crates/sovereign-core/src/runtime/retrieval_pipeline.rs:807::step_governance_active_set'''
 asserts = '''given a GovernanceView with a superseded rule's section and chunks from it, st.chunks after step_governance_active_set excludes those ids and the outcome note reports the drop count.'''
 catches = '''the failure the step's own comment names: the filter matches nothing, every amended rule stays live, and a governance answer built on repealed text is reported clean.'''
-destination = '''sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs (mod tests)'''
+destination = '''svrn/crates/sovereign-core/src/runtime/retrieval_pipeline.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-core::runtime::retrieval_pipeline::tests::a_superseded_rules_chunks_leave_the_pool_and_the_note_says_how_many'''
 
@@ -316,10 +316,10 @@ id = "EN-4"
 family = "EN"
 status = "landed"
 clause = '''There MUST be exactly one helper constructing this cache identity, so every read and write carries the same notion of identity.'''
-target = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs:72::with_model_identity'''
+target = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs:72::with_model_identity'''
 asserts = '''CacheModelIdentity is constructed in exactly one place in phase_cache.rs production code (source-scan test, like the existing call_census pattern).'''
 catches = '''a second construction site built from different fields that silently disagrees with with_model_identity and defeats the model-swap guard.'''
-destination = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs (mod tests)'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs (mod tests)'''
 kind = '''rust-unit; source-scan, mirror call_census'''
 landed = '''corpus-engine::enrichment::pipeline::phase_cache::tests::exactly_one_place_constructs_the_cache_model_identity'''
 
@@ -328,10 +328,10 @@ id = "EN-5"
 family = "EN"
 status = "landed"
 clause = '''A dedicated span-typed entity extractor MUST be available, generation-agnostic behind a seam so alternative implementations share one persistence, deduplication, and provenance path.'''
-target = '''corpus-engine/src/enrichment/tiered.rs:64::ChunkEntityExtractor'''
+target = '''ingest/crates/corpus-engine/src/enrichment/tiered.rs:64::ChunkEntityExtractor'''
 asserts = '''a mock ChunkEntityExtractor injected into run_tiered_enrichment has extract_for_conversation invoked once per non-empty conversation group with the right corpus_id/conv_uuid/chunks, and its count flows into the outcome.'''
 catches = '''a dispatch-loop change that stops calling the injected extractor, silently reverting to RAPTOR-derived entities only. Nothing exercises this seam today.'''
-destination = '''corpus-engine/src/enrichment/tiered.rs (mod tests)'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/tiered.rs (mod tests)'''
 kind = '''rust-unit; mock ChunkEntityExtractor impl'''
 landed = '''corpus-engine::main::tiered_entity_extractor_seam::* '''
 
@@ -340,11 +340,11 @@ id = "EN-9"
 family = "EN"
 status = "landed"
 clause = '''Clustering thresholds MUST be **corpus-shape aware**. A threshold tuned for one content shape MUST NOT be applied to another.'''
-target = '''corpus-engine/src/enrichment/domains/philosophy.rs:222::clustering_config'''
-existing = '''partial: corpus-engine/src/enrichment/domains/personal.rs:392::clustering_config_values'''
+target = '''ingest/crates/corpus-engine/src/enrichment/domains/philosophy.rs:222::clustering_config'''
+existing = '''partial: ingest/crates/corpus-engine/src/enrichment/domains/personal.rs:392::clustering_config_values'''
 asserts = '''PhilosophyDomain.clustering_config() has max_cluster_points 30000 and reduced_dims 128 while PersonalDomain's are 0/0 — the configs actually differ by corpus shape.'''
 catches = '''a copy-paste giving every domain the same caps, applying a large-corpus projection to a small personal corpus. The existing test asserts only the shared constants.'''
-destination = '''corpus-engine/src/enrichment/domains/ (mod tests)'''
+destination = '''ingest/crates/corpus-engine/src/enrichment/domains/ (mod tests)'''
 kind = '''rust-unit; compare two domains' configs'''
 landed = '''corpus-engine::enrichment::domains::tests::a_large_corpus_domain_and_a_small_one_do_not_share_clustering_caps'''
 
@@ -353,10 +353,10 @@ id = "EV-11"
 family = "EV"
 status = "landed"
 clause = '''A judge MUST pass a **calibration gate** against a hand-labelled bank, with stated sensitivity and specificity floors, before its verdicts are used.'''
-target = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs:312::TierScore::clears_floors'''
+target = '''bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs:312::TierScore::clears_floors'''
 asserts = '''a TierScore below CALIBRATION_SENSITIVITY_FLOOR or CALIBRATION_SPECIFICITY_FLOOR (0.85) makes clears_floors() false; a tier with zero items of a class is not-under-test, not a pass.'''
 catches = '''a judge model or prompt swap quietly dropping below the stated floor and still being accepted into production scoring, because nothing computes the floor comparison.'''
-destination = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs (mod tests)'''
+destination = '''bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-cli-bench::bench_cmd::rubric::judge::tests::a_tier_below_either_stated_floor_does_not_clear (+2)'''
 
@@ -390,10 +390,10 @@ id = "GR-4"
 family = "GR"
 status = "landed"
 clause = '''Any window bound inside the gate MUST be *derived* from the retrieved set, not a constant. Where a constant no longer governs anything, it MUST be removed rather than left as a knob.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:3188::gate_longform'''
+target = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs:3188::gate_longform'''
 asserts = '''per_claim_chunks scales with leaf_chunks.len() — 3 leaf chunks yield a materially different window than 30 — and never reverts to a literal.'''
 catches = '''reintroducing a constant (like the removed max_chunks: 8) that stops governing the audit window, so the auditor sees less evidence than the drafter did, silently.'''
-destination = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs (mod tests)'''
+destination = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-core::runtime::grounding::tests::the_audit_window_is_derived_from_the_retrieved_leaf_set_not_a_constant'''
 
@@ -402,10 +402,10 @@ id = "GR-46"
 family = "GR"
 status = "landed"
 clause = '''An answer MUST be a typed object carrying per-claim provenance, an overall verdict, and — where the answer is incomplete — a conjecture about what is missing and how it could be acquired.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/epistemic.rs:79::assemble_epistemic_state'''
+target = '''svrn/crates/sovereign-core/src/runtime/epistemic.rs:79::assemble_epistemic_state'''
 asserts = '''one assemble_epistemic_state call, given both a supported and an uncovered demand, returns an EpistemicState whose holdings, verdict and gaps are populated together and mutually consistent.'''
 catches = '''a change that populates gaps correctly but leaves holdings stale, or a verdict disagreeing with the holdings it derives from. Every existing test exercises one slice in isolation.'''
-destination = '''sovereign/crates/sovereign-core/src/runtime/epistemic.rs (mod tests)'''
+destination = '''svrn/crates/sovereign-core/src/runtime/epistemic.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-core::runtime::epistemic::tests::one_assembly_returns_holdings_verdict_and_gaps_that_agree_with_each_other'''
 
@@ -414,7 +414,7 @@ id = "FE-10"
 family = "FE"
 status = "landed"
 clause = '''Leaving MUST clear the pointer *and* remove the departed membership. Leaving a pointer naming deleted state reads as healthy at boot while making that membership permanently unforgettable.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1805::stop_inner'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:1805::stop_inner'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/mesh_switch.rs:179::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 landed = '''sovereign-mesh::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 
@@ -423,8 +423,8 @@ id = "FE-102"
 family = "FE"
 status = "landed"
 clause = '''The client-fairness share rule MUST take **no weight argument**, so weight-ordering unfairness is *unexpressible* rather than merely avoided. A single caller alone on the host MUST be untouched.'''
-target = '''serving-policy-core/src/fair_sched.rs:163::fair_share_cap'''
-existing = '''serving-policy-core/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
+target = '''shared/crates/serving-policy-core/src/fair_sched.rs:163::fair_share_cap'''
+existing = '''shared/crates/serving-policy-core/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
 landed = '''serving-policy-core::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal'''
 
 [[spec]]
@@ -432,8 +432,8 @@ id = "FE-106"
 family = "FE"
 status = "landed"
 clause = '''A peer that refuses with a stated retry delay MUST be excluded from candidacy for that delay, capped, and cleared by any success — **before** any manifest fetch, so a yielding peer costs nothing rather than a cheaper something.'''
-target = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:79::record_refusal'''
-existing = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:195::backoff_is_capped_however_long_the_peer_asks'''
+target = '''serve/crates/sovereign-scheduler/src/yield_backoff.rs:79::record_refusal'''
+existing = '''serve/crates/sovereign-scheduler/src/yield_backoff.rs:195::backoff_is_capped_however_long_the_peer_asks'''
 landed = '''sovereign-scheduler::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks'''
 
 [[spec]]
@@ -441,8 +441,8 @@ id = "FE-11"
 family = "FE"
 status = "landed"
 clause = '''A ring MUST carry **two separate credentials**: one that authorises ongoing participation and never rotates, and one that admits new joiners and rotates freely.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:673::rotate_invite_key'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:565::rotating_the_invite_never_touches_the_mesh_secret'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:673::rotate_invite_key'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:565::rotating_the_invite_never_touches_the_mesh_secret'''
 landed = '''commonwealth-core::mesh::tests::gossip_auth::rotating_the_invite_never_touches_the_mesh_secret'''
 
 [[spec]]
@@ -450,16 +450,16 @@ id = "FE-110"
 family = "FE"
 status = "exists-untagged"
 clause = '''A pull-side transfer MUST be credited to the node that shipped the bytes, with the origin explicit in the schema.'''
-target = '''commonwealth/crates/commonwealth-core/src/contributions.rs:178::aggregate'''
-existing = '''commonwealth/crates/commonwealth-core/src/contributions.rs:420::pull_emitted_shard_transfer_credits_actual_sender'''
+target = '''cmnwlth/crates/commonwealth-core/src/contributions.rs:178::aggregate'''
+existing = '''cmnwlth/crates/commonwealth-core/src/contributions.rs:420::pull_emitted_shard_transfer_credits_actual_sender'''
 
 [[spec]]
 id = "FE-13"
 family = "FE"
 status = "landed"
 clause = '''The participation credential SHOULD NOT ride the wire between upgraded peers. A round SHOULD carry a keyed proof bound to the **sender** and to a short time window, so a captured proof is neither transferable nor durable.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:550::mesh_proof'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:165::a_proof_cannot_be_replayed_by_a_different_peer'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:550::mesh_proof'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:165::a_proof_cannot_be_replayed_by_a_different_peer'''
 landed = '''commonwealth-core::mesh::tests::gossip_auth::a_proof_cannot_be_replayed_by_a_different_peer'''
 
 [[spec]]
@@ -467,8 +467,8 @@ id = "FE-133"
 family = "FE"
 status = "landed"
 clause = '''A host preparing a distributed load MUST be able to ask a participant to seed its portion **before** the load begins, and MUST distribute only to participants that pass an eligibility profile — a settling period plus quarantine on instability, surfaced to the operator.'''
-target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:625::eligible'''
-existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:748::stable_worker_eligible_after_settle'''
+target = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:625::eligible'''
+existing = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:748::stable_worker_eligible_after_settle'''
 landed = '''sovereign-serving-host::worker_eligibility::tests::stable_worker_eligible_after_settle'''
 
 [[spec]]
@@ -476,8 +476,8 @@ id = "FE-135"
 family = "FE"
 status = "landed"
 clause = '''Where a topology stratifies into anchors (holding the split) and consumers, anchors MUST advertise their anchor profile, and the candidate filter MUST exclude non-anchors so a casual peer never joins the split. Anchors MUST get the stricter eligibility profile.'''
-target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
-existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:734::anchor_profile_is_stricter_than_default'''
+target = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
+existing = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:734::anchor_profile_is_stricter_than_default'''
 landed = '''sovereign-serving-host::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
 
 [[spec]]
@@ -485,7 +485,7 @@ id = "FE-137"
 family = "FE"
 status = "exists-untagged"
 clause = '''Host election MUST be re-evaluated each cycle over replicated membership, with a pinned host winning while eligible, and the elected host MUST be published so a soak test can assert a **no-split-brain** invariant.'''
-target = '''commonwealth/crates/commonwealth-core/src/partition.rs:47::should_host'''
+target = '''cmnwlth/crates/commonwealth-core/src/partition.rs:47::should_host'''
 existing = '''sovereign/crates/sovereign-mesh/src/dst.rs:882::no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders'''
 
 [[spec]]
@@ -493,7 +493,7 @@ id = "FE-15"
 family = "FE"
 status = "landed"
 clause = '''Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrading*; a peer simply not yet observed since start-up needs one *round*. Collapsing them tells operators their fleet is un-migrated when it is not.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:112::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 
@@ -502,8 +502,8 @@ id = "FE-16"
 family = "FE"
 status = "landed"
 clause = '''**The confirmation is local observation, never a peer's claim.** An upgraded peer deliberately withholds the credential, so a zeroed field stopped being evidence of an old build; reading it as one made two upgraded nodes report each other as legacy and block rotation on both sides.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:611::gossip_authorized_with'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:261::a_peer_that_proves_possession_is_never_reported_pre_split'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:611::gossip_authorized_with'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:261::a_peer_that_proves_possession_is_never_reported_pre_split'''
 landed = '''commonwealth-core::mesh::tests::gossip_auth::a_peer_that_proves_possession_is_never_reported_pre_split'''
 
 [[spec]]
@@ -511,7 +511,7 @@ id = "FE-17"
 family = "FE"
 status = "landed"
 clause = '''Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:86::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 
@@ -526,8 +526,8 @@ clause = '''Shared state MUST converge by epidemic replication: a periodic round
 # it. The rail's `sync.rs` does the same digest reconciliation on the path that
 # is live, so the clause moves to the real subject rather than losing its
 # claim — the intent survives the code (plan §"Keep the intent, drop the code").
-target = '''commonwealth/crates/commonwealth-rail-core/src/sync.rs:53::digest'''
-existing = '''commonwealth/crates/commonwealth-rail-core/src/sync.rs:121::a_hole_lowers_the_mark_so_the_peer_re_sends_across_it'''
+target = '''shared/crates/commonwealth-rail-core/src/sync.rs:53::digest'''
+existing = '''shared/crates/commonwealth-rail-core/src/sync.rs:121::a_hole_lowers_the_mark_so_the_peer_re_sends_across_it'''
 
 [[spec]]
 id = "FE-21"
@@ -546,15 +546,15 @@ retired = '''subject deleted (latency_probe.rs, 0 callers) — the clause is now
 # Not a claim about where the fix goes — a grouping key, so the item renders in
 # the queue instead of clustering under an empty path. RTT belongs wherever the
 # peer wire already is; picking the site is part of the write.
-target = '''commonwealth/crates/commonwealth-transport/src/'''
+target = '''cmnwlth/crates/commonwealth-transport/src/'''
 
 [[spec]]
 id = "FE-23"
 family = "FE"
 status = "landed"
 clause = '''Reachability information a peer publishes MUST be **signed per-node with a monotonic version**, so an attacker past the admission gate cannot force a peer unreachable or downgrade its transport.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:731::reconcile_dial_info'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:239::dial_info_strip_attack_is_rejected_and_pinned'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:731::reconcile_dial_info'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests.rs:239::dial_info_strip_attack_is_rejected_and_pinned'''
 landed = '''commonwealth-core::mesh::tests::dial_info_strip_attack_is_rejected_and_pinned'''
 
 [[spec]]
@@ -562,8 +562,8 @@ id = "FE-24"
 family = "FE"
 status = "landed"
 clause = '''Policy that must only ever tighten (such as an encryption requirement) MUST merge **stricter-wins**, not last-writer-wins.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:382::merge_from_authenticated'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:389::encryption_policy_never_downgrades'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:382::merge_from_authenticated'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests.rs:389::encryption_policy_never_downgrades'''
 landed = '''commonwealth-core::mesh::tests::encryption_policy_never_downgrades'''
 
 [[spec]]
@@ -571,8 +571,8 @@ id = "FE-25"
 family = "FE"
 status = "landed"
 clause = '''*How this node reaches a peer* MUST be decided in exactly one place: a seam resolving **(peer, traffic class) → ordered candidate endpoints**. Call sites keep their own clients and timeouts and append route paths.'''
-target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:141::endpoints'''
-existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:245::routed_class_lists_primary_then_default_fallback'''
+target = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:141::endpoints'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:245::routed_class_lists_primary_then_default_fallback'''
 landed = '''commonwealth-transport::routed::tests::routed_class_lists_primary_then_default_fallback'''
 
 [[spec]]
@@ -580,8 +580,8 @@ id = "FE-26"
 family = "FE"
 status = "landed"
 clause = '''At least two transports MUST be supportable behind that seam: a conventional address-based one, and a **key-addressed encrypted** one that dials a peer by its public key with no address, bridging to the ordinary local listeners.'''
-target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:52::RoutedTransport::new'''
-existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:283::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
+target = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:52::RoutedTransport::new'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:283::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
 landed = '''commonwealth-transport::routed::tests::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
 
 [[spec]]
@@ -589,8 +589,8 @@ id = "FE-27"
 family = "FE"
 status = "landed"
 clause = '''A routing transport MUST concatenate a chosen transport's candidates ahead of a default, so a failed or absent dial degrades to the fallback **on the same request**, automatically. Success feedback MUST route back to the producing transport.'''
-target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:160::note_success'''
-existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:329::note_success_routes_to_the_transport_that_produced_the_endpoint'''
+target = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:160::note_success'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:329::note_success_routes_to_the_transport_that_produced_the_endpoint'''
 landed = '''commonwealth-transport::routed::tests::note_success_routes_to_the_transport_that_produced_the_endpoint'''
 
 [[spec]]
@@ -598,8 +598,8 @@ id = "FE-3"
 family = "FE"
 status = "landed"
 clause = '''Every node MUST persist a durable asymmetric keypair. The identity MUST be **mesh-independent**: it survives leaving, joining, and switching, so a node is the same node in every trust ring it belongs to.'''
-target = '''commonwealth/crates/commonwealth-transport/src/identity.rs:90::load_or_generate_node_key'''
-existing = '''commonwealth/crates/commonwealth-transport/src/identity.rs:267::load_or_generate_round_trips'''
+target = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:90::load_or_generate_node_key'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:267::load_or_generate_round_trips'''
 landed = '''commonwealth-transport::identity::tests::load_or_generate_round_trips'''
 
 [[spec]]
@@ -607,15 +607,15 @@ id = "FE-4"
 family = "FE"
 status = "exists-untagged"
 clause = '''Joining MUST be by a short human-transcribable key. The receiving side MUST store only a hash and discard the plaintext.'''
-target = '''commonwealth/crates/commonwealth-discovery/src/membership.rs:11::generate_join_key'''
-existing = '''commonwealth/crates/commonwealth-discovery/src/membership.rs:416::join_key_format'''
+target = '''cmnwlth/crates/commonwealth-discovery/src/membership.rs:11::generate_join_key'''
+existing = '''cmnwlth/crates/commonwealth-discovery/src/membership.rs:416::join_key_format'''
 
 [[spec]]
 id = "FE-43"
 family = "FE"
 status = "exists-untagged"
 clause = '''Control-plane and administrative routes MUST be local-only, defended in **three layers**: router middleware, per-handler check, and a pinned test asserting the guard under the *production listener shape*.'''
-target = '''sovereign/crates/sovereign-daemon/src/loopback_guard.rs:159::loopback_only'''
+target = '''svrn/crates/sovereign-daemon/src/loopback_guard.rs:159::loopback_only'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs:134::admin_http_rejects_non_loopback_via_admin_reload'''
 
 [[spec]]
@@ -623,8 +623,8 @@ id = "FE-5"
 family = "FE"
 status = "landed"
 clause = '''Join MUST include proof-of-possession of the node's identity key; a bad proof MUST be rejected.'''
-target = '''commonwealth/crates/commonwealth-transport/src/identity.rs:163::verify_join_proof'''
-existing = '''commonwealth/crates/commonwealth-transport/src/identity.rs:344::join_proof_binds_node_id_and_name'''
+target = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:163::verify_join_proof'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:344::join_proof_binds_node_id_and_name'''
 landed = '''commonwealth-transport::identity::tests::join_proof_binds_node_id_and_name'''
 
 [[spec]]
@@ -632,8 +632,8 @@ id = "FE-6"
 family = "FE"
 status = "landed"
 clause = '''Identity keys MUST be protected by an anti-downgrade rule: a relayed record without the key MUST NOT strip a known one.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:448::merge_one_member'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:555::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:448::merge_one_member'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests.rs:555::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
 landed = '''commonwealth-core::mesh::tests::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
 
 [[spec]]
@@ -641,7 +641,7 @@ id = "FE-7"
 family = "FE"
 status = "landed"
 clause = '''A node MUST be able to belong to **many** trust rings and be active in exactly one. Parked memberships MUST retain their full roster and credentials, so returning to one is a **resume** — no handshake, no key redeemed.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1405::join_mesh'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:1405::join_mesh'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/join_parks_not_leaves.rs:89::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 landed = '''sovereign-mesh::main::join_parks_not_leaves::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 
@@ -650,8 +650,8 @@ id = "FE-70"
 family = "FE"
 status = "landed"
 clause = '''Where a model exceeds one node, the placement policy MUST apportion each device a **contiguous** range whose **bytes** — not unit count — are proportional to its memory.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:658::plan_shards_weighted'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1630::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:658::plan_shards_weighted'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1630::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::weighted_balances_clustered_mass_better_than_count + ::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
 
 [[spec]]
@@ -659,8 +659,8 @@ id = "FE-74"
 family = "FE"
 status = "landed"
 clause = '''Per-device fit MUST be one decider used by both the preview and the load. Aggregate pooled memory is **not** sufficient: a cluster clearing the aggregate gate can still hand one device more than it has.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1765::pooled_memory_can_pass_where_a_device_fails'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1765::pooled_memory_can_pass_where_a_device_fails'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::pooled_memory_can_pass_where_a_device_fails'''
 
 [[spec]]
@@ -668,8 +668,8 @@ id = "FE-75"
 family = "FE"
 status = "landed"
 clause = '''The fit result MUST return **one row per device, fitting rows included** — a pass/fail return forces the preview to keep its own traversal, and a second traversal is the drift being removed.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1738::shard_fits_reports_every_device_not_just_the_failures'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1738::shard_fits_reports_every_device_not_just_the_failures'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::shard_fits_reports_every_device_not_just_the_failures'''
 
 [[spec]]
@@ -677,8 +677,8 @@ id = "FE-76"
 family = "FE"
 status = "landed"
 clause = '''*Cannot judge* MUST be distinct from *pass* (X-EH-2): an unread metadata table would otherwise clear every device on the strength of zeros.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1727::an_unread_tensor_table_is_never_a_pass'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1727::an_unread_tensor_table_is_never_a_pass'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::an_unread_tensor_table_is_never_a_pass'''
 
 [[spec]]
@@ -695,16 +695,16 @@ id = "FE-87"
 family = "FE"
 status = "exists-untagged"
 clause = '''**The obvious served-slot guard does nothing.** A response's model field is typically a verbatim echo of what the client requested. The real check MUST understand every hosting mode, including one where the in-process view reports the model as *not resident* for a perfectly healthy externally-hosted instance. States that mean "something else is answering" MUST NOT count as serving.'''
-target = '''sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs:1118::primary_is_serving'''
-existing = '''sovereign/crates/sovereign-cli-llm/src/mesh_bench/tests.rs:1045::a_child_hosted_primary_counts_as_serving_though_resident_is_false'''
+target = '''svrn/crates/sovereign-cli-llm/src/mesh_bench.rs:1118::primary_is_serving'''
+existing = '''svrn/crates/sovereign-cli-llm/src/mesh_bench/tests.rs:1045::a_child_hosted_primary_counts_as_serving_though_resident_is_false'''
 
 [[spec]]
 id = "FE-90"
 family = "FE"
 status = "landed"
 clause = '''A record MUST carry the **pre-image of its own key**, so a reader can say what the number was *for*. The pre-image MUST be **checkable**: recomputing the key from the stored fields, with a mismatch treated as *absent* rather than quoted.'''
-target = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:460::PlacementWitness::explains'''
-existing = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:2290::a_witness_accounts_for_the_digest_it_was_built_from'''
+target = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:460::PlacementWitness::explains'''
+existing = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:2290::a_witness_accounts_for_the_digest_it_was_built_from'''
 landed = '''sovereign-core::mesh_measurements::tests::a_witness_accounts_for_the_digest_it_was_built_from'''
 
 [[spec]]
@@ -712,8 +712,8 @@ id = "FE-92"
 family = "FE"
 status = "landed"
 clause = '''An empty co-resident list MUST render as the *finding* "nothing else was resident", not as silence. An older record MUST say "not recorded", never imply a quiet machine.'''
-target = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:778::RunConditions::describe'''
-existing = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:2950::no_co_residents_is_reported_as_a_finding_not_as_silence'''
+target = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:778::RunConditions::describe'''
+existing = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:2950::no_co_residents_is_reported_as_a_finding_not_as_silence'''
 landed = '''sovereign-core::mesh_measurements::tests::no_co_residents_is_reported_as_a_finding_not_as_silence'''
 
 [[spec]]
@@ -721,8 +721,8 @@ id = "FE-99"
 family = "FE"
 status = "landed"
 clause = '''There MUST be exactly one canonical wire form for an origin identifier, and exactly one parser. A display form MUST never be accepted as a wire form. A present-but-malformed value MUST still be gated and tallied, and the status surface MUST name the rejected raw value, when it was last seen, and the expected form.'''
-target = '''commonwealth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
-existing = '''commonwealth/crates/commonwealth-api/src/admission.rs:1289::middleware_malformed_header_buckets_zero_and_is_named'''
+target = '''cmnwlth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
+existing = '''cmnwlth/crates/commonwealth-api/src/admission.rs:1289::middleware_malformed_header_buckets_zero_and_is_named'''
 landed = '''commonwealth-api::admission::tests::middleware_malformed_header_buckets_zero_and_is_named (+ ::headers::tests::wrong_length_returns_none + ::headers::tests::non_hex_returns_none + ::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form)'''
 
 [[spec]]
@@ -730,104 +730,104 @@ id = "IN-17"
 family = "IN"
 status = "exists-untagged"
 clause = '''Where a model architecture is known to fault on a given compute backend, the system MUST detect this **before loading weights** — from model metadata alone — and MUST substitute a safe alternative discovered alongside it, surfacing a non-fatal notice. Where no safe alternative exists, start-up MUST fail with a clear in-application message rather than a native crash.'''
-target = '''sovereign/crates/sovereign-inference/src/cpu_compat.rs:125::choose_cpu_safe_chat_model'''
-existing = '''sovereign/crates/sovereign-inference/src/cpu_compat.rs:265::substitutes_largest_dense_when_unsafe_on_cpu'''
+target = '''serve/crates/sovereign-inference/src/cpu_compat.rs:125::choose_cpu_safe_chat_model'''
+existing = '''serve/crates/sovereign-inference/src/cpu_compat.rs:265::substitutes_largest_dense_when_unsafe_on_cpu'''
 
 [[spec]]
 id = "IN-2"
 family = "IN"
 status = "exists-untagged"
 clause = '''Slots MUST be able to alias one another so a single resident copy serves several roles, and the resolution order for an alias MUST have one decider.'''
-target = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:88::resolution_alias_keys'''
-existing = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
+target = '''serve/crates/sovereign-scheduler/src/slot_aliases.rs:88::resolution_alias_keys'''
+existing = '''serve/crates/sovereign-scheduler/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
 
 [[spec]]
 id = "IN-22"
 family = "IN"
 status = "exists-untagged"
 clause = '''Next-edit prediction MUST have a **deterministic rule lane** (pure induction from observed edits, no model) as well as any model lane. Rule kinds MUST render through one shared representation so that site finding, the already-applied exclusion, thresholds, and the queue are shared — new inductions, not new pipelines.'''
-target = '''commonwealth/crates/commonwealth-api/src/next_edit.rs:342::induce_insertion'''
-existing = '''commonwealth/crates/commonwealth-api/src/next_edit.rs:892::insertion_rule_skips_already_applied_sites'''
+target = '''cmnwlth/crates/commonwealth-api/src/next_edit.rs:342::induce_insertion'''
+existing = '''cmnwlth/crates/commonwealth-api/src/next_edit.rs:892::insertion_rule_skips_already_applied_sites'''
 
 [[spec]]
 id = "IN-26"
 family = "IN"
 status = "exists-untagged"
 clause = '''An episode MUST be recordable as **metadata only** (X-PV-7), joined to what the developer actually did with the suggestion — accepted, dismissed, diverged, superseded. **Diverged MUST NOT be folded into dismissed**, and an unreported episode MUST count as *unknown*, never as a dismissal (X-EH-2).'''
-target = '''sovereign/crates/sovereign-contracts/src/types/next_edit_journal.rs:409::stats'''
-existing = '''sovereign/crates/sovereign-contracts/src/types/next_edit_journal.rs:532::diverged_is_never_counted_as_dismissed'''
+target = '''shared/crates/sovereign-contracts/src/types/next_edit_journal.rs:409::stats'''
+existing = '''shared/crates/sovereign-contracts/src/types/next_edit_journal.rs:532::diverged_is_never_counted_as_dismissed'''
 
 [[spec]]
 id = "IN-28"
 family = "IN"
 status = "exists-untagged"
 clause = '''The local record layer MUST be feature-agnostic: file layout, rotation, size cap, retention, and a multi-level off-switch MUST live in one generic mechanism with one enabling decider. A second record stream MUST be a declaration plus types, touching no dispatch on stream names.'''
-target = '''sovereign/crates/sovereign-contracts/src/types/journal.rs:148::JournalStream::enabled'''
-existing = '''sovereign/crates/sovereign-contracts/src/types/journal.rs:335::the_global_marker_disables_every_stream'''
+target = '''shared/crates/sovereign-contracts/src/types/journal.rs:148::JournalStream::enabled'''
+existing = '''shared/crates/sovereign-contracts/src/types/journal.rs:335::the_global_marker_disables_every_stream'''
 
 [[spec]]
 id = "IN-29"
 family = "IN"
 status = "exists-untagged"
 clause = '''A model MUST publish one **capability claim** per kind of work it does well, carrying at minimum a work-kind tag, an affinity, and a latency class. The tag vocabulary MUST be standardised at its core with an open extension namespace (X-EX-2).'''
-target = '''oicp-types/src/capability.rs:118::CapabilityHint'''
-existing = '''oicp-types/src/capability.rs:387::capability_hint_standardized_constructors'''
+target = '''shared/crates/oicp-types/src/capability.rs:118::CapabilityHint'''
+existing = '''shared/crates/oicp-types/src/capability.rs:387::capability_hint_standardized_constructors'''
 
 [[spec]]
 id = "IN-3"
 family = "IN"
 status = "exists-untagged"
 clause = '''Remote and hybrid providers MUST be supported behind the same interface as local ones, so a deployment can mix local and remote capacity, with failover.'''
-target = '''sovereign/crates/sovereign-inference/src/hybrid.rs:190::HybridProvider::complete'''
-existing = '''sovereign/crates/sovereign-inference/src/hybrid.rs:439::falls_back_on_failure'''
+target = '''serve/crates/sovereign-inference/src/hybrid.rs:190::HybridProvider::complete'''
+existing = '''serve/crates/sovereign-inference/src/hybrid.rs:439::falls_back_on_failure'''
 
 [[spec]]
 id = "IN-30"
 family = "IN"
 status = "exists-untagged"
 clause = '''Schedulers MUST score requests against claims using one shared composed scoring function with protocol-level and per-scheduler operational adjustments. There MUST be exactly one implementation of the composition (X-SD-1).'''
-target = '''oicp-types/src/scoring.rs:535::score_with_adjustments'''
-existing = '''oicp-types/src/scoring.rs:1036::composed_product_all_factors_active_golden'''
+target = '''shared/crates/oicp-types/src/scoring.rs:535::score_with_adjustments'''
+existing = '''shared/crates/oicp-types/src/scoring.rs:1036::composed_product_all_factors_active_golden'''
 
 [[spec]]
 id = "IN-5"
 family = "IN"
 status = "exists-untagged"
 clause = '''The system MUST report, per slot: which model is resident, whether it is resident or cold, and whether it is running in a degraded substitute form. **Cold is not an outage** and MUST be reported distinctly.'''
-target = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:121::build_self_manifest'''
-existing = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:952::manifest_reports_indeterminate_and_absent_residency_as_cold'''
+target = '''serve/crates/sovereign-serving-host/src/oicp_synthesis.rs:121::build_self_manifest'''
+existing = '''serve/crates/sovereign-serving-host/src/oicp_synthesis.rs:952::manifest_reports_indeterminate_and_absent_residency_as_cold'''
 
 [[spec]]
 id = "IN-7"
 family = "IN"
 status = "exists-untagged"
 clause = '''The local-fit gate MUST NOT charge for bytes that never reach the accelerator. It MUST obtain the host-resident byte count from the engine's own projection, and MUST NOT condition that discount on a related-but-different setting.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1711::local_fit_verdict'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:2884::mmap_resident_weights_are_not_charged_but_the_incident_still_refuses'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1711::local_fit_verdict'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:2884::mmap_resident_weights_are_not_charged_but_the_incident_still_refuses'''
 
 [[spec]]
 id = "ST-10"
 family = "ST"
 status = "exists-untagged"
 clause = '''Any cache of embeddings MUST key the *instruction* used to produce them into its identity, not only the model. A model fingerprint cannot see an instruction change, and a cache that reports fresh while holding vectors from a different semantic space is worse than a cold cache.'''
-target = '''sovereign/crates/sovereign-core/src/router_embed_cache.rs:149::key'''
-existing = '''sovereign/crates/sovereign-core/src/router_embed_cache.rs:571::classifier_keys_fold_in_the_instruction'''
+target = '''svrn/crates/sovereign-core/src/router_embed_cache.rs:149::key'''
+existing = '''svrn/crates/sovereign-core/src/router_embed_cache.rs:571::classifier_keys_fold_in_the_instruction'''
 
 [[spec]]
 id = "ST-24"
 family = "ST"
 status = "exists-untagged"
 clause = '''The join MUST be computed by locating each stored passage within its source document. Because stored passage text is rarely a verbatim slice of the source (ingestion prepends titles and reflows whitespace), the locator MUST attempt several normalisations and MUST **reject ambiguity rather than resolve it by taking the first match**. Unlocatable passages MUST be reported, not dropped (X-EH-1).'''
-target = '''corpus-engine/src/enrichment/pipeline/section_join.rs:120::assign_chunks_to_sections'''
-existing = '''corpus-engine/src/enrichment/pipeline/section_join.rs:434::an_ambiguous_chunk_is_unmapped_not_guessed'''
+target = '''ingest/crates/corpus-engine/src/enrichment/pipeline/section_join.rs:120::assign_chunks_to_sections'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/pipeline/section_join.rs:434::an_ambiguous_chunk_is_unmapped_not_guessed'''
 
 [[spec]]
 id = "ST-25"
 family = "ST"
 status = "landed"
 clause = '''Join status MUST be three-valued: **no structure declared**, **structure declared but join missing**, **join present**. Conflating the first two is what allows this to rot invisibly — no caller can distinguish a broken corpus from a flat one.'''
-target = '''corpus-engine/src/enrichment/governance_view.rs:293::chunk_to_section_map_status'''
-existing = '''corpus-engine/src/enrichment/governance_view.rs:1198'''
+target = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:293::chunk_to_section_map_status'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:1198'''
 landed = '''corpus-engine::enrichment::governance_view::tests::sections_with_no_chunk_ids_are_a_missing_join_and_say_so (+ ::an_absent_manifest_is_no_structure_not_a_missing_join + ::an_empty_chapter_list_is_no_structure_not_a_fault + ::a_populated_join_is_present_and_silent)'''
 
 [[spec]]
@@ -835,24 +835,24 @@ id = "ST-27"
 family = "ST"
 status = "exists-untagged"
 clause = '''Publishing a corpus bundle MUST refuse an unjoined bundle (X-CO-3). A corpus that declares structure and joins none MUST fail publication, naming the offending corpora and the repair. A partial join is legitimate; an override MUST print the same facts rather than taking a quieter path.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:711::audit_section_joins'''
-existing = '''sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:1282::a_sibling_with_sections_and_no_join_fails_the_gate'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:711::audit_section_joins'''
+existing = '''ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:1282::a_sibling_with_sections_and_no_join_fails_the_gate'''
 
 [[spec]]
 id = "ST-4"
 family = "ST"
 status = "exists-untagged"
 clause = '''A **shard** — an index holding a contiguous identifier range — MUST be structurally identical to a whole index. Search MUST NOT be able to tell the difference. Three shard operations MUST exist: report statistics, extract a range into a new index, merge N indexes into one.'''
-target = '''corpus-engine/src/sharding.rs:523::extract_shard'''
-existing = '''corpus-engine/tests/main/sharding_round_trip_e2e.rs:233::merged_search_finds_term_unique_to_one_shard'''
+target = '''ingest/crates/corpus-engine/src/sharding.rs:523::extract_shard'''
+existing = '''ingest/crates/corpus-engine/tests/main/sharding_round_trip_e2e.rs:233::merged_search_finds_term_unique_to_one_shard'''
 
 [[spec]]
 id = "ST-5"
 family = "ST"
 status = "landed"
 clause = '''The pair *(corpus identifier, passage identifier)* is the citation handle and MUST be globally unique. Enumeration of installed corpora MUST deduplicate deterministically and MUST exclude out-of-band directories.'''
-target = '''corpus-engine/src/engine/mod.rs:1676::dedupe_by_corpus_id'''
-existing = '''corpus-engine/src/engine/mod.rs:3263::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
+target = '''ingest/crates/corpus-engine/src/engine/mod.rs:1676::dedupe_by_corpus_id'''
+existing = '''ingest/crates/corpus-engine/src/engine/mod.rs:3263::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
 landed = '''corpus-engine::engine::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
 
 [[spec]]
@@ -860,8 +860,8 @@ id = "ST-6"
 family = "ST"
 status = "landed"
 clause = '''**A directory is not an installed corpus.** Readiness MUST be decided by a positive completion signal from the index itself, at the canonical location, by one decider shared by every reader (X-SD-1). In-flight ingests MUST write to a distinct location that no reader mistakes for an installed corpus.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:844::corpus_readiness'''
-existing = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1173::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:844::corpus_readiness'''
+existing = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1173::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
 landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
 
 [[spec]]
@@ -869,8 +869,8 @@ id = "ST-7"
 family = "ST"
 status = "landed"
 clause = '''Readiness MUST be a three-or-more-valued answer (**ready**, **building**, **absent**, and any further distinguishable states), never a boolean.'''
-target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:809::CorpusReadiness'''
-existing = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1155::readiness_labels_are_stable_api'''
+target = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:809::CorpusReadiness'''
+existing = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1155::readiness_labels_are_stable_api'''
 landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::readiness_labels_are_stable_api'''
 
 [[spec]]
@@ -878,8 +878,8 @@ id = "ST-9"
 family = "ST"
 status = "landed"
 clause = '''Nodes sharing a corpus MUST produce bit-compatible vectors. Any operation that mixes vectors from two models MUST be impossible.'''
-target = '''corpus-engine/src/sharding.rs:598::merge_shards'''
-existing = '''corpus-engine/src/sharding.rs:1903::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
+target = '''ingest/crates/corpus-engine/src/sharding.rs:598::merge_shards'''
+existing = '''ingest/crates/corpus-engine/src/sharding.rs:1903::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
 landed = '''corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
 
 [[spec]]
@@ -887,24 +887,24 @@ id = "UI-18"
 family = "UI"
 status = "exists-untagged"
 clause = '''Long-running background services MUST rotate their own logs by copy-truncate (preserving the file identity held by service supervisors), with a size cap, a backup count, and a sweep.'''
-target = '''sovereign/crates/sovereign-cli-daemon/src/log_rotation.rs:80::rotate_one'''
-existing = '''sovereign/crates/sovereign-cli-daemon/src/log_rotation.rs:237::over_cap_copy_truncates'''
+target = '''svrn/crates/sovereign-cli-daemon/src/log_rotation.rs:80::rotate_one'''
+existing = '''svrn/crates/sovereign-cli-daemon/src/log_rotation.rs:237::over_cap_copy_truncates'''
 
 [[spec]]
 id = "UI-30"
 family = "UI"
 status = "exists-untagged"
 clause = '''A three-layer support surface MUST exist, in the order a person hits them: 1. **Fix it yourself** — a health panel running a fixed check set over gathered facts, with a pure evaluation function, a terminal-free repair hint on every non-OK check, and **unknown** rendered for an unreachable probe (never a fabricated verdict). 2. **Report the machine** — a diagnostic report file for **any** reason, not only a crash, with an unknown reason degrading to *other* (a user trying to report a problem must never be blocked by an enumeration). 3. **Report one answer** — a per-turn report for the complaint that machine state cannot explain, assembled from the delivered message's **persisted** metadata rather than from in-memory state.'''
-target = '''sovereign/crates/sovereign-desktop/src-tauri/src/health.rs:216::evaluate'''
-existing = '''sovereign/crates/sovereign-desktop/src-tauri/src/health.rs:598::a_dead_engine_does_not_fabricate_a_model_verdict'''
+target = '''clients/desktop/src-tauri/src/health.rs:216::evaluate'''
+existing = '''clients/desktop/src-tauri/src/health.rs:598::a_dead_engine_does_not_fabricate_a_model_verdict'''
 
 [[spec]]
 id = "UI-31"
 family = "UI"
 status = "landed"
 clause = '''Each report MUST carry a short speakable **reference code** derived from the message identity by a **pinned** function — a wire format, not an implementation detail (X-CO-2).'''
-target = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:153::reference_code'''
-existing = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:400::reference_code_is_stable_and_speakable'''
+target = '''clients/desktop/src-tauri/src/turn_report.rs:153::reference_code'''
+existing = '''clients/desktop/src-tauri/src/turn_report.rs:400::reference_code_is_stable_and_speakable'''
 landed = '''sovereign-desktop::bin/sovereign-desktop::turn_report::tests::reference_code_is_stable_and_speakable (+ ::reference_code_is_deterministic_and_distinguishes_turns + ::a_thin_snapshot_still_renders_without_guessing)'''
 
 [[spec]]
@@ -912,8 +912,8 @@ id = "UI-32"
 family = "UI"
 status = "landed"
 clause = '''Source text in a report MUST be opt-in per report, defaulted off, with the gate enforced by the renderer rather than trusted to the caller.'''
-target = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:191::render_turn_section'''
-existing = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:423::source_text_is_withheld_unless_the_reporter_opted_in'''
+target = '''clients/desktop/src-tauri/src/turn_report.rs:191::render_turn_section'''
+existing = '''clients/desktop/src-tauri/src/turn_report.rs:423::source_text_is_withheld_unless_the_reporter_opted_in'''
 landed = '''sovereign-desktop::bin/sovereign-desktop::turn_report::tests::source_text_is_withheld_unless_the_reporter_opted_in (+ ::source_text_appears_when_the_reporter_opted_in + ::snapshot_deserializes_from_a_minimal_frontend_payload)'''
 
 [[spec]]
@@ -921,24 +921,24 @@ id = "UI-33"
 family = "UI"
 status = "exists-untagged"
 clause = '''Every report MUST be a file the user reads before sending, and MUST **state its own contents**, derived from what is actually in the file (X-PV-6).'''
-target = '''sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs:314::disclosure'''
-existing = '''sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs:706::the_disclosure_tracks_what_is_actually_in_the_file'''
+target = '''clients/desktop/src-tauri/src/crash_bundle.rs:314::disclosure'''
+existing = '''clients/desktop/src-tauri/src/crash_bundle.rs:706::the_disclosure_tracks_what_is_actually_in_the_file'''
 
 [[spec]]
 id = "EN-13"
 family = "EN"
 status = "exists-untagged"
 clause = '''Merge signals MUST be **identity-grade only** — exact name folding, nickname and initial-surname forms, exact shared contact identifiers or aliases, organisation-plus-role. Fuzzy cross-attribute matching and bare-name aliasing MUST NOT be used.'''
-target = '''corpus-engine/src/enrichment/reconciliation/signals.rs:80::NameSimilaritySignal::check'''
-existing = '''corpus-engine/src/enrichment/reconciliation/signals.rs:505::name_similarity_ignores_shared_bare_given_name_alias'''
+target = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/signals.rs:80::NameSimilaritySignal::check'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/reconciliation/signals.rs:505::name_similarity_ignores_shared_bare_given_name_alias'''
 
 [[spec]]
 id = "EN-19"
 family = "EN"
 status = "landed"
 clause = '''Adjudications MUST survive a rebuild that renumbers graph identifiers. They MUST therefore record their endpoint *rule pair*, not only an edge identifier, and MUST resolve **mootness** — a conflict whose rule has been superseded is not open. Only a genuinely dangling decision (whose rule text was edited away) MUST surface as an issue.'''
-target = '''corpus-engine/src/enrichment/governance_view.rs:411::tension_disposition'''
-existing = '''corpus-engine/src/enrichment/governance_view.rs:949::tension_with_superseded_endpoint_is_moot_not_open'''
+target = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:411::tension_disposition'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/governance_view.rs:949::tension_with_superseded_endpoint_is_moot_not_open'''
 landed = '''corpus-engine::enrichment::governance_view::tests::tension_with_superseded_endpoint_is_moot_not_open (+ ::pair_matched_disposition_survives_rebuild_edge_ids + ::vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is)'''
 
 [[spec]]
@@ -946,48 +946,48 @@ id = "EN-3"
 family = "EN"
 status = "exists-untagged"
 clause = '''Each cached enrichment phase MUST record the model that produced it, and MUST decline to reuse a phase produced by a different model. A model swap MUST force recomputation rather than silently mixing outputs from two models in one graph.'''
-target = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs:130::PhaseCache::read'''
-existing = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs:373::different_model_is_cache_miss'''
+target = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs:130::PhaseCache::read'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/pipeline/phase_cache.rs:373::different_model_is_cache_miss'''
 
 [[spec]]
 id = "EV-10"
 family = "EV"
 status = "exists-untagged"
 clause = '''Any judge MUST be **forced-choice** with evidence quotes and **could-not-judge first-class** (X-EH-2).'''
-target = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs:136::parse_trial'''
-existing = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs:561::ambiguous_or_long_prose_is_could_not_judge'''
+target = '''bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs:136::parse_trial'''
+existing = '''bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs:561::ambiguous_or_long_prose_is_could_not_judge'''
 
 [[spec]]
 id = "EV-17"
 family = "EV"
 status = "exists-untagged"
 clause = '''The bank MUST enforce a **fairness contract at load**: answerable items must ship a witness; absent items must not.'''
-target = '''sovereign/crates/sovereign-eval/src/chaos_monkey/question.rs:208::ChaosBank::validate'''
-existing = '''sovereign/crates/sovereign-eval/src/chaos_monkey/question.rs:461::answerable_without_gold_is_rejected'''
+target = '''bench/crates/sovereign-eval/src/chaos_monkey/question.rs:208::ChaosBank::validate'''
+existing = '''bench/crates/sovereign-eval/src/chaos_monkey/question.rs:461::answerable_without_gold_is_rejected'''
 
 [[spec]]
 id = "EV-18"
 family = "EV"
 status = "exists-untagged"
 clause = '''The scorer MUST have **two red lines** and MUST NEVER blend competence-when-present with honesty-when-absent — so neither a hallucinator nor a blanket-abstainer can game it.'''
-target = '''sovereign/crates/sovereign-eval/src/chaos_monkey/score.rs:624::score'''
-existing = '''sovereign/crates/sovereign-eval/src/chaos_monkey/score.rs:1124::confident_hallucinator_fails_honesty_only'''
+target = '''bench/crates/sovereign-eval/src/chaos_monkey/score.rs:624::score'''
+existing = '''bench/crates/sovereign-eval/src/chaos_monkey/score.rs:1124::confident_hallucinator_fails_honesty_only'''
 
 [[spec]]
 id = "EV-24"
 family = "EV"
 status = "exists-untagged"
 clause = '''A test suite MUST prove it **can fail**. Every other measure (spec counts, coverage, fixture liveness) describes what tests *reached*. Negative controls break the product on purpose and require the tests claiming that coverage to go red.'''
-target = '''corpus-engine/tests/ui/harness_positive_control.rs'''
-existing = '''corpus-engine/tests/evidence_reds.rs:41::evidence_has_exactly_one_door'''
+target = '''ingest/crates/corpus-engine/tests/ui/harness_positive_control.rs'''
+existing = '''ingest/crates/corpus-engine/tests/evidence_reds.rs:41::evidence_has_exactly_one_door'''
 
 [[spec]]
 id = "EV-28"
 family = "EV"
 status = "landed"
 clause = '''**A step that asserts an exit code asserts nothing**, because tools of this kind exit successfully when they find nothing. Every step a lane runs MUST assert **output** — read inline, or proven by a later step.'''
-target = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:288::Journey::exercises'''
-existing = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:1289::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream'''
+target = '''svrn/crates/sovereign-cli-shared/src/cli_contract.rs:288::Journey::exercises'''
+existing = '''svrn/crates/sovereign-cli-shared/src/cli_contract.rs:1289::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream'''
 landed = '''sovereign-cli-shared::cli_contract::tests::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream (+ ::a_trailing_mutation_with_nothing_after_it_is_unproven)'''
 
 [[spec]]
@@ -995,8 +995,8 @@ id = "EV-30"
 family = "EV"
 status = "landed"
 clause = '''At least three gates MUST be **hard zeros**: every live step asserts something; every live read step asserts output; every live journey asserts output somewhere. Never-run debt MUST be capped and shrink-only.'''
-target = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:952::assertion_census'''
-existing = '''sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs:733::live_steps_all_assert_something'''
+target = '''svrn/crates/sovereign-cli-shared/src/cli_contract.rs:952::assertion_census'''
+existing = '''svrn/crates/sovereign-cli/tests/main/cli_contract_journeys.rs:733::live_steps_all_assert_something'''
 landed = '''sovereign-cli::main::cli_contract_journeys::live_steps_all_assert_something (+ ::live_read_steps_assert_output + ::every_live_journey_asserts_output_somewhere + ::steps_no_lane_runs_do_not_grow)'''
 
 [[spec]]
@@ -1004,8 +1004,8 @@ id = "EV-4"
 family = "EV"
 status = "landed"
 clause = '''Gate logic MUST be one shared metric/direction/tolerance primitive across all lanes (X-SD-1). A first run MUST pass.'''
-target = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:304::diff'''
-existing = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:497::first_run_when_no_baseline'''
+target = '''bench/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:304::diff'''
+existing = '''bench/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:497::first_run_when_no_baseline'''
 landed = '''sovereign-cli-bench::bench_cmd::lane_baseline::tests::first_run_when_no_baseline (+ ::one_item_flip_within_tolerance_is_noise + ::lower_is_better_rise_regresses + ::near_zero_drift_either_sign_regresses + ::same_model_compares_normally_and_honours_tolerance)'''
 
 [[spec]]
@@ -1013,8 +1013,8 @@ id = "EV-7"
 family = "EV"
 status = "landed"
 clause = '''Baselines MUST record the **concrete artefact** that produced them — resolving any alias to the specific model — and MUST stamp that identity into every transcript row. An alias is worthless the moment it is re-pointed.'''
-target = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:170::LaneBaseline::attribute'''
-existing = '''sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:668::attribute_refuses_alias_and_accepts_concrete_stem'''
+target = '''bench/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:170::LaneBaseline::attribute'''
+existing = '''bench/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs:668::attribute_refuses_alias_and_accepts_concrete_stem'''
 landed = '''sovereign-cli-bench::bench_cmd::lane_baseline::tests::attribute_refuses_alias_and_accepts_concrete_stem (+ ::is_alias_marker_matches_canonical_slots + ::unattributed_baseline_is_flagged_but_still_compares)'''
 
 [[spec]]
@@ -1022,8 +1022,8 @@ id = "GR-2"
 family = "GR"
 status = "landed"
 clause = '''**The evidence universe is the load-bearing design decision.** Verification MUST run against the *sealed corpus* — per-claim search over the source of record — not merely against the prompt's snapshot of it. Failed claims' corrective passages MUST feed the repair, replacing rather than deleting.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:2547::rewrite_system_note'''
-existing = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:6633::rewrite_note_includes_corrective_passages'''
+target = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs:2547::rewrite_system_note'''
+existing = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs:6633::rewrite_note_includes_corrective_passages'''
 landed = '''sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages'''
 
 [[spec]]
@@ -1031,16 +1031,16 @@ id = "GR-33"
 family = "GR"
 status = "exists-untagged"
 clause = '''Coverage MUST be **code**: an exhaustive per-intent table with three dispositions (covered / no-op by construction / excluded by decision), pinned by test, with non-intent-keyed exits dispositioned explicitly.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:345::guard_story'''
-existing = '''sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:588::every_intent_has_a_guard_story'''
+target = '''svrn/crates/sovereign-core/src/runtime/authority_guard.rs:345::guard_story'''
+existing = '''svrn/crates/sovereign-core/src/runtime/authority_guard.rs:588::every_intent_has_a_guard_story'''
 
 [[spec]]
 id = "GR-35"
 family = "GR"
 status = "landed"
 clause = '''A user-facing **coverage card** MUST derive, from the same source the tool answers from: what the corpus answers, over what period, as of which version, and its named structural limits.'''
-target = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:179::coverage_card'''
-existing = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:376::every_period_the_card_advertises_is_answerable_by_the_tool'''
+target = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:179::coverage_card'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:376::every_period_the_card_advertises_is_answerable_by_the_tool'''
 landed = '''corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool'''
 
 [[spec]]
@@ -1048,8 +1048,8 @@ id = "GR-36"
 family = "GR"
 status = "landed"
 clause = '''Three properties MUST be structural rather than remembered: - the card type MUST carry no coverage ratio, and MUST NOT carry the counts from which one could be computed; - a declared limit MUST carry no severity field, so no renderer can style a refusal as a fault; - capability and boundary MUST share one presentation rule, so neither can be demoted to fine print without visibly demoting the other.'''
-target = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:81::CoverageCard'''
-existing = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:306::card_carries_no_percentage_and_no_tag_ratio'''
+target = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:81::CoverageCard'''
+existing = '''ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:306::card_carries_no_percentage_and_no_tag_ratio'''
 landed = '''corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio'''
 
 [[spec]]
@@ -1057,13 +1057,13 @@ id = "GR-49"
 family = "GR"
 status = "exists-untagged"
 clause = '''Where two mechanisms (an incumbent and a replacement) both run, the system MUST be able to say **which one spent the turn**, per stage, with a closed set of owners including a *shared* owner for work belonging to neither.'''
-target = '''sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs:349::TurnStageLedger::seal'''
-existing = '''sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs:424::seal_names_both_stacks_when_both_executed'''
+target = '''shared/crates/sovereign-contracts/src/types/stage_attribution.rs:349::TurnStageLedger::seal'''
+existing = '''shared/crates/sovereign-contracts/src/types/stage_attribution.rs:424::seal_names_both_stacks_when_both_executed'''
 
 [[spec]]
 id = "GR-9"
 family = "GR"
 status = "exists-untagged"
 clause = '''Judge prompts MUST be byte-pinned to the calibration harness, so a calibrated operating point transfers.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs:1266::chunk_judge_prompt'''
-existing = '''sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs:1911::one_renderer_owns_the_family'''
+target = '''svrn/crates/sovereign-core/src/runtime/grounding/judge.rs:1266::chunk_judge_prompt'''
+existing = '''svrn/crates/sovereign-core/src/runtime/grounding/judge.rs:1911::one_renderer_owns_the_family'''

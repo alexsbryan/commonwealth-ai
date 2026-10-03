@@ -41,7 +41,7 @@ PRE-REGISTERED BARS (written before the first retrieval)
 import json, re, subprocess, time
 from pathlib import Path
 
-D = Path("/home/alexbryan/dev/commonwealth-ai/sovereign/bench/sep_atlas/map-conversion-rung6")
+D = Path("/home/alexbryan/dev/commonwealth-ai/bench/lanes/sep_atlas/map-conversion-rung6")
 K = 80
 NS = [5, 10, 15, 20, 28, 40, 80]
 

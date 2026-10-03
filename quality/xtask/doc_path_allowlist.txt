@@ -1,0 +1,115 @@
+# docs-gate allowlist — spans the narrative docs cite INTENTIONALLY even
+# though they resolve to nothing in the repo. Each entry needs a reason;
+# an entry without one is doc rot hiding from the gate.
+
+# SYSTEM_OVERVIEW cites the deleted TLS scaffolding by name — the whole
+# point of that passage is that the file was removed (2026-06-15) rather
+# than left as a security façade.
+discovery/tls.rs
+
+# ARCH_PRINCIPLES §"asset lives alongside its consumer" names a
+# hypothetical "distant config/ directory" rhetorically, not a real path.
+config/
+
+# §10 ledger forward-reference: the Gemini import recipe does not exist
+# yet — the row names where the work will land when someone builds it.
+sovereign-recipes/conversations-gemini/
+
+# §5 accessibility tooling: `npm run a11y` writes its report to the
+# desktop crate's test-artifacts/a11y/ — a generated, gitignored output
+# dir that exists only after a run, never in the repo.
+test-artifacts/a11y/
+
+# §2 sovereign top-level layout cites `models/` — the downloaded GGUF
+# weights directory. Created by `sovereign setup`, gitignored by design
+# (both root .gitignore:72 and svrn/.gitignore), so it exists on
+# every working install but never in a clean checkout.
+models/
+
+# §1 supporting-directories prose cites `vendor/` (the pinned
+# llama-cpp-4 tree). It is real and tracked, but build_path_index
+# prunes vendored trees (same skip list as target/.git), so the gate
+# structurally cannot resolve it.
+vendor/
+
+# The regression-gate section cites the cargo build tree `target/` (and
+# `target/sovereign-test-scoped`) when explaining why scoped runs share the
+# workspace target dir rather than paying for a second cold one. Same
+# structural reason as `vendor/` above: build_path_index prunes target/, so
+# the gate can never resolve it — and it is gitignored, so it is absent from
+# a clean checkout regardless. Added 2026-07-24, when the docs-gate failure
+# it caused was found by the new pre-push hook (scripts/pre-push.sh) rather
+# than by CI, which had stopped running on a billing hard-stop.
+target/
+# Deleted 2026-07-28 (F10: dead benchmark producers); SYSTEM_OVERVIEW cites the
+# path HISTORICALLY ("had zero callers ... both dead producers are deleted").
+sovereign-inference/src/benchmark.rs
+
+# SYSTEM_OVERVIEW §8 "Where to look for what" cites the exo comparative
+# teardown, which lives under `docs/internal/` — a directory gitignored by
+# design (`.gitignore:68`), so the gate can never resolve it. Same structural
+# reason as `target/` and `vendor/` above: intentionally-out-of-repo, not doc
+# rot. Found 2026-08-01: the gate had been RED at HEAD since 40b20d64 added
+# the citation, unrelated to the change that surfaced it.
+docs/internal/EXO_COMPARATIVE_STUDY.md
+
+# SYSTEM_OVERVIEW §10 ledger, `project_cmd.rs` split row, cites `init/` while
+# recording that it LEFT `sovereign-cli-dev/src/project_cmd/` on 2026-08-07 for
+# `sovereign-cli/src/project_init/` (which the same sentence cites and which
+# does resolve). Same reason as `discovery/tls.rs` above: the passage documents
+# a move, so the old path is supposed to be absent. Found 2026-08-07 cutting
+# cli-v0.5.0 — the gate had been RED at HEAD since the move landed.
+init/
+
+# ARCH_PRINCIPLES §"paths are attributes" postmortem names `indexes/` —
+# the relative path a stale reader resolved during the lint_status
+# orphaned-DB split-brain. The passage describes the historical defect;
+# no such directory ever belonged in the repo.
+indexes/
+
+# §3 SEC-facts sidecar staging: `raw/` is the per-corpus download staging
+# directory under ~/.svrnmesh/indexes/_downloads/<corpus>/raw/. It is created
+# at ingest time and never exists in the repo — same class as
+# test-artifacts/a11y/ above.
+raw/
+
+# §3 names the Python decider it REPLACED by name — the passage's whole point
+# is that `scripts/sec_facts.py` was deleted (order `sec-facts-decider-port`)
+# after a parity test against its committed output. Same shape as
+# discovery/tls.rs above.
+scripts/sec_facts.py
+
+# §"multi-process supervision" names the directory it REPORTS AS DELETED —
+# `commonwealth-inference/orchestrator/`, 1,904 lines whose `Orchestrator::new`
+# was called from nothing but two integration tests (2026-09-03, phase 0b of
+# the commonwealth-as-liftable-package program). The passage exists to answer
+# the liveness question OICP_RATIONALIZATION.md flagged it for, and to say
+# where supervision actually lives now. Same shape as scripts/sec_facts.py.
+commonwealth-inference/orchestrator/
+
+# SYSTEM_OVERVIEW's ring-rail section cites `commonwealth-knowledge/src/rail/`
+# HISTORICALLY — the passage's point is that the rail BECAME the
+# `commonwealth-rail-core` / `commonwealth-rail` pair out of that module
+# (cw-lift 1b, 2026-09-04), so the old path is supposed to be absent. Same
+# shape as discovery/tls.rs above. Found 2026-09-09 on sv-surface R1 pickup:
+# the gate had been RED at HEAD since the split landed, verified with the
+# work stashed.
+commonwealth-knowledge/src/rail/
+
+# §10.1r cites `sovereign-cli-daemon/src/service_install.rs` HISTORICALLY — the
+# row's whole point is that its 1,039 lines BECAME `sovereign-service` as one
+# registrar for three platforms (fe5a85cc3, 2026-09-11), so the old path is
+# supposed to be absent. Same shape as discovery/tls.rs above.
+sovereign-cli-daemon/src/service_install.rs
+
+# §10's arch-gate incident record ("This is not the ontology wave's bill",
+# 2026-08) cites `commonwealth-test-harness/tests/integration.rs` at THREE
+# named commits — `abbd08b6f`, `851bf1784` and the merge — to say the file is
+# byte-identical across them, which is what makes the growth somebody else's.
+# The crate moved and was renamed at the domains-2 move (2026-09-11); it is
+# `sovereign/crates/sovereign-mesh-test-harness/tests/integration.rs` today.
+# Rewriting the citation to the new path would make the claim FALSE: at each
+# of those three commits the file was where this span says it was. The passage
+# is history, so the path stays the one history had. Same shape as
+# commonwealth-knowledge/src/rail/ above.
+commonwealth-test-harness/tests/integration.rs

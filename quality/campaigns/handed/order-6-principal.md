@@ -30,9 +30,9 @@ with it, and the HUMAN row is moot because no behaviour changes.
 ## Premises (verified 2026-09-17, file:line)
 
 - `pub enum Scope { Models(Vec<String>), Rails(String) }` —
-  sovereign/crates/sovereign-grants/src/guest_grant.rs:76 (variants :80, :88). The doc at :71-74
+  svrn/crates/sovereign-grants/src/guest_grant.rs:76 (variants :80, :88). The doc at :71-74
   already tells a future author what adding a variant costs.
-- `grep -n '_ =>' sovereign/crates/sovereign-grants/src/guest_grant.rs` returns **nothing**. Every
+- `grep -n '_ =>' svrn/crates/sovereign-grants/src/guest_grant.rs` returns **nothing**. Every
   match on a `Scope` in the workspace names both variants:
   - `Scope::paths` — `match self` at guest_grant.rs:103, arms :104, :105.
   - `Scope::label` — `match self` at :111, arms :112, :113.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stratified next-edit golden-set harvester.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §2. Taxonomy + sizing:
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §2. Taxonomy + sizing:
 `gym/next-edit/golden/README.md`.
 
 Mines many repositories for frontier-shape editing episodes and emits

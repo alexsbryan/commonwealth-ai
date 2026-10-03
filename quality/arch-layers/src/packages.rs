@@ -329,7 +329,7 @@ name = "sovereign-contracts"
 allow = ["oicp-types"]
 [[package]]
 name = "demo"
-doc = "studio/BOUNDARY.md"
+doc = "clients/studio/BOUNDARY.md"
 crates = ["pkg-a", "pkg-b"]
 "#;
 
@@ -467,7 +467,7 @@ crates = ["pkg-a", "pkg-b"]
     /// -> sovereign-*` row) and `cargo xtask boundary-gate` exit **0**,
     /// printing "✓ every declared package reaches only itself + the shared
     /// leaves". The gate that names itself for lift closure was the one that
-    /// said yes, on the exact edge `commonwealth/BOUNDARY.md` was written
+    /// said yes, on the exact edge `cmnwlth/BOUNDARY.md` was written
     /// about. `sovereign-contracts` is a `[[package_leaf]]`, leaves are
     /// GLOBAL, and this pass read membership and nothing else (ARCH §18.1).
     ///

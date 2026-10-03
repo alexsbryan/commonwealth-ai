@@ -24,7 +24,7 @@
 #   - PDFium shared library (bblanchon/pdfium-binaries, latest)      → ~7 MB
 #
 # What it does NOT fetch: tesseract. The 2026-05-27 bake-off (see
-# sovereign/docs/OCR_PADDLE_ENGINE.md) replaced tesseract with PaddleOCR —
+# svrn/docs/OCR_PADDLE_ENGINE.md) replaced tesseract with PaddleOCR —
 # which needs no platform install — so the desktop no longer bundles it.
 # Tesseract remains a CODE fallback (OcrEngineKind::Tesseract) for users
 # with a system install; a tesseract-bundling build is a documented opt-in
@@ -35,7 +35,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-DESKTOP_BIN_DIR="${REPO_ROOT}/sovereign/crates/sovereign-desktop/src-tauri/binaries"
+DESKTOP_BIN_DIR="${REPO_ROOT}/clients/desktop/src-tauri/binaries"
 
 # PaddleOCR model set id — must match `paddle::DEFAULT_MODEL_ID` and the
 # `tauri.release.conf.json` resources glob.
@@ -189,6 +189,6 @@ echo "  pdfium/:"
 ls -la "$DESKTOP_BIN_DIR/pdfium" 2>/dev/null | sed 's/^/    /' || true
 echo
 echo "Next:"
-echo "  cd sovereign/crates/sovereign-desktop"
+echo "  cd clients/desktop"
 echo "  cargo tauri build --config src-tauri/tauri.release.conf.json"
 echo "  (omit --config for a plain dev build; the base config has no resources)"

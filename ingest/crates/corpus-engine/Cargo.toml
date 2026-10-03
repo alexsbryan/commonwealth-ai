@@ -1,0 +1,317 @@
+[package]
+name = "corpus-engine"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Shared corpus ingestion and index management for Sovereign and Commonwealth"
+
+[dependencies]
+# The neutral kernel (layer 0) — `ContentHash` is THE content-hash
+# implementation. This crate had seven of its own: `blake3_hex`, two raw
+# `blake3::hash(..).to_hex()` calls in reindex, and a 16-hex `short_hash`
+# written verbatim THREE times (atlas/atoms, governance, code_intel), each
+# with a comment naming the others. They all reach one decider now
+# (ARCH §10.6, noun-convergence rung nc-1-kernel).
+kernel-types = { workspace = true }
+# The append-only journal, re-exported as `corpus_engine::oplog` so this
+# crate's consumers did not change when it left (2026-09-04).
+oplog = { workspace = true }
+
+# The pure section detectors (SectionDetector / DetectedSection /
+# ChapterRegexDetector / TocAnchoredDetector) — this crate's own segmentation
+# vocabulary, in a `regex`-only leaf so the studio SectionTool can share the ONE
+# implementation by reaching DOWN. Re-exported at `chunkers::sectioned::*`.
+# They lived in `sovereign-contracts` from 2026-07, which made the knowledge
+# layer name four types owned by the layer above it (noun-convergence rung 2,
+# 2026-08-20).
+corpus-engine-sections = { workspace = true }
+# The atlas vocabulary (atoms/edges/taxonomy/canonical) — a behaviour-free
+# leaf re-exported at its historical paths. See understanding-vocab/Cargo.toml.
+understanding-vocab = { workspace = true, features = ["read"] }
+# The resolved-atlas READ surface (projection, citation, context_filter,
+# section_cache, evidence_site, axis_catalog) — carved read-only out of
+# enrichment/atlas (FIVE_PROGRAMS §12 decision 1) and re-exported at its
+# historical paths; corpus-engine keeps the WRITE side.
+corpus-engine-atlas-reader = { workspace = true }
+# The retrieval read-port leaf (CorpusIndex, IndexInfo, the persisted settings,
+# the search/evidence surface) — re-exported at its historical paths so nothing
+# in the monorepo changed when it was carved out (domains
+# REVIEW-build-index-read-port, DE "The read-port leaf, measured again").
+corpus-index = { workspace = true }
+# The bundled recipe definitions as static data (five-programs-52). Named in
+# one file only, `src/recipe_source/bundled.rs`, behind the RecipeSource and
+# AssetSource ports.
+corpus-engine-recipes = { workspace = true }
+# Understanding's pure tier — a temporary shim edge: the pure files that leave
+# `corpus-engine` for `understanding-atlas` are re-exported at their historical
+# paths here (domains REVIEW-build-understanding-crate-tree, §3a step 5) until
+# their in-engine importers repoint. The final audit deletes the shims, and the
+# edge with them (DE "Direction: Understanding reads Ingest and Retrieval,
+# never the reverse").
+understanding-atlas = { workspace = true }
+
+# What is LEFT of the sovereign edge after that move, and why it is left.
+# Census 2026-08-20, minus the descriptor const (removed 2026-09-16: it now
+# embeds from corpus-engine's own OUT_DIR, so it no longer re-exports through
+# the leaf) — two modules, no types, five call sites:
+#   rebrand::svrnmesh_root              (registry.rs, meta_atlas/{builder,bridge/edges}.rs
+#                                        + 2 examples) — the workspace path SSOT.
+#                                        220 call sites over 15 crates; clippy's
+#                                        `disallowed_methods` deny makes
+#                                        hand-rolling the path a build error, so
+#                                        this must stay ONE accessor (ARCH §10.6).
+#                                        Relocating it is its own rung.
+#   recipe::url_template::render_template   (acquirers/http_api/template.rs)
+# Unlike the detectors, these are not corpus-engine vocabulary parked upstairs:
+# they are things the engine and the recipe package must agree on bit-for-bit,
+# with no natural home below. `nc-boundary.py` never saw them — it counts TYPES,
+# and a dependency carried entirely by free functions and consts is invisible to
+# it. Recorded in quality/ARCH_LAYERS.toml rather than left implicit.
+sovereign-contracts = { workspace = true }
+# The protocol recipe-test report the daemon port projects onto
+# (engine/daemon_port.rs, pb-ingest-dial-daemon-ports).
+oicp-types = { workspace = true }
+
+# YieldHook contract (Tier-0 leaf, zero deps). Extracted from
+# ingest/crates/corpus-engine/src/yield_hook.rs during the watchers carve-out so the
+# data plane and corpus-engine-watchers share one trait identity.
+# Non-optional: CorpusEngine::set_yield_hook is core, always-compiled API.
+corpus-engine-yield = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+# `preserve_order` is load-bearing, not cosmetic: the Phase-1 response schema
+# is handed to the daemon's llguidance grammar, which generates properties in
+# SCHEMA order. Alphabetical order puts the optional `claims` array first and
+# the model skips it (measured 2026-09-02: 0/2 claims sorted vs 2/2 authored,
+# same section, same model). Declared here so a build that resolves
+# serde_json without a unifying neighbour cannot silently change what the
+# model is asked for; `phase1_schema_keeps_its_authored_order` is the gate.
+serde_json = { workspace = true, features = ["preserve_order"] }
+toml = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# mmap reader for the v2 `edges.csr` (ATLAS_STORAGE_V2) — the BFS edge path
+# stays sync + paged, mirroring sovereign-core's atoms.rkyv mmap.
+memmap2 = "0.9"
+
+# Logging
+tracing = { workspace = true }
+
+# HTTP — workspace baseline ["json", "rustls-tls"]; engine adds streaming + compression.
+reqwest = { workspace = true, features = ["gzip", "brotli", "stream"] }
+
+# Server-Sent Events client — used by the newsworthy watcher to
+# subscribe to Wikimedia EventStreams (`stream.wikimedia.org`) for
+# push-based article freshness instead of polling MediaWiki's API.
+# Handles SSE framing, `Last-Event-ID` resumption, and auto-reconnect.
+reqwest-eventsource = "0.6"
+
+# Vector database
+lancedb = { workspace = true }
+# Lance is the on-disk format under lancedb. We pull it in directly
+# so `snapshot::publish_snapshot` can enumerate fragments from the
+# manifest (transactional view) instead of via a `readdir` of
+# `chunks.lance/data/`. readdir races with LanceDB background
+# compaction — empirically dropped 9/3021 fragments on the first
+# wikipedia publish. See `project_snapshot_publish_consistency.md`.
+# `lance` itself stays inline — corpus-engine is the only consumer.
+lance = "4"
+lance-index = "4"
+lance-table = "4"
+
+# Arrow (version driven by lancedb)
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+
+# XML
+quick-xml = "0.36"
+
+# HTML
+scraper = "0.20"
+
+# JSON
+jsonpath-rust = "0.7"
+
+# Directed-multigraph cycle detection — used by the investigation
+# enrichment pipeline's `circular_flow` pattern detector. Pinned at
+# 0.6 (current stable as of 2026-04). Default features include the
+# graph algorithms we need (Tarjan SCC + simple cycle enumeration).
+petgraph = "0.6"
+
+# Data formats
+parquet = { workspace = true }
+csv = "1.3"
+# Spreadsheet reader (xlsx described-asset sub-extractor). Workspace
+# version declaration in root Cargo.toml per ARCH §8.1.
+calamine = { workspace = true }
+
+# RFC-5322 / MIME parser (email_rfc5322 extractor). Workspace version
+# declaration in root Cargo.toml per ARCH §8.1.
+mailparse = { workspace = true }
+
+# Compression
+flate2 = "1"
+bzip2 = "0.5"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+# 7z used by the Internet Archive Stack Exchange dump (one .7z per
+# community). Default features are heavier than we need (aes256, ppmd,
+# encoder) — disable them; SE archives are LZMA2 (decoder always
+# available via the lzma-rust2 hard dep) + occasional bzip2 entries.
+# `util` exposes the `decompress_file` convenience used by the SE
+# extractor's lazy-extract step.
+sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2", "util"] }
+
+# Text
+regex = { workspace = true }
+glob = "0.3"
+
+# Misc
+tempfile = { workspace = true }
+
+# Hashing
+blake3 = "1"
+sha2 = { workspace = true }
+
+# Canonical-sync packing: tar over zstd for cross-peer canonical
+# transfers. Both are mature pure-Rust impls; tar handles directory
+# walks + sparse files, zstd gives ~3-5× compression on LanceDB
+# fragment files in practice.
+tar = "0.4"
+# `zstdmt` is NOT a default feature and is what makes `Encoder::multithread`
+# compile. Without it a snapshot publish is single-threaded: measured
+# 2026-08-05 on the 21.8 GB wikipedia index at level 19, that is 13.2 MB/min
+# of output — a ~12-hour build for one 9.4 GB release artifact, on a 12-core
+# machine using one core. See `snapshot::write_snapshot_archive`.
+zstd = { version = "0.13", features = ["zstdmt"] }
+
+# Clustering
+hdbscan = "0.12"
+
+# Time
+chrono = { workspace = true }
+
+# Unique IDs (used by NoteStore). Workspace declares ["v4", "serde"];
+# the extra `serde` feature is harmless here.
+uuid = { workspace = true }
+
+# Code intelligence (gated on `treesitter` feature). Tree-sitter and its
+# grammar crates are heavy, so default builds skip them. Enable with
+# `--features treesitter` when indexing source code.
+tree-sitter            = { version = "0.26", optional = true }
+tree-sitter-language   = { version = "0.1",  optional = true }
+tree-sitter-rust       = { version = "0.24", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-go         = { version = "0.25", optional = true }
+tree-sitter-python     = { version = "0.25", optional = true }
+streaming-iterator     = { version = "0.1",  optional = true }
+walkdir                = { version = "2",    optional = true }
+notify                 = { version = "8",    optional = true }
+
+# rusqlite stays here for the non-scip stores (NoteStore, FeatureStore,
+# wikipedia_graph, lint/test results, plan_items, project_docs, notes_sync).
+# Scip's own rusqlite usage now lives in corpus-engine-scip.
+rusqlite               = { version = "0.35", features = ["bundled"], optional = true }
+# Markdown AST. Used by `extractors/markdown.rs` (and used to be used
+# by design_signals.rs, which moved to corpus-engine-atos 2026-05-23).
+# Same version sovereign-atos and corpus-engine-atos use — one version
+# per workspace, per ARCH_PRINCIPLES.md §8.1.
+pulldown-cmark         = { version = "0.12", default-features = false, features = ["simd"], optional = true }
+
+# SCIP call graph + exporter dispatch — moved to its own crate
+# (2026-05-23, ARCH §3.1/§3.3 carve-out). corpus-engine still uses
+# scip from `update::watch::CodeWatcher` and
+# `enrichment::atlas::strategies::code_walk`, so we pull it back in
+# behind the same `treesitter` feature gate the scip modules used to
+# carry.
+corpus-engine-scip     = { workspace = true, optional = true }
+
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[features]
+# `stores` is in the default set because every downstream sovereign +
+# commonwealth crate touches at least one rusqlite-backed module
+# (wikipedia_graph + the notes_sync bridge here).
+# Pre-2026-05-22 these lived under `treesitter` because rusqlite happened
+# to be declared there — that wart forced 5 tree-sitter grammar crates
+# into every binary that only needed a notes table. The two are split
+# now: `stores` is the SQLite layer, `treesitter` is grammars + SCIP.
+# (lint/test result stores moved to `corpus-engine-watchers` 2026-07-13.)
+default = ["markdown", "stores"]
+markdown = ["dep:pulldown-cmark"]
+# `stores` unlocks the remaining rusqlite-backed modules in this crate
+# (wikipedia_graph, wikipedia_columnar, notes_sync). Cheap to enable —
+# rusqlite is bundled (no system dep) and SQLite is small.
+stores = ["dep:rusqlite", "dep:notify", "dep:walkdir"]
+treesitter = [
+    "stores",
+    "dep:tree-sitter",
+    "dep:tree-sitter-language",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-typescript",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-go",
+    "dep:tree-sitter-python",
+    "dep:streaming-iterator",
+    "dep:pulldown-cmark",
+    # scip is its own crate now; pulling it in behind the same feature
+    # gate keeps the corpus-engine surface backwards-compatible with
+    # consumers that opt into `treesitter`.
+    "dep:corpus-engine-scip",
+]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }
+# The atlas store fixtures and the canned typed-extension envelope the
+# `AtlasPort` parity tests share with svrn's double-side tests (phase-b-48).
+corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
+# Dev-only, and only to capture what a tracing event ACTUALLY formats to.
+# The F5 demand instrument is a Rust writer read back by a Python reader
+# (scripts/sec-miss-demand.py); the two agree on a log-line grammar and
+# nothing else, so the test that pins that grammar has to render a real
+# event through a real subscriber rather than assert on a string the test
+# itself composed. Workspace-pinned, so this adds no second version of a
+# crate nine others already use (ARCH §8.2), and no production weight.
+tracing-subscriber = { workspace = true }
+# SP5 spike probe (examples/concept_graph_probe.rs): Leiden community
+# detection over a concept co-occurrence graph. Survey pick 2026-07-31
+# (research/enrichment-spikes/findings/SP5_concept_graph.md): core has no
+# petgraph coupling (its optional adapter wants petgraph 0.8; we pin 0.6),
+# tiny dep tree (rand, rustc-hash, thiserror), MIT/Apache-2.0.
+leiden-rs = "0.8"
+# In-process HTTP fake for the http_api acquirer e2e tests. Pinned
+# at 0.6 (current stable as of 2026-04). Used only in tests.
+wiremock = "0.6"
+# Encoder side is `compress` — only needed in tests, so pulled in
+# additively here to keep the library binary lean.
+sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2", "util", "compress"] }
+# Write-side xlsx generator used to build fixture spreadsheets in
+# unit tests. Read-side `calamine` is already a runtime dep; the
+# writer is dev-only so the production binary stays lean.
+rust_xlsxwriter = "0.83"
+# Compile-fail proofs for `Evidence`'s one-door invariant
+# (`tests/evidence_reds.rs`, noun-convergence rung nc-4-evidence). The bar
+# `nc-thesis` asks for "compile-fail tests, one per illegal construction",
+# and a rendered-stderr comparison is the only way to assert that the
+# COMPILER rejects a construction rather than that the source merely looks
+# private. Dev-only; no runtime weight.
+trybuild = "1"
+# Dev-only: the `recipe_schema` test parses recipe.rs's AST to generate
+# ingest/crates/sovereign-recipes/SCHEMA.md and gate it against drift. No runtime dep —
+# the recipe types stay free of doc-gen derives.
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+
+
+[lints]
+workspace = true

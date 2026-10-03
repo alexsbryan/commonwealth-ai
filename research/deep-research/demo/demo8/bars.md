@@ -39,9 +39,9 @@ two reds measured before the fix. R-5 (red-first, zero assertion changes
 between red and green): a personal-corpus chunk must not reach a remote
 payload via `enrich --provider` — RED at HEAD (the remote path existed
 with zero privacy tokens, nothing refused), GREEN after the landing
-(sovereign/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs:96).
+(svrn/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs:96).
 ONE boundary choke point for remote-model calls AND query egress:
-sovereign/crates/sovereign-core/src/egress.rs — `verify` decides on the
+svrn/crates/sovereign-core/src/egress.rs — `verify` decides on the
 caller-declared payload (privacy, custody, what, target, exact detail),
 `search_client`/`model_client` are the only client factories; every
 remote host (cli, cli-llm, tools, server, desktop) injects the
@@ -54,7 +54,7 @@ DEMO-8 flight transcripts are the evidence (query releases under the
 run grant + public-web url releases + the typed default-deny refusal).
 Consent gate: run-scoped typed grant (`--consent public-web|peer|personal`),
 default-deny, frozen into the charter and recorded in manifest.json.
-F26 census enforced as a build gate (sovereign/crates/sovereign-core/
+F26 census enforced as a build gate (svrn/crates/sovereign-core/
 tests/f26_egress_census.rs, in the standard suite): the red counted FIVE
 egress-class construction sites at HEAD; the landing registers zero
 outside the boundary. DEMO-8: research/deep-research/demo/demo8/;
@@ -73,7 +73,7 @@ decider, the R-6 red measured first: at HEAD every budget decider was
 fail-open and none run-scoped (BudgetView had no writer anywhere; every
 production construction empty; budget_allows(None) => true;
 orchestrator.rs:222-230; a second monthly fail-open decider at
-search.rs:234-238). The landing: sovereign/crates/sovereign-core/src/
+search.rs:234-238). The landing: svrn/crates/sovereign-core/src/
 deep_research/budget.rs SpendDecider — the ONE decider — covers
 web-search spend AND frontier-key spend (FAMILY_WEB_SEARCH /
 FAMILY_WEB_FETCH / FAMILY_FRONTIER_KEY; the frontier-key family is

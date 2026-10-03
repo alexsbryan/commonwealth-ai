@@ -52,7 +52,7 @@ set -uo pipefail
 # ── Paths & constants ────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
-DESKTOP_DIR="$REPO_ROOT/sovereign/crates/sovereign-desktop"
+DESKTOP_DIR="$REPO_ROOT/clients/desktop"
 CLI="$REPO_ROOT/target/debug/sovereign-cli-llm"
 # The DISPATCHER, not the sibling: `quality check` is in-process in
 # `sovereign-cli` and needs its `dev-tools` feature.
@@ -94,7 +94,7 @@ TARGET_PRIMARY="$SHIPPED_PRIMARY"   # --primary <path> overrides (e.g. run the 2
 : "${SMOKE_P5_MIN_SECS:=600}"
 : "${SMOKE_P6_SECS:=900}"
 # The perf tolerance bands (PERF_TPS_DROP_PCT / PERF_TTFT_RISE_PCT) moved into
-# `sovereign/bench/quality-check/throughput.toml` as pre-registered per-stem
+# `bench/lanes/quality-check/throughput.toml` as pre-registered per-stem
 # BARS, which is the difference between a threshold written down before the
 # run and one an env var can move after it.
 : "${SAFETY_DROP_ABS:=0.05}"     # safety_number may not drop >0.05
@@ -341,12 +341,12 @@ phase1() {
   log "PHASE 1 — perf baseline (throughput + TTFT + MTP + TTFI)"
   [ -n "$DRY_RUN" ] && { record "1 perf" "DRY" 0 "throughput_probe x2 + mtp-probe + ttfi"; return 0; }
   local t0; t0=$(date +%s) fail=0 detail=""
-  sovereign/scripts/smoke-attach-mode.sh > "$ART/p1-attach.log" 2>&1 \
+  svrn/scripts/smoke-attach-mode.sh > "$ART/p1-attach.log" 2>&1 \
     && log "  daemon surface: up" || { warn "  smoke-attach probes failed (non-fatal)"; detail+="attach? "; }
 
   # The throughput lane of `svrn quality check` owns this now. It runs the
   # same `scripts/throughput_probe.py`, over four declared arms instead of
-  # two, against PRE-REGISTERED bars in `sovereign/bench/quality-check/
+  # two, against PRE-REGISTERED bars in `bench/lanes/quality-check/
   # throughput.toml` and a per-stack baseline that is committed — where the
   # comparison this block used to do read a gitignored `$BASELINE` directory
   # that does not exist on a fresh checkout, so on this host it captured on
@@ -405,7 +405,7 @@ phase3() {
   log "PHASE 3 — desktop-layer (routing-replay through the command bridge :$BRIDGE_PORT)"
   [ -n "$DRY_RUN" ] && { record "3 desktop-layer" "DRY" 0 "launch bridge + bench routing-replay vs direct"; return 0; }
   [ -x "$DESKTOP_BIN" ] || { record "3 desktop-layer" "SKIP" 0 "desktop binary missing (run --build)"; warn "  no $DESKTOP_BIN — skipping"; return 0; }
-  local t0; t0=$(date +%s) bank="sovereign/bench/routing/cells_v1.toml"
+  local t0; t0=$(date +%s) bank="bench/lanes/routing/cells_v1.toml"
 
   # Routing-replay only measures routing if the ROUTER is engaged. `naked_mode`
   # (a desktop.toml setting the resident config has ON) bypasses routing and

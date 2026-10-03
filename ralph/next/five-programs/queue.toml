@@ -32,5 +32,5 @@ variant = "medium"
 # side, pure-Rust xtask); COMPILE is the toolbox-wrapped full compile this
 # host requires for anything that reaches llama-cpp-sys-4.
 [checks]
-boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; true'"]
+boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cargo xtask boundary-gate; true'"]
 compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]

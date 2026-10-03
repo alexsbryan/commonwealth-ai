@@ -64,6 +64,18 @@ reading. Neither is introduced here; both are in the registered instrument.
   scripts/nc-boundary.py --edge sovereign:corpus-engine   # what crosses it
 """
 import collections, json, os, sqlite3, sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from top_level_moves import Moves  # noqa: E402
+
+# The domains below are the pre-programs families, spelled as they were when
+# every baseline was taken. The index spells paths as the tree it last saw, so
+# each path is put back in that spelling first (quality/top-level-moves.toml):
+# without it, after the top-level-programs move every path falls through to
+# None and every width reads 0.
+MOVES = Moves.at(REPO)
 
 GRAPH = os.path.expanduser("~/.svrnmesh/indexes/commonwealth-ai/scip_graph.db")
 PREFIX = "rust-analyzer cargo "
@@ -133,6 +145,7 @@ def crate_of(path):
 
 
 def domain(path, crate=None):
+    path = MOVES.back(path)
     if any(b in path for b in NOT_PRODUCTION):
         return None
     # v2 FIX (nc-3-backstage). `load()` passes the crate from the qualified
@@ -257,6 +270,9 @@ def index_provenance(db):
 def main():
     if not os.path.exists(GRAPH):
         sys.exit(f"nc-boundary: no graph at {GRAPH} — svrn refresh")
+    if not MOVES.present:
+        sys.exit("nc-boundary: no quality/top-level-moves.toml — the domains "
+                 "cannot be read off a post-move index without it")
     db = sqlite3.connect(f"file:{GRAPH}?mode=ro", uri=True)
     indexed_head, indexed_at = index_provenance(db)
     owner = load(db)

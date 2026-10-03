@@ -1,0 +1,49 @@
+[package]
+name = "sovereign-cli-base"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The leaf half of the CLI shared set: help, dirs, dispatcher, guest_link, urls, rail, repo, prompts, deprecation, tracing_init, models, mcp_client."
+
+# The thin half of `sovereign-cli-shared`, admitted as a [[package_leaf]]
+# (FIVE_PROGRAMS five-programs-38, fp-98) so every program's CLI can reach it
+# without naming another package's crate. No fs store, no engine: the leaf
+# test is `quality/ARCH_LAYERS.toml`'s `allow` list for this crate.
+
+[dependencies]
+# The rebrand-aware path SSOT (`dirs`), the client daemon base (`urls`) and the
+# guest-link record (`guest_link`).
+sovereign-contracts = { workspace = true }
+# `rail` decodes the daemon's roster / ops / gaps replies; `mcp_client` builds
+# the JSON-RPC body.
+serde_json = { workspace = true }
+# `rail` (feature `rail-client`) and `mcp_client` (feature `mcp-client`) — the
+# HTTP client; `RailAct` is the typed wire form the daemon's append door parses.
+reqwest = { workspace = true, optional = true }
+# `prompts` (the home dir under `~` expansion) and `tracing_init`.
+dirs = "5"
+tracing-subscriber = { workspace = true }
+# `deprecation::refuse_retired` traces each refusal.
+tracing = { workspace = true }
+# `flag_surface` renders a derived clap surface's parse errors.
+clap = { workspace = true }
+# `host_load` only: `getloadavg(3)`, the one reader the check runner and
+# the chat-ask lane share so a wall-clock bar is judged against one
+# number (ARCH §10.6).
+libc = "0.2"
+commonwealth-rail-core = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+# Enables `sovereign_cli_base::rail` — the ONE operator-side rail client.
+rail-client = ["dep:reqwest", "dep:commonwealth-rail-core"]
+# Enables `sovereign_cli_base::mcp_client` — the daemon `/mcp` tool-call client.
+mcp-client = ["dep:reqwest"]
+# Enables `sovereign_cli_base::corpus_install` — the daemon install client.
+corpus-install = ["dep:reqwest"]
+
+[lints]
+workspace = true

@@ -2,14 +2,14 @@
 # oicp-conformance-lane.sh — certify this host against the OICP v0.4 contract
 # and fail on any regression from the committed baseline.
 #
-# WHY THIS WRAPPER EXISTS. `oicp-conformance` (at `commonwealth/crates/` until
+# WHY THIS WRAPPER EXISTS. `oicp-conformance` (at `cmnwlth/crates/` until
 # the domains-2 move, 2026-09-11; a repo-root sibling of `oicp-types` now) has
 # been a
 # complete, working certifier since it was written — manifest invariants, the
 # three constraint modes, embed bit-compat, knowledge search, the ingest state
 # machine, auth posture — with a baseline ratchet already built into it
 # (`src/main.rs:65-87`, `src/report.rs:119`). It ran in NO workflow, NO script
-# and NO timer. `commonwealth/docs/ARCHITECTURE_REVIEW_2026-08-05.md:421` lists
+# and NO timer. `cmnwlth/docs/ARCHITECTURE_REVIEW_2026-08-05.md:421` lists
 # wiring it up as the single highest-leverage item in the repo. This is that
 # wire, and it is deliberately thin: every judgement below belongs to the
 # binary, not to this file.

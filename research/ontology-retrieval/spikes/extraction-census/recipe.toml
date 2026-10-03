@@ -1,5 +1,5 @@
 # Consumer fine print — adapted from the ontology-v1 `contracts` template
-# (sovereign-recipes/_templates/ontology-v1/contracts/recipe.toml).
+# (ingest/crates/sovereign-recipes/_templates/ontology-v1/contracts/recipe.toml).
 #
 # Terms of service, privacy policies and adjacent platform policies. The
 # questions it is built to answer: what kinds of data does a service collect;

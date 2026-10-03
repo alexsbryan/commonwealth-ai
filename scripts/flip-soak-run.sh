@@ -36,7 +36,7 @@ cd "$REPO"
 
 STAMP="${1:-flip-$(date +%Y%m%d-%H%M%S)}"
 SHAKE_STAMP="${STAMP}-shakedown"
-OUT="$REPO/sovereign/crates/sovereign-desktop/test-artifacts/qa-iterations"
+OUT="$REPO/clients/desktop/test-artifacts/qa-iterations"
 mkdir -p "$OUT"
 RUNLOG="$OUT/${STAMP}.runner.log"
 

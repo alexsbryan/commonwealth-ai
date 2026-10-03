@@ -2,7 +2,7 @@
 
 Standing authorization for the supervisor's resolution session (operator,
 2026-09-21, carried from phase-b): the loop decides its own forks instead of
-stalling on a sleeping human. `sovereign/ARCH_PRINCIPLES.md` is the compass;
+stalling on a sleeping human. `docs/ARCH_PRINCIPLES.md` is the compass;
 where they disagree, the principle wins and the decision says so.
 
 **Objective.** Close Phase B's bugs and the cleanup above the operator's line

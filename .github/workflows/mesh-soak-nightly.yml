@@ -1,5 +1,5 @@
 # Nightly multi-process mesh soak — Layer 2 of the mesh QA plan
-# (commonwealth/docs/MESH_QA.md). Spins real `sovereign daemon` subprocesses,
+# (cmnwlth/docs/MESH_QA.md). Spins real `sovereign daemon` subprocesses,
 # forms a mesh, and drives a seeded fault+load schedule while asserting the mesh
 # invariants via `sovereign mesh check-invariants`. Advisory until proven stable
 # on the runner; flip `continue-on-error` off once it's reliably green.

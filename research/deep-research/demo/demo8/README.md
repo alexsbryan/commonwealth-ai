@@ -37,7 +37,7 @@ The two reds, both measured at HEAD before the fix:
 
 - **R-5** — a personal-corpus chunk could reach a remote payload via
   `enrich --provider` with zero privacy tokens (nothing refused). The
-  red-first test (`sovereign/crates/sovereign-cli-llm/src/enrich_cmd/
+  red-first test (`svrn/crates/sovereign-cli-llm/src/enrich_cmd/
   egress_reds.rs:96`) failed at HEAD and passes with ZERO assertion
   changes after the landing: the enrich dispatch verifies before any
   request is built, the gate keying on the derived local-daemon base,
@@ -48,7 +48,7 @@ The two reds, both measured at HEAD before the fix:
   removes them; the F26 census's r6 gate scans every production src
   tree for the retired identifiers and reads zero.
 
-The F26 census (`sovereign/crates/sovereign-core/tests/f26_egress_census.rs`)
+The F26 census (`svrn/crates/sovereign-core/tests/f26_egress_census.rs`)
 is the build gate: at HEAD it counted FIVE egress-class client
 construction sites outside any boundary (inference_client,
 deep_research_cmd, knowledge_lookup, web/mod, conversation.rs — the

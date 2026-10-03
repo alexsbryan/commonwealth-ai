@@ -185,8 +185,8 @@ try {
   };
 
   // ── ring-doc, as the page holds it ────────────────────────────────────────
-  const A = await import(`file://${REPO}/sovereign/apps/ring-doc/adapter.js`);
-  const { Y } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
+  const A = await import(`file://${REPO}/cmnwlth/apps/ring-doc/adapter.js`);
+  const { Y } = await import(`file://${REPO}/cmnwlth/apps/ring-doc/vendor/ring-doc-bundle.js`);
   const fold = (log, reducer, init) => {
     let acc = init;
     for (const op of (log && log.ops) || []) {

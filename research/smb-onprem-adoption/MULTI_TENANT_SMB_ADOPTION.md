@@ -5,7 +5,7 @@ _2026-08-13 · RuggedFox · research status: assessment from code read (three Ex
 The operator's scenario: an SMB wants local RAG over company documents
 for all employees, where individual employees may augment the central
 sources with their own — and some may want to run their own models. This
-document interrogates how close `sovereign/deploy/onprem/` (the hardened
+document interrogates how close `distributions/deploy/onprem/` (the hardened
 on-prem kit) and the platform behind it are to that shape, focused on
 multi-tenancy. Companion: `FIFTEEN_MINUTE_COMMON_CASE.md` — the
 adoption-funnel question (a firm person going "ooo" to running in 15
@@ -140,7 +140,7 @@ no owner; `sovereign-tools/src/local_corpus/watched/config.rs:79-171`), so
 every watched corpus is world-readable to every query on the box
 (`registry.rs:54` keyed by bare `corpus_id`). And there is no document-push
 wire protocol anywhere: OICP's ingest extension installs a *recipe by id*,
-never raw documents (`oicp-types/src/ingest.rs:22-70`). So today "employee
+never raw documents (`shared/crates/oicp-types/src/ingest.rs:22-70`). So today "employee
 adds their own documents" means IT stages files on the server and registers
 a shared watched folder.
 

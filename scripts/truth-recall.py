@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """truth-recall.py — ONE scorer for "did the catalogued facts reach the atoms?"
 
-Why this exists (ei-3c, 2026-09-07). `corpus-mcp/acceptance.sh` used to decide
+Why this exists (ei-3c, 2026-09-07). `svrn/crates/corpus-mcp/acceptance.sh` used to decide
 its EI3 bar by diffing the `got` column of two runs of
 `scripts/setup-numismatics-corpus.sh --atlas`. Three of that table's five bars
 ARE recall (`catalogue_ref`, `mint`, `ruler`: expected names found, capped at

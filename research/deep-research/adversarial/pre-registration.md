@@ -825,9 +825,9 @@ re-measure run).
   by — the t1e-era fetch lists show all-0.9 ties, the re-measure's
   show the term-relevance ranks.
 - **§11/§19 survey (what was checked before building):** the house's
-  search-gym precedent — `sovereign/bench/search-gym/` (the lane's
+  search-gym precedent — `bench/lanes/search-gym/` (the lane's
   on-disk fixture shape gym.rs already composes, per the module header)
-  and `sovereign/bench/CI_GATE_HANDOFF.md` — is a tool-judiciousness
+  and `bench/lanes/CI_GATE_HANDOFF.md` — is a tool-judiciousness
   bench, not a retrieval engine: it cannot serve the loop's search
   leg. The loop's estate search (`estate_search`) is decked-empty in
   v1 (F13/F16) — the corpus-search surface is rung 2 of the operator's
@@ -1024,7 +1024,7 @@ new):**
 
 - The corpus RETRIEVAL surface: `CorpusIndex::open` +
   `CorpusIndex::search(&embedding, query, limit)` — vector + FTS hybrid
-  (corpus-engine/src/index/search.rs, flat-scan fallback under 10k rows) —
+  (ingest/crates/corpus-engine/src/index/search.rs, flat-scan fallback under 10k rows) —
   already wired into the loop's estate survey leg:
   `CliResearchPort::estate_search` (sovereign-cli/src/deep_research_cmd.rs)
   and `svrn corpus search` (corpus_cmd/search.rs). The rung-2 acquisition
@@ -1658,7 +1658,7 @@ written after. Nothing below re-negotiates a pre-registered contract.
 
 ### What ran, in order
 
-1. **The reds, red-first.** R-5 (`sovereign/crates/sovereign-cli-llm/
+1. **The reds, red-first.** R-5 (`svrn/crates/sovereign-cli-llm/
    src/enrich_cmd/egress_reds.rs:96` — a personal-corpus chunk must
    not reach a remote payload via `enrich --provider`) failed at HEAD
    and passes with ZERO assertion changes after the fix. R-6 (the F26
@@ -1988,7 +1988,7 @@ whole flight with `index out of bounds: the len is N but the index is N`.
 Evidence (instrumented, reproduced, understood — no whack-a-mole):
 
 - `[local] task 62 exit=101 terminal=? wall=74s FAIL` — ion-trap
-  question; panic at `studio/crates/sovereign-tools-base/src/web/
+  question; panic at `svrn/crates/sovereign-tools-base/src/web/
   extract.rs:53:17` while fetching `https://en.wikipedia.org/wiki/
   Qubit#Qudits_and_qutrits` (449,475-byte HTML; "len is 449475 but the
   index is 449475"). Corpus arm fetches the source URLs of corpus
@@ -1998,7 +1998,7 @@ Evidence (instrumented, reproduced, understood — no whack-a-mole):
 - Minimal repro (red-first, pinned in the file's test module):
   `extract_text_from_html("<p>İstanbul</p>")` panics at the same
   line:53:17 with "len is 16 but index is 16"; passes after the fix.
-- The fix (one line, `studio/crates/sovereign-tools-base/src/web/
+- The fix (one line, `svrn/crates/sovereign-tools-base/src/web/
   extract.rs`): `let len = html_bytes.len().min(bytes.len());` — the
   walk is bounded by the SOURCE buffer it indexes. `cargo test -p
   sovereign-tools-base --lib`: 93 passed (92 prior + the new regression
@@ -2075,7 +2075,7 @@ appendix (append-only, §18.6).
 
 Observed: local task 95 (Diamond Sutra) exit=101 at 79s —
 
-    svrn panic at sovereign/crates/sovereign-core/src/deep_research/estate.rs:47:23:
+    svrn panic at svrn/crates/sovereign-core/src/deep_research/estate.rs:47:23:
     end byte index 600 is not a char boundary; it is inside 'ā' (bytes 599..601)
 
 The estate snippet window (`estate_snippet`, the term-centered 600-byte cut)
@@ -2928,7 +2928,7 @@ Order deep-research-t3d is the measurement-honesty category: four judge-independ
 
 ### Item 2 — the decline class and the abstention dimension (4c5f1361): ONE decline implementation, chaos vocabulary as additive telemetry
 
-- **§10.6 resolved: one decline shape, one definition site.** Two DECLINE_RE copies existed on the calibration side (classify.mjs's exported gap-family shape and calibrate-judge.mjs's local honest_limitation-overturn shape). The union of both is now THE export in `sovereign/crates/sovereign-desktop/tests/e2e/scripts/lib/classify.mjs`; `calibrate-judge.mjs` imports it (its local copy removed). The union is a superset of both, so neither consumer's behavior changes.
+- **§10.6 resolved: one decline shape, one definition site.** Two DECLINE_RE copies existed on the calibration side (classify.mjs's exported gap-family shape and calibrate-judge.mjs's local honest_limitation-overturn shape). The union of both is now THE export in `clients/desktop/tests/e2e/scripts/lib/classify.mjs`; `calibrate-judge.mjs` imports it (its local copy removed). The union is a superset of both, so neither consumer's behavior changes.
 - **The DRB measurement ports the union verbatim** (DECLINE_SHAPE, `drb-score.py`): a fact that itself declines or asserts absence is classified 'decline' (honest abstention) WITHOUT a judge call — the same deterministic class the declared no-reference rule gives 'unknown'. The vendored validate prompt (`vendor/utils/validate.py`) gains the decline class for judge-emittable declines on non-mechanical shapes (SHA256SUMS amended, old hash in git history).
 - **Chaos graded vocabulary composed as additive telemetry over the frozen artifacts**: the verdict channel is projected onto the graded ladder (chaos_monkey.rs score_answer: supported->grounded, unsupported->hallucination, decline->honest_abstention, unknown->unclassified) in `graded_telemetry` / `abstention_dimension` blocks per aggregation. caveated_ood / answered_novalue need score_answer's critic — the pre-registered 122B graded pass — and are reported null, unmeasured, never defaulted (§18.3). The old single number is still computed (comparability preserved; the 35B numbers stay old-instrument).
 - **The named substitution (§18.3).** The forensics' pass-site-4 count — "7 decline-shaped paired claims (6 local, 1 hybrid)" — is NOT mechanically reproducible: the union regex on recovered paired facts counts **3** (local 83 fact 14 "does not include", local 83 fact 30 "no specific", hybrid 83 fact 3 "no specific"); on raw claim text 15; via the gate's answer_declines zoo 9. The instrument reports its own count with its exact basis; the forensics' 7 is superseded, named, never silently substituted.
@@ -4832,7 +4832,7 @@ downgraded claims visibly stamped.
 Design (all confirmed against the code):
 
 1. `render_race(question, claims, run_id) -> String` — a NEW pure
-   function in `sovereign/crates/sovereign-core/src/deep_research/render.rs`
+   function in `svrn/crates/sovereign-core/src/deep_research/render.rs`
    (my scope per the order). Sections: Findings (passed claims,
    citation tails stripped via the existing `strip_citation_spans`,
    typed citations inline — evidence_id + URL resolved from
@@ -5206,7 +5206,7 @@ ONE commit (pre-reg + reds + fix + prompt clause + execution record
 
 ### Red-first evidence — six tests watched failing at HEAD, green after
 
-All in sovereign/crates/sovereign-core/src/deep_research/:
+All in svrn/crates/sovereign-core/src/deep_research/:
 
 1. `word_figures_tokenize_like_their_digit_forms` — the 10 frozen
    shapes: "twenty percent" ≡ "20%", "fifty-eight point one percent"
@@ -5316,7 +5316,7 @@ arm 13/13 pairs with a PASSING test run (this landing).
   12/13 pairs wrote; seed-01 shed-died (`local_queue_full`,
   retry_after 30s) while the t6a corpus-scale thin bank held the slot
   (its seed-11 1083s and v1 2088s flights overlapped). The frozen
-  comparator (`sovereign/crates/sovereign-core/tests/oneshot_rag.rs`)
+  comparator (`svrn/crates/sovereign-core/tests/oneshot_rag.rs`)
   has NO shed retry — item 7 wrapped only the CLI complete call sites
   in `deep_research_cmd.rs`, NOT the test's draft-ask path — so any
   daemon shed kills the pair.
@@ -5972,7 +5972,7 @@ Pre-registered 2026-08-20 before any code (order deep-research-t7b §2; §18.6).
 ### Landing
 
 ONE commit, local only, never push, no assistant attribution; scope
-sovereign/crates/sovereign-core/src/deep_research/ + this file. Execution
+svrn/crates/sovereign-core/src/deep_research/ + this file. Execution
 record appended below after the battery.
 
 ### Execution record (2026-08-20)
@@ -6233,7 +6233,7 @@ bump — land the measurement and the WARN fix, revert the depth, report.
 ### 7. Landing
 
 ONE commit, local only, never push, no assistant attribution; files:
-sovereign/crates/sovereign-inference/src/embedded/model_slot.rs,
+serve/crates/sovereign-inference/src/embedded/model_slot.rs,
 quality/env-flags.toml, docs/ENV_FLAGS.md (regenerated), this file (the
 shared file carries t7a/t7b's concurrent sections verbatim; the pre-existing
 3 embedded::gates failures at HEAD — named in the baseline snapshot above —
@@ -6380,7 +6380,7 @@ inherited.
 ### Landing
 
 ONE commit (local only, no push, no assistant attribution):
-sovereign/crates/sovereign-inference/src/embedded/model_slot.rs
+serve/crates/sovereign-inference/src/embedded/model_slot.rs
 (n_rs_seq restored to 4; mtp_draft_max_decide + DraftMaxFallback +
 WARN-on-fallback + unit tests kept — 5/5 green, boundary test pins
 "4" out of range at n_rs_seq=4; provenance comments carry the verdict),
@@ -7858,7 +7858,7 @@ grounding gate and is wired only into `runtime/grounding/judge.rs`.
 "How many independent origins does this claim require" is a different
 decision and gets a distinct name (§10.6, one decider one name). Built
 as a sibling centroid classifier with its own exemplar TOML under
-`sovereign/crates/sovereign-core/data/router/`, baked via `include_str!`, same shape as the five
+`svrn/crates/sovereign-core/data/router/`, baked via `include_str!`, same shape as the five
 existing siblings.
 
 - `Quantitative` — structural override, no embedding: the claim carries

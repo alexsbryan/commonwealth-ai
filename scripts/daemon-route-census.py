@@ -22,10 +22,10 @@ import collections, os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOSTS = [
     "sovereign/crates/sovereign-mesh/src",
-    "sovereign/crates/sovereign-daemon/src",
-    "sovereign/crates/sovereign-cli-daemon/src",
+    "svrn/crates/sovereign-daemon/src",
+    "svrn/crates/sovereign-cli-daemon/src",
     "sovereign/crates/sovereign-server/src",
-    "studio/crates/sovereign-workflow-host/src",
+    "svrn/crates/sovereign-workflow-host/src",
 ]
 ROUTE = re.compile(r'\.route\(\s*"([^"]+)"\s*,\s*((?:[a-z]+\([^()]*(?:\([^()]*\))?[^()]*\)\s*\.?\s*)+)', re.S)
 

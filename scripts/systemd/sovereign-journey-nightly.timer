@@ -1,6 +1,6 @@
 [Unit]
 Description=Nightly Sovereign CLI journey harness lane
-Documentation=file:///home/alexbryan/dev/commonwealth-ai/sovereign/docs/TESTING_SURFACE.md
+Documentation=file:///home/alexbryan/dev/commonwealth-ai/svrn/docs/TESTING_SURFACE.md
 
 [Timer]
 # 03:30 local. Late enough that an evening's work is committed, early enough

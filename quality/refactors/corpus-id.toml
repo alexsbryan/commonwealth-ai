@@ -3,7 +3,7 @@
 # Seat ruling 2026-08-23 (rf-1 order): corpus_id goes first not because it
 # matters most but because it is the only high-reach atom whose representation
 # AND wire form both already match — `#[serde(transparent)]` at
-# kernel-types/src/ids.rs, with the wire fixture named under [safety] passing
+# shared/crates/kernel-types/src/ids.rs, with the wire fixture named under [safety] passing
 # in the same file. 369 String declarations, 0 CorpusId declarations at the
 # time this spec was written (scripts/factory-scale.py at 63c72af8).
 #

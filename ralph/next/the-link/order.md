@@ -15,7 +15,7 @@ shrug.
 
 **Done when:** `RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict
 all` reads PASSED on every `tl-*` bar and on all six rr-2 and five rg bars,
-twice from cold; `git diff --stat <BASE>..HEAD -- commonwealth/crates/
+twice from cold; `git diff --stat <BASE>..HEAD -- cmnwlth/crates/
 commonwealth-rail-core` is empty; and the dial report exists with numbers,
 whatever they say.
 
@@ -42,7 +42,7 @@ route, one verb and one document.
 
 - **P1** VERIFIED + CORRECTED by the inventory (2026-09-21): a ring's journal
   is append-only JSONL at `<root>/rings/<ns>/ring_oplog.jsonl` and its roster
-  at `<root>/rings/<ns>/roster.json` (`commonwealth/BOUNDARY.md:133`); the
+  at `<root>/rings/<ns>/roster.json` (`cmnwlth/BOUNDARY.md:133`); the
   daemon enumerates namespaces from disk through the rail handle
   (`sovereign-mesh/src/ring_sync.rs:224`). The one site an export route reads
   both from: `rail.roster(&journal)` (`commonwealth-rail/src/lib.rs:238` —
@@ -59,7 +59,7 @@ route, one verb and one document.
   signature, id-derivation, roster, sequence, fork (`RailGap::SequenceFork`,
   admit.rs:109) and void rules.
 - **P3** The guest-link builder and parser are
-  `commonwealth/crates/commonwealth-discovery/src/deep_link.rs:195-259`,
+  `cmnwlth/crates/commonwealth-discovery/src/deep_link.rs:195-259`,
   percent-encoding in file. CORRECTED by the inventory (2026-09-21): ONE
   production caller of `build_https_guest_link` (`mesh_guest.rs:616`);
   `mesh_guest_link.rs:72` and `deep_link.rs:815` are tests. The encoder is

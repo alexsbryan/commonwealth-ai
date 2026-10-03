@@ -1,0 +1,59 @@
+[package]
+name = "sovereign-work-atlas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+
+[dependencies]
+# The `ReplicatedKv` port atlas records live in, plus `NodeId` straight from the
+# neutral kernel. Both replaced `commonwealth-state` + `commonwealth-core` in
+# cw-lift 3b: this crate calls four store methods, and all four have a correct
+# answer on a node with no peers, so requiring the mesh substrate to build or
+# test a capability was a link-time cost with no runtime meaning.
+sovereign-contracts = { workspace = true }
+kernel-types = { workspace = true }
+
+# Tool trait, ToolContext, StepOutput. The three MCP tools live in this crate.
+sovereign-time = { workspace = true }
+
+# AtlasObserver implements `BackgroundWatcher` (+ reads `WatcherStatus`)
+# so it can register with the watcher coordinator. That trait moved to
+# corpus-engine-watchers (R4 Step 1, 2026-07-13), and it was work-atlas's
+# ONLY *direct* corpus-engine use — so the direct dep is now the small
+# watchers leaf, not the god-crate. (corpus-engine is still reached
+# transitively via `sovereign-core`, so this trims the declared/observed
+# coupling, not the rebuild set.)
+corpus-engine-watchers = { workspace = true }
+
+# Origin URL → repo_id hash.
+sha2 = { workspace = true }
+hex = "0.4"
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+arc-swap = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[dev-dependencies]
+tempfile = "3"
+# The real-store proofs that used to need `commonwealth-state` here —
+# `tests/cross_node.rs` and the gossip-exclusion mirror pin in
+# `src/store.rs::private_app_id_matches_gossip_exclusion_list` — now live
+# beside the store they exercise:
+# `sovereign/crates/sovereign-mesh/tests/main/work_atlas_store.rs`.
+# This crate's own tests run over the port via
+# `sovereign_contracts::peer::SoloReplicatedKv`
+# (`tests/port_fake.rs`), so the mesh substrate is not needed to test a
+# capability.
+
+[lints]
+workspace = true

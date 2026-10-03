@@ -22,7 +22,7 @@ vacuously zero and hop "descents" were pure first-2 fallback.**
 
 Measured 2026-07-31, M2 Max, daemon on :9741, chat = Qwen3.6-35B-A3B-UD-MTP-
 IQ4_NL (temperature 0, thinking off), embeddings = qwen-embedding-0.6b.
-Harness `sovereign/crates/sovereign-inference/examples/p51_descent.rs` +
+Harness `serve/crates/sovereign-inference/examples/p51_descent.rs` +
 `research/enrichment-spikes/scripts/p51_dump.py` (both committed). Raw logs:
 `runs/p51/{hops.jsonl,results.jsonl,run.log}`.
 
@@ -40,7 +40,7 @@ score delta + complete hop logs; evidence for re-planning P5 after T2.
 ```
 .venv/bin/python scripts/p51_dump.py --db ~/.svrnmesh/sovereign.db \
   --chunks ~/.svrnmesh/indexes/sep/chunks.lance --corpus sep \
-  --banks sovereign/bench/sep/summarize.toml sovereign/bench/sep/summarize_obscure.toml \
+  --banks bench/lanes/sep/summarize.toml bench/lanes/sep/summarize_obscure.toml \
   --out-dir data
 cargo build -p sovereign-inference --example p51_descent
 ./target/debug/examples/p51_descent research/enrichment-spikes/data \

@@ -13,7 +13,7 @@ WHY --db HAS NO DEFAULT. Nothing in this repo can bulk-read the store: the CLI
 and the daemon's `/v1/notes/query` both cap a read at 100
 (sovereign-cli/src/notes_cmd.rs:200, sovereign-mesh/src/notes_http.rs:201), and
 the CLI's local lookup follows `~/.svrnmesh/active_notes_db`, which on
-2026-09-13 named the nested `sovereign/.sovereign/notes.db` rather than the
+2026-09-13 named the nested `svrn/.sovereign/notes.db` rather than the
 daemon's `~/.svrnmesh/notes.db`. A default here would be one more hand-derived
 path that can export the wrong store without a word (ARCH principles 6, 8).
 
@@ -28,7 +28,7 @@ CLASSES — a closed set:
   harness    feedback/invariant files in --memory-dir that were never migrated —
              written after 2026-07-18 and visible only to one harness until now.
 Live is the store's own predicate, `retired_at IS NULL AND tombstone = 0`
-(corpus-engine-notes/src/notes.rs:3510). Private notes are never exported.
+(code/crates/corpus-engine-notes/src/notes.rs:3510). Private notes are never exported.
 Every note a class drops is counted in the summary, never silently absent.
 
 SHAPE. One file per note. The heading is the note's first line (a harness file's

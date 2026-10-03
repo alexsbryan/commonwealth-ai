@@ -13,27 +13,27 @@
 [[claim]]
 requirement = "FE-10"
 test = "commonwealth-rails::membership::every_membership_verb_answers_through_cw_rails_alone"
-file = "commonwealth/crates/commonwealth-rails/tests/membership.rs"
+file = "cmnwlth/crates/commonwealth-rails/tests/membership.rs"
 line = 97
 asserts = 43
 
 [[claim]]
 requirement = "FE-15"
 test = "commonwealth-rails::rotate_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"
-file = "commonwealth/crates/commonwealth-rails/tests/rotate_guard.rs"
+file = "cmnwlth/crates/commonwealth-rails/tests/rotate_guard.rs"
 line = 99
 asserts = 3
 
 [[claim]]
 requirement = "FE-17"
 test = "commonwealth-rails::rotate_guard::rotate_refuses_while_an_unconfirmed_peer_is_online"
-file = "commonwealth/crates/commonwealth-rails/tests/rotate_guard.rs"
+file = "cmnwlth/crates/commonwealth-rails/tests/rotate_guard.rs"
 line = 83
 asserts = 3
 
 [[claim]]
 requirement = "FE-7"
 test = "commonwealth-rails::membership::every_membership_verb_answers_through_cw_rails_alone"
-file = "commonwealth/crates/commonwealth-rails/tests/membership.rs"
+file = "cmnwlth/crates/commonwealth-rails/tests/membership.rs"
 line = 97
 asserts = 43

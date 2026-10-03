@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Next-edit build-vs-adopt bakeoff driver — Phase 0.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §7 (Phase 0), §8 item 2.
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §7 (Phase 0), §8 item 2.
 
 For each arm in the manifest this brings up the candidate on llama-server,
 puts `examples/next_edit_score` in front of it (which runs *the daemon's
@@ -20,7 +20,7 @@ Four verdicts, never two (ARCH §18.1): `pass`, `fail`, `could-not-judge`
 `never-ran` (the arm never started — a missing weight file is not a
 model that scored zero).
 
-    python3 scripts/next_edit_bakeoff.py --manifest sovereign/bench/next-edit-bakeoff/arms.toml
+    python3 scripts/next_edit_bakeoff.py --manifest bench/lanes/next-edit-bakeoff/arms.toml
     python3 scripts/next_edit_bakeoff.py --only sweep-1.5b --keep-going
 """
 
@@ -263,8 +263,8 @@ def run_arm(arm: dict, args, outdir: Path) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest",
-                    default="sovereign/bench/next-edit-bakeoff/arms.toml")
-    ap.add_argument("--out", default="sovereign/bench/next-edit-bakeoff/runs")
+                    default="bench/lanes/next-edit-bakeoff/arms.toml")
+    ap.add_argument("--out", default="bench/lanes/next-edit-bakeoff/runs")
     ap.add_argument("--only", action="append", default=None,
                     help="run only these arm ids (repeatable)")
     ap.add_argument("--llama-server", default=shutil.which("llama-server") or "llama-server")

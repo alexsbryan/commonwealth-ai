@@ -32,11 +32,11 @@ recorded in campaign.md.
   the two generators state their values, and the `scope` doc comment is corrected.
 - **All four `CorpusMeta` struct literals are OUT OF CRATE, which changes the error code
   and therefore the mechanism** (verified 2026-09-17, round 4: `git grep -nE 'CorpusMeta
-  \{'` minus the definition at corpus-engine/src/recipe.rs:783): sovereign-tools
+  \{'` minus the definition at ingest/crates/corpus-engine/src/recipe.rs:783): sovereign-tools
   knowledge_view/recipes.rs:41, :136, :260 and catalog_ingest.rs:860. corpus-engine
   itself has ZERO. A private field plus an out-of-crate literal is **E0451** ("field is
   private"), not E0063 ("missing field") — the repo already has the stderr for exactly
-  this shape at kernel-types/tests/ui/citation_without_a_seal.stderr. So the mechanism is
+  this shape at shared/crates/kernel-types/tests/ui/citation_without_a_seal.stderr. So the mechanism is
   a CONSTRUCTOR: `CorpusMeta` gains one that takes the policy by value, the field goes
   private, and the four out-of-crate literals must call it. The plant is then E0451 at a
   literal (the field cannot be named from outside) or E0061 at the constructor (the
@@ -57,13 +57,13 @@ recorded in campaign.md.
   `true` default, so "no second reader can resolve absence its own way" is false until
   each is either folded into the one accessor or NAMED as excluded — the mint decides
   which, per reader, and writes the decision down. Verified 2026-09-17:
-  - `RegistryEntry.mesh_sharing` — corpus-engine/src/registry.rs:76-77,
+  - `RegistryEntry.mesh_sharing` — ingest/crates/corpus-engine/src/registry.rs:76-77,
     `#[serde(default = "default_true")]` at :76 over that crate's own `fn default_true()`
     (registry.rs:112). It reaches the desktop catalog: `Registry::catalog()`
     (registry.rs:311) maps `e.mesh_sharing` at :321 into `BuiltinCorpus`
-    (corpus-engine/src/types.rs:674, the field at :681).
+    (ingest/crates/corpus-engine/src/types.rs:674, the field at :681).
   - `CorpusDefinition.mesh_sharing` — a second manifest parser with its own private
-    default: sovereign/crates/sovereign-tools/src/corpus/registry.rs:45-51,
+    default: svrn/crates/sovereign-tools/src/corpus/registry.rs:45-51,
     `#[serde(default = "default_mesh_sharing")]` at :45 over
     `fn default_mesh_sharing() -> bool { true }` at :49-51, which a
     `git grep default_true` cannot see.
@@ -74,7 +74,7 @@ Measured 2026-09-17, corrected at round 4. The E0063 subject is small — `Corpu
 struct literals are **4 sites / 2 files**; the "5 / 3" an earlier draft carried counted
 `pub struct CorpusMeta {` at recipe.rs:783, the definition itself. The cost is the field going
 private: `.mesh_sharing` is read at **29 sites / 15 files / 6 crates** (16 sites / 8
-files inside corpus-engine/src, 13 / 7 outside), and the `IndexMeta` share of those
+files inside ingest/crates/corpus-engine/src, 13 / 7 outside), and the `IndexMeta` share of those
 is OUT of scope — an installed index keeps its stamp (`[[ability]] custody`
 `not_covered`), so resolve each access by receiver before repointing it.
 

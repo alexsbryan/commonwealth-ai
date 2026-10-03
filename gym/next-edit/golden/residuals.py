@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mine the model's failure pool for structure worth building against.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §4.
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §4.
 
 THE QUESTION THIS ANSWERS: "what does the raw model do poorly at, and is
 there a residual pattern we could scoop up?" A headline useful-fire rate

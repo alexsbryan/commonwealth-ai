@@ -1,7 +1,7 @@
 # SOLVE × Playwright — UI goals through the same two fields
 
 Status: built + live-verified 2026-07-07, both done-means paths, on
-the committed demo app (`sovereign/bench/web-demo`). Fix path: the
+the committed demo app (`bench/lanes/web-demo`). Fix path: the
 planted toast bug → reached in 2 rounds, detected line byte-for-byte
 `playwright · CI=1 npx playwright test --reporter=line --retries=0
 --workers=1`. Pin path: "the Clear button empties the note field" →

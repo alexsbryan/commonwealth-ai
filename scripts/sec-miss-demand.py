@@ -55,7 +55,7 @@ from pathlib import Path
 # The anchor field the Rust writer emits. Kept in ONE place on each side of
 # the language boundary; --self-test proves the two spellings still agree.
 ANCHOR = "f5_demand"
-RUST_WRITER = Path("corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs")
+RUST_WRITER = Path("ingest/crates/corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs")
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # Fields are rendered by tracing's default formatter as `key=value`. The

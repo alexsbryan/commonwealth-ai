@@ -38,7 +38,7 @@ compilation unit — and TOPOLOGY.md:284-287 says so.
 
 - hd-3 has landed: `table()`/`connection()` are `pub(crate)`, `Error::WriterHeld`
   exists, and the per-corpus flock is taken at the index mutation sites.
-- The write methods live on `CorpusIndex` (corpus-engine/src/index/), with the raw
+- The write methods live on `CorpusIndex` (ingest/crates/corpus-engine/src/index/), with the raw
   lancedb mutations in write.rs, create.rs, maintain.rs, raptor.rs, mod.rs.
 - The mint must COUNT BOTH populations before minting rows — the round-3 review
   found this order telling it to census in-crate only, which priced the work at
@@ -47,7 +47,7 @@ compilation unit — and TOPOLOGY.md:284-287 says so.
   `delete_chunks_by_ids`, `dedupe_by_content_hash`, `create_with_sharing`,
   `build_title_scalar_index`, `build_indexes`, `build_raptor_index`,
   `write_field_checkpoint`, `write_field_skeleton`, `mark_ingestion_complete`):
-  - corpus-engine/src — **78 sites / 14 files**
+  - ingest/crates/corpus-engine/src — **78 sites / 14 files**
   - corpus-engine tests + examples — **6 sites / 5 files** (a `tests/` target is a
     separate crate, so it sees only the facade's public surface)
   - outside corpus-engine — **56 sites / 29 files / 8 crates**: sovereign-mesh (17
@@ -67,7 +67,7 @@ compilation unit — and TOPOLOGY.md:284-287 says so.
    left on `CorpusIndex` — that absence is what makes step 3's plant E0599.
    **Two members of the census set are NOT methods and do not belong in the facade**
    (verified 2026-09-17, round 4): `build_raptor_index` is a FREE function at column 0
-   (corpus-engine/src/index/raptor.rs:260), so calling it after a move is E0425
+   (ingest/crates/corpus-engine/src/index/raptor.rs:260), so calling it after a move is E0425
    ("cannot find function"), not E0599 — move it or leave it, but do not count it as a
    facade method; and `create_with_sharing` (create.rs:172) is the constructor that
    CREATES the index, so it cannot be reached from `writer()`, which needs an index to
@@ -86,7 +86,7 @@ compilation unit — and TOPOLOGY.md:284-287 says so.
 
 ## Cap basis (re-priced at round 3, tightened at round 4; cap 8 in STATE.md, was 5 then 9)
 
-1 row for the facade and `writer()`; 2 for corpus-engine/src's 14 files at ~10 a row;
+1 row for the facade and `writer()`; 2 for ingest/crates/corpus-engine/src's 14 files at ~10 a row;
 3 for the 29 out-of-crate files; 1 for the 5 test/example files — **7 rows, cap 8**.
 Round 4 removed the plant row this basis used to charge for: every landing row in this
 campaign carries its PLANT in its own `check:` list (the one standalone plant row,

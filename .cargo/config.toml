@@ -100,18 +100,23 @@ rustflags = [
 # script regardless, so cc's step 1 returns 10.15. Ignored on non-Apple
 # targets; arm64's own baseline (11.0) is higher so 10.15 is harmless there.
 # NB this is a COMPILE-time floor — a rustflags link-arg cannot fix it.
+# `cargo xtask <gate>` from anywhere in the workspace. It lived in
+# corpus-engine/.cargo/config.toml, so it resolved only from inside that crate.
+[alias]
+xtask = "run -p xtask --"
+
 [env]
 MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # The bench tree, absolute, resolved from this file's directory. Lets
 # sovereign-eval's bank tests name their data without climbing out of the
 # crate root, which boundary-gate rule 3c forbids for a liftable package.
-SOVEREIGN_BENCH_ROOT = { value = "sovereign/bench", relative = true }
+SOVEREIGN_BENCH_ROOT = { value = "bench/lanes", relative = true }
 # The CLI contract, absolute: sovereign-cli-shared's `manifest_path` reads it
 # at compile time instead of climbing out of its crate (pb-distribution-svrn-lift).
-SOVEREIGN_CLI_CONTRACT = { value = "sovereign/docs/cli-contract.toml", relative = true }
+SOVEREIGN_CLI_CONTRACT = { value = "svrn/docs/cli-contract.toml", relative = true }
 # The monorepo source tree, absolute, so corpus-engine's workspace-wide gates
 # can name sibling-crate sources without climbing out of the crate root.
 SOVEREIGN_WORKSPACE_ROOT = { value = ".", relative = true }
 # The canonical recipes tree, read at runtime by the recipe gates
 # (corpus-engine tests/main/source_tree.rs, sovereign-pipeline shipped_recipes).
-CORPUS_ENGINE_RECIPES_DIR = { value = "sovereign-recipes", relative = true }
+CORPUS_ENGINE_RECIPES_DIR = { value = "ingest/crates/sovereign-recipes", relative = true }

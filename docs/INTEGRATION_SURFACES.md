@@ -32,18 +32,18 @@ requests. Tools only — no resources or prompts yet — and deliberately
 loopback-only: it exposes local dev tooling, not a remote service.
 
 **OICP** — `GET /oicp/v1/capabilities` plus the ingest extension. The
-spec ([commonwealth/docs/oicp-v0.4.md](../commonwealth/docs/oicp-v0.4.md),
+spec ([cmnwlth/docs/oicp-v0.4.md](../cmnwlth/docs/oicp-v0.4.md),
 v0.3 as fallback) is CC0 — implement it freely on either side.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you
 can lift wholesale to test your own implementation.
 
 **Recipes** — the corpus-ingestion TOML format. The schema reference
-([sovereign-recipes/SCHEMA.md](../sovereign-recipes/SCHEMA.md)) is
+([ingest/crates/sovereign-recipes/SCHEMA.md](../ingest/crates/sovereign-recipes/SCHEMA.md)) is
 generated from the code and test-gated, and the loader keeps old
 recipes working by convention (serde defaults, aliases, versioned
 opt-ins). Start from
-[sovereign-recipes/GETTING_STARTED.md](../sovereign-recipes/GETTING_STARTED.md).
+[ingest/crates/sovereign-recipes/GETTING_STARTED.md](../ingest/crates/sovereign-recipes/GETTING_STARTED.md).
 
 **Corpus snapshots** — `.tar.zst` archives with a versioned manifest
 (`_snapshot_manifest.json`); restore refuses on embedding-model
@@ -53,7 +53,7 @@ same way via the recipe `[prebuilt]` block from Hugging Face.
 **Mesh apps** — corpus-explorer web apps running in the desktop. The
 contract is the `window.meshApp` bridge plus a `meshapp.json`
 manifest; see
-[sovereign/docs/MESHAPP_AUTHORING.md](../sovereign/docs/MESHAPP_AUTHORING.md)
+[svrn/docs/MESHAPP_AUTHORING.md](../svrn/docs/MESHAPP_AUTHORING.md)
 and copy a shipped example.
 
 **Ring rail** — shared, signed, append-only state belonging to a
@@ -72,7 +72,7 @@ something two nodes would spell differently. For a web app the
 contract is `window.ring` — `log`, `record`, `correct`, and a `fold`
 that walks the rail's order and skips voided acts. Start from
 [HOUSE_EXPENSES.md](./HOUSE_EXPENSES.md); the reference is
-[MESHAPP_AUTHORING.md](../sovereign/docs/MESHAPP_AUTHORING.md).
+[MESHAPP_AUTHORING.md](../svrn/docs/MESHAPP_AUTHORING.md).
 Three M0 limits, none of them permanent: the rail is mounted
 loopback-only (no `Peer` or `Guest` surface), rosters are per-node
 files rather than gossiped state, and there is no publish verb — `svrn

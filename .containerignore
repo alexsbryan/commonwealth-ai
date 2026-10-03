@@ -3,7 +3,7 @@
 # multi-GB cargo build outputs — making every container build start
 # with a multi-minute "Sending build context" stall.
 #
-# The Containerfiles under sovereign/container/ COPY in only the paths
+# The Containerfiles under serve/container/ COPY in only the paths
 # cargo / build-scripts actually need; this list enumerates the bulky
 # directories that are NEVER referenced by those COPYs so podman can
 # skip them outright.
@@ -65,7 +65,7 @@ target-container-*/
 dist/
 
 # ─── Re-included on purpose ───────────────────────────────────────────
-# `target/` above is excluded wholesale, but sovereign/container/Containerfile
+# `target/` above is excluded wholesale, but serve/container/Containerfile
 # .local-test COPYs the host-built release binary OUT of it — that image
 # deliberately bakes in a binary compiled on the host rather than rebuilding
 # Rust in-image. Without this negation that COPY cannot resolve and the image
@@ -93,7 +93,7 @@ dist/
 #
 # `target-xwin` is the Windows cross-compile output and matched NEITHER
 # `target/` nor `target-container-*/` — 2042 MB, the single largest offender.
-sovereign/crates/sovereign-desktop/target-xwin/
+clients/desktop/target-xwin/
 # Test output, at the root and under the desktop crate: 497 + 882 MB.
 test-artifacts/
 **/test-artifacts/
@@ -106,13 +106,13 @@ test-artifacts/
 runs/
 .opencode/
 # The mobile tree is not a COPY source for the CLI or desktop images.
-sovereign-mobile/
+clients/mobile/
 
-# sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
+# ingest/crates/sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
 # build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts
 # include_str!s registry.toml + schema/. The tree used to be excluded
 # here when multi-GB bench gyms lived in it — those were evicted to
-# sovereign/bench by the recipes single-source-of-truth refactor, so
+# bench/lanes by the recipes single-source-of-truth refactor, so
 # there is nothing bulky left to skip.
 
 # IDE / editor scratch state.

@@ -14,8 +14,8 @@ Emits under --out-dir:
 Usage:
   .venv/bin/python scripts/p51_dump.py --db ~/.svrnmesh/sovereign.db \
     --chunks ~/.svrnmesh/indexes/sep/chunks.lance --corpus sep \
-    --banks ~/dev/commonwealth-ai/sovereign/bench/sep/summarize.toml \
-            ~/dev/commonwealth-ai/sovereign/bench/sep/summarize_obscure.toml \
+    --banks ~/dev/commonwealth-ai/bench/lanes/sep/summarize.toml \
+            ~/dev/commonwealth-ai/bench/lanes/sep/summarize_obscure.toml \
     --out-dir data
 """
 

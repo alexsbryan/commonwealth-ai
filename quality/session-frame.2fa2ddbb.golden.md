@@ -98,10 +98,10 @@ abandoned approaches.)
 ## Working set
 
 `scripts/fleet-report.py` · `scripts/agent-preflight.py` ·
-`sovereign/crates/sovereign-cli/src/session_cmd.rs` (distill guard) ·
+`svrn/crates/sovereign-cli/src/session_cmd.rs` (distill guard) ·
 `.claude/settings.json` · `.claude/skills/fleet-report/SKILL.md` ·
 `SETUP.md` · `quality/agent-preflight.golden.json` ·
-`sovereign/docs/specs/SESSION_CONTINUITY.md`
+`svrn/docs/specs/SESSION_CONTINUITY.md`
 
 ## Verification
 
