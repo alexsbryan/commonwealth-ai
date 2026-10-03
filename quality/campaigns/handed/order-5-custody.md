@@ -44,7 +44,7 @@ row is an approval-time decision on three data values, answered in the Premises 
   the existing fallback — no second change is needed.
 - **Tracked recipe TOMLs that state nothing: exactly 2.** tomllib over `git ls-files '*.toml'`,
   counting tables with `[corpus] id` and no `mesh_sharing`: `ingest/crates/sovereign-recipes/maple-house/recipe.toml`
-  and `sovereign/crates/sovereign-desktop/src-tauri/resources/starter/recipe.toml`. Both are shipped
+  and `clients/desktop/src-tauri/resources/starter/recipe.toml`. Both are shipped
   as shared today purely by the default.
 - **Production generators that state nothing: exactly 2**, and the tracked-TOML census above cannot
   see either.

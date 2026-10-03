@@ -304,10 +304,10 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: sovereign/crates/sovereign-desktop/package-lock.json
+          cache-dependency-path: clients/desktop/package-lock.json
 
       - name: Install npm deps
-        working-directory: sovereign/crates/sovereign-desktop
+        working-directory: clients/desktop
         run: npm ci
 
       - name: Linux system deps (AppImage / .deb + Vulkan backend)
@@ -451,7 +451,7 @@ jobs:
         run: scripts/stage-daemon-sidecar.sh ${{ matrix.platform.target }}
 
       - name: Tauri build
-        working-directory: sovereign/crates/sovereign-desktop
+        working-directory: clients/desktop
         shell: bash
         env:
           # AppImage tooling (linuxdeploy + its appimage plugin) ship as
@@ -535,7 +535,7 @@ jobs:
           # `<productName>.app.tar.gz` (+ .sig) — identical names across the
           # two mac targets, which would collide in the publish job's flatten
           # step and can't carry the arch the updater manifest endpoint
-          # (landing/api/desktop/updater.js) matches on. Rename to
+          # (clients/landing/api/desktop/updater.js) matches on. Rename to
           # `<productName>_<ver>_<aarch64|x64>.app.tar.gz`. Renaming is safe:
           # the .sig signs the tar.gz BYTES, and the manifest inlines the sig
           # content while pointing at the renamed asset URL.
@@ -686,4 +686,4 @@ jobs:
             the "Check for updates" affordance, served from svrnme.sh.
 
             Code signing (Apple Developer ID, Windows Authenticode) is
-            deferred — see `sovereign/crates/sovereign-desktop/RELEASING.md`.
+            deferred — see `clients/desktop/RELEASING.md`.

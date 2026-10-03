@@ -56,7 +56,7 @@ browser tab needed.
    `SOVEREIGN_DECOMP_DECAY`, were cut with their retrieval steps (ac032e5bc); setting
    them now only prints a startup warning.
 5. **Desktop retrieval reachable:** launch the app (dev: `npm run dev` in
-   `sovereign/crates/sovereign-desktop/`, then `tauri dev`; or the packaged `.app`). It
+   `clients/desktop/`, then `tauri dev`; or the packaged `.app`). It
    attaches to the daemon on `:9741`. **Dry-run the Act 2 question** and confirm a citation
    popover shows the source email.
 6. **CAPTURE the hero answers ahead of time** (35B synth is slow live). See **§Capture**.

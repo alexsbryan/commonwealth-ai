@@ -7,7 +7,7 @@
 //!      SEMVER — never GitHub list order. Every release here shares
 //!      an identical `created_at` (derived from the tagged commit's date), so
 //!      GitHub's ordering is an unstable tiebreak; the desktop updater
-//!      endpoint and `landing/install.sh` both hit — and fixed — this exact
+//!      endpoint and `clients/landing/install.sh` both hit — and fixed — this exact
 //!      trap (2026-07-15). Trusting `[0]` handed users an OLDER version.
 //!   3. when newer, re-runs the CANONICAL installer (`curl … | install.sh`)
 //!      pinned to that version — so "download + checksum + place binaries"
@@ -27,7 +27,7 @@ use std::process::Stdio;
 /// `cli-v*` until the next release is cut here, and the source repo still
 /// carries a stale `cli-v0.1.19` from July. So the answer is MAX SEMVER
 /// ACROSS BOTH — never "the first repo that answers", which would offer
-/// 0.1.19 to someone running 0.6.0. `landing/install.sh` resolves the
+/// 0.1.19 to someone running 0.6.0. `clients/landing/install.sh` resolves the
 /// download the same way; drop both entries together.
 const REPOS: &[&str] = &["alexsbryan/commonwealth-ai", "alexsbryan/svrnmesh-releases"];
 const INSTALL_URL: &str = "https://svrnme.sh/install.sh";

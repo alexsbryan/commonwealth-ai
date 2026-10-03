@@ -159,7 +159,7 @@ members = [
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
     "svrn/crates/sovereign-workflow-host",
-    "studio/crates/sovereign-studio",
+    "clients/studio",
     # Headless studio CLI — authors + tests recipes and runs workflows against any
     # OICP daemon, linking ONLY the studio crates + shared leaves (no corpus-engine,
     # no sovereign-core). The proof the studio package is independently usable.
@@ -197,17 +197,17 @@ members = [
     "serve/crates/sovereign-serve",
     # The stock distribution (docs/internal/FIVE_PROGRAMS.md §2c; pb-stock-binary): svrn
     # with serve hosted in one process, what `svrn daemon run` execs.
-    "sovereign/crates/sovereign-stock",
+    "distributions/crates/sovereign-stock",
     # The on-prem distribution (docs/internal/FIVE_PROGRAMS.md §2c; phase-b-86, -87):
     # svrn, serve and ingest in one process, with no code, no mesh, and svrn's
     # open-web surfaces and `/mcp` withheld.
-    "sovereign/crates/sovereign-onprem",
+    "distributions/crates/sovereign-onprem",
     # Ingest's hosting composition for svrn, the one `hosted()` both
     # distributions call (docs/internal/FIVE_PROGRAMS.md §2c; phase-b-88).
-    "sovereign/crates/sovereign-hosted-ingest",
+    "distributions/crates/sovereign-hosted-ingest",
     "svrn/crates/sovereign-service",
-    "sovereign/crates/sovereign-desktop/src-tauri",
-    "sovereign-mobile/src-tauri",
+    "clients/desktop/src-tauri",
+    "clients/mobile/src-tauri",
     # The phone surface. Promoted into the workspace 2026-09-10 (sv-surface R6):
     # it was detached so that unverified mobile deps could not break the main
     # build, for as long as it hand-rolled its OWN copy of the turn protocol. It now
@@ -384,7 +384,7 @@ sovereign-store = { path = "svrn/crates/sovereign-store" }
 sovereign-time = { path = "shared/crates/sovereign-time" }
 sovereign-tools = { path = "svrn/crates/sovereign-tools" }
 sovereign-code = { path = "code/crates/sovereign-code" }
-sovereign-studio = { path = "studio/crates/sovereign-studio" }
+sovereign-studio = { path = "clients/studio" }
 sovereign-gliner = { path = "serve/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "ingest/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "ingest/crates/sovereign-enrichment-build" }
@@ -408,7 +408,7 @@ sovereign-work-atlas = { path = "code/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "code/crates/sovereign-agent-bench" }
 sovereign-eval = { path = "bench/crates/sovereign-eval" }
 sovereign-authoring-harness = { path = "ingest/crates/sovereign-authoring-harness" }
-sovereign-hosted-ingest = { path = "sovereign/crates/sovereign-hosted-ingest" }
+sovereign-hosted-ingest = { path = "distributions/crates/sovereign-hosted-ingest" }
 sovereign-agent-tools = { path = "code/crates/sovereign-agent-tools" }
 sovereign-tdd = { path = "code/crates/sovereign-tdd" }
 commonwealth-core = { path = "cmnwlth/crates/commonwealth-core" }

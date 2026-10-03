@@ -16,7 +16,7 @@ tesseract removed from the bundle (kept as a code fallback), and verified bootin
 
 ## Why this exists
 
-Two things surfaced working through `sovereign/crates/sovereign-desktop/RELEASING.md`:
+Two things surfaced working through `clients/desktop/RELEASING.md`:
 
 1. **OCR peer-dep wart.** The OCR pipeline (`pdfium rasterize → tesseract subprocess → daemon LLM cleanup`) is architecturally sound, but v1 ships **no self-contained tesseract** on macOS/Linux — users must `brew/apt install tesseract`. We want to delete that dependency class.
 2. **Desktop bundle weight.** The desktop binary is ~397 MB, **unstripped** (835k symbols); 207 MB of `.text` from static llama/ggml-vulkan + LanceDB + tantivy + **ONNX Runtime (already statically linked, ~29k symbols, for GLiNER)**.

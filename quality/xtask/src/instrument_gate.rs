@@ -706,7 +706,7 @@ mod tests {
     fn npm_npx_and_cargo_invocations_become_keys() {
         assert_eq!(keys("      - run: npm run check"), vec!["npm:check"]);
         assert_eq!(
-            keys("npm --prefix sovereign/crates/sovereign-desktop run test:e2e"),
+            keys("npm --prefix clients/desktop run test:e2e"),
             vec!["npm:test:e2e"]
         );
         assert_eq!(

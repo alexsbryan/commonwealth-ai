@@ -2047,7 +2047,7 @@ _Historical record below — the reasoning while this row was `preview`._
   feature is the wrong granularity for a product capability, and is
   here only because no runtime control exists.
 - **Settled by:** the on-prem pilot
-  (`sovereign/deploy/onprem/PLAN.md`). If the pilot does not proceed,
+  (`distributions/deploy/onprem/PLAN.md`). If the pilot does not proceed,
   the items above are the standing debt regardless — this crate is
   reachable from the desktop's embedded host too.
 - **Review by:** 2026-09-15.
@@ -2065,7 +2065,7 @@ _Historical record below — the reasoning while this row was `preview`._
   assets (`det.onnx` + `rec.onnx` + `dict.txt` = 12.6 MB, `libpdfium`
   = 7.6 MB) that a default install does not fetch. Off-by-default
   keeps dev builds and the standard release set unchanged;
-  `sovereign/deploy/onprem/package.sh` turns it on.
+  `distributions/deploy/onprem/package.sh` turns it on.
 - **Flip condition (falsifiable):** default-on when (a) the added
   clean-build wall time for `-p sovereign-cli-daemon` is measured at
   under 60 s, **and** (b) the OCR assets ship in the standard release

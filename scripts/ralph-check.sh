@@ -111,7 +111,7 @@ case "$check" in
              run py 12 python3 "$1" --self-test ;;
     campaign) [ -n "${1:-}" ] || { echo "usage: ralph-check.sh campaign <id>" >&2; exit 2; }
              run campaign 5 python3 -c "import sys,tomllib; tomllib.load(open(f'quality/campaigns/{sys.argv[1]}.toml','rb'))" "$1" ;;
-    desktop) run desktop 12 bash -c 'cd sovereign/crates/sovereign-desktop && npm run check && npm run test' ;;
+    desktop) run desktop 12 bash -c 'cd clients/desktop && npm run check && npm run test' ;;
     pilot)   run pilot 20 research/ontology-retrieval/pilot/run-pilot.sh ;;
     testall) run testall 12 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human ;;
     decisions) run decisions 5 python3 scripts/ralph-decisions.py --check ;;

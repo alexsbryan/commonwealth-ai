@@ -3,7 +3,7 @@
 """
 SABOTAGE (Rust side) — does the suite actually notice when the product breaks?
 
-The sibling of sovereign/crates/sovereign-desktop/tests/e2e/scripts/sabotage.mjs,
+The sibling of clients/desktop/tests/e2e/scripts/sabotage.mjs,
 deliberately the same noun and the same bank schema. That one adjudicates
 Playwright specs; this one adjudicates the 11k-test Rust workspace, and it is
 the ADJUDICATOR for requirement conformance: a claim is minted only when the

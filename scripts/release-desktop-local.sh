@@ -9,7 +9,7 @@
 # The per-platform traps (lance-linalg AVX-512 cfg, AppImage binfmt magic,
 # virtiofs copies, DMG TCC fallback, updater second pass) are all handled
 # inside the two build scripts — this driver just sequences, verifies, and
-# uploads. See sovereign/crates/sovereign-desktop/RELEASING.md § "Full
+# uploads. See clients/desktop/RELEASING.md § "Full
 # local release from the arm64 Mac".
 #
 # Usage:
@@ -51,7 +51,7 @@ for arg in "$@"; do
 done
 
 # ─── Pre-flight ───────────────────────────────────────────────────────
-CONF=sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json
+CONF=clients/desktop/src-tauri/tauri.conf.json
 VERSION="$(python3 -c "import json;print(json.load(open('$CONF'))['version'])")"
 TAG="desktop-v$VERSION"
 # Releases publish to THIS repo. It is public, so its release assets are

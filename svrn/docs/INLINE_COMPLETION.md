@@ -3,7 +3,7 @@
 Status: **v1 IMPLEMENTED** (2026-07-21). Ghost-text inline completion
 served by the resident Sovereign daemon over `POST /v1/completions`,
 consumed by the first-party VSCode extension
-(`packages/vscode-sovereign/`). JetBrains port deliberately deferred
+(`clients/vscode/`). JetBrains port deliberately deferred
 (the daemon contract is IDE-agnostic; ~2-3 days of Kotlin/Gradle when
 wanted). SCIP context injection deferred to a measured v2 (§5).
 
@@ -175,7 +175,7 @@ by JSON path.
 
 ### 3.6 IDE plugin (VSCode; JetBrains deferred)
 
-`packages/vscode-sovereign/` — zero-runtime-dep esbuild bundle:
+`clients/vscode/` — zero-runtime-dep esbuild bundle:
 `InlineCompletionItemProvider` with 120ms debounce, single-flight
 abort (CancellationToken → AbortController → SSE socket close →
 daemon receiver-drop cancels mid-token), line-stable context capture
@@ -270,5 +270,5 @@ bench clears.
    (`sovereign-inference/tests/fim_raw_path.rs`) — Raw through
    `EmbeddedLlamaCpp` directly, two sequential requests proving the
    LCP path doesn't desync.
-4. Extension: `npm test` in `packages/vscode-sovereign` (vitest +
+4. Extension: `npm test` in `clients/vscode` (vitest +
    mock daemon, incl. abort-actually-closes-socket).

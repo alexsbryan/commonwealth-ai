@@ -21,7 +21,7 @@
 
 "area: desktop":
   - changed-files:
-      - any-glob-to-any-file: "sovereign/crates/sovereign-desktop/**"
+      - any-glob-to-any-file: "clients/desktop/**"
 
 "area: docs":
   - changed-files:

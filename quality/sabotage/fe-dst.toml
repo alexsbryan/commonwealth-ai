@@ -114,7 +114,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-9-ner_processed_marker_makes_empty_chunks_"
 requirement = "FE-9"
-target = "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"
+target = "clients/desktop/src-tauri/src/state.rs"
 find = "    pub sqlite_store: RwLock<Option<Arc<SqliteStateStore>>>,"
 replace = "    pub sqlite_store: RwLock<Option<Arc<SqliteStateStore>>>,\n    // MUTATION: Introduce a race condition or incorrect initialization that could lead to inconsistent state access, potentially violating the file-then-pointer ordering requirement if the store is accessed before full initialization in concurrent contexts.\n    #[allow(dead_code)]\n    _phantom_state_check: std::marker::PhantomData<std::sync::Mutex<bool>>,"
 mustFail = ["ner_processed_marker_makes_empty_chunks_converge"]

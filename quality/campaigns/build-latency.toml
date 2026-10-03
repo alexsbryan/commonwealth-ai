@@ -65,7 +65,7 @@ weight = 140
 test   = "shard_index_and_count_read_the_convention"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"
+file   = "clients/desktop/src-tauri/src/state.rs"
 crate  = "sovereign-desktop"
 weight = 137
 test   = "deterministic_with_seed"

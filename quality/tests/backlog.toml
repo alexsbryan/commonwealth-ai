@@ -1099,7 +1099,7 @@ found = "2026-08-28"
 class = "instrument-defect"
 tier = 2
 surface = "shell"
-target = "sovereign/crates/sovereign-desktop/tests/e2e/chaos.mjs"
+target = "clients/desktop/tests/e2e/chaos.mjs"
 failure = """Same note, fourth open item: the chaos harness's `read_get_chunk`
 succeeds on corpora that can never answer, because chunks exist even when no
 vector index does. It happily generates questions from a corpus that will refuse

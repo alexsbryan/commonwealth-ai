@@ -10,7 +10,7 @@ initiatives 2026-07-18).
 
 ← companions: `RETRIEVAL_REDESIGN.md` (the retrieval half of the same
 program — §4 unifies with its S2/S5), `specs/TIERED_RETRIEVAL_MEMORIES.md`,
-`sovereign/crates/sovereign-desktop/TEACHABLE.md` (fact-vs-lesson split),
+`clients/desktop/TEACHABLE.md` (fact-vs-lesson split),
 `svrn/KNOWLEDGE_BASE_FEAT.md` (the unbuilt coverage-pipeline spec this
 subsumes), `GROUNDING_GATE_ENV.md`.
 

@@ -93,7 +93,7 @@ dist/
 #
 # `target-xwin` is the Windows cross-compile output and matched NEITHER
 # `target/` nor `target-container-*/` — 2042 MB, the single largest offender.
-sovereign/crates/sovereign-desktop/target-xwin/
+clients/desktop/target-xwin/
 # Test output, at the root and under the desktop crate: 497 + 882 MB.
 test-artifacts/
 **/test-artifacts/
@@ -106,7 +106,7 @@ test-artifacts/
 runs/
 .opencode/
 # The mobile tree is not a COPY source for the CLI or desktop images.
-sovereign-mobile/
+clients/mobile/
 
 # ingest/crates/sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
 # build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts

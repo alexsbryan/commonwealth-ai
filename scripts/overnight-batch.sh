@@ -204,7 +204,7 @@ fi
 if wants 3; then
   hdr "BLOCK 3 — desktop-soak (dual)"
   B3="$OUT/block3"; mkdir -p "$B3"
-  CAL="$REPO/sovereign/crates/sovereign-desktop/tests/e2e/scripts/calibrate-judge.mjs"
+  CAL="$REPO/clients/desktop/tests/e2e/scripts/calibrate-judge.mjs"
   SOAK_MIN="${OVERNIGHT_SOAK_MIN:-120}"
   if [ ! -f "$REPO/scripts/desktop-soak.py" ]; then
     record "block3-soak" "NEVER-RAN" "scripts/desktop-soak.py missing"
@@ -219,7 +219,7 @@ if wants 3; then
     # specificity 0.8). An uncalibrated judge produces numbers, not evidence.
     calib="unknown"
     if [ -f "$CAL" ]; then
-      ( cd "$REPO/sovereign/crates/sovereign-desktop" && node "$CAL" ) > "$B3/judge-calibration.log" 2>&1 \
+      ( cd "$REPO/clients/desktop" && node "$CAL" ) > "$B3/judge-calibration.log" 2>&1 \
         && calib="pass" || calib="FAIL"
       note "  judge calibration: $calib"
     else

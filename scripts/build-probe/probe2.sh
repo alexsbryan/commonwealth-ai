@@ -45,7 +45,7 @@ timeit flip - lint-scoped-noedit 1 $LOCK env CARGO_LOG=cargo::core::compiler::fi
 echo "=== (B) clean re-measure $(date) ==="; settle
 PROBES=(
 "svrn/crates/sovereign-cli-llm/src/lib.rs|sovereign-cli-llm"
-"sovereign/crates/sovereign-desktop/src-tauri/src/state.rs|sovereign-desktop"
+"clients/desktop/src-tauri/src/state.rs|sovereign-desktop"
 "svrn/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools"
 "svrn/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs|sovereign-cli-daemon"
 "shared/crates/sovereign-turn-client/src/lib.rs|sovereign-turn-client"

@@ -61,7 +61,7 @@ fn contracts_skills_source() -> String {
 /// delegate, so the pin below is on the whole crate: no registration
 /// call, no embed, anywhere.
 fn desktop_rust_source() -> String {
-    let root = repo_root::repo_root().join("sovereign/crates/sovereign-desktop/src-tauri/src");
+    let root = repo_root::repo_root().join("clients/desktop/src-tauri/src");
     let mut files = Vec::new();
     walk(&root, &mut files);
     files.sort();

@@ -53,7 +53,7 @@ PROBES=(
 "svrn/crates/sovereign-core/src/deep_research/mod.rs|sovereign-core|gates_require_both_absolute_and_margin"
 "ingest/crates/corpus-engine/src/engine/mod.rs|corpus-engine|stamp_then_load_round_trips"
 "svrn/crates/sovereign-cli-llm/src/lib.rs|sovereign-cli-llm|shard_index_and_count_read_the_convention"
-"sovereign/crates/sovereign-desktop/src-tauri/src/state.rs|sovereign-desktop|deterministic_with_seed"
+"clients/desktop/src-tauri/src/state.rs|sovereign-desktop|deterministic_with_seed"
 "svrn/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools|is_pathological_all_zero"
 "shared/crates/sovereign-contracts/src/setup_config.rs|sovereign-contracts|noop_observer_is_send_sync"
 "svrn/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs|sovereign-cli-daemon|restarts_on_panic_then_completes"

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The on-prem kit's route and literal lists agree (phase-b-86, -87).
 //!
-//! - sovereign/deploy/onprem/nginx/firm-rag.conf proxies exactly the routes
+//! - distributions/deploy/onprem/nginx/firm-rag.conf proxies exactly the routes
 //!   acceptance.sh exercises (its `CLIENT_ROUTES`, every one probed by check
 //!   0b), method for method, with nothing more;
 //! - each of them is a route a lawyer's key may reach — sovereign-daemon's
@@ -23,10 +23,10 @@ use std::collections::{BTreeMap, BTreeSet};
 mod repo_root;
 use repo_root::repo_root;
 
-const KIT: &str = "sovereign/deploy/onprem";
+const KIT: &str = "distributions/deploy/onprem";
 const API_KEYS: &str = "svrn/crates/sovereign-daemon/src/api_keys.rs";
 const CLIENT_AUTH: &str = "svrn/crates/sovereign-daemon/src/client_auth.rs";
-const SEALED_E2E: &str = "sovereign/crates/sovereign-onprem/tests/sealed_composition_e2e.rs";
+const SEALED_E2E: &str = "distributions/crates/sovereign-onprem/tests/sealed_composition_e2e.rs";
 
 fn read(rel: &str) -> String {
     let path = repo_root().join(rel);

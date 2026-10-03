@@ -14,7 +14,7 @@ question: what stands between the current platform and that first
 
 | Window | Step | State today |
 |---|---|---|
-| t=0 | one command the person already trusts | EXISTS — `curl -fsSL https://svrnme.sh/install.sh \| sh` installs the three CLI binaries (`landing/install.sh`, platform-detect, checksummed) |
+| t=0 | one command the person already trusts | EXISTS — `curl -fsSL https://svrnme.sh/install.sh \| sh` installs the three CLI binaries (`clients/landing/install.sh`, platform-detect, checksummed) |
 | t≈2m | binaries in place | EXISTS |
 | t≈2-10m | model + embed + starter corpus download | EXISTS AS PARTS — `svrn setup` fetches GGUFs; the docs' CPU-only floor for a real primary is **~2.5 GB** (`TWO_NODE_QUICKSTART.md`), embed ~0.6 GB, a starter corpus ~0.5 GB (`svrn corpus install sep`). Total ≈ 3.5 GB ≈ 5 min on 100 Mb/s, longer on bad Wi-Fi — a bracket to measure, not a number to claim |
 | t≈10-12m | point at their documents | EXISTS — `svrn corpus watch <dir>` is one command; sweep picks up additions |
@@ -26,7 +26,7 @@ collapse.
 
 ## 2. What exists already (the inventory — most of this is assembled, not built)
 
-- **The one-command install.** `landing/install.sh` does curl|sh with
+- **The one-command install.** `clients/landing/install.sh` does curl|sh with
   platform detection and checksums. Targets: Linux x86_64, macOS
   arm64/x86_64. No Windows.
 - **Model acquisition.** `svrn setup` fetches GGUFs from HuggingFace —

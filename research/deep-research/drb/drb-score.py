@@ -79,7 +79,7 @@ COST_PROXY = 1.45            # $/task, o3-deep-research at 50K/20K/15-search mix
 
 # THE one decline-shape implementation (§10.6, order deep-research-t3d,
 # 2026-08-17): the union regex ported VERBATIM from
-# sovereign/crates/sovereign-desktop/tests/e2e/scripts/lib/classify.mjs
+# clients/desktop/tests/e2e/scripts/lib/classify.mjs
 # (the single definition site; calibrate-judge.mjs's local copy was
 # removed — the union is a superset of both prior copies, so no
 # consumer's behavior changed). One decline shape, one definition site;

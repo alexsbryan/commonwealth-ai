@@ -107,7 +107,7 @@ name = "oicp-types"
 allow = []
 [[package]]
 name = "demo"
-doc = "studio/BOUNDARY.md"
+doc = "clients/studio/BOUNDARY.md"
 crates = ["pkg-a", "pkg-b"]
 "#,
     )

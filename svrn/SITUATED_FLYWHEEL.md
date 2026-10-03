@@ -59,7 +59,7 @@
 
 Spec, 2026-08-04. Status: PROPOSED — no phase is funded until the operator
 signs off. Companion surfaces: `bench/moral/` (the apparatus this reuses),
-`bench/chaos_monkey/` (the bank it extends), `landing/situated-agent.html`
+`bench/chaos_monkey/` (the bank it extends), `clients/landing/situated-agent.html`
 (the thesis it operationalizes).
 
 ## Objective

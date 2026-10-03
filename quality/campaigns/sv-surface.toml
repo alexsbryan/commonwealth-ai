@@ -1081,7 +1081,7 @@ check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (c
 #   smoketest - meshapp webview auth - supervisor (process management).
 # OUT OF SCOPE: mobile SHIPPING (real keychain, iOS/Android project
 # generation, signing, TestFlight) - a product decision with an Apple
-# toolchain attached, not an architecture one (sovereign-mobile/HANDOFF.md).
+# toolchain attached, not an architecture one (clients/mobile/HANDOFF.md).
 #
 # ── LADDER ──────────────────────────────────────────────────────────────────
 #
@@ -1699,7 +1699,7 @@ status       = "open"
 #   * half 1 — the five burn-down [[exception]] rows removed: 5 violations,
 #     one per crate the desktop reached, each naming its path.
 #   * half 2 — a retained `std::process::Child` + `try_wait` + respawn planted
-#     in sovereign-mobile/src-tauri/src/state.rs (a surface that was CLEAN):
+#     in clients/mobile/src-tauri/src/state.rs (a surface that was CLEAN):
 #     3 violations, one per rule. Same plant in the desktop's attach_watch.rs
 #     (the file the bar names as where a Down-triggered respawn would be
 #     written): 2 violations. Both restored byte-identical, git status clean.

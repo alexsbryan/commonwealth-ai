@@ -103,9 +103,9 @@
 2754	svrn/crates/sovereign-daemon/src/routes_responses.rs
 2250	svrn/crates/sovereign-daemon/src/state.rs
 2102	svrn/crates/sovereign-daemon/src/turn_http.rs
-1479	sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs
-1287	sovereign/crates/sovereign-desktop/src-tauri/src/commands/conversation.rs
-1316	sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs
+1479	clients/desktop/src-tauri/src/commands/chat.rs
+1287	clients/desktop/src-tauri/src/commands/conversation.rs
+1316	clients/desktop/src-tauri/src/local_corpus_commands.rs
 1914	bench/crates/sovereign-eval/src/chaos_monkey/score.rs
 1364	bench/crates/sovereign-eval/src/flywheel/generators/adversarial.rs
 4406	serve/crates/sovereign-inference/src/embedded/engine.rs

@@ -85,7 +85,7 @@ identities.
 
 ## Part B — build the app on it
 
-The bundle is composed from the **MeshApp SDK** (`sovereign/crates/sovereign-desktop/public/meshapp/_sdk/`,
+The bundle is composed from the **MeshApp SDK** (`clients/desktop/public/meshapp/_sdk/`,
 dependency-free ES modules). You almost never write DOM — you compose components.
 
 4. **Scaffold** an SDK-composed explorer:
@@ -94,7 +94,7 @@ dependency-free ES modules). You almost never write DOM — you compose componen
    sovereign meshapp new my-explorer --corpus my-corpus
    ```
 
-   This writes `sovereign/crates/sovereign-desktop/public/meshapp/my-explorer/{index.html, app.js, meshapp.json}` — a
+   This writes `clients/desktop/public/meshapp/my-explorer/{index.html, app.js, meshapp.json}` — a
    working explorer: a scale banner, a force-directed graph with a type toggle, search,
    and the cited drill-down.
 
@@ -123,9 +123,9 @@ dependency-free ES modules). You almost never write DOM — you compose componen
    | `claimList` / `questionList` | argument cards and open-question cards, with the corpus's own words |
    | `storyShow` / `heatGrid` | the lean-back full-screen card deck (the Wrapped form) and an hour-of-week grid |
 
-   `sovereign/crates/sovereign-desktop/public/meshapp/enron/app.js` is the full worked example.
+   `clients/desktop/public/meshapp/enron/app.js` is the full worked example.
 
-6. **Ship it** so consumers get one-click data. In `sovereign/crates/sovereign-desktop/public/meshapp/my-explorer/`:
+6. **Ship it** so consumers get one-click data. In `clients/desktop/public/meshapp/my-explorer/`:
    - copy your `recipe.toml` into the bundle (it carries the `[prebuilt]` block);
    - add `corpus_data` to `meshapp.json`:
 

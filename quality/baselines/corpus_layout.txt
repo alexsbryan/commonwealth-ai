@@ -30,8 +30,8 @@
 5	code/crates/sovereign-cli-dev/src/code_refresh.rs
 6	code/crates/sovereign-cli-dev/src/git_archaeology_cmd.rs
 3	code/crates/sovereign-cli-dev/src/rough_edges_cmd.rs
-2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs
-2	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
+2	clients/desktop/src-tauri/src/commands/corpus_install.rs
+2	clients/desktop/src-tauri/src/import_commands.rs
 8	svrn/crates/sovereign-grants/src/shard_manager.rs
 1	svrn/crates/sovereign-daemon/src/auto_resume.rs
 3	svrn/crates/sovereign-daemon/src/reading_http.rs

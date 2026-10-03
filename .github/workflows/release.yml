@@ -141,8 +141,8 @@ jobs:
             # entries — no dependency changes, no network, no compilation.
             cargo update --workspace
             git add Cargo.toml Cargo.lock \
-              sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \
-              sovereign/crates/sovereign-desktop/package.json
+              clients/desktop/src-tauri/tauri.conf.json \
+              clients/desktop/package.json
             git commit -m "release: v${version} (${bump} bump via Release workflow)"
           fi
 

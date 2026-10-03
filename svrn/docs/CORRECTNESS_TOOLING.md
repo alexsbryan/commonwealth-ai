@@ -45,11 +45,11 @@ Grouped by what each tool actually protects, not by where the code lives.
 
 ### 5. UI responsiveness — TTFI
 
-The Playwright suite lives in `sovereign/crates/sovereign-desktop/tests/e2e/`. Run via `npm run` from that directory.
+The Playwright suite lives in `clients/desktop/tests/e2e/`. Run via `npm run` from that directory.
 
 | Tool | Command | Protects | Source |
 |---|---|---|---|
-| **TTFI (time to first intelligence)** | `npm run test:ttfi` then `npm run report:ttfi` (with optional baseline diff via `report:ttfi:save-baseline`) | Six observed tiers + a derived `gap` measured in-page from the Send-click anchor: `generic`, `specific`, `aux`, `visible`, `thinking`, `content`, and `gap = content − specific`. Mocks at the Tauri-event boundary, not HTTP — measures exactly what the user perceives. Methodology in `sovereign/crates/sovereign-desktop/tests/e2e/TTFI.md`. | `tests/e2e/specs/ttfi.spec.ts` + `fixtures/ttfi-probe.js` + `scripts/ttfi-summary.mjs` |
+| **TTFI (time to first intelligence)** | `npm run test:ttfi` then `npm run report:ttfi` (with optional baseline diff via `report:ttfi:save-baseline`) | Six observed tiers + a derived `gap` measured in-page from the Send-click anchor: `generic`, `specific`, `aux`, `visible`, `thinking`, `content`, and `gap = content − specific`. Mocks at the Tauri-event boundary, not HTTP — measures exactly what the user perceives. Methodology in `clients/desktop/tests/e2e/TTFI.md`. | `tests/e2e/specs/ttfi.spec.ts` + `fixtures/ttfi-probe.js` + `scripts/ttfi-summary.mjs` |
 | **Chat E2E suites** | `npm run test:e2e` | Golden path, edge cases, chaos, conversation routing, placeholder, mesh-health, watched-folder, reading-conversation. | `tests/e2e/specs/chat-*.spec.ts`, `mesh-health.spec.ts`, `reading-conversation.spec.ts`, `watched-folder-detail.spec.ts` |
 | **MeshApp LVT bundle** | `npx playwright test specs/meshapp-lvt.spec.ts` | Agent-drivable verification of the first-party SF-LVT explorer (sandboxed mesh app): renders cited figures + verbatim derivation, the rate slider drives revenue, a bridge denial fails closed, and the **real host shim** wires `window.meshApp` → `__TAURI_INTERNALS__` (the only test that exercises the shim→IPC path — where the `withGlobalTauri`-off bug hid). Mocks the bridge; a11y/role/text locators; headless. | `tests/e2e/specs/meshapp-lvt.spec.ts` + `src-tauri/src/meshapp_shim.js` |
 | **Component / state-machine tests** | `npm run test` (vitest) | Approval, routing, skills, setupWizard, chat XState machines + Svelte component contracts. | `src/lib/**/*.test.ts`, `src/lib/machines/**/*.test.ts` |
@@ -123,5 +123,5 @@ Separate from the everyday CLIs above; used for longer experiments where you wan
 
 - Eval banks: `bench/lanes/<corpus>/*.toml` (e.g. `bench/lanes/voice/*.toml`, `bench/lanes/wikipedia/questions.toml`).
 - Eval reports: pass `--output <path>` to anything that supports it. Run outputs are not committed — write them under `target/` or a `bench/lanes/<corpus>/baselines/` dir as needed.
-- TTFI reports: `sovereign/crates/sovereign-desktop/tests/e2e/.ttfi-report.json`; baseline at `.ttfi-baseline.json`.
-- Bench harness internals: `svrn/docs/BENCHMARKING.md` (embed) and `sovereign/crates/sovereign-desktop/tests/e2e/TTFI.md` (UI).
+- TTFI reports: `clients/desktop/tests/e2e/.ttfi-report.json`; baseline at `.ttfi-baseline.json`.
+- Bench harness internals: `svrn/docs/BENCHMARKING.md` (embed) and `clients/desktop/tests/e2e/TTFI.md` (UI).

@@ -147,7 +147,7 @@ if ! cargo tauri --version >/dev/null 2>&1; then
 fi
 
 # ─── Stage external binaries ─────────────────────────────────────────
-BIN_DIR="sovereign/crates/sovereign-desktop/src-tauri/binaries"
+BIN_DIR="clients/desktop/src-tauri/binaries"
 mkdir -p "$BIN_DIR"
 
 stage_tesseract_for() {
@@ -174,7 +174,7 @@ fi
 # `svrn` on PATH still gets a working app. Separate from the fetch above
 # because this one BUILDS (see the script header); it must therefore come
 # after the toolchain/cross-compile setup this script does below.
-SIDECAR="sovereign/crates/sovereign-desktop/src-tauri/binaries/sovereign-cli-daemon"
+SIDECAR="clients/desktop/src-tauri/binaries/sovereign-cli-daemon"
 if (( UNIVERSAL )); then
     bash scripts/stage-daemon-sidecar.sh "aarch64-apple-darwin"
     bash scripts/stage-daemon-sidecar.sh "x86_64-apple-darwin"
@@ -193,7 +193,7 @@ fi
 
 # ─── Frontend deps ────────────────────────────────────────────────────
 log "Installing npm deps..."
-(cd sovereign/crates/sovereign-desktop && npm ci --no-audit --no-fund)
+(cd clients/desktop && npm ci --no-audit --no-fund)
 
 # ─── Signing visibility ──────────────────────────────────────────────
 # Two independent signatures are in play; don't conflate them:
@@ -245,7 +245,7 @@ rm -f "$OUT_DIR"/macos/*.app.tar.gz "$OUT_DIR"/macos/*.app.tar.gz.sig
 # DMG bundling reported exit 0 because of `| tee`).
 log "Running cargo tauri build $TARGET_ARG ..."
 set +e
-(cd sovereign/crates/sovereign-desktop && cargo tauri build \
+(cd clients/desktop && cargo tauri build \
     $TARGET_ARG \
     --config src-tauri/tauri.release.conf.json)
 BUILD_RC=$?
@@ -314,7 +314,7 @@ fi
 # useless — the updater rejects them).
 if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]] && ! ls "$OUT_DIR"/macos/*.app.tar.gz >/dev/null 2>&1; then
     log "Updater archive missing (the DMG failure aborted the bundler) — running an app-only pass to emit + sign it..."
-    (cd sovereign/crates/sovereign-desktop && cargo tauri build \
+    (cd clients/desktop && cargo tauri build \
         $TARGET_ARG \
         --bundles app \
         --config src-tauri/tauri.release.conf.json)

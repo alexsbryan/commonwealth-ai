@@ -2,7 +2,7 @@
 //! `svrn setup --fim` — one-command inline-completion onboarding.
 //!
 //! The manual flow this replaces is seven steps in
-//! `packages/vscode-sovereign/README.md`: download a coder GGUF,
+//! `clients/vscode/README.md`: download a coder GGUF,
 //! download an embed GGUF, hand-write a `[models.edit]` block, restart
 //! the daemon, curl a completion, build a `.vsix`, install it. Every
 //! step has a failure mode that surfaces minutes later as "ghost text
@@ -821,7 +821,7 @@ async fn verify(port: u16) -> Result<Verified, String> {
 /// (see RELEASING.md). Same repo as `update_cmd::REPO` — keep them in step.
 ///
 /// This path matters more than it looks: anyone who installed from the CLI
-/// tarball has no `packages/vscode-sovereign` to build from, so this banner
+/// tarball has no `clients/vscode` to build from, so this banner
 /// is the *only* instruction they get. It named a tag prefix that never
 /// existed (`svrn-fim-*`) until 2026-07-29.
 ///
@@ -836,7 +836,7 @@ const VSIX_RELEASES_URL: &str = "https://github.com/alexsbryan/commonwealth-ai/r
 /// private. Every `vscode-v*` release through v0.3.0 lives there and nowhere
 /// else, so the banner names it too until the next extension release is cut
 /// from the source repo. Drop this with the `SHELF_REPO` fallback in
-/// `landing/install.sh` — see RELEASING.md.
+/// `clients/landing/install.sh` — see RELEASING.md.
 const VSIX_SHELF_URL: &str = "https://github.com/alexsbryan/svrnmesh-releases/releases";
 
 enum EditorOutcome {
@@ -921,12 +921,12 @@ fn on_path(cmd: &str) -> bool {
     })
 }
 
-/// Locate `packages/vscode-sovereign`. Checked against the working
+/// Locate `clients/vscode`. Checked against the working
 /// directory first (the common case: an operator in the repo) and
 /// then relative to the running binary, which covers
 /// `target/debug/sovereign-cli-daemon` invoked from elsewhere.
 fn find_extension_dir() -> Option<PathBuf> {
-    const REL: &str = "packages/vscode-sovereign";
+    const REL: &str = "clients/vscode";
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Ok(cwd) = std::env::current_dir() {
         roots.extend(cwd.ancestors().map(Path::to_path_buf));
@@ -1142,7 +1142,7 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome, scip_popula
             println!("            (published before 2026-08-31: {VSIX_SHELF_URL})");
             println!("            code --install-extension <downloaded>.vsix");
             println!("          From a source checkout you can build it instead:");
-            println!("            cd packages/vscode-sovereign && npm install && npm run package");
+            println!("            cd clients/vscode && npm install && npm run package");
         }
     }
 }

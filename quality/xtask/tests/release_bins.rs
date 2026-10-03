@@ -6,7 +6,7 @@
 //! `locate_sibling(...)` in the dispatcher, in `sovereign-cli-daemon` (which
 //! `daemon run` and `setup` reach) and in `sovereign-cli-mesh` (whose
 //! `mesh up` brings cw-rails up). Each named binary must be in BOTH release
-//! lists — `landing/install.sh`'s `BINS` and `scripts/release-cli-local.sh`'s
+//! lists — `clients/landing/install.sh`'s `BINS` and `scripts/release-cli-local.sh`'s
 //! `BINS` — and its owning package in the latter's `PKGS`, or a release
 //! install answers the verb with "cannot find sibling binary".
 //!
@@ -209,7 +209,7 @@ fn workflow_words(
 fn release_lists_carry_every_exec_d_binary() {
     let root = repo_root();
     let needed = exec_closure(&root);
-    let install = shell_list(&root.join("landing/install.sh"), "BINS=\"", '"');
+    let install = shell_list(&root.join("clients/landing/install.sh"), "BINS=\"", '"');
     let release = root.join("scripts/release-cli-local.sh");
     let release_bins = shell_list(&release, "BINS=(", ')');
     let release_pkgs = shell_list(&release, "PKGS=(", ')');
@@ -240,7 +240,7 @@ fn release_lists_carry_every_exec_d_binary() {
     let mut missing = Vec::new();
     for bin in &needed {
         if !install.contains(bin) {
-            missing.push(format!("{bin}: not in landing/install.sh BINS"));
+            missing.push(format!("{bin}: not in clients/landing/install.sh BINS"));
         }
         if !release_bins.contains(bin) {
             missing.push(format!("{bin}: not in scripts/release-cli-local.sh BINS"));

@@ -278,7 +278,7 @@ mod tests {
                 ".claude/worktrees",
                 "target",
                 "target-container-linux",
-                "sovereign/crates/sovereign-desktop/target-xwin",
+                "clients/desktop/target-xwin",
             ]),
             set(&[".git", ".sovereign", "vendor", "node_modules"]),
         )
@@ -295,7 +295,7 @@ mod tests {
         assert!(s.excludes_dir(".cargo-container"));
         assert!(s.excludes_dir(".claude/worktrees"));
         assert!(s.excludes_dir("target-container-linux"));
-        assert!(s.excludes_dir("sovereign/crates/sovereign-desktop/target-xwin"));
+        assert!(s.excludes_dir("clients/desktop/target-xwin"));
         // declared: tracked here, but not authored here.
         assert!(s.excludes_dir("vendor"));
         assert!(s.excludes_dir(".git"));

@@ -355,7 +355,7 @@ row(BAR, score(clauses),
 
 # ── tg-meshapp-window-bridge-only ───────────────────────────────────────────
 BAR = "tg-meshapp-window-bridge-only"
-dk = "sovereign/crates/sovereign-desktop/src-tauri"
+dk = "clients/desktop/src-tauri"
 shim = src(f"{dk}/src/meshapp_shim.js") or ""
 shim_names = sorted(set(re.findall(r"\bmeshapp_[a-z0-9_]+", shim)))
 main_rs = src(f"{dk}/src/main.rs") or ""

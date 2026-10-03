@@ -52,7 +52,7 @@ set -uo pipefail
 # ── Paths & constants ────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
-DESKTOP_DIR="$REPO_ROOT/sovereign/crates/sovereign-desktop"
+DESKTOP_DIR="$REPO_ROOT/clients/desktop"
 CLI="$REPO_ROOT/target/debug/sovereign-cli-llm"
 # The DISPATCHER, not the sibling: `quality check` is in-process in
 # `sovereign-cli` and needs its `dev-tools` feature.

@@ -205,7 +205,7 @@ expansion, guards, induction, threshold) is daemon-side so every
 IDE client stays a thin capture-and-render shell.
 
 - **Extension — edit-unit capture.**
-  `packages/vscode-sovereign/src/editUnits.ts` coalesces
+  `clients/vscode/src/editUnits.ts` coalesces
   `onDidChangeTextDocument` keystroke deltas into semantic edit units
   (one select-and-retype or backspace-and-retype burst = one
   `{before, after}` replacement; a multi-cursor event = one unit per
@@ -610,7 +610,7 @@ that is easy to re-break:
   unit stays in the history window it poisoned every later prediction
   until it aged out — behind a green status bar, since 4xx was
   swallowed. The contract now lives in one pure module
-  (`packages/vscode-sovereign/src/wireLimits.ts`), and a 4xx clears
+  (`clients/vscode/src/wireLimits.ts`), and a 4xx clears
   history and says so once.
 - Route posture: the endpoint now carries the same `admission()` gate
   as every other inference route (it drives a model, so a paused peer
@@ -872,7 +872,7 @@ on repo-relative paths the editor does not send). Response carries
 `navigation: { symbol, sites[], truncated, dropped }`, or
 `navigation: { declined: "<reason>" }` — a named state, never an absent
 key. Client surface: a status-bar item and a QuickPick jump list
-(`packages/vscode-sovereign/src/callSites.ts`); selecting an entry moves
+(`clients/vscode/src/callSites.ts`); selecting an entry moves
 the cursor and writes nothing.
 
 **Verification.** `commonwealth-api/tests/next_edit_symbol_lane_e2e.rs`

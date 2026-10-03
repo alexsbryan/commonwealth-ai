@@ -62,7 +62,7 @@ pub fn run() -> i32 {
         Err(e) => {
             eprintln!(
                 "error: cannot read {} ({e}).\n  The package boundaries are declared there \
-                 — see studio/BOUNDARY.md and docs/CODE_TOOLING_BOUNDARY.md.",
+                 — see clients/studio/BOUNDARY.md and docs/CODE_TOOLING_BOUNDARY.md.",
                 map_path.display()
             );
             return 1;

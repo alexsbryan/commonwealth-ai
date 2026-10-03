@@ -39,7 +39,7 @@ get value from it**, and we have run that test four times already:
 
 | Lift | What it proved | Status |
 |---|---|---|
-| `studio` (`studio/BOUNDARY.md`) | the workflow/recipe authoring closure builds outside the monorepo, 36 s cold, zero source edits | lifted 2026-07-21 |
+| `studio` (`clients/studio/BOUNDARY.md`) | the workflow/recipe authoring closure builds outside the monorepo, 36 s cold, zero source edits | lifted 2026-07-21 |
 | `corpus-mcp` (`svrn/crates/corpus-mcp/README.md`) | a third party can search a corpus-engine index AND read what its enrichment produced against a plain `llama-server`, with nothing carrying llama.cpp, ort or iroh | declared, gated |
 | `commonwealth-work` (`scripts/cw-work-lift.sh`) | a package-only peer builds outside the monorepo in 7.7 s and completes three heterogeneous units inside a container boundary | lifted, re-proven 2026-09-11 |
 | `commonwealth-rails` (`scripts/cw-rails-lift.sh`) | the lifted daemon joins a REAL mesh by invite and serves another member's library | lifted 2026-09-11 |

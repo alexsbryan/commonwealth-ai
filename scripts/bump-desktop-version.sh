@@ -13,8 +13,8 @@
 #   2. Computes the new version (explicit arg OR bump from current).
 #   3. Writes the new version to the three files that must agree:
 #        - Cargo.toml                                      (workspace.package.version)
-#        - sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json   (version)
-#        - sovereign/crates/sovereign-desktop/package.json                (version)
+#        - clients/desktop/src-tauri/tauri.conf.json   (version)
+#        - clients/desktop/package.json                (version)
 #   4. Runs check-desktop-version.sh to confirm all three now match.
 #   5. Prints the suggested commit/tag/push lines. Does NOT run them.
 #
@@ -29,8 +29,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 CARGO_TOML="$REPO_ROOT/Cargo.toml"
-TAURI_CONF="$REPO_ROOT/sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json"
-PACKAGE_JSON="$REPO_ROOT/sovereign/crates/sovereign-desktop/package.json"
+TAURI_CONF="$REPO_ROOT/clients/desktop/src-tauri/tauri.conf.json"
+PACKAGE_JSON="$REPO_ROOT/clients/desktop/package.json"
 
 if [[ $# -ne 1 ]]; then
     cat <<EOF >&2
@@ -226,8 +226,8 @@ cat <<EOF
 Next:
   git diff                                                              # review
   git add Cargo.toml \\
-          sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \\
-          sovereign/crates/sovereign-desktop/package.json \\
+          clients/desktop/src-tauri/tauri.conf.json \\
+          clients/desktop/package.json \\
           svrn/crates/sovereign-core/data/router/router-embed-cache.json
   git commit -m 'chore(desktop): release v$NEW_VERSION'
   git tag desktop-v$NEW_VERSION

@@ -70,7 +70,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // reason peer traffic is: own auth (the daemon's), custody class peer.
     // Joined the workspace 2026-09-10, which is when the census first saw
     // it.
-    ("sovereign-mobile/src-tauri/src/remote/client.rs", Class::Mesh, 3),
+    ("clients/mobile/src-tauri/src/remote/client.rs", Class::Mesh, 3),
     // sovereign-cli `svrn quality check` (2026-09-04, order quality-check-lean;
     // the module became a directory on 2026-09-07 in registry-1-selections, so
     // the one row became two — same two clients, same class, split across the
@@ -343,7 +343,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // the red — the re-home review at landing found it dispatched
     // External queries and its construction moved into the boundary;
     // the row is gone with the site.)
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 9),
+    ("clients/desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 9),
     // 8 -> 9 (2026-09-11, thin-desktop slice 4, registered 2026-09-12): the
     // starter-corpus install stopped downloading `federalist-starter.tar.zst`
     // in-process and became `POST /internal/corpus/install` + a poll; the new
@@ -372,30 +372,30 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // sweep client (:740). Every destination is `127.0.0.1:<internal_port>`
     // on this machine's own daemon; nothing here reaches a third party, and
     // the desktop no longer holds an engine that could.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs", Class::LocalDaemon, 7),
+    ("clients/desktop/src-tauri/src/local_corpus_commands.rs", Class::LocalDaemon, 7),
     // NEW (2026-09-09, sv-surface rung 5): workflow_commands.rs's http_client()
     // — the Run-a-workflow surface now POSTs the job to the daemon and polls
     // its events (the in-process runner is deleted; the daemon executes).
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/workflow_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/workflow_commands.rs", Class::LocalDaemon, 1),
     // NEW (2026-09-09, sv-surface R4/B2): main.rs's readiness probe — the
     // backend-ready gate now GETs this host's own daemon /v1/models until
     // the port answers (250ms interval, 90s deadline). Loopback only; the
     // probe IS the readiness signal, so it cannot reuse a longer-timeout
     // command client without lying about liveness.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/main.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/contribution.rs", Class::LocalDaemon, 7),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/budget.rs", Class::LocalDaemon, 6),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/watched_folder_commands.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/main.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/commands/contribution.rs", Class::LocalDaemon, 7),
+    ("clients/desktop/src-tauri/src/commands/budget.rs", Class::LocalDaemon, 6),
+    ("clients/desktop/src-tauri/src/import_commands.rs", Class::LocalDaemon, 2),
+    ("clients/desktop/src-tauri/src/commands/hardware.rs", Class::LocalDaemon, 2),
+    ("clients/desktop/src-tauri/src/watched_folder_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/recipe_commands.rs", Class::LocalDaemon, 1),
     // 1 -> 2 (2026-09-22, merged from local `mesh media` work 11b01ec84):
     // `probe_media_url` — the click-path probe that reports an HTTP status
     // instead of opening a dead tab. Loopback-http ONLY by construction
     // (`is_loopback_http` admits 127.0.0.1 / localhost / [::1] and nothing
     // else — the same rule the daemon-side bridge contract enforces), so the
     // class is unchanged: LocalDaemon, never a general fetch gadget.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 2),
+    ("clients/desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 2),
     // guest_door.rs (merged from the-ring work, 2026-09-22): the daemon's
     // guest-facing door proxies an INBOUND guest request to the PUBLISHED
     // app's own loopback port — `http://{addr}/…` where the address is the
@@ -411,8 +411,8 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // read. Every URL is `state.client_base_url()` — this host's own daemon
     // (`/internal/guest/grant` and friends). LocalDaemon, same reason as the
     // turn-client rows above.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/guest_room_commands.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/guest_room_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
     // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
     // read /status.process.pid on a run-lock refusal; the app takes no run
     // lock now — it never hosts a daemon — so the site is gone with it.
@@ -424,10 +424,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // not own. It is `POST /v1/admin/assets/download` now, so the bytes cross
     // on the daemon's client and the app holds none. A row LEAVING this
     // registry is the outcome the census is for.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/collaborate_commands.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/bootstrap.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/collaborate_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/bootstrap.rs", Class::LocalDaemon, 1),
     // attach_watch.rs held a `reqwest::Client` for its own `/v1/models`
     // poll until sv-surface (2026-09-11) moved the probe onto
     // `ServingHost::is_serving`. The module keeps the BANNER — how many

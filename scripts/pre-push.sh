@@ -216,7 +216,7 @@ fi
 # select.rs::changed_paths; sovereign-lint.sh with SOVEREIGN_LINT_FULL). The
 # desktop is a workspace member, so the whole workspace still covers it.
 # Watched in scripts/tests/pre-push-fail-closed.sh case 4.
-CHANGED_ENV="$(printf '%s\n' "$CHANGED" | tr '\n' ':')sovereign/crates/sovereign-desktop/src-tauri/src/main.rs:"
+CHANGED_ENV="$(printf '%s\n' "$CHANGED" | tr '\n' ':')clients/desktop/src-tauri/src/main.rs:"
 env_bytes=$(printf '%s' "SOVEREIGN_CHANGED_PATHS=$CHANGED_ENV" | wc -c | tr -d ' ')
 if (( GATE_ALL || env_bytes >= 131072 )); then
     (( GATE_ALL )) || say "the change set is ${env_bytes} bytes as one env string, past the kernel's 131072 — gating the WHOLE workspace instead"

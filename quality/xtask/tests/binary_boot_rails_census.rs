@@ -99,7 +99,7 @@ fn every_test_that_boots_a_daemon_pins_its_cw_rails() {
     for known in [
         "svrn/crates/sovereign-daemon/tests/main/admin_join_serves_venues_e2e.rs",
         "svrn/crates/sovereign-daemon/tests/solo_rails_e2e.rs",
-        "sovereign/crates/sovereign-stock/tests/setup_join_e2e.rs",
+        "distributions/crates/sovereign-stock/tests/setup_join_e2e.rs",
     ] {
         assert!(
             booting.iter().any(|(rel, _)| rel == known),

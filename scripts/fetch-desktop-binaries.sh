@@ -35,7 +35,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-DESKTOP_BIN_DIR="${REPO_ROOT}/sovereign/crates/sovereign-desktop/src-tauri/binaries"
+DESKTOP_BIN_DIR="${REPO_ROOT}/clients/desktop/src-tauri/binaries"
 
 # PaddleOCR model set id — must match `paddle::DEFAULT_MODEL_ID` and the
 # `tauri.release.conf.json` resources glob.
@@ -189,6 +189,6 @@ echo "  pdfium/:"
 ls -la "$DESKTOP_BIN_DIR/pdfium" 2>/dev/null | sed 's/^/    /' || true
 echo
 echo "Next:"
-echo "  cd sovereign/crates/sovereign-desktop"
+echo "  cd clients/desktop"
 echo "  cargo tauri build --config src-tauri/tauri.release.conf.json"
 echo "  (omit --config for a plain dev build; the base config has no resources)"

@@ -20,7 +20,7 @@ reach back into the monolith. This document is the contract;
 `cargo run -p xtask -- boundary-gate` enforces it in CI (blocking).
 
 It is the second package to be cut this way. The first is `studio/`
-([studio/BOUNDARY.md](../studio/BOUNDARY.md)), and everything structural here —
+([clients/studio/BOUNDARY.md](../clients/studio/BOUNDARY.md)), and everything structural here —
 the two tiers, the shared-leaf budget, the dev/build-dependency rule — is that
 document's pattern applied a second time. Where the two differ, the difference
 is noted.

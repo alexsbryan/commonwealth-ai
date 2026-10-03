@@ -62,7 +62,7 @@ Detached by default (double-fork + setsid, PPID 1, reaper-immune) so a long run
 survives your shell — or Claude Code's session — closing. The parent prints the
 console-log path and a tail command, then exits. Pass --foreground to run inline.
 
-Artifacts (all under sovereign/crates/sovereign-desktop/test-artifacts/):
+Artifacts (all under clients/desktop/test-artifacts/):
     qa-iterations/<stamp>.console.log     full run log (build, restart, phases)
     qa-iterations/<stamp>-chaos.jsonl     chaos field journal (dual/chaos)
     qa-iterations/<stamp>-personas.jsonl  persona field journal (dual/persona)
@@ -82,7 +82,7 @@ import urllib.request
 import urllib.error
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-CRATE = os.path.join(REPO, "sovereign/crates/sovereign-desktop")
+CRATE = os.path.join(REPO, "clients/desktop")
 E2E = os.path.join(CRATE, "tests/e2e/scripts")
 CHAOS = os.path.join(E2E, "chaos.mjs")
 PERSONAS = os.path.join(E2E, "personas.mjs")

@@ -296,7 +296,7 @@ rather than an empty ranking.
 ## 7. Inline completion in your editor
 
 `svrn setup --fim` configures the edit slot (writing `[models.edit]`),
-and `packages/vscode-sovereign` is the extension for VS Code, Cursor,
+and `clients/vscode` is the extension for VS Code, Cursor,
 and Windsurf. JetBrains is deferred. Under the hood it is `POST
 /v1/completions` (§1) — any editor plugin that can be pointed at an
 OpenAI-compatible FIM endpoint will work, whether or not we ship a

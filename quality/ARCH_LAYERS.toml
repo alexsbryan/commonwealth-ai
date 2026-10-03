@@ -891,7 +891,7 @@ allow = []
 name = "sovereign-contracts"
 # Where `Tool`, `ToolResult`, `Error`, `ToolRegistry`, `types` and
 # `slot_policy` actually live. At 24,619 lines it is the anchor a lift has to
-# reckon with: `studio/LIBRARY.md` prices the real cut at about a dozen items
+# reckon with: `clients/studio/LIBRARY.md` prices the real cut at about a dozen items
 # into a contract crate of a few hundred lines, re-exported at the current
 # paths so no importer in the monorepo changes.
 #
@@ -1760,21 +1760,21 @@ bring_up_decider = { krate = "sovereign-turn-client", file = "shared/crates/sove
 # what the bar counts; `sanctioned` rows are policy and may stand.
 
 [[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
+file = "clients/desktop/src-tauri/src/setup_plan.rs"
 rule = "starts"
 max = 3
 kind = "sanctioned"
 reason = "FIRST RUN, operator call 2026-09-12. The wizard spawns the sidecar's own `setup` verb — `--plan --json` to render the screens, `--yes --json` to run them — because on a first run there is no HTTP to ask: the sidecar exits 1 with no config off a TTY (`daemon_cmd/mod.rs`) and refuses a config with no `[models]` (`sovereign-daemon/src/build/inference.rs`), measured 2026-09-12. What this starts is NOT a backend. `setup` binds no port, serves nothing, and exits; the thing this row permits is a one-shot that ends, which is the opposite of the handle-holding the bar refuses. The alternative priced against it was a daemon that boots unconfigured (a new NodeClass and a restart handshake); this links nothing and adds no ability — the app could already exec this binary (`daemon_binary::stable_daemon_binary`, the same one `ServingHost` brings up). Read it as the shape the rule permits: a user action, a process that terminates, no policy and no timer."
 
 [[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
+file = "clients/desktop/src-tauri/src/setup_plan.rs"
 rule = "reaps"
 max = 1
 kind = "sanctioned"
 reason = "The `.wait()` on the one-shot above. `setup --yes --json` reports its verdict as an EXIT CODE — that is the verb's contract (`setup_cmd/mod.rs`), and the JSON terminal line is the narration beside it — so not reading the code would mean reporting success on a run that failed after its last progress line (ARCH principle 6). This is not deciding when a backend stops: there is no backend, and the process has already ended by the time this resolves. A `wait` on a SERVING child is still refused, and nothing here holds one."
 
 [[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs"
+file = "clients/desktop/src-tauri/src/commands/config_setup.rs"
 rule = "starts"
 max = 3
 kind = "sanctioned"

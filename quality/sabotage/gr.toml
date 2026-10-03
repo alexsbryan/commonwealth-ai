@@ -516,7 +516,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-41-source_text_appears_when_the_reporter_op"
 requirement = "GR-41"
-target = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+target = "clients/desktop/src-tauri/src/turn_report.rs"
 find = "        if turn.include_source_text {\n            if let Some(sn) = r\n                .snippet\n                .as_deref()\n                .map(str::trim)\n                .filter(|s| !s.is_empty())\n            {"
 replace = "        // MUTATION: Removed the include_source_text check to violate GR-41.\n        // This allows source text to leak even when opted out, or conversely,\n        // by removing the block entirely we break the specific assertion logic\n        // that expects 'did not include the text' when false. \n        // To specifically fail `source_text_appears_when_the_reporter_opted_in`:\n        if true {\n            if let Some(sn) = r\n                .snippet\n                .as_deref()\n                .map(str::trim)\n                .filter(|s| !s.is_empty())\n            {"
 mustFail = ["source_text_appears_when_the_reporter_opted_in"]
@@ -546,7 +546,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-46-answerdoc_extracts_provenance"
 requirement = "GR-46"
-target = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/conversation.rs"
+target = "clients/desktop/src-tauri/src/commands/conversation.rs"
 find = "        let corpora = metadata\n            .and_then(|m| m.pointer(\"/provenance/sources\"))\n            .and_then(|v| v.as_array())\n            .map(|srcs| {\n                srcs.iter()\n                    .filter(|s| s.get(\"count\").and_then(|v| v.as_u64()).unwrap_or(0) > 0)\n                    .filter_map(|s| {\n                        s.get(\"display_name\")\n                            .and_then(|v| v.as_str())\n                            .filter(|x| !x.is_empty())\n                            .or_else(|| s.get(\"origin\").and_then(|v| v.as_str()))\n                            .map(str::to_string)\n                    })\n                    .collect()\n            })\n            .unwrap_or_default();"
 replace = "        let corpora = metadata\n            .and_then(|m| m.pointer(\"/provenance/sources\"))\n            .and_then(|v| v.as_array())\n            .map(|srcs| {\n                srcs.iter()\n                    .filter_map(|s| {\n                        s.get(\"display_name\")\n                            .and_then(|v| v.as_str())\n                            .filter(|x| !x.is_empty())\n                            .or_else(|| s.get(\"origin\").and_then(|v| v.as_str()))\n                            .map(str::to_string)\n                    })\n                    .collect()\n            })\n            .unwrap_or_default();"
 mustFail = ["answerdoc_extracts_provenance"]

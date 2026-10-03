@@ -91,9 +91,9 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   `Option`/`Vec` with `skip_serializing_if`). Production builds: serve.rs:306 (graceful guard), :425
   (`drive_stream_handle`), :506 (`serve_non_streaming_turn`) — the only three. Exhaustive destructures:
   serve.rs:554 (`Collector`), sovereign-turn-client/src/lib.rs:4256 (`drain_turn`),
-  sovereign-mobile/src-tauri/src/remote/stream.rs:279. Test builds:
+  clients/mobile/src-tauri/src/remote/stream.rs:279. Test builds:
   sovereign-contracts/tests/main/turn_wire_form.rs:61,76,133 and
-  sovereign-mobile/src-tauri/tests/turn_wire.rs:257,371,459. Every other `TurnFrame::Complete` match uses
+  clients/mobile/src-tauri/tests/turn_wire.rs:257,371,459. Every other `TurnFrame::Complete` match uses
   `..` (`git grep -n 'TurnFrame::Complete {' -- '*.rs'`, 32 hits).
 - **serve.rs already projects from the persisted metadata** after the stream ends: `message_metadata(…)`
   then `project_message_metadata` / `project_epistemic_state` / `project_task` / `project_turn_metadata`
@@ -211,7 +211,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   clause in `quality/campaigns/handed.toml` `[[ability]] render` `not_covered` — without them `render`'s
   promise overclaims.
   - A THIRD `MessageResponse`, the desktop's own:
-    `sovereign/crates/sovereign-desktop/src-tauri/src/commands/mod.rs:13`, carrying
+    `clients/desktop/src-tauri/src/commands/mod.rs:13`, carrying
     `metadata: Option<serde_json::Value>` (:19). An untyped blob the compiler will NOT name when step 2
     converts the daemon's and the server's, so it ships with no verdict.
   - `ApprovalChannel::emit_message_refined` has a no-op DEFAULT body:
@@ -257,7 +257,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   signature hd-5 does not change (hd-5 changes a serde default, not the constructor).
 - Peer state: with both cut rows gone, the only file these rows share with a peer is `docs/SYSTEM_OVERVIEW.md`
   (step 2's one sentence) — no surviving row touches
-  `sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs`. Both were dirty when this order was
+  `clients/desktop/src-tauri/src/commands/chat.rs`. Both were dirty when this order was
   drafted and both are clean as of 2026-09-17. `git merge` refuses to overwrite a locally modified file and
   the pool turns that into a halt, so a peer's hunks in `SYSTEM_OVERVIEW.md` must be committed before a row
   that edits it runs.

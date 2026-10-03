@@ -261,7 +261,7 @@ package = ""
 crates = ["sovereign-cli-daemon", "sovereign-desktop", "sovereign-server", "sovereign-cli", "sovereign-cli-llm", "sovereign-cli-dev", "sovereign-mobile", "sovereign-daemon"]   # sovereign-daemon is the host crate that receives sovereign-mesh's host lines (REVIEW-mint-daemon-move minted the moves into it)
 lift = ""
 applicable_as = "not applicable by design — the daemon is not a domain (DOMAINS §4)"
-roots = ["svrn/crates/sovereign-cli-daemon", "sovereign/crates/sovereign-desktop", "sovereign/crates/sovereign-server", "svrn/crates/sovereign-daemon"]
+roots = ["svrn/crates/sovereign-cli-daemon", "clients/desktop", "sovereign/crates/sovereign-server", "svrn/crates/sovereign-daemon"]
 status = "kept"
 
 [[context]]
@@ -2096,7 +2096,7 @@ why = "18 refs / 3 files. app_id/key/value/timestamp/origin at :80-89 - a KV rec
 [[noun]]
 name = "DiscoveredPeerDto"
 crate = "sovereign-desktop"
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs:367"
+file = "clients/desktop/src-tauri/src/mesh_commands.rs:367"
 visibility = "pub"
 concept = "C1"
 context = "host"
@@ -2107,7 +2107,7 @@ why = "2 refs / 1 file. Mirrors commonwealth-discovery DiscoveredPeer field-for-
 [[noun]]
 name = "PeerPreferenceDto"
 crate = "sovereign-desktop"
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs:571"
+file = "clients/desktop/src-tauri/src/mesh_commands.rs:571"
 visibility = "pub"
 concept = "C5"
 context = "host"
@@ -3209,7 +3209,7 @@ verdict = "converge"
 survivor = "kernel_types::origin::Source — Ingest keeps the WORD in [[context]].owns, the kernel holds the TYPE"
 renames = [
   "sovereign-pipeline::recipe::Source -> KeySet (6/2)",
-  "sovereign-workflow::model::Source -> ItemSet, sibling SourceItem -> Item (12/5, inside the lifted studio package — coordinate with studio/BOUNDARY.md)",
+  "sovereign-workflow::model::Source -> ItemSet, sibling SourceItem -> Item (12/5, inside the lifted studio package — coordinate with clients/studio/BOUNDARY.md)",
   "sovereign-cli-llm::meshapp_registry::Source -> BundleLocation (10/1, private)",
 ]
 rung = "domains-4 (decide) / domains-11 (execute) — 28 refs / 8 files"
@@ -7807,145 +7807,145 @@ lines = 212
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/cache/mod.rs"
+path = "clients/mobile/src-tauri/src/cache/mod.rs"
 context = "host"
 lines = 5
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/cache/schema.rs"
+path = "clients/mobile/src-tauri/src/cache/schema.rs"
 context = "host"
 lines = 152
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/cache/store.rs"
+path = "clients/mobile/src-tauri/src/cache/store.rs"
 context = "host"
 lines = 306
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/commands/chat.rs"
+path = "clients/mobile/src-tauri/src/commands/chat.rs"
 context = "host"
 lines = 100
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/commands/conversation.rs"
+path = "clients/mobile/src-tauri/src/commands/conversation.rs"
 context = "host"
 lines = 108
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/commands/corpus.rs"
+path = "clients/mobile/src-tauri/src/commands/corpus.rs"
 context = "host"
 lines = 103
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/commands/host.rs"
+path = "clients/mobile/src-tauri/src/commands/host.rs"
 context = "host"
 lines = 150
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/commands/mod.rs"
+path = "clients/mobile/src-tauri/src/commands/mod.rs"
 context = "host"
 lines = 8
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/connection/keychain.rs"
+path = "clients/mobile/src-tauri/src/connection/keychain.rs"
 context = "host"
 lines = 69
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/connection/mod.rs"
+path = "clients/mobile/src-tauri/src/connection/mod.rs"
 context = "host"
 lines = 46
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/connection/store.rs"
+path = "clients/mobile/src-tauri/src/connection/store.rs"
 context = "host"
 lines = 245
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/connectivity/mod.rs"
+path = "clients/mobile/src-tauri/src/connectivity/mod.rs"
 context = "host"
 lines = 12
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/connectivity/monitor.rs"
+path = "clients/mobile/src-tauri/src/connectivity/monitor.rs"
 context = "host"
 lines = 117
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/connectivity/reachability.rs"
+path = "clients/mobile/src-tauri/src/connectivity/reachability.rs"
 context = "host"
 lines = 24
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/error.rs"
+path = "clients/mobile/src-tauri/src/error.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/iroh_bridge.rs"
+path = "clients/mobile/src-tauri/src/iroh_bridge.rs"
 context = "host"
 lines = 96
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/lib.rs"
+path = "clients/mobile/src-tauri/src/lib.rs"
 context = "host"
 lines = 123
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/main.rs"
+path = "clients/mobile/src-tauri/src/main.rs"
 context = "host"
 lines = 8
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/remote/client.rs"
+path = "clients/mobile/src-tauri/src/remote/client.rs"
 context = "host"
 lines = 208
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/remote/dto.rs"
+path = "clients/mobile/src-tauri/src/remote/dto.rs"
 context = "host"
 lines = 148
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/remote/map.rs"
+path = "clients/mobile/src-tauri/src/remote/map.rs"
 context = "host"
 lines = 67
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/remote/mod.rs"
+path = "clients/mobile/src-tauri/src/remote/mod.rs"
 context = "host"
 lines = 9
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/remote/stream.rs"
+path = "clients/mobile/src-tauri/src/remote/stream.rs"
 context = "host"
 lines = 458
 note = ""
 
 [[module]]
-path = "sovereign-mobile/src-tauri/src/state.rs"
+path = "clients/mobile/src-tauri/src/state.rs"
 context = "host"
 lines = 91
 note = ""
@@ -12655,367 +12655,367 @@ lines = 689
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/approval.rs"
+path = "clients/desktop/src-tauri/src/approval.rs"
 context = "host"
 lines = 68
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/atlas_commands.rs"
+path = "clients/desktop/src-tauri/src/atlas_commands.rs"
 context = "host"
 lines = 415
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/attach_watch.rs"
+path = "clients/desktop/src-tauri/src/attach_watch.rs"
 context = "host"
 lines = 134
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/bootstrap.rs"
+path = "clients/desktop/src-tauri/src/bootstrap.rs"
 context = "host"
 lines = 395
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/collaborate_commands.rs"
+path = "clients/desktop/src-tauri/src/collaborate_commands.rs"
 context = "host"
 lines = 204
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/command_bridge.rs"
+path = "clients/desktop/src-tauri/src/command_bridge.rs"
 context = "host"
 lines = 500
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/asset_download.rs"
+path = "clients/desktop/src-tauri/src/commands/asset_download.rs"
 context = "host"
 lines = 77
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/budget.rs"
+path = "clients/desktop/src-tauri/src/commands/budget.rs"
 context = "host"
 lines = 397
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs"
+path = "clients/desktop/src-tauri/src/commands/chat.rs"
 context = "host"
 lines = 1479
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs"
+path = "clients/desktop/src-tauri/src/commands/config_setup.rs"
 context = "host"
 lines = 1108
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/contribution.rs"
+path = "clients/desktop/src-tauri/src/commands/contribution.rs"
 context = "host"
 lines = 435
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/conversation.rs"
+path = "clients/desktop/src-tauri/src/commands/conversation.rs"
 context = "host"
 lines = 1287
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus.rs"
+path = "clients/desktop/src-tauri/src/commands/corpus.rs"
 context = "host"
 lines = 292
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs"
+path = "clients/desktop/src-tauri/src/commands/corpus_install.rs"
 context = "host"
 lines = 889
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs"
+path = "clients/desktop/src-tauri/src/commands/diagnostics.rs"
 context = "host"
 lines = 320
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/document_asset.rs"
+path = "clients/desktop/src-tauri/src/commands/document_asset.rs"
 context = "host"
 lines = 511
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs"
+path = "clients/desktop/src-tauri/src/commands/hardware.rs"
 context = "host"
 lines = 353
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/lessons.rs"
+path = "clients/desktop/src-tauri/src/commands/lessons.rs"
 context = "host"
 lines = 205
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/mcp_servers.rs"
+path = "clients/desktop/src-tauri/src/commands/mcp_servers.rs"
 context = "host"
 lines = 262
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/meshapp.rs"
+path = "clients/desktop/src-tauri/src/commands/meshapp.rs"
 context = "host"
 lines = 722
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/mod.rs"
+path = "clients/desktop/src-tauri/src/commands/mod.rs"
 context = "host"
 lines = 389
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/models.rs"
+path = "clients/desktop/src-tauri/src/commands/models.rs"
 context = "host"
 lines = 614
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs"
+path = "clients/desktop/src-tauri/src/commands/reading.rs"
 context = "host"
 lines = 125
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/recipe_testing.rs"
+path = "clients/desktop/src-tauri/src/commands/recipe_testing.rs"
 context = "host"
 lines = 379
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/supervisor_ctl.rs"
+path = "clients/desktop/src-tauri/src/commands/supervisor_ctl.rs"
 context = "host"
 lines = 30
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs"
+path = "clients/desktop/src-tauri/src/crash_bundle.rs"
 context = "host"
 lines = 812
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/crash_report.rs"
+path = "clients/desktop/src-tauri/src/crash_report.rs"
 context = "host"
 lines = 403
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/daemon_binary.rs"
+path = "clients/desktop/src-tauri/src/daemon_binary.rs"
 context = "host"
 lines = 483
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/deep_research_commands/mod.rs"
+path = "clients/desktop/src-tauri/src/deep_research_commands/mod.rs"
 context = "host"
 lines = 417
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/deep_research_commands/tests.rs"
+path = "clients/desktop/src-tauri/src/deep_research_commands/tests.rs"
 context = "host"
 lines = 98
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/dev_flags.rs"
+path = "clients/desktop/src-tauri/src/dev_flags.rs"
 context = "host"
 lines = 97
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/enrich_commands.rs"
+path = "clients/desktop/src-tauri/src/enrich_commands.rs"
 context = "host"
 lines = 233
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/error.rs"
+path = "clients/desktop/src-tauri/src/error.rs"
 context = "host"
 lines = 154
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/friendly_names.rs"
+path = "clients/desktop/src-tauri/src/friendly_names.rs"
 context = "host"
 lines = 92
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/governance_commands.rs"
+path = "clients/desktop/src-tauri/src/governance_commands.rs"
 context = "host"
 lines = 243
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/health.rs"
+path = "clients/desktop/src-tauri/src/health.rs"
 context = "host"
 lines = 724
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs"
+path = "clients/desktop/src-tauri/src/import_commands.rs"
 context = "host"
 lines = 1151
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/insight_commands.rs"
+path = "clients/desktop/src-tauri/src/insight_commands.rs"
 context = "host"
 lines = 251
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/invoke_coverage.rs"
+path = "clients/desktop/src-tauri/src/invoke_coverage.rs"
 context = "host"
 lines = 175
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/launch_mode.rs"
+path = "clients/desktop/src-tauri/src/launch_mode.rs"
 context = "host"
 lines = 44
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs"
+path = "clients/desktop/src-tauri/src/local_corpus_commands.rs"
 context = "host"
 lines = 1316
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/main.rs"
+path = "clients/desktop/src-tauri/src/main.rs"
 context = "host"
 lines = 904
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs"
+path = "clients/desktop/src-tauri/src/mesh_commands.rs"
 context = "host"
 lines = 1016
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/meshapp.rs"
+path = "clients/desktop/src-tauri/src/meshapp.rs"
 context = "host"
 lines = 218
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs"
+path = "clients/desktop/src-tauri/src/mobile_host_setup.rs"
 context = "host"
 lines = 339
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/recipe_author_commands.rs"
+path = "clients/desktop/src-tauri/src/recipe_author_commands.rs"
 context = "host"
 lines = 329
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs"
+path = "clients/desktop/src-tauri/src/recipe_commands.rs"
 context = "host"
 lines = 138
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/routing_events.rs"
+path = "clients/desktop/src-tauri/src/routing_events.rs"
 context = "host"
 lines = 78
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/serving_host.rs"
+path = "clients/desktop/src-tauri/src/serving_host.rs"
 context = "host"
 lines = 230
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_flow.rs"
+path = "clients/desktop/src-tauri/src/setup_flow.rs"
 context = "host"
 lines = 610
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
+path = "clients/desktop/src-tauri/src/setup_plan.rs"
 context = "host"
 lines = 280
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"
+path = "clients/desktop/src-tauri/src/state.rs"
 context = "host"
 lines = 669
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/builders/mod.rs"
+path = "clients/desktop/src-tauri/src/state/builders/mod.rs"
 context = "host"
 lines = 31
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/builders/test_support.rs"
+path = "clients/desktop/src-tauri/src/state/builders/test_support.rs"
 context = "host"
 lines = 52
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/config.rs"
+path = "clients/desktop/src-tauri/src/state/config.rs"
 context = "host"
 lines = 791
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/wire_turns.rs"
+path = "clients/desktop/src-tauri/src/state/wire_turns.rs"
 context = "host"
 lines = 238
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/tray.rs"
+path = "clients/desktop/src-tauri/src/tray.rs"
 context = "host"
 lines = 262
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+path = "clients/desktop/src-tauri/src/turn_report.rs"
 context = "host"
 lines = 557
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/update_commands.rs"
+path = "clients/desktop/src-tauri/src/update_commands.rs"
 context = "host"
 lines = 134
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/watched_folder_commands.rs"
+path = "clients/desktop/src-tauri/src/watched_folder_commands.rs"
 context = "host"
 lines = 476
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-desktop/src-tauri/src/workflow_commands.rs"
+path = "clients/desktop/src-tauri/src/workflow_commands.rs"
 context = "host"
 lines = 363
 note = ""
@@ -15805,7 +15805,7 @@ lines = 325
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-studio/src/main.rs"
+path = "clients/studio/src/main.rs"
 context = "unknown"
 lines = 517
 note = ""

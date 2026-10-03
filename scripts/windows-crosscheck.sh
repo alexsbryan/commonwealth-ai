@@ -93,7 +93,7 @@ log "Running: cargo xwin $CARGO_VERB --target $TARGET ${PASSTHRU[*]:-} (in sover
 log "Reminder: a failure INSIDE the llama.cpp/onnxruntime cmake build is a"
 log "          cargo-xwin limitation, not a real-CI signal — prove that on Windows."
 
-cd sovereign/crates/sovereign-desktop
+cd clients/desktop
 # ${arr[@]+...} guards the empty-array expansion so macOS's bash 3.2 doesn't
 # trip `set -u` ("unbound variable") when no --features were passed.
 exec cargo xwin "$CARGO_VERB" --target "$TARGET" ${PASSTHRU[@]+"${PASSTHRU[@]}"}

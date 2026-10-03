@@ -54,10 +54,7 @@ const TEST_SUFFIX: &str = "::tests";
 /// Script trees measured as keys of their own. Repo-relative, so the key a
 /// failure prints is the path a reader chases — the same contract the crate
 /// keys keep.
-const SCRIPT_DIRS: [&str; 2] = [
-    "scripts",
-    "sovereign/crates/sovereign-desktop/tests/e2e/scripts",
-];
+const SCRIPT_DIRS: [&str; 2] = ["scripts", "clients/desktop/tests/e2e/scripts"];
 
 /// Extensions counted inside a [`SCRIPT_DIRS`] tree.
 const SCRIPT_EXTS: [&str; 4] = ["sh", "py", "mjs", "ts"];

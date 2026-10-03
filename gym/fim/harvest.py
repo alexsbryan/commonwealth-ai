@@ -29,7 +29,7 @@ REPO = Path(__file__).resolve().parents[2]
 # Every workspace member, from the root manifest (crates no longer share a parent).
 RUST_ROOTS = [m for m in __import__("tomllib").load(open(REPO / "Cargo.toml", "rb"))["workspace"]["members"]
               if not m.startswith("quality/")]
-TS_ROOTS = ["packages/chat-ui/src", "sovereign/crates/sovereign-desktop/src"]
+TS_ROOTS = ["clients/chat-ui/src", "clients/desktop/src"]
 PY_ROOTS = ["scripts", "gym"]
 
 # File filters: skip tests/benches/generated — completions there are

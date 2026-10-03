@@ -339,25 +339,25 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `daemon-soak` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: by-hand
 - `daemon-soak-report` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `daemon-soak-report-selftest` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
-- `desktop-a11y` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
-- `desktop-breaker` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
-- `desktop-chaos` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: by-hand
-- `desktop-demo` — sovereign/crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md · runs in: by-hand
-- `desktop-demo-export` — sovereign/crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md · runs in: by-hand
-- `desktop-e2e-faults` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: smoke:4, by-hand
-- `desktop-e2e-real` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: smoke:4, by-hand
-- `desktop-invoke-coverage` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything · runs in: by-hand
-- `desktop-invoke-coverage-real` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything · runs in: by-hand
-- `desktop-journeys` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
-- `desktop-judge-calibration` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: by-hand
-- `desktop-report-breaker` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
-- `desktop-report-journeys` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
-- `desktop-report-soak` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
-- `desktop-report-ttfi` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
-- `desktop-smoke` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
-- `desktop-soak` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
-- `desktop-soak-py` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
-- `desktop-ttfi` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:1, by-hand
+- `desktop-a11y` — clients/desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
+- `desktop-breaker` — clients/desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
+- `desktop-chaos` — clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: by-hand
+- `desktop-demo` — clients/desktop/tests/e2e/demo/DEMO_BEATS.md · runs in: by-hand
+- `desktop-demo-export` — clients/desktop/tests/e2e/demo/DEMO_BEATS.md · runs in: by-hand
+- `desktop-e2e-faults` — clients/desktop/QUALITY_SURFACE.md#the-layers · runs in: smoke:4, by-hand
+- `desktop-e2e-real` — clients/desktop/QUALITY_SURFACE.md#the-layers · runs in: smoke:4, by-hand
+- `desktop-invoke-coverage` — clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything · runs in: by-hand
+- `desktop-invoke-coverage-real` — clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything · runs in: by-hand
+- `desktop-journeys` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
+- `desktop-judge-calibration` — clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: by-hand
+- `desktop-report-breaker` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
+- `desktop-report-journeys` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
+- `desktop-report-soak` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
+- `desktop-report-ttfi` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
+- `desktop-smoke` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
+- `desktop-soak` — clients/desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
+- `desktop-soak-py` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
+- `desktop-ttfi` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:1, by-hand
 - `dm-census-atom-outside` — quality/campaigns/domains.toml (bar dm-atom-outside — the count this measures) · runs in: by-hand
 - `dm-census-congestion` — quality/campaigns/domains.toml (bar dm-context-congestion — the count this measures) · runs in: by-hand
 - `dm-census-crate-lines` — quality/campaigns/domains.toml (bar dm-mesh-lines — the count this measures) · runs in: by-hand
@@ -378,7 +378,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `feature-powerset` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `hakari-verify` — quality/BUILD_LATENCY.md D1 — the workspace-hack crate keeps feature resolution scope-invariant; `cargo hakari generate` after any dependency change, or this reports drift. Advisory until a week of pushes shows no false positive (AGENTS.md §Definition of done); needs cargo-hakari installed (`cargo install cargo-hakari --locked`). · runs in: prepush
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
-- `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
+- `inner-chaos-calibrate` — clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — bench/lanes/chaos_monkey/README.md · runs in: smoke:5
 - `judge-replay` — svrn/crates/sovereign-cli-llm/src/judge_replay.rs (module header) · runs in: by-hand
 - `judge-replay-bank` — quality/campaigns/verifier-loop.toml §vl-bank-live · runs in: run-if-stale, by-hand
@@ -398,11 +398,11 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `quality-check` — svrn/docs/CLI_REFERENCE.md#svrn-quality · runs in: smoke:2, by-hand
 - `retrieval-prod` — bench/lanes/sep/README.md · runs in: check
 - `routing` — bench/lanes/README.md · runs in: check
-- `routing-replay` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:3
+- `routing-replay` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:3
 - `run-if-stale` — scripts/run-if-stale.sh (header) · runs in: by-hand
 - `rustsec-advisories` — .github/workflows/weekly.yml (header) · runs in: weekly:advisories
 - `sabotage` — quality/sabotage/all.toml (the mutant bank this adjudicates) · runs in: by-hand
-- `smoke-attach-mode` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:1
+- `smoke-attach-mode` — clients/desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:1
 - `sovereign-lint` — AGENTS.md §Compilation and test feedback · runs in: smoke:0, by-hand
 - `sovereign-lint-scoped` — scripts/pre-push.sh (header — why the compile runs alongside the ratchets) · runs in: prepush
 - `synth` — bench/lanes/sep/README.md · runs in: check

@@ -45,7 +45,7 @@
 //!     (QueryEgress — the web-escalation client)
 //!   - svrn/crates/sovereign-tools-base/src/web/mod.rs
 //!     (QueryEgress — the search tool's default_client)
-//!   - sovereign/crates/sovereign-desktop/src-tauri/src/commands/
+//!   - clients/desktop/src-tauri/src/commands/
 //!     conversation.rs (the Search-the-web card's client — carried
 //!     at the red as `LocalDaemon 1`; corrected at landing when the
 //!     re-home review saw the site dispatch External queries)

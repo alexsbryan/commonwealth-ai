@@ -22,7 +22,7 @@
 1	quality/xtask/src/target_arch.rs
 2	shared/crates/kernel-types/src/judgement.rs
 1	cmnwlth/crates/oicp-conformance/src/main.rs
-1	sovereign-mobile/src-tauri/src/commands/host.rs
+1	clients/mobile/src-tauri/src/commands/host.rs
 1	bench/crates/sovereign-cli-bench/src/eval_cmd/runner.rs
 1	svrn/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs
 1	svrn/crates/sovereign-cli-daemon/src/doctor_cmd/mod.rs
@@ -60,11 +60,11 @@
 1	svrn/crates/sovereign-daemon/src/state.rs
 1	svrn/crates/sovereign-daemon/src/turn_http.rs
 2	svrn/crates/sovereign-daemon/src/yield_hook.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/command_bridge.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/commands/contribution.rs
-2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/meshapp.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
+1	clients/desktop/src-tauri/src/command_bridge.rs
+1	clients/desktop/src-tauri/src/commands/contribution.rs
+2	clients/desktop/src-tauri/src/commands/meshapp.rs
+1	clients/desktop/src-tauri/src/crash_bundle.rs
+1	clients/desktop/src-tauri/src/import_commands.rs
 2	svrn/crates/sovereign-grants/src/auto_recover.rs
 2	svrn/crates/sovereign-grants/src/shard_manager.rs
 1	serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs

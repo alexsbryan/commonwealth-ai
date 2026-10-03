@@ -21,7 +21,8 @@
 //!
 //! `<data_dir>/client-tokens/<label>.token`, file `0600` and directory
 //! `0700` — the file-per-name shape of the MCP secret store
-//! (`studio/.../mcp/secret_store.rs`), reused as a SHAPE and not as code: that
+//! (`svrn/crates/sovereign-tools-base/src/mcp/secret_store.rs`), reused as a
+//! SHAPE and not as code: that
 //! store hardcodes `~/.svrnmesh/secrets/mcp` and this one is told its
 //! directory, because the daemon under test must not mint into the operator's.
 //! The reason the shape is right is the same one: a credential that lives in

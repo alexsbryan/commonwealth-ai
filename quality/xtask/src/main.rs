@@ -116,7 +116,7 @@ fn print_usage() {
         "  docs-gate                      Resolve every repo path cited by the narrative docs"
     );
     eprintln!(
-        "  boundary-gate                  Enforce the studio-package dependency boundary (studio/BOUNDARY.md)"
+        "  boundary-gate                  Enforce the studio-package dependency boundary (clients/studio/BOUNDARY.md)"
     );
     eprintln!(
         "  clone-gate [--update-baseline|--tighten]  Production lines covered by an 8-line window in 2+ files may only shrink"

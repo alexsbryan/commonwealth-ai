@@ -79,7 +79,7 @@ difference between "smooth" and "where is that again?".
    Verify: `sovereign enrich investigation show uap-blue-book` prints `Entities: 5598 /
    Relationships: 3386 / Pattern findings: 15`.
 4. **Desktop retrieval reachable:** launch the app (dev: `npm run dev` in
-   `sovereign/crates/sovereign-desktop/` then `tauri dev`; or the packaged `.app`). It
+   `clients/desktop/` then `tauri dev`; or the packaged `.app`). It
    attaches to the daemon on `:9741`. Confirm `uap-blue-book` is retrievable — if you've
    set `[retrieval] corpora` allow-list anywhere, `uap-blue-book` must be in it (empty =
    all). **Dry-run the Act 2 question and confirm a citation popover appears.**

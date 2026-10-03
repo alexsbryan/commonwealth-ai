@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # The output directory is the deployable static site. Overridable so a consumer
-# (landing/scripts/build-ring-runtime.sh → landing/ring/) can place it where
+# (clients/landing/scripts/build-ring-runtime.sh → clients/landing/ring/) can place it where
 # its host serves it; default is this repo's target/.
 OUT="target/ring-runtime/site"
 while [ $# -gt 0 ]; do

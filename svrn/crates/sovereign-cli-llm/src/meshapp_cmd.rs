@@ -106,8 +106,7 @@ fn run_new(args: &[String]) -> i32 {
         return 2;
     }
     let name = name.unwrap_or_else(|| title_case(&app_id));
-    let base =
-        base.unwrap_or_else(|| PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp"));
+    let base = base.unwrap_or_else(|| PathBuf::from("clients/desktop/public/meshapp"));
     let dir = base.join(&app_id);
     if dir.exists() {
         eprintln!("meshapp new: {} already exists", dir.display());
@@ -196,8 +195,7 @@ async fn run_dev(args: &[String]) -> i32 {
     let bundle_dir = match dir {
         Some(d) => d,
         None => {
-            let in_repo =
-                PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp").join(&app_id);
+            let in_repo = PathBuf::from("clients/desktop/public/meshapp").join(&app_id);
             if in_repo.join("index.html").is_file() {
                 in_repo
             } else {

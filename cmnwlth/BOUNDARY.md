@@ -232,7 +232,7 @@ package carries its tests.
 
 ## What a green gate does not prove
 
-The same caveat `studio/BOUNDARY.md` earned by actually performing a lift: a
+The same caveat `clients/studio/BOUNDARY.md` earned by actually performing a lift: a
 clean dependency closure is not a clean lift. Studio's gate was green while
 `sovereign-contracts` embedded a file from outside its crate root, and the
 sandbox had to preserve the monorepo's directory shape to compile. The

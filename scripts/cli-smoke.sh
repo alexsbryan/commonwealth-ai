@@ -22,7 +22,7 @@
 #                      (svrnme.sh). Validates the published release end to end;
 #                      run post-deploy or on a schedule. Tests the RELEASE, not
 #                      your working tree.
-#   local              pipe the repo's landing/install.sh into sh — tests your
+#   local              pipe the repo's clients/landing/install.sh into sh — tests your
 #                      EDITED installer against the published binaries, before
 #                      you deploy it to svrnme.sh.
 #   binary             mount a working-tree Linux binary (--binary <path>) at
@@ -34,7 +34,7 @@
 #
 # Usage:
 #   scripts/cli-smoke.sh                                   # hosted installer, default distros
-#   scripts/cli-smoke.sh --install-mode local              # test landing/install.sh
+#   scripts/cli-smoke.sh --install-mode local              # test clients/landing/install.sh
 #   scripts/cli-smoke.sh --install-mode binary --binary target/x86_64-unknown-linux-gnu/release/svrn
 #   scripts/cli-smoke.sh [--model-dir sovereign/models] [--distros "ubuntu:24.04,debian:12"]
 #                        [--runtime auto|podman|docker] [--prompt "..."] [--keep] [--dry-run]
@@ -57,7 +57,7 @@ cd "$REPO_ROOT"
 # ── Defaults / args ──────────────────────────────────────────────────────────
 INSTALL_MODE="hosted"                       # hosted | local | binary
 INSTALL_URL="https://svrnme.sh/install.sh"
-LOCAL_INSTALLER="$REPO_ROOT/landing/install.sh"
+LOCAL_INSTALLER="$REPO_ROOT/clients/landing/install.sh"
 DATA_DIR_HOST=""                             # persist /data on the host (models + config) across runs
 BINARY=""                                    # dir of locally-built LINUX binaries (binary mode);
                                             # defaults to the repo's container-build output

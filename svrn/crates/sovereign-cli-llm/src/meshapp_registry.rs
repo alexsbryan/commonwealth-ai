@@ -27,7 +27,7 @@ use sovereign_cli_base::dirs::sovereign_meshapps;
 /// The reviewed, in-repo curated list (the trust anchor). Resolved relative to
 /// the repo root (run from there) or via `--registry`.
 const CURATED_REGISTRY: &str = "ingest/crates/sovereign-recipes/meshapp-registry.toml";
-const DEFAULT_BUNDLE_BASE: &str = "sovereign/crates/sovereign-desktop/public/meshapp";
+const DEFAULT_BUNDLE_BASE: &str = "clients/desktop/public/meshapp";
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Registry {

@@ -302,7 +302,7 @@ Adjudicated 2026-09-14; rows, prices and evidence are the `[[collision]]` rows w
 
 ## What a green gate does not prove
 
-A clean dependency closure is not a clean lift — the caveat `studio/BOUNDARY.md` earned
+A clean dependency closure is not a clean lift — the caveat `clients/studio/BOUNDARY.md` earned
 by performing one: its gate was green while `sovereign-contracts` embedded a file from
 outside its crate root and the sandbox had to preserve the monorepo's directory shape to
 compile. The way to know Serving carries no such embed is to lift it. **Serving carried

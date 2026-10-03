@@ -13,7 +13,7 @@ use std::process::Command;
 mod repo_root;
 use repo_root::repo_root;
 
-const INSTALL: &str = "sovereign/deploy/onprem/install.sh";
+const INSTALL: &str = "distributions/deploy/onprem/install.sh";
 const MAIN_UNITS: [&str; 2] = ["firm-rag-daemon.service", "firm-rag-server.service"];
 
 /// The lines between install.sh's `retire-main-units` markers.

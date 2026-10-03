@@ -108,7 +108,7 @@ libc = "0.2"
 # read scanned PDFs on a headless box. Without it, a scanned PDF lands in
 # `WatchedFolderState.failed_files` with reason `scanned_no_text`.
 #
-# See sovereign/deploy/onprem/README.md and the DEFAULTS_LEDGER row.
+# See distributions/deploy/onprem/README.md and the DEFAULTS_LEDGER row.
 ocr = ["sovereign-daemon/ocr"]
 
 [lints]

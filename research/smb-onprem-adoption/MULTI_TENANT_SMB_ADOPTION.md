@@ -5,7 +5,7 @@ _2026-08-13 · RuggedFox · research status: assessment from code read (three Ex
 The operator's scenario: an SMB wants local RAG over company documents
 for all employees, where individual employees may augment the central
 sources with their own — and some may want to run their own models. This
-document interrogates how close `sovereign/deploy/onprem/` (the hardened
+document interrogates how close `distributions/deploy/onprem/` (the hardened
 on-prem kit) and the platform behind it are to that shape, focused on
 multi-tenancy. Companion: `FIFTEEN_MINUTE_COMMON_CASE.md` — the
 adoption-funnel question (a firm person going "ooo" to running in 15

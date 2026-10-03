@@ -31,7 +31,7 @@ in the files the row points at. When a row and the tree disagree, you stop
 | TESTFN(c,f) | `scripts/ralph-check.sh testfn c f` — `f` is the WHOLE test fn name (a vague filter rebuilds the workspace) | exit=0 |
 | ENV | `scripts/ralph-check.sh env` | exit=0 (rows that add an env read) |
 | PY(s) | `scripts/ralph-check.sh py s` — runs `python3 s --self-test`; every python file this queue creates carries one, with a planted failing input | exit=0 |
-| DESKTOP | `scripts/ralph-check.sh desktop` — `npm run check` and `npm run test` in `sovereign/crates/sovereign-desktop` | exit=0 |
+| DESKTOP | `scripts/ralph-check.sh desktop` — `npm run check` and `npm run test` in `clients/desktop` | exit=0 |
 | CAMPAIGN | `scripts/ralph-check.sh campaign epistemic-index` | exit=0 (rows that edit the campaign file) |
 <!-- section: checks-queue-2 -->
 | NODE(d) | `scripts/ralph-check.sh node d` (node 20 and npx are in the toolbox; pin every npm version the row names) | exit=0 |

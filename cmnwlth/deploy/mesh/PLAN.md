@@ -6,7 +6,7 @@ three drafting passes (ambition correction → staff verification → foundation
 **Evidence:** every load-bearing claim about current code is verified at file:line in
 [`GROUND_TRUTH.md`](GROUND_TRUTH.md) (same directory), cited below as **GT**. Claims marked *(doc)*
 rest on repository markdown whose runs were not re-executed.
-**Predecessor:** `sovereign/deploy/onprem/PLAN.md` — single box, landed 2026-08-03; its clean-VM
+**Predecessor:** `distributions/deploy/onprem/PLAN.md` — single box, landed 2026-08-03; its clean-VM
 rehearsal is still owed and is a prerequisite here.
 **Compass:** §7 structural-not-remembered · §10.6 one-decider-one-name · §18.1 watch the gate fail ·
 §18.3 never silently substitute · §18.5 one run is not a measurement.

@@ -178,7 +178,7 @@ tailnet path untouched.
 
 ### M2 — phone side: iroh in the Tauri Rust core
 
-- Add the iroh dep to `sovereign-mobile/src-tauri` behind the same
+- Add the iroh dep to `clients/mobile/src-tauri` behind the same
   experimental-feature posture as the mesh spike. (iroh runs on
   iOS/Android; the Rust core is exactly where it belongs — this is
   the "iroh embeds in your app instead of a companion VPN app"

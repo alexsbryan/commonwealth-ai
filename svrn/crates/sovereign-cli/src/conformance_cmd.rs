@@ -689,7 +689,7 @@ const REGISTRY: &str = kernel_types::conformance::REGISTRY_PATH;
 const CLAIMS_DIR: &str = "quality/conformance";
 const MANIFEST: &str = "svrn/docs/cli-contract.toml";
 /// Where the desktop app's Playwright run leaves its JUnit report.
-const PLAYWRIGHT_JUNIT: &str = "sovereign/crates/sovereign-desktop/test-results/junit.xml";
+const PLAYWRIGHT_JUNIT: &str = "clients/desktop/test-results/junit.xml";
 
 /// What the last journey lane recorded, keyed by `(journey id, step index)`.
 struct StepReport {

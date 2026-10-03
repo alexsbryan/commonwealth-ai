@@ -9,7 +9,7 @@
 # Exits 0 on match, 1 on mismatch. Designed for pre-release use (run
 # before `git tag desktop-v...`) and CI gating.
 #
-# Why three files? See sovereign/crates/sovereign-desktop/RELEASING.md
+# Why three files? See clients/desktop/RELEASING.md
 # §"Versioning". The desktop crate's src-tauri/Cargo.toml inherits via
 # `version.workspace = true`, so the cargo-side source of truth is the
 # workspace root.
@@ -20,8 +20,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 CARGO_TOML="$REPO_ROOT/Cargo.toml"
-TAURI_CONF="$REPO_ROOT/sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json"
-PACKAGE_JSON="$REPO_ROOT/sovereign/crates/sovereign-desktop/package.json"
+TAURI_CONF="$REPO_ROOT/clients/desktop/src-tauri/tauri.conf.json"
+PACKAGE_JSON="$REPO_ROOT/clients/desktop/package.json"
 
 for f in "$CARGO_TOML" "$TAURI_CONF" "$PACKAGE_JSON"; do
     if [[ ! -f "$f" ]]; then

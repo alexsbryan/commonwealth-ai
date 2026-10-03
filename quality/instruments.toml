@@ -8,7 +8,7 @@
 # `scripts/desktop-smoke.sh` (seven phases), `scripts/run-if-stale.sh`,
 # `sovereign-cli/src/posture_cmd.rs` (eight hand-written rows), the desktop
 # `package.json` (34 scripts), and the layer table in
-# `sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md`. None of them could
+# `clients/desktop/QUALITY_SURFACE.md`. None of them could
 # answer "what verifies this repo", so none could answer the question that
 # actually costs money: what verifies it NOWHERE.
 #
@@ -53,7 +53,7 @@
 #
 # Censused surfaces: `.github/workflows/{ci,weekly}.yml`,
 # `scripts/{pre-push,pre-commit,desktop-smoke,run-if-stale}.sh`, and
-# `sovereign/crates/sovereign-desktop/package.json`.
+# `clients/desktop/package.json`.
 #
 # ── Fields ──────────────────────────────────────────────────────────
 #
@@ -175,8 +175,8 @@ censused_surfaces = [
   "scripts/pre-commit.sh",
   "scripts/desktop-smoke.sh",
   "scripts/run-if-stale.sh",
-  "sovereign/crates/sovereign-desktop/package.json",
-  "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md",
+  "clients/desktop/package.json",
+  "clients/desktop/QUALITY_SURFACE.md",
   "svrn/docs/TESTING_SURFACE.md",
   "svrn/docs/specs/DAEMON_RESILIENCE.md",
 ]
@@ -356,7 +356,7 @@ negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
 # when_changed: per-crate `.rs` lines (crate roots found by Cargo.toml) plus the two
 #               script trees that are keys of their own (size_gate.rs:58).
-when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^scripts/|^sovereign/crates/sovereign-desktop/tests/e2e/scripts/|^quality/baselines/)"
+when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^scripts/|^clients/desktop/tests/e2e/scripts/|^quality/baselines/)"
 doc = "AGENTS.md §Definition of done"
 load_bearing = [
   { flag = "--tighten", why = "banks a real cut and never raises — always safe" },
@@ -1353,7 +1353,7 @@ preconditions = ["port-listening:9745"]
 baseline = { kind = "metrics", path = "bench/lanes" }
 negative_control = "none"
 runs_in = ["smoke:3"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "inner-chaos-calibrate"
@@ -1367,7 +1367,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "metrics", path = "bench/lanes/chaos_monkey" }
 negative_control = "none"
 runs_in = ["smoke:2"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
+doc = "clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
 load_bearing = [
   { flag = "sensitivity floor 0.85 / specificity floor 0.8", why = "no rubric or judge change may score runs without passing it — the judge-calibration gate (ARCH §18.6)" },
 ]
@@ -1399,7 +1399,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["ci:desktop", "smoke:0"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "--fail-on-warnings", why = "without it svelte-check exits 0 on warnings and the gate passes while the app has accessibility and unused-export problems. `check:loose` is the no-gate variant — do not wire it into CI" },
 ]
@@ -1415,7 +1415,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "desktop-sabotage"
 runs_in = ["ci:desktop", "smoke:0"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-e2e-synthetic"
@@ -1429,7 +1429,7 @@ fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "desktop-sabotage"
 runs_in = ["ci:desktop", "smoke:0"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "playwright.config.ts (the default)", why = "spec selection is DIRECTORY-based: this config's testDir is tests/e2e/specs against a Tauri backend mocked by fixtures/tauri-shim.js. It cannot assert that any answer is correct — every answer is a string the test injected" },
 ]
@@ -1445,7 +1445,7 @@ fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["ci:desktop"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/NEGATIVE_CONTROLS.md"
+doc = "clients/desktop/tests/e2e/NEGATIVE_CONTROLS.md"
 load_bearing = [
   { flag = "--allow-dirty", why = "escape hatch only. The default refusal exists because the script rewrites TRACKED files and a SIGKILL mid-run would lose uncommitted work git cannot return" },
   { flag = "(runs after the suite)", why = "a red suite makes every verdict here meaningless, and the script refuses to start on a red baseline" },
@@ -1463,7 +1463,7 @@ preconditions = ["port-listening:9745", "binary:sovereign-desktop"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:4", "by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "-c playwright.real.config.ts", why = "bare `playwright test` silently runs the SYNTHETIC suite instead" },
   { flag = "SOVEREIGN_REAL_CHAT_MODEL / SOVEREIGN_REAL_EMBED_MODEL", why = "setup FAILS if these do not resolve — the GGUFs are not in the repo, which is the whole reason no CI job runs this" },
@@ -1482,7 +1482,7 @@ preconditions = ["port-listening:9751", "binary:sovereign-desktop"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:4", "by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "-c playwright.faults.config.ts", why = "a separate config because the fault specs kill processes and own ports — they cannot share a run with anything" },
 ]
@@ -1498,7 +1498,7 @@ fidelity = "F2"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-demo"
@@ -1512,7 +1512,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md"
+doc = "clients/desktop/tests/e2e/demo/DEMO_BEATS.md"
 load_bearing = [
   { flag = "(a failed beat exports no clip)", why = "the product reel is an acceptance suite: `demo:export` is what turns green beats into artifacts, so a broken beat cannot ship as a video" },
 ]
@@ -1528,7 +1528,7 @@ fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md"
+doc = "clients/desktop/tests/e2e/demo/DEMO_BEATS.md"
 
 [[instrument]]
 id = "desktop-a11y"
@@ -1541,7 +1541,7 @@ fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-soak"
@@ -1555,7 +1555,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-breaker"
@@ -1568,7 +1568,7 @@ fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-layers"
 
 [[instrument]]
 id = "desktop-chaos"
@@ -1582,7 +1582,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "desktop-judge-calibration"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
+doc = "clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
 
 [[instrument]]
 id = "desktop-ttfi"
@@ -1592,10 +1592,10 @@ command = "npm run test:ttfi"
 cost_secs = 300.0
 enforcement = "tracked"
 fidelity = "F1"
-baseline = { kind = "metrics", path = "sovereign/crates/sovereign-desktop/tests/e2e/.ttfi-baseline.json" }
+baseline = { kind = "metrics", path = "clients/desktop/tests/e2e/.ttfi-baseline.json" }
 negative_control = "none"
 runs_in = ["smoke:1", "by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-ttfi"
@@ -1608,7 +1608,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-soak"
@@ -1621,7 +1621,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-breaker"
@@ -1634,7 +1634,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-report-journeys"
@@ -1647,7 +1647,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "desktop-invoke-coverage"
@@ -1660,7 +1660,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = "test-artifacts/ledger-synthetic.jsonl" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
+doc = "clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
 load_bearing = [
   { flag = "SOVEREIGN_INVOKE_COVERAGE=<path>", why = "off entirely when unset; a run with it unset produces no ledger and this reader then exits 3 as could-not-judge rather than reporting 0%" },
 ]
@@ -1676,7 +1676,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = "test-artifacts/ledger-real.jsonl" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
+doc = "clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
 
 [[instrument]]
 id = "desktop-invoke-coverage-gate"
@@ -1689,7 +1689,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = "test-artifacts/ledger-synthetic.jsonl" }
 negative_control = "none"
 runs_in = ["ci:desktop"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
+doc = "clients/desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
 load_bearing = [
   { flag = "--min-percent 35", why = "the ratchet floor. RAISE it as coverage lands; setting it aspirationally high and muting the failure is how a floor stops being read" },
 ]
@@ -1703,10 +1703,10 @@ cost_secs = "unmeasured"
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/crates/sovereign-desktop/tests/e2e" }
+baseline = { kind = "metrics", path = "clients/desktop/tests/e2e" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
+doc = "clients/desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
 load_bearing = [
   { flag = "sensitivity floor 0.85 / specificity floor 0.8", why = "no rubric or judge change may score runs without passing it (ARCH §18.6)" },
 ]
@@ -1725,7 +1725,7 @@ preconditions = ["binary:sovereign-desktop", "binary:timeout"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 load_bearing = [
   { flag = "SMOKE_P<n>_SECS", why = "per-phase soft budgets. A phase that runs out of budget SKIPs, and a SKIP verified nothing — read the scoreboard for SKIP rows, not just the final verdict" },
   { flag = "the timeout resolver", why = "run_capped shelled out to GNU `timeout` until 2026-07-28, which darwin does not ship, so every phase exited 127 and the whole gate was structurally incapable of passing on half the platforms it ships to. The start banner now names which of timeout/gtimeout/bash-fallback it resolved" },
@@ -1743,7 +1743,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "smoke-attach-mode"
@@ -1757,7 +1757,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:1"]
-doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
+doc = "clients/desktop/QUALITY_SURFACE.md#the-big-harnesses"
 
 [[instrument]]
 id = "mtp-probe"

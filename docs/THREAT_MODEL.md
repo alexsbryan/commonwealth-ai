@@ -125,7 +125,7 @@ Three zones, from most to least trusted:
 | `sovereign-server` `:8080` (multi-tenant REST/WS, mobile-facing) | `127.0.0.1` (`sovereign/crates/sovereign-server/src/config.rs`) | API-key → tenant middleware. **Startup refuses a non-loopback bind with auth disabled** unless `allow_unauthenticated_remote = true` is set explicitly (`validate_exposure`). `/health` + `/status` unauthenticated by design. | Plain HTTP on the perimeter; iroh dial-by-key optional (`[iroh] enabled`) |
 | Worker-pod daemon `:9742` (rented/cloud worker) | `0.0.0.0` | Owner-only routes; client pins the worker's certificate thumbprint from the bootstrap seed | rustls TLS (`cmnwlth/crates/sovereign-pods/src/worker_daemon.rs`) |
 | Tensor-split RPC `:50051/:50052` (`llama-server` ↔ `rpc-server`) | `127.0.0.1` — including `--rpc-worker` and `role = "anchor"`, which took `0.0.0.0` until 2026-09-20. A non-loopback `SOVEREIGN_RPC_SERVE` is refused unless `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1` (or `[shared_model] allow_plaintext_lan = true`) acknowledges it (`sovereign-contracts/src/launch.rs`) | **None** | **None — raw TCP.** Members reach the worker over the member-only `RPC_ALPN` tunnel (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`), which needs no LAN bind. See Known gaps |
-| Desktop command bridge `:9745` (test automation) | `127.0.0.1` | Debug builds only, opt-in via `SOVEREIGN_COMMAND_BRIDGE=1`; must never ship enabled in release (`sovereign/crates/sovereign-desktop/src-tauri/src/command_bridge.rs`) | — |
+| Desktop command bridge `:9745` (test automation) | `127.0.0.1` | Debug builds only, opt-in via `SOVEREIGN_COMMAND_BRIDGE=1`; must never ship enabled in release (`clients/desktop/src-tauri/src/command_bridge.rs`) | — |
 
 Browser CORS: the `:9741` client surface deliberately ships **no** CORS
 layer (`routes_ollama.rs` module doc — "honest disclosure over silent
@@ -288,7 +288,7 @@ it.
    with IPC access could invoke any registered command. That is no longer what
    this entry waits on: the desktop gained its own allowlist rather than
    waiting for upstream. `meshapp::bridge_refusal(label, command)`
-   (`sovereign/crates/sovereign-desktop/src-tauri/src/meshapp.rs`) is the one
+   (`clients/desktop/src-tauri/src/meshapp.rs`) is the one
    decider — pure, label and command in, refusal out — called in the invoke
    closure in `src-tauri/src/main.rs` before the handler runs, so a label
    `app_id_from_label` recognises may invoke only a name in
@@ -391,7 +391,7 @@ it.
    you mesh with machines whose owners you trust.
 11. **The desktop main window's Content-Security-Policy has been set but not
    watched refuse.** Narrowed 2026-09-21 (row `tg-11-main-window-has-a-csp`).
-   `sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json` set
+   `clients/desktop/src-tauri/tauri.conf.json` set
    `app.security.csp` to `null` until then, so the main window — the one
    holding your conversations, corpora and mesh controls — was under no
    restraint on where it may load script from or where it may send a

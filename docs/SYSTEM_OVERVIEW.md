@@ -57,15 +57,15 @@ commonwealth-ai/
 ├── ingest/crates/sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / daemon)
 ├── cmnwlth/              # Mesh coordination daemon
-├── studio/                    # Liftable authoring package
+├── clients/studio/            # Headless studio CLI (the authoring package's other crates sit with their programs)
 ├── quality/                   # Quality program — layer map, gate baselines, arch-layers crate
-├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
-├── packages/vscode-sovereign/ # First-party VSCode FIM extension
-└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android)
+├── clients/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
+├── clients/vscode/ # First-party VSCode FIM extension
+└── clients/mobile/          # Thin Tauri 2 mobile client (iOS + Android)
 ```
 
 Outside the map: `vendor/` (pinned `llama-cpp-4`), `scripts/`, `docs/`,
-`landing/`, `gym/`, `baselines/`, and `quality/xtask` — the gate
+`clients/landing/`, `gym/`, `baselines/`, and `quality/xtask` — the gate
 binaries plus the workspace-hygiene generators in `xtask/tests/`, which live
 there because they read the repo root and so cannot sit in a liftable crate.
 `models/` holds downloaded GGUF weights, gitignored.
@@ -231,7 +231,7 @@ Windows task XML `install_service` embeds.
 
 The liftable authoring package, buildable against only the OICP contract
 crates, enforced by `cargo xtask boundary-gate` (contract
-`studio/BOUNDARY.md`). One of four declared packages — the others are
+`clients/studio/BOUNDARY.md`). One of four declared packages — the others are
 `code-intel` (`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp`
 (`svrn/crates/corpus-mcp/README.md`) and `commonwealth` (`cmnwlth/BOUNDARY.md`).
 Crate sets and shared-leaf budgets are `[[package]]` / `[[package_leaf]]`
@@ -842,7 +842,7 @@ LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
 | Ontology primitives + migration | [`docs/specs/ONTOLOGY_PRIMITIVES.md`](../svrn/docs/specs/ONTOLOGY_PRIMITIVES.md), [`docs/specs/ONTOLOGY_MIGRATION.md`](../svrn/docs/specs/ONTOLOGY_MIGRATION.md) |
 | Drift / correctness tooling | [`docs/DRIFT_DETECTION.md`](../svrn/docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](../svrn/docs/CORRECTNESS_TOOLING.md) |
 | Work-atlas peer coordination | [`docs/WORK_ATLAS.md`](../svrn/docs/WORK_ATLAS.md) |
-| Desktop quality surface — START HERE to verify the desktop | [`crates/sovereign-desktop/QUALITY_SURFACE.md`](../sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md) |
+| Desktop quality surface — START HERE to verify the desktop | [`clients/desktop/QUALITY_SURFACE.md`](../clients/desktop/QUALITY_SURFACE.md) |
 | Browser actuation / TDD machine / Solver | [`docs/BROWSER_ACTUATOR.md`](../svrn/docs/BROWSER_ACTUATOR.md), [`docs/TDD_MACHINE.md`](../svrn/docs/TDD_MACHINE.md), [`docs/SOLVER_DESIGN.md`](../svrn/docs/SOLVER_DESIGN.md) |
 | Mobile / session continuity / memory model | [`docs/specs/MOBILE.md`](../svrn/docs/specs/MOBILE.md), [`docs/specs/SESSION_CONTINUITY.md`](../svrn/docs/specs/SESSION_CONTINUITY.md), [`../docs/specs/MEMORY_MODEL.md`](../docs/specs/MEMORY_MODEL.md) |
 | Worker pods / cloud peers | [`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](../svrn/docs/PINNED_WORKER_AS_INFERENCE_PEER.md), [`docs/CLOUD_PEER.md`](CLOUD_PEER.md) |
@@ -1207,7 +1207,7 @@ a bundled `sovereign-cli-daemon` sidecar when nothing answers, behind the
 `bundled-backend` feature declared by exactly one surface), commissions no
 `Runtime`, loads no GGUF, and reads the turn socket once per conversation. The
 deletion is structural rather than conventional — those crates left
-`sovereign-desktop/src-tauri/Cargo.toml`, so the ability is gone, not merely
+`clients/desktop/src-tauri/Cargo.toml`, so the ability is gone, not merely
 unused. W6 is the self-service support surface: seven health checks, a
 redacted diagnostic bundle, and a per-answer report, all files on the Desktop
 the user reads before sending, never auto-uploaded.
@@ -1452,11 +1452,11 @@ the shared report.
 | Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
 | Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |
-| Prove desktop and CLI answer one question alike | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |
+| Prove desktop and CLI answer one question alike | `clients/desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |
 | Trace a `/v1/chat/completions` end-to-end | `cmnwlth/docs/routing-field-guide.md` |
 | Understand OICP routing | `shared/crates/oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` + [`docs/inference.md`](../svrn/docs/inference.md) |
 | Point an outside tool at the daemon | [`docs/INTEROP.md`](INTEROP.md); [`docs/INTEGRATION_SURFACES.md`](INTEGRATION_SURFACES.md) for which surfaces are contracts |
-| Deploy to a shared air-gapped box | `sovereign/deploy/onprem/` — **read `EGRESS.md` before claiming this system makes no outbound connections** |
+| Deploy to a shared air-gapped box | `distributions/deploy/onprem/` — **read `EGRESS.md` before claiming this system makes no outbound connections** |
 | Rent a GPU by the minute | [`docs/CLOUD_PEER.md`](CLOUD_PEER.md); `scripts/dev-pod.sh`. A `--mesh` flight puts the join link on third-party hardware — end it with `svrn mesh rotate` |
 | Know which CLI use cases are promised | `docs/cli-contract.toml` — `[[command]]` the verb surface, `[[journey]]` the sequenced use cases, `[[experience]]` the promises |
 | See what the CLI promises and how much can fail | **`svrn contract`** (`map` / `census` / `nightly`). `census` splits the manifest into steps a lane RUNS and steps nothing runs, because a step in a never-run journey is a written intention |
