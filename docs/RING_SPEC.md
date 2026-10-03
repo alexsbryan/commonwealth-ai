@@ -161,11 +161,15 @@ read_only = "methods"          # or "none"
   counts, no `invite` verb (D4).
 - Target (LIB §16): one invite — a secret with an expiry and a use count on the
   minting node; redeeming it writes one `Admit`. Tiers: guest (the host or bridge
-  signs; the person is a name in the payload), browser key, installed key — each
-  a key under the same person.
+  signs; the person is a name in the payload) and installed key — the ring app on
+  a phone or the desktop app — each a key under the same person. A browser holds
+  no key in anyone else's ring (LIB §15): it is a guest on the house WiFi and a
+  read-only teaser elsewhere (`RING_ENTRY.md` "Phones").
 - The browser crate `sovereign/apps/ring-runtime` (its own workspace; artefacts
-  in `landing/ring/wasm/`) holds no rail-core and signs nothing. Browser signing
-  is unbuilt.
+  in `landing/ring/wasm/`) holds no rail-core and signs nothing, and stays so.
+  The phone app is `sovereign-mobile` (Tauri 2), whose key is ephemeral today
+  (`sovereign-mobile/src-tauri/src/iroh_bridge.rs:14`) and whose host,
+  `sovereign-server`, was deleted.
 
 ### 3.7 The bridge
 
@@ -275,7 +279,7 @@ the `ring-apps` rung it lands, or `new`.
 | U18 gesture gate | new | U7, U14 | gesture kinds declared; an unconfirmed gesture act refused | the library's `kind`, the bridge | entry-gesture-needs-person |
 | U19 journal-acquirer | ra-12 | — | `[acquire] type = "ring-journal"`, indexing what the fold shows | `corpus-engine` acquirers | elder-cites-an-act |
 | U20 ask-performer | ra-12 | U7 | the `pending` performer, `ask` first, the answer as a fulfilment act | the runtime and the lending node | elder-one-answer |
-| U21 browser-key | ra-11 | U16 | rail-core in wasm against golden vectors; client-signed append through `RingJournal::ingest` | `sovereign/apps/ring-runtime` | entry-one-link |
+| U21 phone-member | ra-11 | U16 | the ring app: `sovereign-mobile` with a persistent, keystore-wrapped key introduced under the person; `window.ring` served by the shell over iroh to the host; rail-core native; client-signed append through `RingJournal::ingest`; a read-only remote teaser in `ring-runtime/web` | `sovereign-mobile/src-tauri`, the door, `sovereign/apps/ring-runtime/web/app.js` | phone-to-own-key, off-the-wifi (`RING_ENTRY.md` "Phones") |
 | U22 provisioner | new | U4 | per-member Jellyfin accounts reconciled from the register, beside today's shared viewer | `sovereign-cli-mesh/src/mesh_media/` | entry-revocation |
 | U23 uninsured-notice | new | U9, U14 | the clerk lists a leaving host's uninsured apps to the ring | the bridge's clerk | — |
 | U24 ring-header | new | U5 | the door adds a verified `X-Mesh-Rings`, stripping client copies | `commonwealth-transport/src/iroh_identity_forward.rs` | proto-ring-header |
@@ -303,7 +307,7 @@ the `ring-apps` rung it lands, or `new`.
 - U17 `git grep -n 'fn mesh_get_contributions' -- sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs` → `:520`
 - U18 `git grep -n -i gesture -- sovereign/crates/sovereign-contracts/src/guest_pages sovereign/crates/sovereign-cli-mesh/src/ring_cmd` → nothing
 - U19 `git grep -n -E 'RingJournal|commonwealth[-_]rail' -- 'corpus-engine*' sovereign/crates/sovereign-core sovereign-recipes ':!corpus-engine/xtask'` → nothing
-- U21 `git grep -n commonwealth-rail-core -- sovereign/apps/ring-runtime/Cargo.toml` → nothing
+- U21 `git grep -n -i ephemeral -- sovereign-mobile/src-tauri/src/iroh_bridge.rs` → `:14`
 - U22 `git grep -n 'const VIEWER_NAME' -- sovereign/crates/sovereign-cli-mesh/src/mesh_media/viewer.rs` → `:52`
 - U24 `git grep -n -i x-mesh-rings -- '*.rs'` → nothing
 - U25 `git grep -n -i -E 'sharing_table|ShareTable|LendTable' -- '*.rs'` → nothing
@@ -429,7 +433,8 @@ anyone to trust anyone (ARCH principle 9).
 second implementation (a phone, a browser signer, another language) can exist:
 
 - the journal wire: signing bytes, canonical form, sync digest, gaps
-  (`RAIL_PROTOCOL_SKETCH.md`; v1 is U28, forced by U21's wasm signer);
+  (`RAIL_PROTOCOL_SKETCH.md`; v1 is U28, forced by the first implementation
+  that is not ours — the phone app signs with rail-core natively);
 - membership: one fold with the permutation property (after U1);
 - the link: `<gateway>/#ring=…&via=…&relay=…` (`docs/THE_LINK.md`);
 - what an app receives: the `X-Mesh-*` headers, `X-Mesh-Rings` included;
