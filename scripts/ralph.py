@@ -1819,6 +1819,12 @@ def conflict_pairs(text):
 
 # The one cargo budget (lib/cargo-jobs.sh), split across the lanes of a wave.
 CARGO_JOBS_LIB = pathlib.Path(__file__).resolve().parent / "lib" / "cargo-jobs.sh"
+# No wave starts with less free disk than this on the lane root. A lane's debug
+# target outgrows the clone it starts from (two ersilia r12 lanes reached 68G
+# each); waves started into a shrinking disk filled it, and every session, the
+# model probes (opencode's own database) and the supervisor's halt notice then
+# failed ENOSPC — the loop died without a word (2026-10-03).
+DISK_FLOOR_GB = 40
 # Where a lane reads its share: a file, because `toolbox run` forwards no env.
 LANE_JOBS_FILE = "target/ralph/lane.env"
 LANE_JOBS_VARS = ("SOVEREIGN_LINT_JOBS", "SOVEREIGN_TEST_JOBS")
@@ -1894,7 +1900,8 @@ class Pool:
                  lanes=2, base_branch="",
                  marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
-                 max_lane_failures=3, probe=None, jobs_share=None, lane_root=None):
+                 max_lane_failures=3, probe=None, jobs_share=None, lane_root=None,
+                 disk_floor_gb=DISK_FLOOR_GB, disk_free_gb=None):
         self.paths = paths
         self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
@@ -1915,6 +1922,9 @@ class Pool:
         self._held = frozenset()
         self.jobs_share = jobs_share or cargo_jobs_share
         self._jobs = None
+        self.disk_floor_gb = disk_floor_gb
+        self.disk_free_gb = disk_free_gb or (
+            lambda: shutil.disk_usage(self.lane_root).free // 2**30)
 
     def _git(self, *args, cwd=None):
         return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
@@ -2101,6 +2111,12 @@ class Pool:
                 # Lanes started into this would each size their builds from the
                 # same free memory: the shape of the 2026-10-01 OOM.
                 say(f"pool: wave {', '.join(wave)} not started — {why}")
+                self.sleep(60)
+                continue
+            free_gb = self.disk_free_gb()
+            if free_gb < self.disk_floor_gb:
+                say(f"pool: wave {', '.join(wave)} not started — {free_gb}GB free on "
+                    f"{self.lane_root}, under the {self.disk_floor_gb}GB disk floor")
                 self.sleep(60)
                 continue
             say(f"pool: {jobs} cargo jobs per lane — {why}")

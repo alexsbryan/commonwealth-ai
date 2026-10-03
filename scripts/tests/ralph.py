@@ -2921,6 +2921,23 @@ class PoolQueueTests(unittest.TestCase):
             want = ("4", "SOVEREIGN_LINT_JOBS=4\nSOVEREIGN_TEST_JOBS=4\n")
             self.assertEqual(seen, {"q-a": want, "q-b": want})
 
+    def test_a_wave_waits_out_the_disk_floor(self):
+        # Waves started into a shrinking disk filled it; the sessions, the model
+        # probes and the supervisor's halt notice then all failed ENOSPC
+        # (2026-10-03). No lane starts until the lane root is over the floor.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            readings = iter([12, 80])
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             disk_free_gb=lambda: next(readings, 80))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            said = out.getvalue()
+            self.assertIn(f"pool: wave q-a not started — 12GB free on {pool.lane_root}, "
+                          f"under the {ralph.DISK_FLOOR_GB}GB disk floor", said)
+            self.assertLess(said.index("disk floor"), said.index("lane start q-a"))
+
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
         with contextlib.redirect_stdout(io.StringIO()):
