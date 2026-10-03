@@ -556,5 +556,5 @@ fn row(atom: Atom<'_>, via: &[Via<'_>], named: &[&str]) -> TypedRow {
 }
 
 #[cfg(test)]
-#[path = "typed_tests.rs"]
+#[path = "tests/typed.rs"]
 mod tests;

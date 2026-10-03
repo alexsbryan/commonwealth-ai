@@ -140,8 +140,8 @@
 74	sovereign/crates/sovereign-onprem
 298	sovereign/crates/sovereign-onprem::tests
 25	sovereign/crates/sovereign-peer-wire
-29028	sovereign/crates/sovereign-pipeline
-4924	sovereign/crates/sovereign-pipeline::tests
+29117	sovereign/crates/sovereign-pipeline
+4947	sovereign/crates/sovereign-pipeline::tests
 2323	sovereign/crates/sovereign-pods
 2837	sovereign/crates/sovereign-pods::tests
 516	sovereign/crates/sovereign-runtime-recipe
@@ -178,8 +178,8 @@
 1678	studio/crates/sovereign-workflow-host
 611	studio/crates/sovereign-workflow-host::tests
 1213	studio/crates/sovereign-workflow::tests
-2591	understanding-atlas
-2127	understanding-atlas::tests
+3787	understanding-atlas
+2665	understanding-atlas::tests
 8	understanding-host::tests
 3186	understanding-vocab
 874	understanding-vocab::tests
