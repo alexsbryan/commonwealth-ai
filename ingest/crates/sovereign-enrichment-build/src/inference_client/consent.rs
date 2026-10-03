@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The enrich run's consent grant: what the egress gate in
 //! [`super::DaemonInferenceClient::complete`] consults before a payload goes
-//! to a remote provider.
+//! to a chat host off this machine.
 //!
 //! The gate landed with order deep-research-t2a and its grant surface did
 //! not, so from then until 2026-10-03 nothing called `with_consent` and every

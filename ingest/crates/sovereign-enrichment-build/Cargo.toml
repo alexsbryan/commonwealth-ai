@@ -68,7 +68,6 @@ reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
 tracing = { workspace = true }
 # `test_env::scoped_home` only, behind `test-support`. NOT a runtime cost:
 # every non-test use of tempfile in the moved code sits after a `#[cfg(test)]`.

@@ -106,33 +106,26 @@ Two distinct seams, and they are not the same one.
 
 ### Extraction against your endpoint
 
-Enrichment resolves `provider:model` specs against
-`~/.config/sovereign/providers.toml`:
+Enrichment talks to one OpenAI-compatible host: the corpus's `base_url`
+(`--chat-url` on `svrn-ingest ingest`), with embeddings at `embed_base_url`
+when they are a second process, as with llama-server, which serves one
+model per process. Model ids go to that host verbatim, so `qwen3:8b`
+reaches Ollama as written. A hosted model is not enrichment's concern:
+point it at a sovereign daemon whose `[engine]` is the vendor.
 
-```toml
-[providers.myserver]
-type = "openai-compatible"      # local daemon, vLLM, llama.cpp, OpenRouter, Together
-base_url = "http://10.0.0.5:8080/v1"
-```
-
-A bare model id resolves to provider `local`. `anthropic` is the other
-dialect (`/v1/messages`).
-
-**`structured_output_mode` is an override, not a requirement.** The
-extraction pipeline asks for JSON against a schema. By default it asks for
-`json_schema` (the provider enforces it: OpenAI, our daemon), and a host that
-refuses that with a 400 (DeepSeek's chat API) is asked once more with the
-schema as a forced function call; if that answers, the provider uses it for
-the rest of the run. Set the mode only to pin a spelling: `json-object` (valid
-JSON, no schema enforcement), `tool-use-auto`, or `tool-use-forced`. A host
-that accepts `json_schema` but ignores it does not 400, so it is not caught by
-the fallback, and shows up as extraction quality loss rather than an error.
+**Structured output is negotiated, not configured.** The extraction
+pipeline asks for JSON against a schema: `json_schema` by default, or what
+the host advertises at `/oicp/v1/capabilities`. A host that refuses
+`json_schema` with a 400 (DeepSeek's chat API) is asked once more with the
+schema as a forced function call. A host that accepts `json_schema` but
+ignores it does not 400, so it is not caught by the fallback, and shows up
+as extraction quality loss rather than an error.
 
 **The gotcha that will bite you.** There is one egress boundary, and it
-decides local-versus-remote by comparing the resolved `base_url` against
-this client's own daemon base. Your llama-server on another host or port
-is **remote** by that definition, even on your LAN — so personal-custody
-chunks are refused to it unless a consent grant is installed for the run.
+decides local-versus-remote by whether the host is on this machine
+(loopback). Your llama-server on another host is **remote** by that
+definition, even on your LAN — so personal-custody chunks are refused to it
+unless the run has a consent grant (`--consent <class>`).
 This is deliberate: the boundary protects custody, and it does not know
 that your endpoint is one you trust. Plan for it rather than discovering
 it mid-ingest.
@@ -319,8 +312,8 @@ One small binary placed beside what you already run. It takes two
 configuration values — an atlas directory and a `base_url` — and serves
 governance over HTTP. The `base_url` points either at your own
 OpenAI-compatible endpoint (llama.cpp, vLLM, SGLang, TGI) or at a
-sovereign daemon, which is the same `providers.toml` seam Tier 3
-already uses.
+sovereign daemon, which is the same one-host seam Tier 3 already
+uses.
 
 This is a small binary rather than a platform for one reason: the fold
 is pure, so most of what a server would serve is file-backed pure

@@ -17,16 +17,12 @@ use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 use corpus_engine::InferenceFn;
 
+use oicp_client::StructuredOutputMode;
 use sovereign_contracts::egress::{model_client, verify, ConsentGrant, EgressPayload};
 use sovereign_contracts::types::{Custody, SearchPrivacy};
 
-use super::providers::{
-    local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
-};
-
 mod consent;
-#[cfg(test)]
-mod dialect_tests;
+mod negotiate;
 mod wire;
 
 pub use consent::{export_run_consent, parse_consent_class, run_consent};
@@ -35,9 +31,9 @@ pub use consent::{export_run_consent, parse_consent_class, run_consent};
 // has a client, so they surface here rather than as methods. They live in the
 // corpus-index leaf (`corpus_index::v1_models`, pb-code-clean) so a program
 // that does not link this crate reaches the same decider. `wire` holds the
-// two provider dialects as a second `impl DaemonInferenceClient` block and
-// exports nothing: its methods are `pub(super)`, reachable from this module
-// and no further.
+// chat dispatch as a second `impl DaemonInferenceClient` block and exports
+// nothing: its methods are `pub(super)`, reachable from this module and no
+// further.
 pub use corpus_index::v1_models::{probe_daemon, resolve_default_models};
 
 // The three-way probe (order enrich-probe-timeout) stays INSIDE the
@@ -63,11 +59,17 @@ const CHAT_TIMEOUT: Duration = Duration::from_secs(1800);
 /// tight so a hung embed surface doesn't freeze a whole run.
 const EMBED_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// Reusable OpenAI-compatible chat client pointed at the local daemon.
+/// Reusable OpenAI-compatible chat client pointed at one host: this
+/// machine's daemon, or a bare llama-server / Ollama / vLLM endpoint. A
+/// hosted model is the daemon's business (its `[engine]`), not this client's.
 #[derive(Debug, Clone)]
 pub struct DaemonInferenceClient {
     client: reqwest::Client,
-    base_url: String,
+    /// The chat host's `/v1` base.
+    chat_base: String,
+    /// The chat host is on this machine (`oicp_client::endpoint_is_loopback`).
+    /// Anything else is a remote payload, gated by the run's grant.
+    on_box: bool,
     chat_model: String,
     embed_model: String,
     /// Per-request output token cap. `None` means "let the daemon
@@ -101,7 +103,7 @@ pub struct DaemonInferenceClient {
     /// Mirrors `PhaseOverride` from EnrichConfig; the client applies
     /// matching entries to every outgoing prompt's `phase_id` before
     /// dispatch. Empty map = no per-phase tuning, fall through to
-    /// provider defaults.
+    /// the dispatcher's defaults.
     phase_overrides: BTreeMap<String, super::config::PhaseOverride>,
     /// Phase D2 — token ledger. Atomic counters bumped on every
     /// successful `complete_inner` call. Cloned across `Clone`d
@@ -110,37 +112,16 @@ pub struct DaemonInferenceClient {
     /// constructed from a clone (`build_client_pair` does this).
     /// Cheap (relaxed atomics; no lock) so the hot path stays hot.
     usage: Arc<TokenUsageLedger>,
-    /// Multi-provider registry. Holds the built-in `local` provider
-    /// pointed at `base_url`, plus any operator-configured remote
-    /// providers from `~/.config/sovereign/providers.toml`. The
-    /// dispatcher resolves `provider:model` syntax in the configured
-    /// `chat_model` (or per-phase override) by looking up here. Bare
-    /// model ids without a `provider:` prefix route to `local`,
-    /// preserving prior behavior.
-    providers: Arc<ProviderRegistry>,
-    /// The egress boundary (order deep-research-t2a): the custody
-    /// class this client declares for payloads it would send to a
-    /// REMOTE provider. Default `Personal` — an enrich extraction
-    /// chunk is the estate's own content and must never leave the
-    /// machine without a consent grant. Local-daemon dispatch (the
-    /// built-in `local` provider) is never gated — that traffic
-    /// never leaves the machine.
+    /// How the chat host is asked for schema-shaped output: `json_schema`
+    /// until [`Self::discover_capabilities`] reads what the host advertises.
+    structured_output_mode: StructuredOutputMode,
+    /// The egress boundary (order deep-research-t2a): the custody class of
+    /// every payload this client sends. `Personal`: an extraction chunk is
+    /// the estate's own content.
     payload_custody: Custody,
-    /// Run-scoped consent grant, consulted at the boundary when a
-    /// remote provider is resolved. Default `None` — default-deny:
-    /// a remote-provider dispatch refuses with a typed message
-    /// naming what was withheld (the R-5 red, green). The t2b seat
-    /// lands the grant surface for enrich; until then the refusal is
-    /// the product behavior.
+    /// The run's consent grant (`--consent`). `None` is default-deny: a
+    /// payload bound for another host refuses, naming what was withheld.
     consent: Option<ConsentGrant>,
-    /// The derived base URL of THIS client's own daemon (the same
-    /// normalization the built-in `local` entry gets — see
-    /// `providers::local_daemon_base`), and only when that daemon is on
-    /// this machine: a dispatch skips the egress gate when its provider's
-    /// `base_url` equals this. `None` when the configured base names another
-    /// host, so `--chat-url https://api.deepseek.com` is a remote payload
-    /// like any other.
-    local_base: Option<String>,
     /// Where `POST /v1/embeddings` goes, which is `base_url` for every
     /// host that serves both models — a daemon, Ollama, vLLM — and a
     /// DIFFERENT process for `llama-server`, which serves one model per
@@ -203,10 +184,11 @@ impl DaemonInferenceClient {
         // with enrich's documented 1800s hang headroom passed in.
         let client = model_client(CHAT_TIMEOUT)?;
         let base_url_str = base_url.into();
-        let providers = Arc::new(ProviderRegistry::load_default(&base_url_str));
+        let chat_base = v1_base(&base_url_str);
         Ok(Self {
             client,
-            base_url: base_url_str.clone(),
+            on_box: oicp_client::endpoint_is_loopback(&chat_base),
+            chat_base,
             chat_model: chat_model.into(),
             embed_model: embed_model.into(),
             max_output_tokens: None,
@@ -214,15 +196,9 @@ impl DaemonInferenceClient {
             max_tokens_by_phase: BTreeMap::new(),
             phase_overrides: BTreeMap::new(),
             usage: Arc::new(TokenUsageLedger::default()),
-            providers,
-            // Default-deny at t2a: a personal-corpus chunk to a
-            // remote provider refuses unless a consent grant covers
-            // it (the R-5 red → green). The t2b seat lands the grant
-            // surface for enrich.
+            structured_output_mode: StructuredOutputMode::default(),
             payload_custody: Custody::Personal,
             consent: None,
-            local_base: Some(local_daemon_base(&base_url_str))
-                .filter(|base| oicp_client::endpoint_is_loopback(base)),
             // One host until told otherwise. `with_embed_base_url` is how a
             // caller says the embeddings live somewhere else.
             embed_base_url: base_url_str,
@@ -240,7 +216,7 @@ impl DaemonInferenceClient {
     }
 
     /// Install the run-scoped consent grant consulted at the egress
-    /// boundary when a remote provider is resolved. `None` (the
+    /// boundary when the chat host is off this machine. `None` (the
     /// default) is default-deny.
     pub fn with_consent(mut self, consent: Option<ConsentGrant>) -> Self {
         self.consent = consent;
@@ -349,20 +325,16 @@ impl DaemonInferenceClient {
         .with_consent(run_consent(&cfg.corpus_id)))
     }
 
-    /// Refine the provider registry's structured-output modes against
-    /// live OICP capability manifests before dispatching any request
-    /// (see [`ProviderRegistry::discover_structured_output`]). Async,
-    /// best-effort, idempotent: an unreachable host leaves every
-    /// provider on its configured/default mode. Callers on the enrich
-    /// full-run path chain this after [`Self::from_enrich_config`] so
-    /// the `local` provider's mode reflects what the daemon actually
-    /// advertises (OICP v0.4 §feature-negotiation) rather than a
-    /// hard-coded `json_schema`. Skipping it is safe — the default is
-    /// correct for a Sovereign daemon.
+    /// Refine the structured-output mode against the chat host's live OICP
+    /// capability manifest before dispatching any request
+    /// (`negotiate::discover_structured_output`). Best-effort: an
+    /// unreachable or non-OICP host keeps `json_schema`. Callers on the
+    /// enrich full-run path chain this after [`Self::from_enrich_config`].
+    /// Skipping it is safe — the default is correct for a Sovereign daemon.
     pub async fn discover_capabilities(mut self) -> Self {
-        let mut registry = (*self.providers).clone();
-        registry.discover_structured_output().await;
-        self.providers = Arc::new(registry);
+        self.structured_output_mode =
+            negotiate::discover_structured_output(&self.chat_base, self.structured_output_mode)
+                .await;
         self
     }
 
@@ -429,52 +401,18 @@ impl DaemonInferenceClient {
     /// "let the daemon decide" (useful for tests and environments
     /// where no cap has been explicitly configured).
     async fn complete_inner(&self, prompt: &ChatPrompt, max_tokens: Option<u32>) -> Result<String> {
-        // Parse `provider:model` from the resolved chat-model (or its
-        // per-phase override). Bare ids → local provider; explicit
-        // provider names dispatch to remote registry entries.
-        let raw = self.resolve_model_for_phase(prompt.phase_id.as_deref());
-        let (provider_name, model_id) = parse_model_spec(raw);
-        let provider = self.providers.get(&provider_name).ok_or_else(|| {
-            Error::Serialization(format!(
-                "no provider named `{provider_name}` configured (referenced by chat_model `{raw}`); \
-                 add a [providers.{provider_name}] block to ~/.config/sovereign/providers.toml \
-                 or use a bare model id to fall back to `local`"
-            ))
-        })?;
-        let effective_model = if model_id.is_empty() {
-            provider
-                .default_model
-                .as_deref()
-                .ok_or_else(|| Error::Serialization(format!(
-                    "model id missing in `{raw}` and provider `{provider_name}` has no default_model"
-                )))?
-                .to_string()
-        } else {
-            model_id
-        };
-        let effective_max_tokens = max_tokens.or(provider.default_max_tokens);
-        // The egress boundary (order deep-research-t2a, R-5): every
-        // dispatch passes the ONE release gate BEFORE any request is
-        // built. Only this client's own on-box daemon is Local; any other
-        // endpoint is External, including a provider on loopback, which
-        // may be a relay to a vendor. Default custody Personal + no grant
-        // → typed refusal naming what was withheld.
-        let on_box = self.local_base.as_deref() == Some(provider.base_url.as_str());
-        tracing::debug!(
-            target: "egress",
-            provider = %provider.name,
-            base_url = %provider.base_url,
-            on_box,
-            "enrich dispatch locality"
-        );
-        let privacy = if on_box {
+        // The model id goes to the host verbatim: which backend serves it is
+        // the host's business, and an id may carry a colon (`qwen3:8b`).
+        let model = self.resolve_model_for_phase(prompt.phase_id.as_deref());
+        // The egress boundary (order deep-research-t2a, R-5): every dispatch
+        // passes the ONE release gate before any request is built. A host on
+        // this machine is Local; any other is External, and a personal chunk
+        // refuses there without the run's grant.
+        let privacy = if self.on_box {
             SearchPrivacy::Local
         } else {
             SearchPrivacy::External {
-                provider: match provider.kind {
-                    ProviderKind::Anthropic => "anthropic",
-                    ProviderKind::OpenaiCompatible => "openai-compatible",
-                },
+                provider: "openai-compatible",
             }
         };
         verify(
@@ -482,7 +420,7 @@ impl DaemonInferenceClient {
                 privacy,
                 custody: self.payload_custody,
                 what: "chunk",
-                target: &provider.name,
+                target: &self.chat_base,
                 detail: &prompt.user,
                 user_formed: false,
             },
@@ -490,26 +428,13 @@ impl DaemonInferenceClient {
         )
         .map_err(|r| {
             Error::Safety(format!(
-                "{r}. To release this corpus's text to `{}` ({}), pass --consent <class> \
+                "{r}. To release this corpus's text to {}, pass --consent <class> \
                  (public-web | peer | personal) or set SVRNMESH_EGRESS_CONSENT",
-                provider.name, provider.base_url
+                self.chat_base
             ))
         })?;
-        match provider.kind {
-            ProviderKind::OpenaiCompatible => {
-                self.complete_openai_compatible(
-                    provider,
-                    &effective_model,
-                    prompt,
-                    effective_max_tokens,
-                )
-                .await
-            }
-            ProviderKind::Anthropic => {
-                self.complete_anthropic(provider, &effective_model, prompt, effective_max_tokens)
-                    .await
-            }
-        }
+        self.complete_openai_compatible(model, prompt, max_tokens)
+            .await
     }
 
     /// Call `/v1/embeddings` for a single text. Uses a shorter timeout
@@ -613,9 +538,35 @@ impl DaemonInferenceClient {
     }
 }
 
+/// The host's `/v1` base. Atlas configs carry the bare host
+/// (`http://localhost:9741`), so `/v1` is appended unless the base already
+/// names a `/vN` segment.
+fn v1_base(raw: &str) -> String {
+    if raw.contains("/v1") || raw.contains("/v2") || raw.contains("/v3") {
+        raw.to_string()
+    } else {
+        format!("{}/v1", raw.trim_end_matches('/'))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Atlas configs carry the bare host; the chat route must land on `/v1`
+    /// once, not twice.
+    #[test]
+    fn the_chat_base_gets_v1_once() {
+        assert_eq!(v1_base("http://localhost:9741"), "http://localhost:9741/v1");
+        assert_eq!(
+            v1_base("http://localhost:9741/"),
+            "http://localhost:9741/v1"
+        );
+        assert_eq!(
+            v1_base("http://localhost:9741/v1"),
+            "http://localhost:9741/v1"
+        );
+    }
 
     // These exercise the client's own phase->model resolution, which is
     // private to this module. They arrived in `discovery.rs` with the split

@@ -27,7 +27,7 @@ pub use sovereign_enrichment_catalog::{catalog, config, paths};
 // `super::inference_client` and so on. Same reason `config` and `paths` are
 // re-exported on the line above: the home moved, the call sites did not.
 pub use sovereign_enrichment_build::{
-    corpus_io, inference_client, pipeline_resolve, providers, source_loader,
+    corpus_io, inference_client, pipeline_resolve, source_loader,
 };
 
 pub mod atlas_configuration;

@@ -63,7 +63,6 @@ pub mod corpus_io;
 pub mod inference_client;
 pub mod pipeline_map;
 pub mod pipeline_resolve;
-pub mod providers;
 pub mod source_loader;
 
 /// End-to-end tests for the build: a scaffolded corpus, deterministic embed

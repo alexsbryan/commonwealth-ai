@@ -35,9 +35,9 @@
 //! ## Structured output, and the two capabilities a bare endpoint lacks
 //!
 //! Phase schemas ride `response_format: {type: "json_schema"}`, which
-//! llama-server and Ollama both honour; the orchestrator's provider registry
-//! already defaults an OpenAI-compatible host to that mode and refines it
-//! from `/oicp/v1/capabilities` when a host advertises. GLiNER is absent —
+//! llama-server and Ollama both honour; the orchestrator's chat client
+//! defaults to that mode and refines it from `/oicp/v1/capabilities` when a
+//! host advertises. GLiNER is absent —
 //! `CorpusEngine::with_chunk_entity_extractor` is never called here, because
 //! the extractor lives behind `ort`, which this package's boundary forbids —
 //! so the entity pass is the model's. Both facts are PRINTED at the start of
@@ -125,10 +125,10 @@ pub struct IngestArgs {
     #[arg(long)]
     pub no_enrich: bool,
 
-    /// Release this corpus's text to a remote `provider:model` chat host, up
-    /// to this custody: `public-web | peer | personal`. Absent means
-    /// default-deny: a remote provider refuses, and the local daemon never
-    /// needs a grant.
+    /// Release this corpus's text to a chat host off this machine, up to this
+    /// custody: `public-web | peer | personal`. Absent means default-deny: a
+    /// host off this machine refuses, and the local daemon never needs a
+    /// grant.
     #[arg(long, value_parser = sovereign_enrichment_build::inference_client::parse_consent_class)]
     pub consent: Option<sovereign_contracts::types::Custody>,
 }
@@ -140,7 +140,7 @@ pub struct IngestArgs {
 /// and what the OICP probe and this host's own embed probe take. `*_root` is
 /// what goes into `config.json`, because every reader downstream —
 /// `probe_daemon`'s `{base}/v1/models`, `embed_one`'s `{base}/v1/embeddings`,
-/// `providers::local_daemon_base`'s `{base}/v1` — appends the version segment
+/// the chat client's own `{base}/v1` — appends the version segment
 /// itself. Writing the `/v1` form there yields `…/v1/v1/models`, which 404s as
 /// "daemon is not responding" before phase 1 runs.
 #[derive(Debug)]
@@ -200,7 +200,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     if let Some(floor) = args.consent {
         sovereign_enrichment_build::inference_client::export_run_consent(floor);
         eprintln!(
-            "corpus-mcp: --consent {}: a remote provider may receive this corpus's text",
+            "corpus-mcp: --consent {}: a chat host off this machine may receive this corpus's text",
             floor.as_str()
         );
     }
@@ -379,9 +379,8 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         chat_models: None,
         embed_model: embed_profile.embed_model.clone(),
         // THE SEAM, and it is two fields because llama-server is two
-        // processes. Every phase's chat call, the provider registry's
-        // synthesized `local` entry and the egress gate that compares a
-        // resolved provider against it read `base_url`; every phase's
+        // processes. Every phase's chat call, and the egress gate that asks
+        // whether that host is on this machine, read `base_url`; every phase's
         // resolution embedding reads `embed_base_url` through
         // `EnrichConfig::embed_base`. Roots, not `/v1` — see `Endpoints`.
         // A bare endpoint here is the whole of "runs without our stack".
@@ -490,26 +489,11 @@ async fn resolve_chat_model(args: &IngestArgs, endpoints: &Endpoints) -> Result<
             })?
         }
     };
-    // A `provider:model` spec does not go to the chat endpoint at all, so the
-    // banner names where it does go rather than the URL it bypasses.
-    let (provider_name, _) = sovereign_enrichment_build::providers::parse_model_spec(&chat_model);
-    let registry =
-        sovereign_enrichment_build::providers::ProviderRegistry::load_default(&endpoints.chat_root);
-    match registry
-        .get(&provider_name)
-        .filter(|_| provider_name != "local")
-    {
-        Some(p) => eprintln!(
-            "corpus-mcp: chat via provider `{provider_name}` at {} (providers.toml), model \
-             `{chat_model}`, structured output {:?}",
-            p.base_url, p.structured_output_mode
-        ),
-        None => eprintln!(
-            "corpus-mcp: chat via {}/chat/completions, model `{chat_model}` ({})",
-            endpoints.chat_v1,
-            chat_kind.label()
-        ),
-    }
+    eprintln!(
+        "corpus-mcp: chat via {}/chat/completions, model `{chat_model}` ({})",
+        endpoints.chat_v1,
+        chat_kind.label()
+    );
     Ok(chat_model)
 }
 

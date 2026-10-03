@@ -435,12 +435,11 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // is why it has no row here.
 
     // ---- sovereign-enrichment-build ----
-    // R-5's named path: the enrich --provider dispatch. The chat
-    // client (complete_inner → complete_openai_compatible /
-    // complete_anthropic) moved into BOUNDARY_MODULE (egress.rs
-    // model_client) with the boundary — a remote provider now passes
-    // the release gate (default custody Personal, no grant →
-    // typed refusal). The three remaining sites are local: the embed
+    // R-5's named path: the enrich dispatch. The chat client
+    // (complete_inner → complete_openai_compatible) moved into
+    // BOUNDARY_MODULE (egress.rs model_client) with the boundary — a
+    // host off this machine now passes the release gate (default
+    // custody Personal, no grant → typed refusal). The three remaining sites are local: the embed
     // one-shot client + two /v1/models probes.
     //
     // 2026-09-02: these were one row at
