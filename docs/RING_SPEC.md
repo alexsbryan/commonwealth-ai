@@ -36,8 +36,8 @@ Two rules hold every surface to the pitch.
   house", "the party"), people by their names, apps by their names, and
   *phone*, *computer*, *the chat*. Internal words — ring, member, guest, key,
   sync, journal, host, relay — appear in nothing a person reads (D9
-  plain-words). The app on the home screen needs a name that is not "ring"
-  (owed, D11).
+  plain-words). The app on the home screen is **svrngs** — svrn and rings — for
+  now (D11).
 - **The most general surface, the fewest features.** Everything a group does is
   an app on D0a, so the system learns by adding apps, never by adding platform.
 
@@ -236,15 +236,16 @@ the shells.
 | `rail-core` | the sans-IO state machine and fold above | none |
 | `rail` | the journal actor and its store | the journal |
 | `ring-node` | the shell: iroh accept and dial, the group, claim and serve-to-a-screen routes as `tower` services | none durable |
-| `fold-engine` | wasmtime over the pinned engine bytes, `fold_segment(state, acts) → (state, complete)`; an engine is data, not a type | none; seed caches are the caller's |
+| `fold-engine` | the `Engine` trait — `fold_segment(state, acts) → (state, complete)` and the handler calls — with QuickJS as its first implementation: embedded for first-party apps, in wasm under wasmtime for strangers' code | none; seed caches are the caller's |
 | `door` | the member door as a `tower` stack: header injection, credential mask, refused paths and play count as `Layer`s | declared secrets |
 | `bridge` | Discord, concrete, behind its five calls | declared secrets |
 | keystore | the one trait: iOS keychain, Android keystore and desktop each implement it | keys |
 | shells | cw-rails, the app and the bridge executable wire the above | none of their own |
 
 **Abstraction only where it is real.** A trait appears where a second
-implementation exists or at a genuine I/O boundary — the keystore today, a
-chat adapter when the second one is written — and nowhere else: no `Transport`,
+implementation exists or at a genuine boundary — the keystore; the fold engine,
+which the operator wants swappable (2026-10-03) and which already has two
+forms; a chat adapter when the second one is written — and nowhere else: no `Transport`,
 `Engine` or repository trait threaded through the core. Errors are `thiserror`
 enums in the crates and `anyhow` only in the three shells; refusal reasons are
 designed like events.
@@ -584,6 +585,12 @@ lending a model has no `infer`, and Ask says so.
   locale-dependent built-ins would let two phones compute different balances.
   The fold is the state of record; a screen receives changes and may keep a
   cache.
+- *QuickJS is the first engine, not the only one.* The runtime reaches an engine
+  through one `Engine` trait whose contract is the SDK's — JSON in and out, the
+  five laws, the budgets — and an SDK version names its engine by hash. Another
+  engine replaces QuickJS under a new SDK version once it passes `engine-parity`
+  and `fold-speed` on the golden journals; apps on the older version keep the
+  engine they named.
 - *With a screen:* every bundle is served from one URI scheme,
   `ringapp://<install-id>/`, with a CSP that allows no network, frames, forms or
   navigation. Each app runs in `<iframe sandbox="allow-scripts">`. `window.group`
@@ -726,7 +733,7 @@ earned. The keeper is the host.
 | E1.3 register | `Invite`, the co-signed `Admit` and person ids, `RemoveRequest` and the keeper's `Remove`; one membership writer; the seq-cut and fork-marker code and docs retired | `register`, `admit` | removal-is-sequenced, refusal-not-absence, invite, person-id, admit-co-signed |
 | E1.4 doors by register | the acceptor and every group route admit by the register, not the mesh | `acceptor.rs`, `ring_sync`, `ring_routes` | one-decider, cross-group, first-contact |
 | E1.5 the app | the Tauri shell with the node core, a key per group in the keystore, two-way sync with the host, Expenses and the Library built in, the claim route from the bot's link | `sovereign-mobile` | same-core, phone-to-own-key, reinstall-keeps-person, rebuild-from-a-phone |
-| E1.6 one engine | the host and the app fold with one embedded QuickJS build, JSON-only state | the runtime | fold-parity |
+| E1.6 one engine | the `Engine` trait, and one embedded QuickJS build behind it on the host and the app; JSON-only state | the runtime | fold-parity |
 | E1.7 door basics | lent views under CSP; refused paths, Jellyfin's `/Sessions/Logout` first | the door | peer-text-is-text, lent-service |
 
 *E2 — does the platform carry every class of app?* One reference app per class
@@ -752,7 +759,7 @@ on people's phones, so only now is the platform machinery earned.
 |---|---|---|---|
 | E3.1 SDK v1 | `window.group` published with the terms the seeds use by then; the manifest, capabilities and consent; install and update by signed manifest and bundle hash; the update preview | meshapp's pack and install | permissions, update-preview |
 | E3.2 sandbox | a frame per app, its CSP, the MessageChannel port | the app | frame-cannot-ipc |
-| E3.3 an engine for strangers' code | QuickJS in wasm under wasmtime, metering inside the hashed bytes, fold segments, the engine pinned by the SDK version (C4) | `fold-engine` | engine-parity, fold-speed |
+| E3.3 an engine for strangers' code | QuickJS in wasm under wasmtime as a second implementation of `Engine`, metering inside the hashed bytes, fold segments, the engine pinned by the SDK version (C4) | `fold-engine` | engine-parity, fold-speed |
 | E3.4 the developer surface | the dev loop, the reference with the seven reference apps as worked examples, the harness | `svrn app dev` | developers |
 
 **Avoid:**
@@ -965,10 +972,11 @@ By the operator, 2026-10-03:
 - **Reach:** the box is the meeting point, and the project runs the only relay.
 - **Devices:** a server and a phone are the same kind of thing. Phones-only
   groups were placed in the first stage; the lean order (2026-10-03, "no complex
-  machinery before earning it") moves them behind a trigger in D8 — to confirm.
+  machinery before earning it") moves them behind a trigger in D8, which the
+  operator confirmed as following from the principles.
 - **Apps declare their capabilities, and the group sees them.**
 
-Owed by the operator: the app's name.
+The app is named svrngs, for now (operator, 2026-10-03).
 
 By this design, open to the operator's veto:
 - one node core in every package;
