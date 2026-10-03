@@ -123,7 +123,7 @@ impl RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>> {
-        let admitted = self.outbound(crate::Payload::Completion(request.oicp.as_ref()))?;
+        let admitted = self.outbound(crate::Payload::Completion)?;
         let url = format!("{}/completions", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": request.model_id,

@@ -981,7 +981,7 @@ struct StreamDelta {
 impl InferenceProvider for RemoteApiProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let start = Instant::now();
-        let admitted = self.outbound(Payload::Completion(request.oicp.as_ref()))?;
+        let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let (response, mode) = self.send_chat(&admitted, &url, request).await?;
 
@@ -1046,7 +1046,7 @@ impl InferenceProvider for RemoteApiProvider {
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
         use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
-        let admitted = self.outbound(Payload::Completion(request.oicp.as_ref()))?;
+        let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
@@ -1132,7 +1132,7 @@ impl InferenceProvider for RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        let admitted = self.outbound(Payload::Completion(request.oicp.as_ref()))?;
+        let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);

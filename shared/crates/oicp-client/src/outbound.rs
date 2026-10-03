@@ -2,13 +2,11 @@
 //! The one way out of a [`RemoteApiProvider`]: who answers it ([`FarEnd`]),
 //! what a send carries ([`Payload`]), and the admission rule between them.
 //!
-//! The release of a payload is the CLIENT's decision (an enrich run's
-//! `--consent`, through `egress::release`), declared on the OICP envelope as
-//! `third_party_allowed`. Whether the endpoint is a third party is the
-//! DAEMON's fact, fixed by whoever built the provider. The two meet here, at
-//! the send: [`Admitted`] is the only request builder a provider has, and
-//! [`RemoteApiProvider::outbound`] the only way to get one, so no route
-//! (named, ranked, or a direct caller) can reach a vendor undeclared.
+//! A third party is a hosted vendor the operator configured as this node's
+//! `[engine]`, and that configuration is the release: completions go to it.
+//! Texts to embed or rerank never do, so a corpus is never embedded off the
+//! machine. [`Admitted`] is the only request builder a provider has, and
+//! [`RemoteApiProvider::outbound`] the only way to get one.
 //!
 //! The core (the first half of this file) is pure and table-tested; the shell
 //! below it owns the HTTP client.
@@ -16,7 +14,6 @@
 use std::fmt;
 
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::oicp::{InferenceRequirements, ShardingPrivacy};
 use sovereign_contracts::traits::ServingLocus;
 
 use crate::{RemoteApiProvider, SplitInferenceProvider};
@@ -32,50 +29,34 @@ pub enum FarEnd {
     /// originates here: the caller's envelope crosses verbatim, none is
     /// synthesized, no hop is spent.
     Origin,
-    /// A party outside the estate: a hosted vendor. Only a completion
-    /// declaring `third_party_allowed` is sent. The envelope itself stays here.
+    /// A party outside the estate: a hosted vendor the operator configured.
+    /// Completions go to it, without our envelope; texts to embed never do.
     ThirdParty,
 }
 
 /// What one send carries, as far as admission cares.
-#[derive(Debug, Clone, Copy)]
-pub enum Payload<'a> {
-    /// A completion and its OICP envelope; `None` when it sent none.
-    Completion(Option<&'a InferenceRequirements>),
-    /// Texts to embed or rerank. They carry no envelope to declare a release on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Payload {
+    /// A completion.
+    Completion,
+    /// Texts to embed or rerank.
     Texts,
     /// No caller text at all: the manifest read, warmup.
     Probe,
 }
 
-/// Why a third party was sent nothing.
+/// Why a third party was sent nothing: it was asked to embed or rerank text,
+/// which stays on this machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThirdPartyRefusal {
-    /// A completion whose envelope declares something short of
-    /// `third_party_allowed`, or declares nothing (`None`).
-    Undeclared {
-        /// What the envelope said; `None` when there was no envelope.
-        declared: Option<ShardingPrivacy>,
-    },
-    /// Texts, which have no envelope to declare it on.
-    Undeclarable,
-}
+pub struct ThirdPartyRefusal;
 
 impl FarEnd {
-    /// May `payload` be sent to this far end? A peer and this machine take
-    /// anything; a third party takes a probe, and a completion that declares
-    /// `third_party_allowed`.
-    pub fn admit(self, payload: &Payload<'_>) -> std::result::Result<(), ThirdPartyRefusal> {
+    /// May `payload` be sent to this far end? Everything may, except texts to
+    /// a third party.
+    pub fn admit(self, payload: Payload) -> std::result::Result<(), ThirdPartyRefusal> {
         match (self, payload) {
-            (FarEnd::Peer | FarEnd::Origin, _) | (FarEnd::ThirdParty, Payload::Probe) => Ok(()),
-            (FarEnd::ThirdParty, Payload::Texts) => Err(ThirdPartyRefusal::Undeclarable),
-            (FarEnd::ThirdParty, Payload::Completion(oicp)) => {
-                let declared = oicp.map(InferenceRequirements::sharding);
-                match declared {
-                    Some(ShardingPrivacy::ThirdPartyAllowed) => Ok(()),
-                    _ => Err(ThirdPartyRefusal::Undeclared { declared }),
-                }
-            }
+            (FarEnd::ThirdParty, Payload::Texts) => Err(ThirdPartyRefusal),
+            _ => Ok(()),
         }
     }
 
@@ -92,10 +73,10 @@ impl FarEnd {
     }
 }
 
-impl Payload<'_> {
-    fn describe(&self) -> &'static str {
+impl Payload {
+    fn describe(self) -> &'static str {
         match self {
-            Payload::Completion(_) => "a completion",
+            Payload::Completion => "a completion",
             Payload::Texts => "texts to embed or rerank",
             Payload::Probe => "a probe",
         }
@@ -104,28 +85,11 @@ impl Payload<'_> {
 
 impl fmt::Display for ThirdPartyRefusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ThirdPartyRefusal::Undeclared { declared } => {
-                let declared = declared.map_or_else(
-                    || "no envelope".to_string(),
-                    |s| {
-                        serde_json::to_value(s).map_or_else(|_| format!("{s:?}"), |v| v.to_string())
-                    },
-                );
-                write!(
-                    f,
-                    "only a completion whose OICP envelope declares `privacy.sharding = \
-                     \"third_party_allowed\"` may go there, and this one declares {declared}. The \
-                     client releases its own payload (an enrich run: `--consent <class>`)."
-                )
-            }
-            ThirdPartyRefusal::Undeclarable => write!(
-                f,
-                "embedding and rerank requests carry no OICP envelope, so they cannot declare \
-                 `third_party_allowed`; they need a server on this machine (`[engine] \
-                 embed_endpoint`)."
-            ),
-        }
+        write!(
+            f,
+            "text is never sent to a third party to be embedded or reranked; \
+             embeddings need a model on this machine (`[engine] embed_path`)"
+        )
     }
 }
 
@@ -213,9 +177,9 @@ impl RemoteApiProvider {
     /// Admit `payload` to this provider's far end, and hand back the builder
     /// its requests go out on. Decided once per logical call: a shed retry
     /// reuses the admission.
-    pub(crate) fn outbound(&self, payload: Payload<'_>) -> Result<Admitted<'_>> {
+    pub(crate) fn outbound(&self, payload: Payload) -> Result<Admitted<'_>> {
         let far_end = self.outbound.far_end;
-        let verdict = far_end.admit(&payload);
+        let verdict = far_end.admit(payload);
         if far_end == FarEnd::ThirdParty || verdict.is_err() {
             let endpoint = self.endpoint.describe();
             let what = payload.describe();

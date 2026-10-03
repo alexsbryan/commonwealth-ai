@@ -121,12 +121,9 @@ retrieves — plain chat needs no embedding model.
 other OpenAI-compatible vendor. Sovereign treats every endpoint that is not on
 this machine as a third party, and that changes what it will send there.
 
-**Only requests that say so go to it.** A request reaches a third-party engine
-only when its OICP envelope declares `privacy.sharding = "third_party_allowed"`.
-Anything else (no envelope, `local_only`, `mesh_allowed`) is refused before
-anything leaves, with an error naming that declaration. An enrichment run
-declares it with `--consent <class>`. Chat does not declare it yet, so chat on
-a hosted engine is refused rather than sent.
+**Configuring it is the consent.** Putting a vendor in `[engine]` sends this
+node's chat turns and enrichment calls to it. Our OICP envelope is not sent;
+a vendor does not speak it.
 
 **Embeddings stay on this machine.** An embedding request carries no envelope,
 so it can never declare that release. Point `embed_endpoint` at a server here:

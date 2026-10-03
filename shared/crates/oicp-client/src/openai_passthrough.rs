@@ -113,7 +113,7 @@ impl OpenAiPassthrough {
     async fn post(
         &self,
         path: &str,
-        payload: Payload<'_>,
+        payload: Payload,
         body: &impl serde::Serialize,
         what: &'static str,
     ) -> Result<reqwest::Response> {
@@ -308,7 +308,7 @@ impl LocalInferenceService for OpenAiPassthrough {
         let response = self
             .post(
                 "/chat/completions",
-                Payload::Completion(request.oicp.as_ref()),
+                Payload::Completion,
                 &request,
                 "Relayed chat completion",
             )
@@ -331,7 +331,7 @@ impl LocalInferenceService for OpenAiPassthrough {
         let response = self
             .post(
                 "/chat/completions",
-                Payload::Completion(request.oicp.as_ref()),
+                Payload::Completion,
                 &request,
                 "Relayed chat stream",
             )
@@ -368,7 +368,7 @@ impl LocalInferenceService for OpenAiPassthrough {
         let response = self
             .post(
                 "/completions",
-                Payload::Completion(None),
+                Payload::Completion,
                 &wire,
                 "Relayed FIM completion",
             )

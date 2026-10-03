@@ -49,20 +49,20 @@ fn request(sharding: Option<ShardingPrivacy>) -> CompletionRequest {
 fn refused<T>(result: sovereign_contracts::error::Result<T>, what: &str) {
     match result {
         Err(Error::PermissionDenied(msg)) => assert!(
-            msg.contains("third_party_allowed"),
-            "{what}: the refusal names the declaration that would grant it: {msg}"
+            msg.contains("embed_path"),
+            "{what}: the refusal names where embeddings belong: {msg}"
         ),
         Err(other) => panic!("{what}: refused with the wrong kind: {other}"),
-        Ok(_) => panic!("{what}: sent to a third party without the declaration"),
+        Ok(_) => panic!("{what}: texts sent to a third party"),
     }
 }
 
-/// THE FAILING INPUT: the probe's phase-1 requests (no envelope) and its
-/// composer requests (`local_only`) both reached DeepSeek or were refused for
-/// the wrong reason. Every sending method is driven, so a method that forgets
-/// to admit is the one that moves the counter.
+/// The operator's `[engine]` is the release: a completion reaches the vendor
+/// whatever its envelope says, and texts to embed or rerank never do. Every
+/// sending method is driven, so a method that forgets admission is the one
+/// that moves the counter.
 #[tokio::test]
-async fn a_third_party_is_sent_nothing_the_request_did_not_declare() {
+async fn a_third_party_gets_completions_and_never_texts() {
     let (url, hits, _) = vendor().await;
     let p = RemoteApiProvider::third_party(&url, Some("key".into()), "vendor-model", 8192).unwrap();
     for sharding in [
@@ -70,18 +70,9 @@ async fn a_third_party_is_sent_nothing_the_request_did_not_declare() {
         Some(ShardingPrivacy::LocalOnly),
         Some(ShardingPrivacy::MeshAllowed),
     ] {
-        let req = request(sharding);
-        refused(p.complete(&req).await, "complete");
-        refused(p.complete_stream(&req).await, "complete_stream");
-        refused(
-            p.complete_stream_with_finish(&req).await,
-            "complete_stream_with_finish",
-        );
-        refused(
-            p.complete_batch(std::slice::from_ref(&req)).await,
-            "complete_batch",
-        );
+        assert_eq!(p.complete(&request(sharding)).await.unwrap().text, "ok");
     }
+    assert_eq!(hits.load(SeqCst), 3);
     refused(p.embed("chunk").await, "embed");
     refused(p.embed_query("query").await, "embed_query");
     refused(p.embed_batch(&["chunk".to_string()]).await, "embed_batch");
@@ -89,17 +80,16 @@ async fn a_third_party_is_sent_nothing_the_request_did_not_declare() {
         p.rerank_batch("query", &["chunk".to_string()]).await,
         "rerank_batch",
     );
-    assert_eq!(hits.load(SeqCst), 0, "nothing reached the third party");
+    assert_eq!(hits.load(SeqCst), 3, "no text reached the third party");
 }
 
-/// The other direction: a declared request is served, and our envelope stays
-/// here. A vendor does not speak OICP.
+/// A vendor does not speak OICP: our envelope stays here.
 #[tokio::test]
-async fn a_declared_request_reaches_the_third_party_without_our_envelope() {
+async fn a_completion_reaches_the_third_party_without_our_envelope() {
     let (url, hits, bodies) = vendor().await;
     let p = RemoteApiProvider::third_party(&url, None, "vendor-model", 8192).unwrap();
     let answer = p
-        .complete(&request(Some(ShardingPrivacy::ThirdPartyAllowed)))
+        .complete(&request(Some(ShardingPrivacy::MeshAllowed)))
         .await
         .unwrap();
     assert_eq!(answer.text, "ok");
@@ -154,41 +144,19 @@ fn an_engine_off_this_machine_is_a_third_party() {
     assert_eq!(split.embed.far_end(), FarEnd::Origin);
 }
 
-/// The admission table, whole: every far end against every payload shape and
-/// every declaration a completion can carry.
+/// The admission table, whole: every far end against every payload.
 #[test]
 fn admission_is_a_table_over_far_end_and_payload() {
     use super::{Payload, ThirdPartyRefusal};
-    let env = |s| InferenceRequirements::new().with_sharding(s);
-    let (local, mesh, third) = (
-        env(ShardingPrivacy::LocalOnly),
-        env(ShardingPrivacy::MeshAllowed),
-        env(ShardingPrivacy::ThirdPartyAllowed),
-    );
-    let undeclared = |declared| Err(ThirdPartyRefusal::Undeclared { declared });
-    let rows = [
+    for (payload, third_party) in [
         (Payload::Probe, Ok(())),
-        (Payload::Texts, Err(ThirdPartyRefusal::Undeclarable)),
-        (Payload::Completion(None), undeclared(None)),
-        (
-            Payload::Completion(Some(&local)),
-            undeclared(Some(ShardingPrivacy::LocalOnly)),
-        ),
-        (
-            Payload::Completion(Some(&mesh)),
-            undeclared(Some(ShardingPrivacy::MeshAllowed)),
-        ),
-        (Payload::Completion(Some(&third)), Ok(())),
-    ];
-    for (payload, third_party) in rows {
-        assert_eq!(FarEnd::Peer.admit(&payload), Ok(()), "peer: {payload:?}");
+        (Payload::Completion, Ok(())),
+        (Payload::Texts, Err(ThirdPartyRefusal)),
+    ] {
+        assert_eq!(FarEnd::Peer.admit(payload), Ok(()), "peer: {payload:?}");
+        assert_eq!(FarEnd::Origin.admit(payload), Ok(()), "origin: {payload:?}");
         assert_eq!(
-            FarEnd::Origin.admit(&payload),
-            Ok(()),
-            "origin: {payload:?}"
-        );
-        assert_eq!(
-            FarEnd::ThirdParty.admit(&payload),
+            FarEnd::ThirdParty.admit(payload),
             third_party,
             "third party: {payload:?}"
         );

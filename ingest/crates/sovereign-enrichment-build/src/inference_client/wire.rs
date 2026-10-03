@@ -6,7 +6,7 @@
 use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::error::{Error, Result};
 use oicp_client::{titled_schema, RemoteApiProvider};
-use oicp_types::{CompletionRequest, InferenceRequirements, LatencyClass, ShardingPrivacy};
+use oicp_types::{CompletionRequest, InferenceRequirements, LatencyClass};
 use sovereign_contracts::traits::InferenceProvider;
 use std::sync::atomic::Ordering;
 
@@ -51,7 +51,17 @@ impl DaemonInferenceClient {
                 .response_schema
                 .as_ref()
                 .map(|s| titled_schema(s, prompt.response_schema_name.as_deref())),
-            oicp: envelope(prompt.max_output_tokens, self.reach),
+            // OICP routing: a composer that attached an explicit
+            // `max_output_tokens` has opted into hard-gated claim selection
+            // (§2.4), pinned to Fast so it lands on a FastShort/FastLong claim
+            // rather than a Normal-latency Slow slot. Without the envelope the
+            // phase1b coverage passes 422'd at the daemon's validator, which
+            // is how MacIntyre / Sandel / Walzer leaked through Phase 1.
+            oicp: prompt.max_output_tokens.map(|mo| {
+                InferenceRequirements::new()
+                    .with_latency_class(LatencyClass::Fast)
+                    .with_max_output_tokens(mo)
+            }),
             ..Default::default()
         };
         // Chat only, so the context size is never read on this path.
@@ -186,36 +196,6 @@ impl DaemonInferenceClient {
     }
 }
 
-/// A request's OICP envelope.
-///
-/// A composer that attached an explicit `max_output_tokens` has opted into
-/// hard-gated claim selection (§2.4), pinned to Fast so it lands on a
-/// FastShort/FastLong claim rather than a Normal-latency Slow slot. Without
-/// the envelope the phase1b coverage passes 422'd at the daemon's validator,
-/// which is how MacIntyre / Sandel / Walzer leaked through Phase 1.
-///
-/// The run's `reach` rides on that envelope, or on a privacy-only one. A
-/// privacy-only envelope sets none of the four fields the daemon routes on
-/// (`routes_inference.rs`, "Priority 1"), so a pinned model stays pinned.
-fn envelope(
-    max_output_tokens: Option<u32>,
-    reach: Option<ShardingPrivacy>,
-) -> Option<InferenceRequirements> {
-    let routed = max_output_tokens.map(|mo| {
-        InferenceRequirements::new()
-            .with_latency_class(LatencyClass::Fast)
-            .with_max_output_tokens(mo)
-    });
-    match reach {
-        None => routed,
-        Some(reach) => Some(
-            routed
-                .unwrap_or_else(InferenceRequirements::new)
-                .with_sharding(reach),
-        ),
-    }
-}
-
 /// Send a request, honouring a daemon shed rather than reporting it as a
 /// failure. The DECISION — is this 503 a shed, and for how long — belongs to
 /// [`oicp_client::shed_retry_after`], the one decider (§10.6); this function
@@ -277,46 +257,5 @@ pub(super) async fn send_honouring_shed(
         );
         tokio::time::sleep(delay).await;
         waited += delay;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The envelope is a table over the composer's cap and the run's reach:
-    /// routing appears only with a cap, the declaration only with a reach.
-    #[test]
-    fn the_envelope_routes_on_a_cap_and_declares_a_reach() {
-        let tpa = Some(ShardingPrivacy::ThirdPartyAllowed);
-        let json = |e: Option<InferenceRequirements>| e.map(|e| serde_json::to_value(e).unwrap());
-        assert_eq!(json(envelope(None, None)), None);
-
-        let routed = json(envelope(Some(512), None)).unwrap();
-        assert_eq!(routed["latency_class"], "fast");
-        assert_eq!(routed["max_output_tokens"], 512);
-        assert!(
-            routed.get("privacy").is_none_or(|p| p.is_null()),
-            "{routed}"
-        );
-
-        let declared = json(envelope(None, tpa)).unwrap();
-        assert_eq!(declared["privacy"]["sharding"], "third_party_allowed");
-        for routing in [
-            "capability_hint",
-            "latency_class",
-            "context_tokens",
-            "max_output_tokens",
-        ] {
-            assert!(
-                declared.get(routing).is_none_or(|v| v.is_null()),
-                "a privacy-only envelope must not route ({routing}): {declared}"
-            );
-        }
-
-        let both = json(envelope(Some(512), tpa)).unwrap();
-        assert_eq!(both["latency_class"], "fast");
-        assert_eq!(both["max_output_tokens"], 512);
-        assert_eq!(both["privacy"]["sharding"], "third_party_allowed");
     }
 }

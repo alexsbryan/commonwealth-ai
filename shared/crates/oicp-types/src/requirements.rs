@@ -205,15 +205,6 @@ pub enum ShardingPrivacy {
     #[default]
     LocalOnly,
     MeshAllowed,
-    /// The serving node may hand this request to its own third-party engine
-    /// (a hosted vendor behind `[engine] kind = "remote"`), which no other
-    /// value permits, an absent envelope included.
-    ///
-    /// Not a rung above `MeshAllowed`: every mesh reader asks for
-    /// `MeshAllowed` exactly, so a request declaring this never leaves for a
-    /// peer, and a peer on an older build never has to parse it. The
-    /// release behind it is the client's (an enrich run's `--consent`).
-    ThirdPartyAllowed,
 }
 
 // -----------------------------------------------------------------
@@ -275,15 +266,6 @@ mod tests {
         assert_eq!(value["context_tokens"], 8_000);
         assert_eq!(value["max_output_tokens"], 1_500);
         assert_eq!(value["privacy"]["sharding"], "mesh_allowed");
-    }
-
-    #[test]
-    fn third_party_allowed_round_trips_in_wire_spelling() {
-        let req = InferenceRequirements::new().with_sharding(ShardingPrivacy::ThirdPartyAllowed);
-        let value = serde_json::to_value(&req).unwrap();
-        assert_eq!(value["privacy"]["sharding"], "third_party_allowed");
-        let back: InferenceRequirements = serde_json::from_value(value).unwrap();
-        assert_eq!(back.sharding(), ShardingPrivacy::ThirdPartyAllowed);
     }
 
     /// Absence must resolve to a usable budget, not to zero. Every envelope

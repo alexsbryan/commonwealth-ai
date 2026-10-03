@@ -300,9 +300,8 @@ pub enum ServingLocus {
     /// cannot be honoured here at all.
     ForwardsOffBox,
     /// Forwards to a party outside the estate: a hosted vendor configured as
-    /// this node's `[engine]`. Not a mesh member, so `mesh_allowed` is not
-    /// consent for it; only `third_party_allowed` is, and the provider itself
-    /// refuses anything else before sending (`oicp_client::FarEnd`).
+    /// this node's `[engine]`. The operator's config is the release for
+    /// completions; texts to embed or rerank never go (`oicp_client::FarEnd`).
     ForwardsToThirdParty,
 }
 

@@ -18,8 +18,7 @@ use corpus_engine::types::EmbedFn;
 use corpus_engine::InferenceFn;
 
 use oicp_client::StructuredOutputMode;
-use oicp_types::ShardingPrivacy;
-use sovereign_contracts::egress::{model_client, release, verify, ConsentGrant, EgressPayload};
+use sovereign_contracts::egress::{model_client, verify, ConsentGrant, EgressPayload};
 use sovereign_contracts::types::{Custody, SearchPrivacy};
 
 mod consent;
@@ -123,11 +122,6 @@ pub struct DaemonInferenceClient {
     /// The run's consent grant (`--consent`). `None` is default-deny: a
     /// payload bound for another host refuses, naming what was withheld.
     consent: Option<ConsentGrant>,
-    /// How far the run's grant lets a payload travel, declared on every
-    /// request's envelope: `ThirdPartyAllowed` when `egress::release` frees
-    /// this client's custody, which is what lets a daemon whose engine is a
-    /// hosted vendor serve it. `None` declares nothing. Fixed with the grant.
-    reach: Option<ShardingPrivacy>,
     /// Where `POST /v1/embeddings` goes, which is `base_url` for every
     /// host that serves both models — a daemon, Ollama, vLLM — and a
     /// DIFFERENT process for `llama-server`, which serves one model per
@@ -205,7 +199,6 @@ impl DaemonInferenceClient {
             structured_output_mode: StructuredOutputMode::default(),
             payload_custody: Custody::Personal,
             consent: None,
-            reach: None,
             // One host until told otherwise. `with_embed_base_url` is how a
             // caller says the embeddings live somewhere else.
             embed_base_url: base_url_str,
@@ -224,19 +217,9 @@ impl DaemonInferenceClient {
 
     /// Install the run-scoped consent grant consulted at the egress
     /// boundary when the chat host is off this machine. `None` (the
-    /// default) is default-deny. A grant that releases this client's custody
-    /// also sets the run's reach, which every request declares.
+    /// default) is default-deny.
     pub fn with_consent(mut self, consent: Option<ConsentGrant>) -> Self {
         self.consent = consent;
-        let released = release(self.payload_custody, self.consent.as_ref());
-        self.reach = released.ok().map(|_| ShardingPrivacy::ThirdPartyAllowed);
-        tracing::info!(
-            target: "egress",
-            custody = %self.payload_custody,
-            ?released,
-            reach = ?self.reach,
-            "enrich: the run's reach, declared on every request's envelope"
-        );
         self
     }
 
