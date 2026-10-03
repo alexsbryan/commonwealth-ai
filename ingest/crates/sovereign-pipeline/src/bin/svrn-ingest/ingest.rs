@@ -124,6 +124,13 @@ pub struct IngestArgs {
     /// every step would mean, said once.
     #[arg(long)]
     pub no_enrich: bool,
+
+    /// Release this corpus's text to a remote `provider:model` chat host, up
+    /// to this custody: `public-web | peer | personal`. Absent means
+    /// default-deny: a remote provider refuses, and the local daemon never
+    /// needs a grant.
+    #[arg(long, value_parser = sovereign_enrichment_build::inference_client::parse_consent_class)]
+    pub consent: Option<sovereign_contracts::types::Custody>,
 }
 
 /// The two endpoints, each in both the shapes a caller needs.
@@ -190,6 +197,13 @@ async fn resolve_endpoints(args: &IngestArgs) -> Result<Endpoints> {
 
 pub async fn run(args: IngestArgs) -> Result<()> {
     let started = std::time::Instant::now();
+    if let Some(floor) = args.consent {
+        sovereign_enrichment_build::inference_client::export_run_consent(floor);
+        eprintln!(
+            "corpus-mcp: --consent {}: a remote provider may receive this corpus's text",
+            floor.as_str()
+        );
+    }
     let endpoints = resolve_endpoints(&args).await?;
     let data_dir = args
         .data_dir
@@ -476,11 +490,26 @@ async fn resolve_chat_model(args: &IngestArgs, endpoints: &Endpoints) -> Result<
             })?
         }
     };
-    eprintln!(
-        "corpus-mcp: chat via {}/chat/completions, model `{chat_model}` ({})",
-        endpoints.chat_v1,
-        chat_kind.label()
-    );
+    // A `provider:model` spec does not go to the chat endpoint at all, so the
+    // banner names where it does go rather than the URL it bypasses.
+    let (provider_name, _) = sovereign_enrichment_build::providers::parse_model_spec(&chat_model);
+    let registry =
+        sovereign_enrichment_build::providers::ProviderRegistry::load_default(&endpoints.chat_root);
+    match registry
+        .get(&provider_name)
+        .filter(|_| provider_name != "local")
+    {
+        Some(p) => eprintln!(
+            "corpus-mcp: chat via provider `{provider_name}` at {} (providers.toml), model \
+             `{chat_model}`, structured output {:?}",
+            p.base_url, p.structured_output_mode
+        ),
+        None => eprintln!(
+            "corpus-mcp: chat via {}/chat/completions, model `{chat_model}` ({})",
+            endpoints.chat_v1,
+            chat_kind.label()
+        ),
+    }
     Ok(chat_model)
 }
 
@@ -626,6 +655,7 @@ mod tests {
             max_output_tokens: 16_384,
             min_section_body_words: 40,
             no_enrich: false,
+            consent: None,
         }
     }
 

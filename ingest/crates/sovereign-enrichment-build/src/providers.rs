@@ -117,9 +117,13 @@ pub struct ProviderConfig {
     ///   calls the tool. Works on Anthropic native and DeepSeek's
     ///   Anthropic-compat layer (forced tool_choice fails on
     ///   DeepSeek-reasoner).
-    /// - `tool-use-forced` — forces the model to call the tool via
-    ///   `tool_choice: {type: "tool", name: ...}`. Maximum schema
-    ///   adherence. Works on Anthropic native; rejected by DeepSeek.
+    /// - `tool-use-forced` — forces the model to call the tool. On
+    ///   Anthropic native that is `tool_choice: {type: "tool", name}`.
+    ///   On `openai-compatible` both tool modes speak OpenAI function
+    ///   calling (`tools` + `tool_choice: {type: "function", ...}`), the
+    ///   mode to pick on a host with no schema-enforcing
+    ///   `response_format`: DeepSeek's chat API (2026-10-03) answers
+    ///   `json_schema` with 400 and honours a forced function call.
     #[serde(default)]
     pub structured_output_mode: Option<StructuredOutputMode>,
     /// Extra request-level params passed through verbatim. Useful

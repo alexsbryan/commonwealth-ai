@@ -24,67 +24,8 @@
 use super::inference_client::DaemonInferenceClient;
 use super::test_env::scoped_home;
 use corpus_engine::enrichment::pipeline::ChatPrompt;
-use std::sync::{Arc, Mutex};
+use sovereign_enrichment_build::mock_provider::{mock_openai_host, CONTENT_OK};
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-/// A barebones HTTP dispatcher standing in for a remote model
-/// provider. Accepts one connection, records the request body, and
-/// answers with a minimal OpenAI-compatible completion so the
-/// client's dispatch completes cleanly.
-async fn mock_remote_dispatcher() -> (String, Arc<Mutex<Vec<String>>>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let recorded: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-    let rec = Arc::clone(&recorded);
-    tokio::spawn(async move {
-        let Ok((mut sock, _)) = listener.accept().await else {
-            return;
-        };
-        // Read until the whole body is in hand.
-        let mut buf: Vec<u8> = Vec::new();
-        let mut tmp = [0u8; 8192];
-        loop {
-            if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-                let header = String::from_utf8_lossy(&buf[..pos]).to_string();
-                let content_length = header
-                    .lines()
-                    .find_map(|l| {
-                        let (k, v) = l.split_once(':')?;
-                        k.eq_ignore_ascii_case("content-length")
-                            .then(|| v.trim().parse::<usize>().ok())
-                            .flatten()
-                    })
-                    .unwrap_or(0);
-                let body_start = pos + 4;
-                while buf.len() < body_start + content_length {
-                    let n = sock.read(&mut tmp).await.unwrap_or(0);
-                    if n == 0 {
-                        break;
-                    }
-                    buf.extend_from_slice(&tmp[..n]);
-                }
-                let body = String::from_utf8_lossy(&buf[body_start..body_start + content_length])
-                    .to_string();
-                rec.lock().unwrap().push(body);
-                break;
-            }
-            let n = sock.read(&mut tmp).await.unwrap_or(0);
-            if n == 0 {
-                return;
-            }
-            buf.extend_from_slice(&tmp[..n]);
-        }
-        let resp_body = r#"{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},"finish_reason":"stop"}"#;
-        let resp = format!(
-            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-            resp_body.len(),
-            resp_body
-        );
-        let _ = sock.write_all(resp.as_bytes()).await;
-    });
-    (format!("http://{addr}"), recorded)
-}
 
 /// R-5. The personal-chunk-to-remote-payload red. Fails at HEAD
 /// (the payload arrives); green after the boundary refuses before
@@ -92,7 +33,7 @@ async fn mock_remote_dispatcher() -> (String, Arc<Mutex<Vec<String>>>) {
 #[tokio::test]
 async fn personal_chunk_must_not_reach_a_remote_payload() {
     let _home = scoped_home();
-    let (base_url, recorded) = mock_remote_dispatcher().await;
+    let (base_url, recorded) = mock_openai_host(CONTENT_OK).await;
 
     // Operator config: one REMOTE OpenAI-compatible provider pointed
     // at the dispatcher.
@@ -139,4 +80,74 @@ async fn personal_chunk_must_not_reach_a_remote_payload() {
             || msg.contains("grant"),
         "the refusal must be typed and name what was withheld (personal custody / consent grant): {msg}"
     );
+}
+
+/// The grant surface, end to end: a run that exported its consent reaches the
+/// remote provider through `from_enrich_config`, the construction path every
+/// enrich verb shares. THE FAILING INPUT: before 2026-10-03 nothing read a
+/// grant there (`with_consent` had no caller), so this dispatch was refused
+/// with "grant absent — default-deny" and the mock recorded nothing.
+#[tokio::test]
+async fn an_exported_consent_reaches_the_remote_provider_through_from_enrich_config() {
+    use sovereign_contracts::types::Custody;
+    use sovereign_enrichment_build::config::EnrichConfig;
+    use sovereign_enrichment_build::inference_client::export_run_consent;
+
+    // HOME is scoped under the process-wide lock, which also serializes this
+    // test's write to the consent carrier against every other env-mutating
+    // test in the binary. The guard clears the carrier even on panic.
+    let _home = scoped_home();
+    struct ClearCarrier;
+    impl Drop for ClearCarrier {
+        fn drop(&mut self) {
+            std::env::remove_var("SVRNMESH_EGRESS_CONSENT");
+        }
+    }
+    let _clear = ClearCarrier;
+
+    let (base_url, recorded) = mock_openai_host(CONTENT_OK).await;
+    let home = std::env::var("HOME").expect("scoped_home set HOME");
+    let cfg_dir = format!("{home}/.config/sovereign");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        format!("{cfg_dir}/providers.toml"),
+        format!("[providers.mockprov]\ntype = \"openai-compatible\"\nbase_url = \"{base_url}\"\n"),
+    )
+    .unwrap();
+
+    export_run_consent(Custody::Personal);
+    let cfg = EnrichConfig {
+        schema_version: sovereign_enrichment_build::config::CONFIG_SCHEMA_VERSION,
+        corpus_id: "consent-e2e".into(),
+        pipeline_id: "philosophy_atlas".into(),
+        source_path: "corpus:consent-e2e".into(),
+        chapter_regex: String::new(),
+        chat_model: "mockprov:remote-model".into(),
+        chat_models: None,
+        embed_model: "embed".into(),
+        // The local daemon's base, deliberately NOT the mock: the egress gate
+        // treats a provider whose base equals this one as local.
+        base_url: "http://127.0.0.1:9".into(),
+        embed_base_url: None,
+        min_section_body_words: 0,
+        toc_markers: None,
+        max_output_tokens: 256,
+        phase1b_max_output_tokens: None,
+        phase_overrides: None,
+        ontology: None,
+        created_at: String::new(),
+    };
+    let client = DaemonInferenceClient::from_enrich_config(&cfg).unwrap();
+    let prompt = ChatPrompt::new("Extract the named entities.", "A public paragraph.");
+    let result = tokio::time::timeout(Duration::from_secs(30), client.complete(&prompt))
+        .await
+        .expect("complete must not hang");
+
+    let received = recorded.lock().unwrap().clone();
+    assert_eq!(
+        received.len(),
+        1,
+        "the exported grant must reach the remote provider; got {result:?}"
+    );
+    assert_eq!(result.expect("released, then answered"), "ok");
 }

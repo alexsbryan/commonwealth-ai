@@ -569,6 +569,11 @@ question the pipeline asks about a type is a method on the resolved
   (`refused_over_cap_chunks`), never truncated, and a large count is a signal
   about the CHUNKER, not a reason to raise the ceiling.
 
+**Hosted chat models on the atlas path.**
+- **Resolution.** A `provider:model` chat model resolves through `sovereign-enrichment-build::providers` against `~/.config/sovereign/providers.toml`. The `openai-compatible` and `anthropic` dialects live in `inference_client/wire.rs`.
+- **Consent.** A provider that is not this client's own daemon passes `egress::verify` first, and that gate is default-deny. The grant is the run's `--consent <class>` (`svrn-ingest ingest`, `enrich build`). It reaches child processes as `SVRNMESH_EGRESS_CONSENT` and is read once, at `DaemonInferenceClient::from_enrich_config`.
+- **Structured output** is chosen per provider: `json-schema`, `json-object`, or a tool mode. On an `openai-compatible` host, a tool mode is OpenAI function calling. That is what DeepSeek needs: it rejects `json_schema` and enforces no schema under `json_object`.
+
 `Summary` is the twelfth atom kind and the only one whose `AtomType::grain` is
 `Grain::Summary` — the atlas face of one RAPTOR node. **The walk holds Summary
 seeds OUT of leaf scoring**: a Summary seed does not expand, its reach never

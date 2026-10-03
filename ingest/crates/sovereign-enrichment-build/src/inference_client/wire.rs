@@ -112,33 +112,72 @@ impl DaemonInferenceClient {
         // schema — the prompt itself carries the schema as text and
         // the post-parser tolerates drift.
         let mut has_schema = false;
+        let mut via_tool = false;
         if let Some(schema) = prompt.response_schema.as_ref() {
             let name = prompt
                 .response_schema_name
                 .as_deref()
                 .unwrap_or("response_schema");
             use crate::providers::StructuredOutputMode as M;
-            let response_format = match provider.structured_output_mode {
-                M::JsonSchema => Some(serde_json::json!({
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": name,
-                        "schema": schema,
-                        "strict": true
+            let mode = provider.structured_output_mode;
+            if let Some(obj) = body.as_object_mut() {
+                match mode {
+                    M::JsonSchema => {
+                        obj.insert(
+                            "response_format".into(),
+                            serde_json::json!({
+                                "type": "json_schema",
+                                "json_schema": {"name": name, "schema": schema, "strict": true}
+                            }),
+                        );
                     }
-                })),
-                M::JsonObject => Some(serde_json::json!({"type": "json_object"})),
-                // tool-use modes don't apply to OpenAI-compat path —
-                // they're an Anthropic-shape construct. Fall through
-                // to json_object as the safest weak-enforcement
-                // option.
-                M::ToolUseAuto | M::ToolUseForced => {
-                    Some(serde_json::json!({"type": "json_object"}))
+                    M::JsonObject => {
+                        obj.insert(
+                            "response_format".into(),
+                            serde_json::json!({"type": "json_object"}),
+                        );
+                    }
+                    // OpenAI function calling: the schema is the one tool's
+                    // `parameters`. On a host with no schema-enforcing
+                    // response_format this is the strongest adherence there
+                    // is. Measured 2026-10-03 on DeepSeek's chat API, which
+                    // answers `json_schema` with 400 "unavailable now": under
+                    // `json_object` 15 of 20 wessex-hoard Phase 1 chapters
+                    // dropped the required `questions_raised`.
+                    M::ToolUseAuto | M::ToolUseForced => {
+                        let fn_name = openai_function_name(name);
+                        let choice = if mode == M::ToolUseForced {
+                            serde_json::json!({"type": "function", "function": {"name": fn_name}})
+                        } else {
+                            serde_json::json!("auto")
+                        };
+                        obj.insert(
+                            "tools".into(),
+                            serde_json::json!([{
+                                "type": "function",
+                                "function": {
+                                    "name": fn_name,
+                                    "description": "Return the structured result.",
+                                    "parameters": schema,
+                                }
+                            }]),
+                        );
+                        obj.insert("tool_choice".into(), choice);
+                        via_tool = true;
+                    }
                 }
-            };
-            if let (Some(obj), Some(rf)) = (body.as_object_mut(), response_format) {
-                obj.insert("response_format".into(), rf);
                 has_schema = true;
+            }
+        }
+        // Vendor passthroughs merged last, as on the Anthropic path:
+        // OpenRouter's `provider` routing and `reasoning` controls, OpenAI's
+        // `seed`, without a dispatcher change per knob.
+        if let (Some(extra), Some(obj)) = (
+            provider.extra_params.as_ref().and_then(|e| e.as_object()),
+            body.as_object_mut(),
+        ) {
+            for (k, v) in extra {
+                obj.insert(k.clone(), v.clone());
             }
         }
 
@@ -230,14 +269,42 @@ impl DaemonInferenceClient {
         let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
             Error::Serialization(format!("non-JSON chat response: {e} — body: {text}"))
         })?;
-        let content = v
+        let tool_args = v
+            .pointer("/choices/0/message/tool_calls/0/function/arguments")
+            .and_then(|s| s.as_str());
+        let text_content = v
             .pointer("/choices/0/message/content")
             .and_then(|s| s.as_str())
-            .ok_or_else(|| {
-                Error::Serialization(format!(
-                    "chat response missing choices[0].message.content: {text}"
-                ))
-            })?;
+            .filter(|s| !s.trim().is_empty());
+        let content = match (via_tool, tool_args, text_content) {
+            (true, Some(args), _) => args,
+            // `tool_choice: auto` lets the model answer in text instead. Use
+            // it, and say so: the schema was offered, not enforced.
+            (true, None, Some(t)) => {
+                tracing::warn!(
+                    phase = %phase_label,
+                    model = %model_label,
+                    "inference_client: tool offered but the model answered in text; \
+                     parsing the text, schema not enforced on this call"
+                );
+                t
+            }
+            (false, _, Some(t)) => t,
+            _ => {
+                return Err(Error::Serialization(format!(
+                    "chat response carried neither choices[0].message.content nor a \
+                     tool call: {text}"
+                )))
+            }
+        };
+        // The answer as the parser will see it, beside the request body logged
+        // above, so a parse failure can be diagnosed from one run (§9.1).
+        tracing::debug!(
+            phase = %phase_label,
+            via_tool,
+            content = %content,
+            "inference_client: response content"
+        );
         let total_tokens = v
             .pointer("/usage/total_tokens")
             .and_then(|n| n.as_u64())
@@ -631,6 +698,27 @@ pub(super) async fn send_honouring_shed(
         );
         tokio::time::sleep(delay).await;
         waited += delay;
+    }
+}
+
+/// An OpenAI function name must match `^[a-zA-Z0-9_-]{1,64}$`; a schema
+/// name is free text, so fold it rather than let the host 400 on it.
+fn openai_function_name(name: &str) -> String {
+    let folded: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(64)
+        .collect();
+    if folded.is_empty() {
+        "emit_response".to_string()
+    } else {
+        folded
     }
 }
 

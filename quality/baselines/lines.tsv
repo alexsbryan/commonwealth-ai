@@ -81,11 +81,11 @@
 723	ingest/crates/sovereign-authoring-harness
 115	ingest/crates/sovereign-authoring-harness::tests
 6615	ingest/crates/sovereign-enrichment-build
-1274	ingest/crates/sovereign-enrichment-build::tests
+1619	ingest/crates/sovereign-enrichment-build::tests
 305	ingest/crates/sovereign-enrichment-catalog
 370	ingest/crates/sovereign-enrichment-catalog::tests
-29028	ingest/crates/sovereign-pipeline
-4924	ingest/crates/sovereign-pipeline::tests
+29061	ingest/crates/sovereign-pipeline
+4925	ingest/crates/sovereign-pipeline::tests
 3837	ingest/crates/sovereign-recipe-author
 2428	ingest/crates/sovereign-recipe-author::tests
 81	ingest/crates/sovereign-recipes

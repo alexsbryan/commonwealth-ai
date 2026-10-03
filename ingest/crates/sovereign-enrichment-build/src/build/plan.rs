@@ -236,6 +236,9 @@ pub struct ParsedBuild {
     /// skips land separately in `Plan::auto_skipped`.
     pub(super) skipped: Vec<Step>,
     pub dry_run: bool,
+    /// `--consent <class>`: the release floor the caller exports for this
+    /// run's remote-provider dispatch. `None` keeps default-deny.
+    pub consent: Option<sovereign_contracts::types::Custody>,
 }
 
 impl ParsedBuild {
@@ -276,6 +279,7 @@ impl ParsedBuild {
             selection,
             skipped,
             dry_run,
+            consent: None,
         })
     }
 
@@ -303,9 +307,17 @@ pub fn parse_args(args: &[String]) -> Result<ParsedBuild, String> {
     let mut full = false;
     let mut skipped: Vec<Step> = Vec::new();
     let mut dry_run = false;
+    let mut consent = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--consent" => {
+                let raw = args.get(i + 1).ok_or_else(|| {
+                    "--consent requires a class: public-web | peer | personal".to_string()
+                })?;
+                consent = Some(crate::inference_client::parse_consent_class(raw)?);
+                i += 2;
+            }
             "--full" => {
                 full = true;
                 i += 1;
@@ -370,6 +382,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedBuild, String> {
         selection,
         skipped,
         dry_run,
+        consent,
     })
 }
 

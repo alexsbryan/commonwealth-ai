@@ -1296,6 +1296,13 @@ purpose = "Set to `json` and `svrn enrich build` emits one `@progress {…}` lin
 # ── enrichment: ingest-time entity extraction ───────────────────────
 
 [[flag]]
+name = "SOVEREIGN_EGRESS_CONSENT"
+cluster = "enrichment"
+default = "unset (default-deny: a remote provider:model refuses)"
+status = "guard"
+purpose = "The enrich run's consent grant for remote-provider dispatch: the release floor public-web | peer | personal. Exported (as SVRNMESH_EGRESS_CONSENT) by --consent on `svrn-ingest ingest` and `svrn enrich build` so every enrich child a pipeline shells out to inherits it; read once per client at DaemonInferenceClient::from_enrich_config, which hands it to the egress::verify gate. A value outside the closed set grants nothing and warns. Setting it by hand is the same act as passing the flag."
+
+[[flag]]
 name = "SOVEREIGN_GLINER_MODEL_ID"
 cluster = "enrichment"
 default = "gliner_small-v2.1"

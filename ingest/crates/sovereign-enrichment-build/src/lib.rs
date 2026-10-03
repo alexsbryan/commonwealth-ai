@@ -79,3 +79,8 @@ mod integration_tests;
 /// modules. Behind a feature so it costs a normal build nothing.
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_env;
+
+/// A one-shot OpenAI-compatible host that records request bodies, for
+/// dispatch tests here and in `sovereign-pipeline`.
+#[cfg(any(test, feature = "test-support"))]
+pub mod mock_provider;

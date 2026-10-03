@@ -30,9 +30,15 @@ const HELP: Help = Help {
     summary: "Run the full atlas enrichment flow for a corpus in one command.",
     sections: &[
         HelpSection::Usage(
-            "svrn enrich build <corpus-id> [--chapters <ids> | --full] [--skip <step>...] [--dry-run]",
+            "svrn enrich build <corpus-id> [--chapters <ids> | --full] [--skip <step>...] [--consent <class>] [--dry-run]",
         ),
         HelpSection::Flags(&[
+            (
+                "--consent <class>",
+                "Release the corpus's text to a remote provider:model chat host, up to \
+                 this custody: public-web | peer | personal. Absent means a remote \
+                 provider refuses; the local daemon never needs a grant.",
+            ),
             (
                 "--chapters <ids>",
                 "Comma-separated chapter ids for Phase 1 (e.g. sec_0001,sec_0002). \
@@ -95,6 +101,9 @@ pub async fn cmd_build(args: &[String]) -> i32 {
             return 2;
         }
     };
+    if let Some(floor) = parsed.consent {
+        sovereign_enrichment_build::inference_client::export_run_consent(floor);
+    }
 
     // Two renderings of one event stream, and the parent picks.
     //

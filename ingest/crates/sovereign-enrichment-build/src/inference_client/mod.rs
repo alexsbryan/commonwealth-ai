@@ -24,7 +24,12 @@ use super::providers::{
     local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
 };
 
+mod consent;
+#[cfg(test)]
+mod dialect_tests;
 mod wire;
+
+pub use consent::{export_run_consent, parse_consent_class, run_consent};
 
 // The two `/v1/models` probes are free functions every caller runs BEFORE it
 // has a client, so they surface here rather than as methods. They live in the
@@ -337,7 +342,8 @@ impl DaemonInferenceClient {
         .with_max_output_tokens(cfg.max_output_tokens)
         .with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot())
         .with_max_tokens_by_phase(max_tokens_by_phase)
-        .with_phase_overrides(cfg.phase_overrides_snapshot()))
+        .with_phase_overrides(cfg.phase_overrides_snapshot())
+        .with_consent(run_consent(&cfg.corpus_id)))
     }
 
     /// Refine the provider registry's structured-output modes against
@@ -468,7 +474,13 @@ impl DaemonInferenceClient {
                 },
                 self.consent.as_ref(),
             )
-            .map_err(|r| Error::Safety(format!("{r}")))?;
+            .map_err(|r| {
+                Error::Safety(format!(
+                    "{r}. To release this corpus's text to `{}`, pass --consent <class> \
+                     (public-web | peer | personal) or set SVRNMESH_EGRESS_CONSENT",
+                    provider.name
+                ))
+            })?;
         }
         match provider.kind {
             ProviderKind::OpenaiCompatible => {
