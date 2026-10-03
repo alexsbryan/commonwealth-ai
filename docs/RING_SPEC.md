@@ -10,6 +10,36 @@
 > svrngs replaces and which retires as it does. The design record — rationale,
 > prior art and history — stays here in `docs/RING_APP_LIBRARY.md`.
 
+## Retirement list
+
+The strategy toward this repository is svrngs' `docs/DESIGN.md` D2b, "Toward
+commonwealth-ai" (operator, 2026-10-03). Ring code here is lifted by svrngs and
+then deleted, each item when the svrngs bar proving its replacement passes; the
+deleting commit names that bar and its measurement. Nothing here retires on a
+date or a promise.
+
+| Retires | Replaced in svrngs by | When this svrngs bar passes |
+|---|---|---|
+| `commonwealth/crates/commonwealth-rails/src/ring_sync` and `ring_routes` — group membership, sync and routes | `svrngs-node` (E1.1, E1.4) | `converge`, `one-decider` |
+| `sovereign/crates/sovereign-cli-mesh/src/ring_cmd` | the `svrngs` command (E0.5, E1.2) | `host-setup` |
+| `sovereign/apps/ring-doc` | the Doc reference app (E2.6) | `live-doc` |
+| `sovereign/apps/ring-runtime` and `sovereign/crates/sovereign-contracts/src/guest_pages/ring_shim.js` | the svrngs app and SDK (E1.5, E3.1) | `phone-to-own-key` |
+| the ring shell in `sovereign-mobile` | svrngs `app/` (E1.5) | `phone-to-own-key` |
+| the ring use of `sovereign/crates/sovereign-cli-mesh/src/mesh_media` — lending a library to a group; its use within one owner's mesh stays | Films and the Jellyfin provider (E2.2) | `lent-service`, `credential-stays-home` |
+| the campaigns `ring-apps`, `ring-doc`, `ring-room` and `ring-guest` | svrngs-e0 onward | the svrngs demo replacing each demo: ring-room's film leg at movie night (E1.7), its doc leg at write it together (E2.6), its answer leg at your group's own AI (E2.3) |
+
+**Stays — the mesh.** The rail the work plane folds over (`commonwealth-rail-core`,
+`commonwealth-rail`), the work plane and its donor loop, inference routing and
+mesh membership solve one owner's machines, not a group of people, and may
+diverge from svrngs freely.
+
+**Converges on svrngs.** The door that forwards with a verified identity
+(`commonwealth/crates/commonwealth-transport/src/iroh_identity_forward.rs`) and the signing and
+canonical-form code are shared primitives: once `svrngs-node` passes
+`node-library` (E1.8), this repository may adopt it as any outside builder
+would. Until then, a fix to either copy is checked against svrngs'
+`scripts/ports.py`, which lists every port beside its original.
+
 ## The inventory (2026-10-02)
 
 > **Superseded where svrngs' design differs; kept for status.** Every status below was
