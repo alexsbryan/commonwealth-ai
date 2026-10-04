@@ -3,6 +3,7 @@
 
     score.py [--corpus crm-ward] [--json out.json]     # score
     score.py --selftest                                 # the instrument on a hand case first
+    score.py --bar crm-people                           # one bar's holdout value, co-lineage's contract
 
 No judge model. A pipeline record meets a gold record only through the evidence it cites:
 atoms cite SECTIONS (the email extractor keys a section by Subject, so one section can hold
@@ -152,7 +153,8 @@ def score(g, ent, claims, scope):
                 deal_atom[d["id"]] = e["id"]; used.add(e["id"]); break
     gs = [s for s in g["stage_updates"] if s["file"] in scope]
     sh = sum(1 for s in gs if any(c.get("claim_kind") == "stage_update" and s["file"] in c["_files"]
-                                  and c.get("subject") == deal_atom.get(s["deal"])
+                                  and deal_atom.get(s["deal"]) is not None
+                                  and c.get("subject") == deal_atom[s["deal"]]
                                   and (c.get("attributes") or {}).get("stage") == s["stage"] for c in claims))
     cur_ok = cur_n = 0
     for d in gd:
@@ -165,7 +167,7 @@ def score(g, ent, claims, scope):
         cur_ok += bool(last) and (last.get("attributes") or {}).get("stage") == mine[-1]["stage"]
     gc = [c for c in g["commitments"] if c["file"] in scope]
     ch = sum(1 for k in gc if any(c.get("claim_kind") == "commitment" and k["file"] in c["_files"]
-                                  and c.get("subject") in {person_atom.get(k["person"]), person_atom.get(k["person"] + "#name")}
+                                  and c.get("subject") in {person_atom.get(k["person"]), person_atom.get(k["person"] + "#name")} - {None}
                                   for c in claims))
     labelled = lambda kind: {x["file"] for x in g[kind]}  # noqa: E731
     made_up = {k: sum(1 for c in claims if c.get("claim_kind") == ck and c["_files"] & scope
@@ -189,9 +191,11 @@ def selftest():
          "people": [{"id": "f:p1", "name": "Ann Lee", "emails": ["ann@city.gov"], "company": "f:c1"},
                     {"id": "f:p2", "name": "Bo Ray", "emails": ["bo@x.com"], "company": "f:c1"}],
          "companies": [{"id": "f:c1", "name": "City of X", "domains": ["city.gov"]}],
-         "deals": [{"id": "f-d1", "counterparty": "f:c1", "kind": "transaction", "files": {"f/1", "f/2"}}],
+         "deals": [{"id": "f-d1", "counterparty": "f:c1", "kind": "transaction", "files": {"f/1", "f/2"}},
+                   {"id": "f-d2", "counterparty": "f:c1", "kind": "transaction", "files": {"f/3"}}],
          "stage_updates": [{"deal": "f-d1", "stage": "proposal", "file": "f/1"},
-                           {"deal": "f-d1", "stage": "won", "file": "f/2"}],
+                           {"deal": "f-d1", "stage": "won", "file": "f/2"},
+                           {"deal": "f-d2", "stage": "lead", "file": "f/3"}],
          "commitments": [{"person": "f:p1", "file": "f/1"}, {"person": "f:p2", "file": "f/2"}]}
     atoms = [{"atom_type": "Entity", "data": {"id": "e7", "entity_type": "company", "canonical_name": "Other Co",
                                               "attributes": {"domain": "other.com"}}},
@@ -220,12 +224,20 @@ def selftest():
              # a commitment on f/2 attributed to the wrong person (gold's is Bo's, whose email is split)
              {"atom_type": "Claim", "data": {"id": "k6", "claim_kind": "commitment", "subject": "e1", "anchor": "We accept",
                                              "evidence": [{"chunk_id": "s2"}]}},
+             # no subject at all, on a labelled file, right stage, for a gold deal no atom matches
+             {"atom_type": "Claim", "data": {"id": "k7", "claim_kind": "stage_update", "subject": None, "anchor": "unrelated",
+                                             "evidence": [{"chunk_id": "s2"}], "attributes": {"stage": "lead"}}},
+             {"atom_type": "Claim", "data": {"id": "k8", "claim_kind": "commitment", "subject": None, "anchor": "We accept",
+                                             "evidence": [{"chunk_id": "s2"}]}},
              {"atom_type": "Claim", "data": {"id": "k4", "claim_kind": "stage_update", "subject": "e5", "anchor": "unrelated",
-                                             "evidence": [{"chunk_id": "s2"}], "attributes": {"stage": "lead"}}}]
+                                             "evidence": [{"chunk_id": "s2"}], "attributes": {"stage": "lead"}}},
+             # anchored in f/3; only without anchor narrowing would it reach f/2's "won"
+             {"atom_type": "Claim", "data": {"id": "k9", "claim_kind": "stage_update", "subject": "e5", "anchor": "unrelated",
+                                             "evidence": [{"chunk_id": "s2"}], "attributes": {"stage": "won"}}}]
     ent, claims = load_atlas(atoms, sec)
     got = score(g, ent, claims, g["files"])
     want = {"people": 1, "emails_split": 1, "companies": 1, "deals": 1, "stage": 1, "current_stage": 0,
-            "commitments": 1, "made_up_stage": 1}
+            "commitments": 1, "made_up_stage": 0}
     have = {"people": got["people"]["hit"], "emails_split": got["emails_split"], "companies": got["companies"]["hit"],
             "deals": got["deals"]["hit"], "stage": got["stage"]["hit"], "current_stage": got["current_stage"]["hit"],
             "commitments": got["commitments"]["hit"], "made_up_stage": got["made_up"]["stage_updates"]}
@@ -240,6 +252,9 @@ def main():
     ap.add_argument("--gold", type=pathlib.Path, default=WARD / "gold")
     ap.add_argument("--json", type=pathlib.Path)
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--bar", help="print one crm-proof bar's holdout value as {value, artifact} (co-lineage measure)")
+    ap.add_argument("--run", type=pathlib.Path, default=WARD / "runs/current",
+                    help="the run's Phase-1 token snapshots (tokens-*.json: calls, started/updated ms) and score.json")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -252,8 +267,27 @@ def main():
     covered = {f for s in extracted for f, _ in secfiles.get(s, [])} & g["files"]
     smoke = set((HERE / "smoke_sections.txt").read_text().strip().split(","))
     smoke_files = {f for s in smoke for f, _ in secfiles.get(s, [])}
+    snaps = [json.loads(p.read_text()) for p in sorted(a.run.glob("tokens-*.json"))]
+    messages = sum(len(secfiles.get(s, [])) for s in extracted)
+    wall = sum(t["updated_at_ms"] - t["started_at_ms"] for t in snaps) / 1000
     out = {"gold_files": len(g["files"]), "covered_files": len(covered),
+           "cost": {"phase1_wall_s": round(wall, 1), "calls": sum(t["calls"] for t in snaps),
+                    "messages_extracted": messages, "s_per_message": round(wall / messages, 2) if messages and snaps else None,
+                    "prompt_tokens": sum(t["prompt_tokens"] for t in snaps),
+                    "completion_tokens": sum(t["completion_tokens"] for t in snaps)},
            "holdout": score(g, ent, claims, covered - smoke_files), "all": score(g, ent, claims, covered)}
+    if a.bar:
+        a.run.mkdir(parents=True, exist_ok=True)
+        art = a.run / "score.json"
+        art.write_text(json.dumps(out, indent=1) + "\n")
+        key = {"crm-people": "people", "crm-companies": "companies", "crm-deals": "deals", "crm-stage": "stage",
+               "crm-commitments": "commitments"}.get(a.bar)
+        value = out["cost"]["s_per_message"] if a.bar == "crm-cost" else (out["holdout"][key]["recall"] if key else None)
+        if value is None:
+            print(f"no value for {a.bar}", file=sys.stderr)
+            return 4
+        print(json.dumps({"value": value, "artifact": str(art)}))
+        return 0
     print(json.dumps(out, indent=1))
     if a.json:
         a.json.write_text(json.dumps(out, indent=1) + "\n")

@@ -33,60 +33,78 @@ PY'''
 
 [[bar]]
 id           = "crm-people"
+derives_from = "README 'Identity: no model for most of it' — address keys the person; GOLD_SPEC people"
 one_line     = "Share of gold people with an email that the atlas holds as ONE person atom carrying that email"
 status       = "open"
 direction    = "higher_is_better"
-floor        = 0.0
-floor_basis  = "unmeasured at registration; smoke (50 sections) had 56 of 100 person atoms carrying any email and one email on two atoms"
+floor        = 0.584
+floor_basis  = "baseline 2026-10-03, current pipeline, holdout: 156/267; 24 emails split across atoms; 101 person atoms match no gold person"
 target       = 0.9
 goodhart     = "hits target while the contact list fills with junk — person atoms matching no gold person are reported beside it, and an email split across atoms counts as a miss"
+instrument   = "python3 research/ontology-apps/ward/score.py --bar crm-people"
+timeout_s    = 300
 
 [[bar]]
 id           = "crm-companies"
+derives_from = "README 'domain keys the company (minus freemail)'; GOLD_SPEC companies"
 one_line     = "Share of gold companies the atlas holds as a company atom, matched by a gold domain or the folded name"
 status       = "open"
 direction    = "higher_is_better"
-floor        = 0.0
-floor_basis  = "unmeasured at registration"
+floor        = 0.615
+floor_basis  = "baseline 2026-10-03, current pipeline, holdout: 56/91"
 target       = 0.8
 goodhart     = "company atoms matching no gold company are reported beside it"
+instrument   = "python3 research/ontology-apps/ward/score.py --bar crm-companies"
+timeout_s    = 300
 
 [[bar]]
 id           = "crm-deals"
+derives_from = "README 'deals ... typed in a schema the business chose' — the half that is the differentiator"
 one_line     = "Share of gold transaction deals matched by a deal atom whose evidence cites one of the deal's messages and whose counterparty resolves to the gold counterparty"
 status       = "open"
 direction    = "higher_is_better"
-floor        = 0.0
-floor_basis  = "unmeasured at registration; smoke had 2 deal atoms in 50 customer-folder sections"
+floor        = 0.029
+floor_basis  = "baseline 2026-10-03, current pipeline, holdout: 2/69; 22 deal atoms for 79 gold transactions, 11 with a company counterparty"
 target       = 0.6
 goodhart     = "a deal atom citing many messages could match many gold deals — each atom matches at most one gold deal, and deal atoms matching none are reported"
+instrument   = "python3 research/ontology-apps/ward/score.py --bar crm-deals"
+timeout_s    = 300
 
 [[bar]]
 id           = "crm-stage"
+derives_from = "README 'A deal's current stage is its latest cited stage_update'"
 one_line     = "Share of gold stage_updates matched by a stage_update claim citing the same message, whose subject is the matched deal and whose stage equals gold's"
 status       = "open"
 direction    = "higher_is_better"
 floor        = 0.0
-floor_basis  = "unmeasured at registration; smoke had 7 of 55 stage_update claims with a deal subject"
+floor_basis  = "baseline 2026-10-03, current pipeline, holdout: 0/206; of all 266 gold stage updates: 96 no claim on the message, 116 a claim with another stage (103 claims carry no stage), 54 right stage on an unresolved deal (153 of 222 stage claims have no subject)"
 target       = 0.6
 goodhart     = "the CRM shows a deal's CURRENT stage: per-deal current-stage accuracy (latest by message date) is reported beside it, and stage_update claims on messages gold left unlabelled are reported as made-up"
+instrument   = "python3 research/ontology-apps/ward/score.py --bar crm-stage"
+timeout_s    = 300
 
 [[bar]]
 id           = "crm-commitments"
+derives_from = "README 'Commitments are who promised what, by when'"
 one_line     = "Share of gold commitments matched by a commitment claim citing the same message whose subject is the committing person (by email, else name)"
 status       = "open"
 direction    = "higher_is_better"
-floor        = 0.0
-floor_basis  = "unmeasured at registration; smoke had 20 of 45 commitment claims with a person subject"
+floor        = 0.125
+floor_basis  = "baseline 2026-10-03, current pipeline, holdout: 11/88; 31 of 102 gold commitments have no claim on the message"
 target       = 0.5
 goodhart     = "commitment claims on messages gold left without one are reported as made-up"
+instrument   = "python3 research/ontology-apps/ward/score.py --bar crm-commitments"
+timeout_s    = 300
 
 [[bar]]
 id           = "crm-cost"
+derives_from = "README 'Why cost is the blocker for this market' — a 50k mailbox in a day is 1.7 s per message"
 one_line     = "Wall seconds of the atlas build's LLM phases per message over the 286 gold messages"
 status       = "open"
 direction    = "lower_is_better"
-floor        = 25.5
-floor_basis  = "smoke 2026-10-03: 50 sections, 21 m 13 s, 25.5 s per section (3,476 prompt + 999 completion tokens per call); per-message figure is written by the first scored run"
+floor        = 17.86
+floor_basis  = "baseline 2026-10-03, current pipeline, holdout: 6,395 s of Phase 1 over 358 messages in the 220 extracted sections (smoke 1,273 s + rest 5,123 s; 220 calls, 703k prompt + 217k completion tokens); registered as 25.5 s per SECTION, re-stated per message, the bar's unit"
 target       = 1.7
 goodhart     = "hits target by extracting less — it is read only beside crm-people, crm-deals and crm-stage on the same run, and a cut that loses any of them below its floor voids the read"
+instrument   = "python3 research/ontology-apps/ward/score.py --bar crm-cost"
+timeout_s    = 300
