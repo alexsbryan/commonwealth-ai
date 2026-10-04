@@ -70,6 +70,10 @@ _ALIAS_RE = re.compile(r"^alias\s*(?:→|->)\s*(.+)$")
 # 2026-09-19). Word-bounded on BOTH tokens: `retrieved 5031 chunks` is not a
 # 503, and `ghost busywork` is not `host busy` — a substring search counts both.
 REFUSAL_RE = re.compile(r"\b503\b|\bhost busy\b", re.IGNORECASE)
+# A turn the subject failed to answer (`[<id>] turn: run_turn at <base>: <error>`): the eval
+# records the question with no answer and exits 0, so without this a run whose every turn
+# errored (Metal OOM, 2026-10-03: 18/18 at decode ret -3) read as recorded.
+TURN_ERROR_RE = re.compile(r"\]\s+turn: run_turn at \S+: ")
 REFUSAL_SAMPLE_MAX = 10
 
 
@@ -157,6 +161,44 @@ def daemon_base(env):
     return DAEMON_DEFAULT
 
 
+def subject_env(base, keys):
+    """The arm's env keys as the process answering `base` holds them; None when unreadable.
+
+    Since pb-bench-dials-turns the eval builds no Runtime: every turn runs in the daemon
+    that answers `base`, so an overlay set on the eval process reaches no decision there.
+    The subject's own environment is the only place an arm's env takes effect, so it is
+    read from that process (local only: `lsof` for the listener, `ps eww` for its env)."""
+    from urllib.parse import urlparse
+    u = urlparse(base)
+    if u.hostname not in ("localhost", "127.0.0.1", "::1"):
+        return None
+    try:
+        pids = subprocess.run(["lsof", "-nP", f"-iTCP:{u.port or 80}", "-sTCP:LISTEN", "-t"],
+                              capture_output=True, text=True, timeout=10).stdout.split()
+        if not pids:
+            return None
+        out = subprocess.run(["ps", "eww", "-o", "command=", "-p", pids[0]],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = {}
+    for k in keys:
+        m = re.search(rf"(?:^|\s){re.escape(k)}=(\S*)", out)
+        found[k] = m.group(1) if m else None
+    return found
+
+
+def arm_env_mismatch(overlay, subject):
+    """[(key, the arm's value, the subject's)] for each overlay key the subject does not
+    carry as given. Unset is not the default: an arm that leans on a default records
+    nothing while the default moves (arms.toml header). Unreadable is a mismatch."""
+    if not overlay:
+        return []
+    if subject is None:
+        return [("(subject env)", "readable", "unreadable")]
+    return [(k, v, subject.get(k)) for k, v in overlay.items() if subject.get(k) != v]
+
+
 def daemon_models(base, timeout=10.0):
     """Synth and judge model ids as the daemon reports them.
 
@@ -193,7 +235,9 @@ def daemon_models(base, timeout=10.0):
 
 def count_refusals(stderr_lines):
     hits = [ln.rstrip("\n") for ln in stderr_lines if REFUSAL_RE.search(ln)]
-    return {"count": len(hits), "sample": hits[:REFUSAL_SAMPLE_MAX]}
+    failed = [ln.rstrip("\n") for ln in stderr_lines if TURN_ERROR_RE.search(ln)]
+    return {"count": len(hits), "sample": hits[:REFUSAL_SAMPLE_MAX],
+            "turn_errors": len(failed), "turn_error_sample": failed[:REFUSAL_SAMPLE_MAX]}
 
 
 def git_provenance(repo=REPO):
@@ -214,6 +258,8 @@ def build_manifest(*, arm_id, variant, corpus, index_dir, recipe, run_index,
         reasons.append(f"daemon at {base}: {models['error']}")
     if refusals["count"]:
         reasons.append(f"{refusals['count']} daemon refusal(s) in the run's stderr")
+    if refusals.get("turn_errors"):
+        reasons.append(f"{refusals['turn_errors']} turn(s) the subject failed to answer")
     if eval_exit not in (0, None):
         reasons.append(f"eval exited {eval_exit}")
     return {
@@ -279,12 +325,18 @@ def run(args):
 
     env = {**os.environ, **env_overlay}
     base = daemon_base(env)
+    mismatch = arm_env_mismatch(env_overlay, subject_env(base, env_overlay))
 
     if args.dry_run:
         json.dump({"argv": argv, "env": env_overlay, "host": base,
-                   "out": str(out_run)}, sys.stdout, indent=2)
+                   "subject_env_mismatch": mismatch, "out": str(out_run)}, sys.stdout, indent=2)
         sys.stdout.write("\n")
         return 0
+    if mismatch:
+        raise Refused(
+            f"the daemon answering {base} does not run arm `{args.arm}`'s env "
+            + "; ".join(f"{k}: arm {w!r}, subject {g!r}" for k, w, g in mismatch)
+            + f" — the turns run there, not here. Launch it with harness/arm_daemon.sh {args.arm}")
 
     out_run.mkdir(parents=True, exist_ok=True)
     models = daemon_models(base)
@@ -466,6 +518,33 @@ def self_test():
                     f"substituted=4 ok; absent refused: {e}")
         return False, "arm_env substituted a pool scale nobody chose"
 
+    def arm_env_off_the_subject_refuses():
+        # PLANT: an overlay the subject daemon never saw. Recording it as applied made
+        # `bare` and `full` the same arm after pb-bench-dials-turns (2026-10-03).
+        overlay = {"SOVEREIGN_ATOM_ENUM": "1"}
+        absent = arm_env_mismatch(overlay, {"SOVEREIGN_ATOM_ENUM": None})
+        wrong = arm_env_mismatch(overlay, {"SOVEREIGN_ATOM_ENUM": "0"})
+        unread = arm_env_mismatch(overlay, None)
+        held = arm_env_mismatch(overlay, {"SOVEREIGN_ATOM_ENUM": "1"})
+        none = arm_env_mismatch({}, None)
+        ok = bool(absent) and bool(wrong) and bool(unread) and held == [] and none == []
+        return ok, f"absent={absent} wrong={wrong} unread={unread} held={held}"
+
+    def errored_turns_are_never_ran():
+        # PLANT: every turn errored and the eval still exited 0.
+        lines = ["  [list-igch0774-mints] turn: run_turn at http://localhost:9741: Inference error: "
+                 "Prompt decode failed: Decode Error -3: unknown\n", "wrote run JSON to x\n"]
+        r = count_refusals(lines)
+        m = build_manifest(arm_id="full", variant="both", corpus="c", index_dir=Path("."),
+                           recipe=Path("."), run_index=1, env={}, argv=[], base="b",
+                           models={"error": None, "source": "t", "synth": "s", "judge": "j"},
+                           refusals=r, eval_exit=0, git={"commit": None, "dirty": False})
+        clean = count_refusals(["wrote run JSON to x\n"])
+        return (m["verdict"] == "never-ran" and clean["turn_errors"] == 0,
+                f"verdict={m['verdict']} reasons={m['never_ran_reasons']}")
+
+    case("errored-turns-are-never-ran", errored_turns_are_never_ran)
+    case("arm-env-off-the-subject-refuses", arm_env_off_the_subject_refuses)
     case("ontology-hash-is-only-difference", ontology_hash_is_the_only_difference)
     case("missing-ontology-is-null", missing_ontology_is_null_not_empty_hash)
     case("chunks-listing-name-and-size", chunks_listing_is_name_and_size_only)
