@@ -5,6 +5,7 @@
 #![allow(unused_imports)]
 
 pub mod capabilities;
+mod compute_backend;
 mod control_vector;
 mod embed_only;
 mod embed_slot;
@@ -17,7 +18,6 @@ mod grammar;
 pub(crate) mod idle_slot;
 /// What one slot's KV cache costs, from the gguf's own metadata.
 pub(crate) mod kv_budget;
-mod compute_backend;
 pub mod kv_ops;
 mod model_slot;
 mod prefix_state;
