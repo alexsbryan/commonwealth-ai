@@ -127,7 +127,7 @@ BUNDLE="$(mktemp -t co-review-bundle.XXXXXX)"
   echo "=== LEDGER MENTIONS OF TOUCHED FLAGS ==="
   FLAGS="$(git -C "$REPO" show --format= "$COMMIT" | grep -oE 'SOVEREIGN_[A-Z_]+' | sort -u | head -6)"
   if [ -n "$FLAGS" ]; then
-    for f in $FLAGS; do grep -n "$f" "$REPO/sovereign/DEFAULTS_LEDGER.md" | head -2; done
+    for f in $FLAGS; do grep -n "$f" "$REPO/docs/DEFAULTS_LEDGER.md" | head -2; done
   else
     echo "(no SOVEREIGN_* flags in this diff)"
   fi

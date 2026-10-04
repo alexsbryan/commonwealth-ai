@@ -23,7 +23,7 @@ variant = "high"   # opencode-only: the shim drops it and says so in the iter lo
 
 # `scripts/ralph-check.sh <name> [args]` runs these; arguments are appended.
 [checks]
-desktop = ["bash", "-c", "cd sovereign/crates/sovereign-desktop && npm run check && npm run test"]
+desktop = ["bash", "-c", "cd clients/desktop && npm run check && npm run test"]
 pilot = ["research/ontology-retrieval/pilot/run-pilot.sh"]
 py = ["sh", "-c", "python3 \"$1\" --self-test", "py"]
 campaign = ["python3", "-c", "import sys, tomllib; tomllib.load(open(f'quality/campaigns/{sys.argv[1]}.toml', 'rb'))"]

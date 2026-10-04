@@ -6,11 +6,11 @@
 #
 # This corpus backs the `literary/bk-book-1` enrichment lane in
 # scripts/sovereign-ci-bench.sh — the HARD, baseline-diffed gate that scores a
-# resolved literary atlas against sovereign/bench/literary/bk-book-1.toml.
+# resolved literary atlas against bench/lanes/literary/bk-book-1.toml.
 #
 # YOU DO NOT NEED THIS SCRIPT TO INSTALL. Unlike setup-chaos-corpus.sh, the
 # recipe's `[acquire]` points at an https URL rather than a $HOME path, and the
-# recipe is registered in sovereign-recipes/registry.toml, so the plain
+# recipe is registered in ingest/crates/sovereign-recipes/registry.toml, so the plain
 #
 #     svrn corpus install brothers-karamazov-book-1
 #
@@ -120,7 +120,7 @@ if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
   echo "  expected sha256: $EXPECTED_SHA" >&2
   echo "  actual   sha256: $ACTUAL_SHA" >&2
   echo >&2
-  echo "  The bench baseline at sovereign/bench/literary/baselines/bk-book-1/ was" >&2
+  echo "  The bench baseline at bench/lanes/literary/baselines/bk-book-1/ was" >&2
   echo "  minted from an atlas extracted from the EXPECTED bytes. Scoring a" >&2
   echo "  different text against it would report a model regression that is" >&2
   echo "  really a corpus change. Resolve the drift before running the lane." >&2

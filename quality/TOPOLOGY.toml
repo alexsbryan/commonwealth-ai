@@ -147,7 +147,7 @@ today    = "matches"
 # next reader will otherwise inherit them: (a) "ships in no release lane" —
 # it shipped a systemd unit, a launchd plist and a `curl | sh` installer that
 # fetched a release binary; nothing BUILT that binary, which is a different
-# defect. (b) commonwealth/README.md claimed it served the headless cloud-GPU
+# defect. (b) cmnwlth/README.md claimed it served the headless cloud-GPU
 # peer; CLOUD_PEER_DEPLOY.md never invoked it, and that case is actually
 # `sovereign-cli daemon run --worker-mode` (Launch::Worker), containerised.
 
@@ -170,7 +170,7 @@ name          = "scip-graph"
 path          = "<root>/indexes/<corpus>/scip_graph.db"
 capability    = "scip-writer"
 writers_today = ["daemon-reindexer", "cli"]
-today         = '''MATCHES — flock on .rebuild.lock, staging write, rename over (corpus-engine-scip/src/scip_graph.rs:2190-2245). The one store that already does this, and the template for the rest.'''
+today         = '''MATCHES — flock on .rebuild.lock, staging write, rename over (shared/crates/corpus-engine-scip/src/scip_graph.rs:2190-2245). The one store that already does this, and the template for the rest.'''
 
 [[store]]
 name          = "enrichment"

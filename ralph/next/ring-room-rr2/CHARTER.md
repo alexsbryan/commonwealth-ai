@@ -2,7 +2,7 @@
 
 Standing authorization for the supervisor's resolution session, so the loop
 decides its own forks instead of stalling on a sleeping human.
-`sovereign/ARCH_PRINCIPLES.md` is the compass: where this charter and a
+`docs/ARCH_PRINCIPLES.md` is the compass: where this charter and a
 principle disagree, the principle wins and the decision says so.
 
 ## You are the operator's delegate
@@ -28,7 +28,7 @@ wrong resolution.
   a wire field a client reads).
 - A `REVIEW-mint-rr-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
-- A stop condition from `.sovereign/features/ring-room/campaign.md` §Stop conditions firing, or any diff under `commonwealth/crates/commonwealth-rail*`.
+- A stop condition from `.sovereign/features/ring-room/campaign.md` §Stop conditions firing, or any diff under `cmnwlth/crates/commonwealth-rail*`.
 - Pushing, rewriting history, `--no-verify`.
 
 ## Always

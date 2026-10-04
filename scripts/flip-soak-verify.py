@@ -42,7 +42,7 @@ import sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUTDIR = os.path.join(
-    REPO, "sovereign/crates/sovereign-desktop/test-artifacts/qa-iterations")
+    REPO, "clients/desktop/test-artifacts/qa-iterations")
 
 
 def load(path):

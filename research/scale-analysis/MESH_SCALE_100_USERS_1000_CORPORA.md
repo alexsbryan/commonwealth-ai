@@ -1,7 +1,7 @@
 # Scale analysis — 100 users, 1000 corpora: where the system breaks, in order
 
 **Date:** 2026-08-13 · **Method:** three parallel code sweeps (retrieval path, inference
-scheduling, mesh substrate) + the existing `sovereign/docs/specs/SCHEDULER_QUALITY.md`
+scheduling, mesh substrate) + the existing `svrn/docs/specs/SCHEDULER_QUALITY.md`
 measurements. Every claim below carries a file:line citation from today's tree; nothing is
 extrapolated from docs alone.
 
@@ -502,13 +502,13 @@ counts), `scripts/probe-t1-corpora-sweep.sh` (the n-sweep), `scripts/probe_a_str
 and `scripts/probe_a_greedy_vs_polite.py` (load generators for the existing Probe A netns
 harness, which gained `--load` / `--load-args` / `--daemon-env` so its sealed netns and its
 bind assertion stay the only implementation of both), and two `#[ignore]`d tests in
-`corpus-engine-notes/tests/`. Dev daemons ran in a rootless netns under a throwaway `$HOME`;
+`code/crates/corpus-engine-notes/tests/`. Dev daemons ran in a rootless netns under a throwaway `$HOME`;
 `BIND CHECK PASSED` is recorded for every daemon run below, and the operator's live daemon
 and corpora were never in the path.
 
 #### 1. `t1-notes-clean-wire` — 16.1 KB per gossiped note, cliff at ~520
 
-`corpus-engine-notes/tests/red_baseline_note_wire_size.rs` (`#[ignore]`d measurement).
+`code/crates/corpus-engine-notes/tests/red_baseline_note_wire_size.rs` (`#[ignore]`d measurement).
 Events come from `NoteStore::notes_delta_since` — the shipped constructor — over a
 **snapshot of the real `~/.svrnmesh/notes.db`** (5,540 notes, 4,811 global), and are
 serialized with the same `serde_json::to_vec` the daemon's sink calls
@@ -531,7 +531,7 @@ serialized with the same `serde_json::to_vec` the daemon's sink calls
 
 #### 2. `t1-notes-own-space` — the contamination is reproducible in 0.02 s
 
-`corpus-engine-notes/tests/red_baseline_cross_model_notes.rs::red_baseline_foreign_space_embedding_must_not_enter_the_cosine_pool`,
+`code/crates/corpus-engine-notes/tests/red_baseline_cross_model_notes.rs::red_baseline_foreign_space_embedding_must_not_enter_the_cosine_pool`,
 committed `#[ignore]`d and **watched failing**:
 
 ```
@@ -911,7 +911,7 @@ scorer, the loop.
 
 `svrn corpus ingest` — the documented folder-ingest, and the path this rig uses
 — never stamps `indexes_built`. `mark_indexes_built()` is called only from the
-BESPOKE ingest path (`corpus-engine/src/engine/ingest.rs:1709`) and from shard
+BESPOKE ingest path (`ingest/crates/corpus-engine/src/engine/ingest.rs:1709`) and from shard
 promotion (`sharding.rs:1407`); the workflow's `tool:corpus_store` has no
 equivalent call. `corpus_search.rs` Filter 2 then drops every such corpus
 before the fan-out — "skip it on EVERY path so the model can't fabricate over
@@ -947,7 +947,7 @@ readiness itself. Proof on the instrument that found it:
 `needle-rig-build.sh` reports `repaired=0/100`, and `needle-rig-baseline.sh`
 goes from exit 4 (`kq_fanout_corpora=0`, eligibility refused) to exit 0
 (`searched=100 installed=100 OK`, 100/100 rank-1 in both runs). Regression
-test: `sovereign/crates/sovereign-tools/tests/corpus_store_readiness.rs`.
+test: `svrn/crates/sovereign-tools/tests/corpus_store_readiness.rs`.
 
 #### 8.6.3 Instrument validated before any result was read
 
@@ -1124,7 +1124,7 @@ should not read "peers were offline" as "we learned nothing about scaling":
    But five gates bound it, each cited: the ranked/OICP route refuses an envelope-less
    request outright (`peer_inference.rs:1396-1402`, `has_routing_signal` at `:1119-1127`) and
    a plain OpenAI client sends no envelope; `sharding()` defaults to `LocalOnly`
-   (`oicp-types/src/requirements.rs:146-151`, gate at `oicp_select.rs:113-124`); the
+   (`shared/crates/oicp-types/src/requirements.rs:146-151`, gate at `oicp_select.rs:113-124`); the
    load-balance tiebreak is `if local_inflight <= peer_inflight` → **Local**
    (`peer_inference.rs:1817`), so at equal load nothing ever spreads; peer load is read from
    gossip up to 10 s stale and gossip *overrides* the just-incremented self-observed count
@@ -1349,7 +1349,7 @@ stale: the peer just said so.
 property of the scorer rather than a preference.** The order asked for the peer to be
 "scored down for the `retry_after_secs` window". The score path cannot express that:
 the SSOT scorer clamps availability to `[0.2, 1.0]`
-(`oicp-types/src/scoring.rs:553`), so the strongest discount available is a 5×
+(`shared/crates/oicp-types/src/scoring.rs:553`), so the strongest discount available is a 5×
 multiplier — a peer that is 5× better on the other terms still wins, and still gets
 refused. "Do not re-dial into the same refusal" is an exclusion, so it is one:
 `ExclusionReason::YieldedToLocal`, a countable arm of the existing closed set.
@@ -1754,7 +1754,7 @@ separate order; what follows closed is the half that made the response *lie*.
 `corpora_unavailable` never left the client:
 `MeshKnowledgeSource::search` returned a bare `Vec<MeshScoredChunk>`, so
 `MeshKnowledgeClient` parsed the response, took `results`, and dropped the
-rest on the floor — `sovereign/deploy/mesh/GROUND_TRUTH.md` had already
+rest on the floor — `cmnwlth/deploy/mesh/GROUND_TRUTH.md` had already
 recorded this ("The fan-out client discards `corpora_searched`/
 `corpora_unavailable` and returns transport failure as an empty vec"). Three
 failure paths — transport error, non-2xx, malformed body — each returned an

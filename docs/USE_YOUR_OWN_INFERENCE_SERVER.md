@@ -115,6 +115,66 @@ That's worth 1–5% on retrieval; a model without that asymmetry loses nothing.
 You can skip all of this if you don't use corpora, memory, or anything that
 retrieves — plain chat needs no embedding model.
 
+## A hosted provider
+
+No local model? One command sets a node up on a hosted one:
+
+```sh
+svrn setup --hosted deepseek < key.txt   # or anthropic, openrouter --model <id>, or a /v1 URL
+svrn daemon
+```
+
+It downloads only the small embedding model and writes the `[engine]` below
+with no `[models]`. The key comes from stdin, never the command line, and the
+config is written readable by you only.
+
+`kind = "remote"` can point at a hosted API: OpenRouter, DeepSeek, or any
+other OpenAI-compatible vendor. Sovereign treats every endpoint that is not on
+this machine as a third party, and that changes what it will send there.
+
+**Configuring it is the consent.** Putting a vendor in `[engine]` sends this
+node's chat turns and enrichment calls to it. Our OICP envelope is not sent;
+a vendor does not speak it.
+
+**Embeddings stay on this machine.** Text is never sent to a vendor to be
+embedded. Name the embedding GGUF in `embed_path` and this process loads it
+(Qwen3-Embedding-0.6B is about 600 MB and runs on CPU), so no `[models]`
+section and no second server are needed. A llama-server on this machine,
+named in `embed_endpoint`, also works. With no GPU it runs on the CPU and the
+daemon's log says so. If it will not run on your machine at all, `svrn doctor`
+says which check failed and names the machine; open an issue with
+`svrn doctor --json` attached.
+
+**Peers can use it.** The node advertises the vendor model to the mesh like
+any loaded model, so a peer's turn can be served from it, on this node's key.
+`fast_model_id` names a second, quicker model for fast turns.
+
+**Vendor knobs go in `extra_params`**, merged into every chat body last.
+OpenRouter needs `require_parameters`, or it may route a schema request to a
+backend that ignores the schema, and that loss is silent.
+
+**Anthropic ignores the schema field** on its OpenAI-compatible endpoint, so
+`svrn setup --hosted anthropic` writes `structured_output = "tool-use-forced"`
+and schemas go as a forced function call (see "Structured output" below). Use
+Claude Opus 5 or Sonnet 5 there: Opus 5.5 and Fable 5.1 refuse a forced
+function call.
+
+```toml
+[engine]
+kind = "remote"
+endpoint = "https://openrouter.ai/api/v1"
+model_id = "deepseek/deepseek-v3.2"
+api_key = "..."
+context_size = 65536
+embed_path = "/home/me/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+extra_params = { provider = { require_parameters = true } }
+```
+
+A server you run on another machine of your own, vLLM on your LAN for
+instance, is treated the same way, because an address cannot say whose machine
+it is. If your requests should not need the declaration, run a Sovereign node on
+that machine and reach it over the mesh instead.
+
 ## What still works, and what doesn't
 
 Chat, streaming, tool calls, the OpenAI-compatible API on `:9741`, corpora and
@@ -127,17 +187,22 @@ itself.
 **Structured output depends on your server now.** When Sovereign wants JSON
 matching a schema it sends it as the standard `response_format` field, so a
 server with guided decoding — vLLM and SGLang both have it — will enforce it as
-before. A server that ignores the field returns ordinary text, and you'll find
-out at the point something fails to parse rather than up front. Sovereign's own
-grammar constraints are a private extension and no third-party server implements
-them, so those become suggestions.
+before. A server that refuses the field with a 400 is asked once more with the
+schema as a forced function call, and is asked that way from then on. A server
+that ignores the field returns ordinary text, which nothing can learn from, so
+tell Sovereign up front: `structured_output = "tool-use-forced"` in `[engine]`
+sends every schema as a forced function call from the first request. Sovereign's
+own grammar constraints are a private extension and no third-party server
+implements them, so those become suggestions.
 
 **Reranking is off** unless you run a reranker yourself; Sovereign's is part of
 the built-in engine. Retrieval falls back to un-reranked results, which is a
 quality step down, not a failure.
 
-**`svrn status` reports no models resident**, because none are. Ask your own
-server what it's holding.
+**`svrn status` lists the remote models as resident**, the chat model and any
+`fast_model_id`, plus the embedding model when `embed_path` loads it here.
+Resident means this node can serve them, not that their weights are in its
+memory; ask your own server what it's holding.
 
 Sovereign won't paper over any of these. A feature that needs local weights
 reports itself unavailable rather than pretending it worked.
@@ -146,7 +211,8 @@ reports itself unavailable rather than pretending it worked.
 
 `kind = "remote"` talks the OpenAI API, which is what vLLM, SGLang, TGI,
 llama-server, LM Studio, Ollama and most hosted providers speak. If your engine
-speaks that, you're done — the name on the box doesn't matter.
+speaks that, you're done — the name on the box doesn't matter. A hosted
+one is a third party: read "A hosted provider" above.
 
 If it doesn't, or you want it in the daemon's own process rather than behind
 HTTP, you can compile an engine in. That means implementing four methods in Rust
@@ -157,7 +223,7 @@ load one from a shared library safely. The walkthrough is a runnable file:
 cargo run -p sovereign-inference --example custom_engine
 ```
 
-[`sovereign/crates/sovereign-inference/examples/custom_engine.rs`](../sovereign/crates/sovereign-inference/examples/custom_engine.rs)
+[`serve/crates/sovereign-inference/examples/custom_engine.rs`](../serve/crates/sovereign-inference/examples/custom_engine.rs)
 is the template — a working engine, the config that selects it, and the
 conformance check you run before trusting it. That check is worth using: it
 catches the mistakes that otherwise surface much later as a truncated answer or

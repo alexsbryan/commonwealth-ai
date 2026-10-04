@@ -16,7 +16,7 @@
 #   cargo run -p xtask -- layer-gate     Cargo-DECLARED edges (CI, <1s)
 #   sovereign code arch-report           SCIP-OBSERVED symbol references
 
-schema_version = 5
+schema_version = 6
 
 # ── Back-of-house: the quality controls ──────────────────────────────────────
 # eval, benches, judges, gates, harnesses, archaeology, ATOS. These sit OUTSIDE
@@ -463,7 +463,7 @@ reason = "the wire contract is the floor — a protocol crate that names the run
 
 # oicp-client's ONE surviving sovereign edge, with the finding that keeps it.
 # Census 2026-08-20, `scripts/nc-boundary.py --edge oicp:sovereign`: 12 types /
-# 103 refs, every one of them from `oicp-client/src/lib.rs`, every one defined
+# 103 refs, every one of them from `shared/crates/oicp-client/src/lib.rs`, every one defined
 # in `sovereign-contracts` —
 #   traits.rs            InferenceProvider, ResidentSlot
 #   types/completion.rs  CompletionRequest, CompletionResponse, StreamFrame,
@@ -664,7 +664,7 @@ reason = "the rail's manifests declare commonwealth-core ABSENT in prose and not
 # `commonwealth-rail*` at the time; the check held for `-work` and did not for
 # `commonwealth-rails`, which is why they name their two crates now.) Without this block the crate would sit in `mesh-foundation` with
 # nothing at all stopping a `sovereign-*` edge, which is the exact failure
-# `commonwealth/BOUNDARY.md` was written about.
+# `cmnwlth/BOUNDARY.md` was written about.
 [[forbid]]
 from = "commonwealth-work"
 to = "sovereign-*"
@@ -780,7 +780,7 @@ reason = "must stay consumable without the agent runtime — it names NO soverei
 # entry (the edge is gone) fails the gate until it is deleted — removals are
 # the celebration, same as the layer exceptions below.
 #
-# Moved here from Rust consts in `corpus-engine/xtask/src/boundary_gate.rs`
+# Moved here from Rust consts in `quality/xtask/src/boundary_gate.rs`
 # (2026-09-03). One policy file, one parser (`quality/arch-layers`), same as
 # layer-gate and arch-report — ARCH §10.6, and "say it in TOML".
 
@@ -891,7 +891,7 @@ allow = []
 name = "sovereign-contracts"
 # Where `Tool`, `ToolResult`, `Error`, `ToolRegistry`, `types` and
 # `slot_policy` actually live. At 24,619 lines it is the anchor a lift has to
-# reckon with: `studio/LIBRARY.md` prices the real cut at about a dozen items
+# reckon with: `clients/studio/LIBRARY.md` prices the real cut at about a dozen items
 # into a contract crate of a few hundred lines, re-exported at the current
 # paths so no importer in the monorepo changes.
 #
@@ -906,7 +906,7 @@ allow = ["oicp-types", "kernel-types", "sovereign-time"]
 [[package_leaf]]
 name = "oicp-client"
 # Protocol types plus the client that speaks them. The `sovereign-contracts`
-# edge is 12 types / 103 refs, all from `oicp-client/src/lib.rs`; the finding
+# edge is 12 types / 103 refs, all from `shared/crates/oicp-client/src/lib.rs`; the finding
 # recorded on the `[[forbid]]` above is that the inference vocabulary is oicp's
 # own and the fix is a MOVE, gated on an oicp-owned error across 79
 # `impl InferenceProvider` sites.
@@ -1392,6 +1392,9 @@ crates = [
     "sovereign-pods",
     # cmnwlth's CLI, lifted out of sovereign-cli-llm 2026-09-21.
     "sovereign-cli-mesh",
+    # The OICP host conformance tester, beside the spec it executes
+    # (cmnwlth/docs). Its internal surface is oicp-types alone.
+    "oicp-conformance",
 ]
 
 [[package]]
@@ -1482,7 +1485,7 @@ doc = "docs/internal/FIVE_PROGRAMS.md"
 #     (a), 2026-09-24): the evaluator's claim-miner reads ingest's atoms.json.
 #     Its closure is serde/serde_json/blake3 + `kernel-types` (already here),
 #     and eval links it with `default-features = false`, so the `std::fs`
-#     `read` door (understanding-vocab/src/read.rs) is not in eval's build;
+#     `read` door (shared/crates/understanding-vocab/src/read.rs) is not in eval's build;
 #     eval reads its own bytes and calls `read::parse_atoms` (fp-58).
 #   - `oicp-client`, `sovereign-turn-client`, `sovereign-cli-base`, `host-kit`,
 #     `corpus-index` — admitted by the operator (phase-b-33) for bench's own
@@ -1753,28 +1756,28 @@ doc = "quality/campaigns/sv-surface.toml §sv-no-daemon-management"
 # `Child` and drops it on the next line, so there is nothing to `try_wait` on
 # — and `reaps` being forbidden in this very file is what refuses the loop
 # that would grow back.
-bring_up_decider = { krate = "sovereign-turn-client", file = "sovereign/crates/sovereign-turn-client/src/reach.rs", reason = "ServingHost::ensure_reachable is the one decider for `is a backend reachable, and start one if this build ships one`. Thirteen private copies of the probe preceded it; retiring them onto one is why the client family, not the app, owns reachability." }
+bring_up_decider = { krate = "sovereign-turn-client", file = "shared/crates/sovereign-turn-client/src/reach.rs", reason = "ServingHost::ensure_reachable is the one decider for `is a backend reachable, and start one if this build ships one`. Thirteen private copies of the probe preceded it; retiring them onto one is why the client family, not the app, owns reachability." }
 
 # ── The lifecycle ledger — every process-control site a surface still has ────
 # Census 2026-09-11 (`cargo xtask lifecycle-gate`). `burning-down` rows are
 # what the bar counts; `sanctioned` rows are policy and may stand.
 
 [[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
+file = "clients/desktop/src-tauri/src/setup_plan.rs"
 rule = "starts"
 max = 3
 kind = "sanctioned"
 reason = "FIRST RUN, operator call 2026-09-12. The wizard spawns the sidecar's own `setup` verb — `--plan --json` to render the screens, `--yes --json` to run them — because on a first run there is no HTTP to ask: the sidecar exits 1 with no config off a TTY (`daemon_cmd/mod.rs`) and refuses a config with no `[models]` (`sovereign-daemon/src/build/inference.rs`), measured 2026-09-12. What this starts is NOT a backend. `setup` binds no port, serves nothing, and exits; the thing this row permits is a one-shot that ends, which is the opposite of the handle-holding the bar refuses. The alternative priced against it was a daemon that boots unconfigured (a new NodeClass and a restart handshake); this links nothing and adds no ability — the app could already exec this binary (`daemon_binary::stable_daemon_binary`, the same one `ServingHost` brings up). Read it as the shape the rule permits: a user action, a process that terminates, no policy and no timer."
 
 [[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
+file = "clients/desktop/src-tauri/src/setup_plan.rs"
 rule = "reaps"
 max = 1
 kind = "sanctioned"
 reason = "The `.wait()` on the one-shot above. `setup --yes --json` reports its verdict as an EXIT CODE — that is the verb's contract (`setup_cmd/mod.rs`), and the JSON terminal line is the narration beside it — so not reading the code would mean reporting success on a run that failed after its last progress line (ARCH principle 6). This is not deciding when a backend stops: there is no backend, and the process has already ended by the time this resolves. A `wait` on a SERVING child is still refused, and nothing here holds one."
 
 [[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs"
+file = "clients/desktop/src-tauri/src/commands/config_setup.rs"
 rule = "starts"
 max = 3
 kind = "sanctioned"
@@ -1800,7 +1803,7 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 #
 # The closing conditions those eleven rows carried are not lost: they are in
 # the diffs that deleted them, in docs/CODE_TOOLING_BOUNDARY.md, in
-# sovereign/SERVING_BOUNDARY.md and in corpus-engine/DECOMPOSITION.md.
+# serve/SERVING_BOUNDARY.md and in corpus-engine/DECOMPOSITION.md.
 #
 # `sovereign-mesh-test-harness -> sovereign-api` retired at
 # REVIEW-build-harness-oicp-seam (2026-09-17). The harness's simulated node is
@@ -1878,3 +1881,23 @@ from = "sovereign-mobile"
 to = "commonwealth-transport"
 reason = "REACHED via sovereign-mobile → commonwealth-transport. The phone dials the mesh over iroh directly and commonwealth-transport is the client of that wire — but it drags commonwealth-core (the mesh's own model), which is the leak. The client half of the transport belongs beside sovereign-turn-client in the contract layer; until that split lands this row stands."
 tracking = "sv-surface mobile-transport seam (2026-09-11)"
+
+# ── Where each crate lives (schema v6) ───────────────────────────────────────
+# The top level is one directory per program, and a crate's directory says
+# which program owns it. boundary-gate fails a member no row claims, and a
+# member outside the top-level directory its row names: a [[package]] row's
+# crates live under its own `name`, and the other kinds under the directories
+# below. When two claim one crate the first of tooling, client, distribution,
+# package and leaf decides (quality/arch-layers/src/crate_dirs.rs).
+[crate_dirs]
+package_leaf = "shared"
+distribution = "distributions"
+clients = "clients"
+tooling = "quality"
+# Apps over the programs, in no package. Two of them are also the
+# [thin_surfaces], which is a different rule (what they may link).
+client_crates = ["sovereign-desktop", "sovereign-mobile", "sovereign-studio"]
+# The quality program's own crates: the gates, and the parser of this file.
+# arch-layers is also a [[package_leaf]] (its closure is a leaf's); its home
+# is here.
+tooling_crates = ["xtask", "arch-layers"]

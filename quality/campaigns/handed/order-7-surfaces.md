@@ -55,7 +55,7 @@ only door to a `Runtime`, so every served turn has a named profile structurally.
   gold_keywords, …, rationale }` (:128-147); `qtype` is snake_case `PressureKind` (:30-31), `present` at
   :34. `validate` REFUSES an answerable question with no `gold_keywords` (:226-235), so the generative
   probe carries one.
-- **The probes.** Grounded: `sovereign/bench/chaos_monkey/saltgrass.toml:22-27` — id `present-victim`,
+- **The probes.** Grounded: `bench/lanes/chaos_monkey/saltgrass.toml:22-27` — id `present-victim`,
   question "Who is found drowned in the lock basin at Glasswater Stave?", gold `["Pellow"]`, over the
   held-out original novella (`[meta] corpus = "chaos-saltgrass"` :16-17; contamination-free by
   construction, :4-9). The index exists on this host: `~/.svrnmesh/indexes/chaos-saltgrass`.

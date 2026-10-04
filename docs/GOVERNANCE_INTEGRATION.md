@@ -31,7 +31,7 @@ edges. Producing them is extraction — it costs model calls.
 retract, resolve, accept, dismiss, revert. The fold that turns that log
 into the current active rule set is
 `derive_active(&[Op<GovernanceOpKind>]) -> ActiveSet`
-(`corpus-engine/src/enrichment/governance.rs:280`). It does no IO and
+(`ingest/crates/corpus-engine/src/enrichment/governance.rs:280`). It does no IO and
 never calls inference.
 
 So the governance semantics — what is in force, what was superseded and
@@ -106,31 +106,26 @@ Two distinct seams, and they are not the same one.
 
 ### Extraction against your endpoint
 
-Enrichment resolves `provider:model` specs against
-`~/.config/sovereign/providers.toml`:
+Enrichment talks to one OpenAI-compatible host: the corpus's `base_url`
+(`--chat-url` on `svrn-ingest ingest`), with embeddings at `embed_base_url`
+when they are a second process, as with llama-server, which serves one
+model per process. Model ids go to that host verbatim, so `qwen3:8b`
+reaches Ollama as written. A hosted model is not enrichment's concern:
+point it at a sovereign daemon whose `[engine]` is the vendor.
 
-```toml
-[providers.myserver]
-type = "openai-compatible"      # local daemon, vLLM, llama.cpp, OpenRouter, Together
-base_url = "http://10.0.0.5:8080/v1"
-```
-
-A bare model id resolves to provider `local`. `anthropic` is the other
-dialect (`/v1/messages`).
-
-**Set `structured_output_mode` deliberately.** The extraction pipeline
-asks for JSON against a schema, and providers differ in how they honor it:
-`json-schema` (the provider enforces it — OpenAI, our daemon),
-`json-object` (valid JSON, no schema enforcement), `tool-use-auto`, and
-`tool-use-forced` (maximum adherence, not universally supported). A
-llama-server that doesn't enforce `json_schema` needs `json-object`, and
-guessing wrong shows up as extraction quality loss rather than an error.
+**Structured output is negotiated, not configured.** The extraction
+pipeline asks for JSON against a schema: `json_schema` by default, or what
+the host advertises at `/oicp/v1/capabilities`. A host that refuses
+`json_schema` with a 400 (DeepSeek's chat API) is asked once more with the
+schema as a forced function call. A host that accepts `json_schema` but
+ignores it does not 400, so it is not caught by the fallback, and shows up
+as extraction quality loss rather than an error.
 
 **The gotcha that will bite you.** There is one egress boundary, and it
-decides local-versus-remote by comparing the resolved `base_url` against
-this client's own daemon base. Your llama-server on another host or port
-is **remote** by that definition, even on your LAN — so personal-custody
-chunks are refused to it unless a consent grant is installed for the run.
+decides local-versus-remote by whether the host is on this machine
+(loopback). Your llama-server on another host is **remote** by that
+definition, even on your LAN — so personal-custody chunks are refused to it
+unless the run has a consent grant (`--consent <class>`).
 This is deliberate: the boundary protects custody, and it does not know
 that your endpoint is one you trust. Plan for it rather than discovering
 it mid-ingest.
@@ -282,7 +277,7 @@ dropped section are lost with it. The precise fix is sub-chunk
 
 ## A worked corpus to test against
 
-`sovereign-recipes/maple-house/` is a seeded charter-plus-amendments
+`ingest/crates/sovereign-recipes/maple-house/` is a seeded charter-plus-amendments
 corpus with planted ground truth: a founding Charter of numbered Articles
 and dated house-meeting Decisions that amend it, including three genuine
 cross-section conflicts and one decoy that shares vocabulary without
@@ -294,7 +289,7 @@ before you point it at a real corpus — a detector that flags the parking
 decoy as a conflict with the overnight-guest rule is telling you something
 you want to know early.
 
-`sovereign/bench/governance/` holds the two lanes that gate this: a
+`bench/lanes/governance/` holds the two lanes that gate this: a
 precision/recall detector lane over tension edges, and an answering lane
 carrying the three red lines.
 
@@ -317,8 +312,8 @@ One small binary placed beside what you already run. It takes two
 configuration values — an atlas directory and a `base_url` — and serves
 governance over HTTP. The `base_url` points either at your own
 OpenAI-compatible endpoint (llama.cpp, vLLM, SGLang, TGI) or at a
-sovereign daemon, which is the same `providers.toml` seam Tier 3
-already uses.
+sovereign daemon, which is the same one-host seam Tier 3 already
+uses.
 
 This is a small binary rather than a platform for one reason: the fold
 is pure, so most of what a server would serve is file-backed pure

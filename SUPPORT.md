@@ -7,10 +7,10 @@ Start here, in this order — it's roughly fastest-answer-first.
 1. **`svrn doctor`.** It checks most of the common failures itself — daemon
    down, models missing, index unbuilt, watcher dead — and each row prints the
    command that fixes it. `svrn doctor --fix` repairs what it safely can.
-2. **[TROUBLESHOOTING](./sovereign/docs/TROUBLESHOOTING.md)** for symptom-to-fix
-   pairs, and **[HAVING_TROUBLE](./sovereign/docs/HAVING_TROUBLE.md)** if you'd
+2. **[TROUBLESHOOTING](./svrn/docs/TROUBLESHOOTING.md)** for symptom-to-fix
+   pairs, and **[HAVING_TROUBLE](./svrn/docs/HAVING_TROUBLE.md)** if you'd
    rather read prose than a table.
-3. **[FAQ](./sovereign/docs/FAQ.md)** for the questions people ask first.
+3. **[FAQ](./svrn/docs/FAQ.md)** for the questions people ask first.
 4. Still stuck: **open a bug report.** The template asks for your version,
    platform, and `svrn doctor` output up front, because those three answer most
    of the follow-up questions before they're asked.

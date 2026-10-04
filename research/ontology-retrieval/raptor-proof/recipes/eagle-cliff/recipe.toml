@@ -1,4 +1,4 @@
-# ei7-prove-raptor candidate. Same shape as sovereign-recipes/chaos-secret-agent
+# ei7-prove-raptor candidate. Same shape as ingest/crates/sovereign-recipes/chaos-secret-agent
 # (paragraph chunks, 2048/256); the atlas and its Summary atoms are built by
 # `svrn enrich` afterwards, as they were for that corpus.
 [corpus]

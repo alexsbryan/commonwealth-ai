@@ -10,9 +10,9 @@ spine and it applies to the doc's own evidence first.
 ← companions: `docs/COMAINTAINER.md` (the role this scales — read it
 first; this doc assumes its §4 vocabulary and §10 artifacts),
 `.claude/skills/comaintainer/SKILL.md` (the as-built M0 seat protocol),
-`sovereign/ARCH_PRINCIPLES.md` (§18 is the judgment core; §19 is the
+`docs/ARCH_PRINCIPLES.md` (§18 is the judgment core; §19 is the
 reuse obligation this doc answers in §9),
-`sovereign/docs/WORK_ATLAS.md` (the coordination organ being
+`svrn/docs/WORK_ATLAS.md` (the coordination organ being
 centralized), `quality/ARCH_LAYERS.toml` (the scheduler's input),
 `gym/comaintainer/` (the charter, the gym, the measured baseline).
 

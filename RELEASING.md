@@ -25,15 +25,15 @@ downloads, and the desktop auto-updater. The repo is open source now, so that
 indirection is retired. **The shelf still holds the newest published assets of
 every stream** (`desktop-v0.4.0`, `cli-v0.6.0`, `vscode-v0.3.0`) until the next
 release is cut here, so every consumer reads BOTH repos and takes the max
-semver across them: `landing/api/desktop/_releases.js` for the two edge
-endpoints, the `SHELF_REPO` fallback in `landing/install.sh`. This repo also
+semver across them: `clients/landing/api/desktop/_releases.js` for the two edge
+endpoints, the `SHELF_REPO` fallback in `clients/landing/install.sh`. This repo also
 carries stale `desktop-v0.1.19` / `cli-v0.1.19` tags from July — which is why
 the rule is max-semver-across and not first-repo-that-answers. Retire the
 fallback (delete `SHELF_REPO`, set `GITHUB_FALLBACK_REPO=""` in the Vercel
 project) once the newest release of every stream lives here.
 
 **The tag prefix is load-bearing, and every consumer must filter on its own.**
-`landing/install.sh` takes the max-semver `cli-v*`; `landing/api/desktop/*.js`
+`clients/landing/install.sh` takes the max-semver `cli-v*`; `clients/landing/api/desktop/*.js`
 take the max-semver non-draft `desktop-v*`. Neither uses GitHub's
 `/releases/latest`, which is a single repo-global pointer shared by all three
 streams. A new artifact stream on this shelf **must** be invisible to the
@@ -51,7 +51,7 @@ inside the CLI tarball.
 ## Versioning — one workspace version for the two Rust artifacts
 
 (The VS Code extension is exempt — it carries its own version in
-`packages/vscode-sovereign/package.json`. See its section below.)
+`clients/vscode/package.json`. See its section below.)
 
 There is a single repo-wide version: `[workspace.package].version` in the root
 `Cargo.toml` (every crate inherits it via `version.workspace = true`). Both tag
@@ -218,7 +218,7 @@ combined `SHA256SUMS`.
 enabled on a tag. Intel builds on the **self-hosted Intel-Mac runner** (labels
 `self-hosted, macOS, X64`) — the same box + runner the desktop release uses, so
 **start `./run.sh` before tagging** (manual-start). Runner setup lives in the
-desktop [`RELEASING.md`](sovereign/crates/sovereign-desktop/RELEASING.md) under
+desktop [`RELEASING.md`](clients/desktop/RELEASING.md) under
 *"macOS Intel (x86_64) — self-hosted runner"*. The `release` job is decoupled
 (`if: !cancelled()`), so a down runner can't block the Linux tarball. macOS
 arm64 is ready to uncomment in `cli-release.yml` once a local
@@ -246,7 +246,7 @@ desktop runbook's one-time setup table applies (podman machine, gh auth).
 
 ### 4. The installer
 
-`landing/install.sh` (served at `https://svrnme.sh/install.sh`) is the
+`clients/landing/install.sh` (served at `https://svrnme.sh/install.sh`) is the
 `curl | sh` target. On `latest` it resolves the **newest `cli-v*` release** via
 the GitHub API:
 
@@ -273,7 +273,7 @@ checksum against `SHA256SUMS`, and prints `svrn setup` as the next step.
 Same shape (bump → tag `desktop-v$v` → CI → promote draft), but with more
 moving parts: a four-platform Tauri matrix, bundled OCR/PDFium assets, ad-hoc
 code signing, and the auto-updater keypair. **The authoritative checklist is
-[`sovereign/crates/sovereign-desktop/RELEASING.md`](./sovereign/crates/sovereign-desktop/RELEASING.md)** —
+[`clients/desktop/RELEASING.md`](./clients/desktop/RELEASING.md)** —
 follow it for desktop releases. The one-line version:
 
 ```sh
@@ -374,7 +374,7 @@ to move to. Repair in place; unpublish only if the `.app` itself is bad.
 
 ## Releasing the VS Code extension
 
-`packages/vscode-sovereign` — pure TypeScript bundled by esbuild into one
+`clients/vscode` — pure TypeScript bundled by esbuild into one
 platform-neutral `.vsix`. No cross-compilation, no containers, no CI pipeline:
 `scripts/release-vsix-local.sh` **is** the release path.
 

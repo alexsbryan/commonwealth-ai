@@ -2,7 +2,7 @@
 
 Standing authorization for the supervisor's resolution session, granted by the
 operator 2026-09-16 so the loop decides its own design forks instead of
-stalling on a sleeping human. `sovereign/ARCH_PRINCIPLES.md` is the compass:
+stalling on a sleeping human. `docs/ARCH_PRINCIPLES.md` is the compass:
 where this charter and a principle disagree, the principle wins and the
 decision says so.
 

@@ -188,7 +188,7 @@ room_scaffold() { # dir name
 # Per-file sha256 of a scaffolded directory against the templates, plus the
 # `grep -ci guest` the bar's clause (b) reads. Writes ONE json object.
 room_scaffold_proof() { # dir name out.json
-  python3 - "$1" "$2" "$REPO/sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates" > "$3" <<'PY'
+  python3 - "$1" "$2" "$REPO/svrn/crates/sovereign-cli-llm/src/ring_cmd/templates" > "$3" <<'PY'
 import hashlib, json, os, re, sys
 scaffold, name, templates = sys.argv[1:4]
 def sha(b): return hashlib.sha256(b).hexdigest()[:16]
@@ -368,7 +368,7 @@ print(f\"{len(ops)} {hashlib.sha256(''.join(ops).encode()).hexdigest()[:16]}\")"
 # instead of leaving it probing a namespace nobody owns any more.
 room_daemon_owned_ns() {
   sed -n 's/^pub const MEASUREMENTS_APP_ID: &str = "\(.*\)";$/\1/p' \
-    "$REPO/sovereign/crates/sovereign-core/src/mesh_measurements.rs" | head -1
+    "$REPO/svrn/crates/sovereign-core/src/mesh_measurements.rs" | head -1
 }
 
 # The model the wall will grant, read from the daemon's own dispatchable list
@@ -631,8 +631,8 @@ JOIN_BANK='[
 join_doc_js() {
   cat > "$D/join-doc.mjs" <<'JS'
 const { REPO, PD, PA, POLL_S, WATCH_S } = process.env;
-const A = await import(`file://${REPO}/sovereign/apps/ring-doc/adapter.js`);
-const { Y } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
+const A = await import(`file://${REPO}/cmnwlth/apps/ring-doc/adapter.js`);
+const { Y } = await import(`file://${REPO}/cmnwlth/apps/ring-doc/vendor/ring-doc-bundle.js`);
 // The SDK's fold, as ring-doc-demo.sh's driver carries it.
 const fold = (log, reducer, initial) => {
   let acc = initial;
@@ -1932,8 +1932,8 @@ if topology == "room":
     # did, and it re-arms as a tripwire the moment an unpushed campaign
     # edits rail — which is the standing rule D1 revised for one row only.
     # Operator direction 2026-09-22 (option a on the same handoff).
-    RAIL = ["commonwealth/crates/commonwealth-rail",
-            "commonwealth/crates/commonwealth-rail-core"]
+    RAIL = ["cmnwlth/crates/commonwealth-rail",
+            "shared/crates/commonwealth-rail-core"]
     rail_diff = git("diff", "--stat", "origin/main", "--", *RAIL)
     rail_diff_ring_guest = git("diff", "--stat", guest_base, "HEAD", "--", *RAIL)
     replica = (open(os.path.join(d, "wall-replica.txt")).read().splitlines() + ["", "", ""])[:3] \
@@ -2107,7 +2107,7 @@ if topology == "room":
     b = bars["rg-second-app-zero-lines"]
     row_w = num(r"within ([\d.]+) s", b["floor_basis"])
     tpl_diff = git("diff", "--stat", f"{guest_base}..HEAD", "--",
-                   "sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates")
+                   "svrn/crates/sovereign-cli-llm/src/ring_cmd/templates")
     spend = act_at(p1, "expense")
     spend_s, spend_row = seen_after(wall2_rows, spend)
     if not scaffold or not p1:
@@ -2276,7 +2276,7 @@ if topology == "room":
     # which carries its own self-test; this script does not re-derive it. A
     # counter that cannot run is could-not-judge, never a 0 (ARCH 6).
     doc_files = [os.path.join(REPO, f) for f in
-                 ("sovereign/apps/ring-doc/app.js", "sovereign/apps/ring-doc/adapter.js")]
+                 ("cmnwlth/apps/ring-doc/app.js", "cmnwlth/apps/ring-doc/adapter.js")]
     try:
         counted = json.loads(subprocess.run(
             [sys.executable, os.path.join(REPO, "scripts/ring-doc-guest-lines.py"), *doc_files],

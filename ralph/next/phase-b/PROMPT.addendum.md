@@ -47,7 +47,7 @@ has not been measured (principle 8).
 ## 0. Standing facts (do not re-derive)
 
 - Branch `cut`. NOTHING IS EVER PUSHED; pushing is the operator's call.
-- `cargo xtask boundary-gate` (from `corpus-engine/`) is the burn-down: EXIT=1
+- `cargo xtask boundary-gate` is the burn-down: EXIT=1
   with `N violation(s)`. The raw count goes in EVERY commit body, and every
   row is net-decreasing or delta 0. A move that adds a red edge elsewhere is
   rolled back. `layer-gate` stays ✓.
@@ -108,7 +108,7 @@ has not been measured (principle 8).
   target/ralph/phase-b/preflight-forks.md, or to a one-line note on the row
   that owns it; it never lands in this row's commits. If the census finds
   more than twice the row's LIFT, stop at census (§6) with the split.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
   `scripts/ralph*`. Never stop or restart the DEPLOYED daemon (the one
   `svrn daemon status` names). Never touch `ralph/STOP`,
   `ralph/NEEDS_HUMAN.md`, or another queue's directory under `ralph/next/`.

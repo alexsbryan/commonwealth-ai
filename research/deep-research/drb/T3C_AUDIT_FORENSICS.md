@@ -144,7 +144,7 @@ never scored.
 
 - **What passes through.** `SOVEREIGN_GATE_AUDIT_FORENSICS` (the
   per-claim audit ledger, documented in
-  `sovereign/docs/GROUNDING_GATE_ENV.md`) was not set on the t2b
+  `svrn/docs/GROUNDING_GATE_ENV.md`) was not set on the t2b
   battery. The frozen artifacts contain the gate's decisions
   (gap-list witness records, verdict flags) but **not the window each
   claim was judged against** — the per-claim evidence view is not in

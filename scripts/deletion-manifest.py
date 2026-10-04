@@ -42,22 +42,22 @@ def lines(rel: str) -> int:
 # bench_cmd/enron.rs:349 and :736 open these two by literal path, so they are
 # reachable despite not being a latest.json target.
 SPARE_BENCH = {
-    "sovereign/bench/enron/baselines/enron-entity-resolution/peek_budget.json",
-    "sovereign/bench/enron/baselines/enron-entity-resolution/pre_reconciliation.json",
+    "bench/lanes/enron/baselines/enron-entity-resolution/peek_budget.json",
+    "bench/lanes/enron/baselines/enron-entity-resolution/pre_reconciliation.json",
     # TYPED_EXTENSION_PASS.md:245 and :265 cite these two BY PATH as the v1
     # baseline scores the typed-extension A/B is compared against. The lane's
     # rule reasons only about `bench_cmd/baselines.rs`'s reader — reachable via
     # `<id>/latest.json` — and a spec citing a file by path is a reader that
     # rule cannot see. Deleting them dangles a recorded comparison, and
     # docs-gate would go red on the same commit.
-    "sovereign/bench/obsidian/baselines/vault-port/retrieval-post-vault-port.json",
-    "sovereign/bench/obsidian/baselines/vault-port/synth-post-vault-port.json",
+    "bench/lanes/obsidian/baselines/vault-port/retrieval-post-vault-port.json",
+    "bench/lanes/obsidian/baselines/vault-port/synth-post-vault-port.json",
 }
 # quality/initiative-bars.toml:1817 cites these two as the evidence for a
 # banked bar verdict. Deleting them dangles a recorded verdict.
 SPARE_LOGS = {
-    "runs/serve50-availability/peer-busy_20260814_125105.log",
-    "runs/serve50-availability/peer-idle_20260814_124029.log",
+    "research/runs/serve50-availability/peer-busy_20260814_125105.log",
+    "research/runs/serve50-availability/peer-idle_20260814_124029.log",
 }
 
 # ── DR flight trees. READ_CLASSES is derived from every consumer found:
@@ -111,7 +111,7 @@ def lane_p1_bench_baselines(files: list[str]) -> list[str]:
     unreachable by construction, and (b) inside an <id>/ dir only latest.json
     and its symlink target are ever opened.
     """
-    cand = [f for f in files if "/baselines/" in f and f.startswith("sovereign/bench/")]
+    cand = [f for f in files if "/baselines/" in f and f.startswith("bench/lanes/")]
     keep: set[str] = set()
     for f in cand:
         d = os.path.dirname(os.path.join(ROOT, f))
@@ -154,7 +154,7 @@ def lane_p1_dr_flights(files: list[str]) -> list[str]:
 # `probe_multi_file` was on this list and is NOT dead: it was cleared when it
 # lived under the old crate name, and `4deb7444d` (the two misnamed crates go
 # home) moved it without the clearance being re-checked.
-# `sovereign/bench/agent-coding/problems/3.3-calc-split-python/problem.toml:26`
+# `bench/lanes/agent-coding/problems/3.3-calc-split-python/problem.toml:26`
 # says the problem "is driven by the `probe_multi_file` example binary in
 # `sovereign-tdd`" while its `--agent multi_file` runner is pending — so this
 # lane was pointing at the only thing that runs bench problem 3.3, and the
@@ -189,7 +189,7 @@ def lane_p2_code_certain(files: list[str]) -> list[str]:
            if "/examples/" in f and f.endswith(".rs")
            and not f.startswith("vendor/")
            and os.path.basename(f)[:-3] in dead]
-    ps = "sovereign/crates/sovereign-store/src/postgres.rs"
+    ps = "svrn/crates/sovereign-store/src/postgres.rs"
     if ps in set(files):
         out.append(ps)
     return sorted(set(out))
@@ -202,7 +202,7 @@ def lane_p2_code_certain(files: list[str]) -> list[str]:
 # `probe_multi_file` was cleared as unreferenced under its old crate name,
 # `4deb7444d` moved it, and the clearance moved with it — so the lane went on
 # pointing at the only thing that runs bench problem 3.3
-# (`sovereign/bench/agent-coding/problems/3.3-calc-split-python/problem.toml`
+# (`bench/lanes/agent-coding/problems/3.3-calc-split-python/problem.toml`
 # says so in prose). A scan of the tracked tree on 2026-09-10 found 17 such
 # targets across two lanes.
 #

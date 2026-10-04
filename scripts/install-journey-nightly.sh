@@ -53,7 +53,7 @@ esac
 # Fail here rather than installing a unit that points at a script that is not
 # there — a timer firing into a missing ExecStart is a nightly failure email
 # about the installer, not about the code.
-NIGHTLY="$REPO_ROOT/sovereign/scripts/cli-journey-nightly.sh"
+NIGHTLY="$REPO_ROOT/svrn/scripts/cli-journey-nightly.sh"
 [ -x "$NIGHTLY" ] || { echo "install: $NIGHTLY missing or not executable" >&2; exit 2; }
 
 if ! have_systemd; then

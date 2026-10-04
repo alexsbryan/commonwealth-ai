@@ -1,5 +1,5 @@
 # Workspace CI — the unified root workspace (40 crates: oicp-types,
-# corpus-engine + carve-outs + xtask, sovereign/*, commonwealth/*).
+# corpus-engine + carve-outs + xtask, sovereign/*, cmnwlth/*).
 #
 # Why this lives at the repo root: GitHub Actions only executes workflows in
 # the *root* `.github/workflows/`. `commonwealth/.github/workflows/ci.yml` is a
@@ -146,21 +146,21 @@ jobs:
               - 'vendor/**'
               - 'scripts/sovereign-test.sh'
               - 'scripts/lib/**'
-              - 'sovereign/crates/sovereign-tools/src/code/test_adapters/**'
+              - 'code/crates/sovereign-code/src/test_adapters/**'
               # The CLI contract + journey manifest IS the test input for
               # cli_contract_{code,docs,journeys} and cli_journey_dispatch —
               # editing it can turn the suite red without touching a .rs file.
-              - 'sovereign/docs/cli-contract.toml'
+              - 'svrn/docs/cli-contract.toml'
               # The journey runner, its sandbox lane, its nightly wrapper, and
               # its negative controls. A glob, not a list: this was three named
               # files and the nightly lane added a fourth that silently matched
               # nothing. Keep in step with the `rust` / `JOURNEY` filters in
               # scripts/pre-push.sh.
-              - 'sovereign/scripts/cli-journey-*.sh'
-              - 'sovereign/scripts/tests/**'
+              - 'svrn/scripts/cli-journey-*.sh'
+              - 'svrn/scripts/tests/**'
               - '.github/workflows/ci.yml'
             desktop:
-              - 'sovereign/crates/sovereign-desktop/**'
+              - 'clients/desktop/**'
               - '.github/workflows/ci.yml'
 
   # ---------------------------------------------------------------
@@ -280,14 +280,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: sovereign/crates/sovereign-desktop
+        working-directory: clients/desktop
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: sovereign/crates/sovereign-desktop/package-lock.json
+          cache-dependency-path: clients/desktop/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm run test
@@ -328,8 +328,8 @@ jobs:
         with:
           name: playwright-report
           path: |
-            sovereign/crates/sovereign-desktop/playwright-report/
-            sovereign/crates/sovereign-desktop/test-results/
+            clients/desktop/playwright-report/
+            clients/desktop/test-results/
           retention-days: 7
 
   # ---------------------------------------------------------------
@@ -509,9 +509,9 @@ jobs:
       #
       # The real-daemon run stays an OPERATOR gate, not a CI one, because it
       # needs model weights this runner does not have:
-      #   SOVEREIGN_LIVE_JOURNEYS=1 sovereign/scripts/cli-journey-verify.sh --tier 2
+      #   SOVEREIGN_LIVE_JOURNEYS=1 svrn/scripts/cli-journey-verify.sh --tier 2
       - name: CLI journey harness self-test
-        run: sovereign/scripts/tests/cli-journey-selftest.sh
+        run: svrn/scripts/tests/cli-journey-selftest.sh
       # Benches are the only --all-targets class `cargo test` does not build,
       # and bench code rots silently. Incremental against the artifacts the
       # test build just produced, so this is seconds, not a second compile.
@@ -619,7 +619,7 @@ jobs:
 #         run: sudo apt-get update && sudo apt-get install -y mold clang
 #       # NOT advisory: a boundary breach means the workflow/recipe package can
 #       # no longer be lifted out against just the OICP contract
-#       # (studio/BOUNDARY.md).
+#       # (clients/studio/BOUNDARY.md).
 #       - name: boundary-gate (blocking)
 #         run: cargo run -p xtask -- boundary-gate
 #       - name: arch-gate (advisory — burn-in until ~2026-08)

@@ -157,7 +157,7 @@ class AuditCountTests(unittest.TestCase):
                              (ralph.Status.PENDING, ("u-1",), None, line))
             self.assertTrue(ralph.is_review(row))
             self.assertIn(ralph.AUDIT_ROW_BODY, line)
-            self.assertRegex(line, r" — read: `sovereign/ARCH_PRINCIPLES.md` — check: LINT$")
+            self.assertRegex(line, r" — read: `docs/ARCH_PRINCIPLES.md` — check: LINT$")
             self.assertEqual(q.path.read_text().splitlines()[0], "# queue")
             self.assertEqual(q.current().id, "REVIEW-audit-u-auto-1")
 

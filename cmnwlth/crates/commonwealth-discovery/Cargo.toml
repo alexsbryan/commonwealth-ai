@@ -1,0 +1,44 @@
+[package]
+name = "commonwealth-discovery"
+description = "Founding and joining a Commonwealth mesh: join keys, mDNS discovery, local hardware survey"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { workspace = true }
+mesh-join-vocab = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Join key generation
+blake3 = "1"
+getrandom = "0.3"
+hex = "0.4"
+
+# mDNS
+mdns-sd = "0.12"
+hostname = { workspace = true }
+
+
+
+# `mesh_discovery` (moved from sovereign-mesh, pb-rails-parity).
+# Enumerate ALL local network interfaces so a node on both WiFi
+# and Tailscale (the usual Commonwealth LAN-+-VPN topology) can
+# advertise both addresses in its `MemberRecord.addresses`. The
+# old UDP-connect trick only returned the default outbound IP,
+# which on an AP-isolated WiFi was unreachable from peers who
+# could only route via Tailscale.
+if-addrs = "0.13"
+
+# Hardware detection
+sysinfo = "0.35"
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+
+[lints]
+workspace = true

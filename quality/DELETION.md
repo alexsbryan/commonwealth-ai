@@ -51,7 +51,7 @@ different instruments. This campaign is the first one.**
 
 **It is not the JSON re-encode.** 2,166,456 of the repo's 2,189,222 tracked
 JSON lines are pretty-printed and collapse to zero newlines when compacted.
-`sovereign/crates/sovereign-core/data/router/router-embed-cache.json` alone is 435,030 lines of
+`svrn/crates/sovereign-core/data/router/router-embed-cache.json` alone is 435,030 lines of
 one-float-per-line, and the round-trip is provably exact
 (`json.loads(compact) == original`, 423 entries × 1024 dims). It is
 `include_str!`'d at `sovereign-core/src/router_embed_cache.rs:87` into a plain
@@ -86,7 +86,7 @@ cites the reader that keeps its file alive:
 
 - `peek_budget.json`, `pre_reconciliation.json` — opened by literal path at
   `bench_cmd/enron.rs:349` and `:736`
-- `runs/serve50-availability/peer-{busy,idle}_*.log` — cited by
+- `research/runs/serve50-availability/peer-{busy,idle}_*.log` — cited by
   `quality/initiative-bars.toml:1817` as the evidence for a banked verdict
 
 Widening a lane or adding a spare is a **diff to that script**, reviewed like
@@ -201,7 +201,7 @@ unearned.
    `async fn foo(&self) -> Result<T>;` a `line_end` at the close of the
    enclosing `trait`. `sovereign-atos/src/lib.rs:291-360` reported twelve dead
    functions totalling ~700 LOC; they are twelve one-line signatures.
-4. **`prost` and `serde` are reflective.** `corpus-engine-scip/src/scip_proto.rs`
+4. **`prost` and `serde` are reflective.** `shared/crates/corpus-engine-scip/src/scip_proto.rs`
    is decoded by the protobuf runtime — zero refs by construction.
    `#[derive(Deserialize)]` field structs are the same.
 5. **A name appearing elsewhere proves nothing in either direction.**
@@ -257,7 +257,7 @@ refills unless something stops it. `--verify` is that thing: it fails when a
 lane grows, so committed output cannot silently return while the campaign
 runs.
 
-After P2 lands, promote it. `corpus-engine/xtask/src/arch_gate.rs` already has
+After P2 lands, promote it. `quality/xtask/src/arch_gate.rs` already has
 the shape — a frozen `name → count` baseline, `--tighten` that banks
 improvements and never raises, registered in `quality_cmd.rs`'s gate table
 with `Enforcement::Hard`. An `artifact-gate` over tracked-output line classes

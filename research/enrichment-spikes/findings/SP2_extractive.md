@@ -75,9 +75,9 @@ sovereign enrich raptor sep --titles-file data/sp2_bank_articles.txt --group-by-
 # (raptor-index ran automatically at the end of the retrofit; log runs/armAprime-enrich.log)
 
 # Benches, per arm (runs/arm{A,B}/run-benches.sh):
-sovereign eval run --bank sovereign/bench/sep/<bank>.toml --prod-pipeline --isolate \
+sovereign eval run --bank bench/lanes/sep/<bank>.toml --prod-pipeline --isolate \
   --limit 30 --format json --output runs/<arm>/<bank>-r{1..3}.json
-sovereign eval run --bank sovereign/bench/sep/<bank>.toml --limit 30 --format json \
+sovereign eval run --bank bench/lanes/sep/<bank>.toml --limit 30 --format json \
   --output runs/<arm>/<bank>-rawindex.json   # raw-index guard
 
 # Arm B swap:

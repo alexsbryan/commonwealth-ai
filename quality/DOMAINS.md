@@ -17,7 +17,7 @@ for a ratchet, and nothing in this file is a gate.
 **Sovereign answers a question from what you already have, says where the
 answer came from, and declines when it cannot.**
 
-That sentence is the core domain. `sovereign/README.md` states it as the
+That sentence is the core domain. `svrn/README.md` states it as the
 product promise — answers "cited from sources you keep locally", nothing
 leaving the device unless asked — and the bench apparatus measures exactly it.
 
@@ -39,8 +39,8 @@ get value from it**, and we have run that test four times already:
 
 | Lift | What it proved | Status |
 |---|---|---|
-| `studio` (`studio/BOUNDARY.md`) | the workflow/recipe authoring closure builds outside the monorepo, 36 s cold, zero source edits | lifted 2026-07-21 |
-| `corpus-mcp` (`corpus-mcp/README.md`) | a third party can search a corpus-engine index AND read what its enrichment produced against a plain `llama-server`, with nothing carrying llama.cpp, ort or iroh | declared, gated |
+| `studio` (`clients/studio/BOUNDARY.md`) | the workflow/recipe authoring closure builds outside the monorepo, 36 s cold, zero source edits | lifted 2026-07-21 |
+| `corpus-mcp` (`svrn/crates/corpus-mcp/README.md`) | a third party can search a corpus-engine index AND read what its enrichment produced against a plain `llama-server`, with nothing carrying llama.cpp, ort or iroh | declared, gated |
 | `commonwealth-work` (`scripts/cw-work-lift.sh`) | a package-only peer builds outside the monorepo in 7.7 s and completes three heterogeneous units inside a container boundary | lifted, re-proven 2026-09-11 |
 | `commonwealth-rails` (`scripts/cw-rails-lift.sh`) | the lifted daemon joins a REAL mesh by invite and serves another member's library | lifted 2026-09-11 |
 
@@ -93,7 +93,7 @@ Each is named by the question it answers and by the word it owns exclusively.
 
 **Understanding** — *what is this material about?*
 Owns **atom**, tension, gap, ontology, seed, domain, field.
-~99,900 lines: `corpus-engine/src/enrichment/` (93,427, of which `atlas/`
+~99,900 lines: `ingest/crates/corpus-engine/src/enrichment/` (93,427, of which `atlas/`
 39,740 and `pipeline/` 27,135), `meta_atlas/`, `atlas_traversal/`.
 Eight design documents of its own under `corpus-engine/` (`ATLAS.md`,
 `ENRICHMENT_V2.md`, `INCREMENTAL_ATLAS.md`, …). `Tension*` is 9 of its 10
@@ -141,7 +141,7 @@ in this repository and the least owned.
 **Fabric** — *who is in this group, how do I reach them, how do we agree?*
 Owns **member**, node identity, reach, ring. The `commonwealth` package: 9
 crates, 37,363 lines, zero `[[exception]]` rows across four widenings
-(`commonwealth/BOUNDARY.md`). Plus ~14,200 of sovereign-side adapter currently
+(`cmnwlth/BOUNDARY.md`). Plus ~14,200 of sovereign-side adapter currently
 inside `sovereign-mesh` (membership 8,734, rail 4,130, media 1,343).
 *Applicable as:* already proven twice — `cw-rails` joined a real mesh.
 
@@ -160,7 +160,7 @@ outside the monorepo inside a rootless container.
 The `code-intel` package is already declared (`docs/CODE_TOOLING_BOUNDARY.md`),
 5 of a target 9 crates.
 *Applicable as:* a code-intelligence MCP server. Next-edit is its clearest lost
-child — an IDE completion service whose spec is `sovereign/docs/NEXT_EDIT.md`,
+child — an IDE completion service whose spec is `svrn/docs/NEXT_EDIT.md`,
 living in the mesh's HTTP crate.
 
 **Workspace** — *what does the assistant remember about its own work?* Owns
@@ -223,7 +223,7 @@ So the two calls:
 answers *what may depend on what*. It cannot answer *where does one word mean
 one thing*, and no amount of tiering will make it.
 
-`corpus-engine/DECOMPOSITION.md` is the clearest case. Its ten-crate target is
+`ingest/crates/corpus-engine/DECOMPOSITION.md` is the clearest case. Its ten-crate target is
 a tier ordering — "dep arrows go up the tier numbers, never down" — and four of
 its tiers are different CONTEXTS wearing tier numbers: Tier 3 is Workspace
 (and its own parenthetical says so), Tier 4 is Workbench, Tier 5 is Build
@@ -256,7 +256,7 @@ cluster that IS its context stays; every other cluster moves to its context's
 home crate (the registry's `crates` list, creating the home when it does not
 exist); leaf clusters first, then by size; an edge that crosses crates after
 the move goes through a port already designed (§10.3,
-`sovereign/SERVING_BOUNDARY.md`) or the cluster splits, never a new exception
+`serve/SERVING_BOUNDARY.md`) or the cluster splits, never a new exception
 row; a rename rides the move; each destination whose own-context share drops
 is enqueued, which is the breadth-first half; stop when the queue is empty and
 the predicate holds. Phase A's renames ride the moves; Phase C is wave 1's
@@ -269,7 +269,7 @@ No phase here moves a line until the one before it has named something, because
 the reason this repository grew three misnamed crates is that code with no home
 goes wherever it links.
 
-**Phase 0 — empty `commonwealth/crates/`.** Operator direction, run ahead of
+**Phase 0 — empty `cmnwlth/crates/`.** Operator direction, run ahead of
 Phase A on branch `domains-1-empty-the-commonwealth-directory` and finished
 2026-09-11. Six crates whose names described a family they were not in left the
 directory in two commits, changing no logic: `commonwealth-{api,inference,
@@ -277,10 +277,10 @@ knowledge,app}` became `sovereign-{api,serving,grants,meshapp-registry}`
 (domains-1), then `commonwealth-test-harness` became
 `sovereign/crates/sovereign-mesh-test-harness` and `oicp-conformance` moved to
 the repo root beside the two crates it certifies against (domains-2). What
-remains under `commonwealth/` is the nine-crate package and nothing else, and
+remains under `cmnwlth/` is the nine-crate package and nothing else, and
 `scripts/cw-work-lift.sh --sandbox` reported verdict 1 after each move — that
 reading is the invariant, not the crate count. The ledger of what went where is
-`sovereign/SYSTEM_OVERVIEW.md` §5. Ordering was BIG-FIRST (operator, reversing
+`docs/SYSTEM_OVERVIEW.md` §5. Ordering was BIG-FIRST (operator, reversing
 the builder): a small crate's destination is decided by where the big one
 lands, so moving it first moves it twice.
 
@@ -337,8 +337,8 @@ floors as the baseline:
 - Row 2 would read green today while the defect stands. All 20 `atoms.json`
   readers already use `understanding-vocab`'s `AtomsFile`; none declares its
   own struct. The leak is the DOOR: `read_atlas_atoms` is at
-  `corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
-  `corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
+  `ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
+  `svrn/crates/corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
   bar becomes "pub `Atom*` outside vocab and `enrichment/`, minus three named
   axum binders": **12 → 0**, and the door invariant is made structural rather
   than counted. `Cluster*` is never persisted under `atlas/` and leaves §5's
@@ -371,7 +371,7 @@ floors as the baseline:
 - §9's `understanding-vocab` figure of 5,161 is right; a non-recursive
   `wc -l src/*.rs` gives 2,769 and is the trap §2's preamble warns about.
 - `scripts/daemon-route-census.py:25` still names
-  `commonwealth/crates/commonwealth-api/src`, gone since `domains-1`; every
+  `cmnwlth/crates/commonwealth-api/src`, gone since `domains-1`; every
   route `sovereign-api` registers is uncounted and today's 213 unique paths
   is an under-count. Repaired by rung `domains-3`.
 
@@ -470,7 +470,7 @@ input exists today.
 | two `decision_log`s | split | mesh module → `routing_decisions`, types `RoutingDecision*`; studio's keeps the tool id in four registries. `SOVEREIGN_DECISION_LOG`, `oicp-decision/v1`, `DECISION_TRACE_TARGET` do not move | 10 |
 | `GuestLender*` | split by side of the link | four types move to the serving host unrenamed; `StoredGuestLink` is host wiring; `sovereign-grants` keeps `GuestGrant`/`Scope`. `GuestLenderSource` is NOT `PeerEndpointSource`: enumerate vs lookup-by-model-id, `Vec` vs `Option`, a 60 s TTL with `invalidate()` on 401, and a guest is a PIN that beats selection (`peer_inference.rs:3104`). Two ports | 10 |
 | `frontdoor.rs` | Host, confirmed | two production callers, 23 sites (`routes_responses.rs` 14, `routes_inference.rs` 9), both above the routing decision; imports no scheduler, candidate, score or admission type | — |
-| the public interface | five sketches | the two ports, the scheduler entry with its real signature, admission on `SchedCore`, the decision record + replay, and what `sovereign-cli-daemon`'s eight sites call — the basis of `sovereign/SERVING_BOUNDARY.md`'s rules | 9 |
+| the public interface | five sketches | the two ports, the scheduler entry with its real signature, admission on `SchedCore`, the decision record + replay, and what `sovereign-cli-daemon`'s eight sites call — the basis of `serve/SERVING_BOUNDARY.md`'s rules | 9 |
 
 ### 10.5 Understanding's collisions — and one correction to Phase B
 
@@ -479,7 +479,7 @@ input exists today.
 | `Gap` ×3 | split two, converge two | `quality/CONCEPTS.toml:831-843` already decided it; the atlas detector's `Gap` becomes **`Lacuna`** (49 sites / 11 files; `atlas/gaps.json` and its key stay via serde rename), deep-research's becomes `GapRow` (19 / 8). kernel-types refused: either survivor drags `AtomId`/`ChunkRef` or `AcquisitionRoute` to layer 0 |
 | `Domain` | split; Understanding does not take the word | the atlas noun has no type (`git grep domains.json -- '*.rs'` = 0); the plugin `Domain` → **`FieldModel`** (45 refs), `DomainRegistry` → `FieldModelRegistry`. `Pass` refused: `EnrichmentPassRegistry` is a step, a domain is a genre |
 | `Seed` | split | six homonyms rename (37 refs / 11 files); `SeedError`/`SeedReport` are Understanding's; the outside count is 1 → 0, not 2 |
-| `AtomSpan` ×2 | converge into vocab | owned, `atom_type: AtomType` (closed set at `understanding-vocab/src/atoms.rs:1104`); `AtomType::from_label` must be minted |
+| `AtomSpan` ×2 | converge into vocab | owned, `atom_type: AtomType` (closed set at `shared/crates/understanding-vocab/src/atoms.rs:1104`); `AtomType::from_label` must be minted |
 | `Cluster` (39 defs, six families) | not a noun | `writer.rs` has zero matches; struck from owned words |
 | read model (21 defs, 5 crates) | converge to 16 in 2 | one `AtlasPage<T>`; `SectionRef` + `EvidenceExcerpt` one type; `RelatedAtom`/`CrossCorpusLink` each defined twice; `AtomHead` collapses a four-producer field set; **`AtomCard` deletes** (a lossy mirror of `AtomEnvelope`); `read_atlas_ontology` is minted, not moved (its only inline site is `context_loader.rs:711`) |
 | archaeology `Atom*` | split, not allow-list | `AtomProvenance` → `AnchorHistory` (27 / 4), `AtomWitness` → `WitnessTally` (13 / 1). The allow-list is the three axum binders and nothing else; I1 is 12 → 0 |
@@ -518,7 +518,7 @@ documents; each paragraph here is what a registry row records.
 
 The host crate, the dissolution of `AppState` and the adapter rule are `quality/DAEMON_CORE.md`
 §4. The caller's identity — which corrects §10.1's gift of `Principal` to Serving — is its §3.3.
-Serving's corrections head `sovereign/SERVING_BOUNDARY.md`. The `[[forbid]] corpus-engine* ->
+Serving's corrections head `serve/SERVING_BOUNDARY.md`. The `[[forbid]] corpus-engine* ->
 sovereign-*` row stands, and none of the clusters it appeared to block goes to `corpus-engine` or
 `sovereign-enrichment-build`.
 

@@ -38,7 +38,7 @@ noticeably snappier. On a home or office network you already have this. Across
 locations, put the GPU boxes on a shared overlay — [Tailscale](https://tailscale.com)
 gives everyone a shared private address and the split rides on top. (Ordinary mesh
 use — sharing one host's model, knowledge search, gossip — needs no VPN at all;
-see [getting-started](../commonwealth/docs/getting-started.md). It's specifically
+see [getting-started](../cmnwlth/docs/getting-started.md). It's specifically
 the cross-box tensor split here that wants shared IP locality.)
 
 And **the same version on every machine.** The split has the GPUs talking in a

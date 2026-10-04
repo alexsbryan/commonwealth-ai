@@ -48,7 +48,7 @@ because two bars in this arc were mis-specified for want of one (§14, §15).
 import json, re, subprocess, sys, time, urllib.request
 from pathlib import Path
 
-D = Path("/home/alexbryan/dev/commonwealth-ai/sovereign/bench/sep_atlas/map-conversion-rung6")
+D = Path("/home/alexbryan/dev/commonwealth-ai/bench/lanes/sep_atlas/map-conversion-rung6")
 GEN = "http://127.0.0.1:9741/v1/chat/completions"
 MODEL = "Qwen3.5-4B-UD-MTP-Q6_K_XL"
 POOL_K = 80

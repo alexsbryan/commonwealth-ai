@@ -33,7 +33,7 @@ the count that went down in the commit body.
 
 - Branch `cut`. NOTHING IS EVER PUSHED. Never amend and never rewrite
   history: other loops share this repo.
-- `cargo xtask boundary-gate` (from `corpus-engine/`) exits 0 since Phase B
+- `cargo xtask boundary-gate` exits 0 since Phase B
   and stays 0. BOUNDARY's line goes in EVERY commit body; a change that adds
   an edge is rolled back. `layer-gate` stays ✓.
 - clone-gate rides on BOUNDARY (phase-b-99) and never rises. A row that
@@ -101,7 +101,7 @@ same commit.
   never above the cut line, and it never lands in this row's commits. If the
   census finds more than twice the row's LIFT, stop at census (§6) with the
   split.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md` or `.claude/`. Never
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md` or `.claude/`. Never
   edit `scripts/ralph*` unless your row is pc-pool-ready, whose outcome is
   ralph's pool. Never stop or restart the DEPLOYED daemon (the one
   `svrn daemon status` names). Never touch `ralph/STOP`,

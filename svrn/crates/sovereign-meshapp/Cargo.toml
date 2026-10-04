@@ -1,0 +1,37 @@
+[package]
+name = "sovereign-meshapp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+
+[dependencies]
+# Zero-dep leaf: canonical Unix-epoch wall-clock helpers.
+sovereign-time = { workspace = true }
+# Atoms + the atlas read (understanding-vocab), the investigation graph and
+# parcel analytics (the atlas reader leaf), the turn-header grammar (the
+# sections leaf) — the meshapp ops are projections over atlas reads, and none
+# of them links corpus-engine (fp-67).
+understanding-vocab = { workspace = true, features = ["read"] }
+corpus-engine-atlas-reader = { workspace = true }
+corpus-engine-sections = { workspace = true }
+# Chunk-index rows + CorpusIndex live in the read-port leaf.
+corpus-index = { workspace = true }
+# The explorer DTOs live in `sovereign_contracts::daemon_wire::meshapp`; this
+# crate re-exports them at their historical path.
+sovereign-contracts = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Wrapped artifact builder: weekday/hour folds + read-only GLiNER
+# chunk_entities reads from the sovereign state db.
+chrono = { workspace = true }
+rusqlite = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true }
+
+[lints]
+workspace = true

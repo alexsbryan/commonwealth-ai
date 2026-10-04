@@ -44,8 +44,8 @@ sys.path.insert(0, str(HERE))
 import markers as M  # noqa: E402
 
 REPO = HERE.parent.parent
-LEDGER = REPO / "sovereign" / "DEFAULTS_LEDGER.md"
-ARCH = REPO / "sovereign" / "ARCH_PRINCIPLES.md"
+LEDGER = REPO / "docs" / "DEFAULTS_LEDGER.md"
+ARCH = REPO / "docs" / "ARCH_PRINCIPLES.md"
 NOTES_DB = Path.home() / ".sovereign" / "notes.db"
 
 PROBLEMS: list[tuple[str, str, str]] = []  # (episode id, check, detail)

@@ -1,0 +1,3909 @@
+# Defaults Ledger — capabilities shipped dark, and what flips them
+
+**The failure mode this file exists to stop:** an initiative proves a
+capability works ("zero delta on both banks!"), ships it behind a flag
+or non-default mode "until X", and then X never happens — the work
+withers, provably good code sits dark forever, and six months later
+nobody remembers the flip condition or whether it was ever met.
+(Poster child: the cluster-score blend shipped 2026-05-22 at
+`cluster_weight=0.0` "pending bench plan" and sat dark for ten weeks
+before this ledger existed.)
+
+**The contract:**
+
+1. Any push that ships a capability default-off or dark **adds a row
+   in the same commit** — with a falsifiable flip condition, which
+   plan item or run settles it, and a review-by date.
+2. When the condition is met (or refuted), the row **moves** to
+   Graduated or Rejected — it never silently disappears.
+3. A row past its review-by date is not noise: it is the signal. Any
+   session touching that area raises it to the operator — flip it,
+   kill it, or re-date it with a reason. "Still waiting" without a
+   named blocker is not a valid state.
+
+Cross-references: env flag defaults live in `quality/env-flags.toml`
+(this ledger records *why* a default is what it is and what changes
+it, not the mechanics); decisions with full context live in the notes
+store (ids cited per row).
+
+---
+
+## DARK — proven or plausible, awaiting a named condition
+
+### Typed list answer over a declared ontology — rides `SOVEREIGN_ATOM_ENUM`, off (`fi-ontology-list`, 2026-10-03)
+
+**What changed.** A list question over a declared ontology gets a typed query
+written by the primary, executed in code and injected as a cited table
+(`atom_enum_typed.rs`, 7bc206fd1), behind the Stage-1 gate of the default-off
+`SOVEREIGN_ATOM_ENUM`.
+
+**Measurements (ft-ans-dev-b, 18 dev K1 rows, 112 text-attested members, one
+run each).** Through chat (e1a43bcd2): bare 0.205, full 0.241, and 0/18 typed
+tables non-empty: the producer names the hoard by `name contains` plus a year
+or findspot its atoms cannot meet. Re-extracted with the focused relation pass
+(`holds_coins_of` links 56 -> 71, mint entities 15 -> 11), `k1_bound.py`: a
+producer that named the hoard perfectly gets the records ceiling
+(`records_recall.row`), a table at 0.286 pooled, and with full's answer
+0.339 — +0.134 over bare, short of the bar's +0.15 before the wide baseline,
+a band, or a synthesizer that drops anything. Read 1's queries relaxed to
+name only reach 0.393 with 60 strays (voided by the bar's goodhart); name +
+findspot 0.312, +0.107, 29 strays. 80 of 112 members are beyond the records
+(stages: no hoard 2 rows, no link 3, members missing 13; Demanhur links 4 of
+22). Records coverage binds; no producer fix carries the bar here.
+
+**What these numbers do not show (operator, 2026-10-03: the leg is closed,
+not refuted).** They measure our pipeline, not ontologies, for four reasons:
+(1) the gold is the domain's own populated ontology — CoinHoards/IGCH NUDS
+records labelled through Nomisma, 3,759 cached in `ans/raw/coinhoards` — used
+only as held-out truth, while a local model rebuilt it from monograph prose
+under a six-type schema we wrote; (2) the read path asks the model to
+describe the hoard as filters instead of linking the mention to an
+identifier first (value or entity linking), so identity, the thing an
+ontology is for, was never given a step; (3) the bar asks the typed path
+alone to beat retrieval by 0.15 on a 29-section fixture that top-k mostly
+covers, where an ontology has nothing to add over reading; (4) single runs
+under a three-iteration cap with a ledger exit turn a bad setup into a fast
+negative. Nothing here is evidence against declared ontologies.
+
+**Flip condition.** The typed surface is proven where it is used: records
+read directly, scored on a records gold, in `svrn-docs/ontology-apps` (CRM
+from a mailbox). A chat-turn arm is re-measured only on a fixture whose typed
+records come from structured sources where they exist, with a linking step
+before the query, on questions whose answers exceed any top-k. Until then
+the chat arm (`atom_enum_typed.rs`) stays off; if the CRM work never routes
+a chat turn through it, it is deleted.
+Settled by: the ontology-apps CRM proof.
+
+**Review-by 2026-10-31.**
+
+### `SOVEREIGN_SUMMARY_PLACEMENT` — collapsed-tree pool, shipped at `head` (feature-fidelity R0.1, 2026-10-02)
+
+**What changed.** `append_atlas_summaries` reads one switch. `head` (default,
+unchanged) reserves every late summary ahead of every leaf; `collapsed` seats
+each at its cosine rank among the leaves, leaf order untouched
+(`atlas_grounding/placement.rs`).
+
+**Measurements (pilot essay bank, 12 questions; facts-in-pool on this bank
+counts three names, not substance).** On the tree as first built, collapsed
+seated no summary (0/120 vs head 96/120): summaries were embedded bare while
+every leaf carries ingest's title header, and the best summary ranked
+27th-124th of 258 nodes against the question vector. Rebuilt with summaries
+under the same header and a root (426c0970d, 19de4aa5a), the clean offline
+ranking puts a summary 1st-9th on every question, non-leaf share 20.8% at
+top-10 (paper 23-57%). In the pipeline collapsed still seats 5/120, because
+entity-boost leaves carry cosine to the entity string, not the question
+(note 1bf9d2da); head seats the root in its 8 on most questions.
+Provisional T1 (one run, `--synth`, judged pairwise in both orders by
+`book_judge.py` on the local primary, which is also the synthesizer, and
+uncalibrated): head 2 wins, 3 losses, 6 ties, 1 could-not-judge (p = 1.0);
+mean accuracy 3.09 head vs 3.50 collapsed. Head drew 58 judge-listed errors
+to 41, and the gap is binding (who did what, 24 vs 7), not time (22 vs 20):
+summaries compress several people into one paragraph and the synthesizer
+swaps them. The pilot's entity layer carries the same errors (e.g. Garvloit
+described as Elizabeth's mother), so it cannot yet supply the binding.
+
+**Flip condition.** Collapsed wins the R-T1 pairwise on the pilot and
+eagle-cliff essay banks (`book_judge.py`, both orders) with the non-leaf pool
+share inside the paper's 23-57%, and the 174-question lookup guard stays
+inside the bare band. Lose either and the switch is deleted, not kept.
+Settled by: campaign `feature-fidelity` R-T1 (`quality/campaigns/feature-fidelity.toml`).
+
+**Review-by 2026-10-31.**
+
+### `SOVEREIGN_COVERAGE_FIRST` — tell the model what it has, and card the gap on an answered turn (2026-09-22)
+
+**What it does.** `runtime::coverage_first` reads the demand set that
+`stamp_coverage` already computes before synthesis and that, until now, only
+the post-release ledger read. Flag on, it (1) renders the named facets into
+the KQ prompt as "Named in these passages" / "Not found by name in these
+passages", and (2) turns an answered turn with an absent Entity facet into a
+`GapTrigger::Uncovered`, which fires the Refinement card with that
+deterministic ask and skips the phrasing call. Flag off, both readers are
+inert and every path is byte-identical.
+
+**Shipped beside it, unflagged:** the synthesis prompt's whole-answer decline
+rule and "never complete a list" clause were replaced by LISTS / PARTIAL
+COVERAGE (give what the passages name, name the gap), and both EVIDENCE CHECK
+notes now say the same. Motivation: the ANS board (7baf4da8f) — 42
+decline-class rows in the full arm against bare's 9, including
+`list-igch0076-mints` declined with 3 of 6 gold mints in its chunks.
+
+**Flip condition.** Both, measured on the same synth + judge identity:
+(a) the ANS full arm, 3 runs, flag on vs off over the prompt change — K1 and
+K0 judge score up by more than the full arm's own run-to-run spread (bare's
+band is degenerate: its 3 runs are byte-identical), and bar 3's fabricated
+members not above bare's; (b) `svrn quality check` with no lane regressing.
+Owed first, before reading (a): the rate of answered turns that carry an
+absent Entity facet (a count over `epistemic_state` in persisted message
+metadata) — it sets whether "any absent Entity" is a tolerable card rate or
+the trigger needs narrowing. **Reject** if fabricated members rise above
+bare's or the card rate is noise. **Review by 2026-10-06.**
+
+### `SOVEREIGN_KQ_POOL_SCALE` — the deep-pool arm's knob, shipped at 1 and **never a default** (ei7-stage0, 2026-09-19)
+
+**What changed.** One decider, `runtime::prompts::kq_pool_scale`, reads
+`SOVEREIGN_KQ_POOL_SCALE` once (1..=8; unset, unparsable, 0 and > 8 all mean
+1) and multiplies BOTH retrieval pool limits by it. The pair is computed in
+one expression, `pool_limits_at(scale) -> (KQ_MERGED_LIMIT * scale,
+MAX_KNOWLEDGE_CHARS * scale)`, so neither limit can move without the other.
+Every live use site of the two constants now reads an accessor
+(`kq_merged_limit`, `max_knowledge_chars`) rather than the constant. At
+scale 1 — the default, and the only value any shipped path uses — every call
+site is byte-identical to the constants, so this is inert in the product.
+
+**Why it exists.** `PRE-REG-custom-ontology-and-raptor-2026-09-17` "Arms"
+pre-registers a deep-pool arm and records that it has no knob: `--limit 80`
+is dead under `--synth` (the dispatcher takes the synth branch first and
+never reads `prod_pipeline`), so what reaches synthesis is fixed by
+`KQ_MERGED_LIMIT` = 20 and `MAX_KNOWLEDGE_CHARS` = 24000. The arm that
+answers "just retrieve more" cannot be run at all without one declared knob.
+
+**Why both limits, never one.** Raising the chunk cap alone hands the
+formatter more chunks than the char budget can seat, so it evicts the tail it
+just admitted — the same trade
+`text_utils::the_prompt_budget_triple_moves_together_or_not_at_all` was
+written to record. Raising the char budget alone widens a window the cap
+never fills. `pool_scale_moves_both_limits_together` asserts the two move by
+one factor at every scale 2..=8, cross-multiplied so it is exact.
+
+**Flip condition — none. This is never a default.** It is instrument
+machinery for a pre-registered arm, not a capability awaiting promotion. The
+multiplier the arm uses is fixed at ratification together with the synth
+model, whose context is its ceiling; the arm is `never-ran` until then, not a
+null. The row closes when the study reports, either by retiring the knob or
+by recording which scale the ratified arm ran at — not by flipping a default.
+
+**Review-by 2026-10-31.** If the study has not run by then, the question for
+the operator is whether to retire the knob rather than whether to ship it.
+
+### ONNX CPU memory arena — flipped OFF for both GLiNER backends (enrich-bounded-1, 2026-09-12)
+
+**What changed.** Neither backend registered a CPU execution provider, so
+both ran with ORT's default: the pooling CPU memory arena ENABLED. Both now
+register `CPUExecutionProvider::default()`, whose `register` calls
+`DisableCpuMemArena` (`ort-2.0.0-rc.9/src/execution_providers/cpu.rs:48-51`).
+`serve/crates/sovereign-gliner/src/session_bound.rs` is the one place
+that decides it; a census test stops a second session escaping.
+
+**Why.** The arena grows in power-of-two buckets and does not return them.
+`malloc_history` on pid 47944 (2026-09-12) showed exactly that shape:
+stackless blocks of 1, 2, 2, 8 and 32 GB with no frame pointers, C++ threads
+inside onnxruntime. With the arena off, transient inference buffers go to
+the system allocator and are freed on release.
+
+**What was NOT available.** rc.9 exposes no CPU arena SIZE limit at all —
+`OrtApi::CreateArenaCfg`'s `max_mem` is a raw `ort-sys` function pointer
+`ort` wraps nowhere, and `gpu_mem_limit` / `with_memory_limit` are
+device-side. The bound on this pass is therefore the INPUT bound above, and
+`session_bound.rs` states that rather than implying a cap it does not have.
+
+**The cost, unmeasured.** Disabling a pooling allocator trades allocator
+throughput for a bounded footprint. On a background CPU NER pass that is
+the right side of the trade, but the NER wall-clock delta arena-on vs
+arena-off has NOT been measured and this row exists so that is not read as
+a claim.
+
+**Flip condition.** A measured NER wall-clock comparison, arena on vs off,
+on the same corpus with peak RSS recorded per arm. If arena-off costs more
+than ~20% wall clock AND peak RSS stays inside budget with it on, revisit —
+but only together with the batch bound above, since the two interact (the
+arena's high-water mark is set by the largest batch it ever served).
+
+**Review by 2026-12-12.**
+
+### GLiNER input bound — `MAX_CHUNK_CHARS` 2,048 / `MAX_BATCH_CHUNKS` 16, shipped ON (enrich-bounded-1, 2026-09-12)
+
+**What ships.** `ingest/crates/corpus-engine/src/enrichment/chunk_ner_bound.rs` bounds every input
+reaching the per-chunk NER seam: a text over `MAX_CHUNK_CHARS` is REFUSED
+(never truncated) and counted, and no single `extract_mentions_batch` call
+carries more than `MAX_BATCH_CHUNKS` texts. Both `GlinerChunkExtractor`
+entry points go through it. There is no env knob and no off switch — this
+is a guard, not an experiment — but the two numbers are defaults and this
+row is where they come from.
+
+**Where 2,048 came from — the model, not a guess.** gline-rs's
+`Parameters::default()` sets `max_length: Some(512)`
+(`gline-rs-1.0.1/src/model/params.rs:23`; `Some(512)` in the `Default`
+impl at :32) and
+`sovereign-gliner` passes `Parameters::default()` verbatim; a grep for
+`Parameters::new|with_max_length` across `sovereign-gliner/src` returns
+nothing (2026-09-12). The unit is WORDS from `RegexSplitter`
+(`gline-rs-1.0.1/src/text/splitter.rs:38-47`, pattern
+`\w+(?:[-_]\w+)*|\S`), and the limit is enforced by BREAKING out of the
+token loop — a silent truncation with no error and no report. 512 words ×
+4 chars/word = 2,048, conservative for English prose and about right for
+punctuation-dense agent transcripts where `|\S` makes every bracket its own
+word. So a text under the ceiling is one gline-rs would not have cut.
+
+**Where 16 came from — nowhere, and that is the point of this row.** It is
+a batch-size default: the smallest power of two that still keeps v1's
+native batching worth having (the trait's looping fallback is N=1). It is
+NOT tuned. Peak arena is linear in it (gline-rs runs one `inference()` per
+batch), so 16 turns tens of GB into hundreds of MB; the THROUGHPUT cost of
+choosing 16 over 32 or 64 has not been measured.
+
+**Flip condition.** Two, independent:
+- `MAX_BATCH_CHUNKS`: a measured NER wall-clock comparison at 16 / 32 / 64
+  on a real conversation corpus, with peak RSS recorded per arm. Raise to
+  the largest arm whose peak RSS stays inside the daemon's idle budget.
+  Until that run exists, 16 stands on the incident, not on a number.
+- `MAX_CHUNK_CHARS`: the first corpus whose
+  `_enrichment_state.json.refused_over_cap_chunks` is a large fraction of
+  its chunk count. That is not a signal to raise the ceiling — the model
+  cannot read those inputs either way — it is a signal that the CHUNKER is
+  emitting units the model cannot use, and the fix belongs there.
+
+**Settles via.** The `refused_over_cap_chunks` field is the instrument for
+the second; the first needs a bench arm that does not exist yet, and is
+banked rather than claimed.
+
+**Review by 2026-12-12.**
+
+**Why it is not off.** The incident it prevents is a host-level failure:
+corpus `agent-sessions` took the daemon 20.2 GB → 79.9 GB in eight minutes
+with zero requests and two jetsam SIGTERMs (pid 47944, 2026-09-12).
+A default-off guard would have been off during that.
+
+### `search_web` stays in the app — a DECLARED exception on egress custody (sv-surface svt-3b, 2026-09-11)
+
+**What stays local.** `search_web` (`commands/models.rs`) dispatches a web
+search from the desktop process rather than asking the daemon to. So does
+`submit_information_search`; both now go through the one function,
+`state::web_search_once`.
+
+**Why it is not a route, and the honest version of the reason.** The campaign
+file listed `search_web` in its cannot-cross set and the svt-3 order called
+that case "weak as written", correctly: the backend is resolved from the
+SHARED `config.toml` (`sovereign-tools/src/bundles.rs:69`), not a
+desktop-private file, so "the desktop has the key" is not the ground. The
+ground is EGRESS CUSTODY. The query leaves this machine for a third-party
+provider, and the release gate that authorises it without a grant reads
+`user_formed: true` — a fact only the surface that took the keystrokes can
+assert. A daemon route would have to accept that flag from its caller, which
+turns a boundary check into a field the caller supplies (ARCH principle 5's
+"a guard asserting on a field the subject supplies").
+
+**What svt-3b did change.** It was reaching `runtime.tools.get("search")` —
+the desktop's last reason to hold a commissioned `Runtime`. It holds none now,
+and the search runs through the registry `sovereign_tools::bundles` already
+exports. The exception is about WHERE THE EGRESS HAPPENS, not about the app
+owning a turn.
+
+**What thin-desktop R2 did change (2026-09-12).** The two MESSAGE WRITES
+crossed. The command saved the user's query and the formatted result block
+through the app's own `SqliteStateStore`, which on an attached boot is a
+different file from the one the sidebar lists — so a web search landed in a
+conversation nothing would ever render it in, at `Ok`. Both now go to
+`POST /v1/conversations/{id}/messages/record` in one call. That route is
+narrow on purpose: it records what a client authored and drives no turn, so
+nothing about this exception widened. The exception was always about the
+egress, and the egress did not move.
+
+**Flip condition (falsifiable).** The egress boundary gains a way for a client
+to prove a query was user-formed that a daemon can verify rather than trust —
+or the operator rules that a loopback-only daemon on the same machine inherits
+the surface's custody, at which point this becomes a route like any other.
+`commands/conversation.rs` spelled its own copy of the dispatch until
+2026-09-11; it calls `web_search_once` now (ARCH principle 8). Still open:
+`search_web` has NO caller in the Svelte app — it is exported from
+`api.ts:629` and invoked nowhere — so the prior question is whether the
+command should exist at all.
+
+**How the exception coexists with the dependency gate (2026-09-11).** The
+search stack the app uses was never in `sovereign-tools` proper: `web::search`
+is `sovereign-tools-base`'s, a studio contract crate the thin-surface rule
+does not forbid. The one resolver, `effective_search_registry`, moved down to
+sit beside `configured_search` in that crate, and `sovereign_tools::bundles`
+re-exports it — so the desktop and every host resolve the operator's `[search]`
+through the same function without the app linking `sovereign-tools`.
+
+**Review by 2026-10-11.**
+
+
+### Model-load safety guards — **NO OWNER** since 2026-09-11 (sv-surface svt-3a)
+
+**What is dark.** TWO guards, both of which asked "can this machine actually
+load this GGUF?" before loading it, and neither of which now runs anywhere.
+
+1. **The CPU/arch gate.** Some architectures — Qwen3.5 "Gated DeltaNet"
+   (`qwen35`), Mamba/SSM, RWKV — SIGSEGV inside ggml's recurrent `SET` op
+   during CPU prefill. Nothing decides, on any surface, whether the configured
+   chat model is one of them.
+2. **The GPU crash probe** (`sovereign-desktop/src-tauri/src/smoketest.rs`,
+   deleted; 302 lines). It forked `current_exe() --smoketest`, loaded the chat
+   GGUF and decoded ONE token in a throwaway process. If the child died on a
+   signal — the Gemma-4-on-Apple-Metal SIGSEGV in llama-cpp-2 0.1.145 is the
+   case it was built for — the parent set `SOVEREIGN_FORCE_CPU_CHAT=1`, loaded
+   on CPU instead, and recorded a `CrashRecord`. Verdicts were cached per
+   (model, gpu_layers, ctx), so an unchanged config paid nothing.
+
+**What is NOT lost, and it is the larger half.** The reason the probe mattered
+was `DAEMON_RESILIENCE.md:75` — "daemon + ggml run in-process → any native
+crash kills the app". That has not been true since svt-2 removed supervision
+and svt-3a removed in-process hosting: the weights are in a process the app
+does not own, so a ggml crash kills the DAEMON and the window survives it.
+`attach_watch` notices and drives the ReconnectBanner; `attach_restart_daemon`
+is the recovery button. What is genuinely gone is the PRE-EMPTION — avoiding
+the crash rather than surviving it — and with it the automatic CPU fallback
+that kept such a machine usable at all.
+
+**Why it went, and why putting it back where it was would be worse.** The
+desktop held it (`state/builders/model_compat.rs`, deleted): on a CPU machine
+it read the GGUF header, picked a dense substitute discovered alongside the
+configured model, mutated its in-memory `ResolvedModelSlots`, and raised a
+`model-notice` banner. That was correct exactly while the desktop loaded the
+weights. It never wrote `config.toml` — so the moment the daemon became the
+loader, the substitution could not reach the weights at all. All it still did
+was make `build_daemon_provider` derive a model id the daemon never loaded,
+while telling the user a swap had happened that had not (ARCH principle 6).
+That defect was live in attach mode before svt-3; svt-3 made attach the only
+mode, which is why the removal lands with it rather than after it.
+
+**Where both belong.** With whoever loads the weights, and BOTH deciders are
+already shared crates, so neither implementation moves — only its caller, into
+`sovereign-cli-daemon`'s slot build beside the `force_cpu_chat()` reads that
+are already there (`sovereign-inference/src/embedded/model_slot.rs:1564,2326`):
+
+* `sovereign_inference::cpu_compat::{choose_cpu_safe_chat_model,
+  is_cpu_incompatible_arch}` — the arch gate.
+* `sovereign_inference::smoketest::{run_from_argv, SMOKETEST_FLAG}` — the
+  probe's whole implementation, which has always lived in the shared crate.
+  The daemon's `Launch::parse` ALREADY accepts the flag
+  (`sovereign-contracts/src/launch.rs`; `launch_smoketest_flag_matches_owner`
+  in `sovereign-inference/src/smoketest.rs` pins the two spellings together);
+  it has never spawned it.
+
+Measured 2026-09-11: `grep -rn choose_cpu_safe_chat_model
+svrn/crates/sovereign-cli-daemon` returns **zero hits**, and the only
+`smoketest` hits in that crate are the flag-name test just cited — so today no
+process applies either guard.
+
+**Flip condition (falsifiable), both halves.** The daemon (a) refuses or
+substitutes a CPU-incompatible chat model at slot-build time and (b) probes the
+GPU path in a child before its own in-process load, saying which on its startup
+trace — and a desktop attached to it renders that refusal rather than watching
+a port die. Settled by: an svt-3 follow-up order against
+`sovereign-cli-daemon`. The `model-notice` Tauri listener
+(`src/lib/components/ModelNoticeBanner.svelte`) is left in place and inert —
+the banner text is the user-facing half and is worth keeping for whatever emits
+it next; a daemon-side guard reaches it through `/status` or a turn error, not
+through a Tauri event.
+
+**Review by 2026-10-11.** If the daemon-side guards have not landed by then,
+the question for the operator is whether a CPU-only machine with a
+recurrent-arch model, or a Metal machine with a Gemma-4-class model, is a shape
+this build still ships to — not whether to re-add an in-memory substitution
+that cannot reach the loader, or a fork in a client that probes somebody else's
+weights (ARCH principle 12).
+
+
+### `sovereign-turn-client/bundled-backend` — a surface now ships a backend → **GRADUATED 2026-09-11** (declared by `sovereign-desktop`; the crate default stays OFF)
+
+**What ships NOW.** `sovereign-desktop` declares
+`sovereign-turn-client = { features = ["bundled-backend"] }`
+(`src-tauri/Cargo.toml`) and ships the backend that declaration promises: a
+Tauri sidecar of `sovereign-cli-daemon`, built by
+`scripts/stage-daemon-sidecar.sh` into `src-tauri/binaries/` and declared as
+`bundle.externalBin` in `tauri.release.conf.json` — the release overlay, never
+the base config (RELEASING.md "Tauri config split"). At startup
+`serving_host::ensure_reachable` resolves that sidecar via
+`daemon_binary::stable_daemon_binary`, installs it under `<branded root>/bin`
+so the path outlives the `.app`, and hands it to `ServingHost::bringing_up`.
+That is the desktop's ENTIRE daemon interaction: one call, no handle, no retry,
+no health loop. A machine with no `svrn` on PATH now has a daemon to reach.
+
+**Why the crate default stays OFF.** The feature asks "does THIS BUILD ship a
+backend?", and only the desktop does. A CLI, a bench harness or a server build
+that turned it on would compile a bring-up path with no binary behind it —
+inventory (ARCH principle 11), and an ability `CAN_BRING_UP_A_BACKEND` would
+then report the build as having when it does not.
+
+**Which of the two named cases this covers.** The flip condition (revised
+2026-09-11, after the operator settled that the DEFAULT topology is an
+OS-installed service) named the fallback's own moment: "a surface ships a
+backend binary and declares `features = ["bundled-backend"]` to cover the two
+cases a service cannot — the first-run window before registration succeeds,
+and a host that refuses or declines to register one (managed machines; the
+user who wants nothing in their login items)." Both. And the desktop no longer
+registers anything itself: svt-0 cut `adopt_service` and the `stop_service`
+rollback, so service registration lives only in `svrn install-service`.
+Recovery is still NOT one of the covered cases — nothing here restarts a
+crashed daemon, and the bring-up runs once, at startup, never on a timer or a
+health signal.
+
+**Exercised on a packaged app, 2026-09-11.** `cargo tauri build --debug` with
+`SOVEREIGN_DESKTOP_SIDECAR_PROFILE=debug` put both binaries in
+`svrnmesh.app/Contents/MacOS/` — `sovereign-desktop` beside
+`sovereign-cli-daemon`, which is where `daemon_binary`'s first search leg
+looks. Launched under `env -i` with a scratch HOME and `svrn`, `sovereign` and
+`sovereign-cli` all absent from PATH, the app logged `reach: this build ships a
+backend it can bring up` naming `<root>/.sovereign/bin/sovereign-cli-daemon`
+(so `stable_daemon_binary`'s install ran, not the in-bundle path), then
+`BroughtUp { pid, ready_after: 27.0s }`; `/v1/models` answered with the model
+loaded and a `/v1/chat/completions` turn returned. The app was then killed and
+the daemon KEPT SERVING, pgid equal to its own pid — the detached-survival
+property, observed on a real bundle rather than only asserted in a unit test.
+
+**What is STILL not settled.** Only the DEBUG profile has been packaged; release
+codegen has never carried the sidecar on this host, and the tauri DMG step fails
+here for unrelated Finder/TCC reasons (`scripts/build-desktop-macos.sh`
+documents it), so the installer leg is unproven. The Windows
+`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` spawn compiles (`cargo xwin
+check`) and has still never been RUN.
+
+**Superseded by, not withering into.** This row closes because a surface
+reached for the capability, which is what the row asked for. If the desktop
+ever stops shipping the sidecar, the honest move is a new row, not a silent
+`default-features` edit: `serving_host.rs` does not compile without the
+feature, so the removal cannot pass unnoticed.
+
+### `process:v1` donation — a BOUNDARY, not a refusal → **GRADUATED 2026-09-10** for the package donor (the daemon path is built, not measured)
+
+**What ships NOW.** `ProcessExecutor`'s descriptor still REQUIRES
+`Isolation::RootlessContainer`; what changed is that a build can provide it.
+`commonwealth_work::sandbox::Sandbox::probe` derives the answer at boot from
+three things it CONFIRMS — a runtime on `PATH`, rootless, and the declared
+image present locally — and `Isolation::Subprocess` is what a host missing any
+of them gets, with the reason on the boot trace. `work_donor::DONOR_ISOLATION`
+survives as that fallback rather than as the answer; the daemon reads the probe
+(`daemon.rs:2751-2777`, on `[compute.work_offer] image`) and the lifted peer
+reads the same probe on `--image` / `CW_WORK_IMAGE`. So a donor with podman and
+an image publishes `process:v1`, and a donor without one still refuses it and
+names which of the four things to fix. `ingest:v1` is unaffected: it declares
+`InProcess`, it runs our own code on the daemon's threads, and it still offers.
+
+**What ships in the boundary**, and the flag list is the mechanism (§7 —
+structural, not remembered): `--entrypoint=` so the unit's argv is the program
+that runs, `--network=none`, `--cap-drop=ALL`,
+`--security-opt=no-new-privileges`, `--userns=keep-id`, `--rm`, and EXACTLY ONE
+`-v` — the unit's workdir. The donor's data directory is therefore unreachable
+by construction rather than by an exclusion someone maintains, which is what
+`work_donor::resolve_workdir` already made possible by handing out
+`donor_root/scratch`, a CHILD of the data dir.
+
+`--entrypoint=` was a MEASURED defect, not a review catch: the first sandboxed
+lift run gave three units, three exit-127s and a `failed` verdict for a program
+that never ran, because the declared image's own `ENTRYPOINT` took the unit's
+argv as arguments. A donor reporting a verdict about a program the submitter
+never sealed is the §18.3 substitution in its purest form.
+
+**There is no flag, and that is the point.** Operator decision 2026-09-10:
+isolation is the default and there is no arbitrary code execution outside a
+well-defined boundary. A config key here would be a way to assert an
+isolation this build cannot perform, which is the substitution §18.3
+forbids — `DONOR_ISOLATION` is a `const` for that reason, and the fix is a
+mechanism.
+
+**What it was before.** `process:v1` published an offer whose only wall was
+consent, and the module's own doc says consent is not isolation
+(`work_donor.rs:40-43`): a unit ran as the donor's user with the donor's
+filesystem and network, which reaches `~/.svrnmesh/node_key` — the donor's
+mesh identity readable by the work it accepts. `accept` defaulted to
+`nobody`, so the surface was safe by convention. It is now safe by
+refusal.
+
+**Flip condition — MET for the package donor, on the evidence it asked
+for.** It asked for a container-backed executor raising what the build
+PROVIDES to `RootlessContainer`, a run donating a unit through it, and a
+watched red where a unit tries to read the donor's identity or open a socket
+and FAILS. All three, 2026-09-10, on the Fedora host with rootless podman
+5.8.4:
+
+- **Donated, measured, repeated.** `scripts/cw-work-lift.sh --sandbox` with an
+  image reports `{"value": 1}` — three heterogeneous units complete on a
+  nine-act rail, built outside the monorepo, with `podman info` rootless
+  confirmed by the probe. Four runs, one verdict. `co-lineage.py measure
+  cw-lift` stamped `cw-work-package-lift  met  value=1.0`, which is the row
+  that bar's own text said it was waiting for.
+- **Contained, not merely configured.** The shell unit carries back
+  `cwd=/work`, so the unit ran inside the mount and not beside it.
+- **THE WATCHED RED IS NOW A STEP, not a sentence.** Step 6 of the instrument
+  writes an escape probe, runs it FIRST on the bare host where it must fail
+  (it does: `ESCAPE: this unit opened a TCP connection to the internet`), then
+  submits it as a donated unit where it must pass (it does: no network, and
+  the donor's rail is not on the unit's filesystem). Both branches were
+  watched failing on their own. A probe that cannot fail is not a gate
+  (§18.1), so the control is not optional and an instrument whose probe passes
+  bare ABSTAINS rather than reporting green.
+
+**What is NOT measured, and it is the honest half:** no run has donated
+through the DAEMON. It composes the same probe, the same registry and the same
+executor as the peer, so the parts are the ones under test — but "the same code
+path" is an argument, not a measurement, and the daemon-side reading is D2's
+and needs a second machine.
+
+**IT COST D3, AND THE COST IS THE POINT.** The floor is
+`JobExecutorRegistry::offerable` in `commonwealth-work` — the package both
+donors link — rather than only in `sovereign-mesh`'s boot path, because a
+donor built from the package alone had no floor at all and the lifted peer
+(`examples/work_peer.rs`) was exactly that donor: it published `process:v1`
+and ran a stranger's argv with consent in front of it. With the floor
+reaching it, the peer published nothing and exited 3, so
+`scripts/cw-work-lift.sh --sandbox` read **could-not-judge** where it had read
+a measured 1 — the honest verdict rather than a regression, since steps 1-4
+still measured and only the donation abstained.
+
+**THE COST IS REPAID, and by the mechanism rather than by an exemption.** The
+peer donates again because it now HAS a boundary, not because it was let off
+one: same floor, same `offerable` partition, and with no `--image` it still
+publishes nothing and still exits 3 naming what is absent. `cw-work-package-lift`
+is back at `met` 1.0. The peer did not grow to get there — it is unchanged at
+400 code lines, which is its own cap (`cw-work-second-lift`), and the two things
+this rung needed went into the package and the instrument instead. That cap is
+now the binding constraint on the demo: a `--env` flag for `ProcessPayload::env`
+costs four lines and did not fit, so the instrument spells the unit's
+environment with `env(1)` in the argv. Moving the cap is the operator's call.
+
+**Known open beside it, banked against cw-lift.** The first two closed the
+same day: `JobRequirements.isolation` exists (`shared/crates/oicp-types/src/job.rs:384`) and
+`WorkRefusal::IsolationBelow` has a producer in `may_take`
+(`commonwealth-work/src/refusal.rs:408`), so a submitter can now demand a
+boundary and be refused by name. Still open:
+
+- **A donor cannot bind an `accept_from` key to the peer it names** — mesh
+  transport prints no peer pubkeys, so the whole trust boundary is a 64-hex
+  string asserted in a chat message.
+- **`host_satisfies` checks the DONOR'S HOST while the unit runs inside the
+  DONOR'S IMAGE.** Under a container boundary a `Precondition::Binary` is a
+  claim about the image, and nothing checks it there — so a host without
+  python3 refuses a unit its image could have run, and a host with cargo
+  accepts one its image cannot. Found by running the lift, not by reading it.
+- **A unit that COMPILES needs its inputs inside the one mount.** `--network=none`
+  plus a single `-v` means no registry and no writable package cache, which is
+  correct and is also a requirement submitters have to be told: the lift's
+  first sandboxed shard failed with `no matching package named blake3` until the
+  instrument vendored 119 crate sources into the workdir (0.4 s, 109 MB) and
+  pointed `CARGO_HOME` at a relative path inside it. `--distribute` will pay the
+  same cost for D2, and an absolute path there would hardcode `sandbox`'s mount
+  point into a submitter's payload.
+
+**Review by 2026-11-01**, now for the daemon half only: if no run has
+donated a unit through a DAEMON's `[compute.work_offer] image` by then, say so
+and decide whether the daemon ships `ingest:v1` only while the package donor
+carries `process:v1`.
+
+### Merge coverage bar — `MergePlan::expected_partitions`, shipped UNSET (2026-09-09)
+
+**What ships.** `ShardManager::merge_participants` refuses a merge —
+`corpus_engine::Error::IncompleteCoverage`, no canonical written — when the
+resolved shard dirs number fewer than `expected_partitions`. Watched RED:
+without the guard the same fixture merges 2 of 3 partitions and returns a
+`chunk_count: 2` canonical
+(`commonwealth-knowledge/tests/main/merge_participants_coverage.rs`).
+
+**Why UNSET.** The only caller today is `coordinate_merge`, and nothing
+upstream of it knows the expected partition count — handoff state carries who
+participated, not how many were meant to. It passes `None`, which is the
+legacy "merge whatever is present" behaviour, so this commit changes nothing
+observable. The bar is cw-lift 5g part 2's B7 and is armed by the fold-side
+collector in `sovereign-mesh`, which does know the count.
+
+**Why it needs to exist at all.** `auto_recover`'s existing coverage guard
+arms only when a partition meta stamps `total_shards`, and
+`ingest/crates/corpus-engine/src/engine/ingest.rs:718` stamps that for
+`ExtractorConfig::WikipediaJsonl` alone ("the only multi-shard extractor
+today"). With the guard dark, linux-peer merged a 17/38 canonical and
+re-advertised it: "every peer ends up with a different 'complete' canonical
+and they fight forever" (`sovereign-mesh/src/auto_ingest.rs:263-276`).
+
+**Flip condition (falsifiable).** Graduates when the fold-side collector
+passes `Some(n)` and a run exercises the refusal — not when a default
+changes; there is no default to change. Refuted if part 2 lands without a
+partition count to state, in which case the parameter and its error variant
+come out rather than sit unreachable.
+
+**Review by 2026-10-15.** If part 2 has not armed it by then, the guard is
+unreachable code: arm it, or delete it.
+
+### Local-only daemon profile — OFF, `[daemon] local_only` / `SOVEREIGN_LOCAL_ONLY` (2026-09-08)
+
+**What ships.** One decider, `sovereign_mesh::LocalOnlyProfile`, resolved once
+per `start_daemon` from `[daemon] local_only` with a both-directions env
+override. On, it silences every background loop that talks to another machine
+— gossip, the auto-ingest collaborate handoff, ring-sync, the rail KV pump —
+and the two gates that already had their own off-switches (`mDNS`,
+`iroh_access::resolve_enabled`) now READ it rather than deciding beside it. The
+unauthenticated internal API binds loopback. The mesh-of-one is untouched: it
+is still minted, persisted and served, because the solo case is the honest N=1.
+
+**Why it exists at all, rather than a crate boundary.** `cw-lift`'s
+`cw-local-only-daemon` bar claimed a daemon that "compiles and boots with zero
+commonwealth-\* and no iroh". Direct deps reached zero at rung 3b and the claim
+was still false: ten commonwealth crates ride `sovereign-mesh`. The 2026-09-08
+fusion census priced the seam that would remove them — 78 reached items
+(25 mesh-only / 32 local-in-substance / 21 both), **31 unmovable however the
+cut is drawn**, 21 of those the daemon's own lifecycle, **15,634 lines moved
+for zero deleted dependencies**. That is the shim the bar's own K2 warns
+against, so K2 fired and the profile is the honest deliverable.
+
+**Why OFF.** Every existing operator is a networked one, and flipping the
+default would silently stop gossip on installs that depend on it. The
+capability is what needed to exist; the default is not in question.
+
+**Flip condition (falsifiable).** Not "flip the default" — this one graduates
+by being REACHED, not by being made default. It graduates when either:
+
+- `svrn daemon run` grows a `--local-only` flag (or setup offers the posture)
+  and one real install runs on it for a week with no operator report of a
+  missing local capability; or
+- the desktop's single-user Local mode adopts it, which is the population the
+  profile actually describes.
+
+It is **rejected** if a subsystem turns out to need one of the four loops for
+purely local work — the census would show it as a local feature riding a peer
+loop, and the fix would then be to move that work, not to widen the profile.
+
+**Settles it.** `cw-lift` ladder row 4d; the boot assertion is
+`sovereign-mesh/tests/main/local_only_boot.rs`
+(`a_local_only_daemon_spawns_no_network_service` + its control).
+
+**Review by 2026-12-08.** If no consumer has reached it by then, the honest
+reading is that the profile was built for a bar rather than for a user, and it
+should be flipped, wired to a flag, or deleted — not left dark.
+
+### Reindexer warm LSP tier — OFF, `SOVEREIGN_SCIP_LSP_TIER` (2026-09-04)
+
+**What ships.** On each debounced save the reindexer asks the already-running
+rust-analyzer (through the lspmux shim, `scripts/install-lspmux.sh`) for the
+call edges rooted in the changed files and ADDS them to the graph. It closes a
+real gap: the tree-sitter overlay refreshes symbol defs in milliseconds but can
+never see a cross-file call, and the export that can costs a cold analysis of
+all 54 crates — 3m42s and 15.2 GB measured on RuggedFox 2026-09-04 — so it sits
+behind a 900 s cooldown. Between the two, a save that adds a call is invisible
+to `callers` until the next export.
+
+**Why not always-on — and this is now a measurement, not a caution.** The
+order pre-registered a stop condition: park if the warm server's per-file
+requests cost more than the overlay's debounce window (2000 ms,
+`default_scip_debounce_ms`). Measured against the shared analyzer on RuggedFox
+2026-09-04, warm, second pass:
+
+| file | defs | call sites derived | requests | warm cost |
+|---|---|---|---|---|
+| `sovereign-mesh/src/reindexer.rs` (2,116 lines) | 140 | 594 | 282 | **8,848 ms** |
+| `sovereign-mesh/src/lsp_tier.rs` (~600 lines) | 36 | 218 | 74 | **2,503 ms** |
+| `shared/crates/corpus-engine-scip/src/tool_path.rs` (~300 lines) | 25 | 145 | 52 | **1,857 ms** |
+
+**The stop condition is triggered**, and its shape is specific: the cost is
+`2N+1` round trips for a file with N definitions, at ~31 ms each. Nothing is
+slow; there are simply too many calls. A small file fits inside the window; a
+2,116-line one is 4.4x over it, and a batch save of ten files would be tens of
+seconds on the watcher's hot path.
+
+So the tier is correct, its edges are real (594 from one file), its safety is
+proven by test — and it is OFF because the shape it queries in is the wrong
+one, not because nobody looked.
+
+**Two further operating facts from the same session**, both against flipping
+as-is:
+
+- The shared analyzer dies after `instance_timeout` (300 s idle) and the next
+  client spawns a cold one. During that load every request answers `[]` or
+  `file not found` — observed twice while measuring. Additive-only writing is
+  what makes that window cost nothing instead of emptying a file's edges.
+- Through lspmux the server is configured by whichever client handshakes
+  FIRST, so a declared `hierarchicalDocumentSymbolSupport` can be ignored and
+  the flat `SymbolInformation` shape arrives instead. `collect_definitions`
+  handles both; that is measured behaviour, not defensive coding.
+
+**The condition that flips it:** get the per-save cost under the debounce
+window, which means querying the definitions that CHANGED rather than every
+definition in the file — the reindexer already re-parses each saved file with
+tree-sitter, so the previous parse's spans are the missing input, not a new
+analyzer capability. Then two 30-minute continuous-editing windows (tier off,
+tier on) with export count and peak rust-analyzer RSS recorded for each,
+against the 2026-08-16 reference of ~88-90% duty cycle and ~14 GB, plus a
+`callers` query showing an edge that a save added and the last export does not
+contain.
+
+**Review by 2026-10-05.** Owner: whoever next picks up order
+`scip-on-shared-analyzer`.
+
+
+### Reified merges — ON for a DECLARED corpus, OFF everywhere else (2026-09-02)
+
+**What ships.** `svrn enrich reconcile` writes one `same_as` Claim per merge
+(plus `Involves` / `Grounds` edges) when — and only when — the atlas's
+`ontology.json` declares types. An undeclared corpus keeps today's silent
+merge: `atoms.json` is unchanged and only the oplog records what collapsed.
+
+**Why not always-on.** Enron is the reconciler's only measured corpus and it
+declares nothing. Reifying its merges would add a Claim atom per cluster to
+`atoms.json`, which the B³ lane does not read — but the atlas it reads would no
+longer be the one the baseline was minted on, and "probably fine" is not a
+measurement (§18.5). **The condition that flips it:** two `bench enron` runs on
+the always-on build with B³ unmoved. That bench is also what P3 pre-registered
+as its own leak detector, so the run is already on the board.
+
+**One thing this row is NOT.** The grade on a reified merge is `external` or
+`signal_gated` — never "judged". `ONTOLOGY_PRIMITIVES.md` calls the non-strict
+path judged, and `ReconciliationPolicy.judge_when_uncertain` defaults to `true`,
+but `enrich reconcile` installs no judge (`reconcile` takes no `InferenceFn`),
+so what actually decides a non-strict merge today is the signal-count gate. The
+word is not a default that can be flipped; it is a capability that does not
+exist yet, and grading a merge by a judge that never ran would be the
+well-formed false result §18.3 forbids. When a judge lands it produces a THIRD
+grade, and this paragraph is what says so.
+
+### `[node] entry` — keyed on an ADDRESS, not a node id — **CLOSED 2026-08-31**
+
+**Repaid.** A terminal now binds its entry node by mesh identity
+(`[node] entry_node`) and resolves it through `PeerEndpointSource` on every
+call. `EntryNodeEndpoint` (`sovereign-mesh/src/entry_endpoint.rs`) is the
+resolver; `EndpointResolver` / `EndpointRef` (`shared/crates/oicp-client/src/lib.rs`) is the
+seam it plugs into. `svrn setup --terminal <join-link>` joins the mesh first,
+so there is a real node id to bind. The address form survives for an entry node
+that is not a mesh member, and `validate_class` refuses a config carrying both.
+
+**The deferral reason was wrong, and that is the lesson worth keeping.** This
+row priced the fix as "a provider type wrapping `SplitInferenceProvider`" and
+then correctly refused it: `InferenceProvider` carries 27 methods, 24 defaulted,
+and a delegating wrapper that omits `embed_batch` silently re-introduces the
+per-item loop that once made corpus ingest embed-bound. All true — and it was
+pricing the wrong design. `self.endpoint` is read at seven sites inside
+`RemoteApiProvider`. Putting the indirection THERE leaves `SplitInferenceProvider`
+with every override intact by construction, so there is no wrapper and no
+default to inherit. The estimate that justified deferring was an estimate of a
+design nobody had to build.
+
+**Three failures, one cause.** The row listed address-keying's cost as a moved
+DHCP lease and a missing multi-homed fallback chain. There was a third it did
+not see: an encrypted mesh forces its plaintext client API loopback-only
+(`sovereign-mesh/src/daemon.rs:2718`) and routes peers over the iroh acceptor,
+so a literal `http://host:9741/v1` answers **nothing** there. Terminals were
+unreachable on the posture this fleet actually runs, and the two-machine test
+that would have shown it had never been run. All three were consequences of
+bypassing `PeerTransport`, and resolving through it fixed all three at once.
+
+**What did NOT change.** `serving_locus` is now a stored fact on
+`SplitInferenceProvider` rather than a loopback test on the endpoint string.
+That is load-bearing, not tidying: a resolved binding on an encrypted mesh is an
+iroh bridge at `127.0.0.1:<port>` whose far end is another machine, so the old
+string test would have answered `ForwardsOnBox` and honoured `local_only` for a
+turn leaving the host — the exact inversion `ServingLocus` was introduced to
+prevent, arriving through the fix for something else.
+
+**Still owed.** `EntryNodeEndpoint::base_url` takes the top-ranked candidate
+rather than carrying the whole ranked list into the provider's retry loop, so a
+terminal whose entry node is reachable only on a lower-ranked address fails the
+turn and re-resolves on the next. Stated in the code. Left until a real
+multi-homed terminal shows it is not enough, because the alternative is a second
+implementation of candidate ordering that `peer_inference` already owns (§10.6).
+
+**Verified, 2026-08-31, co-located on an ENCRYPTED mesh.** Two sandboxed
+daemons, `svrn mesh create --encrypt` (`require_encryption=true`, all seven
+classes iroh-REQUIRED including `inference`, no plaintext fallback):
+
+- `svrn setup --terminal "sovereign://join/…"` joined, found the holder, wrote a
+  config carrying `entry_node` and NO address, and proved a served turn. Exit 0.
+- The resolver was observed choosing the encrypted path:
+  `terminal: resolved entry node … endpoint=http://127.0.0.1:56365/v1` — an
+  iroh BRIDGE port, which is the only ingress such a mesh has. A 1024-dim
+  embedding came back through it.
+- The terminal advertised `[]` on `/oicp/v1/capabilities`, surfaced `primary`
+  on its own `/v1/models`, and reported `node_class: terminal` with the bound
+  identity on `/v1/mesh/status`.
+
+That last bullet is also the demonstration behind the `serving_locus` change:
+the resolved address really is `127.0.0.1`, so the old string test would have
+answered `ForwardsOnBox` for a turn leaving the process.
+
+**Corrected by the same run:** the binding does NOT carry "every turn". A JOINED
+terminal's chat resolves from the holder's advertised manifest through
+`provider_for_peer` and never reaches the resolver; the binding carries
+EMBEDDINGS always, and chat only when no peer advertises the name (the un-joined
+case). Docs and the module header now say so.
+
+**Still NOT done: the two-machine run.** Everything above is co-located, so
+`ServingLocus::ForwardsOffBox` and the off-box `local_only` refusal remain
+unit-tested only — see `MESH_N4_TOPOLOGY.md` §4.5.
+
+### `SOVEREIGN_RPC_WORKER_PROCESS` — shipped OFF (2026-08-29)
+
+**What is dark.** The out-of-process ggml RPC worker. With the flag set, the
+daemon re-execs `current_exe() --rpc-worker --bind … --cache-dir … --threads N`
+and supervises it; unset, ggml's accept loop runs on a thread inside the daemon
+exactly as before. Both paths call the identical
+`ggml_backend_rpc_start_server` on the identical devices and port.
+
+**Why it exists.** ggml enforces its RPC bounds with `GGML_ASSERT`, which
+expands to an unconditional `ggml_abort()` — no `NDEBUG` guard
+(`ggml.h:288`). Two of those sites take peer-supplied input:
+`deserialize_tensor`'s buffer-bounds check (`ggml-rpc.cpp:1103`) and
+`graph_compute`'s `GGML_ASSERT(status == GGML_STATUS_SUCCESS)` (`:1468`) —
+the second needs no malformed message, only a graph large enough to fail
+allocation. In process, either aborts the daemon holding the mesh secret key,
+the secret store and the conversation database. Upstream states the posture
+itself (`tools/rpc/README.md`): *"fragile and insecure. Never run the RPC
+server on an open network."*
+
+**Why it is not the default yet.** Nothing about parity has been MEASURED on a
+real two-node run. Three specific unknowns, in priority order:
+
+1. **Hybrid host+worker VRAM accounting.** A host that also serves
+   (`QWEN122B_DISTRIBUTED_HANDOFF.md:132` does exactly this) has one ggml
+   allocator today. Split into two processes it has two, and Metal's
+   working-set query is per-process where CUDA's free-VRAM query is not. The
+   host's own placement planning (`rpc_headroom_factor`, default 1.2) may
+   therefore over-commit on macOS hybrid nodes.
+2. **Warm-cache parity.** The child is passed `--cache-dir` explicitly so it
+   reads where `warm_cache_from_gguf` writes, but no run has yet confirmed a
+   cache HIT across the process boundary.
+3. **Orphan handling under real teardown.** `PR_SET_PDEATHSIG` covers Linux;
+   macOS uses a 1s parent-pid poll. **The macOS half is watched working**
+   (2026-08-29, M2 Max): parent `SIGKILL`ed while the worker held
+   `127.0.0.1:50098`, worker gone and the port released with zero listeners.
+   The Linux `PDEATHSIG` half is untested on this host. **Windows has no guard
+   at all** — `libc::getppid` does not exist there, so the `cfg` is
+   `all(unix, not(linux))`; an orphaned Windows worker is caught only by the
+   supervisor failing to re-bind. Closing that needs a Job Object.
+
+**Flip condition.** Flip ON by default when a two-node run shows, on both a
+Linux and a macOS worker: (a) a distributed load completing with zero weight
+bytes on the wire after a warm — proving the cache crosses the boundary; (b) a
+`kill -9` of the daemon leaving no process holding the RPC port within 2s; and
+(c) a hybrid host+worker load that does not OOM where the in-process build does
+not. A green build is NOT sufficient — none of the three is visible to the
+build gate. (b) is half-done: macOS is proven, Linux is not.
+
+**What IS proven as of 2026-08-29.** The child dispatches, refuses malformed
+arguments with exit 2 rather than defaulting (`--bind` absent, unknown
+argument, `--threads 0`), initialises Metal, enumerates exactly the local GPU
+with the CPU excluded, and binds — watched on an M2 Max:
+`rpc-worker: serving local GPU to mesh peers (out of process) bind=127.0.0.1:50099 n_devices=1`.
+That is the entry path, not parity.
+
+**What it costs while dark.** Nothing. The in-process path is untouched and
+remains the default; the flag adds one branch at
+`serve_rpc_worker_if_configured`.
+
+**Review by.** 2026-10-15. If unflipped and unmeasured by then, the honest
+options are to run the three checks or to delete the child path — a second
+worker shape that nobody exercises is worse than either.
+
+### `SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST` — shipped OFF (2026-08-29)
+
+**What is dark.** The daemon's synthesis of a citation allowlist from the
+conversation. `apply_url_allowlist_from_tool_results` and
+`apply_evidence_id_allowlist_from_tool_results` scan `role: tool` messages for
+URLs and `ev-Tn-NNNN` handles and thread them onto the request, where the
+inference layer builds a byte-trie sampler constraint that masks any token
+extending into an unlisted value. Both ran unconditionally on
+`POST /v1/chat/completions` until this commit; they now require the flag.
+
+**Why it went dark.** It was a silent substitution on the OpenAI-compatible
+ingress (ARCH §18.3). Measured against the live daemon 2026-08-29: a
+conversation whose tool result carried
+`https://doc.rust-lang.org/error_codes/E0433.html` made that the only URL the
+trie could reach, so a request to emit `https://api.stripe.com/v1/charges`
+returned the rust-lang URL — HTTP 200, no warning, wrong bytes. The control
+run, identical but for that one link, emitted the Stripe URL correctly. The
+constraint cannot tell "fabricating a sibling URL" from "writing the URL the
+user asked for", and any coding agent whose tool output mentions a URL (cargo,
+npm, a git remote, curl) trips it.
+
+**What it costs while dark.** Nothing measured. The two lanes that want the
+constraint — `deep_research/port.rs` and `search_gym_cmd/runner.rs` — set
+`url_allowlist` explicitly, and an explicit allowlist has always won over the
+synthesis, so both keep the constraint with the flag off. The synthesis existed
+only to extend it to clients that never asked.
+
+**Flip condition.** Flip ON by default only when the constraint can distinguish
+a fabricated sibling URL from a caller-requested novel one — e.g. it applies to
+synthesis turns only, or admits URLs present in the *user* turn as well as tool
+results. A bench showing fabrication-rate improvement is NOT sufficient on its
+own: the failure this row records is invisible to a fabrication bench, because
+the wrong answer scores as a real URL.
+
+**Settled by.** A pre-registered run on the search-gym fabrication bank that
+also carries a counter-bank of turns legitimately requesting an unseen URL.
+Both numbers, or no flip.
+
+**Review by.** 2026-11-29.
+
+
+### `Mesh::gossip_authorized` legacy compat arm — shipped ON (2026-08-26)
+
+**What is dark.** Not a capability held back: a *fallback* held open. The
+credential split gives `Mesh` a `mesh_secret` that authorizes gossip and never
+rotates, separate from the `invite_key_hash` that admits joiners. A peer on a
+pre-split build sends a zeroed `mesh_secret`, so `gossip_authorized` falls back
+to comparing `invite_key_hash` — the old predicate — and logs
+`gossip: legacy auth` at `warn` naming the mesh.
+
+**Why it is not just removed.** Every node upgrades on its own schedule. Without
+the arm, the first upgraded node rejects every peer that has not upgraded yet
+and is rejected by them, which is precisely the symmetric partition the split
+exists to eliminate. The arm is the only thing that makes the upgrade rolling
+rather than flag-day.
+
+**What it costs while open.** Invite rotation is still unsafe for un-upgraded
+peers, because they authorize on the very hash rotation changes.
+`EmbeddedDaemon::rotate_invite` therefore refuses with `PreSplitPeersOnline`
+(HTTP 409) unless every online member is CONFIRMED post-split, naming the ones
+that are not; `--force` overrides. So the cost is visible and gated, not silent.
+
+The confirmation is our own observation, never a peer's claim: a merged gossip
+payload carrying a `mesh_secret` proves the sender is post-split, and
+`MergeReport::peer_pre_split` is the only place that fact surfaces before it is
+discarded. `AppState::peer_post_split` retains it. Unknown counts as unsafe, so
+a fresh daemon refuses until it has gossiped once with each online peer.
+
+This guard shipped INERT on 2026-08-26 and was fixed 2026-08-27: it filtered on
+`mesh.mesh_secret` — our OWN credential, non-zero on every migrated node — so
+the predicate was always false and the refusal never fired. No test covered it
+(`tests/rotate_pre_split_guard.rs` now does, five cases). Worth recording because
+the failure was invisible in exactly the way this ledger exists to catch: a
+guard that reads as protection, passes every gate, and protects nothing.
+
+**Flip condition (falsifiable).** No `gossip: legacy auth` warn observed on any
+fleet node for one full week. At that point every peer carries a real secret and
+the arm is unreachable.
+
+That condition was NOT falsifiable as first shipped, and it is worth recording
+why. `DAEMON_TRACING_FILTER` listed `commonwealth_discovery` and
+`commonwealth_api` but not `commonwealth_core`, where the warn is emitted, and
+the filter's default directive is ERROR — so the warn was dropped before it
+reached the log. The flip condition would have been satisfied by construction,
+on a fleet still actively running the arm. Measured live 2026-08-27: a peer
+sending a zeroed `mesh_secret` produced 5 gossip rounds and zero log lines.
+Fixed by adding `commonwealth_core=info` to the filter and pinning it in
+`tests::daemon_filter_lists_grounding_targets`. Verified after the fix: one
+`gossip: legacy auth` warn per round, `self_has_secret=true
+peer_has_secret=false`.
+
+Before flipping, confirm the reader is actually wired: the absence of this warn
+means nothing unless `commonwealth_core` is in the daemon's filter.
+
+**Two things narrow the arm while it stays open (2026-08-27).** The fallback is
+peer-SELECTED — `gossip_authorized` takes it whenever EITHER side's secret is
+zeroed, so a caller omits the field and gets the weaker predicate, and its only
+entry ticket is an `invite_key_hash` that rides every gossip payload and every
+join snapshot. That is exactly what a departed member holds, and the mesh has no
+eviction (todo `23f0b547`).
+
+1. The gossip reply now REDACTS `mesh_secret` whenever the merge authorized on
+   the legacy arm. Without it, a holder of any current-or-stale invite hash
+   could read the real secret out of the response and hold permanent gossip
+   auth — `mesh_secret` never rotates and `rotate_invite_key` structurally
+   cannot change it, so there is no revocation path afterwards. That would be
+   strictly worse than the pre-split model, where rotating DID revoke. Costs a
+   genuine pre-split peer nothing: its build has no such field.
+2. `SOVEREIGN_MESH_STRICT_AUTH=1` refuses the arm outright, for operators who
+   know their fleet is upgraded and want the surface closed before the
+   fleet-wide flip. Off by default. It only acts on a node whose own secret is
+   set, so a not-yet-migrated node cannot self-partition with it.
+
+**What settles it.** Delete the fallback branch in
+`commonwealth-core/src/mesh.rs::gossip_authorized`, the `UNSET` zero-checks
+around it, and the `PreSplitPeersOnline` refusal in
+`EmbeddedDaemon::rotate_invite` — rotation becomes unconditionally safe once
+there is no peer that reads `invite_key_hash` for auth.
+
+**Review by:** 2026-10-01.
+
+### `[models].fast_context_size` — per-slot KV windows, shipped UNSET (2026-08-25); FLIPPED ON THE 64 GB DEV HOST 2026-09-12, settle pending
+
+**What is dark.** The mechanism, not the value. Until now `[models].context_size`
+was one global applied to every `LlamaContext` this daemon builds — the fast
+slot, the primary, the primary sibling pool and the fast/primary alias — with a
+doc comment that said so outright ("Applies to all loaded slots … per-slot
+override would need a richer schema"). KV cache is linear in `n_ctx`, so a 4B
+fast model carried a 27B primary's window and paid a 27B primary's cache for it.
+`SlotWindows` makes the window a per-slot value; `fast_context_size` is the key
+that uses it. It ships unset, which resolves to the primary's window and is
+byte-identical to the old behaviour (pinned by
+`an_unset_fast_window_is_the_primary_window`).
+
+**Why it is not just set.** The fast slot is the OVERFLOW path — `pick_slot`
+routes any prompt too large for FastShort's per-sequence budget here — so its
+window must cover the largest prompt that actually lands on it, not the typical
+one. Nobody has measured that. Shipping a guessed value would trade a known
+memory cost for an unknown `NoKvCacheSlot` failure at decode time, which is the
+worse trade.
+
+**FLIP CONDITION (falsifiable).** With the `kv budget: slot context built`
+trace lines now emitted per context at load, and a distribution of prompt sizes
+that reach the `fast` slot (not FastShort) over a real soak:
+set `fast_context_size` to the observed p100 fast-slot prompt + the output cap,
+rounded up to a multiple of 256 (llama.cpp pads there anyway — see
+`ctx_n_batch`). The flip is settled when a soak at that value shows **zero**
+`NoKvCacheSlot` errors on the fast slot and the summed `kv_ceiling_mib` across contexts
+drops. Both halves are required: a smaller number that starts failing decodes is
+a regression, not a win.
+
+**Settled by.** The same daemon restart that takes the per-slot KV
+measurement — the trace lines exist precisely so this does not need its own run.
+
+**Review by 2026-09-25.** If unmeasured by then the honest options are to take
+the measurement or to delete the key; a per-slot knob nobody sizes is the
+withering this ledger exists to stop.
+
+**Measured 2026-09-12 (the flip condition's first half).** Over `daemon.err`
+2026-09-10..12, 175 completed `slot="fast"` calls: p50 399, p99 10,130,
+p100 10,130 `tokens_used`; none above 16,384. The one known larger consumer is
+deep research's round leg at ~21,014 tokens (`deep_research/port.rs`, the
+2026-08-27 death at a 16,384 window). Set on this host:
+`fast_context_size = 32768` — covers both, KV ceiling 16,896 -> 4,224 MiB
+(`kv budget: slot context built slot="fast"` on the 01:51Z boot). What forced
+the measurement: with the key unset the fast slot inherited the primary's
+131,072 and the daemon's physical footprint was 65.9 GB on a 64 GB host
+(`vmmap --summary`: MALLOC_LARGE 47.8 GB, 46.0 GB swapped out), two jetsam
+SIGTERMs in one evening, every desktop soak aborting on its own memory rule.
+After the flip: 60.2 GB. Still over the host — the remainder is NOT this key
+(primary KV 10,496 MiB at 131,072 plus ~25 GB of ggml Metal buffers
+unaccounted at the daemon's log level); that is the daemon memory order, not
+this row. **Not yet settled:** the second half — zero `NoKvCacheSlot` on the
+fast slot over a real soak — has no soak yet, because no soak fits beside the
+daemon at this footprint. Zero such lines in the window read since the flip.
+Settles when a soak runs at this value; reverts to a larger window if a
+`NoKvCacheSlot` names the fast slot. Setup (`setup_cmd/finish.rs`) still
+writes it unset for new installs; a default for the product is a separate
+decision once the sum is known.
+
+
+
+### `SOVEREIGN_TENSOR_BUFT_OVERRIDE` — declaring where one tensor lives, shipped UNSET (2026-08-27)
+
+**What is dark.** The ability to say, in configuration, which buffer type a
+tensor must land in — llama.cpp's own `<regex>=<buffer-type>` syntax, with `CPU`
+resolving to `ggml_backend_cpu_buffer_type()`: plain *pageable* CPU, deliberately
+not the device HOST buffer, which is pinned and is the opposite of what a large
+evictable table wants.
+
+**Why it ships unset: it is currently a NO-OP, and that is the whole problem.**
+Qwen3.8-Flash-Next's 26.8 GiB `per_layer_token_embd` engram already lands on
+plain CPU without it — but only because IQ4_NL is unsupported by `Vulkan_Host`
+and *falls back*. The load says so in as many words: `tensor
+'per_layer_token_embd.weight' (iq4_nl) … cannot be used with preferred buffer
+type Vulkan_Host, using CPU instead`. Measured flat either way (22.42 vs 22.45
+tok/s; `research/engram/RESULTS.md` §6, and §6.1 measures the override itself as
+a no-op on this model). Shipping it default-on today would be complexity that
+moves no metric.
+
+**Why it exists anyway.** That placement is **load-bearing and accidental at the
+same time** — the two properties that should never coexist. Flash-Next is 103.7
+GiB and fits a 128 GB box *only* because 26.8 GiB of it stays out of GTT
+(measured: 81.9 GiB peak GTT + 27.0 GiB RSS, `research/engram/spike-flashnext.log`).
+Nothing declares that; a quant-support gap in one backend is holding up the whole
+serving story (`RESULTS.md` §6.3). This flag is the declaration that would make
+it structural (ARCH §7, §10).
+
+**Flip condition (falsifiable, and it is a detector, not a date).** Flip to
+default-on for `qwen4exp` the first time a load is observed in which
+`per_layer_token_embd` does **not** land on plain CPU — concretely, when the
+`using CPU instead` line for that tensor disappears from the load log, or when
+`projected_overheads`' `model_host_bytes` for Flash-Next drops materially below
+~26 GiB. Either means the accident has stopped holding and the model is about to
+stop fitting.
+
+**The event that could trigger it is known:** the next move of the vendored
+llama.cpp pin (`vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`). Check the detector
+above as part of that move — that is cheaper and more reliable than a calendar.
+
+**Review by 2026-10-27**, or the next vendor pin move, whichever comes first.
+Owner: whoever moves the pin. Notes `dccee8ed`, `b588ba8b`;
+`research/engram/RESULTS.md` §6.1–6.3.
+
+---
+
+### `SOVEREIGN_TENSOR_NO_HOST` — llama.cpp `--no-host`, shipped OFF and MEASURED HARMFUL (2026-08-27)
+
+**What is dark.** Bypassing the device HOST buffer type on a local load — and,
+through patch `0008-no-prefetch-when-host-buffer-bypassed.patch`, the load-time
+prefetch along with it.
+
+**This row is not "promising, awaiting evidence". The evidence is in and it is
+negative for the case the flag was written for.** On Flash-Next, turning it on
+converted the mmap-resident engram into an *anonymous* copy — RssAnon 8.85 →
+21.47 GiB, RssFile 0.29 → 0.06 GiB — and the load OOM'd. Anonymous pages cannot
+be reclaimed; file-backed ones can. Default OFF is the measured answer, not a
+holding position.
+
+**Why it is kept rather than deleted.** On a backend whose host buffer *does*
+accept the tensor's quant, CPU-placed weights really do land in pinned memory and
+this is the lever that moves them. The flag is right for a machine we do not have;
+it is wrong for this one. Measure the RssAnon/RssFile split before turning it on.
+
+**THE REAL DEBT THIS ROW RECORDS — a useful capability is welded to a harmful
+one.** Patch 0008 gates `ml.init_mappings(!params.no_host, …)`. So "do not
+MAP_POPULATE 26.8 GiB of engram before a single row has been gathered" is
+reachable *only* through the flag above, which OOMs here. As shipped, the good
+half is unreachable in the configuration we actually run. That is one flag
+deciding two independent things (ARCH §10.6).
+
+**What this row does NOT gate, contrary to an earlier reading of the code.** The
+local-fit gate's discount of `model_host_bytes` is **unconditional** — it does not
+require `no_host`, and `wants_no_host` returns false on a default load. A stale
+comment paragraph in `rpc_distribution.rs` claimed the opposite directly above the
+correction that reversed it; it is deleted, and the log line that said "no_host
+load" is corrected. Flash-Next therefore passes the gate on a stock load. If it
+did not, this row would be a shipping blocker rather than a debt.
+
+**Flip condition — and it is NOT "turn this on".** This row retires when prefetch
+is **decoupled** from `no_host` (its own gate, or keyed to the buft override), and
+a paired load with `no_host` OFF measures prefetch-off as neutral-or-better on:
+major faults during load, the RssAnon/RssFile split, peak `MemAvailable`, and
+load wall-clock. `research/engram/spike-run.sh` is the harness — it already
+samples avail/GTT/RSS every 2s across a real load, so the A/B is two runs and no
+new instrument. If prefetch-off measures worse or neutral, say so and close the
+row REJECTED; an unmeasured "should help" is what this ledger exists to stop.
+
+**Review by 2026-10-27.** Notes `dccee8ed`, `401428eb`, `b588ba8b`;
+`research/engram/RESULTS.md` §6.4, §7.
+
+---
+
+### `sec-filings-company` install-by-ticker — `catalog_status = "featured"` since 2026-08-18 (was **preview**)
+
+**FLIPPED 2026-08-18 BY OPERATOR DECISION, over an unmet condition.** The
+seat recommended holding and was overruled; that is the operator's call
+and it is recorded as a decision, not as a bar that was met. Three of the
+four flip conditions below are MET — (1) render pre-ingest, (2) a figure
+answered from a ticker-installed corpus with basis and accession, now
+proven on BOTH the CLI (ring 0, n=3) and the DESKTOP (ring 2, run 6), and
+(3) the install form. **(4), the F3 hand-read at its registered bar, is
+NOT met**, and the ring 2 run that would speak to it is RED on a
+transport invariant (one trailing newline, `invariants.ts:111`), with the
+KO filer and two-filer assertion SKIPPED rather than passed.
+
+**The three known gaps a user can hit, stated so nobody has to rediscover
+them** (also carried in `ingest/crates/sovereign-recipes/registry.toml` above the entry,
+and in notes `9be87107` / `45b04cf5`):
+
+1. **Segment questions with no structural word answer CONSOLIDATED, and
+   this is a MEASURED REGRESSION against a pre-registered item, not an
+   estimate.** `SecRefusal::ScopeNotInSource` catches "Mac **segment**
+   revenue" but not "**Mac** revenue" / "**Services** revenue" — it keys
+   on structural vocabulary, never on a filer's product names, which
+   companyfacts does not carry.
+   - Frozen-set item `segment-services`
+     (`ingest/crates/sovereign-recipes/sec-filings-company/prereg/aapl-fabrication-set.toml:62`,
+     `question = "What was Apple's Services revenue in fiscal 2025?"`,
+     `expect = "refusal"`) **passed on 2026-08-16** (`aapl-fabrication-
+     n3run1_20260816.jsonl`, 9/9) and **does not now**: the planner sends
+     `concept="revenue"` and the turn serves consolidated
+     `$416,161 million` for a Services question. True Services revenue is
+     `109,158` — listed in that item's own `forbidden_values`.
+   - **Cause is the enum, by mechanism.** Pre-enum an out-of-vocabulary
+     ask drifted to something unmapped and refused honestly; post-enum the
+     planner is reliably pushed into the closed set, picks the nearest
+     LEGAL member, and the tool answers it. The enum is a real improvement
+     on in-vocabulary asks and a real regression on out-of-vocabulary ones.
+   - **SCORED, whole set, 2026-08-18: `8/9 passed` — HONESTY 1, bar
+     ZERO.** `segment-services` FAILED with "unattributable numeral(s):
+     $416,161 million". Every other item passed, including
+     `prose-explanation-mac`, `period-calendar-trap`, `period-beyond-asof`
+     and `arithmetic-yoy-revenue` (11 figures, all attributable).
+     Artefacts committed alongside the prior runs:
+     `bench/lanes/sec-filings/results/aapl-fabrication-postenum-scope_20260818.jsonl`
+     (+ `-records_`). Compare `aapl-fabrication-n3run1_20260816.jsonl` = 9/9.
+   - BOTH instruments validated before the result: `run_frozen_set.py
+     --self-test` (6/6 controls, watched reading fired and not-fired) and
+     `scripts/check-sec-answer-path.py --self-test` (watched FAILING on 5
+     tampered controls — 4 honesty, 1 competence — and passing on 4 clean).
+   - This is the highest-severity live gap: a real, cited,
+     wrong-granularity figure rather than a refusal, and it crosses a
+     registered bar whose threshold is zero.
+2. **The e2e has never gone green end to end** — nine attempts. Run 6 got
+   the figure on the desktop and then failed a byte-equality invariant.
+   Unattributed; the newline is not chased.
+3. **F2 segment honesty is unsettled and this flip does not settle it**
+   (`e8b9319b`) — companyfacts is consolidated-only by construction.
+
+**Review-by 2026-08-30 stands.** If gap 1 is still open then, this row is
+the place to argue for reverting to `preview`.
+
+---
+
+_Historical record below — the reasoning while this row was `preview`._
+
+### `sec-filings-company` install-by-ticker — `catalog_status = "preview"` (not **featured**)
+- **Shipped dark:** 2026-08-16, order `financial-corpora` slice 2
+  (worker `sec-recipe-install`). The recipe installs one company's 10-K
+  by ticker with no repo script: `sec_edgar` acquirer + registration on
+  all four engines that can ingest, and `[parameters.ticker]` as the
+  user's sole input. `preview` keeps it out of the desktop catalog's
+  featured surface — a user cannot arrive at it by browsing.
+- **Why dark rather than shipped (2026-08-16, superseded — see below):**
+  the acquirer deliberately left `companyfacts.json` untouched under
+  `raw/`, because rendering figures there would be a SECOND
+  implementation of the `sec_facts_render::render` decider (ARCH §10.6).
+  Until that renderer was called pre-ingest, an installed corpus carried
+  PROSE ONLY and the `sec_facts` tool could not claim it.
+- **Why still dark, 2026-08-17 (order `sec-filings-last-mile`, M4):** the
+  reason above is GONE — the acquirer now calls the decider at step 6 and
+  `place_rendered` writes `docs/facts/*.txt` pre-ingest and stages the
+  sidecar where `install_fact_sidecar` already places it synchronously.
+  What is missing now is not code, it is a RUN. The journey has never
+  been executed end to end on this host: three attempts, none of which
+  reached the assertions — a harness livelock in `global-setup`'s own
+  fixture ingest, then a 20.5-minute install that was TOTALLY SILENT
+  because the daemon's tracing allowlist did not carry `sec_edgar`, then
+  a workspace build broken by an unrelated in-flight change. So the
+  install is UNPROVEN, not disproven, and an unproven button stays off.
+  Arming it now would ship exactly the failure F3 exists to prevent, on
+  a guess: a user picks a ticker, waits, and finds out.
+- **Evidence so far, cited:** live against real SEC, not a fixture —
+  `svrn recipe test … --params ticker=AAPL --recapture` VERDICT GREEN
+  on Apple 10-K accession 0000320193-25-000079. ACQUIRE 5 docs from
+  `custom:sec_edgar`, 0 empty; CHUNK 0 over the 3000 limit
+  (2587..2621); FTS rare-token probe returns its source chunk. 22
+  `sec_edgar` tests, instrument validated (a deliberately broken
+  assertion took the run to exit 100 naming the right test).
+- **Flip condition (falsifiable):** `catalog_status` moves to
+  `featured` when ALL of (1) `sec_facts_render::render` is called
+  pre-ingest, writing `fact_files` into `docs/facts/` and staging its
+  sidecar where `install_fact_sidecar` places it; (2) `sec_facts`
+  answers a figure from a corpus installed BY TICKER — not from a
+  script-built one — with fiscal-period basis and accession citation;
+  (3) the desktop install form exists and passes `ticker`; (4) the F3
+  hand-read passes at its registered bar. Any one unmet keeps it
+  `preview`.
+- **Condition audit, 2026-08-17 — two met, two `never-ran`:**
+  (1) **MET** — `sec_edgar::acquire` step 6 + `place_rendered`; 4 tests,
+  instrument validated (redirecting the sidecar write reddened exactly
+  one test, two controls in the same file stayed green).
+  (3) **MET** — `RecipeParameterForm.svelte`, rendered from
+  `ParameterSpec.kind` with nothing ticker-specific; 8 tests, one of
+  which renders a DIFFERENT recipe's `int`/`date`/`list` parameters with
+  no new code.
+  (2) and (4) are **`never-ran`, NOT failed** — the e2e that would decide
+  them (`tests/e2e/real/sec-filings-by-ticker.real.spec.ts`) has never
+  reached its assertions. Recording them as failures would put a wrong
+  verdict against work that is probably correct; recording them as met
+  would be the F2 mistake in another costume. They are unmeasured.
+- **Condition audit, 2026-08-18 — (2) moves `never-ran` → FAILED, for a
+  cause that is not the corpus.** Order `sec-filings-close`, ring 2
+  (`runs/sec-filings-close-e2e/`, `DONE 15:35:15Z`). The e2e reached its
+  assertions for the first time in seven attempts.
+  - **Arming is PROVEN on the desktop.** `sec_facts: discovery complete
+    declared=1` → `coarse=Some("AUTHORITY_CLAIM")`, neither ever logged
+    on this surface before. Registering `SecFactsTool` (`655c6ab5`) is
+    the whole of the change; run 4 logged `not armed — no evidence
+    corpus declares authority handler="kq_stream"` at the same point.
+  - **(2) FAILED — no figure was answered.** The planner called the tool
+    with `concept="capital_expenditures|acquisitions|property_plant_equipment"`,
+    a pipe-alternation hedge. `resolve_concept` is a DECLARED two-step
+    resolver that never similarity-guesses (§18.3), so it normalized that
+    to a single id containing pipes, matched nothing, and refused
+    (`outcome="unmapped"`, `store_concepts=20`). The store DOES hold
+    `capital_expenditures` — the first alternative would have resolved
+    at step 1.
+  - **Two structural defects behind it, neither in scope for that order.**
+    (a) `concept` is a CLOSED set — the store's 20 ids, known at call
+    time — passed to the planner as free text with six examples and no
+    `enum`, while `mode` in the same schema IS an enum (ARCH §2 /
+    principle 9; §7.6 on asking a model to guarantee what a schema can
+    enforce). (b) `executor: step done success=true` for a step whose
+    tool REFUSED — an `Err` collapsed into a success-shaped value (§18.3,
+    smell table). The empty basis is why the provenance audit then
+    flagged all four numerals: with no tool datum in the basis,
+    "untraceable" is correct by construction, so the guard is right about
+    a symptom.
+- **Condition audit, 2026-08-18 (later) — (2) moves FAILED → MET.** Order
+  `sec-facts-concept-enum` + the planner change it was blocked on
+  (`format_param_hint` now renders a declared `enum` into the plan
+  prompt). Ring 0, `svrn chat ask` against `sec-cik0000320193`, n=3:
+  - The planner sent `concept="capital_expenditures"` — a bare canonical
+    id — **3/3**. No hedge, no label, no pipe alternation. The prior
+    failing inputs were a label (`"Payments to acquire property, plant
+    and equipment"`, deterministic 3/3) and the pipe hedge; both are gone.
+  - **A figure was answered, with basis and citation, 3/3 identical:**
+    `capital_expenditures = $12,715,000,000.00`, us-gaap
+    `PaymentsToAcquirePropertyPlantAndEquipment`, period
+    `2024-09-29..2025-09-27`, Form 10-K accession `0000320193-25-000079`,
+    plus a reproduce path to the companyfacts URL. Zero `refusal emitted`.
+  - **Still `preview`, because (4) is unmeasured.** (1) (2) (3) are now
+    MET; the F3 hand-read has never run. Any one unmet keeps it `preview`,
+    so this does not flip the row — it removes the blocker that made the
+    initiative close NOT-SHIPPABLE.
+  - Ring 2 (desktop e2e) NOT re-run: ring 0 proves the planner→tool→basis
+    path, and the desktop's own arming was already proven at `655c6ab5`.
+  - **NEW BLOCKER, same session — the REFUSAL half now fails, 2/2.** This
+    registry entry's flip condition wants an answered figure AND a refusal
+    naming what IS available; only the first is met. Asked for Apple's
+    **Mac** and then **iPhone** segment revenue, the planner sent
+    `concept="revenue"` both times and got consolidated $416,161M, which
+    the model narrated as "Apple Inc.'s Mac segment revenue in FY2025 was
+    $416,161 million". The enum closed the in-vocabulary hole and
+    SHARPENED this one: the schema tells the planner to "send the closest
+    single id and let the tool refuse", but that premise is false when the
+    closest id is in the store — so no refusal ever fires (§18.3, moved
+    from the resolver to the planner). The provenance guard withheld both
+    answers only INCIDENTALLY — on a rounding restatement (`$416.2
+    billion`) and on an accession fragment (`0000320`) — neither catch
+    about granularity. Detail + fix shape (compare the ask against the
+    resolved concept at the `ToolContext` seam, as M1b already does for
+    period): note `45b04cf5`. **Do not flip until this refuses.**
+  - **CLOSED, same session.** `SecRefusal::ScopeNotInSource` +
+    `scope_qualifier_in_question`, wired at the same seam as
+    `PeriodNotAsAsked` and gated on `store.coverage.consolidated_only`.
+    Re-run of the exact failing probe: the planner still sends
+    `concept="revenue"` (the enum correctly pushes it into the closed
+    set), and the tool now REFUSES — "this question asks for a
+    'segment'-level figure … the consolidated 'revenue' figure is NOT
+    that number and is not offered as a substitute", followed by all 20
+    typed concepts. Consolidated control unchanged: capex still answers
+    `$12,715,000,000.00`, zero refusals. So both halves of this entry's
+    flip condition — an answered figure AND a refusal naming what IS
+    available — now hold at ring 0.
+  - **RESIDUE, disclosed not hidden (§18.3).** The guard keys on
+    STRUCTURAL segment vocabulary (`segment`, `division`, `business unit`,
+    `product line`, `by region`, `geographic`, …), deliberately not on one
+    filer's product names, which would not transfer to the next company.
+    So "What was **Mac** revenue in FY2025?" — a product name with no
+    structural word — is NOT caught and would still answer consolidated.
+    Closing that needs the filer's own segment names, which companyfacts
+    does not carry. Scoped to the clear case exactly as the calendar check
+    was, by the same operator direction.
+- **Ring 2, run 6 (`runs/sec-filings-scope-e2e/`) — the figure LANDED on
+  the desktop, and the run is still RED.** Both are true and neither
+  cancels the other.
+  - **The substantive win, first time in nine attempts.** Installed BY
+    TICKER through the catalog, in `sovereign-desktop`, the turn returned
+    `capital_expenditures = $12,715,000,000.00 — us-gaap
+    PaymentsToAcquirePropertyPlantAndEquipment, period
+    2024-09-29..2025-09-27, Form 10-K accession 0000320193-25-000079`.
+    That is condition (2) on the surface that ships — the inference M2.5
+    existed to stop us making, now measured instead of inferred.
+  - **Why it is still red, and it is NOT the figure.** The spec aborted in
+    `assertTurnInvariants` (`invariants.ts:111`) on a TRANSPORT invariant:
+    `concat(message-chunk)` differs from `message-complete.full_text` by
+    exactly one trailing newline. It failed BEFORE reaching the figure
+    assertion at `:475`; the figure is visible only in the failure diff.
+    The describe block is serial, so **KO and the two-filer assertion
+    never ran** (skipped, not passed).
+  - **UNATTRIBUTED.** Neither order touches the answer-rendering or
+    streaming path — the enum changes a prompt, the scope guard is inert
+    here (the spec has no segment vocabulary, grepped). Leading hypothesis
+    is REVEALED-not-caused: this assertion had never executed on an
+    answered figure in eight prior attempts, so a pre-existing off-by-one
+    newline would surface exactly now. **That is a hypothesis, not a
+    finding** — proving it needs a control run on a stashed tree, which
+    was not spent.
+  - **Condition (4) therefore does NOT pass, and the row stays
+    `preview`.** A red e2e is not an F3 hand-read at its registered bar.
+- **Instrument gap this run exposed:** the answer TEXT is preserved
+  nowhere in `evidence/` — only the audit's violation list — so whether
+  `2023`/`2024` were prose years or claimed data CANNOT be decided from
+  this run's record. That question is left open rather than guessed.
+- **Known gap this does NOT cover:** segment figures. The acquirer
+  refuses segment concepts because companyfacts is consolidated-only;
+  the F2 honesty violation at `e8b9319b` is the same gap seen from the
+  answer end (prose-served Mac segment numbers). Flipping this row
+  does not settle F2.
+- **Review-by:** 2026-08-30. If slice 3 closes without the flip, this
+  row moves to Rejected naming which of the four conditions failed.
+
+### Batched claim verify (one prefill, N verdicts) — `SOVEREIGN_GATE_BATCH_VERIFY` (default **OFF**)
+- **Shipped dark:** 2026-08-14, order `audit-economy` D2 (approval
+  directive 086f6682; worker directive 233d3558). The family-joined
+  batched register (D1, fc58319d) plus the asymmetric-trust wiring:
+  batch "supported" clears without a per-claim call; "unsupported" and
+  parse gaps fall to the calibrated per-claim judge, so released flags
+  stay calibrated by construction.
+- **Evidence so far, cited:** replay recalibration on the pinned v2
+  set — catch 0.950 / clear 1.000 (vs the calibrated register's
+  0.900/0.750 on the same labels), ZERO (c)-class loss, bit-stable;
+  population sweep 3/407 flips, all hand-read (a)-class
+  (`audit_economy_d1_batched_recalibration_20260814.md`). Measured
+  batch support rate 53.7% => predicted per-claim term ~6.2s vs 11.1s
+  baseline.
+- **Flip condition (falsifiable):** (1) live smoke
+  (`runs/audit-economy-d2-smoke/`) batch+judges call-sum <=6.5s median
+  — the POST-DATA AMENDED bar per directive 6686251c (registered bar
+  was 5.5s; amended after D1 measured the 53.7% support rate; recorded
+  as amended everywhere it appears); (2) frozen-3 live arm 3/3;
+  (3) dropped-catch read zero unexplained (c)-class; (4) paired chaos
+  CONFAB-LEAK NEW<=OLD; (5) composed after-arm audit#1 median <=16.8s
+  with p90 <=90s re-judged. Promotion to default-on is OPERATOR-HELD.
+- **Settling plan item:** order `audit-economy` steps 4-6 (directive
+  233d3558) — the D2 smoke, the full live discipline, the composed
+  after-arm vs 688f8eba.
+- **Review-by:** 2026-08-28. If the order closes without the flip,
+  this row moves to Rejected with the curve that said no.
+
+### Declared attributes in the embed text — `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` (default **OFF**)
+- **Shipped dark:** 2026-09-02, order `ontology-v1-p5` item 5. A declared
+  atom's `attributes` map is appended to its embed text as
+  `\nattr: metal=silver; mint=Eoforwic; weight=1.21`, in
+  `atom_attributes_suffix` (`ingest/crates/corpus-engine/src/enrichment/atlas/context.rs`),
+  called from both renderers — `render_atom_entry` (the ANN backfill) and the
+  daemon bag loader (`atlas_context_loader.rs`), which forks the same
+  rendering. One decider, so the two paths cannot drift.
+- **Why it might matter:** the wessex-hoard probe asks "which coins are in
+  this catalogue, and what metal is each". The metal is on the atom, in a JSON
+  map the embedder never sees, so cosine has no handle on it. This is the
+  cheapest way to give it one.
+- **Evidence so far, cited:** NONE. Nothing has been measured. The
+  implementation is verified only by unit test
+  (`attribute_suffix_is_dark_and_key_sorted`, context.rs): the rendering is
+  deterministic and key-sorted, and the default renders nothing. The row exists
+  because the code shipped, not because a number said to ship it.
+- **Structurally inert where it must be:** an atom with an empty `attributes`
+  map renders byte-identically whichever way the knob is set. Every atom of
+  SEP, Wikipedia and Enron has an empty map (attributes are an ontology-v1
+  declared-type field), so those corpora are unaffected even if an operator
+  turns it on.
+- **Flip condition (falsifiable), pre-registered:** (1) numismatics
+  attribute questions score ≥1 hit with it on that they miss with it off;
+  AND (2) the `--quick` sep + wikipedia HARD lanes are unchanged across TWO
+  runs, not one (§18.5). Either half failing keeps it off.
+- **Known cost if flipped:** the cache signature does NOT key on this knob, so
+  flipping it makes every existing embedding cache stale WITHOUT invalidating
+  it. Whoever flips it must force a re-embed, or fold the knob into
+  `AtlasContextFilter::signature()` first. Recorded here because it is the
+  trap, not a detail.
+- **Review-by:** 2026-10-01. If nothing has measured it by then, this row
+  moves to Rejected and the code comes out.
+
+### Declared claim types in the atlas bag — `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS` (default **OFF**)
+- **Shipped dark:** 2026-09-02, order `ontology-v1-p5` item 5. New
+  `AtlasContextFilter.include_declared_claim_types`
+  (`sovereign-tools/src/atlas_context_manager.rs`), read from the env in
+  `default()` and baked into `signature()`. `load_atlas_context` admits a Claim
+  atom when its `claim_kind` names one of the corpus's declared claim types.
+- **Why it might matter:** on a declared corpus the claim is where the
+  substance is — "Halstead dates C1 to 685/690 on a die-link" is an
+  `attribution` Claim, and the entity bag cannot carry it. The existing
+  `SOVEREIGN_ATLAS_INCLUDE_CLAIMS` is the corpus-wide switch and multiplies the
+  embed count on wiki/SEP-scale atlases; this one admits only the author's own
+  declared types.
+- **Evidence so far, cited:** NONE. Verified by unit test only
+  (`declared_claim_types_are_dark_and_keyed_into_the_signature`,
+  atlas_context_manager.rs): default off, and the signature changes when it
+  flips so a bag built without declared claims is not served after the flip.
+- **Structurally inert where it must be:** the admission guard reads the
+  corpus's declared claim types from `atlas/ontology.json`, filtered on
+  `has_declarations()`. That list is empty for every undeclared corpus, so the
+  guard admits nothing new there however the knob is set.
+- **Flip condition (falsifiable), pre-registered:** (1) the governance-qa gate
+  holds; AND (2) the wessex-hoard "who disputes the 780s dating" question hits
+  with it on and misses with it off. Both, or it stays off.
+- **Review-by:** 2026-10-01. Same terms as the row above.
+
+### TOMBSTONE 1/2 — the longform REWRITE pass — `SOVEREIGN_GATE_LONGFORM_REPAIR` (default **OFF**)
+- **Shipped tombstoned:** 2026-08-14, order `gate-tombstone-ladder`
+  (Phase 4 of `svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md`),
+  operator directive `c256c16f`. **This is a tombstone, not a
+  delete** (§9.0): the code stays, the path stops executing on the
+  default configuration, and the switch that re-runs it is this row.
+- **What stopped executing:** the repair pass on the longform path —
+  surgical span-edits on the fast slot, and its full-re-synthesis
+  fallback. A draft whose audit found failures is now released with
+  those claims marked instead of re-written.
+- **Why the grounding function is undiminished:** §3.3 G2 — marking
+  discharges G2 completely; the rewrite discharged a *presentation*
+  preference, at wall cost and at honesty cost (a rewritten answer no
+  longer shows where it was thin). The mark is a `failed_once` holding
+  in a `mixed`-verdict epistemic ledger, which ships and renders on the
+  desktop today (D0 inventory, note `e1e9e7a3`: verified live on 9 of
+  17 captured desktop turns, zero exceptions).
+- **Measured expectation, cited not promised:** 5.4s/turn — the
+  mechanism's price after the Phase 2 cap fix (§7.3.1), *not* the 43.2s
+  the plan's first draft booked.
+- **Flip condition (re-arm):** `SOVEREIGN_GATE_LONGFORM_REPAIR=1`
+  re-arms this and Tombstone 2/2 together. Re-arm if the pre-registered
+  kill **K2** fires — the chaos gate regresses hallucination beyond lane
+  tolerance, in particular the 2026-07-17 CONFAB-LEAK probe — or if the
+  operator judges the marked answer unacceptable to read
+  (`E-operator-holdout` is terminal). Under tombstone-then-delete that
+  retreat is a flag flip, not a revert, which is why the ratchet was
+  retargeted.
+- **Evidence bearing on "marking discharges G2 completely", 2026-09-09
+  — for ONE class, and NOT on the default configuration.** The
+  value-presence veto reached this ladder that day (commit
+  `5d0dca076`); it is refusal-only and deterministic, and a claim it
+  refuses asserts a specific present in NO passage the claim was judged
+  against. Traced live on `absent-embassy-country` with
+  `SOVEREIGN_LONGFORM_CHARS=0` forcing the per-claim ladder:
+  `value_presence … decision=claim_vetoed_absent`, then
+  `repair_tombstoned`, then release as `annotated_marked`. The released
+  text led with "Mr. Vladimir is employed by the **Russian** embassy in
+  London" — a country Conrad never names — and the chaos lane's own
+  scorer classified the turn `confab_leaked`, honesty-when-absent
+  0.50 (RED-LINE 2 FAIL), wrong answers reaching the reader 1.
+  So for a VETO-REFUSED claim, marking does not discharge the honesty
+  function the way it does for a claim the judge merely could not
+  support: the mark rides under the fabrication rather than instead of
+  it, which is the same laundering-by-caveat this session removed from
+  the value extractor earlier the same day.
+  **This is not K2 firing.** K2 is the chaos gate regressing on the
+  DEFAULT configuration, and it has not: the same 4-probe subset on the
+  default pivot the same hour returned RED-LINE 1 and 2 both PASS,
+  confab-leaked 0, wrong answers reaching the reader 0. The forced arm
+  is an instrument, not production, and n=1. What it establishes is that
+  the premise above is class-dependent, which is the operator's call to
+  weigh at the review below — not a flag this seat flips.
+- **Settling plan item:** Phase 5, the single deletion pass, triggered
+  when these tombstones have held across the window below, `E-wall-time`
+  and `E-variance` have readings, and the operator says the new stack is
+  right.
+- **Review-by: 2026-09-13** (30 days). Per **K8**: if this path is still
+  tombstoned-but-undeleted past that date with no dated Phase 5 trigger,
+  tombstone-then-delete has collapsed into "nothing is deleted until H0
+  graduates" wearing a new hat, `E-tombstone-ledger` fails, and the
+  deletion pass is scheduled by the seat rather than waited for.
+
+### TOMBSTONE 2/2 — AUDIT #2, the re-audit — `SOVEREIGN_GATE_LONGFORM_REPAIR` (default **OFF**)
+- **Shipped tombstoned:** 2026-08-14, same order, same commit, same
+  knob as Tombstone 1/2. It has **its own row** because it is its own
+  path with its own cost, and a ledger that folded it into the rewrite's
+  row would hide the larger of the two numbers.
+- **What stopped executing:** the full re-audit of repaired text — claim
+  re-extraction and the per-claim judge fan-out over prose the rewrite
+  had just produced.
+- **Why it needs no separate flip condition:** audit #2's only input is
+  the rewrite's output (`StageCause::RewriteProducedNewProse`). With the
+  rewrite tombstoned there is no new prose to audit, so this path has
+  nothing to run on. It is tombstoned *by consequence*, and it re-arms
+  in lockstep.
+- **Why there is deliberately NOT a second knob** — the one design
+  decision in this pair worth reading twice. A separate re-audit flag
+  would make **"rewrite ON, re-audit OFF"** reachable. That is precisely
+  the configuration attempted on 2026-07-17, which shipped unaudited
+  regenerated prose and leaked a GK-caveated fabrication (CONFAB-LEAKED
+  0→1); it was reverted and §7.4 forbids re-proposing it. One switch
+  keeps the unsafe combination unreachable **by construction** rather
+  than by anyone remembering (ARCH §7, §10.6). A knob whose only safe
+  value is one value is not a knob; it is a trap.
+- **Measured expectation, cited not promised:** 50.9s on the operator's
+  turn — the larger half of this phase, and the reason the pair is worth
+  the two rows.
+- **Settling plan item / Review-by:** as Tombstone 1/2 — Phase 5,
+  **2026-09-13**.
+
+### ~~H1 tau overrides — `SOVEREIGN_NG_TAU_ABSTAIN` / `SOVEREIGN_NG_TAU_ANSWER`~~ — RETIRED 2026-08-10
+- **Retired the same day they shipped, by their own written clause.**
+  The row's flip condition said these "do not outlive Step 3's
+  conclusion" and named branch (b) — per-corpus thresholding recorded
+  failed — as one of the two settled end states. D5 returned exactly
+  that: 0.65/0.65 against a 0.71 bar, with the margins interleaved
+  (present m=1.19 *below* absent m=1.31), so no operating point on this
+  signal separates the two classes (`step3/d5_verdict.json`, note
+  `d6911acb`).
+- **Executed:** order `native-grounding-p1-desktop`, per the parity
+  plan's P1 Deletes ledger (`NATIVE_GROUNDING_PARITY_PLAN.md` §7).
+  Deleted: both env reads, `apply_tau_overrides` and its `TauSource`
+  enum, the override test, and both `quality/env-flags.toml` rows.
+  `effective_thresholds()` now returns the committed calibration and
+  cannot return anything else — one ruler, structurally, and a test
+  asserts the two env names appear nowhere in the module.
+- **The finding survives the knobs**, which is the point of retiring
+  them here rather than silently: per-corpus thresholding on the
+  reranker margin is closed by measurement, not by opinion. Re-opening
+  it needs a new signal, not a new threshold.
+- **Nothing to review by:** there is no flag left to review.
+
+### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
+- **Shipped:** 2026-08-07, default-on, with the developer handover.
+- **Why it is in this ledger at all** — it is not dark, it is the
+  opposite: a default-ON **local write** the user did not ask for. The
+  ledger's job here is to hold the boundary rather than the flip. The
+  boundary: recording locally is on, **sending is never** — there is no
+  network path out of `types::next_edit_journal`, and `svrn journal
+  bundle` writes a file plus a manifest of every field in it so the
+  developer decides what leaves the machine after reading what is in
+  it. If a future push adds a submit path, this row is the review that
+  has to happen first.
+- **Scope of this row:** the JOURNAL LAYER, not just next-edit.
+  `sovereign-contracts/src/types/journal.rs` is feature-agnostic and
+  next-edit is its first stream; a second stream inherits this row's
+  boundary rather than minting its own, and `SOVEREIGN_JOURNAL=off`
+  covers every stream including ones added later.
+- **Second stream (2026-08-07): `grounding`** — one decision line per
+  gated answer (verdict, score, tau, action, `(corpus, chunk-id)`
+  evidence handles; never claim/answer/chunk text — canary
+  `no_content_bearing_field_can_reach_a_line`). It is the VERIFIER_V0.md
+  §6.1 phase-0 collector: the training/calibration substrate for the
+  deferred second-judge slot, gathered from the incumbent-only gate that
+  16 GB nodes actually run. Its own settle condition: after ~2 weeks,
+  `svrn journal grounding stats` shows an evidence-handle coverage high
+  enough (≥80% of chunks resolvable) that a mining pass can re-judge
+  what the gate judged — below that, the chunk-target plumbing on the
+  non-corpus surfaces gets fixed or the field is documented as
+  corpus-lanes-only, rather than left silently bounding every future
+  mining pass. Off switch: `SOVEREIGN_GROUNDING_JOURNAL` /
+  `svrn journal grounding off`.
+- **What it does:** one metadata-only record per `POST
+  /v1/edit_predictions` at `~/.svrnmesh/journal/next-edit-<date>.jsonl`
+  (14-day retention, 8 MiB/day cap), plus one line per outcome the
+  editor reports (`accepted` | `dismissed` | `diverged` |
+  `superseded`). Metadata-only is structural, not a convention:
+  `NextEditEpisode` has no free-form or `serde_json::Value` field, so
+  there is no channel a document, a region, a needle, a rewrite or a
+  file path could travel through. Two tests hold it —
+  `no_code_bearing_field_can_reach_a_line` (contracts) and
+  `debug_extraction_carries_no_code` (commonwealth-api) — each feeding
+  a canary through every field a caller might smuggle it in.
+- **Why default-on:** the terminal milestone is a small group of Go and
+  TS/React developers using this and their experience returning as
+  evidence. A journal nobody switched on returns nothing, and the
+  alternative to a local record is asking people what they remember.
+- **What settles it (falsifiable):** after the first cohort week, `svrn
+  journal stats` on at least 3 machines reports ≥20 judged episodes
+  each. Then either (a) the acceptance rate is actionable and the
+  journal has earned its default, or (b) coverage is so low the outcome
+  reporting is not working, and the extension half gets fixed or
+  removed rather than left recording into a number nobody can use.
+- **Cost of on:** one ~600-byte append per prediction, off-thread, and
+  a directory the user did not create. Unquantified: nobody has
+  measured the append against the p50 (1.2 s) — expected to be
+  invisible, and it cannot fail a request by construction (`record`
+  drops its join handle).
+- **Review by:** 2026-09-05. If no cohort data exists by then, the
+  honest move is to say the handover did not happen, not to extend the
+  date.
+- **Decision:** note `09599af1` (outcome telemetry: four-way and
+  invisible; reverses an earlier daemon-side-journal-only call in the
+  same session).
+
+
+
+### Corpus relevance prefilter — `SOVEREIGN_CORPUS_PREFILTER_TOPK` (unset)
+- **Shipped:** dark, pre-2026-08; row added 2026-08-05 on first real
+  measurement.
+- **What it does:** on an UNSCOPED turn, prunes the eligible corpus set
+  to the top-K by query↔centroid cosine before the fan-out.
+- **Proof so far:** measured at `K=5` on
+  `bench sep/summarize --prod-pipeline` (14 questions, 420 chunks,
+  deterministic): off-topic evidence 11.0% → **10.2%**, no change to
+  fact recall (0.7500 / 0.7833). The centroid ranking is genuinely
+  discriminating — sep 0.59 and wikipedia 0.59 against
+  conversations-anthropic 0.39 — so the mechanism works.
+- **Why it under-delivers, and this is the actionable part:** the trace
+  shows `kept=9` at `top_k=5` — five corpora earned a slot on relevance
+  and **four more were admitted by the "always keep `personal_scope`
+  regardless of score" carve-out**. Those four are the entire residual
+  (31 of 43 off-topic chunks). The prefilter cannot fix what it is
+  required to exempt.
+- **Flip condition:** a run on a bank that contains BOTH reference-corpus
+  and personal-corpus questions shows top-K pruning holding personal
+  recall flat while cutting off-topic share. Flipping it on today's
+  evidence would be tuning against a bank that can only see one side.
+- **Settled by:** the personal-corpus bench bank (see
+  `svrn/docs/RETRIEVAL_AUDIT_2026-08-04.md` §D1-residual) — unowned. If no
+  tranche claims that bank by the review date, kill this row rather than
+  re-dating it a third time.
+- **Review by:** 2026-09-05.
+- **Notes:** `8758759a`, `c9aa59c6`.
+- **2026-08-13 (order `mesh-scale-t1-retrieval`) — a SECOND reason it was
+  not flippable, now removed.** The mesh-scale red baseline measured the
+  prefilter running **once per fan-out, 4× per turn**, each pass linear in
+  corpus count (~0.73 s per 100 corpora per pass). At n=1000 turning it ON
+  made the turn 35% SLOWER — 22.1-22.4 s → 29.7-30.6 s — so on a large
+  install it was a net latency REGRESSION regardless of its recall effect
+  (`MESH_SCALE_100_USERS_1000_CORPORA.md` §8.3.4). `SOVEREIGN_EXPANSION_SCOPE`
+  collapses it to one pass per turn structurally (a scoped fan-out skips the
+  prefilter), which removes the multiplier. The flip condition above is
+  unchanged and still governs — this note only records that the cost
+  objection is no longer one of the blockers. The var is now declared in
+  `quality/env-flags.toml` and off the env-gate waiver baseline.
+
+### Expansion fan-out scope — `SOVEREIGN_EXPANSION_SCOPE` → **GRADUATED 2026-08-13, default ON**
+- **Shipped:** dark 2026-08-13, order `mesh-scale-t1-retrieval`; flipped to
+  default ON the same day on verdict 94f01eb2. Both events in this row.
+- **What it does:** scopes every expansion fan-out — entity boost, query
+  decomp, title expand, demand-plan fan-out, graph-neighbor, and the two
+  lanes SPAWNED at `ppr_struct_spawn` (PPR structural + entity obligations) —
+  to the top `SOVEREIGN_EXPANSION_SCOPE_CORPORA` (=8) CORPORA of the MAIN
+  fan-out, ranked by each corpus's best chunk under
+  `reweight_by_query_relevance`. Decided once in `step_main_retrieval_mesh`
+  and threaded through the single accessor
+  `PipelineState::expansion_corpora()`. Bounded above by 8 corpora however
+  many are installed. Side effect, structural and free: a scoped fan-out skips
+  the corpus prefilter, so that runs once per turn instead of once per
+  fan-out.
+- **The red it attacks:** per-turn retrieval wall LINEAR in corpus count at
+  **2.19 s per 100 corpora** (5-point sweep, intercept 0.38 s, within 5% at
+  every point), with a fixed 4 fan-outs/turn — 1 KnowledgeQuery + 3
+  EntityBoost, the latter ~62% of the fan-out wall at n=1000
+  (`MESH_SCALE_100_USERS_1000_CORPORA.md` §8.3.3).
+- **Proof:** `MESH_SCALE_100_USERS_1000_CORPORA.md` §8.4. Slope **2.183 →
+  0.849 s per 100 corpora, a 2.57× cut**, on the red's own 5-point harness;
+  the three EntityBoost passes fall 13,346 → 106 ms at n=1000. The flag-OFF
+  arm was re-measured on every rig and binary revision and reproduced the red
+  six times (2.176-2.193 vs 2.19) — the instrument was validated before any
+  green number was read. Quality: SEP-at-rig anchor **42/66 + 137/158,
+  byte-identical**, at 190.1 s vs 321.0 s (41% wall cut); sep and cross-corpus
+  banks identical; wikipedia sources identical, −1 fact (reproduced).
+- **Also carries the scale-vs-recall dial** `SOVEREIGN_EXPANSION_SCOPE_CORPORA`
+  (default 8). Two earlier producers were measured WRONG and are recorded in
+  §8.4.1 — "corpora that produced hits" selected 50 of 50 (a no-op), and
+  raw-score ranking on a chunk budget scoped 14 of 20 wikipedia questions to
+  `sf-assessor-roll` alone. Ranking on `reweight_by_query_relevance` is what
+  works.
+- **Known limit, named not silent:** the sweep rig's 1000 corpora are `cp -r`
+  clones of ONE index, so all of them score identically and the top-8
+  selection is tie-arbitrary there. The rig can prove the BOUND (≤8 corpora
+  searched per expansion regardless of n) but not selection QUALITY. Quality is
+  carried by the SEP-at-rig anchor (one real corpus among stubs — a real
+  relevance gradient) and the bank battery on real corpora. A heterogeneous rig
+  is banked as a Tier-2 improvement.
+- **Flip condition (as written when the row was dark) — MET, clause by clause,
+  2026-08-13:**
+  1. *Slope ≤ ~0.55 s per 100 corpora* — **met against the RE-CUT bar of
+     ≤~0.9, not the original 0.55.** Measured **0.849**. The original 0.55 was
+     unreachable by arithmetic, not by effort: it was the AVERAGE over four
+     unequal fan-outs, and the one fan-out this order does not scope (the main
+     KnowledgeQuery pass) costs **0.84 s/100 on its own**. A turn cannot come
+     in under the cost of the fan-out it must always run. The re-cut is
+     recorded in §8.4 with that derivation, and it is a SUBSTITUTED bar — named
+     here rather than quietly satisfied.
+  2. *SEP-at-rig anchor holds 42/66 + 137/158* — **met exactly, byte-identical**,
+     at 190.1 s vs 321.0 s (41% wall cut).
+  3. *SEP 21-q, wikipedia, cross-corpus banks inside their noise bands* —
+     **met**: sep and cross-corpus identical, wikipedia sources identical with
+     −1 fact of 130 (reproduced, so real but immaterial).
+  4. *`sovereign-ci-bench.sh --quick` green on `retrieval-prod`* — **met on the
+     lane, SUBSTITUTED at the suite level.** Both `retrieval-prod` lanes PASSED
+     (HARD, feature ON, against flag-OFF baselines), as did the other three
+     HARD retrieval/enrichment lanes. The suite-level aggregate VERDICT was
+     **never produced** — the run died during the advisory `chaos-monkey` lane
+     when its harness wrapper was reaped. Per-lane evidence was accepted in
+     lieu of the aggregate by verdict 94f01eb2. One unrelated HARD lane,
+     `routing`, failed with 3 regressions; it runs `bench all --routing-only`,
+     which drives ONLY the intent classifier (no retrieval, no synthesis), so
+     this feature's code path is never entered. That failure predates and is
+     independent of this row and still wants an owner.
+- **Settled by:** order `mesh-scale-t1-retrieval`; landing verdict **94f01eb2**,
+  operator direction "approve with the flip", 2026-08-13.
+- **Status: GRADUATED to default ON, 2026-08-13.** The flag survives as the
+  OFF-switch (`=0/false/off/no`); `SOVEREIGN_EXPANSION_SCOPE_CORPORA` stays at
+  8. The corpus prefilter (`SOVEREIGN_CORPUS_PREFILTER_TOPK`) stays UNSET on
+  the recommendation in §8.4.3 — even hoisted to one pass per turn it is a net
+  loss (1.828 s/100 with it against 0.849 without), because its own probe is
+  O(n).
+- **Review by:** n/a — graduated. Row retained here rather than moved, because
+  its flip-condition audit above is the evidence for the default and belongs
+  next to it.
+
+### Multi-quote citation contract (`SOVEREIGN_CITATION_MULTIQUOTE`) → **GRADUATED 2026-08-05, default ON**
+- **Moved to GRADUATED the same day it shipped dark.** The row stays
+  here rather than in the Graduated section only because its whole
+  argument is the DARK row below it; read the two together. Flip
+  landed in `grounding/config.rs::citation_multiquote_enabled`.
+- **What settled it** (matched control — same HEAD, same day, same
+  local topology, `saltgrass_compound` n=7, **0 extraction failures in
+  both arms**, `=1` vs `=0`):
+
+  | metric | `=0` (legacy) | `=1` (shipped) |
+  |---|---|---|
+  | citation releases | 0 | **3** |
+  | competence-when-present | 0.14 (1/7 correct) | **0.43 (3/7)** |
+  | misses attributed to gate | 4 | **2** |
+  | blatant-confab-rate | 0.00 | **0.00** |
+
+  Both halves of the flip condition are met: releases > 0, and confab
+  did not regress. **The known risk did not materialise** — it did not
+  trade a full correct legacy answer for a partial one. It RECOVERED
+  two turns the legacy ladder was abstaining away
+  (`compound-sentence-then-inn`, `compound-constable-then-finder`:
+  Abstained → `citation_grounded`), which is the "kills 3-4 correct
+  drafts per run" cost the dark row predicted, now measured at 4 → 2.
+- **Caveat carried forward, not hidden:** n=7 on one bank. The
+  competence delta is 1/7 → 3/7 — direction is unambiguous and the
+  mechanism is understood, but this is not a CI-separated result and
+  the n≈20 compound bank should re-confirm it.
+- **Shipped:** 2026-08-05, dark.
+- **Proof so far:** the defect is measured and deterministic, the cure
+  is not yet. Quote-first citation grounding releases on **0 of 14**
+  compound probes (chaos-monkey `saltgrass_compound`, n=7 × 2
+  independent runs, 2026-08-04): every probe ends `ANSWER: NONE`
+  because the prompt demands the ONE sentence answering the whole
+  question, and a two-part question has none. In
+  `compound-inn-and-innkeeper` the model copied the correct sentence
+  for part one and still answered NONE. Consequence: `cites_a_source`
+  is 0/7 structurally, and all 14 fall through to the legacy ladder,
+  which then kills 3–4 correct drafts per run.
+- **Flip condition:** an arm-C chaos + situated run vs the arm-A
+  baseline shows citation releases > 0 on the compound bank AND no
+  regression in blatant-confab-rate (currently 0.00) — i.e. the
+  partial releases are grounded, not padded. Overlapping CIs on the
+  situated dimensions do NOT settle it either way at n=7; the bank
+  grows first (see below).
+- **Settled by:** P4 arm C (this initiative's A/B), then the n≈20
+  compound bank.
+- **Known risk this must clear:** unlike `SOVEREIGN_CITATION_BROAD`
+  this is *not* purely additive — it converts a legacy-ladder turn
+  into a partial citation release, so it could in principle replace a
+  full correct legacy answer with a grounded-half-plus-named-gap. The
+  arm measures exactly that trade.
+- **Review by:** 2026-09-05.
+
+
+### Next-edit consult gates `fanout_insert` + `param_insert` (detected, declined)
+- **Shipped:** 2026-08-06, dark — `next_edit_model::should_consult`
+  returns `Consult::No { skipped: "fanout_insert_deferred" }` /
+  `"param_insert_deferred"`. Detection is unchanged, so both stay
+  visible in the admission table; only the consult is withheld. Joins
+  `casing_deferred`, deferred the same way in v1.
+- **Why:** scored **per admitting gate** rather than per bank shape on
+  the golden set (`gym/next-edit/golden/`, 1,098 cases, note
+  `2c22ec10`), the three consult reasons are three different bets:
+  `multiline_fanout` 17 useful / 1 wrong (94.4%), `fanout_insert` 2/17
+  (10.5%), `param_insert` 2/6 (25.0%). `fanout_insert` was also the
+  path by which 7 `neg_literal_trap` wrong fires reached the model.
+- **Cost of off:** 4 useful edits, measured — paired, deterministic
+  pipeline, same 1,098 cases. Bought 23 fewer wrong fires; all 27
+  changed cases moved one way, none regressed. System goes 36.0%
+  useful / 21.0% wrong-fire → 35.4% / 15.2%, which is a LOWER
+  wrong-fire than disabling the model lane entirely (33.1% / 15.8%).
+  Model-lane p95 1748ms → 9ms.
+- **Flip condition:** a candidate model scores ≥60% useful on the
+  `fanout_insert`-admitted slice (n=41) and `param_insert`-admitted
+  slice (n=19) of the golden set, with ≤1 wrong fire on the negatives
+  each gate admits. Re-measure with `--force-consult` + `compare_runs.py`;
+  the admission counts those gates still log are the denominator.
+- **Settled by:** the next bakeoff arm scored on the golden set —
+  zeta-2 and instinct have never been run against it. Until one is,
+  this is a property of sweep-1.5b only.
+- **Review by:** 2026-09-06.
+
+### Next-edit symbol lane — call-site NAVIGATION on, edit proposals withheld
+- **Shipped:** 2026-08-28, ON for Rust in the first-party extension
+  (`sovereign-fim.nextEdit.symbolLane`, default `true`); the daemon's
+  `symbol_lane` request field defaults `false`, so any other client is
+  unaffected until it asks. Rust only because it is the sole language
+  the SCIP graph indexes — `TRIGGER_LANGUAGES` in
+  `code/crates/code-next-edit/src/next_edit_symbols.rs`.
+- **What it does:** when the cursor is in a function's parameter list
+  AND that list differs from the last save, it names that function's
+  call sites — `path`, `line`, `col`, preview — as a jump list
+  (`navigation.sites`). A third induction source beside the rule and
+  model lanes: semantic consequence from the SCIP graph, actionable on
+  the FIRST edit, reaching the `signature_fanout` shape the rule lane
+  is silent on by construction (3.3% useful-fire over 90 golden cases).
+- **What is deliberately DARK: the edit text.** The lane proposes no
+  `new_text` at any site, and this is the measured posture rather than
+  a staging choice. On the index-aligned bank (`gym/next-edit/aligned/`,
+  M1a 2026-08-28), restricted to the shape it fires on — an existing
+  function whose parameter list changed, 34 episodes over 13
+  independent commits — site RECALL is **95.8%**, cluster-bootstrap 95%
+  CI **[87.0, 100.0]**, clear of the pre-registered 80% bar. Site
+  PRECISION is **69.7%**, CI **[34.4, 91.5]**: the 60% bar lies INSIDE
+  the interval, so precision is a **could-not-judge**, not a pass
+  (ARCH §18.1). A jump list's bar is recall — a wrong entry costs a
+  keystroke — while proposing text would be spending a precision
+  number nobody has.
+- **Value of on:** the rule lane serves 3.3% of `signature_fanout`
+  cases today. 45 of 90 such golden cases have a held-out truth that is
+  literally a call site gaining an argument, 89% of them in indexable
+  languages, against 3 served.
+- **Flip condition (for EDIT proposals, not for the jump list):** site
+  precision's CI lower bound clears 60% on the target shape. That needs
+  more independent commits, not a better filter — M1a measured ten
+  candidate filters and none reached 60% precision while holding 80%
+  recall. The named path is widening the harvest by mapping call-site
+  lines through intervening diffs instead of requiring byte-identity
+  with HEAD, which also recovers the 731 sites currently dropped as
+  unaligned.
+- **Not covered, on the record:** Rust only; the `is_call_site` filter
+  is unconditional because it measured free (105 junk occurrences
+  removed, **zero** true sites lost — all were `use` imports and
+  `pub use` re-export lists, since `refs` is an occurrence table whose
+  `ref_kind` is uniformly `direct` across 1.36M rows).
+- **Degrades, and says so:** no index ⇒ `graph_unavailable`, a normal
+  200 with every other lane untouched, plus a once-per-process `WARN`
+  naming `svrn init`. Announced at three surfaces because
+  silence is what made it invisible: `setup --fim` offers the command
+  (never runs it — indexing takes minutes), `doctor`'s `scip_indexed`
+  check names the lane and repairs it, and the editor reports the real
+  reason instead of "edit a parameter list". Bounded at 250 ms
+  (`SYMBOL_TIMEOUT_MS`) so a locked graph cannot stall a keystroke.
+- **Review by:** 2026-09-28.
+
+### Next-edit syntax site filter — dark for TypeScript, JavaScript, Python
+- **Shipped:** 2026-08-06 (`5a962765`), ON for Go and Rust only.
+  `next_edit_syntax::PROVEN_LANGUAGES = ["rust", "go"]`. The grammars
+  for typescript / tsx / javascript / python are compiled in and the
+  parse works — the filter is withheld, not unavailable.
+- **What it does:** parses the live buffer and keeps only candidate
+  sites whose node-kind chain matches a site the user ALREADY edited
+  (the occurrences of the rule's `replace`). Targets the largest
+  measured defect in the feature: only ~34% of proposed hunks were
+  edits the author actually made.
+- **Why dark for TS:** it measured WORSE there. On the React/TS bank
+  (`gym/next-edit/golden/cases.react-ts.jsonl.gz`) useful-fire
+  52.0% → **41.2%** and wrong-fire 6.2% → **9.7%**, with `.ts` wrong
+  fires going 2 → 4. Mechanism understood, not mysterious: emptying the
+  literal lane's site set hands the case to the pair fallback
+  (`next_edit::predict_filtered`), whose rule can be wrong. Per-hunk the
+  trade is also worst on TS — 6.75 junk removed per good hunk lost,
+  against 11.5:1 on Go and 9.8:1 on Rust.
+- **Value of on, where it is on:** main bank hunk-precision
+  33.9% → 38.6%, wrong-fire 12.8% → 12.6%; 441 junk hunks removed per
+  45 good (9.8:1). The React/TS bank is bit-for-bit unchanged, which is
+  the whitelist doing its job.
+- **Flip condition (per language, not as a set):** on a bank of ≥150
+  positives in that language, adding the id must (a) raise
+  `hunk-precision` by ≥5 points, (b) not raise `wrong-fire`, and (c)
+  not cost more than 2 points of `useful-fire`. TypeScript today fails
+  (b) and (c) outright.
+- **Settled by:** the pair-fallback interaction is the thing to fix
+  first — if a filtered-empty site set stopped falling through to the
+  pair kinds, the TS wrong-fire rise likely disappears and TS becomes
+  re-measurable. That is a code change, not a threshold sweep.
+- **Note:** `e8ecaef7` (frontier + per-language trade), `de3003cc`
+  (first-user languages), `e0d16d45` (what syntax cannot fix).
+- **Review by:** 2026-09-06. **First users are Go + React TS**, so a
+  capability that is dark on half their codebase is not a quiet row —
+  raise it.
+
+### Next-edit fallback onto the resident chat model — `SOVEREIGN_NEXT_EDIT_FALLBACK` (off)
+- **Shipped:** 2026-08-07, dark —
+  `EmbeddedLlamaCpp::install_fallback_next_edit_slot`, armed from
+  `sovereign-daemon/src/build/inference.rs` only when the env var is `1`/`true`
+  AND no `[models.edit]` is configured. An explicit `[models.edit]`
+  always wins; the fallback never overwrites an existing arrangement.
+- **What it does:** serves the next-edit lane
+  (`POST /v1/edit_predictions`) off the already-resident fast slot
+  (`ModelsSection::fast_path()` — explicit `[models].fast` when set,
+  primary otherwise) for users who configured no editing model at all.
+  Marks the slot `degraded: true`, which drives the one-sentence
+  `advice` nudge on `/status.inference.edit`. Zero extra GB, zero
+  download, and no editing keystroke can trigger a model load because
+  those weights are resident either way.
+- **Why it is plausible:** the two-lane split (`EditSlotInfo`) made it
+  *possible* — next-edit needs only a prompt dialect, not FIM marker
+  tokens. Measured 2026-08-07 with the consult gate forced open: the
+  35B-A3B chat primary on `region_instruct` with thinking off scored
+  **21/30 useful, 0 wrong edits, p95 2576 ms**, against the 1.5B
+  next-edit specialist's **19/30, 0 wrong, p95 828 ms**. A 2-case
+  spread at n=30 is inside the noise, so on a *primary-class* model
+  the specialist's real win is latency, not correctness. For the user
+  with no edit model the alternative is not a worse suggestion — it is
+  no feature.
+- **The number that actually governs this flag, and it did NOT hold
+  (2026-08-07).** The fallback serves off `fast_path()`, so on any box
+  with an explicit `[models].fast` the answering model is the FAST
+  slot, not the primary. Run end to end through the **production
+  daemon** (not a standalone llama-server, unlike the arms above) with
+  the flag armed, `[models].fast = Qwopus3.5-4B-v3-MTP-Q8_0`, same
+  60-case bank, same forced gate:
+
+  | gate | fast slot (4B) | 35B primary | sweep-1.5b |
+  |---|---|---|---|
+  | GM4 usefulness | **FAIL 14/30** | PASS 21/30 | PASS 19/30 |
+  | GM3 wrong-edit | PASS 0/17 fires | PASS 0/25 | PASS 0/26 |
+  | GM5 p95 | PASS 2194 ms | 2576 ms | 828 ms |
+  | GM1 malformed | PASS 0 | PASS 0 | PASS 0 |
+
+  `next_edit_gen_eval.py`'s own verdict line: **`stay opt-in`**. So the
+  21/30 does **not** transfer down a model class, and the fallback is
+  not meaningfully faster either (2194 vs 2576 ms — a 4B on this lane
+  is no cheaper than a 35B-A3B MoE, because ~3B active is the same
+  decode cost). It stays safe (0 wrong edits), which is why the honest
+  posture is opt-in rather than removed.
+- **Cost of off:** every user without a `[models.edit]` section gets
+  no next-edit model lane. Unquantified: nobody has counted how many
+  installs that is. The rule lane is unaffected either way.
+- **Why not default-on already:** the measurement above is **one run
+  of one model on one bank**, and it is the wrong bank for this
+  question — `gym/next-edit/gen/` is 60 hand-curated generalization
+  cases with the gate forced open, not the 1,098-case golden set the
+  shipped model lane is actually gated on (ARCH §18.4/§18.5). Turning
+  this on also silently changes which model answers on machines whose
+  primary is arbitrary; the p95 of 2576 ms is already 1.4x the
+  shipped lane's 1748 ms, and a slower or thinking-locked primary
+  would be worse.
+- **Flip condition:** the fast-slot fallback scores, on
+  `gym/next-edit/golden/` (1,098 cases) via `examples/next_edit_score`
+  against the operator's resident primary, (a) wrong-fire **no higher**
+  than the shipped model lane's 15.2%, and (b) p95 **≤6 s** (the GM5
+  bar). Quality parity is NOT required — "better than nothing" is the
+  claim, and the useful-fire number only has to beat rule-lane-only.
+- **Settled by:** a golden-set arm in the next-edit bakeoff
+  (`bench/lanes/next-edit-bakeoff/arms.toml`, the Phase 1
+  `chat-primary-moe-*` arms) — those arms exist and have run on the
+  gen bank; the golden set is what is missing.
+- **Known risk, now CLEARED for the daemon path (2026-08-07).**
+  Thinking suppression is load-bearing, not a tuning knob: the same
+  model with reasoning ON scored **0/30**, emitting ~1044 tokens of
+  `reasoning_content` before its first answer byte against this lane's
+  64–1024 grant, so every case truncated. That risk was that the
+  daemon's transport might not actually suppress. It does: the 60-case
+  run above produced **zero `truncated` drops** (17 noop, 6 invalid, 20
+  inconsistent, 17 fired), and a direct probe on the same slot returned
+  `content='READY'` in 526 ms suppressed versus reasoning prose leaking
+  into `content` at 1114 ms unsuppressed. `ConsultPlan::suppress_thinking`
+  → `chat_template_kwargs.enable_thinking=false` + `think_budget=0` is
+  exercised end to end, not assumed.
+
+  What remains unproven is the same claim on a model whose template
+  ignores both transports — the fallback targets whatever the user has.
+- **Blocking issue for the flip:** quality on the model the flag
+  actually routes to. 14/30 is below the shipped rule lane's bar for a
+  default-on claim; the flip needs either a better fallback target
+  (e.g. prefer a coder-class fast slot) or acceptance that "better than
+  nothing" is worth 47% usefulness. That is a product call, not a
+  measurement gap — the measurement now exists.
+- **Review by:** 2026-09-07.
+
+### EvidenceCheck frame + evidence-shape early-decline
+- **Shipped:** 2026-07-21, dark.
+- **Proof so far:** top_cosine established as TOPIC signal, not
+  answer-containment (~0.75 in-topic-but-thin) — the floor needs
+  calibration before the frame can gate anything.
+- **Flip condition:** floor calibration soak separates
+  "in-topic-thin" from "answerable" without raising false declines.
+- **Settled by:** unowned — no current T1 item covers it. If no
+  tranche claims it by review date, kill or re-scope.
+- **Review by:** 2026-08-14.
+
+### Cross-encoder reranker slot
+- **Shipped:** dark (note `10a1b08d`). **Wired into the daemon-server
+  and desktop Runtimes 2026-08-03** (T1 A2) — until then the `svrn
+  chat` CLI was the only surface that installed one, so both shipping
+  surfaces ran baseline fusion and `SOVEREIGN_PPR_EXPAND` logged "lane
+  dark" for want of the same `rerank_fn`. Still opt-in via
+  `SOVEREIGN_RERANK_MODEL_PATH`; the row stays DARK until the A/B.
+- **Cost of on:** the ~500MB / ~1.7s-per-query figures below are
+  SUPERSEDED and were measured on the broken jina GGUF. SP4
+  (2026-07-31, note `d43fb03b`) adopted the official
+  `Qwen3-Reranker-0.6B-Q8_0` GGUF: 639MB, **22.7ms/pair batched**
+  (~470ms for top-20), 2.57ms/pair on short titles. The
+  `jina-reranker-v3-Q8_0.gguf` finding that read as "rerankers are
+  unusable" was a conversion defect in that one artifact — it dropped
+  the scoring head — not a property of the capability.
+- **Superseded cost figures:** ~500MB resident, ~1.7s/query at k=50,
+  OICP wire work for peer routing.
+- **Flip condition:** residual contribution (+1 SEP source, +5 wiki
+  sources, +12 wiki facts) survives after cap-N chunks-per-article +
+  vector-distance dedup are measured *combined* — the cheap fixes
+  must fail to close the gap before the expensive slot earns it.
+- **SETTLED 2026-08-04 — the flip condition PASSED on quality and the
+  slot was REJECTED ANYWAY, on latency.** See the REJECTED section
+  below; this row is kept here only so the flip condition and its
+  answer sit together. Notes `6a957b47`, `f4150097`.
+- **Review by:** closed.
+
+### Hardened `sovereign-server` — `dev-routes` + `net-tools` (both default **ON**)
+- **Shipped:** `dev-routes` 2026-08-02, `net-tools` 2026-08-03. Both
+  default ON. The *hardened* build is the opt-in one:
+  `cargo build -p sovereign-server --no-default-features`.
+- **What is dark:** not a capability — a *posture*. Default-on keeps
+  every existing build (desktop, mobile host, dev workstation)
+  byte-identical, so the row records why the safe configuration is the
+  one you have to ask for.
+- **`dev-routes` gates PRIVILEGE:** `POST /v1/solve` + `/v1/cycle/bdd`
+  (client-supplied `test_command` reaches `sh -c` inside the
+  *authenticated* router — any tenant key is a shell);
+  `POST /v1/documents/upload` + `/v1/corpora/upload` (ingest an
+  absolute server-side path — any tenant can read any file the process
+  can, including the config holding every other tenant's key);
+  `/mcp`, `/mcp/message`, `/mcp/stats` (outside the auth layer, gated
+  only by `ip.is_loopback()`, which a same-host reverse proxy
+  satisfies for every remote caller); `ShellTool`.
+- **`net-tools` gates EGRESS**, and it exists because an audit found
+  three agent tools reaching the open internet on **ordinary chat
+  turns** with no config key, no env var, and no removal by
+  `--no-default-features`: the `search` tool's web fallback
+  (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top LOCAL
+  retrieval score is thin), `web_fetch` (any URL the model emits,
+  scheme-only validation, 5 redirects), and `wikipedia_fetch`. They sit
+  three lines below `ShellTool`, which *is* gated. `Permission::Network`
+  is not a control: it is consulted at exactly one call site, in the
+  plan executor, and the chat path calls `tool.execute()` directly.
+  Under `--no-default-features`, `search` survives built local-only.
+- **Why they are two flags, not one:** privilege and egress are
+  unrelated decisions. One flag for both would make neither name true
+  (§10.6, one decider one name).
+- **Proof so far:** both configurations compile clean; under
+  `--no-default-features` the dead-code count drops 47 → 2, confirming
+  the modules are excluded from the binary rather than merely
+  unreachable. `acceptance.sh` check 0c enumerates `GET /v1/tools` on
+  the running box and fails if either egress tool is present *or* if
+  `search` went missing with them.
+- **Flip condition (falsifiable):** `dev-routes` is **deleted and the
+  hardened surface becomes unconditional** once all four are true —
+  (a) upload routes path-jail to a per-tenant root instead of taking
+  an absolute server path; (b) `/mcp` moves inside the auth layer and
+  stops trusting peer address; (c) `test_command` is an allowlist, not
+  free text; (d) `ShellTool` registration is gated on an explicit
+  config key. `net-tools` flips only when the three tools gain a
+  runtime allowlist that the chat path actually consults — a cargo
+  feature is the wrong granularity for a product capability, and is
+  here only because no runtime control exists.
+- **Settled by:** the on-prem pilot
+  (`distributions/deploy/onprem/PLAN.md`). If the pilot does not proceed,
+  the items above are the standing debt regardless — this crate is
+  reachable from the desktop's embedded host too.
+- **Review by:** 2026-09-15.
+
+### Headless OCR in the daemon — the `ocr` cargo feature (default **OFF**)
+- **Shipped:** 2026-08-03, off by default
+  (`sovereign-cli-daemon/Cargo.toml`, `ocr = ["sovereign-tools/paddle-ocr"]`).
+- **What is dark:** the daemon can install an `OcrCtx` at boot so
+  `svrn corpus watch --ocr` reads scanned PDFs headlessly. Without the
+  feature, a scanned PDF lands in `WatchedFolderState.failed_files`
+  with reason `scanned_no_text` — reported, not silent, but the
+  document does not enter the index.
+- **Cost of on:** pulls `ort` + `ndarray` + `imageproc` + `i_overlay`
+  into every daemon build, and the runtime needs ~20 MB of staged
+  assets (`det.onnx` + `rec.onnx` + `dict.txt` = 12.6 MB, `libpdfium`
+  = 7.6 MB) that a default install does not fetch. Off-by-default
+  keeps dev builds and the standard release set unchanged;
+  `distributions/deploy/onprem/package.sh` turns it on.
+- **Flip condition (falsifiable):** default-on when (a) the added
+  clean-build wall time for `-p sovereign-cli-daemon` is measured at
+  under 60 s, **and** (b) the OCR assets ship in the standard release
+  artifact so the feature is not compiled-in-but-unusable — a build
+  that has the code and no models fails `build_engine` at ingest,
+  which is worse than not having it.
+- **Settled by:** the on-prem pilot's `package.sh`; the general
+  release path (`scripts/release-cli-local.sh`) does not stage OCR
+  assets today.
+- **Review by:** 2026-09-15.
+
+### Comaintainer director (M0 supervised) + review seat — script-invoked, no env flag
+- **Shipped:** 2026-08-06, M0. The role is `gym/comaintainer/CHARTER.md`;
+  the seat is `scripts/co-review.sh` (advisory: exit 0 always, no hook,
+  no gate, verdicts append to `~/.sovereign/comaintainer/verdicts.jsonl`);
+  supervision records land via `scripts/co-directive-log.sh`
+  (`--stats` = the per-kind edit rate). Vision `docs/COMAINTAINER.md`.
+  Since 2026-08-06 the seat also runs unattended: `scripts/co-sweep.sh`
+  (launchd, nightly 03:30, this host) shadow-reviews each new commit —
+  still advisory, verdicts to the same log; and a warn-only pre-commit
+  hook (`scripts/pre-commit.sh`) surfaces peer work-atlas collisions.
+  Artifact 4 (the work order, `scripts/co-order.sh` +
+  `.sovereign/features/<id>/order.md` + boot-hook index) landed
+  2026-08-06: opt-in per session, advisory check, gitignored per-host
+  files — journey scenes 1–3 now have their carrier. The director
+  seat is `/comaintainer` (`.claude/skills/comaintainer`): the
+  operator's primary interface — briefs, intakes orders, spawns
+  workers on approval (cap 3), oversees glassbox-style; M0 supervision
+  unchanged (every directive drafted for operator approve/edit).
+- **What it does:** a trained, measured role between operator and agent
+  pool. At M0 every directive it drafts (order/steer/review/briefing)
+  passes an operator approve/edit before reaching a worker; the
+  (draft, final) delta is the disengagement signal, self-driving style.
+- **What is dark:** any autonomy. M0 supervision is charter-enforced
+  (remembered, not structural) — acceptable only because the operator
+  is in the loop by construction; from M1 on, sends must route through
+  the helper with an explicit per-kind operator-ack flag (§7).
+- **Proof so far:** the gym (`gym/comaintainer/`, 301 episodes, tier-A
+  holdout 72): noise floor exactly 0/90, baseline 36.1%, charter v4
+  56.9% (+20.8pt, McNemar p=0.0015, basis-exists 93.2%) — numbers in
+  `gym/comaintainer/README.md` §Results. M0 exercise completed
+  2026-08-06: 5 supervised directives (order/steer/review/briefing),
+  overall edit rate 60% at n=5, first real operator edit captured
+  (agent-family-agnostic scheduling), operator audit of the bank
+  passed.
+- **Flip condition (M1, per directive kind):** over the trailing ≥30
+  directives of that kind, the operator edit rate is at or below a
+  threshold SET FROM M0 DATA (never invented — §18.4), AND the charter
+  meets its predeclared gym margin on the tier-A holdout.
+- **Settled by:** `~/.sovereign/comaintainer/directives.jsonl`
+  (`co-directive-log.sh --stats`) + the gym.
+- **Review by:** 2026-09-06.
+
+### Landing field-diff — `co-review.sh --field` (opt-in flag, no env var)
+
+- **Shipped:** 2026-08-07, opt-in, same commit as this row
+  (docs/internal/FIELD_VERDICTS.md Scene 2).
+- **What it does:** at a landing review, runs one degraded scratch
+  render (`fieldglass --no-dup --out <scratch>`; the default delta
+  baseline is structurally untouched) and diffs the changed files' rows
+  against the standing sidecar — growth/offender transitions, new
+  violation edges, SCIP freshness as a mechanical could-not-judge. The
+  `field_evidence` object lands in the bundle and the verdict record; a
+  headline finding auto-mints a tier-A episode skeleton to
+  `~/.sovereign/comaintainer/field-episodes.jsonl` (unaudited; manual
+  promotion).
+- **What is dark:** the flag itself — no seat runs it unless invoked.
+- **Proof so far:** watched-fail chain 2026-08-07: pre-change binary
+  confirmed writing no scratch JSON; post-change writes it while both
+  baseline-preservation paths hold; growth diff verified on `b0edbe15`
+  (13 real rows); synthetic offender transition minted exactly one
+  skeleton; stale-SCIP path emits could-not-judge, never zero-delta.
+- **Flip condition (default-on in the seat's landing step):** across 5
+  real landing reviews, the field pass completes, adds under 90 s
+  wall-clock, and its evidence appears in the drafted verdict at least
+  twice. Rejected if cost or noise makes seats skip it — recorded, not
+  argued with.
+- **Settled by:** `~/.sovereign/comaintainer/verdicts.jsonl`
+  (`field_evidence` present + `field:` anchors in basis) against the
+  seat's stewardship notes.
+- **Review by:** 2026-08-21.
+
+### Per-commit architecture audit — `CO_ARCH` in `co-sweep.sh` → **GRADUATED 2026-08-17, default ON**
+
+- **Graduated same day it shipped, by operator direction, on an AMENDED
+  bar — not on the bar it was registered against.** The candidate missed
+  bar (c) as written (2.5s/commit); the operator re-anchored the bar to
+  the house tolerance for a quality check ("running tests is about the
+  anchor... realistically it takes 10 mins") and directed the flip. At the
+  shipped config the audit costs ~19s per fired commit and ~2.8 min/night
+  at the sweep's 20-commit cap — inside a lint run per commit, and well
+  inside the ceiling for the night. The seat proposed the amendment and
+  did not make it: a bar moved by the seat after seeing the data it failed
+  is not a bar.
+- **Standing exit condition (operator's words):** "we can modify if it
+  hurts ergonomics too much." That is what review-by asks.
+- **Config shipped:** `window = 8`, `max_sites = 16` in
+  `quality/arch-probes.toml`, chosen from a 4-point sweep on a frozen
+  12-commit set. It is the knee: identical verdicts to the full diff at
+  40% of the cost, and the two cheaper configs judge strictly worse
+  (could-not-judge 0.38 vs 0.25).
+- **Residual, named:** 25% of rule-verdicts are could-not-judge at every
+  config tested. They render as an explicit `C` line in the rollup — the
+  seat sees "not judged", never "clean".
+- **Shipped:** 2026-08-17, same commit as this row.
+  `scripts/co-arch.py` + bars at
+  `gym/comaintainer/PREREG_arch_probes_20260817.md`.
+- **What it does:** per swept commit, judges the added code against the
+  §15 smell rows that code cannot enforce, in ONE batched forced-choice
+  call (A/B/C per rule, ~3 chars per rule). A model-free gate decides
+  which rules can fire and SUPPLIES THE CITATIONS, so no model authors a
+  character of the row; §2.1 is decided by an arm counter and never
+  reaches the model (§7.6). Rows land as `kind:"arch"`, `shadow:true` in
+  `~/.sovereign/comaintainer/verdicts.jsonl`; the seat reads
+  `co-arch.py --rollup`.
+- **Quality bars, all MET on the 27B and re-run at the shipped config:**
+  gate recall 21/21, catch 0.952 on planted violations, **false-B 0.000
+  across 13 hard negatives** (clean code that trips the gate), bit-stable
+  0/39 across repeats. The 4B is DISQUALIFIED and may carry no rule:
+  catch 0.667.
+- **MEASURED AND REFUSED, 2026-08-17 (same day):** bars ran on a restored
+  daemon. Gate recall 21/21 MET; catch 0.952 on the 27B MET; false-B
+  0.000 MET; bit-stability 0/39 MET. **Bar (c) cost MISSED on both
+  engines** — 27B median 5,398ms per fired commit (kill tripped at
+  ≥4,000ms), 4B median 2,509ms against a 2,500ms bar — and the 4B is
+  separately disqualified on catch (0.667). So it stays OFF.
+- **Why cost missed:** the shape is right and decode is genuinely free
+  (5-12 output tokens per commit); the price is PREFILL, measured at
+  ~7-8ms per prompt token. The registration's ~1.2s projection was
+  borrowed from a batched register whose speed came from a shared cached
+  prefix, which a per-commit bundle does not have. Full-bundle candidate:
+  46.3s/commit, well-evidenced. Gate-localised windows: 5.4s/commit but
+  could-not-judge on 6 of 12 real commits — speed bought by removing
+  evidence. Both refused; data in the prereg's RESULTS section.
+- **Open question for the operator (do NOT let the seat self-resolve):**
+  bar (c)'s 2.5s came from an interactive register; this is a nightly
+  batch where the full-bundle candidate costs ~34 min/night and the
+  windowed one ~4 min. Amending the bar to total sweep wall-clock is
+  defensible, but a bar moved after seeing the data it failed is not a
+  bar — so it is the operator's call, not the seat's.
+- **Flip condition (unchanged):** every bar in the prereg met, including
+  whatever bar (c) becomes if the operator amends it, PLUS the standing
+  reporting duty added 2026-08-17 — the real-commit could-not-judge rate
+  reported beside the bank score, because the bank passed while
+  production returned all-C on half the commits.
+- **Settled by:** `~/.sovereign/comaintainer/verdicts.jsonl`
+  (`kind:"arch"`) against the bank's labels;
+  `gym/comaintainer/score_arch.py` is the instrument.
+- **Review by:** 2026-08-24.
+
+## OWED A ROW — dark capabilities with no flip condition (audit 2026-08-05)
+
+**How this section came about.** Cross-referencing
+`quality/env-flags.toml` against this file found **31 retrieval flags, 12
+default-off or `status = experiment`, and only 2 with a ledger row**. The
+contract in the preamble says a dark ship adds a row in the same commit; these
+predate the contract, so nobody broke it — but they are exactly the withering
+this file exists to stop, and they were invisible until someone counted.
+
+Stripping out what is not ledger material — `SOVEREIGN_FORENSIC` (debug),
+`SOVEREIGN_COMPACTION_DISABLE` (escape hatch), and `ATOM_ENUM_RANK` / `_POOL` /
+`DECOMP_DECAY` (tuning params, not on/off capabilities) — **six genuine dark
+capabilities are owed a row**. They are listed here rather than given
+fabricated flip conditions: a row whose "proof so far" was invented is worse
+than no row, because it reads as settled.
+
+Each needs one measurement before it can graduate to a real row. The instrument
+already exists and is deterministic (~9 min per arm):
+`svrn bench all --bench-root bench/lanes --filter <bank> --prod-pipeline`.
+
+| flag | capability | measurement owed |
+|---|---|---|
+| `SOVEREIGN_ATOM_ENUM` | entity-typed atom enumeration for enumeration-class questions | an A/B on a bank with enumeration questions ("which X were involved") — the Enron counterparty case its doc comment cites |
+| `SOVEREIGN_ATOM_ENUM_RELATIONS` | relation atoms in the same path | same bank, as a second arm on top of `ATOM_ENUM=1` |
+
+2026-10-03: a declared-ontology arm rides the `SOVEREIGN_ATOM_ENUM` gate (a
+typed query written by the model, executed in code, injected as a cited
+table — `atom_enum_typed.rs`). Its measurement is feature-fidelity's
+`fi-ontology-list` (O-T1 on ft-ans-dev-b's dev K1 rows, then O-T2), which is
+also the first enumeration-bank read this flag has had.
+
+Four more rows (`SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `_META_BRIDGE`,
+`_QUERY_DECOMP`, `_TITLE_EXPAND`) left this table 2026-09-21 when their
+retrieval steps were cut (ac032e5bc); no measurement is owed on code that is gone.
+
+**One live inconsistency found in the same audit, and it is not cosmetic.**
+`SOVEREIGN_ATOM_ENUM` is default-**off** with `status = experiment`, while
+`SOVEREIGN_ATOM_ENUM_OVERVIEW` — a sibling path in the same module, reached
+through the same `enumerate_typed_atom_chunks` entry point — is default-**on**
+and runs in production on every overview-shaped question. That is how audit D1
+happened: a production path whose parent feature is nominally an experiment,
+so nobody was measuring it. Either the overview path is a shipped capability
+(then `ATOM_ENUM`'s `experiment` status is wrong and its own row is overdue) or
+it is an experiment (then it should not be default-on). Resolve it with the
+`SOVEREIGN_ATOM_ENUM` measurement above.
+
+- **Review by:** 2026-09-05 — the whole section. If a flag has no measurement
+  by then, the right move is to DELETE the capability, not re-date it. Six
+  unmeasured flags is a labyrinth; six measured ones is a feature set.
+
+## REJECTED — measured no; do not re-litigate without new evidence
+
+### GLiNER with declared types as the atlas entity pass — not built (`fi-gliner-declared-labels`, 2026-10-03)
+- **Bar:** feature-fidelity `fi-gliner-declared-labels` — ingest wall time
+  at most 0.5x the LLM entity pass's, at member recall no lower than the
+  LLM arm's minus its band. **Closed on a structural bound, not a G-T2
+  run**, named as such: the bound is the best case the run could show.
+- **The bound.** Atlas entities are not a separate LLM call; they are one
+  facet of the joint Phase-1 call per section, so a GLiNER entity pass
+  can only remove that facet's output. On ft-ans-dev-b's cached Phase 1
+  (29 sections, `~/.svrnmesh/enrichment/ft-ans-dev-b/runs/_phase1_checkpoint.jsonl`),
+  `entities_introduced` is 37% of the section extraction's output
+  characters; claims 32%, relations 14%. Prefill, thinking, the focused
+  relation calls and GLiNER's own time only shrink the saving, so the
+  ratio cannot fall below 0.63 with GLiNER owning every entity.
+- **Neither arm reaches the bar.** Full replacement fails the recall half:
+  declared attributes, the hoard's `igch` identity key and coin refs ride
+  on the LLM's entity sketches (`pipeline/atlas.rs` `EntitySketch.attributes`),
+  GLiNER cannot fill them, and without the identity key the K2 probe lost
+  14 rows. The hybrid that keeps hoard and coin on the LLM hands GLiNER
+  19% of the output: ratio no better than 0.81. Label recall was not yet
+  solved either (the declared name `mint` tags 8/72 gold mints at 0.6).
+- **What is NOT rejected:** GLiNER on the wire and at ingest
+  (`chunk_entities`), its G-T0 reproduction (seam faithful, 51.15 vs 50.7
+  F1), and the two wire defects G-T0 found — `/v1/ner` carries no labels,
+  offsets are bytes where the contract says chars — which stand as
+  defects in their own right.
+- **Re-open only if:** the extraction stops being one joint call per
+  section (entities in their own pass, where GLiNER replaces a whole
+  call), or a corpus whose declared types carry no attributes or
+  identity keys makes full replacement legal — and then on a measured
+  G-T2, both halves.
+
+### Native grounding, H1 admission **as a gate** — rejected as calibrated, and the gate is deleted
+> **Read the scope of this row carefully.** What is rejected here is
+> *deciding* on H1's answerability. The `SOVEREIGN_NATIVE_GROUNDING`
+> knob itself is no longer off — it was promoted to **default ON for
+> DISPLAY** on 2026-08-11; see the GRADUATED row below. Nothing in this
+> row was re-litigated to get there, because display and gating are
+> different questions and the gate no longer has a switch to flip.
+- **History:** shipped dark 2026-08-09 (`bb48e8c6`) with the flip
+  condition "both HARD A/B bars clear with no in-curve parameter
+  change". The A/B ran the same day. **The condition was refuted, so
+  this row moved here rather than sitting dark waiting.** The row is
+  doing exactly what the ledger exists for: the answer came back in
+  hours, not ten weeks.
+- **The numbers** (`bench/lanes/calibration/ab/`, saltgrass dev
+  bank, both arms carrying the reranker so only the flag differs):
+
+  | bar | flag OFF | flag ON r1 | flag ON r2 | bar | verdict |
+  |---|---|---|---|---|---|
+  | honesty-when-absent | 0.91 | 0.91 | 0.91 | ≥ 0.91 | PASS, delta **0.00** |
+  | competence-when-present | **0.74** | **0.26** | **0.23** | ≥ 0.80 / 0.71 | **FAIL, −0.48** |
+
+- **Why, in one sentence:** H1 abstained on 31 of 33 turns because the
+  saltgrass median rerank margin is 4.49 against a threshold of 5.885
+  fitted on SEP + brothers-karamazov — and at that scale the
+  calibration corpus shows a 0.98% false-alarm rate where saltgrass
+  shows 50%, a ~50x shift.
+- **It bought nothing.** This is not a trade. The incumbent already
+  caught 10 of 11 absent probes, so the headroom was one probe and H1
+  captured none of it, while turning 15 of 23 correct answers into
+  refusals.
+- **No in-curve recovery**, for two independent reasons: the threshold
+  that would restore competence is priced on a margin scale that
+  demonstrably does not transfer, and the honesty it promises is not
+  there to buy at any threshold. Thresholds were NOT re-fitted on the
+  bank under test.
+- **This confirms a registered risk**, not a surprise:
+  `NATIVE_GROUNDING.md` §10's first named risk is the reranker head
+  failing to transfer across corpora.
+- **Rejected as CALIBRATED, not as a mechanism.** The code is sound and
+  stays (deletion was explicitly out of scope for this order). What is
+  rejected is this calibration shipped as a global default. Do not
+  re-litigate a flip on the current artifacts. Step 3 owns the real
+  decision with the number now in hand: per-corpus calibration of
+  `tau_abstain`, the §7.3 fallback (train the 4B head via the
+  verifier-v0 pipeline), or dropping answerability routing as not worth
+  its transfer cost.
+- **Companion measurement, same order:** certified-claims-skip-judge
+  was also refused — resolver precision 0.7429 against a pre-pinned
+  0.98 bar (`bench/lanes/calibration/resolver-precision/`). Per-claim
+  verification is untouched.
+- **2026-08-10 — what the flag MEANS changed; the default did not.**
+  Order `native-grounding-p1-desktop` executed the parity plan's P1
+  composition (`svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md`
+  §4.1). Admission-as-gate — the thing rejected above — is now gone from
+  the code, not merely defaulted off: the native decline arm in
+  `handlers/knowledge_query.rs` was **deleted**, and so was the typed
+  shortcut in `grounding::abstention_action` that let a verdict change a
+  turn's gate action. What `SOVEREIGN_NATIVE_GROUNDING=1` turns on is
+  **display**: typed answer segments on the wire and in the desktop
+  bubble, plus H1's answerability recorded as telemetry with
+  `enforced=false` on every event. The withhold decision is the
+  incumbent cosine floor on **both** arms.
+- **Therefore this REJECTED row is about a mechanism that no longer has
+  a switch.** Do not read it as "the flag is rejected" — read it as
+  "gating on this calibration is rejected, and the gate is deleted."
+  The flag's own default was held **OFF** pending P1's bars (§4.1:
+  competence ≥ 0.74, honesty ≥ 0.91 both on-runs, no HARD lane
+  regression, every Grounded badge resolves, zero disclaimer-
+  confabulations) — promotion an operator call on those numbers.
+- **Settled 2026-08-11: the operator made that call and the default is
+  now ON.** This row is closed as a gating question; the display
+  promotion and its evidence live in the GRADUATED row below. Re-opening
+  *gating* still needs a new signal, not a new threshold.
+
+### Run-if-stale launchd triggers — rejected in favor of the seat ritual
+- **History:** shipped dark 2026-08-07 with `scripts/run-if-stale.sh`
+  (`--write-plists` wrote two LaunchAgents and deliberately never
+  called `launchctl`; the flip condition was the operator loading
+  them). The operator resolved it 2026-08-08 — an operator product
+  decision, not a measurement: **no launchd**. The plists are deleted;
+  `launchctl bootstrap` is a dead ask, do not re-raise it.
+- **What survives:** `scripts/run-if-stale.sh` itself, run DETACHED
+  (nohup + disown, note `b25059e3`) for both lanes as part of the
+  comaintainer seat's close-up-shop ritual — the staleness guard fires
+  on "closing the shop," not on login. `svrn posture`'s ByHandOnly
+  wording already states this honestly (commit `c9224da6`).
+- **Why:** a login-time job in the operator's GUI session is exactly
+  the invisible mechanism the guard was built to remove; the seat
+  ritual keeps the same coverage with a human in the loop.
+- **Re-open only if:** seatless stretches (no close-up-shop for >1
+  week) let a contract FAIL sit unread again — the failure mode that
+  motivated the guard (2026-08-03, three days unread).
+- **2026-08-13 — what is rejected is the LOGIN AGENT, and it stays
+  rejected.** Order `seat-handoff-hardening` added
+  `run-if-stale.sh --write-oneshot <lane>`: a transient plist under
+  `~/.svrnmesh/run-if-stale/`, never in `~/Library/LaunchAgents`, so
+  bootstrapping it arms exactly one run and nothing survives logout.
+  That is the seat's existing "longer than a harness task → launchd
+  one-shot" tier given a file you can read, not a new cadence — it
+  replaces `launchctl submit`, which is now banned repo-wide for
+  carrying implicit keepalive with no plist to find. This mode does
+  not re-raise `launchctl bootstrap` of the login agents; that ask
+  remains dead.
+
+### GLiNER2 as the vault/conversation extractor — `SOVEREIGN_GLINER_MODEL_ID` (stays `gliner_small-v2.1`)
+- **Shipped and settled the same day, 2026-08-03.** The row was written
+  in the morning against a flip condition — "holds the vault bar at a
+  lower time-to-enriched AND no per-label typing regression" — and the
+  afternoon's run refuted **both halves**. Recording it rather than
+  deleting it, because the seam it rode in on is staying.
+- **Verdict, on all 3,175 obsidian vault chunks**, both backends through
+  the production `LabeledEntityExtractor` seam
+  (`sovereign-gliner/examples/typing_audit.rs`, artifact
+  `research/enrichment-spikes/findings/typing_audit_obsidian.json`):
+  - **Time: 881.9 s v1 vs 893.2 s GLiNER2 — no speedup, marginally
+    slower.** The 2.52× was real but is a property of the chunk-length
+    distribution, not the model (sep p50 761 chars; vault p50 1,808).
+    v1's gline-rs stack batches 8 texts per call and amortises; GLiNER2
+    is one graph call per text. Note `dc2e4b5d`.
+  - **Typing: worse, not fixed.** Mention-level Person accuracy 96.9%
+    (v1) vs 81.8% (GLiNER2) on the vault oracle; 99.7% vs 67.3% on sep.
+    `Ostrom` — the vault's anchor entity — is `Person` ×6 /
+    `Organization` ×6 under GLiNER2. `Work` becomes a catch-all for
+    ordinary noun phrases: 16,053 `Work` mentions to v1's 632, 47% of
+    its entire output. Note `f42cf7ec`.
+- **What is NOT rejected:** the residency finding (GLiNER2 is ~4.8×
+  lighter, note `3f47d12e`) and the seam itself. The knob stays — it is
+  how anyone re-tests this — and P2.1's steps (b)–(d) were never
+  evaluated.
+- **Re-open only if:** a GLiNER2 checkpoint or label/threshold
+  configuration demonstrably stops `Work` absorbing common noun phrases,
+  scored **per mention** on `bench/gliner/` oracles; or a target corpus
+  with sep-shaped chunk lengths makes the throughput win real AND typing
+  holds. Both halves, not either.
+
+### Cross-encoder reranker slot — `SOVEREIGN_RERANK_MODEL_PATH` (stays unset)
+- **Verdict:** 2026-08-04. **The flip condition PASSED and the slot is
+  still rejected** — it was a quality condition, and quality was never
+  the binding constraint. Rejected on TTFT plus a fourth resident model
+  slot. Notes `6a957b47`, `f4150097`; artifacts
+  `target/overnight/20260803-225051/block1/`.
+- **The condition, answered:** 180-question paired bank on
+  `conversations-anthropic` via `eval run --prod-pipeline`. The cheap
+  fix measured alone (`dedup-only`, per-article dedup, no model) moved
+  the number a lot and still LOST to the cross-encoder 42–89
+  (p=0.0000). Gap not closed ⇒ by the letter of the condition, earned.
+
+  | arm | mean RR | both@10 | src ratio | **search p50** |
+  |---|---|---|---|---|
+  | baseline | 0.2631 | 26.7% | 0.744 | **557 ms** |
+  | dedup-only | 0.3362 | 50.6% | 0.856 | **1,240 ms** |
+  | reranker | 0.3968 | 75.6% | 0.903 | **4,566 ms** |
+
+- **What killed it:** corpus search runs SYNCHRONOUSLY inside the turn,
+  so retrieval latency lands on TTFT. The median turn goes 0.56 s →
+  4.6 s **before the model emits a token**. The reranker's margin over
+  free dedup is +18% mean RR / +25pp both@10 for **+2.8 s of TTFT** —
+  and it needs a 4th resident slot on a daemon already at ~29 GB
+  (35B + 2B + embed + a 7.85M-edge wiki graph). `RERANK_EXPERIMENT.md`
+  §"Resident-weight cost" predicted exactly this in May.
+- **And it is fragile, not merely slow:** the same arm cost 4.3 s/query
+  on a quiet box and **>280 s/query** the next day under memory
+  pressure (~5 GB free, compressor holding ~5.4 GB of RAM). A ~60×
+  degradation with headroom is not a knob you ship behind a default.
+- **What shipped instead:** `[retrieval] dedup_by_source = true` on
+  `conversations-anthropic` (measured) and `conversations-chatgpt`
+  (same shape, inferred — labelled as such in the recipe). ~60% of the
+  quality gain for ~20% of the latency, no model, no slot, no VRAM.
+  This is `RERANK_EXPERIMENT.md`'s own pre-registered call — "the big
+  win is the dedup… don't add the slot, add the diversifier" — decided
+  by the arm that doc asked for.
+- **NOT rejected:** per-article dedup itself, and the reranker as an
+  OFFLINE/batch tool where TTFT is irrelevant (bench scoring, index
+  build). The rejection is specifically *a resident slot on the
+  interactive path*.
+- **Re-open only if:** retrieval moves off the critical path (streamed
+  or speculative retrieval), OR a rerank pass lands somewhere TTFT
+  cannot see it, OR an `x:rerank` peer capability serves it from a node
+  with headroom — the OICP route `RERANK_EXPERIMENT.md` §"Mesh contract
+  surface" sketched. Not on a faster GGUF alone: 610 MB was never the
+  problem, the 4th slot and the synchronous path were.
+- **Code NOT deleted, deliberately** — unlike the cluster-score row
+  below. The rerank stack has live non-interactive consumers (the bench
+  param-loop drives `SOVEREIGN_RERANK_DEDUP_*` via
+  `scaffolding_param.rs::RerankSettings::set_env` +
+  `promote.rs:389`, and `bench enrichment-ablate --rerank` scores it),
+  and the dedup path that DID ship shares that code. Deleting the slot
+  would take the diversifier with it. What must not persist is the
+  *expectation* that this becomes a default — hence this row.
+
+### Conversation entity PPR — `SOVEREIGN_CONV_PPR_WEIGHT` (0.25 → **0.0**)
+- **Verdict:** 2026-08-04. Default flipped OFF. Notes `6a957b47`,
+  `f4150097`; artifact
+  `target/overnight/20260803-225051/block1/VERDICT-with-ppr0.txt`.
+- **Measured, on the corpus where it actually fires:** 180-question
+  paired bank on `conversations-anthropic`, `eval run --prod-pipeline`,
+  two-sided sign test on reciprocal rank. Alone: 49–31 vs the off arm,
+  **p=0.0567**. Under the strongest retrieval config: 64–43,
+  **p=0.0527**. Neither reaches p<0.05. The arm was NOT vacuous — it
+  changed ordering on 146/180 questions — so this is "measured and did
+  not separate", not "never engaged". (An earlier 2026-07 attempt WAS
+  vacuous: it ran on SEP, where this path never fires.)
+- **Why the ceiling is low, structurally:** it re-ranks in place and
+  never adds a document. `B-in-pool` (87.8%) and `source_ratio`
+  (0.9028) were **identical to four decimals** with it on and off —
+  only the ordering moved. `bench/conversation-bridge/GATE_FINDINGS.md`
+  predicted exactly this before the run ("PPR re-ranks in place and
+  never adds"), which is also why that doc pre-registered this A/B.
+- **Cost of on:** a per-conversation entity graph rebuilt from SQL on
+  EVERY query, plus — because it reads `chunk_entities` on the query
+  path — it is the sole reason the GLiNER NER pass must complete
+  eagerly at ingest before a corpus is fully useful. Turning it off is
+  what makes deferred/late NER safe (`PROGRESSIVE_ENRICHMENT.md`).
+- **CODE KEPT, NOT DELETED — operator call 2026-08-04.** ~1,325 lines
+  (`conv_entity_graph.rs` + `rerank_conv_chunks_via_ppr` + 23 unit
+  tests) were sized for removal and deliberately retained: the code is
+  correct and tested, the measurement says *marginal*, not *wrong*, and
+  a one-line default is cheaper to reverse than a deletion is to
+  rebuild. This is a deliberate departure from the cluster-score row
+  below, which was deleted — that one had a measured **0.0000** delta;
+  this one has a real-but-unprovable effect.
+- **What a user loses:** the "bridge" badge on promoted sources
+  (`ppr_seed` / `ppr_mass_norm` → `SourceAttribution.svelte`,
+  `EpistemicFooter.svelte`) simply never fires. The UI degrades
+  silently and correctly; no dead controls.
+- **Re-open only if:** a bank shows it separating at p<0.05 — most
+  plausibly one built on *cross-conversation* questions where in-pool
+  reordering is the whole game, since this bank's own headroom analysis
+  showed 66% of target conversations were already in the pool. The knob
+  and its code were cut 2026-09-21 (cc78b933b), so re-opening means restoring
+  that code; setting `SOVEREIGN_CONV_PPR_WEIGHT` now only prints a warning.
+
+### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (stays 0.0)
+- **Verdict:** 2026-07-31, per this row's own settling condition — the
+  T1 P0.4 knob matrix (`bench enrichment-ablate`, 3 sep banks × 3
+  reps, artifact `bench/lanes/ablation/2026-07-31-sep-knob-matrix.json`)
+  reports the banks CANNOT separate it: Δ = 0.0000 on every bank,
+  zero rep spread. In fact NO knob separated — even
+  `SOVEREIGN_RAPTOR_GROUNDING=0` moved only −0.0125 on summarize,
+  under the 0.02 floor. Dark since 2026-05-22; settled in one night
+  once the lane existed.
+- **Honest scope note:** the sep banks do not exercise the
+  attached-document search path the blend lives in — this is "the
+  current banks can't see it", not "the blend does nothing". Both
+  readings route the same way:
+- **Re-open only if:** P3.1 golden authoring (T2) produces a bank that
+  exercises attached-doc retrieval with cluster-structured answers —
+  the same routing as the demand-plan rejection.
+- **CODE DELETED 2026-08-01.** Both env vars, the blend branch in
+  `attached_document_search.rs`, and the now-unreachable
+  `blend_by_cluster_score` / `min_max_normalize` helpers with their 10
+  tests are gone; the registry entries in `quality/env-flags.toml` are
+  replaced by a tombstone pointing here. A Rejected verdict that leaves
+  the code running is the withering pattern this ledger exists to stop —
+  the verdict and the deletion belong in the same week, not the same
+  hypothetical future tranche. Enrichment knob count **12 → 10**, the
+  first movement on the `ENRICHMENT_ROADMAP.md:348` complexity ratchet.
+  Recovery for the re-open case: `git show <this commit>^` — the
+  rationale survives in `svrn/docs/specs/CLUSTER_SCORE_BLEND.md`.
+
+### Demand-plan fan-out — `SOVEREIGN_DEMAND_PLAN_FANOUT` (off)
+- **Verdict:** 2026-07-19 A/B — net-neutral answer quality at 2–3x
+  retrieval latency. Flag stays off; `env-flags.toml` records it.
+- **Re-open only if:** a bank exists that separates multi-hop recall
+  (P3.1 golden-authoring, T2). A flat-recall bank cannot exonerate it.
+
+### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` (stays off)
+- **What it did:** used a batched triage judge to decide which claims
+  skip the per-claim corpus fan-out. Worth wanting: that fan-out is one
+  hybrid search per allowed corpus per claim and measured 25% of
+  wall-clock on `bench sep/summarize --synth`; the ladder measured
+  **−6.8%** turn wall while skipping ~half the fan-out.
+- **Verdict:** 2026-08-05 — **it destroys 23% of the rescues.** Over 78
+  claims on the `sep-summarize-slowtail` scratch bank (SHADOW=1,
+  LADDER=0, so every claim is still searched and the true rescue set is
+  observable): 26 real rescues, 41 claims the ladder would skip, and
+  **6 of those skipped claims were real rescues.** Batch-vs-calibrated
+  agreement is 86% (67/78), and the 14% disagreement lands exactly where
+  it costs most. Trading 23% of the anti-fabrication rescue mechanism
+  for 6.8% latency is not a trade this system makes.
+- **Why the safety argument failed:** it claimed losslessness *by
+  construction* — a rescue fails without re-search, so it must have
+  stage-1 `vp >= tau` and always reach stage 2. Sound only while stage 1
+  is the CALIBRATED per-claim judge. Stage 1 is the batched text A/B, a
+  different instrument with different tau semantics, so their agreement
+  is empirical. The claim was withdrawn by its author before this run;
+  the run measured what the withdrawal predicted.
+- **Both known stage-1 instruments now fail.** A calibrated per-claim
+  stage 1 measured net-NEGATIVE (+5.0s wall — a restored pinned prefix
+  does not make a forced-choice free; note `a4be8afd`). A batched stage 1
+  is fast but lossy, above. Any re-open needs a THIRD instrument, not a
+  retuned threshold.
+- **Re-open only if:** a stage-1 triage exists whose disagreement with
+  the calibrated judge is measured at ~0 on skipped claims — the gate is
+  `lost_rescue == 0` summed over a bank, from the `claim_search_shadow`
+  event. Note `3850a896`-adjacent; instrument lives in
+  `grounding/mod.rs`.
+- **Kept, not deleted:** the flag and its shadow instrument stay so the
+  next attempt inherits the measurement harness rather than rebuilding
+  it. The fan-out it targets is still 25% of wall-clock and still worth
+  attacking.
+
+### Acquisition gate armed at 0.45
+- **Verdict:** 2026-07-20 — `import_conversations` is a top-1
+  attractor at that threshold; arming it misroutes.
+- **Re-open only if:** the attractor is fixed and the threshold
+  recalibrated against the post-fix distribution.
+
+### Speculative decoding (classic draft)
+- **Verdict:** 2026-05-12 — net-negative on this hardware; KV-rollback
+  hand-port costed at 2–4 days for nothing the llama-server harness
+  doesn't provide.
+- **Re-open triggers:** recorded in
+  `svrn/docs/archive/SD_EXPERIMENT.md` §closure.
+
+## INTENTIONAL OPT-IN — off is the designed end state, not a debt
+
+### RSS hard limit — `SOVEREIGN_RSS_HARD_LIMIT_MB` (off)
+- Self-SIGTERM is only safe under a supervisor that restarts the
+  daemon (2026-07-18). Soft-warn is on. This row exists so nobody
+  "fixes" the default.
+
+## GRADUATED — the pipeline completing, for the record
+
+### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` → **default ON 2026-08-14** → **RETIRED 2026-09-02**
+- **RETIRED 2026-09-02 (issue #57), the knob with it.** The triage was one
+  model call spent to skip deterministic corpus searches. On the reporter's
+  box it measured 185 s against 518 ms of searching; on this host, two
+  successive attempts to PRICE it per turn (a measured bar, then a carried
+  per-search cost) each reproduced the inversion through a new door, because
+  a per-corpus, per-box, per-load quantity was being stored under the
+  identity of the process. The deterministic fix stands instead: the
+  `claims x corpora` fan-out runs concurrently under ONE process-wide permit
+  (`claim_search_permits`, `cores/4` clamped `1..=4`, covering `open_index`
+  as well as the search), which bounds the cost the triage was trying to
+  dodge with no model in the loop and no threshold on a model-produced count.
+  Deleted: `claim_search_ladder_enabled`, two process-global cost stores and
+  their accessors, the 10 s fallback bar, the timeout/abandon path, eight
+  integration tests with real sleeps. The batched pass survives only behind
+  `SOVEREIGN_GATE_BATCH_VERIFY` / `SOVEREIGN_GATE_BATCH_SHADOW`, where it was
+  born. Accepted loss: on wikipedia-scale corpora a working triage saved a
+  few seconds of fan-out per turn on this host; that is now spent, bounded.
+  Guards: `the_claim_search_fanout_overlaps_and_never_exceeds_its_bound`,
+  `the_permit_bounds_open_and_search_across_nested_fanouts`.
+- **Lifespan dark: 2026-08-05 to 2026-08-14** (shipped as an experiment
+  with its safety counter pre-built; flipped by operator close decision,
+  order `audit-economy` D6).
+- **Flip condition, met non-vacuously.** The registered bar was
+  bank-level `lost_rescue = 0` from shadow rows. The 21-turn ladder-shadow
+  arm (`runs/audit-economy-ladder-shadow/`, 2026-08-14, baseline verdicts,
+  D5 corpus pre-flight applied): **lost_rescue 0/160** with **8 REAL
+  rescues present in the bank** and the ladder's skip set disjoint from
+  all of them — the zero had every chance to be nonzero; `newly_failed`
+  0/160 (the dilution-avoidance direction, reported per §18.6); 96/160
+  searches skippable, ~-3.5s/turn at healthy search prices.
+- **What flipped, precisely.** `claim_search_ladder_enabled()`
+  (`grounding/config.rs`) now returns `true` when the knob is unset. The
+  knob is the opt-OUT: `=0` (also `false`/`off`, trimmed) disables;
+  every other value including unset and unrecognised leaves it ON. The
+  batched stage-1 remains TRIAGE ONLY — the released verdict stays the
+  calibrated per-claim forced-choice.
+- **Reversal condition:** any production `lost_rescue` evidence
+  (re-arm `SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW` to collect it) or a
+  CONFAB-LEAK NEW>OLD read on the next paired chaos arm reverts by flag
+  (`=0`), not by code. **Review-by: 2026-08-28** — if the next chaos arm
+  has not run by then, that is the signal, not noise.
+- **Settling plan:** the order closed short (bar missed at the composed
+  level; mechanism wins banked). The next chaos/composed arm on the
+  longform banks reads the ladder's live effect; no dedicated arm owed.
+
+### Native grounding, DISPLAY — `SOVEREIGN_NATIVE_GROUNDING` → **default ON 2026-08-11**
+- **Lifespan dark: 2026-08-09 to 2026-08-11.** Shipped dark (`bb48e8c6`),
+  re-scoped from gate to display by order `native-grounding-p1-desktop`
+  (2026-08-10), promoted to default-on 2026-08-11 by operator directive
+  **`7aa64f29`** ("Let's flip it on. I approve the order"), order
+  `native-grounding-flip-soak`. Two days dark, not ten weeks — which is
+  what this ledger is for.
+- **What flipped, precisely.** `native_grounding_enabled()`
+  (`native_grounding/admission.rs`) now returns `true` when the knob is
+  unset. **The knob is now the opt-OUT.** Off-form:
+  `SOVEREIGN_NATIVE_GROUNDING=0` (also `false` / `off`, trimmed,
+  case-insensitive). Every other value — including unset, empty, and
+  anything unrecognised — leaves it ON, so a typo cannot silently
+  disable grounding (ARCH §18.3).
+- **The predicate is a mirror, not an inversion**, and that is the
+  safety property: every string that turned the path off before the flip
+  still turns it off after it. Only the non-instructions (unset, empty,
+  unrecognised) changed meaning.
+- **What is ON is DISPLAY.** Typed answer segments + provenance strip in
+  the desktop bubble, and H1's calibrated answerability recorded as
+  telemetry with `enforced=false` on every admission event. **It decides
+  nothing** — the withhold decision is the incumbent cosine floor, the
+  same on both arms. The gating question is closed separately and stays
+  closed (REJECTED row above).
+- **Evidence basis for the promotion** (operator's stated grounds):
+  P1 landing — display-only composition with zero added model calls
+  verified, A1 decision identity, citability 1.0, real-app render
+  witnessed — plus the incumbent-competence landing of 2026-08-11 at
+  **0.871 on both arbitration runs**.
+- **Reversal condition, pre-stated.** The flip is one line and reverses
+  to the same line. Flip back OFF same-day if the 2h desktop soak
+  (`scripts/desktop-soak.py`, order `native-grounding-flip-soak` D2)
+  surfaces **either** a per-turn latency regression past the noise bands
+  (`svrn/docs/RUNBOOK.md` §6) **or** a rendering failure class.
+  Sustained free RAM < 2GB during the soak is an abort-and-report, not a
+  push-through. The report stands as the evidence either way.
+- **Review-by:** the landing verdict of order
+  `native-grounding-flip-soak` — the 2h soak's scorecard, latency
+  percentiles (p50/p95, never single-turn), display telemetry, and
+  memory profile. If that verdict is not recorded here, this row is
+  overdue and any session touching grounding should raise it.
+- **RAISED OVERDUE 2026-08-14** (seat, on worker D0 of order
+  `gate-tombstone-ladder`, note `e1e9e7a3`): the review-by verdict
+  (`e2b474da`, merged `e73fc760`) was never recorded here, and the
+  promotion evidence "real-app render witnessed" does not hold on
+  BeefyMac now — `answer_segments` is NULL on 17/17 live desktop turns
+  (2026-08-13/14). Segment production is gated on
+  `native_verdict.is_some()` (`streaming.rs:1799`), whose only margin
+  sources are reranker-derived (`admission.rs:191-205`) — i.e. this
+  DISPLAY row's render depends on the slot the REJECTED row above keeps
+  unset. What renders in practice is the claim-level epistemic ledger,
+  not the span strip. Reconciliation is a backlog item (recorded
+  2026-08-14); until it lands, the display claim is DARK-IN-EFFECT on
+  hosts without a margin source.
+- **RECONCILED 2026-09-12** (campaign `verifier-loop`, rung vl-6): the
+  backlog item above landed. Display segmentation no longer reads H1's
+  verdict — `EvidenceContext::native_admission` carries a three-state
+  `NativeAdmission` (`NotRun` / `NoInstrument { reason }` / `Decided`)
+  and the segment, claim-address and stage-ledger sites all condition on
+  `ran()`. The two absences that used to share one `None` are now
+  distinct: an opted-out turn still carries no `answer_segments` field
+  (the incumbent arm stays byte-identical), while a turn H1 could not
+  measure is segmented against its sealed pool. This changes DISPLAY
+  only — `verdict()` is still the gate's single read, still `None` on
+  both of those turns, and the withhold decision is still
+  `evidence_early_decline` on both arms. The row above is no longer
+  DARK-IN-EFFECT on hosts without a margin source.
+
+### `SOVEREIGN_SKIP_MOTIFS` / `vault-report --no-motifs` → **deleted**
+- **Lifespan: 2026-08-02 to 2026-08-02.** Shipped dark in the morning
+  as an ablation arm; the code it ablated was deleted the same day. The
+  knob is gone with it — this row is the record, not a live default.
+- **What it proved.** Motif extraction was **22.3m of a 52m03s cold
+  vault build — 42.8% of time-to-enriched** (330 notes,
+  `~/.svrnmesh/bench-runs/vault-report/1785678945/`), and its output
+  table `conv_motifs` had one INSERT, two DELETEs and **no reader
+  anywhere in the workspace**. The briefing-signposts claim at
+  `conv_tiered_provider.rs:232` traced to `CONV_TIERED_PORT.md:385`,
+  which is future tense and was never built for the conv/vault side.
+- **The measured result** (three cold builds + `eval run
+  --prod-pipeline`, obsidian vault, sweeper paused):
+
+  | config | wall | speedup | facts | sources |
+  |---|---|---|---|---|
+  | motifs + GLiNER | 52m03s | 1.00x | 58/68 | 8/12 |
+  | **motifs off, GLiNER on** | **29m32s** | **1.76x** | **58/68** | **8/12** |
+  | motifs off, GLiNER off | 14m15s | 3.65x | 58/68 | 5/12 |
+
+  Motifs-off matched the full build **per question exactly** on facts
+  (6,6,5,3,4,6,5,4,3,6,6,4). Run-to-run variance on one build was zero.
+- **Resolution: deletion, not a flip.** `build_folder_artifacts` now
+  calls `build_raptor_nodes_with_checkpoint`, which has no motif
+  concept in its return type — the pass cannot be re-enabled by
+  setting anything. `save_conv_motifs` and `ConvMotifRow` are deleted.
+  The `conv_motifs` table and its purge DELETE are retained so existing
+  databases still shed their legacy rows.
+- **Untouched:** the attached-document path keeps its motifs
+  (`asset_motifs`, read by `list_asset_motifs` for the doc briefing).
+- **Notes:** `3f47d12e` (the result), `e10bf96e` (the no-reader
+  census), `de25ebe9` (why the confirmation arm was cancelled),
+  `0b8b6cae` (sweeper contamination), `d39af2dc` (the 68/68 correction).
+
+### Extractive summary mode default for memory corpora (T1 P1.1)
+- **Flip condition met 2026-07-31, same day it was written:** the
+  production seam held parity on the sep banks — both arms rebuilt
+  through `enrich raptor` at identical 14-article scope, |B−A| =
+  −0.0125 on summarize (band ±0.025), 0.0000 on obscure (band
+  ±0.0167), r1–r3 deterministic, rawindex guard 0.0000 both banks
+  (`research/enrichment-spikes/runs/prodAB/`).
+- **Default flipped:** memory corpora (vault notes, imported
+  conversations via `build_folder_tiered_provider`; memory-pool trees
+  via `mem_atlas`; the vault-wide theme synthesis) now build
+  EXTRACTIVE trees. Attached documents keep abstractive — now
+  verifier-gated (T1 P1.2, same push). `enrich raptor` CLI default
+  remains abstractive with explicit `--summary-mode`.
+- **Registry/env:** no env flag — the default is code-level policy at
+  the memory-corpus construction sites, provenance-stamped per node.
+
+### Measured capability probe — `SOVEREIGN_CAPABILITY_PROBE`
+- **Default ON 2026-08-10**, opt out with `=0`. Shipped dark for one day
+  and **made load-bearing the same day** once the shadow sweep was in:
+  `prefix_cache_gate` now follows the measurement, not the arch ladder.
+- **What `=0` costs, now that it decides.** Turning the probe off leaves
+  every slot `CouldNotJudge`, and the gate falls back to the
+  pre-2026-08-10 declared ladder — i.e. **exactly the old behaviour**,
+  not a blanket veto. That was chosen deliberately: a flag whose off
+  position silently costs a full prefill on every turn is a trap. The
+  fallback is reported at `info` on the `capability` target as
+  `authority=declared-fallback`, never silently (§18.3). The same path
+  serves distributed children, which never probe.
+- **Why the flip was safe (measured, note `bca4ae8e`).** Shadow sweep
+  over the local zoo — 12 models, 9 architectures, production config —
+  found the measurement agreeing with the pre-flip gate on **12/12**, so
+  the flip changed no answer on this host. The ladder it displaces was
+  **wrong on 4/12** (three dense `qwen35`, plus `nemotron_h_moe` — a
+  Mamba2 hybrid whose arch string carries no ssm marker) and
+  **load-bearing on 0/12**: no model it vetoed was one libllama's flags
+  did not already veto.
+- **The asymmetry that makes a measurement acceptable in a safety gate.**
+  libllama's `is_recurrent`/`is_hybrid` keep an unconditional veto; the
+  probe may only ever ADD one. So a probe that loses sensitivity costs
+  prefill time and cannot cost correctness — the inverse of the plan's
+  original shape, where a false `Safe` would have cleared a corrupting
+  model.
+- **Why:** one property — can this model survive a partial KV op — was
+  declared in six places, in three vocabularies, and measured in none
+  (`embedded/capabilities.rs` module doc has the table). §10.6: "a
+  duplicated decider diverges and you get a plausible number, with
+  nothing red anywhere." It produced the dense-`qwen35` miss
+  (2026-06-09), two FastShort ladders of different width, and a repro
+  harness that recommended deleting a gate it never exercised.
+- **What it measures:** TWO rollback arms differing in exactly one
+  variable — whether a decode-pass boundary is crossed — compared to a
+  straight prefill by L2 over the full logit vector. The `gen_before=0`
+  arm is the model's own float-noise floor; the `gen_before=2` arm is
+  the signal. `Safe` iff signal <= 4x floor.
+- **Why a ratio and not a threshold (measured 2026-08-10,
+  `rs_rollback_spike::logit_delta_calibration`):**
+
+  | model | floor | signal | ratio |
+  |---|---|---|---|
+  | `qwen35moe` 36B | 97.6 | 1656-1793 | **17x** |
+  | `qwen35` 2B | 19.9 | 459-644 | **23x** |
+  | `gemma4` (correct) | 94.3 | 94.3 | **1.00x** |
+
+  Absolute floors differ 5x across models — `gemma4`'s CORRECT delta
+  exceeds `qwen35`'s floor — so any fixed constant misclassifies
+  somebody in a zoo. Each model supplies its own control.
+- **Why not sampled tokens.** The first detector compared greedy
+  continuations and had a MEASURED false negative: `qwen35moe` probed
+  `Safe` while the sweep showed it corrupt at every depth. Greedy argmax
+  absorbs a perturbed state; `top1` was unchanged in every calibration
+  row, including the corrupting ones, while L2 moved 17-25x. Tuning the
+  constants moved the holes around rather than closing them.
+- **Cost:** 76-653ms per chat-slot load measured across the three
+  models (three 192-token prefills + 2 decodes; the logit detector is
+  ~2.5x FASTER than the token one it replaced, which generated
+  continuations). Skipped
+  for distributed children and for the FastShort sibling (its batched
+  path carries no prefix reuse at all).
+- **Review by:** the flip of `prefix_cache_gate` onto the measured
+  verdict is a SEPARATE change, gated on shadow data showing whether
+  probe and ladder ever disagree — `journalctl --user | grep capability`
+  is the dataset. Zero disagreements is a legitimate reason to stop
+  here rather than a failure. Notes `8291000e`, `2022a071`, `923ca1e1`.
+
+### Caller-directed prefix-cache pin — `SOVEREIGN_PREFIX_STATE`
+- **Default ON 2026-08-03**, opt out with `=0`. Genuinely flipped this
+  time — `env_enabled()` now defaults true.
+- **This row was FALSE for thirteen days and that is the lesson.** It
+  claimed "default-on 2026-07-21" when the flip had never happened:
+  `BATCHED_GATE_VERIFY.md` *recommended* flipping after two hardenings,
+  those hardenings landed, and the row recorded the recommendation as
+  executed. A false GRADUATED row is worse than no ledger, because it
+  is trusted. Nothing parses this file's review-by dates (T1 B2 is the
+  gate that would have caught it).
+- **Earned by:** controlled A/B through the production answer path,
+  `svrn bench enrichment-ablate bench/lanes/obsidian/questions.toml
+  --prefix-state --reps 2`, on `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`:
+
+  | arm | reps | mean wall | fact ratio |
+  |---|---|---|---|
+  | off | 901.7s, 835.2s | 868.4s | 0.4736 |
+  | on  | 671.1s, 667.0s | 669.0s | 0.4597 |
+
+  **1.30x, −199s per rep**, against an OFF-arm spread of 66.5s — the
+  delta is 3x the noise. Arms proven distinct by pin telemetry: OFF
+  `LEARNED=0 HIT=0`, ON `LEARNED=28 HIT=86`. Reproduces the 2026-07-21
+  result (1.35x, 786.3s → 584.5s) on HEAD.
+- **The earlier "worth ≈0" result was never a contradiction.** The
+  2026-07-12 A/B measured ONE synthesis prefill; the pin's only
+  consumer is the grounding gate, which issues ~35 judge calls per turn
+  each re-prefilling the same evidence. Two workloads, not two answers.
+- **Open caveat, stated rather than buried:** the quality delta is
+  −0.0139 mean fact ratio (~1 fact in 60). That is below the ablation's
+  0.02 separation floor and reports as NOT SEPARABLE, but it was
+  IDENTICAL in both reps — a small reproducible difference, not noise.
+  If restore is bit-exact it should be zero. Settle it by checking
+  restore bit-exactness, not by adding reps (the eval is deterministic
+  per arm, so more reps of the same config cannot move it).
+- **Model scope:** measured on `qwen35moe`. The pin's value scales with
+  prefill cost, and `prefix_cache_gate` vetoes ordinary partial-KV
+  reuse on both `qwen35moe` and dense `qwen35`, so on those the pin is
+  the ONLY caching available. On a small primary the win will be
+  smaller and the ~64KB/token state cost proportionally larger; the
+  byte-capped LRU (`_MAX_MB`, default 2048) is what bounds it.
+- **Instrument:** `svrn bench enrichment-ablate --prefix-state` is
+  committed and is the template for any daemon-side knob. The original
+  harness (`scratchpad/arm_runner.py`) never was.
+
+### ~~RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`~~ — RETIRED 2026-09-07
+- **What was on by default:** summary nodes as virtual chunks, injected at
+  retrieval time by `runtime/retrieval/raptor_grounding.rs` with the position
+  picked by `SOVEREIGN_RAPTOR_LATE` (late since 2026-08-10). That earned the
+  default, and the finding it earned survives the knob.
+- **RETIRED 2026-09-07 (order ei-5c), with its four sibling knobs**
+  (`SOVEREIGN_RAPTOR_LATE`, `_TOP_M`, `_MIN_LEVEL`, `_DEDUPE`). Not a
+  reversal — a merge. The atlas walk
+  (`corpus_engine::enrichment::atlas::ground::ground`) now reaches the same
+  RAPTOR summaries as `Summary` atoms, and
+  `retrieval/atlas_grounding.rs::append_atlas_summaries` appends them at the
+  same late position. Two producers of the same rows at the same seam is two
+  implementations of one decision; the injector is the one that goes. One
+  walk, one producer.
+- **Deleted:** `runtime/retrieval/raptor_grounding.rs`
+  (`apply_raptor_grounding`, `raptor_scored_chunk`, `RaptorCand`),
+  `raptor_late_inject_enabled` in `question_analysis.rs`, the three call sites
+  (retrieval_pipeline rung 7, `retrieval/mod.rs`,
+  `handlers/knowledge_query.rs`), and the `raptor_off` arm of `svrn bench
+  enrichment-ablate` — an arm whose knob is dead force-clears nothing,
+  measures the unablated system, and reports it as an ablation. The five
+  `quality/env-flags.toml` rows are KEPT and marked `deprecated`: the names
+  may still be exported in an operator's shell, and a reader who finds one
+  there needs to be told it does nothing.
+- **What replaced it is not a knob.** Whether a corpus's summaries reach
+  retrieval is now a DATA state — does its atlas carry `Summary` atoms.
+  `svrn enrich summary-atoms <corpus>` projects the corpus's existing
+  `raptor_summaries.lance` rows into them, reusing the stored embeddings, so
+  it needs no RAPTOR pass and no re-embed; a corpus with no RAPTOR nodes has
+  nothing to project. The summarize banks
+  (`bench/sep/summarize.toml`, `summarize_obscure.toml`,
+  `bench/wikipedia/summarize.toml`) are A/B'd that way now: two corpus states,
+  before and after that migration, not two values of an env var.
+- **Nothing to review by:** there is no flag left to review.
+
+## `SOVEREIGN_DR_AUDIT_BATCH_LOCATE` — the audit's location loop, batched
+
+**Landed 2026-08-26 default ON. TURNED OFF THE SAME DAY BY ITS OWN FLIP
+CONDITION.** Now DEFAULT OFF. Paired measurement mode:
+`SOVEREIGN_DR_AUDIT_LOCATE_SHADOW`; bed: `sovereign-core/tests/binder_replay.rs`.
+
+**Read this row for the pattern, not just the flag.** The argument for shipping
+it on was structural and, as far as it went, correct: the triage can only cost
+support, never manufacture it, because the calibrated register still decides
+every chunk that binds. That argument is about DIRECTION. The ledger asked for
+a MAGNITUDE — `shadow_lost = 0` — and the magnitude is what failed. A
+direction argument is not a measurement, and shipping on the strength of one is
+the thing this row now exists to discourage.
+
+**What it changes.** `audit::assess_claim` located a claim's origins with one
+calibrated model call per candidate chunk. With the flag on, the model-free
+stages run for every chunk first, ONE triage generation over the pinned
+evidence window shortlists the candidates, and the calibrated per-span judge
+runs only for those it admits or cannot parse a verdict for.
+
+**Why.** Measured on the pin-validate flight
+(`research/deep-research/arms/runs-pin-validate/pinned-1.log`, 328 claim
+audits, 102.5 minutes):
+
+| claims | share | wall-clock | share of audit |
+|---|---|---|---|
+| reached the location loop | 35 (11%) | 90.6 min (~130s each) | **88%** |
+| short-circuited before it | 285 (87%) | 8.6 min (1.85s each) | 8% |
+| everything else | 7 (2%) | 3.3 min | 3% |
+
+130s is 52-57 calibrated calls against a 54-chunk window, binding 0–2. Three
+hours per question is not shippable (operator, 2026-08-25). Note that the
+batched STAGE-1 pre-pass named in the session frame would have attacked the 285
+fast claims — at most 8.6 minutes of the 102.
+
+**What the bed measured (2026-08-26, claim 1 of the binder bed, 54 chunks).**
+
+| arm | wall-clock | verdict | bound |
+|---|---|---|---|
+| per-span | 343.4s | **Passed**, 2 origins | `ev-25`, `ev-30` |
+| batched (first cut) | 144.4s | **CouldNotJudge**, 0 origins | — |
+
+A verdict change, in the abstention direction, on the first claim that had
+support to lose. Stage split for the batched arm: locate 62.3s (model-free
+embedding, unchanged by this flag), **triage 72.1s**, calibrated 7.9s (3 calls).
+
+**Two causes, both fixed, NEITHER YET RE-MEASURED.**
+
+1. *The prompt asked the wrong question.* It asked whether a passage supported
+   the claim "ON ITS OWN" — a stricter bar than the calibrated judge's — where
+   a triage owes RECALL. It voted B on 49 of 52. The wording now tracks
+   `claim_prompt`'s exactly and states the asymmetry outright: a wrong admit
+   costs one ~2.5s call, a wrong reject loses the evidence permanently, so when
+   in doubt answer A.
+2. *The window shared a prefix with nothing.* It was built from
+   claim-conditioned best-spans, so every claim paid a fresh 12k-token prefill:
+   71,947ms at this host's ~160 tok/s, against the 1,613ms the same claim's
+   whole-window judge paid on a warm prefix. The triage now runs over the
+   PINNED window — the identical slice the whole-window judge was handed — so
+   `EvidenceFamily` renders the same prefix bytes and the daemon restores it.
+
+**What does NOT change when it is on.** Every chunk that binds has cleared
+`SUPPORT_FLOOR` on the same calibrated forced-choice register. Also untouched:
+the verbatim-figure precheck, the `MIN_LOCATE_SIM` locate floor, the
+corroboration floor, the custody veto, the containment witness, and the chunk
+order `supporting_chunk_ids` is recorded in.
+
+**Reversal condition.** Flips back ON only when a binder-bed run over all 6
+loop-reaching claims shows `per_span_only` EMPTY for every claim — the batched
+arm binds everything the per-span arm bound — at a wall-clock that is
+materially better, and a subsequent flight run with
+`SOVEREIGN_DR_AUDIT_LOCATE_SHADOW=1` reports `shadow_lost = 0` across the bank.
+Anything short of that is a latency win bought with comprehensiveness, which is
+one of the two dimensions we are furthest behind AIQ on (note bdf94683: insight
+−18.06, comprehensiveness −16.67). **Re-measurement in flight.** Review by
+2026-09-09.
+
+## `SOVEREIGN_DR_AUDIT_LOCATE_BUDGET` — a declared bound on the search
+
+**Landed 2026-08-26, DEFAULT 0 (unbounded).** Composes with, and depends for
+its legitimacy on, `SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT`.
+
+**Why this is the lever and the other two are not.** A calibrated per-span call
+costs ~2.4s, and that cost is a ~360-token prefill which **cannot be shared**:
+the register exists to judge one passage in isolation, so there is no prefix
+family to put it in (its calls log `stable_prefix_bytes=None` by design, and
+that is correct). Batching the triage cut a claim from 52 calls to 27 — 1.2–1.7×
+measured across three bed claims, which is real and is not an answer to three
+hours per question. The only remaining way to spend less is to make fewer
+calls.
+
+**What the spend buys today.** Bed claims 2 and 3 spent 50 and 14 calibrated
+calls to reach could-not-judge. On the source flight 1 of 6 loop-reaching
+claims passed. Most of this loop's cost purchases an abstention.
+
+**Why a bound is defensible here.** Only because the candidates are judged
+best-first by the cosine stage 2 already computes. A claim whose origins exist
+is expected to find them early; a bound on an unordered sweep would be a
+coin-flip and should not ship.
+
+**It is not a silent truncation.** A claim that exhausts its budget without
+reaching the corroboration floor carries `SEARCH BOUNDED: stopped after N
+calibrated call(s) of M candidate(s)` in its own reason. The record keeps "we
+looked at everything this claim could rest on" apart from "we stopped after N"
+(§18.3). Watched red by
+`the_call_budget_bounds_the_loop_and_names_itself_in_the_record`, which asserts
+BOTH halves — the call count and the disclosure — because a bound that shrank
+the count while reporting a plain floor miss would be the silent truncation
+wearing a finding's clothes.
+
+**The risk, stated plainly.** A claim whose two binding origins rank below the
+budget in cosine order loses a `Passed` verdict it would otherwise have earned.
+That is comprehensiveness traded for latency, against a bar where
+comprehensiveness is already −16.67 (note bdf94683).
+
+**Reversal condition.** Ships on only if the bed's `fast` arm reproduces the
+`per-span` arm's VERDICT on every claim that passes, at a materially better
+wall-clock — and the budget is then set from the measured rank distribution of
+binding origins, not guessed. If binding origins routinely rank deep, this
+stays off and the loop stays expensive. **Measurement in flight.** Review by
+2026-09-09.
+
+## `SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT` — stop at the floor, best first
+
+**Landed 2026-08-26, DEFAULT OFF.** Composes with, and is measured separately
+from, `SOVEREIGN_DR_AUDIT_BATCH_LOCATE`.
+
+**What it turns on.** The location loop judges candidates in descending cosine
+order and stops once the claim has two distinct origins.
+
+**Why.** The batched triage got a passing claim from 52 calibrated calls to 27
+— about 1.55× on the warm per-claim term (127s → 82s), which is real and is not
+an answer to "three hours per question". On the bed's claim 1 the two binding
+origins were `ev-25` and `ev-30`, found part-way through a sweep ordered by
+nothing. Best-first with an exit at the floor stops when it has what the floor
+needs.
+
+**Verdict-identical by construction.** The exit fires only when the claim has
+ALREADY cleared the floor, which is the condition under which it passes. A
+claim that never reaches the floor visits every candidate exactly as before —
+which is most claims, and is why this is a lever on passing claims specifically.
+
+**What it does change.** `supporting_chunk_ids` and
+`corroboration.support_chunks` shrink: the record carries the origins that
+settled the claim, not every chunk that would have bound. Fewer citations per
+claim is a product change, not just a latency one, and it is not obviously good
+— which is exactly why this is its own flag with its own arm in the bed rather
+than shipped inside the batch.
+
+**Reversal condition.** Flips on only if the bed's `early` arm reproduces the
+`per-span` arm's VERDICT on all 6 claims at a materially better wall-clock, AND
+the shrunken citation sets are judged acceptable against the AIQ criteria that
+reward substantiation. If per-claim citation count turns out to carry score,
+this stays off regardless of what it saves. **Not yet measured.** Review by
+2026-09-09.
+
+## `SOVEREIGN_DR_AUDIT_LOCATE_SHADOW` — pricing the triage
+
+**Landed 2026-08-26, DEFAULT OFF.** Measurement mode, never a product one.
+
+**What it turns on.** The calibrated per-span judge runs for the spans the
+triage REJECTED as well, and `shadow_lost` counts how many of them the
+calibrated register would have bound (INFO on the `t5 binder` event, WARN
+whenever non-zero).
+
+**Why.** With the triage on and this off, a rejected span is never judged and
+its lost support is unobservable BY CONSTRUCTION — the same blindness that
+made the grounding ladder's safety argument unmeasurable until
+`SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW` existed. This is the only configuration
+in which `SOVEREIGN_DR_AUDIT_BATCH_LOCATE`'s cost can be priced rather than
+assumed.
+
+**Cost.** The full pre-batch call count PLUS the triage generation, so a
+shadow run is slower than the loop it replaced. That is the point.
+
+**Reversal condition.** Graduates (stays off, permanently available) once the
+batch flag's condition above is settled. It is an instrument, not a
+capability, so it is never expected to flip on by default.
+
+## `SOVEREIGN_DR_REPORT_OUTLINE` — the report outline is not the search frontier (drb1-r5)
+
+**Landed 2026-08-24 default OFF. DEFAULT FLIPPED ON 2026-08-27.** Campaign
+`drb1-race`. Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`. Set
+`SOVEREIGN_DR_REPORT_OUTLINE=0` to restore the frontier.
+
+**Why the default moved, and it is NOT a score argument.** Operator direction,
+2026-08-27: stop optimising against the RACE judge and impose our own ethos on
+the deliverable. The frontier is a list of retrieval targets — the planner
+prompt asks it for "the specific measure or statistic it implies — an index, a
+ratio, a share, a rate, a count". Those are good queries and they are
+indefensible as section headings a reader receives. The shipped task-69
+deliverable carried `## Median Session Establishment Time` and `## Schema
+Mismatch Failures in Third-Party Tool Integration` as TOP-LEVEL sections: our
+search plan printed as prose, 20 of them, 11,270 words. No judge is needed to
+call that wrong, and no judge was consulted for this flip.
+
+**What it is expected to cost.** RACE overall, probably. The judge compares
+head to head against references running 6,898-13,348 words and this makes our
+deliverable materially shorter (see the `TARGET_REPORT_WORDS` retirement in
+`synthesize.rs`, landed the same day — length now derives from the evidence
+each section receives). That trade was made deliberately and with the operator
+naming it: the bench is a tripwire here, not the gate. **Reversal condition:
+not a RACE regression** — set `=0` if readers report the planned outline
+omitting subjects the frontier covered, or if the fallback-to-frontier warning
+fires on a material share of flights (it means the planner is refusing and
+nobody is reading the trace).
+
+**Safe to default because the fallback is named.** A refused or unusable
+outline falls back to the search frontier and logs "outline unavailable —
+sections fall back to the search frontier (named, never silent)" (§18.3,
+`mod.rs`). The flip changes which path is normal, not whether a failure is
+visible.
+
+**What it turns on.** The composed report's sections come from an outline
+planned over the gathered evidence — each distinct subject given standalone
+treatment where it needs explaining on its own terms, then the sections
+relating them, then what follows — instead of one section per planned
+sub-question.
+
+**Why.** The sub-questions ARE the acquisition frontier, and the planner
+prompt tunes that list for retrieval: it asks for "the specific measure or
+statistic it implies — an index, a ratio, a share, a rate, a count". Good
+search queries; bad section headings. The task-69 web arm's real section list
+included *"Count of distinct error handling states defined in the A2A message
+schema"*.
+
+**The evidence is the judge's own words**, on the arm with 98 sources and
+2.18M chars — so this is not an evidence gap:
+
+| criterion | ours | ref | the judge's reason |
+|---|---|---|---|
+| Breadth and Depth of MCP Protocol Description | 5.0 | 9.0 | "Article 2 dedicates Section III to MCP… Article 1 lacks a comprehensive standalone explanation" |
+| Clarity and Substantiation of A2A/MCP Connections | 6.0 | 9.5 | "Article 2 has a dedicated Section VI ('Interplay and Relationship')" |
+| Clarity and Logical Rigor in Problem-Solution Mapping | 6.5 | 9.5 | "Article 2 explicitly maps problems to solutions in Section IX" |
+| Depth and Nuance in Comparative Analysis | 7.0 | 9.0 | ours "risks being overly granular or speculative" |
+
+Three of the four largest weighted losses are structural. The fourth says the
+fragmentation costs **insight** — our worst dimension against AIQ (−18.06).
+It also explains why widening the frontier 8 → 20 did not help: it made the
+deliverable more fragmented, not better organised.
+
+**What does NOT change.** Acquisition. The frontier keeps its job and its
+width; this changes only what the writer is asked to build. Citations,
+corroboration floor, custody veto and the audit are untouched.
+
+**Refusal.** An outline parsing to fewer than 2 briefed sections is refused
+and the loop falls back to the frontier, naming the fallback. A bare heading
+with no brief is not a section — watched red in
+`deep_research::synthesize::tests::the_outline_refuses_a_frontier_shaped_list`,
+which under the permissive rule parses the literal task-69 frontier as a
+five-section outline.
+
+**Cost.** One extra `Speed::Slow` draft call per run.
+
+**Reversal condition.** Flips on only if, replayed against a FIXED cached
+estate (acquisition held constant, so writer variance is the only noise), the
+outline arm beats the frontier arm on RACE overall with the honesty floor
+intact — and the comprehensiveness and insight dimensions move, since those
+are what the diagnosis predicts. **Not yet measured.**
+
+## `SOVEREIGN_DR_REPORT_SECTION_EVIDENCE` — show the writer the evidence (drb1-r9)
+
+**Landed 2026-08-26, DEFAULT OFF.** Campaign `drb1-race`. Requires
+`SOVEREIGN_DR_COMPOSED_REPORT=1`. Deliberately separate from
+`SOVEREIGN_DR_REPORT_ARCHITECTURE`: that flag decides the deliverable's shape,
+this one decides how much evidence stands behind each part of it.
+
+**The measurement that produced it** — task-69 control flight `dr-1787742429`,
+counted off its own `evidence-window-1.json`, not reasoned about:
+
+| | |
+|---|---|
+| evidence window | 46 chunks, **1,060,308 chars** |
+| chunks mentioning MCP | **40 / 46** |
+| chunks carrying MCP primitives (Tools/Resources/Prompts/Roots/Sampling) | **41 / 46** |
+| what ONE section's writer sees | 8 passages × 1400 chars = **11,200 chars — 1.06%** |
+| what the whole 8-section report sees | **8.5%** |
+| distinct sources the 11,345-word deliverable cites | **22 / 46** |
+| sections describing MCP | **0** |
+
+**Acquisition is not the constraint, and this is the sentence that matters:
+the writer is not failing to use the evidence, it is not being shown it.** The
+material for the MCP section we lose 3.24 points on — in 25 of 25 draws — is
+sitting in 40 of the 46 chunks that were retrieved for it.
+
+This supersedes, for this bed, the older reading at the foot of the
+`SOVEREIGN_DR_COMPOSED_REPORT` row ("the deliverable SHAPE is no longer the
+binding constraint on this score; acquisition is"). That was measured on a run
+whose entire window was 4 chunks and 1,866 chars. On a window three orders of
+magnitude larger the binding constraint moved, and it is now the budget between
+the window and the writer.
+
+**What it turns on — and these are not free parameters.** 28 passages per
+section at a 5-per-source cap, from 8 and 3. That **restores the configuration
+the composed report's own quality number was measured at.**
+
+`compose_report` was ported to Rust in `a50d2fdf3` (2026-08-23) from the Python
+prototype `research/deep-research/arms/lab/compose2.py`. That commit's own
+message says: *"The 44.40 composite that stood in for its quality was measured
+by `arms/lab/compose2.py` — a Python reimplementation."* The prototype chunks
+passages identically (`passages(chunks, size=1400, overlap=200)` against our
+`PASSAGE_CHARS`/`PASSAGE_OVERLAP`), ranks by the same cosine, applies the same
+per-source cap mechanism — and ran at `k=28, repeat_cap=5`, recording the
+consequence in its own manifest as `evidence_chars_per_section: k * 1400` =
+**39,200**.
+
+**The port shipped 8 and 3 — 11,200 chars, a 3.5× cut — and no commit, note or
+ledger row records that as a decision.** It is a port artifact, not a tuned
+bound. Commit `14ddccf49` later OBSERVED the consequence — its own registry
+text reads *"ours showed each section eight passages by cosine, so on the
+logged task-69 flight a 38-chunk window reached the writer eight chunks at a
+time"* — and responded by adding the research-notes flag rather than by
+restoring the number. **So the shipped Rust path has never been run at the
+configuration whose measured quality justified building it.**
+
+Both knobs move through ONE decider (`synthesize::section_evidence_budget`)
+because widening the count while holding the cap at 3 fills the new room from
+new SOURCES only — the opposite of what a section needing depth on one protocol
+requires. The test pins the pair to the prototype's values and to the 39,200
+figure, so a later edit away from them fails rather than quietly testing
+something no measurement stood behind.
+
+**What does NOT change when it is on.** The citation contract, and therefore
+the gate. The same passages, from the same window, ranked by the same cosine,
+carrying the same `ev-N` handles — only how many of them the writer sees
+changes. No new evidence enters, nothing is re-chunked, the audit locates spans
+exactly as before.
+
+**Cost.** ~3.5× the section-writer prefill (11.2k → 39.2k chars per section).
+No extra calls. On a bed where the audit already dominates wall-clock this is
+not the expensive part, but it is not free and the arm must report it.
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm whose mean
+exceeds the like-for-like control by more than the measured band, with
+comprehensiveness moving in the direction claimed. Revert on any arm that costs
+score beyond the band, and — the specific risk of this lever — on any rise in
+audit refusals or could-not-judge verdicts: three times the evidence in front
+of a writer is three times the opportunity to assert something the section's
+own citations do not carry.
+
+**THE ARM REPORTED — 2026-08-27. The flag stays OFF, and the DEFAULT moved
+instead.** The reversal condition above asks for a pre-registered arm beating
+the like-for-like control. The sweep flew five points on bed `dr-1787807617`
+(task 69), one judge (`Qwen3.8-27B-UD-Q6_K_XL`), scored on the same ruler as
+the flights. The compose replay is a zero-noise instrument — writer re-fly
+byte-identical across a daemon restart (sha `517f692874b5d496`), judge
+identical to the last digit — so these are exact for this bed, not one draw:
+
+| arm | RACE overall | delta | words | min |
+|---|---|---|---|---|
+| 8x3 (the then-default) | 45.9166 | +0.00 | 10829 | 10.6 |
+| **16x4** | **51.3347** | **+5.42** | 10707 | 11.2 |
+| 28x5 (THIS FLAG) | 50.9864 | +5.07 | 10200 | 12.3 |
+| 44x6 | 50.9510 | +5.03 | 10178 | 14.1 |
+| 60x8 | 51.9689 | +6.05 | 10064 | 16.2 |
+
+The lever is real and this row's diagnosis was right: the writer was starved,
+and showing it more evidence is worth ~5 points. But **28/5 is not where the
+gain lives.** The whole effect is the first step, 8→16; 16/28/44 then sit
+inside 0.4 of each other while cost climbs monotonically. So the action is to
+move the SHIPPED DEFAULT to 16/4 (`synthesize::SECTION_PASSAGES` /
+`PER_SOURCE_CAP`, pinned by test) rather than to flip this flag on — the flag
+would buy 0.35 points LESS than the new default for +1.1 min and 2.5× the
+per-section prefill.
+
+Read the 60x8 row carefully: it is nominally the highest, by +0.63 over 16x4,
+and it is NOT evidence for going wider. The middle of the curve is
+non-monotone (44x6 is the lowest of the top four), which is the signature of a
+plateau with task-level jitter. Treating +0.63 as a trend across a
+non-monotone plateau is the single-run delta §18.5 forbids, and it would cost
++5.0 min and ~19.9 GB of unreclaimable host memory per flight (the writer's
+output buffer is `n_vocab * prompt_tokens * 4`; see
+`research/deep-research/arms/mem-forensics/PREREG-buffer-threshold.md`).
+
+**n=1 ACROSS TASKS.** One bed, one question. The curve's SHAPE is what moved
+the default; its third digit is not load-bearing. The flag is kept as-is, now
+as a dominated widening rather than a configuration to restore.
+
+**Evidence at landing.** NOT YET MEASURED — landed dark. No claim about its
+effect may be made until a pre-registered arm exists.
+
+## `SOVEREIGN_DR_REPORT_ARCHITECTURE` — the deliverable is a report (drb1-r8)
+
+**Landed 2026-08-26 default OFF. DEFAULT FLIPPED ON 2026-08-27.** Campaign
+`drb1-race`. Set `SOVEREIGN_DR_REPORT_ARCHITECTURE=0` to restore the
+pipeline-shaped deliverable. Requires `SOVEREIGN_DR_COMPOSED_REPORT=1` — which
+is now also the default.
+
+**The measurement it flipped on**, pre-registered before the data
+(`pre-registration.md`, "The readability arm"), bed `dr-1787887462`, n=1 on a
+replay validated as deterministic (`rep1` and `repdet` scored the same arm
+51.3347 twice):
+
+| | control | arch |
+|---|---|---|
+| readability (weighted) | 8.00 | **9.05** (bar was +0.30) |
+| overall, raw draft | 49.73 | 52.31 |
+| overall, RENDERED — what ships | 50.96 | **52.04** |
+
+It cost 0.25 of instruction-following; that is the whole price, and the other
+three dimensions rose. The rendered figure is the honest one: production always
+renders, and the raw-draft delta (+2.58) overstates it.
+
+**Reversal condition:** readability parity or worse against the same-bed
+control on a re-mint, or a rise in the "title refused / summary failed"
+fallbacks it logs — both of which it already names in the trace rather than
+substituting silently.
+
+Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`. Composes with `SOVEREIGN_DR_REPORT_OUTLINE`:
+that flag decides WHICH sections exist, this one decides what surrounds them.
+
+**What it turns on.** Three things, together, because they are one property —
+the deliverable is shaped like a report rather than like the pipeline that
+produced it. (1) The report gets its OWN title; the default H1 is the user's
+raw prompt sentence. (2) An `## Executive Summary`, written last and read
+first, answers the question in its opening two sentences; the closing section
+is titled `## Conclusion` rather than `## Synthesis and Assessment`. (3) The
+section cap rises from 8 to 12.
+
+**Why it exists — diagnosed from the judge's own per-criterion scores, not
+guessed.** Across the 25 scored task-69 judge records on disk, ranked by our
+deficit against the reference article:
+
+| Δ | ours | ref | k | criterion |
+|---|---|---|---|---|
+| −3.24 | 6.12 | 9.36 | 25/25 | comprehensiveness / Breadth and Depth of MCP Protocol Description |
+| −2.90 | 6.60 | 9.50 | 25/25 | readability / Logical Structure and Coherent Flow of Argumentation |
+| −2.50 | 6.98 | 9.48 | 25/25 | readability / Formatting, Layout, and Typographical Consistency |
+| −2.22 | 6.80 | 9.02 | 25/25 | readability / Paragraph Cohesion, Sentence Fluency, and Conciseness |
+
+Six of our seven worst criteria are readability — a property of how the
+article is WRITTEN, not of what was retrieved. The worst single criterion is
+the *second* subject the question names: task 69 asks about A2A **and** MCP,
+and our outlines spend their 8 sections before MCP gets one of its own, while
+the reference article gives it a dedicated section. AIQ's own published
+task-69 article (`inputs/aiq-subset-articles.jsonl`, read directly rather than
+inferred) carries an executive summary, a numbered section per subject, a
+consolidated comparison table, a section mapping innovations to the problems
+they address, and a conclusion. Ours carried 48 headings, every one of them a
+retrieved statistic — "Search Visibility Surge Following A2A Announcement",
+"Payload Efficiency in Agent Handshakes" — and no section describing MCP.
+
+**What does NOT change when it is on.** The citation contract, and therefore
+the gate. The title and summary introduce no claims of their own: the summary
+is instructed to assert nothing the report does not already establish and to
+reuse the `[Source: ev-N]` handles already used below it, and both are composed
+BEFORE the audit pass, so every sentence they carry faces the same gate as the
+sections. Nothing about the window, the handles, the corroboration floor, the
+custody veto or the containment witness moves.
+
+**One decider for the cap.** `synthesize::outline_max()` is read both by the
+prompt that ASKS for n sections and by the parser that ADMITS them, so the
+writer can never be asked for 12 and admitted at 8 — a silent truncation that
+would read as "the model planned 8". Watched red in
+`the_section_cap_is_one_decider_for_the_prompt_and_the_parser`.
+
+**Two refusals, both named, never silent (§18.3).** A title outside 20–160
+chars is refused — a paragraph is the model answering instead of naming, a
+stub names nothing — and the H1 falls back to the question with the fallback
+in the trace. A failed summary lands the report without one, also traced.
+Watched red in `the_title_parser_refuses_what_is_not_a_title`.
+
+**Cost.** Two extra draft calls per run (title, summary).
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm whose mean
+exceeds the like-for-like control by more than the measured band, with
+readability moving in the direction claimed. Revert on any arm that costs score
+beyond the band, or on any rise in audit refusals — an executive summary must
+never become a place to assert what the sections could not. Per-draw sd is 2.97
+and the judge contributes **zero** of it (note `403a218a`), so n is the only
+lever on resolution.
+
+**Evidence at landing.** NOT YET MEASURED — landed dark.
+
+**FIRST MEASUREMENT 2026-08-27 — EXPLORATORY, NOT THE PRE-REGISTERED ARM. The
+default does NOT flip on this.** A like-for-like A/B on the compose-replay bed
+`dr-1787807617` (task 69), both arms at the new 16/4 default, one judge, the
+only difference being this flag:
+
+| | overall | readability (ours) | h2 |
+|---|---|---|---|
+| control | 51.3347 | 8.07 | 21 |
+| **this flag on** | **52.1293** | **8.79** | 22 |
+
++0.79 overall, and readability — the criterion this row claims — moves +0.72,
+closing 59% of the gap to the reference. The replay is a zero-noise instrument
+(note `680940ce`: writer re-fly byte-identical, judge identical to the last
+digit), so on THIS bed the band is 0 and the delta is exact. Per-criterion, two
+close outright: Comparative Presentation -1.50 -> 0.00 and Formatting
+-1.00 -> 0.00. Technical Language slips 9.5 -> 9.0, the one regression.
+
+Why this is NOT the arm the reversal condition asks for, stated plainly so
+nobody mistakes it later: it was exploratory rather than pre-registered, it is
+n=1 across TASKS (one bed, one question), and the per-draw sd of 2.97 quoted
+above is a FLIGHT figure — the replay pins the window, so its zero band does
+not transfer to the flight the condition governs.
+
+What it does establish is the mechanism, and it is not the one this row
+assumes. The flag did NOT reduce fragmentation: 22 h2 headings against the
+control's 21, because `outline_max()` is read by `plan_outline`, which
+`compose_report` never calls — the bed replays a pinned 20-section outline, so
+the 12-section cap is inert on this path. The gain came from the report title
+and the Executive Summary alone. The two readability criteria still at -1.00
+are Logical Structure and Paragraph Cohesion — the fragmentation ones — which
+is why the outline itself is the next arm (`arms/bed/fly-outline-arm.sh`,
+via the new `COMPOSE_SECTIONS`).
+
+## `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS` — stop reserving a logits row per prompt token
+
+**Landed 2026-08-27 default OFF. GRADUATED DEFAULT-ON 2026-09-08** on the
+byte-identity arm recorded below — the reversal condition this row itself
+pre-registered. Opt out with `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS=0`.
+
+**VERIFIED ON THE LIVE DAEMON, same day**, after a full workspace rebuild and a
+clean restart (`cargo check` is not `cargo build`; the daemon's exe read
+`(deleted)` until it was restarted). Warm daemon, fast slot, a 6,103-token
+prompt — above the ~3,650 knee: `RssAnon` **7.22 -> 7.23 GB, a +0.01 GB step**,
+where the old behaviour predicts `6,103 * 993,280` = **+5.64 GB**. That matches
+the isolated test process's +0.01 GiB exactly, so the flag behaves in
+production as it does on the bench.
+
+**What it is for.** The MTP prefill flags every position for logits, which
+makes `n_outputs_all` the whole prompt (`llama-context.cpp:1700`), so
+`output_reserve` sizes the logits buffer at `n_vocab * n_prompt_tokens * 4` —
+**993,280 bytes per prompt token** at the qwen35 family's 248,320 vocab. Past
+~3,650 tokens that buffer exceeds this device's 4 GiB `maxBufferSize`, fails to
+pin, and falls back to a host CPU buffer that is retained at high-water until
+the process exits (`ggml-vulkan.cpp:16191`; `llama-context.cpp:2092` grows and
+never shrinks). One 20k-token request strands ~19.9 GB. It is the daemon's
+single largest unreclaimable allocation, and the reason "restart between runs"
+kept being proposed as a workaround the operator had already ruled out.
+
+**The justification for the flag is false, and that is measured, not argued.**
+`model_slot.rs` cites an upstream invariant — `get_embeddings_pre_norm_ith`
+errors with `batch.logits[N] != true`. That error comes from
+`output_resolve_row`, which `get_embeddings_nextn_ith` calls ONLY on the masked
+path (`llama-context.cpp:966`). The unmasked path returns early at :954-960,
+indexing nextn rows "densely, by raw token position", and `common_speculative`
+initialises the MTP **target** unmasked (`speculative.cpp:1371`) — confirmed at
+runtime, the daemon logs `set_embeddings_nextn: value = 1, masked = 0`.
+
+**The derisking ladder, in the order it was climbed**
+(`tests/mtp_prefill_logits_spike.rs`, Qwen3.5-4B-UD-MTP, 681-token prompt):
+
+| | pre-norm | next-token |
+|---|---|---|
+| FLOOR (all vs all) | 0e0 | 0e0 |
+| SIGNAL (all vs last) | **0e0** | **1.46e-1** |
+
+Pre-norm hidden states — what MTP actually consumes — are BIT-IDENTICAL at
+every one of the 681 positions. 128 greedy tokens generate identically.
+
+**Why it is nevertheless default OFF.** The floor arm is what makes the second
+column a result rather than noise: the model is bit-deterministic run-to-run in
+one configuration, so the 1.46e-1 next-token shift is REAL and attributable —
+`n_outputs_all` going from n to 1 changes the output-gathering graph and hence
+the float accumulation order for the row read. It did not flip a greedy
+decision over 128 tokens, but "did not flip in 128 tokens on one prompt" is not
+"cannot flip", and a composed report is ~10,000 words.
+
+**The vendored precondition has a tripwire.** A bump flipping that `masked`
+argument would not degrade — it would make `output_resolve_row` throw on an
+unflagged position and `GGML_ABORT` the daemon, so by the time a runtime check
+could see it the process is gone. `the_mtp_target_context_is_still_initialised_unmasked`
+asserts it at rest, in the normal test run.
+
+**Cost when on.** None. It removes work and removes an allocation.
+
+**Reversal condition.** Flip default-ON when a byte-identity arm on a real
+composed report reproduces the control's draft sha256 exactly, with the memory
+step measured on the same run. Revert on any divergence in composed output, or
+on any arm that costs RACE score beyond the band.
+
+**Evidence at landing.** The spike above. The byte-identity arm is IN FLIGHT
+and its result belongs here before the flip; until it lands, this row's claim
+is "the mechanism is clear", not "the change is safe".
+
+**BYTE-IDENTITY ARM: RUN, AND THE CONDITION IS MET ON THE 4B (2026-09-08).**
+Measured with NO DAEMON — two `#[ignore]` tests, one process per arm:
+`synthesize.rs::dump_real_compose_draft_prompt` extracts the real production
+draft prompt through the existing `RecordingPort` (the prompt is data; no
+inference), and `mtp_prefill_logits_spike.rs::byte_identity_on_a_real_composed_draft`
+runs one arm and dumps its greedy token stream.
+
+Input: `arms/bed-compose/compose-input.json` — a real composed report, 52-chunk
+evidence window, 20 sections, 264-char question. Prompt 100,302 chars / 26,226
+tokens, well past the ~3,650 knee (the test REFUSES below it: under the knee
+both arms allocate the same pinned buffer, so the memory step would be zero by
+construction and a pass would prove nothing, §18.1).
+
+| arm | prefill RssAnon step | draft sha256 (2,000 greedy tokens) |
+|---|---|---|
+| `all` — control, production today | **+21.20 GiB** | `30091c5fc4524f8da8c492df813fa449de1b5773c77c3f9d9287c71c819421d4` |
+| `tail` — the flag | **+0.01 GiB** | `30091c5fc4524f8da8c492df813fa449de1b5773c77c3f9d9287c71c819421d4` |
+
+**Identical. 21.19 GiB saved.** Predicted `n_tokens * 993,280` = 20.88 GiB
+against a measured 21.20 — the formula holds to 1.5%, so the mechanism is not
+merely clear, it is quantitatively confirmed on the real workload.
+
+ONE ARM PER PROCESS is forced by the defect: the buffer is grow-only and
+retained until process exit, so a second arm in the same process inherits the
+first's allocation and its delta reads ~0 whichever arm it is. Measuring the
+step at all requires a clean process per arm.
+
+**What this does NOT yet cover, and it is the reason the flip is not automatic:**
+the arm ran on `Qwen3.5-4B-UD-MTP-Q6_K_XL`. The daemon's PRIMARY is a 35B-A3B,
+and identity is a per-model property — the 1.46e-1 logit shift the spike found
+is this model's. The same test with `SPIKE_GGUF` pointed at the primary closes
+it; it was not run here because the 35B's 30 GB plus a 21 GB control buffer does
+not fit beside a peer's job on this box. RACE remains a revert guard, not a
+pre-flip requirement.
+
+## `SOVEREIGN_DR_SECTION_CONTEXT` — the section knows it is part of a report
+
+**Landed 2026-08-27, DEFAULT OFF.** Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`.
+Deliberately separate from `SOVEREIGN_DR_REPORT_ARCHITECTURE`: that flag
+decides the deliverable's SHAPE, this one decides whether a section knows it is
+part of one.
+
+**The measurement that produced it, and the one that killed the obvious
+alternative first.** After the section-evidence default moved to 16/4,
+readability is the ONLY RACE dimension still behind the reference, and the only
+one the evidence budget does not move:
+
+| dim | 8x3 | 16x4 | 28x5 | 44x6 | 60x8 | gap at 16x4 |
+|---|---|---|---|---|---|---|
+| comprehensiveness | 7.58 | 8.92 | 8.92 | 8.75 | 9.08 | **+0.42** |
+| insight | 7.50 | 9.12 | 9.00 | 9.25 | 9.12 | **+1.12** |
+| instruction_following | 8.60 | 9.70 | 9.00 | 9.60 | 9.70 | **+0.60** |
+| readability | 7.86 | 8.07 | 8.00 | 8.43 | 8.21 | **-1.21** |
+
+The judge's objection is one sentence: the report has *"a somewhat fragmented
+structure with many short sections that jump between topics ... reads like a
+collection of research findings rather than a single narrative arc"*.
+
+**The obvious cause was flown and REFUTED.** Ours carried 21-22 h2 headings
+against a reference that reads as nine, so the outline looked like the culprit.
+A 10-section outline over the SAME window — planned by production
+`plan_outline`, flown via the new `COMPOSE_SECTIONS`, architecture flag held on
+in both cells — left Logical Structure at **exactly 8.5, unchanged**, while
+costing 0.61 overall and dropping Formatting 9.5 -> 8.5:
+
+| | overall | readability | Logical Structure | h2 | words |
+|---|---|---|---|---|---|
+| 20-section control | 52.1293 | 8.79 | 8.5 | 22 | 10974 |
+| 10-section arm | 51.5225 | 8.64 | **8.5** | 10 | 9100 |
+
+Section COUNT is not the cause. What is left is the prompt: `synthesize.rs`
+hands a section writer the question, its own sub-question, its evidence and a
+word budget, and NOTHING about its neighbours. Every section is composed in
+isolation no matter how many there are — ten isolated sections read as
+disjointed as twenty. This flag prepends the ordered section list with an arrow
+on the writer's own entry, and tells it to assume the reader has read what is
+above and will read what is below.
+
+**What does NOT change when it is on.** The citation contract and therefore the
+gate. No new evidence enters, no passage is re-ranked, and no extra model call
+is made — only the prompt's preamble grows, by roughly 40 characters per
+planned section (~800 on a 20-section plan, about 3.5% of a 16x4 section
+prompt).
+
+**The failure it is built to avoid.** The arrow follows `si` (an index into
+`subs`), while the numbering follows write order (`kept`). Confusing the two
+points every section at the wrong neighbour and produces fluent, correct prose
+about the wrong place in the report — which surfaces as a failure nowhere. Hence
+`section_arc` is a function with tests, not an inline `format!`; watched red in
+`the_section_arc_points_at_the_writers_own_section` and
+`the_section_arc_numbers_by_write_order_not_by_sub_index`.
+
+**Cost.** No extra calls. Prompt preamble only, as above.
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm whose mean
+exceeds the like-for-like control by more than the measured band, with
+readability — specifically Logical Structure and Paragraph Cohesion, the two
+criteria still at -1.00 after the architecture flag — moving in the direction
+claimed. Revert on any arm that costs score beyond the band, and on any rise in
+audit refusals: telling a writer to assume what an earlier section established
+is an invitation to assert it without carrying its own citation.
+
+**Evidence at landing.** NOT YET MEASURED — landed dark. The diagnosis above is
+measured; this flag's own effect is not.
+
+## `SOVEREIGN_DR_WRITER_CONTRACT_V2` — the graded evidence steer (drb1-r7)
+
+**Landed 2026-08-26, DEFAULT OFF.** Campaign `drb1-race`.
+
+**What it turns on.** Two things, together, because either alone is
+incoherent. (1) The evidence block handed to each section writer is GRADED:
+findings carry `[ANCHOR]`/`[SUPPORT]`/`[WEAK]` from their existing 0-100
+`usefulness`, and passages carry the same three tiers from their existing
+descending-cosine rank. (2) `WRITER_CONTRACT` gains four obligations ported
+from AIQ's `writer.j2` — how to use the grade, name consensus and combine
+complementary evidence, inference that is licensed but marked and
+confidence-weighted, and when a table earns its place. Showing a grade without
+stating its obligation would be decoration; stating the obligation with no
+grade to apply it to would be noise.
+
+**Why.** The grade is not new information — **we already computed it on both
+paths and threw it away.** `notes::findings_block` has always sorted findings
+by `usefulness` and then dropped the number; `synthesize::rank_passages` has
+always returned passages best-first and the evidence block has always
+flattened that ordering. The writer received an ordered list and was never
+told the ordering meant anything. AIQ steers synthesis by exactly this signal
+(`evidence_judgment`: anchors carry, medium supports, low is for gaps and
+caveats). This is the cheapest structural item in their writer we lacked, and
+it costs **zero extra inference calls**.
+
+It is the next lever because the alternative was measured and failed. Note
+`403a218a`: `SOVEREIGN_DR_ALL_LEGS_SLOW` moved the writer from the 4B to the
+27B on every drafting leg, routing witnessed in both directions, and produced
+Δ = −0.46 against a like-for-like control. The model rung available on this
+host does not pay, so the gap must be attacked through the prompt contract.
+Targets insight (−15.20) and readability (−11.93), note `bdf94683`.
+
+**What does NOT change when it is on.** The citation contract, and therefore
+the gate. Grades are advisory prose inside the prompt. They do not alter which
+chunks are in the window, which `ev-N` handles exist, what the audit locates,
+the corroboration floor, the custody veto or the containment witness. The
+honesty floor is likewise untouched: the ported inference clause still
+requires an inference to rest on cited evidence and to read visibly as
+reasoning rather than as a sourced fact.
+
+**Two floors that keep the grade from lying.** The bands straddle
+`DEFAULT_USEFULNESS` (50), so a finding whose worker declined to score it
+lands in `SUPPORT` and is never read as a judgement in either direction
+(§18.3 — an absent value is not a verdict). And a section holding fewer than
+three passages grades every one `ANCHOR`, because a naive top-third rule would
+mark a thin section's only evidence `WEAK` and the contract would then
+instruct the writer not to build on anything it has. Both are watched red in
+`synthesize::tests`.
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm of n ≥ 5
+per side on the task-69 bed whose mean exceeds the like-for-like control by
+more than the measured band, with insight or readability moving in the
+direction claimed. Revert on any arm that costs score beyond the band, or on
+any observed rise in audit refusals — the grade must never become a licence to
+assert. Per-draw sd is 2.97 and the judge contributes **zero** of it (note
+`403a218a`), so n is the only lever on resolution: n=5 resolves ~2.7 points.
+
+**Evidence at landing.** Compile + `deep_research::` 217/217 green, parallel,
+three consecutive runs. No flight has been run with this flag on — it is
+landed dark and UNMEASURED, and no claim about its effect may be made until
+that arm exists.
+
+## `SOVEREIGN_DR_RESEARCH_NOTES` — the researcher worker (drb1-r4)
+
+**Landed 2026-08-24, DEFAULT OFF.** Campaign `drb1-race`. Requires
+`SOVEREIGN_DR_COMPOSED_REPORT=1`: notes feed the composer's sections, so with
+the composed report off there is no writer to feed and this flag does nothing.
+
+**What it turns on.** One researcher worker per planned sub-question reads the
+WHOLE merged evidence window and returns structured findings — a claim, the
+`ev-N` window chunks it rests on, and a 0-100 usefulness judgment. The
+composer then writes each section from that sub-question's findings instead of
+from the top-`SECTION_PASSAGES` passages by cosine.
+
+**Why.** Our AIQ teardown (`research/deep-research/aiq-teardown.md` §1.3)
+attributes that system's DRB-II InfoRecall lead — 49.23, above o3 (39.98),
+Gemini-3-Pro (39.09) and Grok (33.52) — to exactly this: a dedicated worker per
+sub-question returning research notes, with the writer reading notes and
+holding no search tools. The teardown's own read is that "the ranking is the
+InfoRecall ranking" and that AIQ's lead is "a breadth result, not a scorer
+trick". Ours showed each section eight passages. On the logged task-69 flight
+(`dr-1787604870`) the window held 38 chunks, so most of what acquisition paid
+for never reached the writer.
+
+**What does NOT change: the citation contract, and therefore the gate.** A
+finding names the `ev-N` handles it rests on, the writer cites those same
+handles, and `audit` locates spans exactly as before — the corroboration floor
+still counts origins and the custody veto still sees a chunk. Distillation
+moves WHERE the reading happens, not what a citation means.
+
+**The refusal that carries the safety case.** A finding citing an id the
+window does not hold is refused WHOLE and recorded with its reason and the
+unknown ids. It is never admitted with the bad id dropped: that would leave a
+true-looking claim re-attributed to a chunk which never supported it. Watched
+red — `deep_research::notes::tests::a_finding_citing_an_unknown_chunk_is_refused`
+and `..::a_partly_resolvable_finding_is_refused_whole_never_re_attributed` both
+fail under exactly that wrong fix, the first printing the surviving
+`Finding { claim: "…", evidence_ids: ["ev-1"] }`. An uncited claim is refused
+too. A sub-question whose findings are ALL refused falls back to passages,
+named in the trace — never composed from nothing.
+
+**Cost.** One extra `Speed::Slow` draft call per sub-question per run. On the
+slow slot deliberately: this leg's output is what the writer reads instead of
+the evidence, so a fabricated finding here becomes a cited sentence the audit
+cannot locate.
+
+**Reversal condition.** The flag flips on only if, on the shipping Rust path
+with both arms otherwise identical, the notes arm beats the passage arm on
+RACE overall with the honesty floor intact (0.0 ungrounded on P4-v0 and R-12)
+and with the refused-finding count reported alongside the score. A win bought
+by refusing so little that unverifiable claims reach the writer is a failed
+arm, not a win. **Not yet measured — no arm has been flown.**
+
+## `SOVEREIGN_DR_COMPOSED_REPORT` — the composed deep-research deliverable (drb1-t5)
+
+**Shipped 2026-08-22 default OFF. DEFAULT FLIPPED ON 2026-08-27** — operator
+direction: ship the deliverable to end users in the desktop app. Campaign
+`drb1-race`, order `drb1-t5`, pre-registered in
+`research/deep-research/adversarial/pre-registration.md`. Set
+`SOVEREIGN_DR_COMPOSED_REPORT=0` to restore the claim-ledger render.
+
+**Why the default moved.** This is the gate every other report-shape switch
+sits behind — `SOVEREIGN_DR_REPORT_OUTLINE`, `..._ARCHITECTURE`,
+`..._RESEARCH_NOTES`, `..._REPORT_SECTION_EVIDENCE` all require it. With it off
+a user reached NONE of them: the desktop app (`src-tauri/
+deep_research_commands/mod.rs`) calls `launch::prepare` with no DR flags and
+inherits process env, so every end user received the claim-ledger render while
+every measurement taken since drb1 was of the composed path. The desktop reads
+`report.md` either way, so this changes that file's CONTENT, not the UI
+contract.
+
+**THE LARGEST UNKNOWN, named rather than buried: the composed report has never
+been scored against the claim-ledger render it replaces.** Everything measured
+is WITHIN the composed path — evidence budget, outline, architecture, section
+context, length. Nothing crosses this gate. This flip is an argument from where
+the work went, not from a measured comparison. **Reversal condition:** a
+head-to-head on the same bed showing the claim-ledger render ahead, or reports
+of `compose_report` falling back on a material share of flights (the fallback
+is logged, so this is checkable — "composed report unavailable — falling back
+to the claim-ledger render").
+
+**Safe to default for the same reason the outline is.** A `compose_report`
+that errors falls back to the claim-ledger render and NAMES the fallback in
+the trace (§18.3). The flip changes which path is normal, not whether a
+failure is visible.
+
+**What it turns on.** The deliverable is composed — one section per planned
+sub-question, retrieved per section over the whole merged evidence window by
+embedding, plus a closing synthesis — rather than rebuilt from atomised,
+individually-audited claim rows.
+
+**Why.** Measured on the logged t7a flight (`runs-t7a-graded-shadow`, the
+benchmark's own RACE criteria, 27B judge): the ledger shape scored a weighted
+mean of **2.16/10** against the reference's **9.32**, and `## Findings` was
+empty or near-empty on all nine deliverables because 127 of 137 claims landed
+could-not-judge. The reference class that scores 40.46 runs ~2,200 words over
+six to eight sections.
+
+**What does not change.** The gate. The audit runs over the composed text, so
+the audited artefact and the delivered artefact are the same document. The
+corroboration floor, custody veto, containment witness and verdict set are
+untouched; refuted claims are marked in place; unverified claims are named in a
+closing Verification section rather than dropped.
+
+**Correction 2026-08-23.** This row previously read "The reference class that
+scores 40.46 runs ~2,200 words over six to eight sections." That conflated two
+different articles. 2,206 words is **Perplexity's** mean over the DRB-I subset
+— the competitor scoring 40.46. The benchmark's REFERENCE articles, which form
+the denominator in `overall = T/(T+R)`, run **6,898-13,348 words** (measured
+from `deep_research_bench/data/test_data/raw_data/reference.jsonl`). The
+mistake is load-bearing: 6-8 sections x the 300-380-word budget in
+`synthesize.rs` reproduces "~2,200" exactly, so the sentence very likely
+authored the constant. Nothing about the flag's on/off state changes; the
+sizing rationale does.
+
+**Reversal condition.** If the composed arm does not beat the ledger arm on the
+graded-probe composite with the honesty floor intact (0.0 ungrounded on P4-v0
+and R-12), it stays off and the finding is reported with the curves.
+
+**Correction 2026-08-24 — the evidence this row leaned on is contaminated, and
+the flag STAYS OFF.** The 44.40 composite was measured by
+`research/deep-research/arms/lab/compose2.py`, a Python REIMPLEMENTATION of
+`compose_report` — and over estates that contain, as evidence, the DRB-I
+reference article for the task being answered. Six of the ten subset estates
+carry their own answer (5.8%-16.2% of evidence by volume; tasks 56, 58, 59, 62,
+65, 69). `demo13/build-ceiling-deck.py` declares that caveat correctly for its
+own arm; `arms/lab/build_estate.py` pooled those windows into the lab estate
+without carrying it forward. Full accounting in
+`research/deep-research/adversarial/pre-registration.md` §"CORRECTION 2026-08-24".
+
+**What the shipping code actually scores.** First measurement of the Rust path
+against this bar (task 69, pinned greedy judge, same estate/binary/window both
+arms): composed **28.4100** vs ledger **27.2127** — composed wins all four RACE
+dimensions, +1.20 overall, insight widest at +11% relative. Perplexity on the
+same task replays at 43.8759.
+
+**Why that is not yet a flip.** The direction the row asks for holds, and the
+honesty floor is untouched (the audit still runs over the composed text; the
+corroboration floor, custody veto and containment witness are unchanged). But
+n=1 task is a direction, not the composite the row names. The flip wants the
+four CLEAN subset tasks (78, 83, 90, 95) measured on the shipping path, both
+arms. At the composed arm's current cost — 68 minutes per run, 93% of it 27B
+compose+audit — that is ~6 hours of local inference, which is why the
+throughput work gates the decision rather than the other way round.
+
+**The larger finding, recorded because it reprioritises this row.** That
+composed run's entire evidence window was 4 chunks / 1,866 chars / ~466 tokens,
+two of which were an Amazon job posting. A 5,773-word report was composed from
+~1,185 chars of relevant evidence, which is why 142 of 190 claims landed
+could-not-judge. The deliverable SHAPE is no longer the binding constraint on
+this score; acquisition is.

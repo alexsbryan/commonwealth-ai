@@ -352,7 +352,7 @@ def render(found: list[dict], n_new: int, note: str | None) -> str:
         "Fix what is real. Re-issue the same commit to proceed: these sites do "
         "not block again this session.",
         "A deliberate deviation is named in the commit body, never left silent (§18.3).",
-        "Open sovereign/ARCH_PRINCIPLES.md at the cited section before deciding; "
+        "Open docs/ARCH_PRINCIPLES.md at the cited section before deciding; "
         "do not recall it (§11.1).",
     ]
     if note:

@@ -11,7 +11,7 @@ the same on a light or dark page.
 | 0 | `00-hero.svg` | runs on your machine · the optional mesh | [README](../../README.md) |
 | 1 | `01-territory.svg` | four projects, one dependency direction | [Architecture tour §1](../ARCHITECTURE_TOUR.md) |
 | 2 | `02-journey.svg` | a message's journey through the grounding gate | [Architecture tour §2](../ARCHITECTURE_TOUR.md) |
-| 3 | `03-recipe.svg` | a recipe is the unit of knowledge + custody flags | [Architecture tour §3](../ARCHITECTURE_TOUR.md), [recipe guide](../../sovereign-recipes/GETTING_STARTED.md) |
+| 3 | `03-recipe.svg` | a recipe is the unit of knowledge + custody flags | [Architecture tour §3](../ARCHITECTURE_TOUR.md), [recipe guide](../../ingest/crates/sovereign-recipes/GETTING_STARTED.md) |
 | 4 | `04-mesh-custody.svg` | chunks travel, corpora don't | [Architecture tour §4](../ARCHITECTURE_TOUR.md), [two-node quickstart](../TWO_NODE_QUICKSTART.md) |
 | 5 | `05-gates.svg` | every layer has a gate — *gates, not vibes* | [Architecture tour §5](../ARCHITECTURE_TOUR.md) |
 | 6 | `06-bigger-model.svg` | run a model bigger than your machine | [Run a bigger model](../RUN_A_BIGGER_MODEL.md) |

@@ -56,7 +56,7 @@ def norm(target):
     """A comparable path: no ::symbol, no :line, no crates/ prefix noise."""
     t = (target or "").split("::")[0].strip()
     t = re.sub(r":\d+$", "", t)
-    return t.replace("sovereign/crates/", "").replace("commonwealth/crates/", "")
+    return re.sub(r"^[^/]+/crates/", "", t)
 
 
 def same(a, b):

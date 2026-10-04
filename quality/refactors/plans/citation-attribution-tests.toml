@@ -2,13 +2,13 @@
 # Derived from `svrn code suggest-seams` + the mod-tests recipe; the
 # first real run of the deterministic plan executor (2026-09-03).
 [plan]
-subject = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
+subject = "svrn/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
 verify_cmd = "cargo test -p sovereign-core --lib"
 
 [[move]]
 start = 848
 end = 1402
-dest = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution/tests.rs"
+dest = "svrn/crates/sovereign-core/src/runtime/grounding/citation_attribution/tests.rs"
 
 [[patch]]
 start = 847

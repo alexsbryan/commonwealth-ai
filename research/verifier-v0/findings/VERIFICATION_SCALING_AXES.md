@@ -1,7 +1,7 @@
 # Verification scaling axes — what LLM-as-a-Verifier offers a 4B, and what it does not
 
 **Status:** further-research pre-registration. Written 2026-08-20.
-**Parent:** `sovereign/docs/specs/VERIFIER_V0.md` (§0 build-vs-adopt, §1 success
+**Parent:** `svrn/docs/specs/VERIFIER_V0.md` (§0 build-vs-adopt, §1 success
 criteria). Successor instrument to `HEADROOM_STUDY.md` and
 `THRESHOLD_CALIBRATION.md`.
 **External source:** `github.com/llm-as-a-verifier/llm-as-a-verifier`,
@@ -1000,7 +1000,7 @@ small high-value window. This bounds what ANY selector could win, before pricing
 one.
 
 **Inventory first (§19), and it changes the question.** Two things already
-exist. `corpus-engine/src/index/search.rs:659` composes the final set by greedy
+exist. `ingest/crates/corpus-engine/src/index/search.rs:659` composes the final set by greedy
 **facility-location** over the pool instead of top-k truncation, behind a
 `coverage_factor` flag with a no-lose fallback. And the cross-encoder reranker
 was REJECTED 2026-08-04 on cost, not quality — `quality/env-flags.toml:1152`

@@ -1,0 +1,157 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `cargo xtask` — repo maintenance gates.
+//!
+//! Usage:
+//!   cargo xtask quality                            Run every local gate, print a summary table
+//!   cargo xtask arch-gate [--update-baseline|--tighten]   ARCH §3.1 size ratchet + §1 doc-contract
+//!   cargo xtask docs-gate                          Every repo path the narrative docs cite must resolve
+//!   cargo xtask boundary-gate                      The studio package depends only on itself + shared leaves
+//!   cargo xtask clone-gate [--update-baseline|--tighten]    Production lines living in 2+ files may only shrink
+//!   cargo xtask concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW duplicated type name
+//!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
+//!   cargo xtask lifecycle-gate                            No thin surface retains a process handle or tracks a lifecycle
+//!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
+//!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
+//!   cargo xtask instrument-gate                    Every command a quality surface reaches is in quality/instruments.toml
+//!   cargo xtask judge-funnel-gate                  One place builds a forced-choice judge body, and the census sees it
+//!   cargo xtask target-arch [--update-doc|--measure]  quality/TARGET_ARCHITECTURE.md renders from CONCEPTS.toml + ARCH_LAYERS.toml + the graph
+//!
+//! Ratchet contract (uniform across gates): baselines live in
+//! `quality/baselines/`, are machine-written only (`--update-baseline`
+//! snapshots current state; `--tighten` rewrites only entries that improved —
+//! never adds, never raises), and every failure message ends with the exact
+//! command that fixes it.
+
+mod api_gate;
+mod arch_gate;
+mod boundary_gate;
+mod clock_gate;
+mod clone_gate;
+mod common;
+mod concept_gate;
+mod distribution_gate;
+mod docs_gate;
+mod env_gate;
+mod instrument_gate;
+mod judge_funnel_gate;
+mod layer_gate;
+mod layout_gate;
+mod lifecycle_gate;
+mod lint_gate;
+mod lock_gate;
+mod manifests;
+mod purity_gate;
+mod quality_cmd;
+mod refactor_apply;
+mod refactor_land;
+mod size_gate;
+mod substitution_gate;
+mod target_arch;
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let cmd = args.first().map(|s| s.as_str()).unwrap_or("help");
+
+    let exit_code = match cmd {
+        "quality" => quality_cmd::run(),
+        "arch-gate" => arch_gate::run(&args[1..]),
+        "refactor-land" => refactor_land::run(&args[1..]),
+        "refactor-apply" => refactor_apply::run(&args[1..]),
+        "docs-gate" => docs_gate::run(),
+        "boundary-gate" => boundary_gate::run(),
+        "clock-gate" => clock_gate::run(&args[1..]),
+        "purity-gate" => purity_gate::run(&args[1..]),
+        "substitution-gate" => substitution_gate::run(&args[1..]),
+        "clone-gate" => clone_gate::run(&args[1..]),
+        "concept-gate" => concept_gate::run(&args[1..]),
+        "api-gate" => api_gate::run(&args[1..]),
+        "env-gate" => env_gate::run(&args[1..]),
+        "instrument-gate" => instrument_gate::run(&args[1..]),
+        "judge-funnel-gate" => judge_funnel_gate::run(&args[1..]),
+        "layer-gate" => layer_gate::run(&args[1..]),
+        "lifecycle-gate" => lifecycle_gate::run(&args[1..]),
+        "layout-gate" => layout_gate::run(&args[1..]),
+        "lint-gate" => lint_gate::run(&args[1..]),
+        "lock-gate" => lock_gate::run(&args[1..]),
+        "size-gate" => size_gate::run(&args[1..]),
+        "target-arch" => target_arch::run(&args[1..]),
+        "help" | "--help" | "-h" => {
+            print_usage();
+            0
+        }
+        other => {
+            eprintln!("Unknown xtask command: {other}");
+            print_usage();
+            1
+        }
+    };
+
+    std::process::exit(exit_code);
+}
+
+fn print_usage() {
+    eprintln!("Usage: cargo xtask <command>");
+    eprintln!();
+    eprintln!("Commands:");
+    eprintln!("  quality                        Run every local gate; one summary table");
+    eprintln!(
+        "  clock-gate [--update-baseline|--tighten]  Wall-clock reads route through each island's time decider"
+    );
+    eprintln!(
+        "  purity-gate                              Zero-I/O of the rail's canon is a gate: pure trees, pure closure, wasm32"
+    );
+    eprintln!(
+        "  substitution-gate                        The identity/signature path defaults to nothing — named failures only"
+    );
+    eprintln!(
+        "  arch-gate [--update-baseline|--tighten]   Enforce the §3.1 file-size ratchet + §1 doc-contract"
+    );
+    eprintln!(
+        "  refactor-land                             Post-split landing chain: conformance-tag regen when stale + arch-gate --tighten"
+    );
+    eprintln!(
+        "  refactor-apply <plan.toml> [--land]       Execute a named move-recipe (deterministic split steps) + verify per step"
+    );
+    eprintln!(
+        "  docs-gate                      Resolve every repo path cited by the narrative docs"
+    );
+    eprintln!(
+        "  boundary-gate                  Enforce the studio-package dependency boundary (clients/studio/BOUNDARY.md)"
+    );
+    eprintln!(
+        "  clone-gate [--update-baseline|--tighten]  Production lines covered by an 8-line window in 2+ files may only shrink"
+    );
+    eprintln!(
+        "  concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW name defined as a type in 2+ crates"
+    );
+    eprintln!(
+        "  layer-gate [--update-baseline|--tighten]  Enforce quality/ARCH_LAYERS.toml + the fan-in ratchet"
+    );
+    eprintln!(
+        "  lifecycle-gate                 No thin surface retains a process handle or tracks a lifecycle (sv-no-daemon-management, half 2)"
+    );
+    eprintln!(
+        "  lock-gate [--update-baseline|--tighten]   No NEW duplicate crate versions in Cargo.lock"
+    );
+    eprintln!(
+        "  env-gate [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml; renders docs/ENV_FLAGS.md"
+    );
+    eprintln!(
+        "  layout-gate [--update-baseline|--tighten]  Ratchet hand-spelled corpus-engine layout (reach `Corpus`)"
+    );
+    eprintln!(
+        "  lint-gate --from <clippy.json> [--update-baseline|--tighten]  Per-crate/lint warning-count ratchet"
+    );
+    eprintln!(
+        "  size-gate [--update-baseline|--tighten|--accept <crate>|--root <path>]  Code lines per crate may only shrink; comments/blanks excluded, tests counted apart"
+    );
+    eprintln!(
+        "  judge-funnel-gate              One place builds a forced-choice judge body, and it hands it to the call census"
+    );
+    eprintln!(
+        "  api-gate [--update-baseline]   Diff hub-crate public APIs vs committed snapshots (pinned nightly)"
+    );
+    eprintln!(
+        "  target-arch [--update-doc|--measure]  Render quality/TARGET_ARCHITECTURE.md's register, layer map, graph evidence and boundary table"
+    );
+}

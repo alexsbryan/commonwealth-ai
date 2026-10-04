@@ -55,7 +55,7 @@ PRE-REGISTERED BARS (written before the script was run)
 import json, sys, itertools
 from pathlib import Path
 
-D = Path("/home/alexbryan/dev/commonwealth-ai/sovereign/bench/sep_atlas/map-conversion-rung6")
+D = Path("/home/alexbryan/dev/commonwealth-ai/bench/lanes/sep_atlas/map-conversion-rung6")
 
 def verdicts(arm):
     """(question_id, fact) -> present. The unit is one thing the user was told."""
@@ -93,7 +93,7 @@ def block(title, pairs):
     u = sum(c["up"] for c in rows); d = sum(c["down"] for c in rows)
     return {"n": n, "flips": f, "rate": f / n if n else 0.0, "up": u, "down": d}
 
-BASE = Path("/home/alexbryan/dev/commonwealth-ai/sovereign/bench/sep/"
+BASE = Path("/home/alexbryan/dev/commonwealth-ai/bench/lanes/sep/"
             "baselines/questions-synth/2026-07-06.json")
 
 def verdicts_path(p):

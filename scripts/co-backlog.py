@@ -138,7 +138,7 @@ no CLI. It is chosen over shelling out to `sovereign notes list` on
 measured evidence, not on the documented caveat alone. Measured
 2026-08-09 on this host, same query, only cwd differs:
 
-    cwd=/Users/alexsbryan/dev/commonwealth-ai  ->  ./sovereign/.sovereign/notes.db   (68 notes)
+    cwd=/Users/alexsbryan/dev/commonwealth-ai  ->  ./svrn/.sovereign/notes.db   (68 notes)
     cwd=$HOME                                  ->  ~/.sovereign/notes.db           (6811 notes)
 
 `sovereign notes list --id 0807272f` returns a hit from BOTH — a

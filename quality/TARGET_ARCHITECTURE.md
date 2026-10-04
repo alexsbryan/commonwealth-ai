@@ -12,8 +12,8 @@ this document narrated by hand would have failed the program regardless of
 any metric.
 
 **What this is not.** Not a contract in the sense of
-[`ARCH_PRINCIPLES.md`](../sovereign/ARCH_PRINCIPLES.md) §1.1.
-[`SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) remains the record
+[`ARCH_PRINCIPLES.md`](../docs/ARCH_PRINCIPLES.md) §1.1.
+[`SYSTEM_OVERVIEW.md`](../docs/SYSTEM_OVERVIEW.md) remains the record
 of what IS, verifiable on the commit it appears in. When the program
 completes, this replaces that file and the distinction disappears.
 
@@ -91,7 +91,7 @@ mentioned five rows that exist.
 | **`Step`** | one typed unit of the single dataflow substrate. | `partial` | `sovereign-workflow` | 5 | One dataflow substrate. |
 | **`Artifact`** | the substrate's typed step output — content-addressed, cacheable. | `partial` | `sovereign-workflow` | 5 | The substrate's typed step output — content-addressed, cacheable. |
 | **`Intent`** | what kind of ask it is. | `partial` | `sovereign-contracts` | 6 | The enum plus a data table — one row per intent declaring handler, slot, retrieval policy, gate surface, budget, labels. |
-| **`Command`** | one CLI promise. | `partial` | `sovereign/docs/cli-contract.toml` | 6 | The contract is GENERATIVE. |
+| **`Command`** | one CLI promise. | `partial` | `svrn/docs/cli-contract.toml` | 6 | The contract is GENERATIVE. |
 | **`Record`** | an immutable fact with provenance. | `target` | `sovereign-record` | 6 | Append-only; identity is a content hash, never a counter, sequence number, or address (ARCH_PRINCIPLES §7.5). |
 | **`Endpoint`** | a network surface with a declared exposure. | `target` | `sovereign-mesh` | 6 | Declaring an endpoint declares its exposure class (loopback \| mesh-internal \| private-lan \| token-authenticated). |
 | **`Gap`** | a demand for evidence the current corpus cannot meet. | `partial` | `sovereign-contracts` | 6 | A Gap is a demand for evidence the current corpus cannot meet — statement, what would answer it, and the trail from claim to demand. |
@@ -255,7 +255,7 @@ What the SCIP graph says about each register row, joined by noun name. `defs` is
 | **`Step`** | `partial` | converge (the dataflow substrate); distinct (plan-step and build-stage squatters) | 3 | 33 | 67 | **DUPLICATED** (3) — defined in `sovereign-cli-dev`, `sovereign-workflow`, `sovereign-contracts` |
 | **`Artifact`** | `partial` | converge (substrate + DR tenancy); distinct (bench output record renames) | 3 | 10 | 57 | **DUPLICATED** (3) — defined in `sovereign-cli-llm`, `sovereign-workflow`, `sovereign-core` |
 | **`Intent`** | `partial` | converge | 1 | 8 | 535 | converged — one definition, in `sovereign-contracts` as declared |
-| **`Command`** | `partial` | converge | 1 | 1 | 4 | the register's canonical `sovereign/docs/cli-contract.toml` is not a crate path, so the graph cannot be asked where this noun lives |
+| **`Command`** | `partial` | converge | 1 | 1 | 4 | the register's canonical `svrn/docs/cli-contract.toml` is not a crate path, so the graph cannot be asked where this noun lives |
 | **`Record`** | `target` | converge | 0 | 50 | 0 | **ABSENT** — no definition anywhere; the register declares `sovereign-record` will own it |
 | **`Endpoint`** | `target` | converge | 0 | 3 | 0 | **ABSENT** — no definition anywhere; the register declares `sovereign-mesh` will own it |
 | **`Gap`** | `target` | converge (the knowledge-gap family); distinct (design/ignorance gaps rename) | 5 | 14 | 47 | **DUPLICATED** (5) — defined in `sovereign-cli-dev`, `sovereign-cli-dev`, `sovereign-core`, `corpus-engine`, `sovereign-contracts` |
@@ -499,7 +499,7 @@ A domain boundary is only a boundary if a small, named set of types crosses it. 
 
 **Read the middle column exactly as written.** Rung 11 minted the types and
 proved by compile-fail that the illegal constructions have no spelling
-(`kernel-types/tests/answer_reds.rs`, six fixtures, each watched failing before
+(`shared/crates/kernel-types/tests/answer_reds.rs`, six fixtures, each watched failing before
 its `.stderr` was recorded). It did NOT migrate the live turn path:
 `grounding/mod.rs` still assembles `ReleasedCitation` by hand and
 `streaming.rs` still holds tokens procedurally. A row reading "type" where the

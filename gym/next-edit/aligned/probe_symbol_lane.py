@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M0 of the symbol lane — a PROBE (sovereign/docs/specs/NEXT_EDIT_SYMBOL_LANE.md).
+"""M0 of the symbol lane — a PROBE (svrn/docs/specs/NEXT_EDIT_SYMBOL_LANE.md).
 
 Writes no daemon code and changes no behaviour. It answers one question:
 

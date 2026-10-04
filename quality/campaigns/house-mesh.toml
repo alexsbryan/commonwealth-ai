@@ -192,7 +192,7 @@ status       = "open"
 #     staleness, with the cost on the record ("six solve attempts served by a
 #     pre-dawn daemon").
 #   - The sentence this bar wants is already written once: `JobKind::is_skew_of`
-#     (oicp-types/src/job.rs:185-188) -> commonwealth-work/src/refusal.rs:160-166,
+#     (shared/crates/oicp-types/src/job.rs:185-188) -> commonwealth-work/src/refusal.rs:160-166,
 #     "this donor offers {offered} and the unit is {wanted} — same kind,
 #     different contract revision."
 #

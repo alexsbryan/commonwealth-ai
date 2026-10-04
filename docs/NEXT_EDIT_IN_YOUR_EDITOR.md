@@ -332,6 +332,6 @@ HTTP route.
 
 The full design, the trigger policy, and the reasoning behind the
 precision posture are in
-[`sovereign/docs/NEXT_EDIT.md`](../sovereign/docs/NEXT_EDIT.md). The
+[`svrn/docs/NEXT_EDIT.md`](../svrn/docs/NEXT_EDIT.md). The
 ghost-text completion this feature sits beside is documented in
-[`sovereign/docs/INLINE_COMPLETION.md`](../sovereign/docs/INLINE_COMPLETION.md).
+[`svrn/docs/INLINE_COMPLETION.md`](../svrn/docs/INLINE_COMPLETION.md).

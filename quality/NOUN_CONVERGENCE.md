@@ -10,7 +10,7 @@ architecture is [`TARGET_ARCHITECTURE.md`](./TARGET_ARCHITECTURE.md).
 reorders.
 
 **Contracts this answers to:**
-[`ARCH_PRINCIPLES.md`](../sovereign/ARCH_PRINCIPLES.md) §10.6, §7, §18, §19.
+[`ARCH_PRINCIPLES.md`](../docs/ARCH_PRINCIPLES.md) §10.6, §7, §18, §19.
 
 ---
 
@@ -676,7 +676,7 @@ a pass.** One blended score would hide exactly the failure worth seeing.
 ### 6.4 What generalizes
 
 **Free — works on another codebase today.** The census is SQL over the SCIP
-schema, and `corpus-engine-scip/src/scip_export.rs` already drives five
+schema, and `shared/crates/corpus-engine-scip/src/scip_export.rs` already drives five
 exporters: `rust-analyzer`, `scip-go`, `scip-typescript`, `scip-python`,
 `scip-java`. Point it at a TypeScript monorepo, run the exporter, and the
 duplicate-concept register comes out. Nothing to port. Also free:
@@ -870,7 +870,7 @@ Four exhibits that this is one concern and not three:
   It wants the envelope badly enough to hand-check for it.
 
 **Owner:** `svrn code converge roles` — the role tier beneath `census` (names)
-and `dry-report` (behaviour). Landed 2026-08-20; `corpus-engine-scip/src/roles.rs`.
+and `dry-report` (behaviour). Landed 2026-08-20; `shared/crates/corpus-engine-scip/src/roles.rs`.
 A mirror, not a gate: no threshold, no exit code, nothing to ratchet.
 
 ### 10.2 The sprawl is inside crates, not between them

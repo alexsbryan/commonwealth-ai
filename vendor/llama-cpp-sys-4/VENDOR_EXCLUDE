@@ -92,7 +92,7 @@ tools/server/*
 # --- CUDA: NOW VENDORED (2026-08-28). This block used to exclude four files
 #     with the reason "no host in this fleet compiles CUDA today; a CUDA host
 #     must vendor them". A CUDA host turned up: the container image
-#     (`sovereign/container/Containerfile.cuda`, GGML_CUDA=ON), rebuilt for
+#     (`serve/container/Containerfile.cuda`, GGML_CUDA=ON), rebuilt for
 #     the first time since 2026-07-27. It failed exactly as this file's own
 #     Metal post-mortem predicts a missing source will —
 #

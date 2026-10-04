@@ -5,7 +5,7 @@ Successor to `M2_STREAM_B.md`, which built and validated the harness on a
 the Strix Halo and **corrects that doc's volume model**, which was wrong in a
 way that would have mis-planned the whole milestone.
 
-Spec: `sovereign/docs/specs/VERIFIER_V0.md` §3 (Stream B), §7 M2.
+Spec: `svrn/docs/specs/VERIFIER_V0.md` §3 (Stream B), §7 M2.
 
 ---
 

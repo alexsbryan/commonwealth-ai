@@ -3,12 +3,20 @@
 #
 # mesh-soak.sh — Layer-2 multi-process mesh soak: the "real bytes" layer of the
 # mesh QA stack (Layer 1 = in-process DST, `sovereign-mesh --features dst`;
-# Layer 3 = the SLO gate, `sovereign mesh soak-gate`). It boots N real
-# `sovereign daemon` processes, forms one mesh over real TCP gossip, then drives
-# real faults (SIGKILL crash + churn/restart) in repeated cycles, asserting the
-# HTTP-observable invariant pack via `sovereign mesh check-invariants` (the
-# unit-tested assertion engine — sovereign-cli-llm/src/mesh_soak.rs) at every
-# checkpoint. Findings stream to mesh-soak-findings.jsonl for the SLO gate.
+# Layer 3 = the SLO gate, `sovereign mesh soak-gate`). It boots N real nodes,
+# each a `cw-rails` (the node's mesh endpoint: membership, gossip, iroh) and a
+# `sovereign daemon` that dials it through `[daemon] rails_base`, forms one mesh
+# over iroh, then drives real faults (SIGKILL crash + churn/restart) in repeated
+# cycles, asserting the HTTP-observable invariant pack via `sovereign mesh
+# check-invariants` (the unit-tested assertion engine —
+# cmnwlth/crates/sovereign-cli-mesh/src/mesh_soak.rs) against each node's
+# cw-rails at every checkpoint. Findings stream to mesh-soak-findings.jsonl for
+# the SLO gate.
+#
+# Since pb-mesh-exit-transport svrn serves no mesh membership: its /v1/mesh/*
+# answer 410 naming cw-rails, and a daemon with no cw-rails beside it is in no
+# mesh at all. So a node here is the pair, a crash kills both, and a restart
+# brings cw-rails up before the daemon that dials it.
 #
 # ── What it exercises that the in-process DST suite cannot ────────────────────
 #   Real process crashes (SIGKILL) + real wall-clock offline-decay + real churn
@@ -17,17 +25,17 @@
 #
 # ── Isolation (this is load-bearing) ──────────────────────────────────────────
 #   The `local` backend re-execs the whole soak inside a ROOTLESS NETWORK
-#   NAMESPACE (`unshare -rn`, loopback-only). Why: the daemon has no mDNS-disable
-#   knob and the CLI `mesh join` is hardcoded to :9741 — run on the bare host it
-#   would mDNS-advertise to (and try to join) the operator's real production
-#   mesh. The netns seals it: test daemons see only `lo`, self-advertise
-#   127.0.0.1, and form their mesh entirely on localhost. Zero production
-#   cross-talk. (Verified: the host's real mesh member count is unchanged across
-#   a full soak.)
+#   NAMESPACE (`unshare -rn`, loopback-only). Why: every port here has a default
+#   on the operator's live node — svrn :9741, cw-rails :9747, serve :9748 — and
+#   any dial that fell back to one (a config key missed, a client that reads
+#   the default) would reach the real house mesh. Every node is given its own
+#   rails_base and serve port below, and the netns is the backstop for the one
+#   nobody thought of: test nodes see only `lo`, self-advertise 127.0.0.1, and
+#   form their mesh entirely on localhost.
 #
 # ── Models by workload ────────────────────────────────────────────────────────
-#   crash lane: daemons only boot + gossip + serve /v1/mesh/status (no chat), so
-#   primary == embed == a small embedding GGUF (~600MB/node) — N fit in RAM.
+#   crash lane: the mesh is cw-rails'; daemons only boot and dial it (no chat),
+#   so primary == embed == a small embedding GGUF (~600MB/node) — N fit in RAM.
 #   ingest lane: a REAL generative primary (so chat runs) + the 0.6B embed.
 #
 # Usage:
@@ -42,12 +50,11 @@
 #     Knobs: MESH_SOAK_OFFLOAD_CONCURRENCY (3), MESH_SOAK_OFFLOAD_SETTLE_SECS (14).
 #     Also runs at the tail of --workload ingest, where the preconditions already hold.
 #
-#   --iroh (SOAK_IROH) runs the transport-migration axis: every node boots with
-#     `[iroh] enabled = true` (all traffic classes route iroh-first, IP fallback
-#     retained), peers join over the founder's dial-by-key invite, and the run
-#     asserts each node actually carried mesh traffic over iroh. The netns is
-#     loopback-only (no internet → no relay); nodes dial by key over gossiped
-#     direct addrs — the LAN-without-internet iroh path. See TRANSPORT_MIGRATION.md W3.
+#   --iroh (SOAK_IROH) is accepted and changes nothing: iroh is cw-rails' only
+#     mesh transport, so every run joins over the founder's dial-by-key invite
+#     and asserts each node carried gossip over iroh. cw-rails runs local-only
+#     (`[relay] discovery = "none"`): the netns has no route to n0, and nodes
+#     dial by key over gossiped direct addrs — the LAN-without-internet path.
 #
 #   --with-desktops (P2) hangs a headless desktop (attach-mode) + an app-user
 #     persona driver on EACH node, in the netns, so user-visible TURN invariants
@@ -57,8 +64,10 @@
 #     crash (users on the app while the mesh is savaged). Needs a built desktop
 #     binary (cargo build -p sovereign-desktop) at target/debug/sovereign-desktop.
 #
-#   --workload corrupt pre-writes garbage into a node's durable mesh.json then
-#     resumes it — the daemon must fail-safe (regenerate/reject, no id collision).
+#   --workload corrupt pre-writes garbage into a node's cw-rails mesh.json then
+#     restarts it — cw-rails must refuse the store by name with its node_id
+#     untouched (identity.rs: a corrupt store is never read as an empty roster),
+#     and the node rejoins once the file is moved aside, under the same id.
 #     A container-free OS-fault (the OS-fault tier — cgroup-OOM / disk-full /
 #     partition — is rootless, no podman; see MESH_QA.md).
 #   --workload ingest drives a daemon corpus ingest concurrently with chat and
@@ -67,8 +76,8 @@
 #     MESH_SOAK_MODEL (default models/Qwen3.5-2B.Q6_K.gguf), and yield<30s.
 #     ~3GB/node — stop the production 35B daemon first; fits a workstation at N=3.
 #
-# Prereq: a built sovereign-cli (cargo build --bins; debug is fine), the model(s)
-# below, and `ip` + `unshare` for the netns.
+# Prereq: a built sovereign-cli and cw-rails (cargo build --bins; debug is
+# fine), the model(s) below, and `ip` + `unshare` for the netns.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -84,20 +93,15 @@ WORKLOAD="${WORKLOAD:-crash}"
 # invariants are asserted WHILE the node is killed/restarted underneath. Forces a
 # generative primary (chat must work). DRIVER_MINUTES defaults to MINUTES.
 DESKTOPS="${DESKTOPS:-0}"; DRIVER_MINUTES="${DRIVER_MINUTES:-}"
-# --iroh (SOAK_IROH): the transport-migration axis. Boots every node with
-# `[iroh] enabled = true` so all traffic classes route iroh-first (IP fallback
-# retained), joins peers over the founder's dial-bearing invite (the `dial=`
-# path), and asserts each node actually carried mesh traffic over iroh. The
-# netns is loopback-only with no internet, so relays are unreachable — nodes
-# dial by key over gossiped `iroh_direct_addrs` (127.0.0.1), which is exactly
-# the LAN-without-internet iroh path. See TRANSPORT_MIGRATION.md W3.
-SOAK_IROH="${SOAK_IROH:-0}"
+# --iroh / SOAK_IROH used to pick the transport. cw-rails has one, so the flag
+# is parsed for old invocations and read by nothing.
 # --reachability-chaos (SOAK_REACH_CHAOS): the founder-reachability self-heal
-# axis (Track W). Each node boots with a fast watchdog + the periodic chaos hook
-# (SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS), injecting reachability wedges; the
-# invariant checker records each node's `founder_reachability.degraded` and the
-# `founder_degraded_rate` SLI (baseline-gated) asserts self-heal keeps recovering
-# them. Implies --iroh (the watchdog only runs when the iroh endpoint is up).
+# axis (Track W). Each node's cw-rails boots with a fast watchdog + the periodic
+# chaos hook (SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS, read by
+# commonwealth-rails iroh_watchdog.rs), injecting reachability wedges; the
+# invariant checker records each node's `self_reachability.degraded` and the
+# `founder_degraded_rate` SLI (baseline-gated) asserts self-heal keeps
+# recovering them.
 SOAK_REACH_CHAOS="${SOAK_REACH_CHAOS:-0}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -106,20 +110,16 @@ while [ $# -gt 0 ]; do
     --seed)     SEED="$2"; shift 2;;
     --workload) WORKLOAD="$2"; shift 2;;
     --with-desktops) DESKTOPS=1; shift;;
-    --iroh)     SOAK_IROH=1; shift;;
-    --reachability-chaos) SOAK_REACH_CHAOS=1; SOAK_IROH=1; shift;;
+    --iroh)     shift;;   # iroh is the only transport; see SOAK_IROH above
+    --reachability-chaos) SOAK_REACH_CHAOS=1; shift;;
     --driver-minutes) DRIVER_MINUTES="$2"; shift 2;;
     --keep)     KEEP=1; shift;;
     --gate)     GATE=1; shift;;
-    -h|--help)  sed -n '3,44p' "$0"; exit 0;;
+    -h|--help)  awk 'NR >= 3 && /^#/ { print; next } NR >= 3 { exit }' "$0"; exit 0;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
 case "$WORKLOAD" in crash|ingest|corrupt|offload) ;; *) echo "bad --workload: $WORKLOAD (crash|ingest|corrupt|offload)" >&2; exit 2;; esac
-# Normalise SOAK_IROH to a shell flag (0/1) + a TOML bool the config heredoc
-# splices verbatim. Accept the usual truthy spellings so `SOAK_IROH=true` and
-# `--iroh` and `SOAK_IROH=1` all mean the same thing.
-case "$SOAK_IROH" in 1|true|yes|on) IROH_ON=1; IROH_TOML=true;; *) IROH_ON=0; IROH_TOML=false;; esac
 case "$SOAK_REACH_CHAOS" in 1|true|yes|on) REACH_CHAOS=1;; *) REACH_CHAOS=0;; esac
 
 # ── Re-exec into a fresh rootless netns (loopback up) for the local backend ────
@@ -127,7 +127,7 @@ if [ "$BACKEND" = "local" ] && [ -z "${MESH_SOAK_IN_NETNS:-}" ]; then
   exec unshare -rn env MESH_SOAK_IN_NETNS=1 \
     NODES="$NODES" MINUTES="$MINUTES" SEED="$SEED" KEEP="$KEEP" GATE="$GATE" \
     MESH_SOAK_BACKEND="$BACKEND" WORKLOAD="$WORKLOAD" \
-    DESKTOPS="$DESKTOPS" DRIVER_MINUTES="$DRIVER_MINUTES" SOAK_IROH="$SOAK_IROH" \
+    DESKTOPS="$DESKTOPS" DRIVER_MINUTES="$DRIVER_MINUTES" \
     SOAK_REACH_CHAOS="$SOAK_REACH_CHAOS" bash "$0"
 fi
 [ "$BACKEND" = "local" ] && ip link set lo up
@@ -135,6 +135,10 @@ fi
 CLI="${SOVEREIGN_CLI:-$ROOT/target/debug/sovereign-cli}"
 [ -x "$CLI" ] || CLI="$ROOT/target/release/sovereign-cli"
 [ -x "$CLI" ] || { echo "sovereign-cli not built (cargo build --bins)"; exit 1; }
+# The node's mesh endpoint. CW_RAILS_BIN is the name `svrn mesh up` reads too
+# (rails_up.rs locate_rails).
+RAILS="${CW_RAILS_BIN:-$ROOT/target/debug/cw-rails}"
+[ -x "$RAILS" ] || { echo "cw-rails not built at $RAILS (cargo build --bins, or set CW_RAILS_BIN)"; exit 1; }
 # Model profile by workload. The crash lane only needs daemons that boot + gossip,
 # so primary == embed == a tiny embedding GGUF (N fit in RAM, no chat is made).
 # The ingest lane needs a REAL generative primary (so chat actually runs) plus the
@@ -175,23 +179,78 @@ YIELD_TOML=""; [ -n "$YIELD_SECS" ] && YIELD_TOML="yield_to_foreground_secs = $Y
 
 WORK="$(mktemp -d -t mesh-soak.XXXXXX)"
 FINDINGS="$ROOT/mesh-soak-findings.jsonl"; : > "$FINDINGS"
-DECAY_WAIT="${DECAY_WAIT:-72}"     # offline_threshold is 60s — wait past it
+# cw-rails' offline_threshold_secs defaults to 60 (commonwealth-rails
+# config.rs); the soak writes no override, so wait past it.
+DECAY_WAIT="${DECAY_WAIT:-72}"
 RANDOM=$SEED                        # seed bash PRNG → reproducible victim picks
-declare -a PIDS NODE_IDS
+declare -a PIDS RPIDS NODE_IDS      # PIDS: the svrn daemons; RPIDS: their cw-rails
 FAILS=0; CYCLE=0
 
-cport() { echo $((19741 + 2 * $1)); }
-iport() { echo $((19742 + 2 * $1)); }
+# Per node: svrn client · svrn internal · (svrn's ring rail, which the daemon
+# binds at client + 2 itself — guest_pages.rs rail_port — so svrn's ports step
+# by 4: at a step of 2, node N's rail took node N+1's client port) · cw-rails
+# API · serve (hosted in the daemon process, which would otherwise take 9748 on
+# every node).
+cport() { echo $((19741 + 4 * $1)); }
+iport() { echo $((19742 + 4 * $1)); }
+rport() { echo $((20741 + 2 * $1)); }
+sport() { echo $((20742 + 2 * $1)); }
+# svrn's data dir and cw-rails' root, side by side: a cw-rails root nested in
+# svrn's [data] dir would be walked by anything that scans it.
+rdir()  { echo "$WORK/rails$1"; }
 log()   { printf '\n\033[1m# [soak] %s\033[0m\n' "$*"; }
 finding() { printf '%s\n' "$1" >> "$FINDINGS"; }
 jget() { curl -s -m 4 "$1" 2>/dev/null | python3 -c "import sys,json
 try:
     d=json.load(sys.stdin); print(eval(sys.argv[1]))
 except Exception: pass" "$2"; }
+# A node's cw-rails logs, ANSI stripped: tracing colours the key=value pairs,
+# so `via=iroh` is not a substring of the raw line.
+rails_log() { cat "$(rdir "$1")"/rails.*.log 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'; }
+# Does node <i>'s cw-rails log hold a line matching <ERE>? Never `rails_log |
+# grep -q`: under pipefail, grep -q exits at the first match, sed dies of
+# SIGPIPE, and the pipeline reports a miss for a line that is there (it read 0
+# on every node of the first ported run, 2026-10-03).
+rails_logged() { rails_log "$1" | grep -E "$2" > /dev/null; }
 
-status_url() { echo "http://127.0.0.1:$(cport $1)/v1/mesh/status"; }
+# The mesh view is cw-rails'. svrn's /v1/mesh/status answers 410.
+status_url() { echo "http://127.0.0.1:$(rport $1)/v1/mesh/status"; }
+rails_url()  { echo "http://127.0.0.1:$(rport $1)"; }
 
-boot_node() {  # boot_node <i>
+# One node identity, as `svrn mesh up`'s handover leaves it
+# (identity_handover.rs): the same node_id in svrn's data dir and cw-rails'
+# root. Seeded once, before the first boot of either; a restart finds it.
+seed_identity() {  # seed_identity <i>
+  local i="$1"; local d="$WORK/node$i" r; r=$(rdir "$i")
+  mkdir -p "$d" "$r"
+  [ -f "$r/node_id" ] && return 0
+  head -c 16 /dev/urandom > "$r/node_id"
+  cp "$r/node_id" "$d/node_id"
+}
+
+boot_rails() {  # boot_rails <i>
+  local i="$1"; local r; r=$(rdir "$i")
+  seed_identity "$i"
+  # name: the member name peers see, and what /v1/mesh/join's node_name must
+  # equal (membership.rs check_node_name). discovery "none" severs n0 — the
+  # netns has no route to it, so asking would only add timeouts.
+  [ -f "$r/rails.toml" ] || cat > "$r/rails.toml" <<EOF
+name = "node$i"
+listen = $(rport "$i")
+
+[relay]
+discovery = "none"
+EOF
+  # The reachability axis's watchdog is cw-rails' now (iroh_watchdog.rs reads
+  # these names): a fast poll + the periodic chaos wedge, so the
+  # founder_degraded_rate SLI observes real detect→escalate→rebuild→recover.
+  local reach_env=""
+  [ "$REACH_CHAOS" = 1 ] && reach_env="SOVEREIGN_MESH_WATCHDOG_POLL_SECS=5 SOVEREIGN_MESH_WATCHDOG_GRACE_SECS=8 SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS=20 SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS=45"
+  env $reach_env "$RAILS" run --data-dir "$r" > "$r/rails.$RANDOM.log" 2>&1 &
+  RPIDS[$i]=$!
+}
+
+boot_daemon() {  # boot_daemon <i>
   # NB: assign `i` on its own line first. A same-line `local i="$1" d="$WORK/node$i"`
   # expands $i in d= BEFORE `local i` is bound, so it captures a LEAKED outer loop
   # var (the survivor loop leaves `i`=NODES-1) — which cross-wired a restarted
@@ -210,34 +269,11 @@ primary_idle_secs = 1800
 extras_idle_secs = 0
 freshness_watchers_enabled = false
 client_bind = "127.0.0.1"
+rails_base = "$(rails_url "$i")"
 $YIELD_TOML
 [data]
 dir = "$d"
-[iroh]
-# Pinned explicitly: soak nodes join via /v1/mesh/join, which writes the
-# client-exposed marker — without this pin, auto-enable would silently point
-# every soak node at public relay infrastructure. --iroh / SOAK_IROH is the
-# transport-migration soak axis (see TRANSPORT_MIGRATION.md W3).
-enabled = $IROH_TOML
 EOF
-  # Under the iroh axis, raise the `transport` tracing target to debug so each
-  # node's log carries the per-dial `transport: resolved` lines (target:
-  # "transport") the assertion greps for — proof iroh actually carried traffic,
-  # not just that the endpoint bound. RUST_LOG is honoured by init_tracing's
-  # EnvFilter. Left unset otherwise so the crash lane's log volume is unchanged.
-  # `sovereign_mesh=info` surfaces the "routing classes over iroh" install
-  # line (its target is the sovereign_mesh module, not `transport`);
-  # `transport=debug` surfaces the per-dial "transport: resolved" lines.
-  # Both targets are needed — an EnvFilter directive for one leaves the other
-  # OFF, which is exactly what silently zeroed the install check on the first
-  # smoke run.
-  local rust_log=""
-  [ "$IROH_ON" = 1 ] && rust_log="RUST_LOG=sovereign_cli_daemon=info,sovereign_mesh=info,transport=debug"
-  # Reachability self-heal axis (--reachability-chaos): a fast watchdog + the
-  # periodic chaos wedge, so the founder_degraded_rate SLI observes real
-  # detect→escalate→rebuild→recover cycles under the soak.
-  local reach_env=""
-  [ "$REACH_CHAOS" = 1 ] && reach_env="SOVEREIGN_MESH_WATCHDOG_POLL_SECS=5 SOVEREIGN_MESH_WATCHDOG_GRACE_SECS=8 SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS=20 SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS=45"
   # Every node gets its own `[data] dir = $d` above, and the run lock is keyed
   # on the DATA ROOT, so all three nodes claim independently. It was keyed on
   # $HOME until 2026-08-24, which meant node0 took the lock and EVERY other
@@ -248,46 +284,87 @@ EOF
   # reporting green. The SOVEREIGN_ALLOW_MULTIPLE_DAEMONS escape hatch that
   # papered over it is deleted with the re-key. See the bind assertion at the
   # bring-up loop.
-  env $rust_log $reach_env \
+  #
+  # The daemon process hosts serve, which binds SOVEREIGN_SERVE_PORT (venue.rs)
+  # and would otherwise race every node for 9748. CW_RAILS_DIR points svrn-side
+  # readers of cw-rails' root (commonwealth_media::rails_data_dir) at this
+  # node's, as collaborate_e2e.rs does.
+  SOVEREIGN_SERVE_PORT="$(sport "$i")" CW_RAILS_DIR="$(rdir "$i")" \
     "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
   PIDS[$i]=$!
 }
-wait_port() { local i="$1" _; for _ in $(seq 1 40); do
-  curl -s -m 2 -o /dev/null "$(status_url $i)" 2>/dev/null && return 0
+
+# A node is the pair; cw-rails first, so the daemon's first dial finds it.
+boot_node() {  # boot_node <i>
+  local i="$1"
+  boot_rails "$i"
+  boot_daemon "$i"
+}
+kill_node() {  # kill_node <i> — SIGKILL both halves, as a power cut would
+  local i="$1"
+  kill -9 "${PIDS[$i]:-0}" "${RPIDS[$i]:-0}" 2>/dev/null
+}
+
+# Up = both halves answer 200: cw-rails' status and svrn's /status. `-f`, so a
+# 410 or a 5xx is not "up". Without it a 410 from svrn's retired
+# /v1/mesh/status passed this wait, and the run failed later as empty node ids.
+wait_port() { local i="$1" _; for _ in $(seq 1 60); do
+  curl -sf -m 2 -o /dev/null "$(status_url $i)" 2>/dev/null \
+    && curl -sf -m 2 -o /dev/null "http://127.0.0.1:$(cport $i)/status" 2>/dev/null && return 0
+  kill -0 "${RPIDS[$i]}" 2>/dev/null || return 1
   kill -0 "${PIDS[$i]}" 2>/dev/null || return 1; sleep 0.5; done; return 1; }
 
 # kill-9-startup-window torture: boot the node, then kill -9 it again WHILE it is
 # still inside its startup window (before wait_port would succeed), then boot it
-# clean. The daemon must persist its node_id synchronously early enough that the
-# clean restart resumes the SAME identity — a regression net for the startup-
-# window identity durability the whole restart-identity investigation hinged on.
-# Stability is asserted by the following healed checkpoint (UniqueIds + the
-# unchanged self_id). If a future daemon change defers node_id persistence past
-# the bind, this fault will start flapping UniqueIds.
+# clean. The clean restart must resume the SAME identity and take back cw-rails'
+# root lock from the dead holder — a regression net for startup-window
+# durability. Stability is asserted by the following healed checkpoint
+# (UniqueIds + the unchanged self_id).
 torture_restart() {  # torture_restart <i>
   local v="$1"
   boot_node "$v"                     # first boot
   sleep "0.$(( (RANDOM % 8) + 1 ))"  # 0.1–0.8s — land inside the startup window
-  kill -9 "${PIDS[$v]}" 2>/dev/null  # kill mid-startup
+  kill_node "$v"                     # kill mid-startup
   finding "{\"kind\":\"fault\",\"action\":\"kill-9-startup-window\",\"node\":$v,\"cycle\":${CYCLE:-0}}"
   boot_node "$v"                     # clean restart — must resume the same id
 }
 
-join_to_founder() {  # join_to_founder <i> <founder_key_or_link>
-  local i="$1" key_or_link="$2" url
-  # Under the iroh axis the caller passes the founder's FULL dial-bearing
-  # invite link (`sovereign://join/<key>?...&dial=<hex>@127.0.0.1:<udp>`) read
-  # live from node0's status — so the joiner dials the founder BY KEY over
-  # iroh (the `dial=` plaintext path, W2c), IP/mDNS fallback intact. Otherwise
-  # the legacy hand-built `?relay=127.0.0.1` IP hint.
-  if [ "$IROH_ON" = 1 ]; then
-    url="$key_or_link"
-  else
-    url="sovereign://join/${key_or_link}?relay=127.0.0.1:$(iport 0)"
-  fi
-  local body; body=$(python3 -c 'import json,sys; print(json.dumps({"key_or_url": sys.argv[1], "node_name": "node"+sys.argv[2]}))' "$url" "$i")
-  curl -s -m 25 -X POST "http://127.0.0.1:$(cport $i)/v1/mesh/join" \
-    -H 'content-type: application/json' -d "$body" >/dev/null 2>&1
+# Found the mesh on node0's cw-rails (`POST /v1/mesh/create`, what `svrn mesh
+# create` sends after its bring-up — which this script must not run: it would
+# install a cw-rails user unit). Sets FKEY and FLINK, the invite with node0's
+# iroh dial. cw-rails' invite carries it as `iroh=`, and a join with no iroh
+# dial is refused by name (join.rs NoIrohDial).
+found_mesh() {
+  local out code body
+  out=$(curl -s -m 20 -w $'\n%{http_code}' -X POST "$(rails_url 0)/v1/mesh/create" \
+    -H 'content-type: application/json' -d '{"name":"mesh-soak","node_name":"node0"}' 2>&1)
+  code="${out##*$'\n'}"; body="${out%$'\n'*}"
+  FKEY=$(printf '%s' "$body" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("join_key") or "")' 2>/dev/null)
+  FLINK=$(printf '%s' "$body" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("join_link") or "")' 2>/dev/null)
+  case "$code:$FLINK" in
+    200:*iroh=*) return 0;;
+  esac
+  echo "  founding on node0 failed: HTTP ${code:-000} ${body:0:300}"
+  finding "{\"phase\":\"found\",\"ok\":false,\"violations\":[{\"invariant\":\"mesh_founded\",\"detail\":\"node0 /v1/mesh/create answered ${code:-000} with no iroh= invite\"}]}"
+  FAILS=$((FAILS+1)); return 1
+}
+
+# Join node <i> to the founder by its invite, through <i>'s own cw-rails
+# (`POST /v1/mesh/join`, the door `svrn mesh join` dials). A refusal is printed
+# and recorded where it happens, rather than surfacing later as a node missing
+# from convergence.
+join_to_founder() {  # join_to_founder <i> <founder_link>
+  local i="$1" link="$2" body out code
+  body=$(python3 -c 'import json,sys; print(json.dumps({"key_or_url": sys.argv[1], "node_name": "node"+sys.argv[2]}))' "$link" "$i")
+  out=$(curl -s -m 60 -w $'\n%{http_code}' -X POST "$(rails_url "$i")/v1/mesh/join" \
+    -H 'content-type: application/json' -d "$body" 2>&1)
+  code="${out##*$'\n'}"
+  [ "$code" = 200 ] && return 0
+  out="${out%$'\n'*}"
+  echo "  node$i join refused: HTTP ${code:-000} ${out:0:300}"
+  local detail; detail=$(printf '%s' "${out:0:300}" | python3 -c 'import sys,json;print(json.dumps(sys.stdin.read()))')
+  finding "{\"kind\":\"join\",\"node\":$i,\"ok\":false,\"http\":\"${code:-000}\",\"detail\":$detail}"
+  return 1
 }
 
 self_id() { jget "$(status_url $1)" '[m["node_id"] for m in d["members"] if m["is_self"]][0]'; }
@@ -308,27 +385,24 @@ wait_online_eq() { local target="$1" excl="${2:-x}" i; for _ in $(seq 1 90); do 
     [ "$(online_count $i)" = "$target" ] || ok=0; done
   [ "$ok" = 1 ] && return 0; sleep 1; done; return 1; }
 
-# Iroh axis (--iroh / SOAK_IROH): prove each node actually routed mesh traffic
-# over iroh — not merely that the endpoint bound. Two signals per node log:
-#   1. install  (info): "routing classes over iroh" — the RoutedTransport with
-#      iroh in the per-class map was installed at start_daemon.
-#   2. carried  (debug, `transport` target, hence RUST_LOG=transport=debug in
-#      boot_node): a "transport: resolved" line naming iroh — a real dial
-#      candidate was produced over iroh, and since iroh candidates are listed
-#      FIRST and loopback is reachable, that request rode iroh.
+# Iroh: prove each node's cw-rails actually carried gossip over iroh — not
+# merely that the endpoint bound. Two signals per node's cw-rails log (both at
+# info, cw-rails' default level):
+#   1. install: "rails: endpoint bound … dial=Some(" — the endpoint is up with
+#      a dial string to hand peers (lib.rs).
+#   2. carried: "gossip: round complete … via=iroh:… outcome=\"reached\"" — a
+#      gossip round reached a peer over an iroh connection (gossip.rs).
+# These replace the daemon's "routing classes over iroh" / "transport:
+# resolved" lines, whose emitters left with the transport.
 # A node missing either signal fails the run. Findings stream to the verdict.
-# Called once after initial convergence — by then ≥1 gossip round has run, so
-# every node has both dialed a peer and been dialed over iroh.
-# Per-node log predicates. `install` is emitted at startup (immediate);
-# `carried` needs a gossip round in each direction (the founder only dials a
-# joiner over iroh once it has merged that joiner's self-stamped dial info),
-# so the caller POLLS for it rather than asserting eagerly.
-iroh_installed() { grep -qs "routing classes over iroh" "$WORK/node$1"/daemon.*.log; }
-iroh_carried()   { grep -hs "transport: resolved" "$WORK/node$1"/daemon.*.log 2>/dev/null | grep -q iroh; }
+# Called once after initial convergence. `install` is immediate; `carried`
+# needs a round in each direction (the founder dials a joiner only once it has
+# merged that joiner's self-stamped dial info), so the caller POLLS for it.
+iroh_installed() { rails_logged "$1" 'rails: endpoint bound.*dial=Some\('; }
+iroh_carried()   { rails_logged "$1" 'gossip: round complete.*via=iroh:.*outcome="reached"'; }
 
 assert_iroh_carried_traffic() {
-  [ "$IROH_ON" = 1 ] || return 0
-  log "iroh axis — asserting each node routed mesh traffic over iroh"
+  log "iroh — asserting each node's cw-rails carried gossip over iroh"
   # Poll up to ~40s: install is immediate, but carried-over-iroh needs the
   # founder↔joiner gossip round that merges dial info (10s cadence). Bounded —
   # if a node never routes over iroh, the check below still runs and FAILS.
@@ -354,19 +428,18 @@ assert_iroh_carried_traffic() {
       FAILS=$((FAILS+1))
     fi
   done
-  # H2 observability: node0's /v1/mesh/status must expose iroh_transport with a
-  # real path (direct/relayed/mixed) for its peers — the operator surface, on a
-  # live daemon. In-netns peers are loopback ⇒ expect "direct".
-  local paths
-  paths=$(jget "$(status_url 0)" '",".join(p.get("path",{}).get("path","?") for p in d.get("iroh_transport",[]))')
-  if [ -n "$paths" ]; then
-    echo "  node0 iroh_transport paths: $paths"
-    case "$paths" in
-      *direct*|*relayed*|*mixed*) finding '{"kind":"iroh","check":"status_surface","node":0,"ok":true}';;
-      *) echo "  node0: iroh_transport present but no active path ✗"; FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"status_surface","node":0,"ok":false}';;
-    esac
+  # The operator surface: node0's cw-rails status must name an iroh dial (a
+  # relay or direct addresses) for every peer, or a member it lists is one it
+  # cannot reach. The daemon's `iroh_transport` path view has no cw-rails
+  # counterpart; `members[].dial` is what cw-rails reports (api.rs).
+  local undialable
+  undialable=$(jget "$(status_url 0)" '",".join(m["name"] for m in d["members"] if not m.get("is_self") and not ((m.get("dial") or {}).get("relay_url") or (m.get("dial") or {}).get("iroh_direct_addrs")))')
+  local peers; peers=$(jget "$(status_url 0)" 'sum(1 for m in d["members"] if not m.get("is_self"))')
+  if [ -n "$peers" ] && [ "$peers" -gt 0 ] && [ -z "$undialable" ]; then
+    echo "  node0 status: an iroh dial for each of $peers peer(s)"
+    finding '{"kind":"iroh","check":"status_surface","node":0,"ok":true}'
   else
-    echo "  node0: /v1/mesh/status exposed no iroh_transport ✗"
+    echo "  node0 status: peers=${peers:-unread} without an iroh dial: ${undialable:-none} ✗"
     FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"status_surface","node":0,"ok":false}'
   fi
 }
@@ -376,16 +449,16 @@ assert_iroh_carried_traffic() {
 # so the issue can be re-inspected (and replayed) offline without re-running the
 # whole soak. This is what makes an intermittent failure efficient to root-cause:
 # a UniqueIds/no_ghost hit tells you WHICH id collided; the bundle tells you which
-# durable field (node_id file vs mesh.json self_node_id) carries the wrong id and
-# what the daemon logged when it adopted it.
+# durable file carries the wrong id and what cw-rails logged when it took it.
+# cw-rails' mesh.json names no self id (identity.rs reads node_id alone), so the
+# second column is svrn's copy: the two must agree, as the handover leaves them.
 REPRO_DIR="$ROOT/mesh-soak-repro"
 fhex() { python3 -c "
+try: print(open('$(rdir "$1")/node_id','rb').read().hex())
+except Exception: print('NO-FILE')" 2>/dev/null; }
+mhex() { python3 -c "
 try: print(open('$WORK/node$1/node_id','rb').read().hex())
 except Exception: print('NO-FILE')" 2>/dev/null; }
-mhex() { python3 -c "import json
-try:
-    d=json.load(open('$WORK/node$1/mesh.json')); b=d.get('self_node_id'); print(bytes(b).hex() if isinstance(b,list) else str(b))
-except Exception: print('NO-MESH')" 2>/dev/null; }
 capture_forensics() {  # capture_forensics <label>
   local label="$1" i
   local cyc="${CYCLE:-0}"
@@ -393,22 +466,22 @@ capture_forensics() {  # capture_forensics <label>
   mkdir -p "$bundle"
   {
     echo "# mesh-soak forensics — seed=$SEED cycle=$cyc phase=$label nodes=$NODES backend=$BACKEND"
-    echo "# durable identity state at the violation (live id vs node_id file vs mesh.json self):"
+    echo "# durable identity state at the violation (live id vs cw-rails node_id vs svrn's copy):"
     for i in $(seq 0 $((NODES-1))); do
-      printf '  node%s  live=%-32s  node_id_file=%-32s  mesh.json_self=%s\n' \
+      printf '  node%s  live=%-32s  rails_node_id=%-32s  svrn_node_id=%s\n' \
         "$i" "$(self_id $i 2>/dev/null || echo DEAD)" "$(fhex $i)" "$(mhex $i)"
     done
     echo "# harness expect-live tracking (a healthy node missing here = a FALSE ghost):"
     echo "  NODE_IDS[]=${NODE_IDS[*]:-<unset>}"
     echo "  ALL_IDS=${ALL_IDS:-<unset>}"
-    echo "# daemon identity events (per node):"
+    echo "# cw-rails identity events (per node):"
     for i in $(seq 0 $((NODES-1))); do echo "  node$i:"
-      grep -hE 'generated . persisted|resumed mesh|joined mesh|handshake_accepted|assigned_node_id' \
-        "$WORK/node$i"/daemon.*.log 2>/dev/null | tail -6 | sed 's/^/    /'; done
+      rails_log "$i" | grep -E 'identity: (minted|mesh loaded)|join: admitted|endpoint bound|is not a mesh' \
+        | tail -6 | sed 's/^/    /'; done
   } | tee "$bundle/forensics.txt"
-  for i in $(seq 0 $((NODES-1))); do local nd="$bundle/node$i"; mkdir -p "$nd"
-    cp "$WORK/node$i/node_id" "$WORK/node$i/mesh.json" "$nd/" 2>/dev/null
-    cp "$WORK/node$i"/daemon.*.log "$nd/" 2>/dev/null; done
+  for i in $(seq 0 $((NODES-1))); do local nd="$bundle/node$i" r; r=$(rdir "$i"); mkdir -p "$nd"
+    cp "$r/node_id" "$r/mesh.json" "$r/rails.toml" "$nd/" 2>/dev/null
+    cp "$r"/rails.*.log "$WORK/node$i"/daemon.*.log "$nd/" 2>/dev/null; done
   echo "  ↳ forensic bundle: $bundle"
   finding "{\"kind\":\"forensics\",\"phase\":\"$label\",\"cycle\":$cyc,\"bundle\":\"$bundle\"}"
 }
@@ -478,7 +551,7 @@ for a in (d.get("founder_degraded") or []): print("    ~ founder self-heal degra
 #                        ingest runs (the advisory foreground-yield lets chat win
 #                        the slot). Asserted on outcome CLASS, not absolute ms.
 setup_ingest_recipe() {  # mirror the committed recipe to the live override dir
-  local canonical="$ROOT/sovereign-recipes/chaos-secret-agent/recipe.toml"
+  local canonical="$ROOT/ingest/crates/sovereign-recipes/chaos-secret-agent/recipe.toml"
   local override="$HOME/.svrnmesh/recipes/chaos-secret-agent/recipe.toml"
   local src="$HOME/.svrnmesh/bench-corpora/chaos-secret-agent/secret-agent.txt"
   [ -f "$canonical" ] || { echo "  canonical recipe missing: $canonical"; return 1; }
@@ -743,11 +816,17 @@ run_ingest_workload() {
 
   local purl="http://127.0.0.1:$(iport "$target")/internal/corpus/progress"
   local DEADLINE; DEADLINE=$(( $(date +%s) + MINUTES*60 ))
-  local ing_seen=0 ing_done=0 prog_changes=0 prev_prog="∅"
+  local ing_seen=0 ing_done=0 prog_changes=0 prev_prog="∅" ing_unread=0 ing_ok=0
   local chat_ok=0 chat_slow=0 chat_fail=0
   while [ "$(date +%s)" -lt "$DEADLINE" ]; do
     local res code ms ing prog; res=$(chat_once "$target" "$SLO_MS"); code="${res%% *}"; ms="${res##* }"
-    ing=$(jget "$(status_url "$target")" 'd.get("active_corpus_ingests",0)'); ing="${ing:-0}"
+    # Active ingest tasks, from the daemon that owns them: /internal/corpus/status
+    # (corpus_ingest.rs corpus_status, one entry per corpus with `active`). It was
+    # `active_corpus_ingests` on svrn's /v1/mesh/status, which cw-rails' status
+    # does not carry. An unread poll is not "none active": it is counted, and it
+    # can neither latch completion nor make the grounding check authoritative.
+    ing=$(jget "http://127.0.0.1:$(iport "$target")/internal/corpus/status" 'sum(1 for e in d["entries"] if e.get("active"))')
+    if [ -z "$ing" ]; then ing_unread=$((ing_unread+1)); ing_ok=0; ing=0; else ing_ok=1; fi
     # Forward-progress signal: the per-corpus IngestProgress phase/percent. A
     # CHANGING value across polls is forward progress even while active stays 1
     # (ingest correctly throttled by — not starved by — foreground chat).
@@ -755,13 +834,14 @@ run_ingest_workload() {
     { [ "$ing" -gt 0 ] || [ "$prog" != "null" ]; } && ing_seen=1
     [ "$prog" != "null" ] && [ "$prog" != "$prev_prog" ] && prog_changes=$((prog_changes+1))
     prev_prog="$prog"
-    [ "$ing_seen" = 1 ] && [ "$ing" = 0 ] && [ "$prog" = "null" ] && ing_done=1
+    [ "$ing_seen" = 1 ] && [ "$ing_ok" = 1 ] && [ "$ing" = 0 ] && [ "$prog" = "null" ] && ing_done=1
     case "$code" in
       200) [ "$ms" -le "$SLO_MS" ] && chat_ok=$((chat_ok+1)) || chat_slow=$((chat_slow+1));;
       *)   chat_fail=$((chat_fail+1));;
     esac
-    finding "{\"kind\":\"contention\",\"node\":$target,\"active_ingests\":$ing,\"prog_changes\":$prog_changes,\"chat_code\":\"$code\",\"chat_ms\":$ms}"
-    echo "  ingest=$ing prog_advances=$prog_changes chat=$code ${ms}ms (ok=$chat_ok slow=$chat_slow fail=$chat_fail)"
+    local ing_json=null; [ "$ing_ok" = 1 ] && ing_json="$ing"
+    finding "{\"kind\":\"contention\",\"node\":$target,\"active_ingests\":$ing_json,\"prog_changes\":$prog_changes,\"chat_code\":\"$code\",\"chat_ms\":$ms}"
+    echo "  ingest=$ing_json prog_advances=$prog_changes chat=$code ${ms}ms (ok=$chat_ok slow=$chat_slow fail=$chat_fail unread=$ing_unread)"
     # Observational retrieval probe (embed + knowledge/search only, no generation):
     # watch the corpus become queryable as ingest advances. Never fails here — a
     # partial index mid-ingest is legitimate; the post-ingest check is the gate.
@@ -799,7 +879,8 @@ run_ingest_workload() {
   fi
 
   # ── grounding under contention: did the corpus ingested under load stay correct? ──
-  # Hard-assert once the ingest TASK is idle (active_corpus_ingests==0) — the true
+  # Hard-assert once the ingest TASK is idle (no `active` entry on a READ
+  # /internal/corpus/status poll) — the true
   # completion signal. NB the lane's ing_done ALSO requires the per-corpus progress
   # entry to go null, but the daemon leaves a terminal (non-null) progress record
   # after a completed ingest, so ing_done under-reports completion (a finished,
@@ -808,7 +889,7 @@ run_ingest_workload() {
   # real, catchable failure. Still-active (ing>0) at loop exit ⇒ soft: the index is
   # legitimately partial (chat throttled it), so don't false-fail on it.
   if [ "$ing_seen" = 1 ]; then
-    if [ "${ing:-1}" = 0 ]; then
+    if [ "$ing_ok" = 1 ] && [ "$ing" = 0 ]; then
       log "grounding check (ingest idle — authoritative) on node$target"
       grounding_verdict "$target" hard
     else
@@ -824,40 +905,68 @@ run_ingest_workload() {
 
 # ── corrupt-persisted-state OS-fault (--workload corrupt) ─────────────────────
 # An OS-level fault that needs NO container: pre-write garbage into a node's
-# durable mesh.json (the file `try_resume` loads on restart), then resume. Two
-# distinct properties: (1) the daemon FAILS-SAFE on resume — identity survives in
-# the separate node_id file, so it never adopts a colliding/garbage id; (2) the
-# corrupt mesh.json wiped its MEMBERSHIP, and in the netns (no mDNS) it can't
-# re-discover peers on its own, so catastrophic state loss must be repaired by a
-# RE-JOIN (the path mDNS gives in a real deployment) — after which the mesh
-# reconverges. UniqueIds + NoGhost + convergence are the net. (The crash lane
+# cw-rails mesh.json (the store `identity::load_mesh` reads at start), then
+# restart. Two distinct properties: (1) cw-rails FAILS SAFE — it refuses the
+# store by name and leaves the separate node_id file alone, so it never boots
+# with an empty roster or a garbage id; (2) with the store moved aside the node
+# has no MEMBERSHIP, and in the netns (no mDNS) it can't re-discover peers on
+# its own, so the loss is repaired by a RE-JOIN under the same id — after which
+# the mesh reconverges. UniqueIds + NoGhost + convergence are the net. (The crash lane
 # bare-resumes because its mesh.json is intact; only the corrupt lane re-joins.
 # cgroup-OOM and disk-full are the other OS-faults in this tier; see MESH_QA.md —
 # all rootless, no podman, per the toolbox decision.)
 run_corrupt_state_workload() {
   local victim=$(( NODES > 1 ? 1 : 0 ))
-  local mj="$WORK/node$victim/mesh.json"
-  log "corrupt-persisted-state on node$victim — kill, corrupt mesh.json, resume + re-join (fail-safe id + re-discover membership)"
-  kill -9 "${PIDS[$victim]}" 2>/dev/null
+  local r; r=$(rdir "$victim")
+  local mj="$r/mesh.json" id_before refused=0 rpid _
+  log "corrupt-persisted-state on node$victim — kill, corrupt cw-rails' mesh.json, expect a named refusal, then recover + re-join"
+  kill_node "$victim"
   finding "{\"kind\":\"fault\",\"action\":\"kill-9\",\"node\":$victim,\"cycle\":0}"
   echo "  waiting ${DECAY_WAIT}s for offline-decay…"; sleep "$DECAY_WAIT"
+  id_before=$(fhex "$victim")
   echo "  corrupting durable state: $mj"
   printf '{ this is not valid mesh json :: %s' "$RANDOM" > "$mj"
   finding "{\"kind\":\"fault\",\"action\":\"corrupt-mesh-json\",\"node\":$victim}"
-  boot_node "$victim"                                   # resume: identity survives (node_id file), membership is gone
+
+  # (1) Fail-safe: cw-rails refuses a store that is not a mesh rather than
+  # booting with an empty roster it would gossip to peers (identity.rs,
+  # a_corrupt_mesh_file_is_refused_rather_than_read_as_empty). Measured
+  # 2026-10-03: exit 1 inside a second, naming the file — "<path> is not a
+  # mesh: …". Serving over the garbage, or exiting without naming the file, or
+  # touching node_id, is the failure.
+  boot_rails "$victim"; rpid="${RPIDS[$victim]}"
+  for _ in $(seq 1 30); do kill -0 "$rpid" 2>/dev/null || break; sleep 0.5; done
+  if kill -0 "$rpid" 2>/dev/null; then
+    kill -9 "$rpid" 2>/dev/null
+    echo "  ✗ cw-rails on node$victim kept running over a corrupt mesh.json"
+  elif rails_logged "$victim" 'mesh\.json is not a mesh'; then
+    refused=1
+  else
+    echo "  ✗ cw-rails on node$victim exited without naming mesh.json: $(rails_log "$victim" | tail -1)"
+  fi
+  if [ "$refused" = 1 ] && [ "$(fhex "$victim")" = "$id_before" ]; then
+    finding "{\"phase\":\"corrupt-state-refused\",\"ok\":true,\"detail\":\"node$victim cw-rails refused the corrupt mesh.json by name; node_id unchanged\"}"
+    echo "  ✓ node$victim cw-rails refused the corrupt store by name (node_id unchanged)"
+  else
+    FAILS=$((FAILS+1)); capture_forensics "corrupt-state-refused"
+    finding "{\"phase\":\"corrupt-state-refused\",\"ok\":false,\"detail\":\"node$victim: refused_by_name=$refused node_id_before=$id_before after=$(fhex "$victim")\"}"
+  fi
+
+  # (2) Recovery, the operator's: move the store aside (kept, never deleted),
+  # bring the node up solo, and re-join — in the netns (no mDNS) nothing
+  # re-discovers peers on its own. Same name, so the founder keeps its id
+  # (membership.rs join refuses a reassigned id).
+  mv "$mj" "$mj.corrupt"
+  boot_node "$victim"
   if wait_port "$victim"; then
-    finding "{\"phase\":\"corrupt-state-recover\",\"ok\":true,\"detail\":\"node$victim bound after corrupt mesh.json (identity intact)\"}"
-    echo "  ✓ node$victim recovered from corrupt mesh.json (identity intact)"
-    # The corruption wiped node$victim's member table; in the netns (no mDNS) it
-    # can't re-discover peers on its own, so re-join the founder. Bare resume
-    # leaves it isolated — the real finding the full-decay sweep surfaced.
-    log "node$victim re-joining founder to re-discover peers (membership lost to corruption)"
-    join_to_founder "$victim" "$FKEY"
+    finding "{\"phase\":\"corrupt-state-recover\",\"ok\":true,\"detail\":\"node$victim up solo with its store moved aside\"}"
+    log "node$victim re-joining the founder (membership lost with the store)"
+    join_to_founder "$victim" "$FLINK"
     finding "{\"kind\":\"fault\",\"action\":\"corrupt-rejoin\",\"node\":$victim}"
   else
     FAILS=$((FAILS+1)); capture_forensics "corrupt-state-recover"
-    finding "{\"phase\":\"corrupt-state-recover\",\"ok\":false,\"detail\":\"node$victim failed to bind after corrupt mesh.json (crash-loop?)\"}"
-    echo "  ✗ node$victim did NOT recover from corrupt state"
+    finding "{\"phase\":\"corrupt-state-recover\",\"ok\":false,\"detail\":\"node$victim did not come back up with its store moved aside\"}"
+    echo "  ✗ node$victim did NOT come back up after the store was moved aside"
   fi
   wait_online_eq "$NODES" || true
   NODE_IDS[$victim]=$(robust_self_id "$victim"); ALL_IDS=$(IFS=,; echo "${NODE_IDS[*]}")
@@ -892,6 +1001,7 @@ context_size = 4096
 client_port = $(cport "$i")
 internal_port = $(iport "$i")
 client_bind = "127.0.0.1"
+rails_base = "$(rails_url "$i")"
 [data]
 dir = "$WORK/desktop$i/data"
 EOF
@@ -923,6 +1033,7 @@ spawn_desktop_for_node() {  # <i>
     XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-}" \
     DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-}" \
     SOVEREIGN_COMMAND_BRIDGE=1 SOVEREIGN_COMMAND_BRIDGE_PORT="$bp" \
+    SOVEREIGN_SERVE_PORT="$(sport "$i")" \
     "$DESKTOP_BIN" > "$WORK/desktop$i/desktop.log" 2>&1 &
   DESK_PIDS[$i]=$!
   for _ in $(seq 1 60); do
@@ -1035,7 +1146,7 @@ teardown() { log "teardown"
   for i in $(seq 0 $((NODES-1))); do
     [ -n "${DRIVER_PIDS[$i]:-}" ] && kill "${DRIVER_PIDS[$i]}" 2>/dev/null
     [ -n "${DESK_PIDS[$i]:-}" ] && kill -- "-${DESK_PIDS[$i]}" 2>/dev/null  # group-kill the setsid desktop
-    kill -9 "${PIDS[$i]:-0}" 2>/dev/null
+    kill_node "$i"
   done
   [ "$KEEP" = 0 ] && rm -rf "$WORK"; }
 trap teardown EXIT
@@ -1051,31 +1162,17 @@ for i in $(seq 0 $((NODES-1))); do
     # printed a line and carried on: the remaining nodes formed a smaller mesh
     # and every invariant passed over it (convergence and liveness are vacuous
     # on one reachable node), so a totally failed bring-up looked green.
-    echo "  node$i FAILED to bind — see $WORK/node$i/daemon.*.log"
-    finding "{\"phase\":\"boot\",\"ok\":false,\"violations\":[{\"invariant\":\"all_nodes_booted\",\"detail\":\"node$i never bound its client port\"}]}"
+    echo "  node$i FAILED to come up — see $(rdir "$i")/rails.*.log and $WORK/node$i/daemon.*.log"
+    finding "{\"phase\":\"boot\",\"ok\":false,\"violations\":[{\"invariant\":\"all_nodes_booted\",\"detail\":\"node$i: cw-rails status or svrn /status never answered 200\"}]}"
     FAILS=$((FAILS+1))
   fi
 done
 
-FKEY=$(jget "$(status_url 0)" 'd["join_key"]')
-if [ "$IROH_ON" = 1 ]; then
-  # Read the founder's dial-bearing invite live — current_invite stamps the
-  # `dial=` connect code once the endpoint has an address (direct addrs are
-  # immediate in-netns; no relay to wait for). Retry until it carries `dial=`.
-  FLINK=""
-  for _ in $(seq 1 20); do
-    FLINK=$(jget "$(status_url 0)" 'd.get("join_link","")')
-    case "$FLINK" in *dial=*) break;; esac
-    sleep 0.5
-  done
-  case "$FLINK" in
-    *dial=*) log "founder key=$FKEY — joining $((NODES-1)) peers over iroh (dial-by-key)";;
-    *) log "founder key=$FKEY — WARNING: node0 invite carries no dial= yet; joining may fall back to IP"; FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"founder_dial_in_invite","ok":false}';;
-  esac
+# Every cw-rails starts solo; node0 founds, the rest join by its invite.
+FKEY=""; FLINK=""
+if found_mesh; then
+  log "founder key=$FKEY — joining $((NODES-1)) peers over iroh (dial-by-key)"
   for i in $(seq 1 $((NODES-1))); do join_to_founder "$i" "$FLINK"; done
-else
-  log "founder key=$FKEY — joining $((NODES-1)) peers over localhost relay"
-  for i in $(seq 1 $((NODES-1))); do join_to_founder "$i" "$FKEY"; done
 fi
 
 log "waiting for convergence to $NODES members"
@@ -1083,23 +1180,13 @@ for _ in $(seq 1 45); do conv=1
   for i in $(seq 0 $((NODES-1))); do [ "$(jget "$(status_url $i)" 'd["members_total"]')" = "$NODES" ] || conv=0; done
   [ "$conv" = 1 ] && break; sleep 1; done
 for i in $(seq 0 $((NODES-1))); do NODE_IDS[$i]=$(robust_self_id "$i"); done
-ALL_NODES=$(for i in $(seq 0 $((NODES-1))); do printf '127.0.0.1:%s,' "$(cport $i)"; done | sed 's/,$//')
+# check-invariants polls each node's cw-rails (mesh_cmd.rs cmd_check_invariants).
+ALL_NODES=$(for i in $(seq 0 $((NODES-1))); do printf '127.0.0.1:%s,' "$(rport $i)"; done | sed 's/,$//')
 ALL_IDS=$(IFS=,; echo "${NODE_IDS[*]}")
 echo "  converged: node0 online=$(online_count 0)/$NODES"
 check "healthy" "$ALL_NODES" "$ALL_IDS"
 # Iroh axis: the mesh converged — now prove it converged OVER iroh.
 assert_iroh_carried_traffic
-
-# ── P2: bring up app-user desktops + persona drivers on every node, BEFORE the
-# chaos starts, so real users are operating the app while the mesh is savaged. ──
-if [ "$DESKTOPS" = 1 ]; then
-  [ -x "$DESKTOP_BIN" ] || { echo "  --with-desktops: desktop binary missing at $DESKTOP_BIN (build it or set SOVEREIGN_DESKTOP_BIN)"; FAILS=$((FAILS+1)); }
-  log "P2: spawning $NODES app desktops + persona drivers (attach-mode, in-netns)"
-  for i in $(seq 0 $((NODES-1))); do
-    spawn_desktop_for_node "$i" && spawn_driver_for_node "$i"
-  done
-  wait_drivers_warm   # barrier: surface established before chaos starts
-fi
 
 # ── P2: bring up app-user desktops + persona drivers on every node, BEFORE the
 # chaos starts, so real users are operating the app while the mesh is savaged. ──
@@ -1128,8 +1215,8 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   # cycle — seed=1 picked node2 all 3 times, leaving node1's user untested).
   # Plain crash lane keeps the seeded-random pick for victim-choice fuzzing.
   if [ "$DESKTOPS" = 1 ]; then victim=$(( (CYCLE-1) % (NODES-1) + 1 )); else victim=$(( RANDOM % (NODES-1) + 1 )); fi
-  log "cycle $CYCLE — crash node$victim (kill -9)"
-  kill -9 "${PIDS[$victim]}" 2>/dev/null
+  log "cycle $CYCLE — crash node$victim (kill -9, cw-rails and daemon)"
+  kill_node "$victim"
   finding "{\"kind\":\"fault\",\"action\":\"kill-9\",\"node\":$victim,\"cycle\":$CYCLE}"
 
   # P3 cross-layer assertion — node$victim's daemon is DOWN: its user's turn must
@@ -1141,14 +1228,14 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   # survivors must now show the victim OFFLINE (decayed, not a live ghost)
   surv_nodes=""; surv_ids=""
   for i in $(seq 0 $((NODES-1))); do [ "$i" = "$victim" ] && continue
-    surv_nodes+="127.0.0.1:$(cport $i),"; surv_ids+="${NODE_IDS[$i]},"; done
+    surv_nodes+="127.0.0.1:$(rport $i),"; surv_ids+="${NODE_IDS[$i]},"; done
   surv_nodes="${surv_nodes%,}"; surv_ids="${surv_ids%,}"
   echo "  node0 sees node$victim as: $(sees_status 0 "${NODE_IDS[$victim]}")"
   wait_online_eq "$((NODES-1))" "$victim" || true   # all survivors must see the victim decayed
   check "post-crash-decay" "$surv_nodes" "$surv_ids"
 
-  # churn: restart — a production restart RESUMES its identity + mesh from its
-  # data_dir (try_resume loads mesh.json) and gossip-reconverges to online. We
+  # churn: restart — a production restart RESUMES its identity + mesh from
+  # cw-rails' root (node_id + mesh.json) and gossip-reconverges to online. We
   # deliberately do NOT call join_to_founder: that would exercise an explicit
   # re-join rather than the normal restart path. (The id-collision the 8h soak
   # first surfaced was a harness bug in boot_node — a leaked-loop-var data-dir
@@ -1171,7 +1258,8 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   # the first request, so allow a generous window).
   [ "$DESKTOPS" = 1 ] && probe_user "$victim" "app-outage-recovered" "complete" 180
 
-  # load: timed /v1/mesh/status queries (latency SLIs for the gate)
+  # load: timed /v1/mesh/status queries against node0's cw-rails (latency SLIs
+  # for the gate)
   for _ in $(seq 1 20); do
     ms=$(curl -s -m 4 -o /dev/null -w '%{time_total}' "$(status_url 0)" 2>/dev/null)
     finding "{\"kind\":\"load\",\"latency_ms\":$(python3 -c "print(round(float('${ms:-0}')*1000,2))" 2>/dev/null || echo 0),\"ok\":$([ -n "$ms" ] && echo true || echo false)}"
@@ -1224,25 +1312,27 @@ if workload in ("ingest", "offload"):
     print("                    field ('@ peer <name>'). The one assertion that fails on a")
     print("                    total peer-offload outage.")
 if workload == "ingest":
-    print("  live this lane  : admission_safety + bounded_fan_out (chat fan-out drives")
-    print("                    peer_inflight / fanout_inflight > 0) + IngestProgress +")
-    print("                    ForegroundLiveness + GroundingIntegrity/GroundingVerdict")
-    print("                    (real generative primary under ingest; grounded RAG turn).")
-elif workload != "offload":
-    print("  inert here      : admission_safety + bounded_fan_out + shared_model_single_host")
-    print("                    (cheap embed-only daemons take no peer-inference / run no")
-    print("                    shared model) — exercised by --workload ingest + the DST suite.")
+    print("  live this lane  : IngestProgress + ForegroundLiveness +")
+    print("                    GroundingIntegrity/GroundingVerdict (real generative")
+    print("                    primary under ingest; grounded RAG turn).")
+# The checker reads these three from the /v1/mesh/status it polls, which is
+# cw-rails' since pb-mesh-exit-transport, and no program emits the fields it
+# reads there (peer_inflight_current/_ceiling, fanout_inflight_current,
+# shared_model_host): svrn's counters left with its own status, and
+# `EmbeddedDaemon::glassbox_signals` has no caller. Every lane passes them
+# vacuously until a producer exists, so they are named, never counted as live.
+print("  inert, all lanes: admission_safety + bounded_fan_out + shared_model_single_host")
+print("                    (no status the checker polls carries their fields since the")
+print("                    rails flip) — exercised only by the in-process DST suite.")
 PY
-if [ "$IROH_ON" = 1 ]; then
-  # grep -c prints "0" AND exits 1 on no-match — a trailing `|| echo 0` would
-  # double it. Take grep's own count, default empty (missing file) to 0.
-  ok=$(grep -c '"kind":"iroh".*"ok":true' "$FINDINGS" 2>/dev/null); ok=${ok:-0}
-  bad=$(grep -c '"kind":"iroh".*"ok":false' "$FINDINGS" 2>/dev/null); bad=${bad:-0}
-  echo "  ── iroh axis ────────────────────────────────────────────"
-  echo "  transport       : iroh-first, all classes (IP fallback retained)"
-  echo "  join path       : dial-by-key over the founder's dial= invite"
-  echo "  iroh checks     : ${ok} ok / ${bad} failed (install + carried-over-iroh per node)"
-fi
+# grep -c prints "0" AND exits 1 on no-match — a trailing `|| echo 0` would
+# double it. Take grep's own count, default empty (missing file) to 0.
+ok=$(grep -c '"kind":"iroh".*"ok":true' "$FINDINGS" 2>/dev/null); ok=${ok:-0}
+bad=$(grep -c '"kind":"iroh".*"ok":false' "$FINDINGS" 2>/dev/null); bad=${bad:-0}
+echo "  ── iroh ─────────────────────────────────────────────────"
+echo "  transport       : iroh, cw-rails' only mesh transport (local-only: direct addrs)"
+echo "  join path       : dial-by-key over the founder's iroh= invite"
+echo "  iroh checks     : ${ok} ok / ${bad} failed (install + carried-over-iroh per node + status dials)"
 if [ "$GATE" = 1 ]; then
   log "SLO gate"
   "$CLI" mesh soak-gate "$FINDINGS" --baseline "$ROOT/mesh-soak-baseline.json" || true

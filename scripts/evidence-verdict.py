@@ -960,7 +960,7 @@ def self_test() -> int:
     files = [{"path": "c/src/lib.rs", "hunks": [{"role": SOURCE, "added": "fn compute_score() {}", "removed": "fn old_score() {}"},
                                                  {"role": TEST, "added": "fn test_only_token() {}", "removed": ""}]},
              {"path": "docs/X.md", "hunks": [{"role": SOURCE, "added": "compute_score doc_only_word", "removed": ""}]},
-             {"path": "sovereign-recipes/sec-filings-company/recipe.toml", "hunks": [{"role": SOURCE, "added": "x = 1", "removed": ""}]},
+             {"path": "ingest/crates/sovereign-recipes/sec-filings-company/recipe.toml", "hunks": [{"role": SOURCE, "added": "x = 1", "removed": ""}]},
              {"path": "scripts/setup-sec-corpus.sh", "hunks": [{"role": SOURCE, "added": "y", "removed": ""}]}]
     touched, stems = source_surface(files)
     check("source_surface: SOURCE hunks only, removed lines count, docs excluded, distinctive stems only",

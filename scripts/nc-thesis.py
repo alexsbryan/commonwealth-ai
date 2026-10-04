@@ -54,7 +54,7 @@ from judgement import emit as emit_judgement  # noqa: E402
 # `tests/ui/` directory; None means no rung has proven it yet.
 #
 # Constructions 2 and 3 landed with nc-4-evidence; 1, 4 and 5 with
-# nc-11-answer (`kernel-types/tests/answer_reds.rs`), which is the rung the bar
+# nc-11-answer (`shared/crates/kernel-types/tests/answer_reds.rs`), which is the rung the bar
 # names in `closes_at`.
 #
 # FILLING IN A FIXTURE NAME HERE MOVES NOTHING ON ITS OWN, and that is the

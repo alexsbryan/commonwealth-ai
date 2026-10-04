@@ -52,7 +52,7 @@ answers "is anything costing me money right now, and how much so far".
   billing.
 
 The GPU allowlist is a safety guard, not a preference: the image is compiled
-for CUDA archs 80;86;89;90 (`sovereign/container/Containerfile.cuda`). Auto-pick
+for CUDA archs 80;86;89;90 (`serve/container/Containerfile.cuda`). Auto-pick
 takes the cheapest offer that passes it and **refuses an unrecognised GPU**
 rather than assuming it works — a Turing card is often the cheapest offer that
 fits the loadout, and you would pay for a could-not-judge. `offers` still lists
@@ -131,7 +131,7 @@ The join link — the mesh key plus the founder's iroh dial string — is writte
 into the Vast onstart script, so **Vast can read it**. The blast radius is
 bounded: on an encrypted mesh every peer is dialed by key, and a stranger
 holding the link can join but cannot reach a corpus flagged
-`query_sharing = false` (`sovereign/crates/sovereign-daemon/src/peer_origin/claims.rs`
+`query_sharing = false` (`svrn/crates/sovereign-daemon/src/peer_origin/claims.rs`
 decides that, per corpus, and it gates advertising rather than serving).
 
 **End a `--mesh` flight by rotating the invite:**

@@ -21,7 +21,7 @@ The bar's `failed` transition now sits on `quality/initiative-bars.toml`
 - the **structural cause** — the v0 decks are single-origin and the
   corroboration floor is never weakened: dr-corroboration is MET (a
   claim whose support set has <2 distinct origins caps at
-  could-not-judge — F22, `sovereign/crates/sovereign-core/src/
+  could-not-judge — F22, `svrn/crates/sovereign-core/src/
   deep_research/gym.rs:828`; the floor is downgrade-only, per
   dr-corroboration's met transition), so every round-N audit caps
   claims and the gap set only grows. Strict shrink on >=10/12 is

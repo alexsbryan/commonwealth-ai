@@ -142,7 +142,7 @@ status    = "closed"
 # *Phase enums (BootstrapPhase, IngestPhase, EnrichmentPhase, NarrationPhase,
 # ClearKvPhase, CorpusInstallPhase, HandoffPhase), six *Runner, six *Step,
 # five *Pipeline — all hand-rolling Step / Artifact / Runner, which already
-# exists in studio/crates/sovereign-workflow and is wired as a product feature
+# exists in shared/crates/sovereign-workflow and is wired as a product feature
 # rather than as substrate. TARGET_ARCHITECTURE §3.2: "five tenants, one engine."
 
 # ── STREAMING — DECIDED 2026-08-19, was a blocking open question ────────────

@@ -34,8 +34,8 @@ I'd rather draw that line clearly than waste your afternoon.
 - Core architecture, new crates, and changes to the runtime, inference, or mesh.
 
 Here's the honest why for that last line. The architecture and the principles
-this thing is built on are still settling; `sovereign/SYSTEM_OVERVIEW.md` and
-`sovereign/ARCH_PRINCIPLES.md` are living documents right now, not stone. Until
+this thing is built on are still settling; `docs/SYSTEM_OVERVIEW.md` and
+`docs/ARCH_PRINCIPLES.md` are living documents right now, not stone. Until
 that foundation is solid I have no fair way to decide what belongs and what
 doesn't — and I'd rather say so than accept your PR today and turn away an
 identical one next month for reasons I couldn't put into words. Settle the
@@ -93,10 +93,10 @@ vector = true
 ```
 
 Two files change: `sovereign-recipes/<id>/recipe.toml`, and a matching
-`[[recipes]]` entry in `sovereign-recipes/registry.toml` — the canonical catalog
+`[[recipes]]` entry in `ingest/crates/sovereign-recipes/registry.toml` — the canonical catalog
 that `corpus-engine` vendors at build time. Start by copying the closest
-existing recipe; [`GETTING_STARTED.md`](./sovereign-recipes/GETTING_STARTED.md)
-walks the first one, and [`SCHEMA.md`](./sovereign-recipes/SCHEMA.md) is the
+existing recipe; [`GETTING_STARTED.md`](./ingest/crates/sovereign-recipes/GETTING_STARTED.md)
+walks the first one, and [`SCHEMA.md`](./ingest/crates/sovereign-recipes/SCHEMA.md) is the
 field reference — it's generated from the code and test-gated, so it can't drift
 from what the loader accepts.
 
@@ -151,7 +151,7 @@ libraries (protobuf and cmake at minimum; the desktop app needs more), then:
 cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
 ```
 
-On Linux, [`sovereign/scripts/bootstrap-linux.sh`](./sovereign/scripts/bootstrap-linux.sh)
+On Linux, [`svrn/scripts/bootstrap-linux.sh`](./svrn/scripts/bootstrap-linux.sh)
 installs every native dep in one shot; `scripts/bootstrap.sh` then wires the
 daemon's lint/test watcher to the workspace.
 
@@ -220,7 +220,7 @@ None of this is a checklist to clear — it's just what tends to earn a quick ye
   test that would fail without your change is the fastest way to build trust in
   it. If one genuinely isn't possible, a sentence on why is plenty.
 - **The map stays honest.** If you added, removed, or reshaped a subsystem, a
-  note in [`sovereign/SYSTEM_OVERVIEW.md`](./sovereign/SYSTEM_OVERVIEW.md) keeps
+  note in [`docs/SYSTEM_OVERVIEW.md`](./docs/SYSTEM_OVERVIEW.md) keeps
   it current.
 - **Green CI.** Red just means not-ready-yet, not that you did something wrong —
   push again. If CI seems confused or wrong, say so in the PR.
@@ -229,10 +229,10 @@ None of this is a checklist to clear — it's just what tends to earn a quick ye
 
 Two documents are the compass, and reviews lean on them:
 
-- [`sovereign/SYSTEM_OVERVIEW.md`](./sovereign/SYSTEM_OVERVIEW.md) — the map of
+- [`docs/SYSTEM_OVERVIEW.md`](./docs/SYSTEM_OVERVIEW.md) — the map of
   every subsystem and how they fit. Read it before a non-trivial change; update
   it when your change moves the map.
-- [`sovereign/ARCH_PRINCIPLES.md`](./sovereign/ARCH_PRINCIPLES.md) — the design
+- [`docs/ARCH_PRINCIPLES.md`](./docs/ARCH_PRINCIPLES.md) — the design
   rules used to weigh trade-offs.
 
 Two habits carry a lot of weight here:

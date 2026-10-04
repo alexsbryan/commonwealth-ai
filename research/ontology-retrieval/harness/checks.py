@@ -50,7 +50,7 @@ from pathlib import Path
 
 HARNESS = Path(__file__).resolve().parent
 REPO = HARNESS.parents[2]
-COMPARE_PY = REPO / "sovereign" / "bench" / "sep_atlas" / "map-conversion-rung6" / "compare.py"
+COMPARE_PY = REPO / "bench" / "lanes" / "sep_atlas" / "map-conversion-rung6" / "compare.py"
 ATTEST_PY = HARNESS / "attest.py"
 
 PASSED, FAILED, CNJ, NEVER = "passed", "failed", "could-not-judge", "never-ran"

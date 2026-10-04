@@ -9,7 +9,7 @@
 #
 # Buckets: 625 in scope (591 must-class + 34 should), 10 out-of-scope (§17),
 # 5 aliases (§4.4). Out-of-scope and alias entries are PRESENT and excluded,
-# never absent — see kernel-types/src/conformance.rs.
+# never absent — see shared/crates/kernel-types/src/conformance.rs.
 spec_hash = "db3e95631b19f6b044a0020c5c9e0f6f490aa33ae6786fdfec27527881a90fa2"
 spec_lines = 3572
 

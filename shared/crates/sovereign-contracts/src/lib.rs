@@ -1,0 +1,262 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Contract crate: the public surface IS the product — every pub item needs
+// docs (count-ratcheted by lint-gate, never a hard deny).
+#![warn(missing_docs)]
+//! `sovereign-contracts` — the daemon↔package contract.
+//!
+//! The trait + type vocabulary a package (the workflow/recipe authoring stack)
+//! needs to talk to a Sovereign daemon, carved out of `sovereign-core` so a
+//! package can depend on the *contract* without dragging the runtime hub (and
+//! through it llama.cpp, LanceDB, the mesh). The only workspace dependency is
+//! `oicp-types` (re-exported below as `oicp`); everything else is a serde leaf.
+//!
+//! `sovereign-core` re-exports every item here at its historical paths
+//! (`sovereign_core::{error, traits, registry, types, ...}`), so the ~200
+//! existing importers are unaffected — this is a pure relocation.
+
+/// The OICP protocol types, re-exported so contract types can reference
+/// `crate::oicp::*` exactly as they did inside `sovereign-core`.
+pub use oicp_types as oicp;
+
+pub mod admission_wire;
+pub mod ask_discipline;
+pub mod baselines;
+/// `.sovereign/sovereign.toml` — the per-project watcher configuration. Moved
+/// down from `corpus-engine` so a caller that only reads the operator's
+/// watcher posture does not link the knowledge engine; corpus-engine
+/// re-exports it at `sovereign_config`.
+pub mod config;
+pub mod containment;
+
+// Wire shapes the daemon's HTTP routes answer with. Here rather than beside
+// the routes because a client that only parses an answer should not have to
+// link the serving host to name it — `sovereign-desktop` named eight of
+// these through `sovereign_mesh::*_http` and paid a layer edge for a `bool`
+// (sv-surface svt-3). `sovereign-mesh` re-exports each at its historical
+// path, so the routes are unchanged.
+pub mod daemon_wire;
+pub mod data_roots;
+/// `TestProvider`, the builder-style `InferenceProvider` double.
+#[cfg(feature = "test-fixtures")]
+pub mod double;
+/// The drift fingerprint sidecar codec (`write_fingerprint` / `hash_file` /
+/// `DriftFingerprint`). Moved down from `sovereign-code` so the reconcile
+/// commands in `sovereign-cli-llm` stamp the same fingerprint without linking
+/// the code-intelligence crate.
+pub mod drift_fingerprint;
+pub mod engine_config;
+/// serve's engine-state wire (pb-svrn-dials-serve).
+pub mod engine_state;
+// The egress boundary — the ONE choke point for remote-model calls and
+// search-query egress (order deep-research-t2a, R10; moved down from
+// `sovereign-core` by ei-5a-build-cut so a crate can gate its egress without
+// linking the inference stack). The F26 census registers this exact file as
+// the `Boundary` class; a reqwest client construction anywhere else fails the
+// build gate. `sovereign_core::egress` re-exports it — one boundary, two
+// paths to it.
+pub mod egress;
+pub mod embed_quirks;
+pub mod enrich_eval;
+/// One truthiness rule for the workspace's operator switches — see the module
+/// docs for why it is a shared leaf rather than a per-crate helper.
+pub mod env;
+pub mod error;
+pub mod eval_bank;
+/// Fill-in-the-middle prompt and stop text — the marker table, the PSM prompt
+/// builder, the mode decision and the pure stream stop tracker. Moved down
+/// from `sovereign-inference` (domains `REVIEW-build-serving-drop-inference`)
+/// so the serving host reaches it without linking the inference stack; it is
+/// arithmetic over `types::FimStyle`, which already lives here.
+pub mod fim;
+pub mod fim_http;
+pub mod frame;
+pub mod gguf_validator;
+pub mod git;
+/// A guest grant the holder has accepted — `guest.json`, read by both the CLI and the daemon.
+pub mod guest_link;
+pub mod guest_pages;
+pub mod health;
+/// This node's identity, published as a watch over `kernel_types::NodeId` —
+/// a reader a consumer holds rather than a value it copies, because
+/// `join_mesh` swaps the id inside a running daemon
+/// (`quality/DAEMON_CORE.md` §4.2). Here because its consumers span crates
+/// that may not name each other (`sovereign-api` cannot name
+/// `sovereign-mesh`).
+pub mod identity;
+/// The node's in-flight request gauge — a signal object created before the
+/// provider that increments it, so the counter is never a slot filled later.
+/// Here because its two speakers may not name each other: `sovereign-mesh`
+/// carries it and `sovereign-api` holds it
+/// (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
+pub mod in_flight;
+/// Where corpus indexes live on this host, and how far indexing got for
+/// one corpus. A `[[package_leaf]]` home for the two questions three
+/// packages ask (`svrn quality check`, `svrn bench all`, the chat-ask
+/// lane) about a tree the `ingest` package writes — see the module doc.
+pub mod index_layout;
+pub mod intent_policy;
+pub mod lane_verdict;
+pub mod launch;
+pub mod lessons;
+pub mod local_inference;
+pub mod local_only;
+pub mod mcp_config;
+/// The ToolRegistry half of an MCP `tools/call`: one path for every program
+/// that serves a `ToolRegistry` over MCP.
+pub mod mcp_host;
+/// The svrn daemon's one read of mesh membership (`MembershipReader`), which
+/// the flip re-points at cw-rails (pb-mesh-exit-core).
+pub mod membership;
+pub mod memory_config;
+/// Answering's port — the middleware trait and its
+/// request/session/error/view vocabulary. Lifted out of
+/// `sovereign-api` (domains `REVIEW-build-middleware-seam`) so the Workspace
+/// decision extractor can name it without the host; the composition
+/// (`Pipeline`, the registry) stays host code.
+pub mod middleware;
+/// The daemon's own rings and the one decider over them (`is_daemon_owned`).
+/// The URLs every surface prints for reaching the project.
+pub mod project_links;
+pub mod ring_namespaces;
+/// What every surface that ran the mobile host answers — `svrn mobile` and
+/// the desktop's Mobile access toggle — now that its binary is deleted.
+pub const MOBILE_HOST_ABSENT: &str =
+    "the mobile host was the sovereign-server binary, which was deleted; no mobile host ships";
+pub mod model_family;
+pub mod model_slots;
+pub mod models_manifest;
+/// The NER port — `LabeledEntityExtractor` and its `EntityMention` — so a host
+/// holds an extractor without linking the ONNX stack that serves it.
+pub mod ner;
+/// The node-identity FILES — the `node_id` file and the identity fields of
+/// `mesh.json`, with the ONE precedence decider every stamping surface shares.
+/// The files are cross-program contracts (the daemon writes them, every CLI
+/// surface reads them); moved here from `sovereign-mesh::persist` by
+/// five-programs fp-33 so the workbench learns which node it is without
+/// linking the mesh substrate. `sovereign_mesh::persist` re-exports the
+/// public items at their historical paths (ARCH §10.6).
+pub mod node_identity;
+/// The agent working-memory port — `AgentNotes`, the widened sibling of
+/// `recipe::notes::RecipeNotes`, so a program outside `code/` reads and writes
+/// notes without naming `corpus-engine-notes`.
+pub mod notes;
+pub mod observer;
+pub mod openai_http;
+pub mod peer_work;
+// The two ports a daemon speaks to its peers through — a replicated KV store
+// and the convergence stamps — plus the honest N=1 implementations of both.
+// Here rather than in the daemon because three crates must agree on them:
+// `sovereign-cli-daemon` declares them, `sovereign-work-atlas` consumes one,
+// and `sovereign-mesh` supplies the mesh-backed adapter for each (cw-lift 3b).
+pub mod peer;
+/// The JSON Schema the planner decodes under — the `structured_output`
+/// constraint, one `oneOf` branch per step kind. Moved down from
+/// `sovereign-core::planner::schema`; the leaf already owns `ToolDescriptor`,
+/// so the schema's only input is vocabulary. `sovereign-core` re-exports it at
+/// its historical path.
+pub mod planner_schema;
+/// Who is asking — the identity a request resolves to before admission, and
+/// the key of the daemon's one `principal -> Scope` table. Published language
+/// rather than the daemon's, because Serving's package and Answering both key
+/// on it and neither may name the daemon (`quality/DAEMON_CORE.md` §3.3).
+pub mod principal;
+/// svrn's retrieval probe: the evidence file `svrn __probe` writes and a bench
+/// judges.
+pub mod probe;
+pub mod rebrand;
+pub mod recipe;
+pub mod registry;
+pub mod reloadable_provider;
+pub mod rerank_kind;
+pub mod rpc_warm;
+pub mod run_identity;
+/// What this node claims about itself — the port Fabric publishes from. A
+/// consumer in `sovereign-mesh` (Fabric) and an implementation in
+/// `sovereign-api` (the daemon) may not name each other, so the port lives
+/// here beside `identity` (`quality/DAEMON_CORE.md` §4.2 "Gossip asks the node
+/// what to claim").
+pub mod self_claims;
+pub mod served_kinds;
+pub mod setup_config;
+/// `[iroh]` / `[iroh.transport]`, beside `setup_config` because that file is
+/// past its ceiling and this block grows with every origin kind. Re-exported
+/// from `setup_config`, so no call site names this path.
+pub mod setup_config_iroh;
+pub mod skills;
+pub mod slot_policy;
+pub mod tokens;
+pub mod tool_bundle;
+pub mod tool_manifest;
+pub mod tool_result_cache;
+pub mod traits;
+pub mod turn_admission;
+pub mod types;
+/// The ranked candidate record (`InferenceVenue`), the `VenueSource` port,
+/// and the slot-alias policy table both advertisement and resolution derive
+/// from (fp-1, §12 decision 3). The ranker lives in `sovereign-scheduler`.
+pub mod venue;
+/// The serving venue ports (`VenueHost`, `LedgerEmitter`) — the identity
+/// reader and ledger port the serving host's router holds. Carved from
+/// `sovereign-serving-host` (fp-16) so the port vocabulary sits at the
+/// contract floor the daemon and the serving process both name.
+pub mod venue_host;
+/// The watcher `projects` on-disk schema — `ProjectEntry`, `Registry` and
+/// the status enums (fp-2, §12 decision 3). Live watcher state stays in
+/// `corpus-engine-watchers`.
+pub mod watcher_projects;
+/// The ephemeral worker pod's owner↔pod wire protocol — bootstrap blob,
+/// worker token, seed-derived cert and the token verifier. A shared leaf
+/// rather than `sovereign-pods` (Compute's crate) because the protocol has
+/// two speakers in two contexts: the pod that decodes it and the serving host
+/// that mints it (`SERVING_BOUNDARY.md` "Grandfathered"; a third package
+/// exception is the kill clause).
+pub mod worker_pod;
+/// Which checkout this host's code tools operate on — one reading of the
+/// two configured sources (`TOPOLOGY.md` §10 phase 10).
+pub mod workspace;
+
+// Root re-exports mirroring the ones `sovereign-core` exposed, so
+// `sovereign_contracts::{Error, Result, ToolRegistry, <Type>}` all resolve.
+//
+// The two module aliases below are BOUNDED globs (quality program R1,
+// 2026-07-11): `traits` declares every item explicitly and `types` re-exports
+// its submodules through explicit lists (types/mod.rs), so nothing can join
+// this crate root without an explicit, reviewable edit — and api-gate
+// snapshots the resulting surface. New pub items declared directly in
+// types/mod.rs still flow through; the api snapshot is the net for those.
+pub use error::{Error, Result};
+pub use registry::ToolRegistry;
+pub use traits::*;
+pub use types::*;
+
+/// Test-only support shared across this crate's modules.
+#[cfg(test)]
+pub(crate) mod test_support {
+    /// One process-wide lock for tests that read *or* mutate the **global**
+    /// `HOME` env var. `rebrand`'s `projects_json_prefers_populated_branded_home`
+    /// points `HOME` at a tempdir; `setup_config`'s tilde-expansion tests read
+    /// `dirs::home_dir()` and assert against the REAL home. They compile into
+    /// the SAME test binary and run concurrently, so the writer swaps `HOME`
+    /// out from under the readers and they resolve a tempdir instead — observed
+    /// 2026-08-10 as `extra_slots_expand_home_at_load` expecting
+    /// `/Users/<me>/dev/big.gguf` and getting `/var/folders/.../svrnmesh-projects-json-<pid>/dev/big.gguf`.
+    ///
+    /// READERS must take it too, not just writers: excluding them is what makes
+    /// this look like an unreproducible flake. Mirrors the same lock in
+    /// `sovereign-desktop`'s `test_support`. Any new HOME-touching test in this
+    /// crate must take it — census run 2026-09-04, every one of them now does.
+    /// Three were reading HOME unserialised and passing on luck; the fourth,
+    /// `rebrand::sessions_root_precedence_is_one_decider`, was failing 3 runs
+    /// in 40 and took the better fix instead — the root it needed is a
+    /// parameter now, so that arm reads no environment at all. Prefer that
+    /// where the seam exists: a lock is remembered, a parameter is not.
+    ///
+    /// Poison is ignored on purpose — a panicking test must not cascade into
+    /// every other test in the binary.
+    pub fn home_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+}

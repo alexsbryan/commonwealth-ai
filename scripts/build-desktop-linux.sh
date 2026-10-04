@@ -34,7 +34,7 @@ cd "$REPO_ROOT"
 . "$SCRIPT_DIR/lib/release-host.sh"
 
 IMAGE="sovereign-desktop-linux-build:latest"
-CONTAINERFILE="sovereign/crates/sovereign-desktop/containerfiles/Containerfile.linux-build"
+CONTAINERFILE="clients/desktop/containerfiles/Containerfile.linux-build"
 
 # ─── Runtime: podman preferred (Fedora native, rootless), docker fallback ───
 if command -v podman >/dev/null 2>&1; then
@@ -129,7 +129,7 @@ RUN_ARGS=(
     # Without this, the entrypoint's `npm ci` replaces the host's
     # darwin-arm64 native binaries (esbuild, rollup) with linux-x64 ones
     # and host `npm run build` breaks until you rm -rf + npm ci again.
-    -v "$REPO_ROOT/.npm-container-modules:/work/sovereign/crates/sovereign-desktop/node_modules:Z"
+    -v "$REPO_ROOT/.npm-container-modules:/work/clients/desktop/node_modules:Z"
 )
 
 if (( SHELL_ONLY )); then

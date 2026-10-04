@@ -117,7 +117,7 @@ A move keeps behaviour identical and keeps every old path compiling.
 Copy the `Cargo.toml` shape of the nearest sibling under
 `sovereign/crates/`; add the crate to the root `Cargo.toml` `[workspace]
 members`; add it to the `[[layer]]` the row names in
-`quality/ARCH_LAYERS.toml`; add one line for it to `sovereign/SYSTEM_OVERVIEW.md`
+`quality/ARCH_LAYERS.toml`; add one line for it to `docs/SYSTEM_OVERVIEW.md`
 §2's crate list. Its `src/lib.rs` holds only the `//!` doc the row gives.
 
 ## 4. REVIEW units — you are the stronger model
@@ -142,7 +142,7 @@ anything that adds an
 `[x]`. If the pointed design is contradicted by the tree, §6.
 
 **`REVIEW-audit-<n>`.** Run TESTALL and PREPUSH. Read `git log` and `git
-diff` since the previous audit's hash against `sovereign/ARCH_PRINCIPLES.md`
+diff` since the previous audit's hash against `docs/ARCH_PRINCIPLES.md`
 ("The twelve", and the section of any principle you cite). Fix what you find,
 behaviour-preserving, and record each finding in `ralph/REVIEW_FINDINGS.md`:
 principle, path:line, fixed-in hash. Delete shims whose importers are all
@@ -160,7 +160,7 @@ does not exist on a Linux host, you are outside it: stop (§6) before building.
 | CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit; disk gate only, it does not build) |
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0; exit=4 (zero tests) only for a crate created in this unit, said in the commit |
-| LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
+| LAYER | `./scripts/with-cargo-lock.sh cargo xtask layer-gate > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
 | BOUNDARY | same, `boundary-gate`, log `target/ralph/boundary.log` | exit=0, unless the row says red is expected |
 | DOCS | same, `docs-gate`, log `target/ralph/docs.log` | exit=0 |
 | INSTR | same, `instrument-gate`, log `target/ralph/instr.log` | exit=0 |
@@ -205,12 +205,12 @@ pushing — and any correction whose evidence you cannot reproduce.
   or widen an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
   `scripts/ralph-*.sh`. Never stop or restart the daemon. Never
   `--update-baseline` a ratchet (first bullet). `quality/baselines/` is
   machine-written and off-limits except for §3a step 6: a move re-keys its own
   file's row to the new path, the line count unchanged — a re-key absorbs no
   growth.
 - When a move changes a path that `quality/DAEMON_CORE.md`,
-  `sovereign/SERVING_BOUNDARY.md` or `corpus-engine/DECOMPOSITION.md` names,
+  `serve/SERVING_BOUNDARY.md` or `ingest/crates/corpus-engine/DECOMPOSITION.md` names,
   fix that line in the same commit.

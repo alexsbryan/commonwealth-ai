@@ -1,0 +1,432 @@
+# syntax=docker/dockerfile:1.7
+# sovereign ephemeral-worker container, CUDA flavor.
+#
+# Sister image to `Containerfile` (ROCm). Runs in worker mode —
+# `sovereign-cli daemon run --worker-mode` — and is owned by exactly
+# one persistent peer for the lifetime of one job. See
+# svrn/docs/EPHEMERAL_WORKER_PODS.md. Differences from the ROCm
+# image:
+#
+#   1. NVIDIA CUDA base (devel for build, runtime for serving).
+#   2. llama-cpp-2 features patched from `"rocm"` to `"cuda"`.
+#   3. cuBLAS comes from the base image — no extra apt math-libs.
+#   4. CMAKE_CUDA_ARCHITECTURES env picks the SM list to compile for.
+#
+# Default arch list = "80;86;89;90" → covers Ampere (A100, RTX 30xx),
+# Ada (L40S, RTX 4090), and Hopper (H100/H200). Override at build time
+# for a single-target slim build:
+#     --build-arg CUDA_ARCHITECTURES=90       # H100 only
+#
+# ── build (from the commonwealth-ai/ workspace root, NOT from serve/):
+#     cd ~/dev/commonwealth-ai
+#     podman build -t ghcr.io/<you>/sovereign-cuda:latest \
+#                  -f serve/container/Containerfile.cuda .
+#
+# ── run locally (rootful podman, NVIDIA GPU passthrough requires the
+#                 NVIDIA Container Toolkit):
+#     podman run --rm --device nvidia.com/gpu=all \
+#       -e SOVEREIGN_BOOTSTRAP="$(sovereign worker-pod mint-blob …)" \
+#       -p 9742:9742 \
+#       ghcr.io/<you>/sovereign-cuda:latest
+#
+# In production the owner doesn't run the pod locally — Vast/RunPod
+# does, and the owner ships `SOVEREIGN_BOOTSTRAP` via the provider's
+# onstart-cmd env. (RunPod's runtime adds GPU device passthrough
+# automatically.)
+
+# ─── Build stage ─────────────────────────────────────────────────────
+# CUDA 12.1.1 requires NVIDIA driver >= 530.30, which most cloud
+# providers ship today. Newer toolkits (12.4+ require 550+) fail on
+# RunPod's stock L40S/A100 hosts with
+# 'CUDA driver version is insufficient for CUDA runtime version'.
+# Performance for llama.cpp inference is identical 12.1 vs 12.4 —
+# the toolkit version only matters for compile-time features we're
+# not using.
+FROM docker.io/nvidia/cuda:12.1.1-devel-ubuntu22.04 AS build
+
+ENV DEBIAN_FRONTEND=noninteractive
+# Build-chain peer deps for the Cargo workspace. cuBLAS dev headers
+# come pre-installed in the CUDA devel image at /usr/local/cuda/.
+#
+# NCCL is required because recent llama.cpp's GGML_CUDA pulls in
+# NCCL all-reduce primitives even on single-GPU builds — the symbols
+# need to resolve at link time. `libnccl-dev` provides headers + the
+# static archive for the build stage; the runtime stage adds
+# `libnccl2` for the dlopen path.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      --allow-change-held-packages \
+      build-essential cmake git curl ca-certificates pkg-config libssl-dev \
+      protobuf-compiler libprotobuf-dev \
+      clang libclang-dev llvm-dev lld python3 \
+      libnccl-dev libnccl2 \
+ && rm -rf /var/lib/apt/lists/*
+
+# sccache caches rustc + nvcc + cc/c++ output keyed by content hash.
+# Wins on every rebuild — the CUDA kernel compile and the llama-cpp /
+# lancedb dep tree are the slow paths and both benefit. Pulled from
+# upstream release (musl static binary, no glibc coupling to base).
+RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
+      | tar xz -C /tmp \
+ && mv /tmp/sccache-*/sccache /usr/local/bin/sccache \
+ && chmod +x /usr/local/bin/sccache \
+ && rm -rf /tmp/sccache-*
+
+ENV PROTOC=/usr/bin/protoc
+ENV PROTOC_INCLUDE=/usr/include
+
+# Rust toolchain. `rustfmt` is required: llama-cpp-sys-2's bindgen
+# pipes its generated bindings through `rustfmt`; without it the build
+# errors with `'rustfmt' is not installed for the toolchain`.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --default-toolchain stable \
+ && /root/.cargo/bin/rustup component add rustfmt
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# CUDA env. The nvidia/cuda:*-devel image installs the toolkit at
+# /usr/local/cuda and pre-sets PATH/LD_LIBRARY_PATH. CMake finds CUDA
+# automatically via standard FindCUDAToolkit logic.
+#
+# CMAKE_CUDA_ARCHITECTURES picks the SM gencodes baked into the image.
+# Listing more architectures = larger binary + slower compile, but a
+# single image deploys to any of those GPU classes.
+ARG CUDA_ARCHITECTURES="80;86;89;90"
+ENV CUDA_PATH=/usr/local/cuda
+ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
+# Git short-SHA stamp read by `sovereign-pods`'s worker daemon (`.git` is not
+# in the build context, and the crate no longer carries a build.rs to shell
+# git). It logs it at startup, so a pod running a stale image self-identifies
+# instead of masquerading as a fresh bug (2026-05-16 incident). Absent, the log
+# says `git_sha=unset-at-build` rather than inventing one.
+# Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+ARG GIT_SHA=unknown
+ENV SOVEREIGN_GIT_SHA=${GIT_SHA}
+# Link-time discovery of `libcuda.so` (the CUDA driver stub). The
+# devel image ships the stub at /usr/local/cuda/lib64/stubs/libcuda.so
+# but (a) doesn't add the dir to ld's search path, and (b) ships only
+# the unversioned `libcuda.so` even though libggml-cuda.so embeds the
+# `libcuda.so.1` SONAME at NEEDED — so the linker fails the transitive
+# lookup when linking llama.cpp's `mtmd`-gated tool binaries
+# (llama-tokenize, llama-batched-bench, llama-fit-params, etc.) with
+# `undefined reference to cuMemRelease`. The symlink + LIBRARY_PATH
+# satisfies the build-time link; runtime resolution swaps in the real
+# driver via the runtime image's NVIDIA mount. Standard "build in
+# non-GPU container against CUDA toolkit" pattern.
+ENV LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LIBRARY_PATH:-}
+RUN ln -sf libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
+ && ln -sf /usr/local/cuda/lib64/stubs/libcuda.so   /usr/lib/x86_64-linux-gnu/libcuda.so \
+ && ln -sf /usr/local/cuda/lib64/stubs/libcuda.so.1 /usr/lib/x86_64-linux-gnu/libcuda.so.1 \
+ && ldconfig
+
+# llama-cpp-sys-2's bundled llama.cpp has unconditional NCCL calls in
+# ggml-cuda.cu (single-GPU builds still reference the multi-GPU
+# all-reduce primitives). Its build.rs doesn't emit
+# `cargo:rustc-link-lib=nccl`, so the static archive's symbols stay
+# unresolved at the final binary link. Inject `-lnccl` here so rustc
+# appends it to the link command.
+#
+# `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld — measurable
+# win on the final sovereign-cli link (lancedb + arrow + llama-cpp pull
+# in a lot of object files).
+# Since the vendored llama-cpp-4 dropped `dynamic-link`, ggml/llama link
+# STATICALLY into the Rust binaries — and llama-cpp-sys-4's build.rs
+# emits no CUDA link directives (it only sets GGML_CUDA=ON in cmake; the
+# transitive cudart/cublas deps used to travel inside libggml-cuda.so).
+# Append them here: runtime API (cudart), cuBLAS (+Lt), and the driver
+# API (cuda — VMM cuMem* calls; resolved from the stubs at build time,
+# the real driver mount at runtime).
+ENV RUSTFLAGS="-C link-arg=-lnccl -C link-arg=-fuse-ld=lld -C link-arg=-L/usr/local/cuda/lib64 -C link-arg=-lcudart -C link-arg=-lcublas -C link-arg=-lcublasLt -C link-arg=-lcuda"
+
+# sccache wiring. CARGO_INCREMENTAL=0 is mandatory — sccache can't cache
+# anything while rustc emits per-crate incremental fragments. The CMAKE
+# launcher vars route ggml-cuda's nvcc / cc / c++ compiles through
+# sccache as well; that's the biggest single win for CUDA rebuilds
+# (each SM in CMAKE_CUDA_ARCHITECTURES compiles all kernels separately).
+ENV RUSTC_WRAPPER=sccache
+ENV CARGO_INCREMENTAL=0
+ENV SCCACHE_DIR=/root/.cache/sccache
+ENV CMAKE_C_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CXX_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CUDA_COMPILER_LAUNCHER=sccache
+
+# Build context = commonwealth-ai/ workspace root, which carries the one
+# workspace Cargo.toml + Cargo.lock. Cargo refuses to load the workspace when
+# any `[workspace] members` entry is missing, built here or not, so every
+# member is copied: each program's crates/ dir whole, then the members that
+# sit outside one. Nothing else is: no crate this image builds include_str!s a
+# file outside its own dir, and none has a build script.
+#
+# This block used to be a hand-kept list of crates, and it kept drifting:
+# `kernel-types` and `corpus-engine-sections` were missing on 2026-08-28, and
+# after the top-level-programs move it copied nine paths that no longer
+# existed while missing every svrn/, serve/, distributions/ and clients/
+# member. A member missing here fails `cargo fetch` ~6 minutes in, after the
+# CUDA layers. scripts/tests/release-build-context.sh now derives
+# the member list from the root manifest and fails, in seconds and without
+# podman, when a member, a [patch] path or a COPY source is missing.
+WORKDIR /workspace
+COPY Cargo.toml Cargo.lock ./
+COPY svrn/crates/          ./svrn/crates/
+COPY serve/crates/         ./serve/crates/
+COPY cmnwlth/crates/       ./cmnwlth/crates/
+COPY ingest/crates/        ./ingest/crates/
+COPY code/crates/          ./code/crates/
+COPY shared/crates/        ./shared/crates/
+COPY bench/crates/         ./bench/crates/
+COPY distributions/crates/ ./distributions/crates/
+COPY clients/studio/            ./clients/studio/
+COPY clients/desktop/src-tauri/ ./clients/desktop/src-tauri/
+COPY clients/mobile/src-tauri/  ./clients/mobile/src-tauri/
+COPY quality/xtask/        ./quality/xtask/
+COPY quality/arch-layers/  ./quality/arch-layers/
+# [patch.crates-io] in the root manifest points llama-cpp-4, llama-cpp-sys-4
+# and lance-linalg at vendor/ — without it cargo resolves the unpatched
+# registry crates (wrong llama.cpp = wrong RPC wire version).
+#
+# llama-cpp-sys-4 joined the patch set on 2026-08-03 and takes this COPY from
+# ~1 MB to ~35 MB, because that crate carries llama.cpp itself. It is vendored
+# for exactly one reason: to hold the llama.cpp revision one commit ahead of
+# what the published crate bundles (upstream 1464c62d88, the Metal DSv4
+# Lightning Indexer kernel). Provenance and the re-pin procedure are in
+# vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT, and
+# ./scripts/verify-vendored-llama-cpp.sh checks the tree against upstream.
+#
+# Adding a file under llama.cpp/ used to need a `touch` on the top-level
+# CMakeLists.txt as well, to move build.rs's mtime-keyed extraction cache.
+# DO NOT RELY ON THAT — a touch changes no content, so podman reuses this
+# COPY layer verbatim, old mtimes and all, and the key never moves. The
+# extraction is now unconditional at the cargo build step below; see the
+# comment there.
+COPY vendor/              ./vendor/
+# sovereign-cli-shared's cli_contract::manifest_path() is
+# env!("SOVEREIGN_CLI_CONTRACT"); in-tree the workspace .cargo/config.toml
+# sets it. That config is not copied (its linux target links with clang +
+# mold, which this image does not carry), so the knob is set here: unset is
+# a compile error. The value is the file's place in the source tree. Only
+# `svrn contract` and the hidden dev verbs `__contract-smoke`/`__journey-plan`
+# read it (sovereign-cli main.rs), and a worker pod runs none of them.
+ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
+
+# Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
+# "vulkan" is currently checked in — the repo default has flipped over
+# time) to "cuda" for this image. We do it in-image rather than via a
+# Cargo feature flag because the choice lives inside a target-conditional
+# dependency declaration, not in the workspace features table.
+#
+# Tolerant of:
+#   - either "rocm" or "vulkan" as the source feature
+#   - comment / blank lines between the [target...] header and the
+#     llama-cpp-2 line (the in-repo comment block explaining the ROCm
+#     SEGV workaround is one such block).
+#
+# Mirrors swap_inference_backend() in scripts/bootstrap-linux.sh.
+RUN python3 <<'PY'
+import re, pathlib
+p = pathlib.Path('/workspace/serve/crates/sovereign-inference/Cargo.toml')
+src = p.read_text()
+header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
+pattern = (
+    re.escape(header)
+    + r'(?:[ \t]*\n(?:[ \t]*#[^\n]*\n|[ \t]*\n)*)'
+    + r'(llama-cpp-4\s*=\s*\{[^\n]*\})'
+)
+m = re.search(pattern, src)
+assert m, "couldn't find Linux llama-cpp-4 line under " + header
+line = m.group(1)
+new_line, n = re.subn(r'"(rocm|vulkan)"', '"cuda"', line, count=1)
+assert n == 1, f"expected one rocm/vulkan token to swap, found {n}: {line!r}"
+p.write_text(src[:m.start(1)] + new_line + src[m.end(1):])
+print("Patched:", new_line.strip())
+PY
+
+WORKDIR /workspace
+# Pre-fetch dependencies so the llama.cpp source lands on disk in the
+# cargo registry; then patch its CMakeLists to default GGML_CUDA_NCCL
+# to OFF. NCCL is only useful for multi-GPU peer-to-peer collectives,
+# but llama.cpp's `ggml_cuda_init` calls `ncclCommInitAll`
+# unconditionally and hard-fails on hosts where the driver/runtime/
+# NCCL combo doesn't line up (common on Vast.ai marketplaces where
+# host driver versions vary widely). Single-GPU pods don't need NCCL.
+# With this patch, ncclCommInitAll is never called and the daemon
+# starts cleanly on any host with a CUDA-capable driver.
+#
+# BuildKit cache mounts persist the cargo registry, git checkouts,
+# target dir, and sccache across rebuilds. First build is cold; every
+# subsequent rebuild reuses dep compiles + cached nvcc artifacts. The
+# sed patch runs inside the same mount as fetch so the registry the
+# build sees is the patched one. `sharing=locked` serializes parallel
+# builds against the same cache; flip to `shared` if doing multi-arch
+# matrix builds.
+#
+# The compiled binary is copied out of the cached target dir into
+# /usr/local/bin so the runtime stage can COPY --from=build from a
+# real image layer (cache mounts don't survive across stages).
+# SEARCHES BOTH ROOTS, AND REFUSES AN EMPTY MATCH (2026-08-28). This looked
+# only under the cargo registry, which was right until `llama-cpp-sys-4`
+# joined the `[patch.crates-io]` set on 2026-08-03 and started resolving to
+# `vendor/` — after which `cargo fetch` never puts it in the registry and the
+# `find` returns nothing. The observed symptom is `sed: no input files`,
+# exit 123, ~6 min into the build.
+#
+# The dangerous version of this bug is the one where it does NOT error. A
+# patch step that silently matches nothing leaves GGML_CUDA_NCCL ON, and the
+# daemon then segfaults the moment llama.cpp enumerates CUDA — a build that
+# exits 0 and produces an image that cannot start (§18.3). Hence the explicit
+# empty check rather than relying on `xargs` to fail.
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    cargo fetch \
+ && CMAKE_LISTS="$(find /root/.cargo/registry/src /workspace/vendor \
+      -path '*/llama-cpp-sys-4*/llama.cpp/ggml/CMakeLists.txt' 2>/dev/null)" \
+ && { [ -n "$CMAKE_LISTS" ] || { \
+      echo "FATAL: no llama-cpp-sys-4 ggml/CMakeLists.txt under the registry OR vendor/;" \
+           "the NCCL patch would no-op and the daemon would segfault on CUDA enumeration"; \
+      exit 1; }; } \
+ && echo "$CMAKE_LISTS" \
+    | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
+ && echo "$CMAKE_LISTS" | xargs grep -n GGML_CUDA_NCCL
+
+# THE `rm -rf` IS LOAD-BEARING — DO NOT DROP IT AS A TIDY-UP (2026-08-28).
+# /workspace/target is a persistent cache mount, and build.rs extracts
+# llama.cpp into target/release/build/llama-cpp-sys-4-*/out/, re-copying only
+# when `llama_src_version` changes. On a non-git tree that version is the
+# MTIME of llama.cpp/CMakeLists.txt plus a patches hash (build.rs:519-558).
+# Two caches then conspire: adding source files under llama.cpp/ does not move
+# an mtime, and `touch`ing the CMakeLists does not move podman's CONTENT-
+# addressed layer digest either, so the COPY layer is reused WITH THE OLD
+# MTIME and the key never changes. The compile then fails on a file that is
+# demonstrably present in the image — which cost four rebuilds on 2026-08-28.
+# Deleting the extracted copy makes the extraction unconditional and drops the
+# mtime dependence entirely. It is not expensive: /root/.cache/sccache is
+# mounted right above, so the C++/CUDA recompile is served from there.
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
+    --mount=type=cache,target=/workspace/target \
+    rm -rf /workspace/target/release/build/llama-cpp-sys-4-*/out/llama.cpp \
+ && cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm --bin sovereign-stock --bin sovereign-pod-worker \
+ && cp /workspace/target/release/sovereign-cli        /usr/local/bin/sovereign-cli \
+ && cp /workspace/target/release/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon \
+ && cp /workspace/target/release/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm \
+ && cp /workspace/target/release/sovereign-stock      /usr/local/bin/sovereign-stock \
+ && cp /workspace/target/release/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker \
+ && sccache --show-stats
+
+# ─── CUDA preflight binary ───────────────────────────────────────────
+# A tiny native test that mirrors llama.cpp's `ggml_cuda_init` path —
+# calls `ncclCommInitAll` exactly the way llama.cpp does. The runtime
+# entrypoint runs this BEFORE the 38 GB R2 model sync so a
+# driver/runtime incompat (common on heterogeneous marketplaces like
+# Vast.ai where host driver versions vary widely) surfaces in ~1 s
+# instead of after 5+ minutes of wasted GGUF download.
+RUN mkdir -p /tmp/preflight && cat > /tmp/preflight/preflight.cu <<'EOF'
+#include <cuda_runtime.h>
+#include <stdio.h>
+int main() {
+    int n = 0;
+    cudaError_t e = cudaGetDeviceCount(&n);
+    if (e != cudaSuccess) {
+        fprintf(stderr, "preflight: cudaGetDeviceCount failed: %s\n",
+                cudaGetErrorString(e));
+        return 2;
+    }
+    if (n < 1) {
+        fprintf(stderr, "preflight: no CUDA devices visible\n");
+        return 3;
+    }
+    // Allocate + free a tiny buffer to confirm the runtime can actually
+    // talk to the device, not just enumerate it. Catches driver/runtime
+    // version mismatches that pass cudaGetDeviceCount but fail at first
+    // real GPU operation.
+    void* p = nullptr;
+    e = cudaMalloc(&p, 4096);
+    if (e != cudaSuccess) {
+        fprintf(stderr, "preflight: cudaMalloc failed: %s\n",
+                cudaGetErrorString(e));
+        return 4;
+    }
+    cudaFree(p);
+    printf("preflight: OK (%d GPU(s), runtime functional)\n", n);
+    return 0;
+}
+EOF
+RUN nvcc -O2 -o /usr/local/bin/cuda-preflight /tmp/preflight/preflight.cu \
+ && rm -rf /tmp/preflight
+
+# ─── Runtime stage ───────────────────────────────────────────────────
+# `runtime` (not `devel`) image is ~3 GB smaller and ships cuBLAS +
+# CUDA driver shim libraries — everything the daemon needs to dlopen
+# at slot-load time. Match toolkit version to the build stage.
+FROM docker.io/nvidia/cuda:12.1.1-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+# Runtime libs the daemon needs to dlopen at startup:
+#   libnccl2  — matches the build-stage `libnccl-dev`. Without it the
+#               daemon segfaults the moment llama.cpp enumerates CUDA.
+#   libgomp1  — GNU OpenMP runtime. llama.cpp links against it
+#               (GGML_OPENMP=ON) but the cuda *-runtime image doesn't
+#               ship it, so sovereign-cli fails immediately with
+#               "error while loading shared libraries: libgomp.so.1".
+#   openssh-server + aria2
+#             — the DEV-daemon path (scripts/dev-pod.sh): the pod binds
+#               127.0.0.1:9741 and is reached over an SSH tunnel, and the
+#               ~30 GB loadout is pulled with aria2c. Both used to be
+#               apt-installed by the pod's own onstart script, which put a
+#               network round-trip and an apt mirror on the critical path of
+#               every cold boot — a rented GPU billing by the minute is the
+#               worst place to discover a mirror is down. Baked in here they
+#               cost one layer and no boot time. Worker-mode pods carry them
+#               unused, which is cheaper than a second image.
+#
+# Worker-mode pods no longer install Tailscale or rclone — uploads
+# arrive over the owner's pinned-TLS connection, and the pod never
+# joins a tailnet. See EPHEMERAL_WORKER_PODS.md "Deleted (when
+# full-mesh-pods go away)".
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      --allow-change-held-packages \
+      curl ca-certificates unzip \
+      libnccl2 libgomp1 \
+      openssh-server aria2 \
+ && rm -rf /var/lib/apt/lists/*
+
+# All three CLI binaries: `sovereign-cli` is an exec-dispatcher — the
+# `daemon`/`doctor` verbs exec the `sovereign-cli-daemon` sibling and
+# `mesh`/`corpus`/… exec `sovereign-cli-llm`; without the siblings on
+# PATH those verbs fail with "cannot find sibling binary".
+COPY --from=build /usr/local/bin/sovereign-cli        /usr/local/bin/sovereign-cli
+COPY --from=build /usr/local/bin/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon
+COPY --from=build /usr/local/bin/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm
+# `daemon run` execs sovereign-stock and `daemon run --worker-mode` execs
+# sovereign-pod-worker (pb-pods-worker).
+COPY --from=build /usr/local/bin/sovereign-stock      /usr/local/bin/sovereign-stock
+COPY --from=build /usr/local/bin/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker
+COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
+# NOTE: no llama.cpp shared-lib copy here anymore. The vendored
+# llama-cpp-4 dropped `dynamic-link` from its default features
+# (vendor/llama-cpp-4/Cargo.toml — "sovereign vendor divergence"), so
+# ggml/llama link STATICALLY into sovereign-cli; there are no
+# libggml*/libllama* .so files to ship, and /workspace/target is a
+# cache mount that never persists into stage layers anyway.
+# Stub libcuda.so so the binary's dynamic linker is satisfied on hosts
+# without a GPU (e.g. local podman smoke tests). On real Vast pods the
+# NVIDIA Container Toolkit bind-mounts the real libcuda.so.1 from the
+# host driver — that mount takes precedence at runtime. The runtime
+# image doesn't ship CUDA stubs by default; copy from the devel build
+# stage where they live at /usr/local/cuda/lib64/stubs/.
+COPY --from=build /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/lib/x86_64-linux-gnu/libcuda.so.1 \
+ && ldconfig
+
+WORKDIR /workspace
+RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign
+
+COPY serve/container/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Worker daemon's owner-only TLS surface. No client port (9741) — pods
+# don't serve /v1/chat/* in worker mode.
+EXPOSE 9742
+
+ENV SOVEREIGN_DATA_DIR=/workspace/data
+ENV SOVEREIGN_MODELS_DIR=/workspace/models
+
+ENTRYPOINT ["/entrypoint.sh"]

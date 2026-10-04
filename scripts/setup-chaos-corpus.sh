@@ -8,7 +8,7 @@
 # corpus_id from the *path hash* (→ a per-machine `watched-<hash>` id), which
 # made the CI gate non-reproducible. A recipe pins `[corpus].id`, so every box
 # gets the same `chaos-secret-agent` id. The canonical recipe is committed at
-# sovereign-recipes/chaos-secret-agent/recipe.toml; this script mirrors it into
+# ingest/crates/sovereign-recipes/chaos-secret-agent/recipe.toml; this script mirrors it into
 # the daemon's live override dir (~/.svrnmesh/recipes/) with a $HOME-correct
 # source path, so the *running* daemon resolves it (registry resolution step 1)
 # without a rebuild or restart.
@@ -90,8 +90,8 @@ if [[ -e "$IDX/chunks.lance" ]]; then
   echo
   echo "Run the chaos bench against the stable corpus:"
   echo "    $BIN bench chaos-monkey run \\"
-  echo "      --bank sovereign/bench/chaos_monkey/secret_agent.toml \\"
-  echo "      --manifest sovereign/bench/chaos_monkey/manifest.toml \\"
+  echo "      --bank bench/lanes/chaos_monkey/secret_agent.toml \\"
+  echo "      --manifest bench/lanes/chaos_monkey/manifest.toml \\"
   echo "      --corpus ${CORPUS_ID}"
   echo
   echo "Or the whole CI suite (the chaos lane defaults CHAOS_CORPUS=${CORPUS_ID}):"

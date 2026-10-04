@@ -1,7 +1,7 @@
 # Custody schema + join rule — design note (order `deep-research-t0b`, reds R-2/R-3/R-4)
 
 **Status:** design only. The three reds in
-`sovereign/crates/sovereign-core/tests/custody_reds.rs` are the
+`svrn/crates/sovereign-core/tests/custody_reds.rs` are the
 specification in failing-test form — each compiles at HEAD, fails when
 run, and fails for the attributed reason. T1's job is to make the
 assertions true, not to rewrite them. **No custody code exists anywhere

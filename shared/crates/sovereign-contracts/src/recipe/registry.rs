@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! The recipe registry catalog — a read-only view over the checked-in
+//! `ingest/crates/sovereign-recipes/registry.toml`.
+//!
+//! `RegistryBrowseTool` lists recipes so the authoring agent can pattern off an
+//! existing one. It did this through `corpus_engine::RecipeRegistry` — a runtime
+//! dependency the extractable authoring package cannot carry.
+//!
+//! The bundled catalog is INJECTED: this leaf keeps the parser and the view
+//! types, and the caller supplies the bundled TOML (the monolith reads it from
+//! `corpus_engine::registry::BUNDLED_REGISTRY_TOML`). The artifact used to be
+//! embedded here with an `include_str!` that climbed three levels out of the
+//! crate root; a flat-copy lift of the package cannot resolve that, so the
+//! data arrives as a value instead.
+
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+
+use serde::Deserialize;
+
+/// The subset of a registry entry the browse tool renders. Unlisted fields in
+/// the TOML (`toml_url`, `sha256`, `prebuilt`, …) are ignored by serde.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RegistryEntryView {
+    /// Recipe id — the registry key, what `recipe:<id>` references.
+    pub id: String,
+    /// Human-readable corpus name.
+    pub name: String,
+    /// Short corpus description; empty when the TOML omits it.
+    #[serde(default)]
+    pub description: String,
+    /// Upstream data license string; empty when unspecified.
+    #[serde(default)]
+    pub license: String,
+    /// Download size, GB (0.0 when unspecified).
+    #[serde(default)]
+    pub size_compressed_gb: f64,
+    /// On-disk indexed size, GB (0.0 when unspecified).
+    #[serde(default)]
+    pub size_indexed_gb: f64,
+    /// Whether the recipe ships an enrichment phase.
+    #[serde(default)]
+    pub enrichment_enabled: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RegistrySnapshotView {
+    #[serde(rename = "recipes", default)]
+    entries: Vec<RegistryEntryView>,
+}
+
+/// Parse a registry snapshot TOML, returning its entries. Returns an empty
+/// vec on a parse error — a malformed registry must not take down the caller
+/// (mirrors `RecipeRegistry::with_local_registry`'s silent-ignore contract).
+pub fn parse_registry(toml_str: &str) -> Vec<RegistryEntryView> {
+    match toml::from_str::<RegistrySnapshotView>(toml_str) {
+        Ok(snap) => snap.entries,
+        Err(_) => Vec::new(),
+    }
+}
+
+/// The user-published local registry path: `~/.svrnmesh/recipes/registry.toml`.
+/// Mirrors `RecipeRegistry::default_local_recipes_dir().join("registry.toml")`.
+///
+/// Still returns `Option` for its callers' sake, but is now always `Some`:
+/// [`crate::rebrand::svrnmesh_root`] resolves an unknown home to `.` rather
+/// than failing, and it carries the legacy `~/.sovereign` fallback that this
+/// hand-rolled `HOME` chain did not.
+pub fn default_local_registry_path() -> Option<PathBuf> {
+    Some(
+        crate::rebrand::svrnmesh_root()
+            .join("recipes")
+            .join("registry.toml"),
+    )
+}
+
+/// One row in the merged catalog: an entry plus whether it came from the user's
+/// local registry (vs the bundled snapshot).
+#[derive(Debug, Clone)]
+pub struct CatalogRow {
+    /// The registry entry.
+    pub entry: RegistryEntryView,
+    /// True when the entry came from the user's local registry rather than the bundled snapshot.
+    pub is_local: bool,
+}
+
+/// The bundled catalog merged with the user's local registry, matching
+/// `RecipeRegistry::list_entries()` precedence: local entries first (deduped by
+/// id), then bundled entries whose id was not already seen. `is_local` mirrors
+/// `RecipeRegistry::is_local_entry`. `live` (network refresh) is never consulted
+/// — the browse tool never refreshes.
+///
+/// `bundled_toml` is the injected `ingest/crates/sovereign-recipes/registry.toml` snapshot.
+pub fn merged_catalog(bundled_toml: &str) -> Vec<CatalogRow> {
+    let bundled = parse_registry(bundled_toml);
+    let local = default_local_registry_path()
+        .filter(|p| p.is_file())
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|t| parse_registry(&t))
+        .unwrap_or_default();
+    let local_ids: BTreeSet<String> = local.iter().map(|e| e.id.clone()).collect();
+
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut out: Vec<CatalogRow> = Vec::new();
+    for e in local.into_iter().chain(bundled) {
+        if !seen.insert(e.id.clone()) {
+            continue;
+        }
+        let is_local = local_ids.contains(&e.id);
+        out.push(CatalogRow { entry: e, is_local });
+    }
+    out
+}

@@ -1,7 +1,7 @@
 # literary-composed.recipe.toml — what it declares, what it could not, how to build it
 
-Custom navigation rows ARE legal: `OntologyV1.navigation` (understanding-vocab/src/ontology/decl.rs:264-268), key
-admitted by `V1_KEYS` (corpus-engine/src/recipe_ontology/language.rs:174), path `[enrichment.ontology.navigation.<kind>]`
+Custom navigation rows ARE legal: `OntologyV1.navigation` (shared/crates/understanding-vocab/src/ontology/decl.rs:264-268), key
+admitted by `V1_KEYS` (ingest/crates/corpus-engine/src/recipe_ontology/language.rs:174), path `[enrichment.ontology.navigation.<kind>]`
 (recipe_ontology/docs/v1.md:54-70). `Summary` is a legal seed kind; a bad kind, edge or source refuses at load (watched).
 Exemplars are optional, but a row without them can never be classified onto (navigation.rs:212-217).
 

@@ -4,7 +4,7 @@
 # place on every machine in the fleet, and a unit that silently points at
 # somebody else's home directory fails in a way nobody reads.
 Description=Sovereign CLI journey harness — nightly live lane
-Documentation=file://@REPO_ROOT@/sovereign/docs/TESTING_SURFACE.md
+Documentation=file://@REPO_ROOT@/svrn/docs/TESTING_SURFACE.md
 # No After=/Requires= on the daemon: the lane is safe whether or not the
 # operator's daemon is up, because it boots its OWN in a private netns on a
 # non-default port.
@@ -34,7 +34,7 @@ StandardError=journal
 # Deliberately NOT hardened with ProtectHome/PrivateTmp: the lane needs $HOME
 # (models, ~/.svrnmesh, the report dir) and creates its own throwaway HOME
 # and network namespace internally, which is where the isolation actually
-# lives. See sovereign/scripts/cli-journey-sandbox.sh.
+# lives. See svrn/scripts/cli-journey-sandbox.sh.
 
 [Install]
 WantedBy=default.target

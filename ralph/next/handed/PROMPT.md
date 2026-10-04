@@ -84,13 +84,13 @@ Three queue duties come with every mint, in the same commit as the rows:
 2. Add a `conflicts.txt` pair for any two rows IN THE QUEUE that edit one file —
    not just two of yours. `pick_wave` will otherwise put both in the same wave, and
    two mints can land on one file without either seeing the other: hd-8 and hd-9 both
-   rewrite `corpus-engine/src/index/create.rs`'s `create_with_sharing`.
+   rewrite `ingest/crates/corpus-engine/src/index/create.rs`'s `create_with_sharing`.
 3. Prove the queue still parses: `python3 scripts/ralph.py report` must print its
    `queue:` line with your rows counted. A typo in a `depends` id leaves the
    queue unreadable and the pool SLEEPS instead of failing.
 
 **`REVIEW-audit-hd-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -105,7 +105,7 @@ On Linux every check runs inside the `sovereign-vulkan` toolbox; if
 | CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit) |
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0 |
-| LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
+| LAYER | `./scripts/with-cargo-lock.sh cargo xtask layer-gate > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
 | TOML | `python3 -c "import tomllib; [tomllib.load(open(p,'rb')) for p in ('quality/campaigns/handed.toml','quality/ARCH_LAYERS.toml','quality/TOPOLOGY.toml')]" && python3 scripts/co-lineage.py list >/dev/null && echo exit=0` | exit=0 |
 | PLANT(x) | make the one-line violation `x` names, run the gate the row names (LINT or LAYER or TEST(c)), paste its red line, `git checkout --` the plant, run the gate again | red with the plant, exit=0 without it |
 | TESTALL | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human > target/ralph/testall.log 2>&1; echo exit=$?; tail -12 target/ralph/testall.log` | exit=0 (audits only) |
@@ -132,7 +132,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
   `scripts/ralph*`. Never stop or restart the daemon.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

@@ -12,5 +12,5 @@ for pair in "full 3" "deep 3"; do set -- $pair
   echo "== arm $1 run $2  [$(date -u +%T)]"; rm -rf "$RUNS/$1/run-$2"; arm "$1" "$2"
 done
 echo "== board  [$(date -u +%T)]"
-python3 sovereign/bench/sep_atlas/map-conversion-rung6/compare.py study --runs $RUNS --out $RUNS --recipe $H/recipes/$S/recipe.toml
+python3 bench/lanes/sep_atlas/map-conversion-rung6/compare.py study --runs $RUNS --out $RUNS --recipe $H/recipes/$S/recipe.toml
 echo "FINISH EXIT $?  [$(date -u +%T)]"

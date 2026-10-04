@@ -19,7 +19,7 @@ TSV="$ROOT/research/engram/synth-$CORPUS$([ -n "$SAMPLE" ] && echo "-n$SAMPLE").
 REPORT="$ROOT/target/ci-bench/synth-$CORPUS-rerun.json"
 mkdir -p "$ROOT/target/ci-bench"
 
-ARGS=(bench all --bench-root "$ROOT/sovereign/bench" --synth --filter "$CORPUS" --report "$REPORT")
+ARGS=(bench all --bench-root "$ROOT/bench/lanes" --synth --filter "$CORPUS" --report "$REPORT")
 [ -n "$SAMPLE" ] && ARGS+=(--sample-questions "$SAMPLE")
 
 printf 'ts\tavail_mib\tgtt_mib\tdaemon_anon_mib\tdaemon_file_mib\teval_rss_mib\n' > "$TSV"

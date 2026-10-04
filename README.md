@@ -18,9 +18,11 @@ svrn setup          # finds models that fit your hardware, downloads them, start
 svrn chat session   # start talking
 ```
 
+No machine that can hold a model? `svrn setup --hosted deepseek < key.txt` sets one up on a hosted model instead (or `anthropic`, `openrouter`, or any OpenAI-compatible URL). Your questions, and the text of folders you add, go to that vendor; embeddings still run on your machine. [A hosted provider](./docs/USE_YOUR_OWN_INFERENCE_SERVER.md#a-hosted-provider) has the details.
+
 That's the whole loop. Answers come grounded in sources you keep — your files, an Obsidian vault, Wikipedia, the Stanford Encyclopedia — searched before each reply and **cited**, so you can trace any claim back to where it came from. Your conversations, documents, and memory stay put, and it remembers what mattered across sessions. Web search is off by default; there's no telemetry.
 
-Swap models live with `svrn model set primary <file>`. There's a desktop app too, and the daemon serves an OpenAI-compatible API you can point your own tools at — both in [the svrnmesh guide](./sovereign/README.md).
+Swap models live with `svrn model set primary <file>`. There's a desktop app too, and the daemon serves an OpenAI-compatible API you can point your own tools at — both in [the svrnmesh guide](./svrn/README.md).
 
 Everything lives under one directory on your machine. `svrn path root` prints it (and `svrn doctor` checks it over); nothing is written anywhere else.
 
@@ -38,7 +40,7 @@ svrn corpus install email-archive --params path=~/Takeout/Mail/inbox.mbox
 svrn workflow run my-pipeline.toml
 ```
 
-[Build your first recipe](./sovereign-recipes/GETTING_STARTED.md) and [write a workflow](./docs/WRITE_A_WORKFLOW.md) each start from a copyable starter.
+[Build your first recipe](./ingest/crates/sovereign-recipes/GETTING_STARTED.md) and [write a workflow](./docs/WRITE_A_WORKFLOW.md) each start from a copyable starter.
 
 ## Run a model bigger than your machine
 
@@ -70,8 +72,9 @@ model_id = "Qwen/Qwen3.5-35B-A3B"
 ```
 
 [Use your own inference server](./docs/USE_YOUR_OWN_INFERENCE_SERVER.md) covers
-the whole change, including the second server you need for embeddings if you
-use corpora, and what you give up by not holding the weights.
+the whole change, including where embeddings come from if you use corpora (a
+small model in the daemon's own process, or a second server), and what you
+give up by not holding the weights.
 
 ## Code completion that explains itself
 
@@ -106,7 +109,7 @@ The rail carries an opaque payload and guarantees four things about the entries 
 
 ## Going deeper
 
-New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Already using another agent harness, editor, or chat UI? [INTEROP.md](./docs/INTEROP.md) points it at a local daemon in five minutes; [GROUND_YOUR_AGENT.md](./docs/GROUND_YOUR_AGENT.md) then gives that agent the session protocol — memory, coordination, handoff; [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.
+New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./docs/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Already using another agent harness, editor, or chat UI? [INTEROP.md](./docs/INTEROP.md) points it at a local daemon in five minutes; [GROUND_YOUR_AGENT.md](./docs/GROUND_YOUR_AGENT.md) then gives that agent the session protocol — memory, coordination, handoff; [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.
 
 ## Contributing
 

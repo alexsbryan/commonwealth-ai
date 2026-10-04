@@ -1,7 +1,7 @@
 # P5 — the poisoned-source drill, flown through the shipped CLI
 
 The P5 drill (order `deep-research-t1b`; spec
-`sovereign/docs/specs/DEEP_RESEARCH.md` P5; the FMEA rows F4/F23) flown
+`svrn/docs/specs/DEEP_RESEARCH.md` P5; the FMEA rows F4/F23) flown
 end-to-end through the shipped CLI — not a bench fork. The bank's three
 poisoned fixtures
 (`research/deep-research/bank/poisoned/{fabrication,prompt-injection,combined-p5}/README.md`)

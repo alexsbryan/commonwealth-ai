@@ -5,7 +5,7 @@
 # hosted compute costs credits — this script replaces exactly the compute.
 #
 # The packaging is byte-compatible with cli-release.yml, so
-# landing/install.sh works unchanged: sovereign-<triple>.tar.gz containing
+# clients/landing/install.sh works unchanged: sovereign-<triple>.tar.gz containing
 # sovereign-<triple>/{sovereign-cli,sovereign-cli-daemon,sovereign-cli-llm},
 # a .sha256 sidecar, and a combined SHA256SUMS asset (regenerated from ALL
 # uploaded sidecars after every upload, so machines can contribute their
@@ -64,7 +64,7 @@ EOF
 
 need() { command -v "$1" >/dev/null 2>&1 || err "'$1' is required"; }
 
-# Same dual-tool dance as landing/install.sh: shasum (mac/ubuntu) or
+# Same dual-tool dance as clients/landing/install.sh: shasum (mac/ubuntu) or
 # coreutils sha256sum (fedora). Both emit "hash  filename"; install.sh
 # compares only the hash field.
 sha256_line() {

@@ -13,8 +13,8 @@
 #   2. Computes the new version (explicit arg OR bump from current).
 #   3. Writes the new version to the three files that must agree:
 #        - Cargo.toml                                      (workspace.package.version)
-#        - sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json   (version)
-#        - sovereign/crates/sovereign-desktop/package.json                (version)
+#        - clients/desktop/src-tauri/tauri.conf.json   (version)
+#        - clients/desktop/package.json                (version)
 #   4. Runs check-desktop-version.sh to confirm all three now match.
 #   5. Prints the suggested commit/tag/push lines. Does NOT run them.
 #
@@ -29,8 +29,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 CARGO_TOML="$REPO_ROOT/Cargo.toml"
-TAURI_CONF="$REPO_ROOT/sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json"
-PACKAGE_JSON="$REPO_ROOT/sovereign/crates/sovereign-desktop/package.json"
+TAURI_CONF="$REPO_ROOT/clients/desktop/src-tauri/tauri.conf.json"
+PACKAGE_JSON="$REPO_ROOT/clients/desktop/package.json"
 
 if [[ $# -ne 1 ]]; then
     cat <<EOF >&2
@@ -188,7 +188,7 @@ if [[ "${BUMP_SKIP_ROUTER_CHECK:-0}" == "1" ]]; then
 fi
 
 # ── Router embed cache: regenerate if stale ──────────────────────────
-# The desktop ships sovereign/crates/sovereign-core/data/router/router-embed-cache.json baked into the
+# The desktop ships svrn/crates/sovereign-core/data/router/router-embed-cache.json baked into the
 # binary so first launch HITS the cache instead of re-embedding ~310 router
 # exemplars (minutes on a CPU-only embed slot). It's a pure function of the
 # exemplars × the prescribed embed model, so it only needs regenerating when
@@ -212,7 +212,7 @@ case "$ROUTER_CACHE_RC" in
             echo "bump-desktop-version: router-cache rebuild failed — fix before releasing." >&2
             exit 1
         }
-        echo "  → commit sovereign/crates/sovereign-core/data/router/router-embed-cache.json with this release (added to the git-add line below)."
+        echo "  → commit svrn/crates/sovereign-core/data/router/router-embed-cache.json with this release (added to the git-add line below)."
         ;;
     *)
         echo "bump-desktop-version: router-cache check errored (exit $ROUTER_CACHE_RC) — fix before releasing." >&2
@@ -226,9 +226,9 @@ cat <<EOF
 Next:
   git diff                                                              # review
   git add Cargo.toml \\
-          sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \\
-          sovereign/crates/sovereign-desktop/package.json \\
-          sovereign/crates/sovereign-core/data/router/router-embed-cache.json
+          clients/desktop/src-tauri/tauri.conf.json \\
+          clients/desktop/package.json \\
+          svrn/crates/sovereign-core/data/router/router-embed-cache.json
   git commit -m 'chore(desktop): release v$NEW_VERSION'
   git tag desktop-v$NEW_VERSION
   git push origin main desktop-v$NEW_VERSION                            # kicks CI

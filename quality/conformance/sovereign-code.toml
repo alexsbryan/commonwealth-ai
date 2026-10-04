@@ -13,6 +13,6 @@
 [[claim]]
 requirement = "IN-27"
 test = "sovereign-code::edit_predictions::outcome::tests::the_outcome_route_answers_204_or_400_and_never_5xx"
-file = "sovereign/crates/sovereign-code/src/edit_predictions/outcome.rs"
+file = "code/crates/sovereign-code/src/edit_predictions/outcome.rs"
 line = 89
 asserts = 3

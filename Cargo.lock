@@ -12827,7 +12827,6 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "tokio",
- "toml 0.8.2",
  "tracing",
  "understanding-vocab",
  "workspace-hack",

@@ -6,11 +6,11 @@ measured on this date from this repo's own history; every recorded
 failure is cited to the document or note that records it.
 
 ← companions: `.claude/CLAUDE.md` (the accreted constitution this doc
-proposes to shrink), `sovereign/ARCH_PRINCIPLES.md` (the values; §18 is
-this doc's judgment core), `sovereign/docs/EPISTEMIC_STATE.md` (the
+proposes to shrink), `docs/ARCH_PRINCIPLES.md` (the values; §18 is
+this doc's judgment core), `svrn/docs/EPISTEMIC_STATE.md` (the
 pattern being repeated: replace prose with a typed object — there the
 answer, here the verdict), `gym/next-edit/golden/` (the mining
-precedent), `sovereign/DEFAULTS_LEDGER.md` (the promotion mechanism),
+precedent), `docs/DEFAULTS_LEDGER.md` (the promotion mechanism),
 `docs/COMAINTAINER_OPERATOR_MANUAL.md` (the operator's own quick
 reference — the commands, not the design),
 `docs/COMAINTAINER_SUBSTRATE.md` (this role scaled to a 30-developer
@@ -51,7 +51,7 @@ correction to t=0, where it costs one exchange instead of fifteen.
 Technical facts: the objective contract already exists and is enforced
 (`session_state` rejects goal writes without an objective,
 `SESSION_CONTINUITY §2.1`); the order file extends the ATOS feature
-trail (§14.4); the lanes exist (`sovereign/bench/README.md`). Missing
+trail (§14.4); the lanes exist (`bench/lanes/README.md`). Missing
 only: the author. (§10 artifact 4.)
 
 **Scene 2 — the order meets the pool.** Today: the operator launches

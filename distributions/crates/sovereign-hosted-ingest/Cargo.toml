@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-hosted-ingest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Ingest's hosting composition for svrn (docs/internal/FIVE_PROGRAMS.md §2c;
+# phase-b-88): the one `hosted()` both distributions hand svrn, moved out of
+# sovereign-stock so on-prem calls it instead of mounting stock's file. A
+# library in no package and no leaf, listed in BOTH the `stock` and `onprem`
+# [[distribution]] rows of quality/ARCH_LAYERS.toml, so its edges and its
+# `src/` answer to each row's faces.
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# svrn's process types `hosted()` builds (`process::HostedIngest`,
+# `IngestCalls`, `IngestMount`, `RecipeAuthoringCompose`). `treesitter` as
+# both distributions resolve it.
+sovereign-daemon = { workspace = true, features = ["treesitter"] }
+# Ingest's enrichment-config port, whose implementor is the catalog's
+# (`port::CatalogEnrichConfig`); svrn links no catalog
+# (pb-ingest-dial-tools-close).
+sovereign-enrichment-catalog = { workspace = true }
+# Ingest's enrichment client (`inference_client::DaemonInferenceClient`), the
+# completions `svrn awareness` makes through `process::IngestCalls`
+# (pb-cli-llm-ingest-move-remainder).
+sovereign-enrichment-build = { workspace = true }
+# Ingest's face (`face::compose`, `face::atlas`, ...): the engine svrn's daemon
+# holds, built here because svrn links no corpus-engine (pb-ingest-dial-daemon).
+# `treesitter` matches the workspace's resolution of corpus-engine.
+corpus-engine = { workspace = true, features = ["treesitter"] }
+# The authoring harness over that engine (`EngineHarness`).
+sovereign-authoring-harness = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
+
+[lints]
+workspace = true

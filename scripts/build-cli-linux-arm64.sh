@@ -25,7 +25,7 @@ RUNTIME="${RUNTIME:-podman}"
 command -v "$RUNTIME" >/dev/null 2>&1 || { echo "need podman or docker (set RUNTIME=)"; exit 2; }
 
 IMAGE="sovereign-cli-arm64-build:latest"
-CF="sovereign/container/Containerfile.cli-arm64"
+CF="serve/container/Containerfile.cli-arm64"
 OUT="target-container-linux-arm64"
 CARGO_CACHE=".cargo-container-arm64"
 

@@ -50,6 +50,17 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from top_level_moves import Moves  # noqa: E402
+
+# Every commit is read in the pre-move spelling (quality/top-level-moves.toml),
+# so a crate is one bucket on both sides of the top-level-programs move and the
+# series stays the one its baselines were taken on. Spelled as it is now,
+# `clients/desktop/...` and `clients/mobile/...` would share a `clients` bucket.
+MOVES = Moves.at(REPO)
 
 SHA_MONTH = re.compile(r"^([0-9a-f]{40}) (\d{4}-\d{2})$")
 
@@ -65,19 +76,28 @@ def band_label(lo, hi):
 
 
 def crate_of(path: str) -> str:
-    parts = path.split("/")
+    parts = MOVES.back(path).split("/")
     if len(parts) >= 3 and parts[1] == "crates":
         return "/".join(parts[:3])
     return parts[0]
 
 
 def commits(since: str = "2026-03-01"):
-    """[(month, distinct_crates, rs_files)] — one row per `.rs`-touching commit."""
+    """([(month, distinct_crates, rs_files)], relocated) — one row per
+    `.rs`-touching commit, and how many file renames were left out.
+
+    A rename the move registry accounts for (`forward(old) == new`) relocated a
+    file without changing what it couples to, so it is not a touch: counted, the
+    top-level-programs commits read as one change to every crate (October 14.3
+    against September's 2.4). No rename before the move can match a row, so
+    every earlier month is unchanged by construction. An in-place edit inside a
+    move commit still counts.
+    """
     out = subprocess.run(
         ["git", "log", f"--since={since}", "--pretty=format:%H %ad",
-         "--date=format:%Y-%m", "--name-only", "--", "*.rs"],
+         "--date=format:%Y-%m", "--name-status", "--", "*.rs"],
         capture_output=True, text=True, check=True).stdout
-    rows, sha, month, files = [], None, None, set()
+    rows, sha, month, files, relocated = [], None, None, set(), 0
     for line in out.splitlines():
         line = line.rstrip()
         if not line:
@@ -88,10 +108,14 @@ def commits(since: str = "2026-03-01"):
                 rows.append((month, len({crate_of(f) for f in files}), len(files)))
             sha, month, files = m.group(1), m.group(2), set()
             continue
-        files.add(line)
+        status, *paths = line.split("\t")
+        if status.startswith("R") and len(paths) == 2 and MOVES.forward(paths[0]) == paths[1]:
+            relocated += 1
+            continue
+        files.add(paths[-1])
     if sha and files:
         rows.append((month, len({crate_of(f) for f in files}), len(files)))
-    return rows
+    return rows, relocated
 
 
 def band_of(nfiles):
@@ -141,7 +165,7 @@ def analyse(rows):
 
 def main() -> int:
     as_json = "--json" in sys.argv
-    rows = commits()
+    rows, relocated = commits()
     if not rows:
         print("nc-congestion: no commits in range — value NOT reported", file=sys.stderr)
         return 3
@@ -167,10 +191,12 @@ def main() -> int:
             "bands_skipped": {mo: s[mo]["bands_skipped"] for mo in months
                               if s[mo]["bands_skipped"]},
             "reference_mix": mix,
+            "relocations_excluded": relocated,
         }))
         return 0
 
     print("\n  congestion — distinct crates per `.rs` commit, AUTHOR month")
+    print(f"  {relocated} renames the top-level move accounts for are not counted as touches.")
     print("  raw is confounded by commit size; adjusted standardizes the mix.\n")
     print(f"  {'month':9} {'raw':>6} {'adj':>6} {'files/commit':>13}  n")
     for mo in months:

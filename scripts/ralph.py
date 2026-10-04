@@ -701,7 +701,7 @@ AUDIT_PREFIX = "REVIEW-audit-"
 # the row). A queue's hand-written audit rows stay its author's.
 AUDIT_ROW_BODY = (
     "audit the commits since the previous `REVIEW-audit-` row's hash (since this queue "
-    "started if there is none) against `sovereign/ARCH_PRINCIPLES.md`; REUSE AND SIZE, WITH "
+    "started if there is none) against `docs/ARCH_PRINCIPLES.md`; REUSE AND SIZE, WITH "
     "DATA: (1) paste a per-unit net-line ledger for product code over that range — "
     "`git log --numstat --format=%s <hash>..HEAD`, summed by the subject's unit id, src "
     "apart from tests; (2) run `target/debug/sovereign-cli code dry-report --scope <dir>` "
@@ -710,7 +710,7 @@ AUDIT_ROW_BODY = (
     "range, `target/debug/sovereign-cli code converge noun <Name>`, and paste any noun "
     "with more than one definition; fix here what is behaviour-preserving and small, "
     "record the rest in `ralph/REVIEW_FINDINGS.md` with both file:line sites "
-    "— read: `sovereign/ARCH_PRINCIPLES.md` — check: LINT")
+    "— read: `docs/ARCH_PRINCIPLES.md` — check: LINT")
 
 
 # The one reading of "units since the last audit": audit_every's trigger, the

@@ -62,8 +62,8 @@ LOG_FILE="${LOG_DIR}/log.jsonl"
 TIMINGS_DIR="${LOG_DIR}/timings"
 mkdir -p "$LOG_DIR" "$TIMINGS_DIR"
 
-LEAF_FILE="sovereign/crates/sovereign-cli/src/notes_cmd.rs"
-DEP_FILE="sovereign/crates/sovereign-core/src/runtime.rs"
+LEAF_FILE="svrn/crates/sovereign-cli/src/notes_cmd.rs"
+DEP_FILE="svrn/crates/sovereign-core/src/runtime.rs"
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 

@@ -219,7 +219,7 @@ still worth the two lines (`refs_in_file` is a genuinely missing primitive —
 `ScipGraph` has `symbols_in_file` and no refs equivalent), and it costs no
 `SCHEMA_VERSION` bump because `CREATE INDEX IF NOT EXISTS` is idempotent. It
 belongs beside the existing three at
-`corpus-engine-scip/src/scip_graph.rs:656`. (An ad-hoc copy was created on this
+`shared/crates/corpus-engine-scip/src/scip_graph.rs:656`. (An ad-hoc copy was created on this
 host during measurement; the indexer rebuilds the db, so it vanishes until the
 schema block carries it.)
 
@@ -232,7 +232,7 @@ because a 15s status gets run once a day and a 0.2s status gets run every time
 anyone wonders. The cache is **disposable** — delete it and everything still
 works, slower — which is what keeps interlock 3 true.
 
-`shape_census` (`corpus-engine-scip/src/shape.rs:355`) was checked and left
+`shape_census` (`shared/crates/corpus-engine-scip/src/shape.rs:355`) was checked and left
 alone: it already builds an inverted posting list from field-key to types, caps
 posting length at `MAX_SEED_POSTINGS`, and scores only cross-crate pairs sharing
 a rare key. That is the right algorithm.

@@ -36,8 +36,8 @@ ln -sf "$(pwd)/target/release/sovereign-cli" ~/.local/bin/svrn
 ```
 
 AMD Strix Halo or a cloud-GPU peer take a little more — see the
-[toolbox](../sovereign/docs/TOOLBOX_SETUP.md) and
-[cloud-peer](../sovereign/docs/CLOUD_PEER_DEPLOY.md) guides.
+[toolbox](../svrn/docs/TOOLBOX_SETUP.md) and
+[cloud-peer](../svrn/docs/CLOUD_PEER_DEPLOY.md) guides.
 
 ## First run
 
@@ -81,7 +81,7 @@ unsupervised until you install the service.
 
 Day-to-day lifecycle: `svrn daemon status / start / stop / restart`, and
 `svrn daemon reload` to apply config changes without a restart. The
-[runbook](../sovereign/docs/RUNBOOK.md) is the operator-grade detail —
+[runbook](../svrn/docs/RUNBOOK.md) is the operator-grade detail —
 pidfiles, log rotation, readiness timeouts, and what supervision does and
 doesn't restart.
 
@@ -93,7 +93,7 @@ registration; `svrn setup --reset` wipes the config and starts over
 
 ## When it breaks
 
-`svrn doctor`, then the [troubleshooting guide](../sovereign/docs/TROUBLESHOOTING.md)
+`svrn doctor`, then the [troubleshooting guide](../svrn/docs/TROUBLESHOOTING.md)
 — symptom-to-fix pairs for the maintainer. Helping someone on the desktop
-app instead? [Having trouble?](../sovereign/docs/HAVING_TROUBLE.md) covers
+app instead? [Having trouble?](../svrn/docs/HAVING_TROUBLE.md) covers
 the same ground without a terminal.

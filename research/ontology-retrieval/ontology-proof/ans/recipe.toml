@@ -1,6 +1,6 @@
 # ANS Alexander-era monographs — DRAFT, not installed, not built.
 # From the ontology-v1 `numismatics` template
-# (sovereign-recipes/_templates/ontology-v1/numismatics/recipe.toml) in the shape of
+# (ingest/crates/sovereign-recipes/_templates/ontology-v1/numismatics/recipe.toml) in the shape of
 # research/ontology-retrieval/recensus/recipe.toml: every list the bank asks for hangs off
 # an entity by a `ref` attribute, the one shape that recipe has proven on this engine.
 # Added to the template: `hoard`, and `coin.hoard`. Dropped from it: `sceatta` (an

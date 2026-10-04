@@ -3,7 +3,7 @@
 Five mechanisms, one loop. Everything else is wiring.
 
 Operator-landed 2026-08-14 (directives 6ab41e6c + c45d8625). Derives from
-`sovereign/docs/specs/DEEP_RESEARCH.md` and `research/deep-research/PLAN.md`;
+`svrn/docs/specs/DEEP_RESEARCH.md` and `research/deep-research/PLAN.md`;
 the falsifiable gates are the `[deep-research]` bars in
 `quality/initiative-bars.toml`. Every build order names the spine mechanism it
 builds and the bar it moves.

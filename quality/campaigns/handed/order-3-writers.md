@@ -32,7 +32,7 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
 
 ## Premises (verified 2026-09-17, file:line)
 
-- **The precedent.** `ScipGraph::try_rebuild_lock(db_dir)` — corpus-engine-scip/src/scip_graph.rs:483-503:
+- **The precedent.** `ScipGraph::try_rebuild_lock(db_dir)` — shared/crates/corpus-engine-scip/src/scip_graph.rs:483-503:
   `create_dir_all`, open `<db_dir>/.rebuild.lock`, `fs4::FileExt::try_lock_exclusive`, `WouldBlock`
   mapped to `Ok(None)`. Its one caller takes it at :2313 inside `export_to_live` and returns
   `REBUILD_COALESCED` on refusal. quality/TOPOLOGY.toml:173 names it the template.
@@ -43,10 +43,10 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   `is_enforced()` :192 (`cfg!(unix)`). `RunLock` is deliberately NOT `Clone` (:66-68). A second
   acquire in the SAME process on one path is refused — flock lives on the open file description
   (run_lock.rs test ~:217). corpus-engine already depends on sovereign-contracts
-  (corpus-engine/Cargo.toml:49). corpus-engine does NOT depend on `fs4`, and `fs4` is not in the
-  root `[workspace.dependencies]` (`grep -n fs4 Cargo.toml` empty; only corpus-engine-scip/Cargo.toml:54).
+  (ingest/crates/corpus-engine/Cargo.toml:49). corpus-engine does NOT depend on `fs4`, and `fs4` is not in the
+  root `[workspace.dependencies]` (`grep -n fs4 Cargo.toml` empty; only shared/crates/corpus-engine-scip/Cargo.toml:54).
 - **The index mutation sites** (`grep -nE '\.(add|delete|create_index|create_empty_table|add_columns|optimize)\('
-  corpus-engine/src/index/*.rs`), each mapped to its enclosing fn:
+  ingest/crates/corpus-engine/src/index/*.rs`), each mapped to its enclosing fn:
   - write.rs:178 `insert_batch` (decl :83) · :210 `delete_chunks_by_source_doc` (:206) ·
     :231 `delete_chunks_by_ids` (:225) · :551 `dedupe_by_content_hash` (:464).
   - create.rs:120 `build_vector_index_with_progress` (private, :58) · :191 `create_with_sharing` (:172) ·
@@ -78,7 +78,7 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   with a TODO — they write nothing.
 - **The raw handle.** `pub fn connection(&self) -> &lancedb::Connection` index/mod.rs:975 and
   `pub fn table(&self) -> &lancedb::Table` :980, under the comment "Access for sharding module".
-  Every caller outside `corpus-engine/src/index/` — 38 hits from
+  Every caller outside `ingest/crates/corpus-engine/src/index/` — 38 hits from
   `git grep -n '\.table()\|\.connection()' -- '*.rs'` (re-run 2026-09-17), minus two DIFFERENT types with
   different return values, enumerated by file because neither is crate-shaped:
   `SqliteStateStore::connection() -> Arc<Mutex<rusqlite::Connection>>` (sovereign-store/src/sqlite.rs:130),
@@ -89,24 +89,24 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   `job_registry::table() -> &Mutex<HashMap<String, Arc<J>>>` (sovereign-daemon/src/job_registry.rs:73),
   called only inside its own file at :83,:98,:128,:151,:164,:200. 38 − 3 inside `index/` − 16 of the other two
   types leaves the 19 below:
-  - corpus-engine/src/sharding.rs — READS :483, :552, :805, :1002, :1604; WRITES `.table().add(..)`
+  - ingest/crates/corpus-engine/src/sharding.rs — READS :483, :552, :805, :1002, :1604; WRITES `.table().add(..)`
     at :564, :938, :1179, :1722 (four, not one).
-  - corpus-engine/src/alignment_projector.rs:104 — read, inside the crate, unaffected by `pub(crate)`.
-  - corpus-engine/tests/main/watcher_e2e.rs:190, :316, :443 — reads; a `tests/` target is a SEPARATE
+  - ingest/crates/corpus-engine/src/alignment_projector.rs:104 — read, inside the crate, unaffected by `pub(crate)`.
+  - ingest/crates/corpus-engine/tests/main/watcher_e2e.rs:190, :316, :443 — reads; a `tests/` target is a SEPARATE
     crate, so `pub(crate)` breaks it.
   - sovereign-tools src/code/code_search.rs:173 (`index.table()` then `.query().nearest_to(..)`) and
     src/code/mod.rs:383 (`.table().query().only_if(..)`) — both reads; both satisfied by a `query()`
     accessor.
-  - corpus-engine/examples/dump_code_index.rs:34,:45,:97,:133 — reads. Cargo auto-discovers
+  - ingest/crates/corpus-engine/examples/dump_code_index.rs:34,:45,:97,:133 — reads. Cargo auto-discovers
     `examples/`, so this is compiled by LINT (`--all-targets`) and must go or be migrated.
-    `corpus-engine/examples/build_fts.rs` and `build_title_btree.rs` use only pub write methods
+    `ingest/crates/corpus-engine/examples/build_fts.rs` and `build_title_btree.rs` use only pub write methods
     (`build_indexes`, `mark_ingestion_complete`, `build_title_scalar_index`) — they are unaffected
     and are NOT deleted by this order.
 - **The atlas is the same store** (TOPOLOGY.toml:161-166: corpus-index holds "chunks.lance, atlas/,
   asset CAS, _corpus_meta.json, caches"). Every atlas write fn takes `atlas_dir: &Path`, and the
   atlas dir is `<index_dir>/<corpus>/atlas/` (atlas/mod.rs:147), so `atlas_dir.parent()` is the
   corpus dir the lock keys on. `git grep -nE '^[[:space:]]*pub (async )?fn (write_|append_|build_and_write|build_wikipedia)'
-  corpus-engine/src/enrichment/atlas/*.rs corpus-engine/src/enrichment/atlas/store/*.rs` prints
+  ingest/crates/corpus-engine/src/enrichment/atlas/*.rs ingest/crates/corpus-engine/src/enrichment/atlas/store/*.rs` prints
   **22** lines (not 21, and the mint's stated pattern missed `build_wikipedia_columnar_store_from_chunks`):
   writer.rs :84,:127,:318,:419,:491,:503,:517,:550,:582,:632,:653,:675; store.rs :682,:719,:734,:743;
   store/derivation.rs:67; wiki_store.rs:258,:676; ann_store.rs:276; doc_to_atoms.rs:194;
@@ -137,15 +137,15 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   `write-is-acyclic` :317 (failing input: "Two processes writing chunks.lance concurrently …
   `svrn enrich` while the daemon is up"). `a-process-writes-only-what-it-is-granted` :322 stays
   false — nothing in this order addresses it. corpus-index store `today` :166.
-- **Uncommitted now** and touched by these rows: `sovereign/SYSTEM_OVERVIEW.md` only
-  (`git status --short` over the rows' paths). `corpus-engine/src/enrichment/state.rs` is dirty and
+- **Uncommitted now** and touched by these rows: `docs/SYSTEM_OVERVIEW.md` only
+  (`git status --short` over the rows' paths). `ingest/crates/corpus-engine/src/enrichment/state.rs` is dirty and
   is NOT touched by this order (the enrichment catalog is a different store).
 
 ## Steps
 
 1. Mint the guard and take it inside every index write path — `REVIEW-build-hd-3-guard`.
    `RunLock::acquire_file(path)` is added over the private `acquire_at`; a new
-   `corpus-engine/src/index/writer.rs` holds `WriterGuard`, a process-wide
+   `ingest/crates/corpus-engine/src/index/writer.rs` holds `WriterGuard`, a process-wide
    `Mutex<HashMap<PathBuf, Weak<RunLock>>>` keyed on the canonicalized corpus dir (upgrade before
    acquire, so a cached `CorpusIndex` handle and a nested re-open share one claim and never
    self-refuse), and `Error::WriterHeld { path }`. Guard taken at the top of each mutating method
@@ -175,18 +175,18 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
 
 - **Must not touch.** The 91 `CorpusIndex::open` READ sites (corpus-read is excluded — campaign.md
   Decisions); IndexMeta / IndexInfo sharing fields (hd-5); the enrichment catalog store
-  (`sovereign-enrichment-catalog/src/config.rs:246`, `corpus-engine/src/enrichment/state.rs:294` —
+  (`sovereign-enrichment-catalog/src/config.rs:246`, `ingest/crates/corpus-engine/src/enrichment/state.rs:294` —
   dirty on 2026-09-17, clean as of round 2; either way this order does not touch it); `scip_graph.db` and its own flock; asset CAS (engine/mod.rs:559); raw
   `lancedb::connect` inside corpus-engine and sovereign-tools; the `cancellation-reaches-the-writer`
   invariant (TOPOLOGY.toml:327, not adopted).
-- **hd-5 (custody)** edits `corpus-engine/src/engine/ingest.rs` and `harness/runner.rs`. No hd-3 row
+- **hd-5 (custody)** edits `ingest/crates/corpus-engine/src/engine/ingest.rs` and `harness/runner.rs`. No hd-3 row
   touches either under this design — the conflict the 25-row shape had is gone.
 - **hd-2 (assemble)** edits `sovereign-contracts/src/setup_config.rs`? No — it edits `launch.rs` and
   the recipe. `hd-3-config-lock` and `REVIEW-build-hd-3-guard` both edit
   `sovereign-contracts/src/run_lock.rs`, which is why `hd-3-config-lock` depends on the guard row
   rather than running as a free lane.
 - **hd-6 (principal)** touches sovereign-grants and sovereign-api. No overlap.
-- `sovereign/SYSTEM_OVERVIEW.md` is edited by every rung and is dirty now: the peer's hunks must be
+- `docs/SYSTEM_OVERVIEW.md` is edited by every rung and is dirty now: the peer's hunks must be
   committed before a REVIEW row in the main tree runs `git add` on it.
 - The domains pool moves files between crates. Re-grep every path premise before a row starts.
 
@@ -198,11 +198,11 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   `REVIEW-build-hd-3-close-raw` LINT red **E0624** on `index.table()` from sovereign-tools;
   `hd-3-config-lock` TEST(sovereign-contracts) red on `a_config_save_is_refused_while_the_lock_is_held`.
 - **Ambient path gone**, both greps empty:
-  `git grep -nE '^[[:space:]]*pub fn (table|connection)\(' -- corpus-engine/src/index/`
+  `git grep -nE '^[[:space:]]*pub fn (table|connection)\(' -- ingest/crates/corpus-engine/src/index/`
   (`[[:space:]]`, not `\s`: under POSIX ERE the `\s` form matched nothing on the tree
   BEFORE the work, so that Done-when bullet was satisfied by a broken pattern rather
   than by a closed handle. With the class it finds index/mod.rs:975 and :980 today.)
-  `git grep -n '\.table()\|\.connection()' -- '*.rs' | grep -vE '^corpus-engine/src/(index/|sharding|alignment_projector)|/(sovereign-store/src/insight_store|sovereign-daemon/src/job_registry|sovereign-cli-daemon/src/daemon_cmd/mod|sovereign-mesh/tests/main/loopback_parity|sovereign-tools/tests/main/knowledge_view_e2e)\.rs:'`
+  `git grep -n '\.table()\|\.connection()' -- '*.rs' | grep -vE '^ingest/crates/corpus-engine/src/(index/|sharding|alignment_projector)|/(sovereign-store/src/insight_store|sovereign-daemon/src/job_registry|sovereign-cli-daemon/src/daemon_cmd/mod|sovereign-mesh/tests/main/loopback_parity|sovereign-tools/tests/main/knowledge_view_e2e)\.rs:'`
   (the second alternative names FILES, not crates. The round-2 form excluded
   `sovereign-(store|daemon|cli-daemon|mesh)/` crate-wide and omitted sovereign-tools, so
   `StateStore::connection()` at sovereign-tools/tests/main/knowledge_view_e2e.rs:384,:413 survived every

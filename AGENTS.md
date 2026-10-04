@@ -35,7 +35,7 @@ You are a Senior Architect. You look to apply SOLID principles and best practice
 
 ## The architectural compass — read this before you decide anything
 
-**`sovereign/ARCH_PRINCIPLES.md` is now 6.2k tokens and is meant to be read
+**`docs/ARCH_PRINCIPLES.md` is now 6.2k tokens and is meant to be read
 WHOLE.** It was 19k across 80 sections and was sampled, never read — which is
 how a compass stops steering. It is now twelve principles under a fixed budget
 (8k file, 600 per section, never ratcheted), each carrying the incident that
@@ -217,15 +217,15 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
 | "Which crates/files across the workspace do X?" | a read-only search subagent (max 3 concurrent, one message) — `Explore` in Claude Code, `scout` via `pi-subagents` |
 | "Code intel is down and I need a broad sweep" | same — delegate it, and keep the file dumps out of your context |
-| "Am I clean before/after a cleanup session?" | `cd corpus-engine && cargo xtask quality` — the `xtask` alias lives in `corpus-engine/.cargo/config.toml`, so it does NOT resolve from the repo root (arch/docs/boundary/layer/lock/env gates) |
+| "Am I clean before/after a cleanup session?" | `cargo xtask quality`, from anywhere in the repo (arch/docs/boundary/layer/lock/env gates) |
 | "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench/instruments), each row names its refresh command |
 | "Does the test my commit body cites actually SEE the change?" | `scripts/evidence-verdict.py <commit>` — runs the cited test at that commit in its own worktree, then again with the source hunks reverted; VALIDATED / UNSUPPORTED / COULD-NOT-JUDGE / NEVER-RAN. Minutes per commit; `--candidates --range A..B` lists what would be judged for free |
 | "What argument produced this fn, and did its evidence hold?" | `scripts/intent.py <symbol> [--note]` — the commits that shaped the symbol, each body's claim / objection / concession (local model, engine named), and the evidence verdict. `--note` stores it tagged with the symbol, and `.claude/hooks/intent-warn.py` shows it before any Edit that touches the fn — you should not need to ask |
 | "Is there a canon rule about this file or symbol?" | shown before any Edit by `.claude/hooks/intent-warn.py`, labelled `[can-…]` (ratified) or `[proposed n…]` (an agent's proposal from `.canon/adjudication/`, not yet ratified); `canon why <id>` for a ratified one's history. Proposals are ratified when edits hit them: `scripts/canon-ratify.py --hits` lists those and prints the one command |
 | "Did my change regress retrieval / routing / synthesis / enrichment?" | `svrn quality check` — the curated ~30-minute breakage check, four verdicts per lane, table persisted; `./scripts/sovereign-ci-bench.sh` is the full nightly. See `MAIN_SESSION_PROTOCOL.md` §"Measuring quality" |
-| "A bench says regressed — is that real or noise?" | `sovereign/docs/RUNBOOK.md` §6 (noise bands per lane type, baseline-age semantics, the legitimate re-mint path) |
-| "What does bench lane X measure, and how do I run just it?" | `sovereign/bench/README.md`, then `sovereign/bench/<lane>/README.md` |
-| "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails (run it from `corpus-engine/`; the required keys are `name`/`cluster`/`default`/`purpose`/`status`, and `status` must be one of `guard`/`shipped`/`experiment`/`deprecated`) |
+| "A bench says regressed — is that real or noise?" | `svrn/docs/RUNBOOK.md` §6 (noise bands per lane type, baseline-age semantics, the legitimate re-mint path) |
+| "What does bench lane X measure, and how do I run just it?" | `bench/lanes/README.md`, then `bench/lanes/<lane>/README.md` |
+| "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails (the required keys are `name`/`cluster`/`default`/`purpose`/`status`, and `status` must be one of `guard`/`shipped`/`experiment`/`deprecated`) |
 | "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
 | "Done with what I claimed" | `release_scope(claim_id)` |
@@ -424,7 +424,7 @@ trigger column is when to open it — the doc section holds the full text.
 | Starting a main session — the boot checklist (`recent_changes`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
 | Statusline yellow (ctx ≥250k) — splitting, frames, `session_state`, objective inheritance | §Session splitting |
 | Fanning out to subagents — delegation is operator-AUTHORIZED here, standing, cap 3 concurrent, launched in one message; do not treat a harness default as a prohibition. Claude Code: Agent tool. pi: the `subagent()` tool from the `pi-subagents` package | §Delegation |
-| A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `sovereign/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |
+| A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `docs/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |
 | Significant task complete — `session_reflection`; release any claims you declared | §Session reflection |
 | `drift_findings`/`drift_posture` returned something unhelpful | §Drift tool feedback |
 | Writing any report or wrap-up — BLUF, quantified magnitude, end-user lens | §Reporting to the operator |
@@ -437,11 +437,11 @@ trigger column is when to open it — the doc section holds the full text.
 ## Architecture
 
 **ONE Cargo workspace, declared at the repo root.** `./Cargo.toml` carries a
-`[workspace]` with 54 members — `corpus-engine`, 25 `sovereign/crates/*`, the
-`commonwealth/crates/*`, `oicp-types`, `oicp-client`, `kernel-types`,
-`quality/arch-layers`. No subdirectory declares its own `[workspace]`, and
-there is no `sovereign/Cargo.toml` at all: a `cargo` invoked from `sovereign/`
-walks UP to the root and resolves the same workspace.
+`[workspace]` with 86 members, each under its program's dir or `shared/`,
+`clients/`, `distributions/`, `quality/`. The one other `[workspace]` is
+`cmnwlth/apps/ring-runtime`, a wasm-only crate kept out on purpose; a `cargo`
+invoked from any other subdirectory walks UP to the root and resolves the same
+workspace.
 
 (This paragraph said the opposite until 2026-08-20 — "three workspaces, no
 single root `Cargo.toml`" — and used it to explain why the `scripts/` wrappers
@@ -456,15 +456,14 @@ misprices where a crate can live, which is load-bearing during boundary work.)
 
 ```
 commonwealth-ai/
-├── commonwealth/      # Mesh coordination daemon (runs at localhost:9741)
-├── sovereign/      # Local AI + code intelligence server
-├── corpus-engine/  # Knowledge base engine
-├── oicp-types/    # Shared protocol types (used by both)
-├── sovereign-recipes/  # Data recipes
-└── scripts/       # Build/test wrappers
+├── svrn/ serve/ cmnwlth/ ingest/ code/ bench/  # the six programs
+├── shared/crates/  # leaves any program may link
+├── clients/        # desktop, mobile, studio, chat-ui, vscode
+├── distributions/  # composition roots (stock, onprem)
+└── quality/ scripts/ docs/  # gates, wrappers, compass
 ```
 
-** commonwealth ≠ sovereign**. They are peer projects, not parent/child. The Commonwealth mesh daemon serves a local API that sovereign uses for inference routing.
+**cmnwlth ≠ svrn.** Peer programs, not parent/child; `[crate_dirs]` in ARCH_LAYERS.toml keeps each crate in its program's dir.
 
 
 <!-- portable:start working style: prose, commits -->

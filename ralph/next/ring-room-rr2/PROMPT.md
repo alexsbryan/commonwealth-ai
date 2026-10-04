@@ -85,7 +85,7 @@ growth past a cap is a design finding, never a queue edit. Commit
 row `[x]`.
 
 **`REVIEW-audit-rd-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -130,9 +130,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   path is relative to the repo root, where every command already runs.
   opencode's permission check resolves `cd X && ../../y` against the wrong
   base, auto-rejects a path INSIDE this repo, and ends your session with the
-  unit half done (rd-1-scaffold lost a session to `/home/sovereign/apps/...`).
+  unit half done (rd-1-scaffold lost a session to `/home/cmnwlth/apps/...`).
   For a scratch build dir use `target/ralph/bundle/` by its repo-relative path
-  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=sovereign/apps/...`).
+  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=cmnwlth/apps/...`).
 - Change files with the Edit and Write tools, never with a shell heredoc
   (`cat >> f <<EOF`, `python3 - <<EOF`): edits inside the repo are accepted
   outright, a heredoc asks the operator and is denied after 600 s unattended.
@@ -142,14 +142,14 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
-  `scripts/ralph*`, or ANYTHING under `commonwealth/crates/commonwealth-rail/` or
-  `commonwealth/crates/commonwealth-rail-core/` — the RING RAIL (zero diffs there
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
+  `scripts/ralph*`, or ANYTHING under `cmnwlth/crates/commonwealth-rail/` or
+  `shared/crates/commonwealth-rail-core/` — the RING RAIL (zero diffs there
   beyond the roster-door hunk the operator permitted is the campaign predicate;
   a row that seems to need one is §6). `commonwealth-rails/` is the rails DAEMON,
   not that rule. Never stop or restart the DEPLOYED daemon (the one `svrn daemon status`
   names); the throwaway podman nodes `scripts/ring-room-demo.sh` (and `scripts/ring-doc-demo.sh`, which it sources) start under its own
   `SOVEREIGN_DATA_DIR` are the script's to start and stop, exactly as
   `scripts/ring-offers-demo.sh` does.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

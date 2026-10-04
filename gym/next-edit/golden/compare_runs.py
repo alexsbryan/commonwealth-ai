@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Diff two `score_golden.py --json` runs, case by case.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §4.
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §4.
 
 THE MEASUREMENT THIS EXISTS FOR. Every model number this project owns was
 taken through the consult gate, and the gate admits ~9% of real editing
@@ -13,7 +13,7 @@ against the gated run separates two things that a single run confounds:
     a gate that protects us from a bad model
     a gate that hides a good one
 
-READING THE DELTA (`sovereign/docs/NEXT_EDIT.md` §9b):
+READING THE DELTA (`svrn/docs/NEXT_EDIT.md` §9b):
 
     useful UP,   wrong flat  -> the gate is the bottleneck; widen it
     useful flat, wrong UP    -> the gate earns its keep; fix induction

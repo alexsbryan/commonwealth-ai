@@ -1,0 +1,20 @@
+# Desktop OCR binaries — populated by scripts/fetch-desktop-binaries.sh.
+# Large blobs, per-target, not source. README at the path explains how
+# to repopulate. The README itself stays tracked.
+/src-tauri/binaries/tesseract-*
+/src-tauri/binaries/pdfium/
+/src-tauri/binaries/tessdata/
+/src-tauri/binaries/paddle-ocr/
+# The daemon sidecar (svt-1), BUILT by scripts/stage-daemon-sidecar.sh
+# rather than fetched — a ~200 MB release artifact of this very workspace.
+/src-tauri/binaries/sovereign-cli-daemon-*
+
+# Playwright artifacts (chat surface e2e tests).
+/test-results/
+/test-artifacts/
+/playwright-report/
+/playwright/.cache/
+
+# TTFI harness reports — local artifacts, regenerable via `npm run test:ttfi`.
+/tests/e2e/.ttfi-report.json
+/tests/e2e/.ttfi-baseline.json

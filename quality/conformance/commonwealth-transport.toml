@@ -13,34 +13,34 @@
 [[claim]]
 requirement = "FE-25"
 test = "commonwealth-transport::routed::tests::routed_class_lists_primary_then_default_fallback"
-file = "commonwealth/crates/commonwealth-transport/src/routed.rs"
+file = "cmnwlth/crates/commonwealth-transport/src/routed.rs"
 line = 247
 asserts = 2
 
 [[claim]]
 requirement = "FE-26"
 test = "commonwealth-transport::routed::tests::required_class_with_no_iroh_path_returns_empty_not_plaintext"
-file = "commonwealth/crates/commonwealth-transport/src/routed.rs"
+file = "cmnwlth/crates/commonwealth-transport/src/routed.rs"
 line = 286
 asserts = 1
 
 [[claim]]
 requirement = "FE-27"
 test = "commonwealth-transport::routed::tests::note_success_routes_to_the_transport_that_produced_the_endpoint"
-file = "commonwealth/crates/commonwealth-transport/src/routed.rs"
+file = "cmnwlth/crates/commonwealth-transport/src/routed.rs"
 line = 334
 asserts = 2
 
 [[claim]]
 requirement = "FE-3"
 test = "commonwealth-transport::identity::tests::load_or_generate_round_trips"
-file = "commonwealth/crates/commonwealth-transport/src/identity.rs"
+file = "cmnwlth/crates/commonwealth-transport/src/identity.rs"
 line = 196
 asserts = 2
 
 [[claim]]
 requirement = "FE-5"
 test = "commonwealth-transport::identity::tests::join_proof_binds_node_id_and_name"
-file = "commonwealth/crates/commonwealth-transport/src/identity.rs"
+file = "cmnwlth/crates/commonwealth-transport/src/identity.rs"
 line = 240
 asserts = 3

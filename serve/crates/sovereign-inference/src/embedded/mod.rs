@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `embedded` — local llama.cpp inference engine, split by concern (PR5b).
+//! Was a single 9669-line file; one slot / concern per submodule,
+//! re-exported flat so `crate::embedded::<Item>` paths are unchanged.
+#![allow(unused_imports)]
+
+pub mod capabilities;
+mod compute_backend;
+mod control_vector;
+mod embed_only;
+mod embed_slot;
+mod engine;
+pub mod ffi_trace;
+pub mod gates;
+mod grammar;
+/// Idle residency for the eager slots (`fast`, `embed`) — the cell and
+/// the one idleness decider both new monitors share.
+pub(crate) mod idle_slot;
+/// What one slot's KV cache costs, from the gguf's own metadata.
+pub(crate) mod kv_budget;
+pub mod kv_ops;
+mod model_slot;
+mod prefix_state;
+mod prompt_helpers;
+mod rerank_slot;
+mod rpc_distribution;
+mod rpc_warm_cache;
+mod sampler;
+
+pub(crate) use compute_backend::*;
+pub use embed_only::*;
+pub use embed_slot::*;
+pub use engine::*;
+pub(crate) use gates::*;
+pub use grammar::*;
+pub use model_slot::*;
+pub use prompt_helpers::*;
+pub use rerank_slot::*;
+pub use rpc_distribution::*;
+pub use rpc_warm_cache::*;
+pub use sampler::*;

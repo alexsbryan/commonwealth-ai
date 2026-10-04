@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # ring-doc-demo.sh — the rd-1 instrument: three machines, one document.
 #
-# Three throwaway daemons on ONE host under their own `SOVEREIGN_DATA_DIR`, on
-# real iroh, one mesh, the three keys rostered on all three. Each daemon gets
+# Three throwaway nodes on ONE host under their own `SOVEREIGN_DATA_DIR`, on
+# real iroh, one mesh, the three keys rostered on all three. A node is a
+# `cw-rails` (its mesh endpoint and the home of its ring journals since
+# pb-mesh-exit-transport) and the daemon that dials it through `[daemon]
+# rails_base`; svrn's own /v1/mesh/* answer 410. Each daemon gets
 # its own `svrn ring show` proxy, and a node driver runs the ring-doc PAGE's
-# loop three times over (sovereign/apps/ring-doc/adapter.js — the same
+# loop three times over (cmnwlth/apps/ring-doc/adapter.js — the same
 # functions app.js calls, with app.js's own debounce and poll constants read
 # out of app.js) against the three proxies. Headless because the bars are
 # about what the rail and the adapter do, not about the DOM.
@@ -19,15 +22,18 @@
 #   4. presence only, then a stop/start of B's daemon → the live lane kept
 #      nothing.
 # Plus two legs that are not the session's: the replication-sender census
-# test, and `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*`.
+# test, and `git diff --stat origin/main -- cmnwlth/crates/commonwealth-rail*`.
 #
 # TOPOLOGY, named because the goodhart asks for it: three daemons on one host.
 # One clock, so latencies need no NTP — and they say nothing about the
 # Halo-to-Mac path, which is HUMAN-rd-1-three-machines.
 #
-# "Stop" and "start" here are a kill of the throwaway daemon's pid and a fresh
-# `daemon run` over the same data dir — never `svrn daemon stop`, which resolves
-# a daemon from config and must not be able to reach the operator's.
+# "Stop" and "start" here are a kill of the throwaway node's pids — cw-rails and
+# daemon both, since the journals and the live lane are cw-rails' — and a fresh
+# `cw-rails run` then `daemon run` over the same dirs — never `svrn daemon
+# stop`, which resolves a daemon from config and must not be able to reach the
+# operator's. Likewise no `svrn mesh up|create|join`: they bring cw-rails up on
+# their own terms and install its user unit.
 #
 #   scripts/ring-doc-demo.sh up                  bring the three up, join, roster
 #   scripts/ring-doc-demo.sh tabs                the three page URLs and whose each is
@@ -67,7 +73,9 @@ SCRIPT="$REPO/scripts/ring-doc-demo.sh"
 D="${RING_DOC_DIR:-$REPO/target/ring-doc-demo}"
 DAEMON="$REPO/target/debug/sovereign-cli-daemon"
 CLI="$REPO/target/debug/sovereign-cli"
-APP="$REPO/sovereign/apps/ring-doc"
+# CW_RAILS_BIN: the name `svrn mesh up` reads too (rails_up.rs locate_rails).
+RAILS="${CW_RAILS_BIN:-$REPO/target/debug/cw-rails}"
+APP="$REPO/cmnwlth/apps/ring-doc"
 CAMPAIGN="$REPO/quality/campaigns/ring-doc.toml"
 RING=ring-doc
 export SOVEREIGN_NO_STALE_WARN=1
@@ -77,6 +85,18 @@ export SOVEREIGN_NO_STALE_WARN=1
 declare -A CPORT=([a]=19841 [b]=19851 [c]=19861)
 declare -A IPORT=([a]=19842 [b]=19852 [c]=19862)
 declare -A DPORT=([a]=19849 [b]=19859 [c]=19869)
+# cw-rails' API and serve's listener, derived from CPORT rather than tabled, so
+# a topology that re-tables CPORT (ring-room-demo.sh) moves them too. Each node
+# needs both named: unset, every daemon dials cw-rails at :9747 and binds serve
+# at :9748 — the operator's live node on the local backend, where these
+# daemons' ring journals would land in the house's cw-rails.
+rport() { echo $(( CPORT[$1] + 6 )); }
+sport() { echo $(( CPORT[$1] + 7 )); }
+rails_base() { echo "http://127.0.0.1:$(rport "$1")"; }
+# cw-rails' root, beside the daemon's data dir (one nested in it would be
+# walked by anything that scans [data] dir). Under $D, so `journals` finds the
+# ring journals it now holds.
+rdir() { echo "$D/$1-rails"; }
 declare -A PERSON=([a]=alex [b]=bo [c]=cy)
 declare -A MESHNAME=([a]=Alex [b]=Bo [c]=Cy)
 
@@ -135,13 +155,18 @@ IMAGE="${RING_DOC_IMAGE:-docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv}"
 # RADV Vulkan driver; only the device is withheld.
 RING_DOC_GPU_NODES="${RING_DOC_GPU_NODES:-}"
 
-# A command on node n, with n's data dir. Plain on local; in n's container on podman.
+# A command on node n, with n's data dir, n's serve port and n's cw-rails root.
+# Plain on local; in n's container on podman. SOVEREIGN_SERVE_PORT is read by
+# the serve hosted in the daemon and by every client that dials serve
+# (venue.rs serve_port); CW_RAILS_DIR by svrn-side readers of cw-rails' root
+# (commonwealth_media::rails_data_dir).
 node_exec() {
   local n=$1; shift
   if [ "$BACKEND" = podman ]; then
-    "${PODMAN[@]}" exec -e SOVEREIGN_DATA_DIR="$D/$n" -e SOVEREIGN_NO_STALE_WARN=1 "$CPREFIX-$n" "$@"
+    "${PODMAN[@]}" exec -e SOVEREIGN_DATA_DIR="$D/$n" -e SOVEREIGN_NO_STALE_WARN=1 \
+      -e SOVEREIGN_SERVE_PORT="$(sport "$n")" -e CW_RAILS_DIR="$(rdir "$n")" "$CPREFIX-$n" "$@"
   else
-    SOVEREIGN_DATA_DIR="$D/$n" "$@"
+    SOVEREIGN_DATA_DIR="$D/$n" SOVEREIGN_SERVE_PORT="$(sport "$n")" CW_RAILS_DIR="$(rdir "$n")" "$@"
   fi
 }
 # curl run ON node n, so a URL on n's loopback is n's own (see `at`).
@@ -216,23 +241,28 @@ start_forwarder() { # node [port]
 # could-not-judge, never a failed bar.
 stale_binaries() {
   local newest src_s src_f bin_s
-  # `sovereign/apps/` is excluded: those pages are SERVED from the repo mount by
+  # `cmnwlth/apps/` is excluded: those pages are SERVED from the repo mount by
   # `svrn ring show`, never compiled in (no include_str! names that tree), so a
   # page-only edit is already what the run reads, and no rebuild can move the
   # binary's mtime past it. Compiled-in JS (ring_cmd/templates, the door's
   # shim) stays covered.
-  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' ':!sovereign/apps/' 2>/dev/null \
+  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' ':!cmnwlth/apps/' 2>/dev/null \
     | xargs -0 -r stat -c '%Y %n' 2>/dev/null | sort -rn | head -1)
   [ -n "$newest" ] || return 0
   src_s=${newest%% *}; src_f=${newest#* }
-  bin_s=$(stat -c %Y "$DAEMON" 2>/dev/null || echo 0)
+  # The older of the two processes a node runs is the one that can be stale.
+  local bin bin_f=""; bin_s=""
+  for bin in "$DAEMON" "$RAILS"; do
+    local s; s=$(stat -c %Y "$bin" 2>/dev/null || echo 0)
+    if [ -z "$bin_s" ] || [ "$s" -lt "$bin_s" ]; then bin_s=$s; bin_f=$bin; fi
+  done
   [ "$src_s" -gt "$bin_s" ] || return 0
-  echo "binaries-stale: $DAEMON mtime $bin_s ($(date -d "@$bin_s" '+%F %T')) is older than $src_f mtime $src_s ($(date -d "@$src_s" '+%F %T')) — rebuild with scripts/dev-build.sh"
+  echo "binaries-stale: $bin_f mtime $bin_s ($(date -d "@$bin_s" '+%F %T')) is older than $src_f mtime $src_s ($(date -d "@$src_s" '+%F %T')) — rebuild with scripts/dev-build.sh"
 }
 
 need_binaries() {
   # Exit 3 is co-lineage's "artifact-absent": could-not-judge, not a failed bar.
-  if ! { [ -x "$DAEMON" ] && [ -x "$CLI" ] && command -v node >/dev/null; }; then
+  if ! { [ -x "$DAEMON" ] && [ -x "$CLI" ] && [ -x "$RAILS" ] && command -v node >/dev/null; }; then
     echo "ring-doc-demo: build first (cargo build --bins --features sovereign-cli/dev-tools) and put node on PATH" >&2
     exit 3
   fi
@@ -328,23 +358,62 @@ containers_up() {
 }
 
 mkcfg() { # node
-  local n=$1 dir="$D/$1"; mkdir -p "$dir"
+  local n=$1 dir="$D/$1" rd; rd=$(rdir "$1"); mkdir -p "$dir" "$rd"
   {
     echo 'mcp_servers = []'; echo
     echo '[daemon]'
     echo "client_port = ${CPORT[$n]}"; echo "internal_port = ${IPORT[$n]}"
+    echo "rails_base = \"$(rails_base "$n")\""
     echo 'autostart = false'
     echo 'client_bind = "127.0.0.1"'; echo 'internal_bind = "127.0.0.1"'; echo
     echo '[data]'; echo "dir = \"$dir\""; echo
     # Terminal nodes: no weights, ~190 MB RSS each.
     echo '[node]'; echo 'entry = "http://127.0.0.1:9741/v1"'; echo
-    echo '[iroh]'; echo 'enabled = true'; echo
-    # No mDNS: these three must not meet the real house on this LAN.
+    # Read by `svrn mesh up` alone now; the cw-rails here runs without --mdns,
+    # so these nodes do not meet the real house on this LAN either way.
     echo '[discovery]'; echo 'mdns = false'; echo 'seed_addrs = []'
   } > "$dir/config.toml"
+  # cw-rails' own config. `name` is the member name the mesh shows and what
+  # /v1/mesh/join's node_name must equal (membership.rs check_node_name).
+  # Relays stay n0's: `wait_homed` waits for a relay home, as the daemons did.
+  { echo "name = \"${MESHNAME[$n]:-$n}\""; echo "listen = $(rport "$n")"; } > "$rd/rails.toml"
+  # One node identity, as `svrn mesh up`'s handover leaves it
+  # (identity_handover.rs): the same node_id in both roots, before either boots.
+  [ -f "$rd/node_id" ] || head -c 16 /dev/urandom > "$rd/node_id"
+  cp "$rd/node_id" "$dir/node_id"
 }
 
+start_rails() { local n=$1; node_bg "$n" "$D/$n/rails.pid" "$D/$n/rails.out" "$D/$n/rails.err" "$RAILS" run --data-dir "$(rdir "$n")"; }
 start_daemon() { local n=$1; node_bg "$n" "$D/$n/pid" "$D/$n/daemon.out" "$D/$n/daemon.err" "$DAEMON" daemon run; }
+
+# Each node's cw-rails answers its status; the daemons dial it from their
+# first request, so it comes up first.
+wait_rails_up() { # node…
+  local deadline=$(( $(date +%s) + 60 )) n missing
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    missing=""
+    for n in "$@"; do
+      node_curl "$n" -sf --max-time 2 -o /dev/null "$(at "$(rport "$n")")/v1/mesh/status" 2>/dev/null || missing="$missing $n"
+    done
+    [ -z "$missing" ] && return 0
+    sleep 1
+  done
+  echo "cw-rails on$missing never answered /v1/mesh/status inside 60s" >&2
+  for n in $missing; do tail -n 5 "$D/$n/rails.err" >&2; done
+  return 1
+}
+
+# The founder's cw-rails founds the mesh (`POST /v1/mesh/create`, what `svrn
+# mesh create` sends after its bring-up). Every cw-rails starts solo; the
+# daemon used to found one on its own.
+found_mesh() {
+  local out
+  out=$(node_curl "$FOUNDER" -s --max-time 20 -w $'\n%{http_code}' -X POST "$(at "$(rport "$FOUNDER")")/v1/mesh/create" \
+    -H 'content-type: application/json' -d "{\"node_name\":\"${MESHNAME[$FOUNDER]:-$FOUNDER}\"}" 2>/dev/null)
+  [ "${out##*$'\n'}" = 200 ] && return 0
+  echo "found: $FOUNDER's cw-rails refused /v1/mesh/create: ${out:0:300}" >&2
+  return 1
+}
 
 # ONE deadline for all of them: they cold-boot concurrently.
 wait_all_up() { # node…
@@ -371,7 +440,7 @@ wait_homed() { # node…
   while [ "$(date +%s)" -lt "$deadline" ]; do
     missing=""
     for n in "$@"; do
-      node_curl "$n" -s --max-time 3 "$(at "${CPORT[$n]}")/v1/mesh/status" 2>/dev/null \
+      node_curl "$n" -s --max-time 3 "$(at "$(rport "$n")")/v1/mesh/status" 2>/dev/null \
         | python3 -c "import sys,json; sys.exit(0 if (json.load(sys.stdin).get('self_reachability') or {}).get('relay_homed') else 1)" 2>/dev/null \
         || missing="$missing $n"
     done
@@ -387,7 +456,7 @@ wait_homed() { # node…
 wait_online() { # display-name
   local deadline=$(( $(date +%s) + 120 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    node_curl "$FOUNDER" -s --max-time 3 "$(at "${CPORT[$FOUNDER]}")/v1/mesh/status" 2>/dev/null \
+    node_curl "$FOUNDER" -s --max-time 3 "$(at "$(rport "$FOUNDER")")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; sys.exit(0 if any(m['name']=='$1' and m.get('status')=='online' for m in json.load(sys.stdin)['members']) else 1)" 2>/dev/null \
       && return 0
     sleep 3
@@ -407,22 +476,23 @@ join_one() { # node
     sleep 3
   done
   [ -z "$key" ] && { echo "join: a would not rotate a key for $n inside 90s" >&2; return 1; }
-  # The product's no-VPN path, the same on both backends: A's status serves the
-  # invite with its live iroh `dial=`, and the joiner key-dials A by it. A
-  # `relay=` hint would POST to A's internal port, which is loopback-bound.
+  # The product's no-VPN path, the same on both backends: A's cw-rails serves
+  # the invite with its live iroh dial (`iroh=` in cw-rails' link), and the
+  # joiner key-dials A by it. cw-rails refuses an invite with no iroh dial
+  # (join.rs NoIrohDial).
   local link="" deadline=$(( $(date +%s) + 60 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    link=$(node_curl "$FOUNDER" -s --max-time 3 "$(at "${CPORT[$FOUNDER]}")/v1/mesh/status" 2>/dev/null \
+    link=$(node_curl "$FOUNDER" -s --max-time 3 "$(at "$(rport "$FOUNDER")")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; print(json.load(sys.stdin).get('join_link') or '')" 2>/dev/null)
-    case "$link" in *"$key"*dial=*|*dial=*"$key"*) break ;; esac
+    case "$link" in *"$key"*iroh=*|*iroh=*"$key"*) break ;; esac
     sleep 2
   done
-  case "$link" in *"$key"*dial=*|*dial=*"$key"*) ;; *)
-    echo "join: $FOUNDER's join_link never carried dial= and the rotated key inside 60s: '$link'" >&2
-    tail -n 20 "$D/$FOUNDER/daemon.err" >&2
+  case "$link" in *"$key"*iroh=*|*iroh=*"$key"*) ;; *)
+    echo "join: $FOUNDER's join_link never carried iroh= and the rotated key inside 60s: '$link'" >&2
+    tail -n 20 "$D/$FOUNDER/rails.err" >&2
     return 1 ;;
   esac
-  node_curl "$n" -s --max-time 90 -X POST "$(at "${CPORT[$n]}")/v1/mesh/join" \
+  node_curl "$n" -s --max-time 90 -X POST "$(at "$(rport "$n")")/v1/mesh/join" \
     -H 'content-type: application/json' \
     -d "{\"key_or_url\":\"$link\",\"node_name\":\"${MESHNAME[$n]}\"}" \
     > "$D/join-$n.json"
@@ -439,7 +509,7 @@ join_one() { # node
 members_from_mesh() {
   local deadline=$(( $(date +%s) + 90 )) MEMBERS_EXPECTED="${1:-${#NODES[@]}}"
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    node_curl "$FOUNDER" -s --max-time 3 "$(at "${CPORT[$FOUNDER]}")/v1/mesh/status" 2>/dev/null \
+    node_curl "$FOUNDER" -s --max-time 3 "$(at "$(rport "$FOUNDER")")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; m={x['node_pubkey']:x['name'] for x in json.load(sys.stdin)['members'] if x.get('node_pubkey')}; sys.exit(1) if len(m)<int(sys.argv[1]) else json.dump(m,sys.stdout)" "$MEMBERS_EXPECTED" \
       > "$D/members.json" 2>/dev/null && break
     sleep 3
@@ -462,17 +532,24 @@ start_proxy() { # node — the page's door to its daemon, holding the grant
   return 1
 }
 
-stop_node() { # node — the daemon only; its proxy stays up and answers 502, as a page's would
-  local n=$1 pid i
-  pid=$(cat "$D/$n/pid" 2>/dev/null) || return 0
-  node_exec "$n" kill "$pid" 2>/dev/null
-  for i in $(seq 1 40); do node_exec "$n" kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
-  node_exec "$n" kill -9 "$pid" 2>/dev/null
+stop_node() { # node — daemon and cw-rails; its proxy stays up and answers 502, as a page's would
+  # Both: the journals and the live lane are cw-rails' now, so a stopped
+  # daemon beside a running cw-rails is a node still in the mesh — not the cut
+  # phase 2 makes, nor the restart phase 4 judges.
+  local n=$1 pidf pid i
+  for pidf in "$D/$n/pid" "$D/$n/rails.pid"; do
+    pid=$(cat "$pidf" 2>/dev/null) || continue
+    node_exec "$n" kill "$pid" 2>/dev/null
+    for i in $(seq 1 40); do node_exec "$n" kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+    node_exec "$n" kill -9 "$pid" 2>/dev/null
+  done
   return 0
 }
 
-start_node() { # node — daemon over the same data dir, then a fresh proxy (the grant may not survive)
+start_node() { # node — cw-rails then daemon over the same dirs, then a fresh proxy (the grant may not survive)
   local n=$1
+  start_rails "$n"
+  wait_rails_up "$n" || return 1
   start_daemon "$n"
   wait_all_up "$n" || return 1
   start_proxy "$n"
@@ -484,9 +561,12 @@ cmd_up() {
   local n
   for n in "${NODES[@]}"; do mkcfg $n; done
   if [ "$BACKEND" = podman ]; then containers_up || exit 3; fi
+  for n in "${NODES[@]}"; do start_rails $n; done
+  wait_rails_up "${NODES[@]}" || exit 3
   for n in "${NODES[@]}"; do start_daemon $n; done
   wait_all_up "${NODES[@]}" || exit 3
   wait_homed "${NODES[@]}" || exit 3
+  found_mesh || exit 3
   # Every node but the founder joins, under the mesh name the table gives it.
   for n in "${NODES[@]:1}"; do join_one $n && wait_online "${MESHNAME[$n]}" || exit 3; done
   # One more gossip round, so B has heard about C from A.
@@ -518,7 +598,7 @@ heal_node() { # node [network]
 cmd_tabs() { # each page's URL on this host, and the mesh name its node signs as
   local n name
   for n in "${NODES[@]}"; do
-    name=$(node_curl "$n" -s --max-time 3 "$(at "${CPORT[$n]}")/v1/mesh/status" 2>/dev/null \
+    name=$(node_curl "$n" -s --max-time 3 "$(at "$(rport "$n")")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; print(next((m['name'] for m in json.load(sys.stdin)['members'] if m.get('is_self')), ''))" 2>/dev/null)
     echo "$n  $(tab_url $n)/  ${name:-<not in the mesh>}"
   done
@@ -529,6 +609,7 @@ cmd_down() {
   for n in "${NODES[@]}"; do
     node_kill "$n" "$D/$n/dev.pid"
     node_kill "$n" "$D/$n/pid"
+    node_kill "$n" "$D/$n/rails.pid"
   done
   sleep 1
   if [ "$BACKEND" = podman ]; then containers_down; fi
@@ -546,7 +627,7 @@ journals() {
 
 driver_js() {
   cat > "$D/driver.mjs" <<'JS'
-// The page's loop, three times, headless. Mirrors sovereign/apps/ring-doc/app.js
+// The page's loop, three times, headless. Mirrors cmnwlth/apps/ring-doc/app.js
 // line for line where app.js decides something; adds only the stamps a
 // measurement needs (a ledger of which act carried which paragraph, and a
 // wall-clock `t` on the cursor state).
@@ -554,13 +635,13 @@ import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const { REPO, D, SCRIPT } = process.env;
-const A = await import(`file://${REPO}/sovereign/apps/ring-doc/adapter.js`);
-const { Y } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
-const { awarenessProtocol } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
+const A = await import(`file://${REPO}/cmnwlth/apps/ring-doc/adapter.js`);
+const { Y } = await import(`file://${REPO}/cmnwlth/apps/ring-doc/vendor/ring-doc-bundle.js`);
+const { awarenessProtocol } = await import(`file://${REPO}/cmnwlth/apps/ring-doc/vendor/ring-doc-bundle.js`);
 
 // app.js's constants, read from app.js: rd-1-tune edits them there, and a run
 // that hardcoded them here would measure the page before the tune.
-const APP_JS = readFileSync(`${REPO}/sovereign/apps/ring-doc/app.js`, "utf8");
+const APP_JS = readFileSync(`${REPO}/cmnwlth/apps/ring-doc/app.js`, "utf8");
 const T = {};
 for (const k of ["DEBOUNCE_MS", "POLL_MS", "PRESENCE_THROTTLE_MS", "LIVE_POLL_MS"]) {
   const m = APP_JS.match(new RegExp(`const ${k} = (\\d+);`));
@@ -954,13 +1035,20 @@ run_session() {
 CENSUS="$D-census"
 run_census() {
   mkdir -p "$CENSUS"
-  "$REPO/scripts/with-cargo-lock.sh" "$REPO/scripts/sovereign-test.sh" --human --package sovereign-mesh \
+  # The census moved to commonwealth-rails with the journals. Its path is
+  # checked before the diff: `git diff --quiet` on a path that no longer
+  # exists exits 0, which read as "unchanged" after the move.
+  local census_test="cmnwlth/crates/commonwealth-rails/tests/replication_sender_census.rs"
+  "$REPO/scripts/with-cargo-lock.sh" "$REPO/scripts/sovereign-test.sh" --human --package commonwealth-rails \
     --filter every_sender_of_replicated_state_is_declared > "$CENSUS/census.log" 2>&1
   echo $? > "$CENSUS/census.rc"
-  git -C "$REPO" diff --quiet origin/main -- sovereign/crates/sovereign-mesh/tests/main/replication_sender_census.rs
-  echo $? > "$CENSUS/census.diff"
-  git -C "$REPO" diff --stat origin/main -- 'commonwealth/crates/commonwealth-rail*' > "$CENSUS/rail.diff"
-  git -C "$REPO" log --format='%h %s' origin/main..HEAD -- 'commonwealth/crates/commonwealth-rail*' > "$CENSUS/rail.commits"
+  if [ -f "$REPO/$census_test" ]; then
+    git -C "$REPO" diff --quiet origin/main -- "$census_test"; echo $? > "$CENSUS/census.diff"
+  else
+    echo "absent: $census_test" > "$CENSUS/census.diff"
+  fi
+  git -C "$REPO" diff --stat origin/main -- 'cmnwlth/crates/commonwealth-rail*' > "$CENSUS/rail.diff"
+  git -C "$REPO" log --format='%h %s' origin/main..HEAD -- 'cmnwlth/crates/commonwealth-rail*' > "$CENSUS/rail.commits"
 }
 
 report() { # bar|all
@@ -1098,5 +1186,5 @@ case "${1:-}" in
     run_session
     report "$2"
     ;;
-  *) sed -n '2,54p' "$0"; exit 2 ;;
+  *) awk 'NR >= 2 && /^#/ { print; next } NR >= 2 { exit }' "$0"; exit 2 ;;
 esac

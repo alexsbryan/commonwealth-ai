@@ -90,7 +90,7 @@ Heisenberg's uncertainty principle reshape philosophical debate about determinis
 
 ## Artifacts
 
-- `sovereign/crates/sovereign-inference/examples/rerank_pairs_probe.rs` (committed):
+- `serve/crates/sovereign-inference/examples/rerank_pairs_probe.rs` (committed):
   sanity gate + 100-pair timing probe, fixture-driven.
 - Fixtures: `data/chunks_{20,100}.jsonl` (gitignored; regenerate with
   `scripts/dump_chunks.py --seed 11|13`).

@@ -85,7 +85,7 @@ growth past a cap is a design finding, never a queue edit. Commit
 row `[x]`.
 
 **`REVIEW-audit-e7-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -103,7 +103,7 @@ On Linux every check runs inside the `sovereign-vulkan` toolbox; if
 | TESTFN(c,f) | `scripts/ralph-check.sh testfn c f` — `f` is the WHOLE test fn name (a vague filter rebuilds the workspace) | exit=0 |
 | ENV | `scripts/ralph-check.sh env` | exit=0 (rows that add an env read) |
 | PY(s) | `scripts/ralph-check.sh py s` — runs `python3 s --self-test`; every python file this queue creates carries one, with a planted failing input | exit=0 |
-| DESKTOP | `scripts/ralph-check.sh desktop` — `npm run check` and `npm run test` in `sovereign/crates/sovereign-desktop` | exit=0 |
+| DESKTOP | `scripts/ralph-check.sh desktop` — `npm run check` and `npm run test` in `clients/desktop` | exit=0 |
 | LAYER | `scripts/ralph-check.sh layer` | exit=0 |
 | CAMPAIGN | `scripts/ralph-check.sh campaign epistemic-index` | exit=0 (rows that edit the campaign file) |
 | DOCS | `scripts/ralph-check.sh docs` | exit=0 (rows that edit a doc) |
@@ -132,9 +132,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   path is relative to the repo root, where every command already runs.
   opencode's permission check resolves `cd X && ../../y` against the wrong
   base, auto-rejects a path INSIDE this repo, and ends your session with the
-  unit half done (e7-1-scaffold lost a session to `/home/sovereign/apps/...`).
+  unit half done (e7-1-scaffold lost a session to `/home/cmnwlth/apps/...`).
   For a scratch build dir use `target/ralph/bundle/` by its repo-relative path
-  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=sovereign/apps/...`).
+  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=cmnwlth/apps/...`).
 - Change files with the Edit and Write tools, never with a shell heredoc
   (`cat >> f <<EOF`, `python3 - <<EOF`): edits inside the repo are accepted
   outright, a heredoc asks the operator and is denied after 600 s unattended.
@@ -144,7 +144,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
   `scripts/ralph*`. Never stop or restart the DEPLOYED daemon. Never edit
   `research/ontology-retrieval/PRE-REG-*.md` except its `## Deviations` section,
   and only when the row says so: the bars are the operator's.
@@ -154,5 +154,5 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
 - **The rented pod.** Never run `scripts/dev-pod.sh up`: renting is the operator's act (`HUMAN-e7-pod-up`). The ONLY thing that touches a rented pod is `research/ontology-retrieval/harness/pod_window.sh`, which destroys it on every exit. If you ever find a pod billing with no window running (`scripts/dev-pod.sh status`), run `scripts/dev-pod.sh down`, then §6.
 - Never acquire a study corpus (ANS, EDGAR, NarrativeQA) and make no outbound
   network request. Stage 0 runs on what is installed.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

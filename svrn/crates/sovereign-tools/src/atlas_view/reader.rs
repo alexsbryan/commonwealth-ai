@@ -1,0 +1,1261 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Disk-backed reader for atlas inspection.
+//!
+//! `FileAtlasReader` is the *only* path the desktop atlas-inspector
+//! UI uses to reach atlas data. Phase 2 (curation overlay) will add
+//! overlay-merging branches inside this same struct — no new trait,
+//! no new caller-facing seam. See the module-level docs in
+//! `atlas_view/mod.rs`.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use understanding_vocab::atoms::AtomType;
+use understanding_vocab::read::ATLAS_DIRNAME;
+
+/// One row in the corpus picker.
+///
+/// `display_name` is the corpus_id today; a future change can hydrate
+/// it from `IndexInfo.corpus_name` for friendlier rendering. The wire
+/// shape exists now so we don't break the UI when that lands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AtlasCorpusSummary {
+    pub corpus_id: String,
+    pub display_name: String,
+    pub total_atoms: u64,
+    /// Per-type atom counts. `BTreeMap` so the JSON order is
+    /// deterministic — easier diffing in tests and friendlier to UI
+    /// snapshot comparison.
+    pub atom_counts: BTreeMap<AtomType, u64>,
+    /// `atoms.json` mtime in seconds since the Unix epoch. Closest
+    /// proxy we have for "when was extraction last run for this
+    /// corpus" without a separate provenance file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_extracted_unix: Option<u64>,
+    /// Logical UI category from the recipe's `[display]` block —
+    /// drives the Atlas View rail grouping (`category =
+    /// "conversation"` collapses every conversation-source corpus
+    /// under one "Conversations" header). `None` on legacy indexes
+    /// that pre-date the `[display]` block — the frontend buckets
+    /// those into an "Other" group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_category: Option<String>,
+    /// Icon hint from the recipe's `[display]` block. Free-form
+    /// string the frontend maps onto its icon set. `None` falls back
+    /// to a generic glyph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_icon: Option<String>,
+    /// The author's own nouns and how many atoms carry each — the declared
+    /// subtype census from `_summary.json` v4, copied through unchanged.
+    /// Empty for every corpus that declares nothing, which is the common case
+    /// and is why it is a plain map rather than an `Option`.
+    ///
+    /// Counts are OWN, not rolled up: a consumer showing "coin" for a corpus
+    /// that also declares `sceatta specializes coin` adds the two itself,
+    /// using [`Self::declared_types`]'s `specializes`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub subtype_counts: BTreeMap<String, u64>,
+    /// What this corpus declared, in declaration-independent form: one row per
+    /// declared type with its atom kind and its parent, if it has one. Empty
+    /// when nothing is declared — which is what tells a viewer to fall back to
+    /// the generic atom kinds rather than render an empty ontology.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared_types: Vec<DeclaredTypeRow>,
+}
+
+/// One declared type, as a viewer needs it: what to call it, which atom kind
+/// it belongs to, and what it specializes.
+///
+/// A flat row rather than the nested `OntologySummary` maps because every
+/// consumer so far wants to iterate types, and joining three maps by name at
+/// each call site is the shape that invites them to disagree (§10.6).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeclaredTypeRow {
+    /// The author's noun, exactly as declared — also the key into
+    /// [`AtlasCorpusSummary::subtype_counts`].
+    pub name: String,
+    /// The atom kind this type specializes (`entity`, `claim`, …), so a
+    /// viewer can colour or group it like the generic kind it refines.
+    pub kind: String,
+    /// The declared type this one `specializes`, when it declares one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specializes: Option<String>,
+    /// How two mentions of this type are judged the same thing
+    /// (`external:<keys>` / `fallback:<keys>`), or `None` when it resolves on
+    /// its canonical name — the reported default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_criterion: Option<String>,
+}
+
+/// What the last build found about a declared corpus, for the desktop's build
+/// report card.
+///
+/// Read from the artefacts a build already writes — `schema_validation.json`
+/// and the ANN table's freshness — rather than recomputed, so this is a
+/// VERDICT with an age, not a live measurement. A card showing it is showing
+/// what the last build said.
+///
+/// `ontology` is `None` for a corpus that declares nothing, which is what
+/// tells the card to render nothing at all rather than an empty ontology
+/// (§18.3). It is also `None` when the report step has not run yet, and those
+/// two are told apart by [`Self::reported`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AtlasBuildReport {
+    pub corpus_id: String,
+    /// Whether `schema_validation.json` exists and parsed. `false` means the
+    /// report step has not run — distinct from "ran and found no ontology".
+    pub reported: bool,
+    /// The declared-ontology dimension of the report: per-type coverage,
+    /// identity criteria, merges, `same_as` claims, claims of a
+    /// subject-declaring type with no subject, and the per-attribute fill
+    /// rate. Reused whole rather than re-flattened — the card wants exactly
+    /// what the CLI report prints (§19).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ontology: Option<corpus_engine_atlas_reader::schema_report::OntologyCoverage>,
+    /// Whether the atom-level ANN table exists AND is newer than `atoms.json`.
+    /// `false` with `grounding_present` true means a rebuild left it stale, so
+    /// the card can say "re-run backfill" rather than "not grounded".
+    pub grounding_fresh: bool,
+    pub grounding_present: bool,
+}
+
+/// One row in a **collection** notebook's member picker.
+///
+/// Some corpora are ingested as one index but enriched per *article*:
+/// SEP's 182k paragraphs live in the `sep` index, while its atlas is
+/// 1,769 sibling `sep-<slug>` indexes, one per encyclopedia entry (see
+/// `ingest/crates/sovereign-recipes/sep/recipe.toml`, `[enrichment]`). The parent's
+/// own `atoms.json` is empty, so the ordinary atom browser has nothing
+/// to show; the map lives in the members. This row is what the picker
+/// renders so the user can choose an article and explore *its* atlas.
+///
+/// `title` is derived from the member id, because nothing on disk
+/// carries a human title: the member's `chapters.json` names sections
+/// (`"## Section 001"`), and the parent's chunk titles are the slug
+/// itself. So `sep-logic-modal` renders as "Logic Modal", not the
+/// upstream "Modal Logic". Deriving is honest about what we have; a
+/// title map would need a network fetch we deliberately don't do.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AtlasMemberSummary {
+    /// The member's own corpus id (`sep-abduction`) — the id every
+    /// downstream atlas call takes.
+    pub corpus_id: String,
+    /// Slug-derived display title (`sep-abduction` → "Abduction").
+    pub title: String,
+    pub total_atoms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_extracted_unix: Option<u64>,
+}
+
+/// Forward-compat field on per-atom DTOs. Phase 1 always emits
+/// [`CurationStatus::Generated`]; Phase 2 starts populating the other
+/// variants. Putting the field through the wire today means the UI
+/// can wire a `<CurationStatusBadge>` once and have it light up when
+/// Phase 2 ships.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CurationStatus {
+    /// Came straight from extraction. No human has reviewed it.
+    Generated,
+}
+
+/// Errors surfaced by [`FileAtlasReader`]. Per-corpus read failures
+/// inside [`FileAtlasReader::list_corpora`] are logged via tracing
+/// and skipped rather than raised — a single corrupt atlas should
+/// not block the whole picker. Other entry points propagate.
+#[derive(Debug, Error)]
+pub enum AtlasViewError {
+    #[error("indexes dir not readable: {0}")]
+    IndexesDir(#[source] std::io::Error),
+    /// Asked about a corpus with no `atlas/` directory. Distinct from a
+    /// corpus whose atlas exists but has not been reported on — that is a
+    /// successful answer, not an error (§18.3).
+    #[error("no atlas for corpus `{0}`")]
+    CorpusNotFound(String),
+}
+
+/// File-system-backed atlas reader.
+///
+/// Cheap to construct (holds a single path). Each method re-reads
+/// the relevant `atoms.json` from disk; there is no in-process cache.
+/// At the inspection rates this drives (a human clicking through a
+/// list), the re-read cost is irrelevant and the simplicity is worth
+/// more than the throughput.
+#[derive(Clone)]
+pub struct FileAtlasReader {
+    indexes_dir: PathBuf,
+    atlas: Arc<dyn AtlasPort>,
+}
+
+impl std::fmt::Debug for FileAtlasReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileAtlasReader")
+            .field("indexes_dir", &self.indexes_dir)
+            .finish_non_exhaustive()
+    }
+}
+
+impl FileAtlasReader {
+    /// Build a reader rooted at the corpus indexes directory
+    /// (typically `<data_dir>/indexes`, the same path
+    /// `compute_atlas_status` walks).
+    /// The summary and grounding-freshness reads, which write or derive,
+    /// go through ingest's `atlas` port.
+    pub fn new(indexes_dir: PathBuf, atlas: Arc<dyn AtlasPort>) -> Self {
+        Self { indexes_dir, atlas }
+    }
+
+    /// Resolve the on-disk atlas directory for a given corpus.
+    /// Returns `None` when the corpus dir doesn't exist or has no
+    /// `atlas/` subdirectory yet.
+    pub fn atlas_dir(&self, corpus_id: &str) -> Option<PathBuf> {
+        let dir = self.indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
+        if dir.is_dir() {
+            Some(dir)
+        } else {
+            None
+        }
+    }
+
+    /// Return one [`AtlasCorpusSummary`] per installed corpus that
+    /// has an atlas on disk. Sorted by `corpus_id` for stable
+    /// rendering. Corpora without an atlas (fresh installs, pure
+    /// catalog entries) are omitted — the inspector has nothing to
+    /// show for them.
+    ///
+    /// Per-corpus summaries are pulled from corpus-engine's cached
+    /// `_summary.json` sidecar (`read_or_compute_atlas_summary`).
+    /// First read of each atlas pays the deserialisation cost once;
+    /// subsequent reads are an O(KB) cache hit. The N corpus reads
+    /// fan out onto the blocking-task pool — for a fleet of
+    /// installed atlases, picker latency is now `max(per-corpus)`
+    /// instead of `sum(per-corpus)`.
+    /// What the last build found about one corpus (ontology-v1 P6.4).
+    ///
+    /// Never an error for a corpus with no report: an absent
+    /// `schema_validation.json` is the answer `reported: false`, which the
+    /// card renders as "not built yet" rather than a failure. The only error
+    /// is a corpus with no atlas directory at all.
+    pub async fn build_report(&self, corpus_id: &str) -> Result<AtlasBuildReport, AtlasViewError> {
+        let Some(atlas_dir) = self.atlas_dir(corpus_id) else {
+            return Err(AtlasViewError::CorpusNotFound(corpus_id.to_string()));
+        };
+        let report =
+            corpus_engine_atlas_reader::schema_report::read_schema_validation_report(&atlas_dir);
+        Ok(AtlasBuildReport {
+            corpus_id: corpus_id.to_string(),
+            reported: report.is_some(),
+            ontology: report.and_then(|r| r.ontology),
+            grounding_fresh: self.atlas.ann_table_is_fresh(&atlas_dir),
+            grounding_present: corpus_engine_atlas_reader::ann_store::ann_table_present(&atlas_dir),
+        })
+    }
+
+    pub async fn list_corpora(&self) -> Result<Vec<AtlasCorpusSummary>, AtlasViewError> {
+        let entries = match std::fs::read_dir(&self.indexes_dir) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::debug!(
+                    indexes_dir = %self.indexes_dir.display(),
+                    "atlas_view:list_corpora: indexes_dir absent, returning empty",
+                );
+                return Ok(Vec::new());
+            }
+            Err(e) => return Err(AtlasViewError::IndexesDir(e)),
+        };
+
+        // Collect candidate (corpus_id, atlas_dir) pairs synchronously
+        // — the `read_dir` walk is cheap and serialising it sidesteps
+        // ordering / Send concerns on the entries iterator.
+        let mut candidates: Vec<(String, PathBuf)> = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            // Same filtering as `compute_atlas_status` — internal /
+            // tier-2 mirror / shard-partition dirs aren't corpora.
+            if !is_browsable_corpus_dir(name) {
+                continue;
+            }
+            let atlas_dir = path.join(ATLAS_DIRNAME);
+            if !atlas_dir.is_dir() {
+                continue;
+            }
+            candidates.push((name.to_string(), atlas_dir));
+        }
+
+        // Fan out the per-corpus reads onto the blocking pool. Each
+        // task either hits a fresh _summary.json (microseconds) or
+        // pays the one-time atoms.json deserialisation cost — which
+        // also writes the sidecar so subsequent calls hit the hot
+        // path. Either way the reads proceed concurrently.
+        let mut handles = Vec::with_capacity(candidates.len());
+        for (corpus_id, atlas_dir) in candidates {
+            let atlas = Arc::clone(&self.atlas);
+            let h = tokio::task::spawn_blocking(move || {
+                let result = summarise_corpus(&*atlas, &corpus_id, &atlas_dir);
+                (corpus_id, atlas_dir, result)
+            });
+            handles.push(h);
+        }
+
+        let mut summaries = Vec::with_capacity(handles.len());
+        for h in handles {
+            match h.await {
+                Ok((_, _, Ok(summary))) => summaries.push(summary),
+                Ok((corpus_id, atlas_dir, Err(e))) => {
+                    // Glassbox: a corrupt atoms.json on one corpus
+                    // shouldn't take out the whole picker, but the
+                    // operator needs to know it happened.
+                    tracing::warn!(
+                        corpus_id = %corpus_id,
+                        atlas_dir = %atlas_dir.display(),
+                        error = %e,
+                        "atlas_view:list_corpora: skipping corpus, summary unreadable",
+                    );
+                }
+                Err(join_err) => {
+                    tracing::warn!(
+                        error = %join_err,
+                        "atlas_view:list_corpora: per-corpus task panicked or was cancelled",
+                    );
+                }
+            }
+        }
+
+        summaries.sort_by(|a, b| a.corpus_id.cmp(&b.corpus_id));
+        tracing::debug!(
+            corpus_count = summaries.len(),
+            "atlas_view:list_corpora: enumerated installed atlases",
+        );
+        Ok(summaries)
+    }
+
+    /// Return one [`AtlasMemberSummary`] per **member atlas** of a
+    /// collection corpus — the sibling indexes named
+    /// `<parent_corpus_id>-<slug>` that carry a non-empty atlas.
+    ///
+    /// This is the read behind a collection notebook's Explore tab
+    /// (see [`AtlasMemberSummary`] for why SEP is shaped this way).
+    /// Members with a zero-atom atlas are omitted: they are enrichment
+    /// scaffolds that never produced a map, and offering them would
+    /// walk the user into the empty view this picker exists to avoid.
+    ///
+    /// Cheaper than [`list_corpora`](Self::list_corpora) despite the
+    /// same shape — it stats only the prefixed subset — and shares the
+    /// same `_summary.json` sidecar cache, so a picker open after the
+    /// Library shelf has already listed corpora is all cache hits.
+    ///
+    /// An empty result is the honest answer for an ordinary corpus:
+    /// "this notebook is not a collection".
+    pub async fn list_members(
+        &self,
+        parent_corpus_id: &str,
+    ) -> Result<Vec<AtlasMemberSummary>, AtlasViewError> {
+        let entries = match std::fs::read_dir(&self.indexes_dir) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(AtlasViewError::IndexesDir(e)),
+        };
+
+        let prefix = format!("{parent_corpus_id}-");
+        let mut candidates: Vec<(String, PathBuf)> = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !name.starts_with(&prefix) || !is_browsable_corpus_dir(name) {
+                continue;
+            }
+            let atlas_dir = path.join(ATLAS_DIRNAME);
+            if !atlas_dir.is_dir() {
+                continue;
+            }
+            candidates.push((name.to_string(), atlas_dir));
+        }
+
+        let scanned = candidates.len();
+        let mut handles = Vec::with_capacity(scanned);
+        for (corpus_id, atlas_dir) in candidates {
+            let parent = parent_corpus_id.to_string();
+            let atlas = Arc::clone(&self.atlas);
+            let h = tokio::task::spawn_blocking(move || {
+                let result = summarise_corpus(&*atlas, &corpus_id, &atlas_dir);
+                (parent, corpus_id, atlas_dir, result)
+            });
+            handles.push(h);
+        }
+
+        let mut members = Vec::with_capacity(scanned);
+        for h in handles {
+            match h.await {
+                Ok((parent, corpus_id, _, Ok(summary))) => {
+                    if summary.total_atoms == 0 {
+                        continue;
+                    }
+                    members.push(AtlasMemberSummary {
+                        title: member_title(&parent, &corpus_id),
+                        corpus_id,
+                        total_atoms: summary.total_atoms,
+                        last_extracted_unix: summary.last_extracted_unix,
+                    });
+                }
+                Ok((_, corpus_id, atlas_dir, Err(e))) => {
+                    tracing::warn!(
+                        corpus_id = %corpus_id,
+                        atlas_dir = %atlas_dir.display(),
+                        error = %e,
+                        "atlas_view:list_members: skipping member, summary unreadable",
+                    );
+                }
+                Err(join_err) => {
+                    tracing::warn!(
+                        error = %join_err,
+                        "atlas_view:list_members: per-member task panicked or was cancelled",
+                    );
+                }
+            }
+        }
+
+        members.sort_by(|a, b| {
+            a.title
+                .cmp(&b.title)
+                .then_with(|| a.corpus_id.cmp(&b.corpus_id))
+        });
+        // Glassbox: `scanned` vs `members` is the "how many scaffolds
+        // never produced a map" number an operator needs when a
+        // collection looks thinner than the ingest promised.
+        tracing::debug!(
+            parent = %parent_corpus_id,
+            scanned,
+            with_atoms = members.len(),
+            "atlas_view:list_members: enumerated member atlases",
+        );
+        Ok(members)
+    }
+}
+
+/// Directory-name filter shared by the corpus and member walks:
+/// internal dirs (`.`/`_` prefixed), tier-2 mirrors, and shard
+/// partitions are storage internals, not browsable corpora.
+fn is_browsable_corpus_dir(name: &str) -> bool {
+    !name.starts_with('.')
+        && !name.starts_with('_')
+        && !name.ends_with("-tier2")
+        && !name.contains("-partition-")
+}
+
+/// `("sep", "sep-logic-modal")` → `"Logic Modal"`.
+///
+/// Slug-derived because no human title exists on disk — see
+/// [`AtlasMemberSummary`]. A member id that somehow lacks the parent
+/// prefix falls back to the whole id, so the row is never blank.
+fn member_title(parent_corpus_id: &str, corpus_id: &str) -> String {
+    let slug = corpus_id
+        .strip_prefix(&format!("{parent_corpus_id}-"))
+        .unwrap_or(corpus_id);
+    let mut title = String::with_capacity(slug.len());
+    for (i, word) in slug.split(['-', '_']).filter(|w| !w.is_empty()).enumerate() {
+        if i > 0 {
+            title.push(' ');
+        }
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            title.extend(first.to_uppercase());
+            title.push_str(chars.as_str());
+        }
+    }
+    if title.is_empty() {
+        corpus_id.to_string()
+    } else {
+        title
+    }
+}
+
+fn summarise_corpus(
+    atlas: &dyn AtlasPort,
+    corpus_id: &str,
+    atlas_dir: &Path,
+) -> Result<AtlasCorpusSummary, std::io::Error> {
+    let (display_category, display_icon) = read_display_meta(atlas_dir);
+
+    // Hot path: a v2 `_summary.json` exists and matches the live
+    // atoms.json cache key — returns in microseconds. Cold path:
+    // cache miss recomputes once and writes the sidecar, so
+    // subsequent calls hit the hot path.
+    let summary = match atlas.atlas_summary(atlas_dir)? {
+        Some(s) => s,
+        None => {
+            // No atoms.json on disk yet. The walk already filtered
+            // out corpora without an `atlas/` dir, so this is a
+            // mid-bootstrap corpus (atlas dir exists but extraction
+            // hasn't written atoms.json yet). Return a zero-atom row
+            // so the picker shows "extraction not yet run" rather
+            // than hiding the corpus entirely.
+            return Ok(AtlasCorpusSummary {
+                corpus_id: corpus_id.to_string(),
+                display_name: corpus_id.to_string(),
+                total_atoms: 0,
+                atom_counts: BTreeMap::new(),
+                last_extracted_unix: None,
+                display_category,
+                display_icon,
+                subtype_counts: BTreeMap::new(),
+                declared_types: Vec::new(),
+            });
+        }
+    };
+
+    // Cache key carries atoms.json mtime in milliseconds; convert
+    // to seconds for the wire (UI shows minute-resolution timestamps).
+    let last_extracted_unix = if summary.atoms_mtime_ms > 0 {
+        Some(summary.atoms_mtime_ms / 1000)
+    } else {
+        None
+    };
+
+    // The declared block was read and thrown away until ontology-v1 P6: the
+    // desktop could show how many Entities a corpus has but not how many
+    // COINS, which is the whole point of declaring the type.
+    let declared_types = summary
+        .ontology
+        .as_ref()
+        .map(|o| {
+            o.declared
+                .iter()
+                .map(|(name, kind)| DeclaredTypeRow {
+                    name: name.clone(),
+                    kind: kind.clone(),
+                    specializes: o.specializes.get(name).cloned(),
+                    identity_criterion: o.identity_criteria.get(name).cloned(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(AtlasCorpusSummary {
+        corpus_id: corpus_id.to_string(),
+        // Phase 1: display_name == corpus_id. Hydrate from
+        // `IndexInfo.corpus_name` in a later pass — the field is in
+        // the wire shape so the desktop doesn't need to change then.
+        display_name: corpus_id.to_string(),
+        total_atoms: summary.atom_count,
+        atom_counts: summary.atom_counts,
+        last_extracted_unix,
+        display_category,
+        display_icon,
+        subtype_counts: summary.subtype_counts,
+        declared_types,
+    })
+}
+
+/// Read the `[display]` block from `<index_dir>/_corpus_meta.json`
+/// (the parent of the atlas directory). Returns
+/// `(category, icon)` — either or both `None` on legacy indexes
+/// pre-dating the field, malformed meta, or missing file.
+///
+/// Light-weight: parses just enough JSON to extract the two fields
+/// rather than pulling in the full `IndexMeta` deserialiser (which
+/// the corpus-engine crate keeps `pub(crate)`).
+fn read_display_meta(atlas_dir: &Path) -> (Option<String>, Option<String>) {
+    let Some(index_dir) = atlas_dir.parent() else {
+        return (None, None);
+    };
+    let meta_path = index_dir.join("_corpus_meta.json");
+    let Ok(raw) = std::fs::read(&meta_path) else {
+        return (None, None);
+    };
+    #[derive(serde::Deserialize)]
+    struct Probe {
+        #[serde(default)]
+        display: Option<DisplayProbe>,
+    }
+    #[derive(serde::Deserialize)]
+    struct DisplayProbe {
+        #[serde(default)]
+        category: Option<String>,
+        #[serde(default)]
+        icon: Option<String>,
+    }
+    match serde_json::from_slice::<Probe>(&raw) {
+        Ok(p) => match p.display {
+            Some(d) => (d.category, d.icon),
+            None => (None, None),
+        },
+        Err(_) => (None, None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+    use tempfile::TempDir;
+    use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};
+    use understanding_vocab::taxonomy::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
+    };
+
+    fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
+        std::fs::create_dir_all(atlas_dir).unwrap();
+        let file = AtomsFile::new(atoms);
+        std::fs::write(
+            atlas_dir.join("atoms.json"),
+            serde_json::to_vec_pretty(&file).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn sample_entity(id: usize, name: &str) -> AtomEnvelope {
+        AtomEnvelope::Entity(Entity {
+            id: AtomId::entity(id),
+            canonical_name: name.into(),
+            aliases: vec![],
+            entity_type: EntityType::Concept,
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: "x".into(),
+            defining_quote: None,
+            salience: 0.5,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: vec![],
+            provenance: Default::default(),
+            attributes: serde_json::Map::new(),
+            concept_kind: None,
+        })
+    }
+
+    fn sample_claim(id: usize, content: &str) -> AtomEnvelope {
+        AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
+            id: AtomId::claim(id),
+            content: content.into(),
+            discourse_act: DiscourseAct::Assert,
+            epistemic_status: EpistemicStatus::Confident,
+            scope: ClaimScope::Universal,
+            evidence: vec![],
+            quotable_excerpt: None,
+            attributed_to: None,
+            confidence: None,
+            anchor: None,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+        })
+    }
+
+    fn make_reader() -> (TempDir, FileAtlasReader) {
+        let tmp = tempfile::tempdir().unwrap();
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
+        (tmp, reader)
+    }
+
+    #[tokio::test]
+    async fn list_corpora_returns_empty_when_indexes_dir_missing() {
+        let reader = FileAtlasReader::new(
+            PathBuf::from("/this/path/does/not/exist/xyz"),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
+        let summaries = reader.list_corpora().await.unwrap();
+        assert!(summaries.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_corpora_skips_corpora_without_atlas() {
+        let (tmp, reader) = make_reader();
+        // Two corpora — only one has an atlas.
+        std::fs::create_dir_all(tmp.path().join("plain-corpus")).unwrap();
+        write_atoms(
+            &tmp.path().join("wikipedia").join("atlas"),
+            vec![sample_entity(1, "Earth")],
+        );
+        let summaries = reader.list_corpora().await.unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].corpus_id, "wikipedia");
+    }
+
+    #[tokio::test]
+    async fn list_corpora_counts_atoms_by_type() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep-epistemology").join("atlas"),
+            vec![
+                sample_entity(1, "Knowledge"),
+                sample_entity(2, "Belief"),
+                sample_claim(1, "Knowledge is justified true belief."),
+            ],
+        );
+        let summaries = reader.list_corpora().await.unwrap();
+        assert_eq!(summaries.len(), 1);
+        let s = &summaries[0];
+        assert_eq!(s.corpus_id, "sep-epistemology");
+        assert_eq!(s.total_atoms, 3);
+        assert_eq!(s.atom_counts.get(&AtomType::Entity).copied(), Some(2));
+        assert_eq!(s.atom_counts.get(&AtomType::Claim).copied(), Some(1));
+        // Untouched types are absent from the map (not zero) —
+        // BTreeMap deserialises cleanly either way.
+        assert!(!s.atom_counts.contains_key(&AtomType::Question));
+    }
+
+    #[tokio::test]
+    async fn list_corpora_sorts_alphabetically() {
+        let (tmp, reader) = make_reader();
+        for name in ["zeta", "alpha", "mu"] {
+            write_atoms(
+                &tmp.path().join(name).join("atlas"),
+                vec![sample_entity(1, name)],
+            );
+        }
+        let summaries = reader.list_corpora().await.unwrap();
+        let ids: Vec<&str> = summaries.iter().map(|s| s.corpus_id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha", "mu", "zeta"]);
+    }
+
+    #[tokio::test]
+    async fn list_corpora_skips_tier2_mirror_dirs() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep-mind").join("atlas"),
+            vec![sample_entity(1, "Mind")],
+        );
+        // Tier-2 workspace mirror — has an atlas-shaped dir but
+        // shouldn't surface as a corpus.
+        write_atoms(
+            &tmp.path().join("sep-mind-tier2").join("atlas"),
+            vec![sample_entity(1, "Mind")],
+        );
+        let summaries = reader.list_corpora().await.unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].corpus_id, "sep-mind");
+    }
+
+    #[tokio::test]
+    async fn list_corpora_skips_dotted_and_underscored_dirs() {
+        let (tmp, reader) = make_reader();
+        for name in [".scratch", "_tmp"] {
+            write_atoms(
+                &tmp.path().join(name).join("atlas"),
+                vec![sample_entity(1, name)],
+            );
+        }
+        write_atoms(
+            &tmp.path().join("real-corpus").join("atlas"),
+            vec![sample_entity(1, "Real")],
+        );
+        let summaries = reader.list_corpora().await.unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].corpus_id, "real-corpus");
+    }
+
+    #[tokio::test]
+    async fn list_corpora_skips_corpus_with_corrupt_atoms_json() {
+        let (tmp, reader) = make_reader();
+        // Good corpus.
+        write_atoms(
+            &tmp.path().join("good").join("atlas"),
+            vec![sample_entity(1, "Good")],
+        );
+        // Corrupt corpus — atoms.json exists but isn't valid JSON.
+        let bad_atlas = tmp.path().join("bad").join("atlas");
+        std::fs::create_dir_all(&bad_atlas).unwrap();
+        std::fs::write(bad_atlas.join("atoms.json"), b"{not json").unwrap();
+        // Reader logs a warning and skips the bad one, doesn't fail.
+        let summaries = reader.list_corpora().await.unwrap();
+        let ids: Vec<&str> = summaries.iter().map(|s| s.corpus_id.as_str()).collect();
+        assert_eq!(ids, vec!["good"]);
+    }
+
+    #[test]
+    fn atlas_dir_resolves_known_corpus() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("wikipedia").join("atlas"),
+            vec![sample_entity(1, "Earth")],
+        );
+        let dir = reader.atlas_dir("wikipedia").expect("atlas dir resolves");
+        assert!(dir.ends_with(Path::new("wikipedia/atlas")));
+    }
+
+    #[test]
+    fn atlas_dir_returns_none_for_corpus_without_atlas() {
+        let (tmp, reader) = make_reader();
+        std::fs::create_dir_all(tmp.path().join("plain")).unwrap();
+        assert!(reader.atlas_dir("plain").is_none());
+        assert!(reader.atlas_dir("nonexistent").is_none());
+    }
+
+    #[test]
+    fn atlas_corpus_summary_serialises_cleanly() {
+        // The Tauri layer relies on this DTO crossing the IPC
+        // boundary. Pin the wire shape so a refactor doesn't
+        // silently break the desktop.
+        let summary = AtlasCorpusSummary {
+            corpus_id: "wikipedia".into(),
+            display_name: "wikipedia".into(),
+            total_atoms: 3,
+            atom_counts: BTreeMap::from([(AtomType::Entity, 2), (AtomType::Claim, 1)]),
+            last_extracted_unix: Some(1_700_000_000),
+            display_category: Some("reference".into()),
+            display_icon: Some("book".into()),
+            subtype_counts: BTreeMap::new(),
+            declared_types: Vec::new(),
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        assert!(json.contains("\"corpus_id\":\"wikipedia\""));
+        assert!(json.contains("\"total_atoms\":3"));
+        assert!(json.contains("\"display_category\":\"reference\""));
+        // A corpus that declares nothing puts NOTHING on the wire — wikipedia
+        // is one of the three prebuilt genres, and its row must stay byte-
+        // identical to what the desktop already parses.
+        assert!(!json.contains("subtype_counts"), "{json}");
+        assert!(!json.contains("declared_types"), "{json}");
+        let back: AtlasCorpusSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, summary);
+    }
+
+    /// A declared corpus carries its nouns, their hierarchy and their identity
+    /// criterion across the IPC boundary — the three things the viewer needs
+    /// to render "coin 13" instead of "Entity 32" and to roll `sceatta` into
+    /// `coin`.
+    ///
+    /// Falsifier: drop `specializes` from the row and a viewer has counts with
+    /// no way to know that `sceatta` is a kind of `coin`.
+    #[test]
+    fn a_declared_corpus_carries_its_nouns_across_the_wire() {
+        let summary = AtlasCorpusSummary {
+            corpus_id: "wessex-hoard".into(),
+            display_name: "wessex-hoard".into(),
+            total_atoms: 100,
+            atom_counts: BTreeMap::from([(AtomType::Entity, 40)]),
+            last_extracted_unix: None,
+            display_category: None,
+            display_icon: None,
+            subtype_counts: BTreeMap::from([("coin".into(), 13), ("sceatta".into(), 2)]),
+            declared_types: vec![
+                DeclaredTypeRow {
+                    name: "coin".into(),
+                    kind: "entity".into(),
+                    specializes: None,
+                    identity_criterion: Some("external:catalogue_ref".into()),
+                },
+                DeclaredTypeRow {
+                    name: "sceatta".into(),
+                    kind: "entity".into(),
+                    specializes: Some("coin".into()),
+                    identity_criterion: Some("external:catalogue_ref".into()),
+                },
+            ],
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        let back: AtlasCorpusSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, summary);
+
+        // The roll-up a viewer has to do, done here so the shape is proven to
+        // support it: coin = its own 13 plus the 2 sceattas that specialize it.
+        let family: u64 = back
+            .declared_types
+            .iter()
+            .filter(|t| t.name == "coin" || t.specializes.as_deref() == Some("coin"))
+            .filter_map(|t| back.subtype_counts.get(&t.name))
+            .sum();
+        assert_eq!(family, 15);
+    }
+
+    /// The three answers this must keep apart: no atlas at all is the only
+    /// ERROR; an atlas with no report yet is a successful `reported: false`;
+    /// and a report too broken to parse is also `reported: false`, never a
+    /// half-verdict shown to a user (§18.3). Collapsing the first two would
+    /// make an unbuilt corpus look like a missing one.
+    ///
+    /// Falsifier: return `reported: true` whenever the file exists, and the
+    /// truncated-file case starts reporting a verdict nobody computed.
+    #[tokio::test]
+    async fn build_report_separates_unbuilt_from_undeclared() {
+        let tmp = TempDir::new().unwrap();
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(
+                AtlasPortDouble::new()
+                    .with_computed_summaries()
+                    .on_ann_table_is_fresh(|_| false),
+            ),
+        );
+
+        // No atlas dir at all is the one error case.
+        assert!(reader.build_report("nothing-here").await.is_err());
+
+        // Atlas dir, no report yet.
+        let atlas = tmp.path().join("fresh").join("atlas");
+        std::fs::create_dir_all(&atlas).unwrap();
+        let r = reader.build_report("fresh").await.unwrap();
+        assert!(!r.reported, "the report step has not run");
+        assert!(r.ontology.is_none());
+        assert!(!r.grounding_present, "no ANN table on a fresh atlas");
+
+        // A report that is PRESENT but unreadable reads as not-reported, with
+        // a warning — a half-written file must not be shown to a user as a
+        // verdict. (`reported: true` requires a report that actually parsed;
+        // whether a parsed one carries an ontology is the `Option` on the
+        // report itself, which this cannot get wrong.)
+        std::fs::write(
+            atlas.join("schema_validation.json"),
+            r#"{"schema_version": "2.1", "truncated": "#,
+        )
+        .unwrap();
+        let r = reader.build_report("fresh").await.unwrap();
+        assert!(
+            !r.reported,
+            "an unparseable report is not a verdict to show anyone"
+        );
+        assert!(r.ontology.is_none());
+    }
+
+    #[test]
+    fn display_block_in_corpus_meta_is_read_when_present() {
+        let tmp = TempDir::new().unwrap();
+        let atlas_dir = tmp.path().join("conversations-anthropic").join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        // Minimal `_corpus_meta.json` with the `[display]` block populated.
+        std::fs::write(
+            atlas_dir.parent().unwrap().join("_corpus_meta.json"),
+            r#"{
+                "corpus_id": "conversations-anthropic",
+                "corpus_name": "Claude conversations",
+                "embedding_model": "qwen-embedding-0.6b",
+                "embedding_dimensions": 1024,
+                "mesh_sharing": false,
+                "license": "private",
+                "created_at": 0,
+                "last_updated": 0,
+                "display": { "category": "conversation", "icon": "chat-bubble" }
+            }"#,
+        )
+        .unwrap();
+        let (category, icon) = read_display_meta(&atlas_dir);
+        assert_eq!(category.as_deref(), Some("conversation"));
+        assert_eq!(icon.as_deref(), Some("chat-bubble"));
+    }
+
+    #[test]
+    fn display_block_absent_returns_none_pair() {
+        let tmp = TempDir::new().unwrap();
+        let atlas_dir = tmp.path().join("legacy").join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        std::fs::write(
+            atlas_dir.parent().unwrap().join("_corpus_meta.json"),
+            r#"{"corpus_id":"legacy"}"#,
+        )
+        .unwrap();
+        let (category, icon) = read_display_meta(&atlas_dir);
+        assert!(category.is_none());
+        assert!(icon.is_none());
+    }
+
+    // ─── Collection members (SEP-shaped corpora) ──────────────
+
+    #[tokio::test]
+    async fn list_members_returns_prefixed_atlases_with_atoms() {
+        let (tmp, reader) = make_reader();
+        // The parent's own atlas is empty — the SEP shape exactly.
+        write_atoms(&tmp.path().join("sep").join("atlas"), vec![]);
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(1, "Abduction")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-logic-modal").join("atlas"),
+            vec![
+                sample_entity(2, "Necessity"),
+                sample_entity(3, "Possibility"),
+            ],
+        );
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(
+            members
+                .iter()
+                .map(|m| m.corpus_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["sep-abduction", "sep-logic-modal"],
+        );
+        assert_eq!(members[0].title, "Abduction");
+        assert_eq!(members[1].title, "Logic Modal");
+        assert_eq!(members[1].total_atoms, 2);
+    }
+
+    #[tokio::test]
+    async fn list_members_omits_zero_atom_scaffolds() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(1, "Abduction")],
+        );
+        // Scaffolded but never extracted — offering it would walk the
+        // user straight into the empty view this picker exists to avoid.
+        write_atoms(&tmp.path().join("sep-scaffold-only").join("atlas"), vec![]);
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].corpus_id, "sep-abduction");
+    }
+
+    #[tokio::test]
+    async fn list_members_excludes_parent_and_unrelated_corpora() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep").join("atlas"),
+            vec![sample_entity(1, "Philosophy")],
+        );
+        write_atoms(
+            &tmp.path().join("wikipedia").join("atlas"),
+            vec![sample_entity(2, "Earth")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(3, "Abduction")],
+        );
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].corpus_id, "sep-abduction");
+    }
+
+    #[tokio::test]
+    async fn list_members_skips_tier2_mirrors_and_shard_partitions() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(1, "Abduction")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-abduction-tier2").join("atlas"),
+            vec![sample_entity(2, "Mirror")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-partition-0").join("atlas"),
+            vec![sample_entity(3, "Shard")],
+        );
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].corpus_id, "sep-abduction");
+    }
+
+    #[tokio::test]
+    async fn list_members_is_empty_for_an_ordinary_corpus() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("wikipedia").join("atlas"),
+            vec![sample_entity(1, "Earth")],
+        );
+        // The honest answer for "wikipedia is not a collection".
+        assert!(reader.list_members("wikipedia").await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_members_returns_empty_when_indexes_dir_missing() {
+        let reader = FileAtlasReader::new(
+            PathBuf::from("/this/path/does/not/exist/xyz"),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
+        assert!(reader.list_members("sep").await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn member_title_humanises_the_slug() {
+        assert_eq!(member_title("sep", "sep-abduction"), "Abduction");
+        assert_eq!(member_title("sep", "sep-logic-modal"), "Logic Modal");
+        assert_eq!(
+            member_title("sep", "sep-african-sage_philosophy"),
+            "African Sage Philosophy",
+        );
+        // Non-ASCII first letters must not be dropped or panic.
+        assert_eq!(member_title("sep", "sep-épistémologie"), "Épistémologie");
+        // No prefix to strip → the whole id, never a blank row.
+        assert_eq!(member_title("sep", "orphan"), "Orphan");
+        assert_eq!(member_title("sep", "sep-"), "sep-");
+    }
+
+    /// The numismatics real-mode fixture, validated through the SAME reader
+    /// the daemon's `atlas_http` routes use.
+    ///
+    /// `numismatics.real.spec.ts` (desktop e2e) asserts a pill row, a
+    /// filtered list and an atom inspector over a checked-in atlas that
+    /// global-setup overlays onto a real ingested corpus. Every number in
+    /// that spec comes from these three files, so if the fixture drifts — a
+    /// serde field renamed, a hand-edited atom that no longer deserialises,
+    /// `ontology.json` dropped from the overlay list — the browser spec
+    /// fails minutes into a real-mode run with a UI-shaped error a long way
+    /// from the cause. This fails in milliseconds and says which file.
+    ///
+    /// Lived in `sovereign-desktop`'s `atlas_commands.rs` until 2026-09-11;
+    /// it pins the on-disk fixture the ROUTE reads, not the command, and the
+    /// desktop no longer links this crate's reader. The fixture moved here
+    /// from `sovereign-desktop/tests/e2e/real/fixtures/` on 2026-09-21
+    /// (boundary-gate rule 3c — the climb out of this crate root); the
+    /// Playwright spec reads it across the repo, which nothing gates.
+    /// The "absent → skip" arm went with it: the fixture is committed, so a
+    /// gate that cannot fail was the wrong shape (ARCH §18.1).
+    #[tokio::test]
+    async fn numismatics_real_fixture_carries_the_census_its_spec_asserts() {
+        use crate::atlas_view::{AtomFilter, PageCursor};
+
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/numismatics-atlas");
+        assert!(
+            fixture.join("ontology.json").exists(),
+            "numismatics fixture absent at {} — it is committed; repair the \
+             checkout, do not skip",
+            fixture.display()
+        );
+
+        // Lay it out exactly as `plantNumismaticsCorpus` does: one index dir
+        // with an `atlas/` holding the three overlay files.
+        let tmp = TempDir::new().unwrap();
+        let atlas_dir = tmp.path().join("numismatics-e2e").join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        for f in ["atoms.json", "edges.json", "ontology.json"] {
+            std::fs::copy(fixture.join(f), atlas_dir.join(f))
+                .unwrap_or_else(|e| panic!("copying {f}: {e}"));
+        }
+
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
+        let rows = reader.list_corpora().await.expect("list_corpora succeeds");
+        let row = rows
+            .iter()
+            .find(|r| r.corpus_id == "numismatics-e2e")
+            .expect("the fixture corpus is listed — if not, atoms.json failed to parse");
+
+        assert_eq!(row.total_atoms, 12);
+
+        // The declaration reached the summary. WITHOUT `ontology.json` in the
+        // overlay this vector is empty and the desktop falls back to the
+        // generic atom kinds — the spec would then assert nothing about
+        // ontology while still passing on the kind pills.
+        let declared: Vec<&str> = row.declared_types.iter().map(|t| t.name.as_str()).collect();
+        // ALPHABETICAL, not declaration order. The recipe declares coin,
+        // sceatta, ruler, mint, attribution; `_summary.json` v4 carries the
+        // declaration as a `BTreeMap<String, String>`, so the order is lost
+        // before `AtlasCorpusSummary` ever sees it — and the desktop's pill
+        // row therefore separates `sceatta` from the `coin` it specializes.
+        // Pinned as it IS rather than as the P6 design assumed, so a later
+        // order-preserving change is a deliberate edit here and not a
+        // surprise (§18.3).
+        assert_eq!(
+            declared,
+            vec!["attribution", "coin", "mint", "ruler", "sceatta"],
+            "the summary's declaration map is a BTreeMap — this is pill order",
+        );
+        let sceatta = row
+            .declared_types
+            .iter()
+            .find(|t| t.name == "sceatta")
+            .expect("sceatta is declared");
+        assert_eq!(
+            sceatta.specializes.as_deref(),
+            Some("coin"),
+            "the roll-up the `coin` pill's badge depends on",
+        );
+
+        // OWN counts. The spec's `coin` badge is 5 — 3 + the 2 sceattas —
+        // and nothing here carries that total.
+        assert_eq!(row.subtype_counts.get("coin"), Some(&3));
+        assert_eq!(row.subtype_counts.get("sceatta"), Some(&2));
+        assert_eq!(row.subtype_counts.get("mint"), Some(&2));
+        assert_eq!(row.subtype_counts.get("attribution"), Some(&2));
+        assert_eq!(
+            row.subtype_counts.get("ruler"),
+            Some(&1),
+            "a `role_of` type is counted across kinds, not inside Entity",
+        );
+        assert_eq!(row.atom_counts.values().sum::<u64>(), 12);
+
+        // Clicking the `coin` pill: exact match, no roll-up.
+        let page = reader
+            .list_atoms(
+                "numismatics-e2e",
+                AtomFilter {
+                    subtypes: vec!["coin".into()],
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        let names: Vec<&str> = page.items.iter().map(|a| a.display_name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["Marlow Field 1", "Marlow Field 2", "Marlow Field 3"],
+            "the three coins, NOT the two sceattas the badge counts",
+        );
+
+        // Clicking `ruler`: a State atom on the person, found without the
+        // caller naming a kind.
+        let page = reader
+            .list_atoms(
+                "numismatics-e2e",
+                AtomFilter {
+                    subtypes: vec!["ruler".into()],
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].display_name, "King of Mercia");
+        assert_eq!(page.items[0].atom_type, AtomType::State);
+
+        // The attribution claim's "About" link, and the `ref` attribute that
+        // resolves beside one that is only what the source said.
+        let detail = reader
+            .get_atom_detail("numismatics-e2e", "claim-0001")
+            .await
+            .unwrap()
+            .expect("the attribution claim is in the fixture");
+        assert_eq!(
+            detail.referenced_atoms["entity-0008"].display_name, "Marlow Field 4",
+            "the claim's subject resolves",
+        );
+        let sceatta = reader
+            .get_atom_detail("numismatics-e2e", "entity-0008")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            sceatta.referenced_atoms["entity-0003"].display_name, "Canterbury",
+            "the `mint` ref attribute resolves",
+        );
+        let unresolved = reader
+            .get_atom_detail("numismatics-e2e", "entity-0009")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            unresolved.referenced_atoms.is_empty(),
+            "\"an unidentified continental mint\" is the source's words, not a link: {:?}",
+            unresolved.referenced_atoms,
+        );
+    }
+}

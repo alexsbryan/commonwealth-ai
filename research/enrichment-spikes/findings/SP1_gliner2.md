@@ -86,7 +86,7 @@ load, so absolute numbers are conservative but the RATIO is fair.
 > production seam (`LabeledEntityExtractor`, so this is what
 > `chunk_entities` would store), harness
 > `sovereign-gliner/examples/typing_audit.rs`, oracle
-> `sovereign/bench/gliner/typing_oracle_sep.json` (BonJour/Sosa + 17 philosopher surnames
+> `bench/lanes/gliner/typing_oracle_sep.json` (BonJour/Sosa + 17 philosopher surnames
 > that must be `Person`), fixture = the 269 sep chunks that actually
 > mention BonJour or Sosa:
 >
@@ -240,7 +240,7 @@ relations PARTIAL.
 
 ## Artifacts
 
-- `sovereign/crates/sovereign-gliner/examples/gliner2_probe.rs` (committed; dev-deps
+- `serve/crates/sovereign-gliner/examples/gliner2_probe.rs` (committed; dev-deps
   `ort =2.0.0-rc.9` + `ndarray 0.16` + `tokenizers 0.21` added to sovereign-gliner —
   versions unify with the existing lockfile, no second ORT).
 - Fixture `data/chunks_50.jsonl` (gitignored, regenerate with seed 7).

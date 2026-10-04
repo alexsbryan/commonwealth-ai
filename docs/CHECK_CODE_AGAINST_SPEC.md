@@ -157,4 +157,4 @@ flagged for you to weigh.
 `corpus_engine::facts` / `facts_check`) plus the fuzzy capability-map and per-function
 summaries. Mechanics and the other verbs (`enrich code-intel`, `code capability-map`,
 `enrich spec-reconcile`) live in
-[CODE_INTELLIGENCE.md](../sovereign/docs/CODE_INTELLIGENCE.md).*
+[CODE_INTELLIGENCE.md](../svrn/docs/CODE_INTELLIGENCE.md).*

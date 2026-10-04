@@ -15,7 +15,7 @@ in the files the row points at. When a row and the tree disagree, you stop
 
 <!-- section: review-audit -->
 **`REVIEW-audit-rd-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -28,9 +28,9 @@ you cannot make green: §6.
 | DEMO-BG | `scripts/ralph-check.sh demo-bg` — starts the full demo DETACHED (it runs ~25 min, past the 10-minute foreground limit) | prints `started pid=` |
 | DEMO-WAIT | `scripts/ralph-check.sh demo-wait` — polls up to 9 min; exit=3 means still running: call it AGAIN, as many times as it takes; then read it exactly as DEMO | as DEMO |
 <!-- section: hard-rules-scope -->
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
-  `scripts/ralph*`, or ANYTHING under `commonwealth/crates/commonwealth-rail/` or
-  `commonwealth/crates/commonwealth-rail-core/` — the RING RAIL (zero diffs there
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
+  `scripts/ralph*`, or ANYTHING under `cmnwlth/crates/commonwealth-rail/` or
+  `shared/crates/commonwealth-rail-core/` — the RING RAIL (zero diffs there
   beyond the roster-door hunk the operator permitted is the campaign predicate;
   a row that seems to need one is §6). `commonwealth-rails/` is the rails DAEMON,
   not that rule. Never stop or restart the DEPLOYED daemon (the one `svrn daemon status`

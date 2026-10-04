@@ -1,0 +1,590 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! The F26 census registry, split out of `f26_egress_census.rs` to keep
+//! the instrument under its size ceiling — the rows are unchanged; the
+//! second half is `registry_tail.rs`.
+
+use super::Class;
+
+/// Every HTTP-client construction site in the workspace's production
+/// src trees, reviewed 2026-08-17 (order deep-research-t2a). Each
+/// row: (repo-relative path, the file's most-privileged traffic
+/// class, construction-site count).
+///
+/// A row's count must equal what the census scan finds. When the
+/// egress boundary landed (order deep-research-t2a), the egress-class
+/// rows below changed class to their remaining local sites
+/// (LocalDaemon / InboundOnly) or disappeared (their construction
+/// moved into the boundary), and BOUNDARY_MODULE gained the Boundary
+/// row — in the SAME commit as the boundary code, per the
+/// review-moment contract.
+/// Paths reconciled 2026-09-23 after the cli-mesh carve (e20d2edd2)
+/// and atos cut (2ea67a59f): moved files are repointed; deleted files
+/// have no row.
+#[rustfmt::skip]
+pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
+    // ---- the ONE egress boundary ----
+    // The only legal construction site for remote-model (RemotePayload)
+    // and search-query (QueryEgress) clients: search_client() (30s)
+    // and model_client(timeout). Everything below is Local / Mesh /
+    // InboundOnly / OperatorSurface / TestOnly.
+    ("shared/crates/sovereign-contracts/src/egress.rs", Class::Boundary, 2),
+    // deep_research/port.rs: the live `ResearchPort` — the rung-2/3
+    // acquisition surface. Its web_search client is built by
+    // BOUNDARY_MODULE (egress.rs `search_client`), and the query
+    // egress passes the release gate (consent grant, default-deny),
+    // so the one site counted here is the /v1/models probe against
+    // the host daemon. Lifted out of sovereign-cli so the desktop
+    // stops spawning the CLI to reach it — the classification did not
+    // change with the crate.
+    ("svrn/crates/sovereign-core/src/deep_research/port.rs", Class::LocalDaemon, 1),
+    // sovereign-turn-client: the client half of the turn protocol, minted
+    // 2026-08-25 (TOPOLOGY §10 phase 6). One `reqwest::Client` for
+    // `POST /v1/conversations` + the conversation-end call; the turn itself
+    // is a WebSocket. Loopback to this host's own daemon — `turn_http` is
+    // loopback-only at both layers and refuses anything else — so the class
+    // is LocalDaemon, not egress. Nothing here leaves the machine.
+    ("shared/crates/sovereign-turn-client/src/lib.rs", Class::LocalDaemon, 1),
+    // `reach.rs` — the named reachability capability (sv-surface,
+    // 2026-09-11). One `reqwest::Client` in `ServingHost::at`, used for a
+    // `GET /v1/models` readiness probe against the base the CALLER supplies.
+    // Same class and the same reason as the row above: a probe carries no
+    // estate payload out, and the base is this host's own daemon. It is the
+    // one implementation of that probe for every surface — thirteen private
+    // copies preceded it — so this row is where a future probe-site review
+    // lands instead of in each consumer.
+    ("shared/crates/sovereign-turn-client/src/reach.rs", Class::LocalDaemon, 1),
+    // `serve_self.rs` — serve's self-report read (`GET /v1/engine/self`) at
+    // this host's serve, moved from the daemon's serve_client at
+    // pb-meshapp-rest so code's editor door shares it. 1 -> 2
+    // (pb-mesh-exit-transport): `read_engine_state` moved here from the
+    // daemon's serve_client so `svrn mesh plan|bench` share it. 2 -> 1
+    // (pc-split-deploy-honesty-serve-reach, cf4ead9cc): both reads go
+    // through one bounded reader.
+    ("shared/crates/sovereign-turn-client/src/serve_self.rs", Class::LocalDaemon, 1),
+    // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
+    // `TurnClient::new(base_url)` over the same client family the desktop
+    // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.
+    // The base url is the OWNER's own daemon on the LAN or over the mesh,
+    // reached by pairing — the estate's own transport, not a third party,
+    // and no estate content leaves the estate. Class Mesh for the same
+    // reason peer traffic is: own auth (the daemon's), custody class peer.
+    // Joined the workspace 2026-09-10, which is when the census first saw
+    // it.
+    ("clients/mobile/src-tauri/src/remote/client.rs", Class::Mesh, 3),
+    // sovereign-cli `svrn quality check` (2026-09-04, order quality-check-lean;
+    // the module became a directory on 2026-09-07 in registry-1-selections, so
+    // the one row became two — same two clients, same class, split across the
+    // files that now own them). Both `reqwest::Client`s talk to the host daemon
+    // on :9741: the stack fingerprint reads `/v1/models`, and the `SlotDecodes`
+    // precondition sends a one-token completion so a lane never runs against a
+    // daemon that answers the models route but cannot decode. Both loopback;
+    // neither carries estate content off the machine. LocalDaemon, not egress.
+    ("svrn/crates/sovereign-cli/src/quality_check_cmd/fingerprint.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli/src/quality_check_cmd/exec.rs", Class::LocalDaemon, 2),
+
+    // ---- sovereign-mesh: the estate's own transport (Mesh) ----
+    // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.
+    // Not third-party egress — the boundary does not gate the estate's
+    // own substrate.
+    // 15 -> 17 (2026-08-27): the `mesh_switch` handler and the two new rotate
+    // tests each construct a client for loopback calls to our own daemon.
+    // Class unchanged — mesh transport, never third-party egress.
+    // 17 -> 16 (2026-09-04, cw-lift 2d, ce42f893f): mesh-measurements moved
+    // onto the ring rail, taking one construction site with it. A DECREMENT
+    // is registered for the same reason an increment is — the census is a
+    // count, and an unexplained fall hides a capability that left.
+    // Re-keyed 2026-09-17 (REVIEW-audit-daemon-1): the mesh host cluster moved
+    // to `sovereign-daemon` (domains dm-daemon-mesh-edge/jobs/adapters). Path
+    // only — every count below is unchanged, the sites travelled with the file.
+    // Re-keyed at the origin/main merge (2026-09-25): ff94f3786 moved
+    // `mesh_http`'s trailing `#[cfg(test)] mod tests` to `mesh_http_tests.rs`
+    // under `#[path]`, and every one of the 16 sites was in it — the route
+    // file itself constructs none. 16 -> 17 is the same commit's new
+    // served-join-link test. A `#[cfg(test)]`-only file is TestOnly, as
+    // `tests/rpc_warm_http.rs` is above. 17 -> 15 (pb-serve-placement): the
+    // `/v1/mesh/measurements` door and its two tests retired. 15 -> 16
+    // (pb-serve-ranks-discovery, 163ecfe35): the rpc-workers test reads
+    // `/v1/mesh/status` from its own test router, loopback. 16 -> retired
+    // (pb-mesh-exit-transport): the routes it drove are cw-rails', and
+    // `mesh_http_tests.rs` went with them.
+    // NEW (2026-09-04, cw-lift 2f, bc600f424): the ring rail's anti-entropy
+    // sender. `exchange` POSTs a RingSyncRequest to `/internal/ring/sync` on
+    // each online peer, plus the inline `#[cfg(test)]` module that binds a
+    // real socket — src/ files carry their test sites into the census.
+    // Class::Mesh: peer traffic on the estate's own transport, our own auth,
+    // custody class peer. It carries signed ring ops, never estate content to
+    // a third party.
+    // 5 -> 9 (2026-09-08): four more inline `#[cfg(test)]` exchanges — the
+    // seal-prune pair (4a), then the derived-roster prune test and its
+    // control half (3c9a41bd8). Every one binds a loopback `internal_router`.
+    // 9 -> 13 (2026-09-08, cw-lift 4): the mesh store becomes a projection of
+    // the rail, and its four two-node tests each drive one — a write reaching
+    // a peer's store, a delete that an older write does not undo, a seal with
+    // its snapshot, and a private namespace that reaches neither. All
+    // loopback `internal_router`.
+    // 13 -> 14 at cw-lift rung 2e: one more `reqwest::Client::new()` in this
+    // file's TEST module, driving the receiver-side privacy guard through the
+    // real `/internal/ring/sync` route. This census counts every line in
+    // `src/` including test modules, deliberately — a client built in a test
+    // is still a client this file constructs — so a new two-node test is a
+    // count bump and not a re-classification.
+    // 14 -> 15 (cw-lift 4, the seal reconciliation):
+    // `a_seal_carries_a_delete_the_peer_never_received` drives the two-node
+    // reproduction of a tombstone stranded by the seal that retired it, over
+    // the same loopback `internal_router`. The partial-pull control beside it
+    // feeds the fold directly and builds no client.
+    // 15 -> 16 (2026-09-08, aff5873f1): retention became part of the fold, and
+    // `a_retention_sweep_is_not_undone_by_the_next_projection` drives the
+    // two-node reproduction — a sweep on A, then B's next projection round —
+    // over the same loopback `internal_router`. One more `exchange` client in
+    // this file's test module; class unchanged.
+    // The three `ring_sync` test modules (9/4/3 sites) moved from
+    // `sovereign-mesh/src/ring_sync/{tests,projection_tests,snapshot_tests}.rs`
+    // to `sovereign-mesh/tests/main/` at `dm-daemon-api-edge` (they cannot name
+    // `sovereign-daemon` from a `#[cfg(test)]` module without a second
+    // `sovereign_mesh` build). The census scans production `src/` only, so those
+    // sites are out of scope now and their rows are removed, not re-keyed —
+    // the files still hold 9/4/3 sites, but no longer as production code.
+    // Re-keyed (pb-cli-llm-bench-move, repairing pb-serve-distributes b13c2ab8b):
+    // the rpc-warm worker moved to sovereign-compute, its two sites with it.
+    ("serve/crates/sovereign-compute/src/distributed_warm/worker.rs", Class::Mesh, 2),
+    // The 2026-09 split of rpc_warm_http.rs moved sites into a sibling
+    // orchestrator and a test module; neither had a row, so this census was
+    // already red on main before the FIVE_PROGRAMS cut touched it.
+    // Re-keyed at pb-serve-distributes: the orchestrator moved whole to
+    // sovereign-compute (count unchanged, 2).
+    ("serve/crates/sovereign-compute/src/distributed_warm.rs", Class::Mesh, 2),
+    // Re-keyed with it (b13c2ab8b): the worker's tests, same four sites.
+    ("serve/crates/sovereign-compute/src/distributed_warm/worker_tests.rs", Class::TestOnly, 4),
+    // mesh_proof_outbound.rs's stamp fixture: retired with the mesh proof
+    // (pb-mesh-exit-transport).
+    // 5 -> 7 (2026-08-23): the two reload-diff regression tests
+    // (`reload_applies_a_context_size_change_without_a_restart`,
+    // `reload_applies_a_code_slot_change_without_a_restart`) each build a
+    // client to POST /v1/admin/reload. Inline `#[cfg(test)]` lives in a
+    // src/ file, so the census counts it; the class is unchanged — this is
+    // loopback admin traffic to our own daemon, never third-party egress.
+    // 7 -> 8 (2026-09-04): a third reload-diff regression test
+    // (`reload_applies_an_extra_slot_without_a_restart`, commit eb215a8b4)
+    // builds the same loopback client to POST /v1/admin/reload. Same class,
+    // same reason.
+    // 8 -> 10 (2026-09-12): the two `context_window_*` tests
+    // (`context_window_reports_the_daemons_slot`,
+    // `context_window_reports_absence_rather_than_echoing_configured`) build
+    // the same loopback client to GET /v1/admin/context-window. Reviewed
+    // here rather than deferred: every one of the ten sites is inside this
+    // file's `#[cfg(test)] mod tests` (opens at admin_http.rs:290) and dials
+    // a spawned admin router on loopback, so the class is unchanged and no
+    // new egress appears. Counted from a WORKING TREE another session had
+    // not yet committed — if those tests do not land, this goes back to 8.
+    //
+    // 10 -> 13 (2026-09-12, recorded by svt-6 and NOT svt-6's change). The
+    // prediction above resolved the other way: the tests landed and three
+    // more came with them. NOT this order's work, and checked rather than
+    // assumed — `admin_http.rs` counts 13 at `c290f6772`, the parent of
+    // svt-6's first commit, and the file is untouched in svt-6's working
+    // tree. The registry row simply had not been re-run since.
+    //
+    // Classified on the sites themselves. `#[cfg(test)] mod tests` opens at
+    // admin_http.rs:351, and all thirteen constructions are below it
+    // (611..1204): three `GET /v1/admin/chat-activity` (:771, :810, :847 —
+    // the window-parameter cases), six `POST /v1/admin/reload` (:874, :912,
+    // :966, :1028, :1080, :1113, one of them dialing an explicit
+    // `http://{addr}` at :1172), and the two `/v1/admin/context-window`
+    // reads above. Every destination is a router this test spawned on
+    // loopback in the same process. `Class::Mesh` is unchanged and correct:
+    // no third-party host is dialed, and no estate content crosses a
+    // boundary — there is no boundary to cross.
+    //
+    // 13 -> 14 (2026-09-18, recorded by rr-1-claim-support-names-the-member,
+    // NOT its change): 031a32294's `reload_moves_the_media_origin_without_a_restart`
+    // POSTs /v1/admin/reload (:1281) to the router it spawned on loopback,
+    // inside `mod tests` — same class, no new egress.
+    //
+    // 14 -> split (2026-09-18, REVIEW-build-rr-1-band-split e85076537): the
+    // test module moved verbatim to child files, so the fourteen sites moved
+    // with it — the eight reload tests to `tests/reload.rs`, the other six to
+    // `tests.rs`. Same sites, same class; `admin_http.rs` itself has none.
+    //
+    // reload.rs 8 -> 7 (pb-mesh-exit-transport): the media-origin reload test
+    // retired with the daemon's media acceptor (cw-rails owns `[media]`).
+    ("svrn/crates/sovereign-daemon/src/admin_http/tests.rs", Class::Mesh, 6),
+    ("svrn/crates/sovereign-daemon/src/admin_http/tests/reload.rs", Class::Mesh, 7),
+    // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
+    // weights surface — hardware / catalog / slot / NER reads plus the one
+    // asset-download job. All five constructions are inside its
+    // `#[cfg(test)] mod route_tests`, which lives in a src/ file and is
+    // therefore counted, the same shape as `admin_http.rs` above: four
+    // `reqwest::Client::new()` and one `reqwest::get(...)`, every one dialing
+    // an `assets_router` this test spawned on loopback in the same process, or
+    // a stub GGUF server it also spawned there.
+    //
+    // `Class::Mesh` is correct and the PRODUCTION side is the reason to be
+    // sure: the handlers construct no HTTP client at all. They delegate to
+    // `setup_planner::download_gguf` and `gliner_ner::download_model`, whose
+    // clients are registered on their own rows — so this route family adds a
+    // download SURFACE without adding an egress site, which is the property
+    // this census exists to keep visible.
+    //
+    // FOUR, not the five `reqwest::` calls the file spells: the fifth is a
+    // bare `reqwest::get(..)`, which this census's `count_sites` does not
+    // recognise (it counts `Client::new(` / `Client::builder(` plus the
+    // PREFIXED forms). Recorded rather than "corrected" — widening the
+    // detector is a change to every row's number and belongs to whoever
+    // re-baselines the whole file, not to a row being added.
+    //
+    // 4 -> 1 at pb-serve-distributes (reconciled at pb-cli-llm-bench-move): the
+    // handlers became forwards to serve, and their route tests moved to
+    // sovereign-compute, two sites to assets/route_tests.rs (0c264ec53) and one
+    // to setup_reads/tests.rs (1d60dad61). The one left is the forward test.
+    ("svrn/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 1),
+    // `#[cfg(test)]`-only files, each dialing a router its test bound on
+    // loopback. setup_reads' second site is 1d60dad61's own new test.
+    ("serve/crates/sovereign-compute/src/assets/route_tests.rs", Class::TestOnly, 2),
+    ("serve/crates/sovereign-compute/src/setup_reads/tests.rs", Class::TestOnly, 2),
+    // Re-keyed at REVIEW-audit-pb-auto-7: the file moved to sovereign-code
+    // at pb-code-freshness (c173a8042). Same four sites, same class.
+    ("code/crates/sovereign-code/src/project_http.rs", Class::Mesh, 4),
+    // The editor door (moved from the daemon at pb-meshapp-rest): one client
+    // for the model lane's calls to serve's loopback base on this host.
+    ("code/crates/sovereign-code/src/edit_predictions.rs", Class::LocalDaemon, 1),
+    ("serve/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 5),
+    // Moved from sovereign-daemon/src/loopback_guard.rs with the guard itself
+    // (pb-shell, da819e9e2): the same three test-module clients, a relocation.
+    ("shared/crates/host-kit/src/shell/guard.rs", Class::Mesh, 3),
+    ("serve/crates/sovereign-serving-host/src/peer_inference.rs", Class::Mesh, 2),
+    // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
+    // 2026-08-31 when `--terminal` learned to take a join link). THREE clients,
+    // and the traffic class is unchanged — every destination is either this
+    // machine or a node on the operator's own mesh:
+    //   1. the address path's client, unchanged: `GET /status` for the entry
+    //      node's embed model id, then one `POST /v1/chat/completions` to prove
+    //      a turn comes back served, both against an address the operator typed;
+    //   2. the join path's client, same two probes against the member the mesh
+    //      says holds the models — an address nobody typed, which is the point
+    //      of the change, but still a peer of a mesh this node just joined;
+    //   3. `daemon_is_listening`, a `GET http://127.0.0.1:9741/v1/models` that
+    //      never leaves the box. Setup joins the mesh in-process and needs the
+    //      client port, so it refuses to run beside a live daemon rather than
+    //      producing the split-brain `mesh_cmd::cmd_join` documents.
+    // The only payload that leaves in any of the three is the same fixed
+    // four-word probe prompt, with no estate content in it.
+    ("svrn/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs", Class::Mesh, 3),
+    // guest_lender.rs (2026-08-28, order mesh-guest-grant): resolving a model
+    // id to a node this one holds a GUEST GRANT with, so a guest's turn runs
+    // on their own daemon and only the completion crosses. ONE site — the
+    // client that fetches the lender's `/v1/models` under the bearer, which
+    // is the authority on what the grant buys. The dispatch itself constructs
+    // nothing: it reuses `InferenceRouter::http`.
+    //
+    // Mesh, and the judgement is worth stating because a lender is NOT a mesh
+    // member and the class name reads as if it should be. Three checks:
+    //   - NOT third-party. The boundary guards egress to third-party
+    //     endpoints — commercial model providers and search engines (see the
+    //     module header; the RemotePayload exemplar is the `--provider` chat
+    //     client). A lender is another Sovereign node speaking the same
+    //     client API. Mesh peers are equally "someone else's machine"; what
+    //     separates Mesh from RemotePayload here is a Sovereign counterparty
+    //     the operator has an explicit trust relationship with, not whose
+    //     hardware it is.
+    //   - The estate's own transport, own auth. It rides GUEST_ALPN through
+    //     `sovereign_mesh::guest_tunnel` on an encrypted mesh, and the
+    //     credential is a grant that node itself issued and can revoke.
+    //   - The destination is operator-chosen and not request-derived. It
+    //     comes from `guest.json`, written only by `svrn mesh use`. No
+    //     parameter of any function here names a host, so no caller — and no
+    //     prompt — can aim it.
+    // What this row does NOT cover: widening a grant beyond
+    // `/v1/chat/completions` + `/v1/models`, or letting a request parameter
+    // choose the lender. Either is a re-classification, not a count bump.
+    //
+    // Re-keyed 2026-09-15: the resolver moved to `sovereign-serving-host`
+    // (domains REVIEW-build-serving-move-throughput-guest). The count is
+    // unchanged — the one `reqwest::Client` that fetches the lender's
+    // `/v1/models` is still the only construction site.
+    ("serve/crates/sovereign-serving-host/src/guest_lender.rs", Class::Mesh, 1),
+    // 2 -> 1 at d413b052b: the newsworthy watcher's MediaWiki client moved
+    // into corpus-engine's daemon port (registered there, InboundOnly).
+    // Re-keyed at pb-serve-distributes: the one left, RPC-worker discovery's
+    // `/status` probe client, moved with discovery to serving-host.
+    ("serve/crates/sovereign-serving-host/src/rpc_discovery.rs", Class::Mesh, 1),
+    ("svrn/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
+    // Moved from sovereign-mesh (pb-mesh-exit-mesh): the canonical pull's
+    // peer client. Class and count unchanged.
+    ("svrn/crates/sovereign-daemon/src/canonical_pull.rs", Class::Mesh, 1),
+    // Re-keyed 2026-09-16: the two knowledge-surface clients moved to the
+    // client family, `sovereign-turn-client` (domains
+    // REVIEW-build-mesh-client-pair, DAEMON_CORE.md §4.3). Class and count
+    // unchanged — the one `reqwest::Client` each file constructs still posts
+    // to the daemon's own surface.
+    ("shared/crates/sovereign-turn-client/src/landscape_digest_client.rs", Class::Mesh, 1),
+    ("shared/crates/sovereign-turn-client/src/knowledge_client.rs", Class::Mesh, 1),
+    // pb-atlas-kv: the one `ReplicatedKv` client over cw-rails' KV doors,
+    // moved from the daemon's rails_client (whose shared client it used) —
+    // its own client now, dialed only from its one dial thread. The work
+    // atlas's claim records ride it to the mesh's rails daemon.
+    ("shared/crates/sovereign-turn-client/src/rails_kv.rs", Class::Mesh, 1),
+    // rails_origins.rs: the origin register/renew loop against cw-rails,
+    // moved from the daemon (pb-serve-distributes-standalone) so serve and
+    // svrn share it. Same class as rails_kv above.
+    ("shared/crates/sovereign-turn-client/src/rails_origins.rs", Class::Mesh, 1),
+    // sovereign-mesh's gossip.rs: retired (pb-mesh-exit-transport); cw-rails
+    // gossips the node.
+
+    // ---- sovereign-pods: the rented-pod modules (Wave 1); Class::Mesh per the enum doc's "pod traffic" ----
+    ("cmnwlth/crates/sovereign-pods/src/worker_http.rs", Class::Mesh, 6),
+    ("cmnwlth/crates/sovereign-pods/src/worker_subprocess_runner.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/sovereign-pods/src/worker_inference_proxy.rs", Class::Mesh, 1),
+
+    // ---- sovereign-desktop: the host daemon on :9741 (LocalDaemon) ----
+    // All desktop commands talk to the local daemon's /internal/*
+    // surfaces; never third-party egress. (conversation.rs once
+    // carried a Search-the-web client here, counted LocalDaemon 1 at
+    // the red — the re-home review at landing found it dispatched
+    // External queries and its construction moved into the boundary;
+    // the row is gone with the site.)
+    ("clients/desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 9),
+    // 8 -> 9 (2026-09-11, thin-desktop slice 4, registered 2026-09-12): the
+    // starter-corpus install stopped downloading `federalist-starter.tar.zst`
+    // in-process and became `POST /internal/corpus/install` + a poll; the new
+    // construction is `install_failure`, which reads
+    // `/internal/corpus/status` to recover the daemon's OWN failure sentence
+    // rather than inventing one. Same loopback surface, class unchanged. The
+    // census caught this a commit late because nothing ran it at slice 4 —
+    // the review moment is here rather than there, and the answer is the same.
+    // 7 -> 8 (2026-09-09, sv-surface rung 5): the workflow surfaces became
+    // job-submission clients of the daemon's /internal/workflows/* — this
+    // file's site is the Local Knowledge panel's watch-route client, one
+    // more construction for the same loopback surface. Class unchanged.
+    //
+    // 8 -> 7 (2026-09-12, landed at ed959fe29, recorded by svt-6). A
+    // REMOVAL, which is the direction this census almost never moves: the
+    // correction-ledger write that `lc_reenrich_note` performed against its
+    // own `sovereign.db` became a field on the daemon's
+    // `enrich/reenrich-note` body at sv-surface svt-3, and the client it
+    // built went with it. Verified rather than attributed — the count is 7
+    // at `ed959fe29` and 8 at its parent `5cc5c84c7`, and svt-6's own
+    // commits leave it at 7.
+    //
+    // The seven that remain are all this class and all loopback: the
+    // one-shot `enrich-once` handoff (:295/:298 and :564), the OCR
+    // extraction client (:610/:613), the watch-route client (:645) and the
+    // sweep client (:740). Every destination is `127.0.0.1:<internal_port>`
+    // on this machine's own daemon; nothing here reaches a third party, and
+    // the desktop no longer holds an engine that could.
+    ("clients/desktop/src-tauri/src/local_corpus_commands.rs", Class::LocalDaemon, 7),
+    // NEW (2026-09-09, sv-surface rung 5): workflow_commands.rs's http_client()
+    // — the Run-a-workflow surface now POSTs the job to the daemon and polls
+    // its events (the in-process runner is deleted; the daemon executes).
+    ("clients/desktop/src-tauri/src/workflow_commands.rs", Class::LocalDaemon, 1),
+    // NEW (2026-09-09, sv-surface R4/B2): main.rs's readiness probe — the
+    // backend-ready gate now GETs this host's own daemon /v1/models until
+    // the port answers (250ms interval, 90s deadline). Loopback only; the
+    // probe IS the readiness signal, so it cannot reuse a longer-timeout
+    // command client without lying about liveness.
+    ("clients/desktop/src-tauri/src/main.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/commands/contribution.rs", Class::LocalDaemon, 7),
+    ("clients/desktop/src-tauri/src/commands/budget.rs", Class::LocalDaemon, 6),
+    ("clients/desktop/src-tauri/src/import_commands.rs", Class::LocalDaemon, 2),
+    ("clients/desktop/src-tauri/src/commands/hardware.rs", Class::LocalDaemon, 2),
+    ("clients/desktop/src-tauri/src/watched_folder_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/recipe_commands.rs", Class::LocalDaemon, 1),
+    // 1 -> 2 (2026-09-22, merged from local `mesh media` work 11b01ec84):
+    // `probe_media_url` — the click-path probe that reports an HTTP status
+    // instead of opening a dead tab. Loopback-http ONLY by construction
+    // (`is_loopback_http` admits 127.0.0.1 / localhost / [::1] and nothing
+    // else — the same rule the daemon-side bridge contract enforces), so the
+    // class is unchanged: LocalDaemon, never a general fetch gadget.
+    ("clients/desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 2),
+    // guest_door.rs (merged from the-ring work, 2026-09-22): the daemon's
+    // guest-facing door proxies an INBOUND guest request to the PUBLISHED
+    // app's own loopback port — `http://{addr}/…` where the address is the
+    // app's 127.0.0.1 bind ("nothing is listening on its loopback port" is
+    // the door's own 502 text). Two `reqwest::Client::new()` sites: the
+    // method-preserving proxy and the index's plain GET. Client construction
+    // is loopback → LocalDaemon; the door's inbound face is not this
+    // census's question (no estate payload is constructed toward a
+    // third party here).
+    ("svrn/crates/sovereign-daemon/src/guest_door.rs", Class::LocalDaemon, 2),
+    // guest_room_commands.rs (merged from the-ring work, 2026-09-22): the
+    // desktop's guest-grant create/list/revoke + the `/v1/mesh/status` dial
+    // read. Every URL is `state.client_base_url()` — this host's own daemon
+    // (`/internal/guest/grant` and friends). LocalDaemon, same reason as the
+    // turn-client rows above.
+    ("clients/desktop/src-tauri/src/guest_room_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
+    // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
+    // read /status.process.pid on a run-lock refusal; the app takes no run
+    // lock now — it never hosts a daemon — so the site is gone with it.
+    //
+    // commands/models.rs ROW REMOVED 2026-09-12 (sv-surface svt-7). Its one
+    // site was `download_model`'s OWN `reqwest::Client::builder()` — a third
+    // GGUF downloader, with its own HF_TOKEN read, content-type sniff, `.part`
+    // handling and validator, writing into a models root this process does
+    // not own. It is `POST /v1/admin/assets/download` now, so the bytes cross
+    // on the daemon's client and the app holds none. A row LEAVING this
+    // registry is the outcome the census is for.
+    ("clients/desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/collaborate_commands.rs", Class::LocalDaemon, 1),
+    ("clients/desktop/src-tauri/src/bootstrap.rs", Class::LocalDaemon, 1),
+    // attach_watch.rs held a `reqwest::Client` for its own `/v1/models`
+    // poll until sv-surface (2026-09-11) moved the probe onto
+    // `ServingHost::is_serving`. The module keeps the BANNER — how many
+    // consecutive misses raise it — and constructs no client at all, which
+    // is why it has no row here.
+
+    // ---- sovereign-enrichment-build ----
+    // R-5's named path: the enrich dispatch. The chat client
+    // (complete_inner → complete_openai_compatible) moved into
+    // BOUNDARY_MODULE (egress.rs model_client) with the boundary — a
+    // host off this machine now passes the release gate (default
+    // custody Personal, no grant → typed refusal). The three remaining sites are local: the embed
+    // one-shot client + two /v1/models probes.
+    //
+    // 2026-09-02: these were one row at
+    // `sovereign-cli-llm/src/enrich_cmd/inference_client.rs` until P0's
+    // crate split moved the file, whole, into `sovereign-enrichment-build`
+    // and left the CLI crate holding only help text and flag parsing. Two
+    // rows now, because the move also split the module in two. Same three
+    // sites, same class, same total — the census caught the stale path, which
+    // is what a per-file count is for. `discovery.rs` then moved, whole, to
+    // `shared/crates/corpus-index/src/v1_models.rs` (pb-code-clean): same two sites.
+    ("shared/crates/corpus-index/src/v1_models.rs", Class::LocalDaemon, 2),
+    ("ingest/crates/sovereign-enrichment-build/src/inference_client/mod.rs", Class::LocalDaemon, 1),
+
+    // ---- sovereign-cli-llm ----
+    // 7 -> 10 (2026-08-27): `mesh rotate`, `mesh leave` and `mesh switch` each
+    // now prefer the running daemon over an in-process fallback (the `cmd_join`
+    // pattern), so each builds a client for 127.0.0.1 loopback. `mesh rotate`
+    // in particular HAD to move: an offline rotation was reverted by the next
+    // gossip round. Class unchanged — loopback to our own daemon.
+    // 8 -> 7 (2026-09-27): fetch-model's peer client moved to
+    // sovereign-serve/src/fetch_model.rs (c2529c94c).
+    // 7 -> 6 (pb-serve-placement): `mesh plan`'s live-mesh read moved to
+    // sovereign-serve/src/mesh_plan.rs.
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 6),
+    // `mesh plan`'s read of the local daemon's `/v1/mesh/status`
+    // (pb-serve-placement, from mesh_cmd.rs). Loopback to our own daemon.
+    ("serve/crates/sovereign-serve/src/mesh_plan.rs", Class::LocalDaemon, 1),
+    // NEW 2026-08-28: `svrn mesh forget-member`, the repair for an
+    // endpoint-key collision, posts to the running daemon's
+    // /v1/mesh/forget-member. Class Mesh — 127.0.0.1 loopback to our own
+    // daemon, and deliberately so: the roster lives in the daemon's memory,
+    // and an offline edit to mesh.json would be reverted by the next gossip
+    // round exactly as `mesh rotate`'s was. One site; the collision WARNING
+    // that names this command is pure rendering and builds no client.
+    (
+        "cmnwlth/crates/sovereign-cli-mesh/src/mesh_member_cmd.rs",
+        Class::Mesh,
+        1,
+    ),
+    // NEW 2026-08-27: `svrn mesh grant` / `svrn mesh use`, the two ends of an
+    // ephemeral guest link. One shared `http_client()` builder serves both
+    // directions — loopback to our own daemon to mint/revoke/list, and one
+    // outbound GET to the ISSUING node's `/v1/models` so `mesh use` can refuse
+    // a dead link before storing it. Both are Commonwealth nodes, so Mesh is
+    // the honest class: no third-party model or search traffic passes here,
+    // and nothing on this path may construct a RemotePayload/QueryEgress
+    // client (that stays in the boundary).
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_guest.rs", Class::Mesh, 1),
+    // NEW 2026-09-11: `svrn mesh media <peer>`, the viewer half of federated
+    // media. One client, two loopback destinations: our own daemon's
+    // `/v1/mesh/media` to mint the bridge, then one `GET /` through that
+    // bridge — which is a 127.0.0.1 port the daemon holds and which tunnels
+    // to a MEMBER's media origin over iroh by its key. The bytes that leave
+    // the machine ride the estate's own transport to a Commonwealth node, so
+    // Mesh is the honest class; the request carries no estate content, only
+    // the probe that proves the splice answers.
+    // 1 -> 2 (2026-09-11): `mesh media fanout <path>` builds its own client to
+    // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
+    // the reaching. Same class, same reason.
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_media.rs", Class::Mesh, 2),
+    // NEW ROW (2026-09-19, ring-room rr-2-media-posture 042a74806): the HOLDER
+    // half of `mesh media offer` — the read-only viewer account it provisions
+    // on the origin before it declares a credential. One client (`viewer.rs`'s
+    // `client()`), and every request it makes goes to `http://{origin}` where
+    // `origin` came through `publish_cmd::resolve_target`, which REFUSES a
+    // non-loopback address (`publish_cmd.rs:423-429`); with no origin given the
+    // candidates are `WELL_KNOWN_ORIGINS`, both `127.0.0.1`
+    // (`mesh_media.rs:542`). So this dials a media server on this machine and
+    // nothing else — `LocalDaemon`, not `mesh_media.rs`'s `Mesh`: no byte of
+    // this exchange rides the estate's transport, the credential it writes is
+    // what LATER dials do carry.
+    (
+        "cmnwlth/crates/sovereign-cli-mesh/src/mesh_media/viewer.rs",
+        Class::LocalDaemon,
+        1,
+    ),
+    // mesh_app.rs (2026-09-12): the viewer half of published apps — asks the
+    // local daemon who publishes, then probes ONE app through the loopback
+    // bridge the daemon minted. Same shape and same class as mesh_media's
+    // probe: the bytes ride the estate's own transport to a Commonwealth
+    // node, and the request carries no estate content.
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_app.rs", Class::Mesh, 1),
+    // run_cmd.rs (2026-09-12): `svrn run` takes, renews and releases a
+    // publish claim against `127.0.0.1:<client_port>/v1/mesh/publish`. Never
+    // leaves the machine — the daemon is what reaches anybody.
+    ("cmnwlth/crates/sovereign-cli-mesh/src/run_cmd.rs", Class::LocalDaemon, 1),
+    // publish_cmd.rs (2026-09-12): bare `svrn publish` asks the daemon what is
+    // published, because a claim taken by a running `svrn run` is in no file.
+    // Loopback only; the config half of the verb dials nothing at all.
+    ("cmnwlth/crates/sovereign-cli-mesh/src/publish_cmd.rs", Class::LocalDaemon, 1),
+    // mesh_skew.rs (2026-09-12, hm-3): explains a mesh route's 404 by asking
+    // the daemon which build it is. It CONSTRUCTS no client in production —
+    // the caller hands it the one it already built — so all three sites are
+    // the inline `#[cfg(test)]` module's own fixtures. The one request the
+    // production path makes is `GET 127.0.0.1:<client_port>/status`, which is
+    // the LocalDaemon class on somebody else's client.
+    // 3 -> 5 (2026-09-13, ra-4): `render_kind_refusal` added two more
+    // `#[cfg(test)]` fixtures for the version-skew leg. Production still
+    // constructs nothing — its one new REQUEST, `probe_known_kind`, POSTs
+    // `127.0.0.1:<client_port>/v1/mesh/fanout` with an empty `peers` list on
+    // the client the caller already built. Empty `peers` is load-bearing for
+    // this class: it selects zero targets, so the control request dials no
+    // peer at all and asks no origin anything.
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_skew.rs", Class::TestOnly, 5),
+    // mesh_offers.rs (2026-09-13, ra-4): `svrn mesh offers` builds ONE client
+    // and points it only at `127.0.0.1:<client_port>` — the roster read, the
+    // fan-out POST and the single-peer reach all go to this node's own
+    // daemon, which is what reaches anybody. Mesh rather than LocalDaemon for
+    // `mesh_media`'s reason: the fan-out's bytes ride the estate's own
+    // transport to member nodes, and the request carries no estate content —
+    // the path asked is `/`, and what comes back is the seller's.
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_offers.rs", Class::Mesh, 1),
+    // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
+    // building its own client and asks `ServingHost` instead.
+    ("svrn/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
+    // `mesh bench` and remote_gguf moved to serve whole (pb-serve-placement);
+    // the sites travelled with the files.
+    ("serve/crates/sovereign-serve/src/mesh_bench/shell.rs", Class::Mesh, 3),
+    ("serve/crates/sovereign-serve/src/remote_gguf.rs", Class::InboundOnly, 2),
+    ("svrn/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
+    // probe_or_bail and resolve_model_ids moved with build_inference to
+    // oicp-client (pb-cli-llm-bench-move); the two sites travelled with them.
+    ("shared/crates/oicp-client/src/daemon_inference.rs", Class::LocalDaemon, 2),
+    // fp-26 (7e21df175): `svrn chat` asks this host's serve's
+    // `GET /internal/guest/route` for the guest link's base (the daemon's
+    // until pb-mesh-exit-mesh); serve owns the tunnel, so this client never
+    // leaves the machine.
+    ("svrn/crates/sovereign-cli-llm/src/chat_cmd/config.rs", Class::LocalDaemon, 1),
+    // 1 -> 2 (2026-09-09, sv-surface rung 5): `workflow run` and `corpus
+    // ingest`'s notebook path became job-submission clients of the daemon's
+    // /internal/workflows/* — run_assembled's poll client joins the
+    // capabilities-fetch client that was already here. Loopback daemon
+    // traffic, class unchanged.
+    ("svrn/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
+    ("code/crates/sovereign-cli-dev/src/solve_cmd.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-pipeline/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
+    // The install client moved to the CLI leaf (pb-cli-llm-ingest-move).
+    ("shared/crates/sovereign-cli-base/src/corpus_install.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-cli-bench/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-pipeline/src/bench_atlas.rs", Class::LocalDaemon, 1),
+    ("ingest/crates/sovereign-pipeline/src/alignment_cmd.rs", Class::LocalDaemon, 1),
+
+];

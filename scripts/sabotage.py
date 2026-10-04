@@ -3,7 +3,7 @@
 """
 SABOTAGE (Rust side) — does the suite actually notice when the product breaks?
 
-The sibling of sovereign/crates/sovereign-desktop/tests/e2e/scripts/sabotage.mjs,
+The sibling of clients/desktop/tests/e2e/scripts/sabotage.mjs,
 deliberately the same noun and the same bank schema. That one adjudicates
 Playwright specs; this one adjudicates the 11k-test Rust workspace, and it is
 the ADJUDICATOR for requirement conformance: a claim is minted only when the
@@ -554,8 +554,8 @@ def self_test() -> int:
     # 1. Two mutants on ONE file must never share a batch. This is the whole
     #    defect: they cannot both be present in the file at once.
     same_file = [
-        {"id": "a", "target": "corpus-engine/src/lib.rs", "find": "A", "replace": "a"},
-        {"id": "b", "target": "corpus-engine/src/lib.rs", "find": "B", "replace": "b"},
+        {"id": "a", "target": "ingest/crates/corpus-engine/src/lib.rs", "find": "A", "replace": "a"},
+        {"id": "b", "target": "ingest/crates/corpus-engine/src/lib.rs", "find": "B", "replace": "b"},
     ]
     batches = make_batches(same_file, width=25, one_per_crate=False)
     check("wide batching separates two mutants that share a target file",
@@ -564,8 +564,8 @@ def self_test() -> int:
 
     # 2. Different files MAY share a batch — otherwise --wide buys nothing.
     diff_file = [
-        {"id": "a", "target": "corpus-engine/src/lib.rs", "find": "A", "replace": "a"},
-        {"id": "b", "target": "corpus-engine/src/other.rs", "find": "B", "replace": "b"},
+        {"id": "a", "target": "ingest/crates/corpus-engine/src/lib.rs", "find": "A", "replace": "a"},
+        {"id": "b", "target": "ingest/crates/corpus-engine/src/other.rs", "find": "B", "replace": "b"},
     ]
     check("wide batching still packs mutants in different files together",
           len(make_batches(diff_file, width=25, one_per_crate=False)) == 1)
@@ -573,8 +573,8 @@ def self_test() -> int:
     # 2b. ONE-PER-CRATE (what phase 2 runs, and what makes --wide sound) must
     #     still separate two mutants in DIFFERENT files of the SAME crate.
     same_crate = [
-        {"id": "a", "target": "corpus-engine/src/lib.rs", "find": "A", "replace": "a"},
-        {"id": "b", "target": "corpus-engine/src/other.rs", "find": "B", "replace": "b"},
+        {"id": "a", "target": "ingest/crates/corpus-engine/src/lib.rs", "find": "A", "replace": "a"},
+        {"id": "b", "target": "ingest/crates/corpus-engine/src/other.rs", "find": "B", "replace": "b"},
     ]
     check("one-per-crate separates two files in the same crate (phase 2's guarantee)",
           len(make_batches(same_crate, width=25, one_per_crate=True)) == 2)

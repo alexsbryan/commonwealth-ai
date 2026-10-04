@@ -1,0 +1,1136 @@
+# Router threshold-calibration bank — v1.
+#
+# Run:  sovereign router fit
+#
+# ── What this bank is for ─────────────────────────────────────────
+#
+# The five routing banks under `bench/lanes/routing/` score 96/96
+# (100%) as of 2026-07-16. That is a statement about the banks, not
+# about the router: they were authored alongside the exemplars they
+# test, they are scored by exact match, and `run_question_routing`
+# builds them a context with `messages: vec![]`. A threshold sweep
+# against a bank you already ace has no gradient — every candidate gate
+# scores identically, and the optimiser returns whatever it started
+# with.
+#
+# So this bank is deliberately authored to FAIL somewhere. It probes
+# the two things exact-match accuracy on a saturated bank cannot see:
+#
+#   1. COVERAGE. The embed router decides only 11/27 of cells_v1 and
+#      8/27 of the paraphrase bank; the rest fall through to the LLM
+#      classifier at ~1.2-1.5s each. Accuracy scores those 27/27 and
+#      reports success. The `expect = "<intent>"` cases below ask the
+#      question accuracy cannot: how much MORE could the embed router
+#      own, at what precision?
+#
+#   2. ABSTENTION. There is no out-of-scope route anywhere in the
+#      system — `Intent` has no Unknown variant, and a Pass 1 parse
+#      failure defaults to KnowledgeQuery. Nothing tests what happens
+#      on a query that should not be committed at all. Every
+#      `expect = "abstain"` case below is one the embed router must NOT
+#      own, because deciding it from a bare utterance would be a
+#      coin flip that the LLM — which sees the full sentence and the
+#      conversation — should call instead.
+#
+# ── Authoring rules ───────────────────────────────────────────────
+#
+# * NOT COACHED TO THE EXEMPLARS. Per the same principle cells_v1
+#   states in its header, every query here is phrased the way a person
+#   would actually type it, not as a restatement of an exemplar. A case
+#   that passes only because it echoes `exemplars.toml` measures
+#   nothing.
+#
+# * EVERY CASE CARRIES A `note`. A calibration case without a stated
+#   reason is a case nobody can safely delete later — and a bank whose
+#   rationale has been forgotten is exactly how reference sets go stale
+#   while continuing to report green.
+#
+# * `expect = "abstain"` IS A REAL ANSWER, not a shrug. It means: this
+#   query is genuinely under-determined by its surface form, and the
+#   correct behaviour is to fall through to the cascade. Firing here is
+#   an error and is counted as a false positive.
+#
+# * AT LEAST FIVE CASES PER CLASS PER AXIS
+#   (`router_calibration::MIN_CASES_PER_CLASS`). The first real run of
+#   this bank, on 2026-07-28, had three or four cases on each binary
+#   axis and fitted the archive gate to a margin of -0.101 and the scope
+#   gate to -0.152 — thresholds that score perfectly and admit queries
+#   where the NEGATIVE class won. `FitReport::underpowered()` now flags
+#   any axis under the floor, and the report says to grow the bank
+#   rather than move the constant. Adding a case is cheap; a constant
+#   moved on four samples is the fit-on-your-own-test-set failure this
+#   whole bank exists to avoid.
+#
+# ── What is NOT here ──────────────────────────────────────────────
+#
+# The archive and locator axes keep their existing held-out guards in
+# `tests/archive_axis_live.rs` and `tests/locator_axis_live.rs`, whose
+# arrays are enforced disjoint from the shipped exemplar banks by
+# `archive_classifier::tests::shipped_bank_is_disjoint_from_evaluation_sets`.
+# The cases below ADD to those; they do not replace them.
+
+[bank]
+name = "router-axes-calibration-v1"
+description = """
+Threshold-calibration bank for all six router embedding gates. Pure
+embedding geometry — no corpus, no LLM, no conversation state. Scored
+by `sovereign router fit`, which sweeps the reachable threshold space
+from one embedding pass and reports the shipped gate against the best
+reachable one.
+"""
+
+# ══════════════════════════════════════════════════════════════════
+# INTENT AXIS — coverage
+#
+# Each of these has one defensible intent from the bare utterance. If
+# the embed router abstains on them it is leaving a ~1.2s LLM call on
+# the table for a decision it could have made in ~50ms.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "int_know_cable_funding"
+axis = "intent"
+query = "who ended up putting up the money for the first transatlantic cable?"
+expect = "knowledge_query"
+note = "Bare factual lookup. Past tense, single entity, no comparison or causal ask — the cleanest possible knowledge_query shape that is NOT phrased like any exemplar."
+
+[[case]]
+id = "int_know_bretton_year"
+axis = "intent"
+query = "what year did the Bretton Woods system actually come apart?"
+expect = "knowledge_query"
+note = "\"actually\" is conversational filler, not a contrastive marker. If this drifts to deep_query the router is reading emphasis as a reasoning request."
+
+[[case]]
+id = "int_deep_bretton_timing"
+axis = "intent"
+query = "why did Bretton Woods come apart when it did rather than a decade earlier?"
+expect = "deep_query"
+note = "Same domain and nearly the same vocabulary as int_know_bretton_year, but the ask is causal and counterfactual. This pair is the discriminating test: topical similarity is high, correct intent differs."
+
+[[case]]
+id = "int_deep_coal_oil"
+axis = "intent"
+query = "what made shipping so much slower than rail to switch off coal?"
+expect = "deep_query"
+note = "Causal, multi-source, no explicit 'why'. Tests whether the axis keys on the reasoning SHAPE or on the literal interrogative."
+
+[[case]]
+id = "int_cmp_rawls_nozick"
+axis = "intent"
+query = "put Rawls and Nozick side by side on distributive justice"
+# Re-adjudicated 2026-08-05 to deep_query, applying the SHAPE rule that reconciles this bank with `bench/routing/cells_v1.toml`'s 2026-06-10 ruling (which had adjudicated "Compare the leadership styles of Lincoln and FDR" as DeepQuery while this bank called the same shape bounded): "Compare/Contrast X and Y" asks for an open-ended qualitative essay -> deep_query; "what's the difference between X and Y" / "how do X and Y differ" asks a bounded contrast -> comparison_query. The two banks had asserted opposite answers for the same shape since 2026-06-10; the contradiction was unreachable while exemplars embedded in retrieval space (topic dominated, so these never matched each other) and became live under the classifier instruction, which matches on the MOVE. `int_cmp_hawk_dove` and `int_cmp_parliamentary_presidential` keep comparison_query — they carry the bounded surface — so the class is still pinned from both sides.
+expect = "deep_query"
+note = "Bounded two-entity contrast phrased as an imperative. The imperative surface is the trap — it must not steal into conation_query. STILL PINS: the imperative/versus/where-do surface must not steal into conation_query or metalingual_query — only the intent class changed."
+
+[[case]]
+id = "int_cmp_stoics_epicureans"
+axis = "intent"
+query = "where do the Stoics and the Epicureans actually part ways on pleasure?"
+# Re-adjudicated 2026-08-05 to deep_query, applying the SHAPE rule that reconciles this bank with `bench/routing/cells_v1.toml`'s 2026-06-10 ruling (which had adjudicated "Compare the leadership styles of Lincoln and FDR" as DeepQuery while this bank called the same shape bounded): "Compare/Contrast X and Y" asks for an open-ended qualitative essay -> deep_query; "what's the difference between X and Y" / "how do X and Y differ" asks a bounded contrast -> comparison_query. The two banks had asserted opposite answers for the same shape since 2026-06-10; the contradiction was unreachable while exemplars embedded in retrieval space (topic dominated, so these never matched each other) and became live under the classifier instruction, which matches on the MOVE. `int_cmp_hawk_dove` and `int_cmp_parliamentary_presidential` keep comparison_query — they carry the bounded surface — so the class is still pinned from both sides.
+expect = "deep_query"
+note = "Two named schools, one explicit axis of difference. 'Where do' is the exact string that once matched DEFINITIONAL_VERBS and misrouted a factual lookup to metalingual — the pre-2026-05-15 failure the embed router replaced. STILL PINS: the imperative/versus/where-do surface must not steal into conation_query or metalingual_query — only the intent class changed."
+
+[[case]]
+id = "int_cmp_hawk_dove"
+axis = "intent"
+query = "what separates a Fed hawk from a dove, really?"
+expect = "comparison_query"
+note = """
+Two-entity contrast whose entities are ROLES, not named thinkers — every
+comparison_query exemplar names people or named doctrines — and whose
+surface ("what separates X from Y") shares no lexical frame with the
+compare/contrast/differ vocabulary they all open with.
+
+This case exists as the control that refuted a proposed fix, and it is
+retained to keep that refutation measurable. On 2026-07-29 the hypothesis
+was that comparison_query had learned the marker VERB rather than its
+stated SHAPE, so marker-free exemplars would recover int_cmp_rawls_nozick.
+Three were added and the cache rebuilt; every case came back byte-identical
+and this control stayed at sim 0.357 with comparison_query not even the
+runner-up (it loses to a deep_query about an NFL salary cap). The exemplars
+were reverted. The axis is k=1 and TOPIC dominates surface: the only
+exemplar that could win the Rawls case is one about Rawls. Fixing this
+needs a per-class or topic-normalised score, not more exemplars.
+"""
+
+[[case]]
+id = "int_code_retry_owner"
+axis = "intent"
+query = "which module owns the retry logic on the ingest path?"
+expect = "code_query"
+note = "Codebase-locator question with no language keyword and no symbol name — code_query has only 16 exemplars, the thinnest of the fat intents, so its coverage is the one most likely to be floor-limited."
+
+[[case]]
+id = "int_code_chunker_type"
+axis = "intent"
+query = "what does the chunker hand back to the indexer?"
+expect = "code_query"
+note = "Domain nouns only; no 'code', 'function', or 'type' marker. Tests code_query recall on natural phrasing."
+
+[[case]]
+id = "int_code_tokenizer_handoff"
+axis = "intent"
+query = "what does the tokenizer pass along to the embedder?"
+expect = "code_query"
+note = """
+The control for int_code_chunker_type. That case was mislabelled to
+metalingual until 2026-07-29, when the exemplar that beat it — "Where is
+the chunking strategy defined here?" — was re-filed to code_query for
+violating the stated WHERE-it-lives rule. But "chunker" and "chunking"
+share a stem, so the repair could have been pure TOPIC proximity rather
+than a repaired claim about SHAPE. This case is the same
+component-A-hands-what-to-component-B shape on a topic no code_query
+exemplar mentions. If it fires, the shape generalises; if it misses, the
+chunker result was topic luck and must be reported as such.
+"""
+
+[[case]]
+id = "int_meta_attributable_term"
+axis = "intent"
+query = "what do people here actually mean when they say a run is 'attributable'?"
+expect = "metalingual_query"
+note = """
+The reverse guard on that same re-filing. Moving two \"where does it live /
+how is it implemented\" exemplars out of metalingual must not drag the
+what-a-term-MEANS neighbourhood with them — that half of the boundary is
+the half metalingual keeps. In-system locator (\"here\"), no doc or spec
+mention to make it easy, and a term ('attributable') that appears in no
+exemplar.
+"""
+
+[[case]]
+id = "int_meta_word_meaning"
+axis = "intent"
+query = "you used the word 'atom' a minute ago — what did you mean by it?"
+expect = "metalingual_query"
+note = "Genuinely about the language of this exchange. Metalingual has 27 exemplars and is the intent most prone to over-firing, so it needs positives as well as the abstain cases below."
+
+[[case]]
+id = "int_conation_halve"
+axis = "intent"
+query = "cut that down by about half"
+expect = "conation_query"
+note = "Short imperative directed at the assistant's last output. No content question at all."
+
+[[case]]
+id = "int_conation_slower"
+axis = "intent"
+query = "same thing again but take it slower"
+expect = "conation_query"
+note = "Redo-with-modification. Tests that 'again' does not pull it toward metalingual recall of the prior turn."
+
+[[case]]
+id = "int_expressive_slog"
+axis = "intent"
+query = "honestly this whole week has been a slog and I can't work out why"
+expect = "expressive_query"
+note = "First-person affect with a trailing 'why' that is rhetorical, not a research request. The 4 known voice-bank misroutes were all journal-shaped turns collapsing into knowledge_query — this is that failure mode in a fresh sentence."
+
+[[case]]
+id = "int_expressive_pleased"
+axis = "intent"
+query = "I'm honestly pretty pleased with how that turned out"
+expect = "expressive_query"
+note = "Positive affect. The expressive bank skews negative/reflective, so a positive-valence case checks the class is not really a 'distress' centroid."
+
+[[case]]
+id = "int_gen_toast"
+axis = "intent"
+query = "draft me a short toast for my sister's wedding"
+expect = "generative_query"
+note = "Unambiguous creative production. generative_query was one of the two intents whose addition densified the space and forced the margin floor 0.04 -> 0.10, so its separation is worth watching."
+
+[[case]]
+id = "int_gen_voice_pastiche"
+axis = "intent"
+query = "write a paragraph in the voice of a shipping forecast"
+expect = "generative_query"
+note = "Style-transfer generation. 'Write' is the marker; the risk is drift into complex_task on the multi-clause framing."
+
+[[case]]
+id = "int_simple_percentage"
+axis = "intent"
+query = "what's 18 percent of 240?"
+expect = "simple_query"
+note = "Closed-form arithmetic needing no retrieval. simple_query has only 6 exemplars — the thinnest intent in the bank — so this probes whether a single global floor under-serves sparse classes."
+
+[[case]]
+id = "int_task_commitments"
+axis = "intent"
+query = "go through my notes, pull out every open commitment, and put them in date order"
+expect = "complex_task"
+note = "Multi-step operation over a source. complex_task has 4 exemplars, the sparsest class of all; if the fit reports it floor-limited that is a per-intent-threshold argument with a number attached."
+
+# ══════════════════════════════════════════════════════════════════
+# INTENT AXIS — abstention
+#
+# Under-determined by surface form alone. The embed router seeing only
+# the bare utterance CANNOT know the answer; the LLM classifier, which
+# gets the situated-context block and the last three turns, can. Firing
+# on any of these is a false positive.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "int_abstain_look_again"
+axis = "intent"
+query = "can you look at that again"
+expect = "abstain"
+note = "Conation (redo it) or metalingual (re-examine what you said)? Depends entirely on what the prior turn was. Committing from the utterance alone is a coin flip."
+
+[[case]]
+id = "int_abstain_what_do_you_think"
+axis = "intent"
+query = "what do you think about that"
+expect = "abstain"
+note = "Deep reasoning request, expressive invitation, or metalingual? The referent is in the history, which this axis cannot see."
+
+[[case]]
+id = "int_abstain_tell_me_more"
+axis = "intent"
+query = "tell me more"
+expect = "abstain"
+note = "Conation (elaborate) or knowledge (retrieve further)? The correct route depends on whether the prior turn was retrieval-backed."
+
+[[case]]
+id = "int_abstain_not_what_i_meant"
+axis = "intent"
+query = "that's not what I meant"
+expect = "abstain"
+note = "Correction. Expressive on its face, conative in effect. This is exactly the ambiguity the LLM's Gricean 'pick the user's actual MOVE' instruction exists to resolve."
+
+[[case]]
+id = "int_abstain_is_that_right"
+axis = "intent"
+query = "is that right?"
+expect = "abstain"
+note = "Metalingual challenge or a factual verification request. Two intents with completely different handlers; nothing in the surface form separates them."
+
+[[case]]
+id = "int_abstain_and_the_other_one"
+axis = "intent"
+query = "and the other one?"
+expect = "abstain"
+note = "Pure ellipsis. Carries no intent signal whatsoever — if any gate fires on this, the floor is too low by construction."
+
+[[case]]
+id = "int_abstain_go_on"
+axis = "intent"
+query = "go on"
+expect = "abstain"
+note = "Two words, no content. Included as the degenerate lower bound: a gate admitting this admits anything."
+
+# ══════════════════════════════════════════════════════════════════
+# INTENT AXIS — growth batch, 2026-07-29, to adjudicate a floor move
+#
+# `fit` measures (0.45, 0.100) as +4 correct fires for zero new errors
+# against the shipped (0.55, 0.100). The 27-case bank could not justify
+# taking it, and the reason is a COVERAGE BIAS, not the sample size:
+#
+#   ALL SEVEN original abstain cases are 2-6 words — "go on",
+#   "tell me more", "is that right?". Every one is an ultra-short
+#   elliptical.
+#
+# That is the wrong evidence for this decision. Lowering the floor admits
+# the sim band 0.45-0.55, and it is CONTENT-RICH queries that score there;
+# a bare elliptical cannot reach it. So the bank was proving the floor drop
+# safe using exactly the cases a floor drop cannot endanger, and had no way
+# to observe the failure it would actually cause. This is the same
+# one-directional hole `eff_short_but_hard` closed on the effort axis, where
+# the 10-case bank endorsed a gate that was a regression at 18 (cf63b468).
+#
+# The four abstain cases below are therefore LONG and confident-sounding but
+# genuinely under-determined — the intent turns on what the previous turn
+# was, which this axis cannot see. They are written to BREAK the floor move.
+# The nine firing cases probe classes the bank under-serves: commissive_query
+# had EIGHT exemplars and ZERO cases despite being the class that wrongly
+# wins two existing errors, and complex_task/simple_query/generative_query
+# are the sparsest.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "int_abstain_veil_didnt_land"
+axis = "intent"
+query = "the part about the veil of ignorance didn't quite land for me, the rest was fine"
+expect = "abstain"
+note = "Content-rich and confident, and still a coin flip: conation (redo that part), expressive (mild dissatisfaction, no action wanted), or metalingual (a remark about the text you produced). Which one depends entirely on whether the user wants it done again — not observable here. The first abstain case in this bank long enough to reach the sim band a lower floor would admit."
+
+[[case]]
+id = "int_abstain_chunker_overlap_hunch"
+axis = "intent"
+query = "is the chunker's overlap setting why retrieval feels off, or am I imagining it?"
+expect = "abstain"
+note = "code_query (go read the code and check) or expressive (floating a hunch, wants a conversation)? The trailing self-doubt is what makes it genuinely ambiguous. Doubles as a guard on the 2026-07-29 code_query re-filing: those exemplars made this neighbourhood more attractive to code_query, and this case must NOT be captured by it."
+
+[[case]]
+id = "int_abstain_third_option_first"
+axis = "intent"
+query = "you gave me three options earlier — I think the second is what I want, but say more about the third first"
+expect = "abstain"
+note = "Two moves in one sentence: metalingual recall of a prior enumeration AND a conation to elaborate. Neither dominates. Long, specific, and high-content, so it should land well inside the band a lower floor opens — which is the point."
+
+[[case]]
+id = "int_abstain_explain_or_just_tell"
+axis = "intent"
+query = "I'm honestly not sure whether I want the whole story of how Bretton Woods unravelled or just the year it ended"
+expect = "abstain"
+note = "The user states their own indeterminacy between deep_query and knowledge_query. If ANY gate commits this one it is committing a question whose asker has explicitly said they have not decided. Shares a topic with int_know_bretton_year and int_deep_bretton_timing, so it also probes whether topic proximity can drag an abstain into a fire."
+
+[[case]]
+id = "int_conation_three_sentences"
+axis = "intent"
+query = "do that again but keep it to three sentences and skip the caveats"
+expect = "conation_query"
+note = "Redo-with-constraints, and unlike int_conation_halve it carries real content. Tests that conation survives at length rather than being a short-imperative centroid."
+
+[[case]]
+id = "int_commissive_draft_tuesday"
+axis = "intent"
+query = "you can expect the draft from me by Tuesday"
+expect = "commissive_query"
+note = "commissive_query has 8 exemplars and had ZERO cases in this bank, yet it is the class that wrongly wins int_task_commitments AND int_gen_voice_pastiche. Without a positive case there is no way to tell over-firing from a healthy class. Speaker-commits-to-future-action, phrased away from the 'I'm going to X' frame the exemplars use."
+
+[[case]]
+id = "int_commissive_lint_before_push"
+axis = "intent"
+query = "from now on I'll run the lint script before I push"
+expect = "commissive_query"
+note = "Second commissive positive, durative rather than one-shot. Adjacent to conation in surface (it describes an action) but the actor is the SPEAKER, not the assistant — that is the whole boundary, and nothing in this bank pinned it before."
+
+[[case]]
+id = "int_simple_cups_ounces"
+axis = "intent"
+query = "how many ounces in three cups?"
+expect = "simple_query"
+note = "Closed-form unit conversion, no retrieval. simple_query has 6 exemplars, and int_simple_percentage is currently its only case — one probe cannot distinguish a healthy sparse class from a lucky one."
+
+[[case]]
+id = "int_complex_reading_triage"
+axis = "intent"
+query = "take my reading list, drop anything I've already finished, and group what's left by how long it'll take"
+expect = "complex_task"
+note = "Three chained operations over one source. complex_task has 4 exemplars — the sparsest class in the bank — and int_task_commitments, its only other case, currently misroutes to commissive_query. A second probe says whether that is the case or the class."
+
+[[case]]
+id = "int_gen_memorial"
+axis = "intent"
+query = "write me something short I could read out at my grandfather's memorial"
+expect = "generative_query"
+note = "Creative production carrying genuine affect. Both existing generative cases miss, one of them to knowledge_query; this one leans emotional, so if generative_query is really behaving like an expressive centroid at the margins this case will show it."
+
+[[case]]
+id = "int_know_losalamos_arrival"
+axis = "intent"
+query = "when did the European physicists actually get to Los Alamos?"
+expect = "knowledge_query"
+note = "Half of a topic-dominance pair, deliberately built on the topic of the deep_query exemplar 'How did Manhattan Project physicists' European exile shape the project's outcome?' — the exemplar that currently beats int_know_cable_funding. A bare date lookup that must NOT be pulled into deep_query by shared topic."
+
+[[case]]
+id = "int_deep_losalamos_disillusion"
+axis = "intent"
+query = "why did so many of the Los Alamos physicists turn against the bomb afterwards?"
+expect = "deep_query"
+note = "The other half. Same topic and nearly the same vocabulary as int_know_losalamos_arrival, opposite correct intent. If both resolve correctly the axis is reading the ASK; if they collapse together it is reading the TOPIC — which is the diagnosis that killed the comparison_query fix, restated as a measurable pair."
+
+[[case]]
+id = "int_meta_corpus_or_inferred"
+axis = "intent"
+query = "which parts of that came from my corpus and which did you work out yourself?"
+expect = "metalingual_query"
+note = "Provenance of the assistant's own answer — metalingual in the strictest sense. Probes the sub-shape found unreachable on 2026-07-29: both existing metalingual cases win via CONVERSATION-RECALL exemplars rather than any about-our-system exemplar. Content-rich, so it lands in the band a floor drop opens."
+
+# ══════════════════════════════════════════════════════════════════
+# LOCATOR AXIS — this thread vs everything else (one-vs-rest)
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "loc_first_thing_this_chat"
+axis = "locator"
+query = "what was the very first thing I asked you in this chat?"
+expect = "conversation"
+note = "Canonical positive. router.rs records this shape routing to KnowledgeQuery 4 times out of 5 before the locator pre-check existed."
+
+[[case]]
+id = "loc_did_i_already_ask"
+axis = "locator"
+query = "have I already asked you this one?"
+expect = "conversation"
+note = "Self-referential about the current thread. Intent is ambiguous here (metalingual vs conation) while the locator is clear — the orthogonality this axis exists for."
+
+[[case]]
+id = "loc_abstain_last_week"
+axis = "locator"
+query = "what did I ask you about this last week?"
+expect = "abstain"
+note = "Reads almost identically to the positives but points at the ARCHIVE, not this thread. The locator must NOT claim it — that belongs to the archive axis. Nearest-neighbour negative for this gate."
+
+[[case]]
+id = "loc_abstain_world_question"
+axis = "locator"
+query = "what is a transformer, in the machine-learning sense?"
+expect = "abstain"
+note = "Plain world question. Blocked by the absolute floor rather than the margin; a regression here means the prefixed embedding space shifted."
+
+[[case]]
+id = "loc_replay_second_option"
+axis = "locator"
+query = "what was the second option you listed?"
+expect = "conversation"
+note = "RECALL end of the recall-vs-resume boundary. Interrogative: it asks for the CONTENT of a prior assistant turn, which is answerable only from this thread. Paired with loc_abstain_resume_second, which is the same referent under an imperative. Split out 2026-07-29 after per-case attribution showed the old single case (`loc_your_second_option`, \"go back to the second option you listed\") losing by -0.133 to the conation exemplar \"Elaborate on the second point.\" — the bank was asserting one side of a boundary it should pin."
+
+[[case]]
+id = "loc_abstain_resume_second"
+axis = "locator"
+query = "go back to the second option you listed"
+expect = "abstain"
+note = "RESUME end of the same boundary, and an abstain for the reason loc_abstain_summarize_pasted gives: the ask is a transformation of in-context content, not recall of it. \"Go back to\" asks the assistant to re-open option 2 and carry on, so a hard commit to MetalingualQuery at 0.95 would answer with a recitation and throw the elaboration away. `exemplars.toml` carries a conation row (\"Elaborate on the second point.\") that wins this query by -0.133 — measured, not assumed, and correctly so."
+
+[[case]]
+id = "loc_did_i_contradict"
+axis = "locator"
+query = "did I contradict myself anywhere above?"
+expect = "conversation"
+note = "A consistency check over the turns already in context — answerable ONLY from this thread, and a shape no exemplar covers. If the locator floor is really about in-context questions rather than about a handful of memorised phrasings, this must clear it."
+
+[[case]]
+id = "loc_what_were_the_three"
+axis = "locator"
+query = "what were the three things you just listed?"
+expect = "conversation"
+note = "Enumeration replay. Distinguished from loc_your_second_option by asking for the whole set rather than one member, which is the sub-shape the exemplar bank labels C."
+
+[[case]]
+id = "loc_abstain_across_all_chats"
+axis = "locator"
+query = "across all our chats, what have I asked about most?"
+expect = "abstain"
+note = "The exemplar file states the rule outright: archive-recall shapes must NOT be tagged as locator, because they search the conversation CORPUS rather than this thread. Firing here would answer a corpus question from the message list and confidently miss everything the user actually said."
+
+[[case]]
+id = "loc_abstain_summarize_pasted"
+axis = "locator"
+query = "summarise the document I pasted in"
+expect = "abstain"
+note = "Self-referential to this thread and still not a locator question: the ask is a transformation of in-context content, not recall of it. Firing hard-commits to MetalingualQuery at confidence 0.95 and throws away the summarisation. The hardest negative here, because every surface cue points the wrong way."
+
+[[case]]
+id = "loc_abstain_notes_not_chat"
+axis = "locator"
+query = "what did I write in my notes about the schema?"
+expect = "abstain"
+note = "Personal, past, and first-person — but the referent is a notes corpus, not this conversation. Belongs to the scope axis. Included so the locator's positives cannot be satisfied by 'first-person plus past tense' alone."
+
+# ══════════════════════════════════════════════════════════════════
+# ARCHIVE AXIS — past conversations vs this thread vs the world
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "arc_lisbon_trip"
+axis = "archive"
+query = "did I ever tell you about the Lisbon trip in one of our older chats?"
+expect = "archive"
+note = "Explicit past-conversation search. Fresh phrasing, disjoint from the arrays in archive_axis_live.rs."
+
+[[case]]
+id = "arc_reading_habits"
+axis = "archive"
+query = "going back through our chats, what have I said I'm reading?"
+expect = "archive"
+note = "Archive search phrased as a summarisation over history rather than a yes/no probe."
+
+[[case]]
+id = "arc_abstain_this_thread"
+axis = "archive"
+query = "what did we just decide?"
+expect = "abstain"
+note = "This thread, not the archive. A false positive here restricts a live conversational question to archive retrieval — the asymmetric error this gate's floor was raised to prevent."
+
+[[case]]
+id = "arc_abstain_world"
+axis = "archive"
+query = "what's the population of Lisbon?"
+expect = "abstain"
+note = "Shares the salient entity with arc_lisbon_trip and nothing else. Tests that the axis keys on the archive-search FRAME, not on topical overlap."
+
+[[case]]
+id = "arc_first_mention_abroad"
+axis = "archive"
+query = "when did I first bring up the idea of moving abroad?"
+expect = "archive"
+note = "First-occurrence search over the archive — a shape the shipped exemplars do not cover, which run to yes/no probes and aggregate summaries. Only a corpus search can answer it; the answer is a point in history, not a theme."
+
+[[case]]
+id = "arc_which_conversation_was_that"
+axis = "archive"
+query = "we worked out a sourdough schedule at some point — which conversation was that in?"
+expect = "archive"
+note = "Asks the archive to IDENTIFY a conversation rather than to recall its content. Included because the retrieval is identical while the question shape is not, so it tests whether the axis generalises past 'what did I say about X'."
+
+[[case]]
+id = "arc_advice_i_ignored"
+axis = "archive"
+query = "what advice have you given me before that I clearly didn't take?"
+expect = "archive"
+note = "Aggregate over prior conversations from the ASSISTANT's side of them. The exemplars are almost entirely about what the user said; if the axis has quietly learned 'first person plus past' rather than 'search the archive', this is where it shows."
+
+[[case]]
+id = "arc_abstain_still_unclear"
+axis = "archive"
+query = "I'm still not clear on the second thing you explained"
+expect = "abstain"
+note = "This thread, phrased as a complaint rather than a question. A false positive sends a live confusion to archive retrieval and answers with something the user said months ago — the asymmetric error the 0.50 floor was raised for on 2026-07-26."
+
+[[case]]
+id = "arc_abstain_forward_looking"
+axis = "archive"
+query = "what should I do about the roof next spring?"
+expect = "abstain"
+note = "Deeply personal and firmly in the future. The sharpest available discriminator between this axis and the scope axis: scope should own it, archive must not, and nothing in the surface form separates them except tense."
+
+[[case]]
+id = "arc_abstain_remember_bait"
+axis = "archive"
+query = "do you remember what transformers are?"
+expect = "abstain"
+note = "Lexical bait. \"Do you remember\" is the archive vocabulary and the question is pure world knowledge. If the axis fires on this it has learned the words rather than the frame, which is precisely the failure the embedding gate replaced a keyword matcher to avoid."
+
+# ══════════════════════════════════════════════════════════════════
+# SCOPE AXIS — personal vs external
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "scope_my_reading"
+axis = "scope"
+query = "based on what I've told you, what have I been reading lately?"
+expect = "personal"
+note = "User-owned corpora only. The scope axis exists because reading this off the winning INTENT exemplar lost exactly these cases (see scope_classifier module docs)."
+
+[[case]]
+id = "scope_abstain_general_reading"
+axis = "scope"
+query = "what have people been reading lately?"
+expect = "abstain"
+note = "One pronoun away from scope_my_reading and the opposite answer. The tightest available discriminator for this gate's margin."
+
+[[case]]
+id = "scope_abstain_definition"
+axis = "scope"
+query = "explain how transformers work"
+expect = "abstain"
+note = "No personal signal at all. The absolute floor exists to stop a no-signal query drifting personal just because that centroid sat marginally closer."
+
+[[case]]
+id = "scope_what_i_keep_getting_wrong"
+axis = "scope"
+query = "what do I keep getting wrong, based on everything I've told you?"
+expect = "personal"
+note = "Self-assessment that is only answerable from user-owned corpora. Names its own evidence source, which is the strongest possible personal signal short of saying the word."
+
+[[case]]
+id = "scope_why_stop_freelancing"
+axis = "scope"
+query = "why did I say I wanted to stop freelancing?"
+expect = "personal"
+note = "Recall of a stated personal reason. Paired deliberately with scope_abstain_generic_advice below: same domain, same vocabulary, opposite scope. The pair is this axis's tightest margin test."
+
+[[case]]
+id = "scope_harder_on_myself"
+axis = "scope"
+query = "am I harder on myself than I am on other people?"
+expect = "personal"
+note = "Introspective and comparative, with no retrieval verb anywhere in it. The exemplars lean on 'what did I say' phrasing; this one has none, so it tests whether the axis has learned self-reference or just a query template."
+
+[[case]]
+id = "scope_dreading_whats_coming"
+axis = "scope"
+query = "what have I got coming up that I said I was dreading?"
+expect = "personal"
+note = "Personal, forward-looking, and grounded in something the user stated earlier. Included as the future-tense positive: unlike the archive axis, scope is not a claim about tense, and this case is what proves it."
+
+[[case]]
+id = "scope_abstain_generic_advice"
+axis = "scope"
+query = "how do most people decide when to quit a job?"
+expect = "abstain"
+note = "The negative half of the scope_why_stop_freelancing pair. Near-total topical overlap; the only difference is whose life is being asked about. A false positive restricts a general question to the user's own corpora and returns nothing useful."
+
+[[case]]
+id = "scope_abstain_about_you"
+axis = "scope"
+query = "what do you think about remote work?"
+expect = "abstain"
+note = "Second person. Personal in grammar, about the ASSISTANT in fact. Every shipped negative is an impersonal world question, so nothing in the exemplar bank rules this out — which is exactly why it belongs here."
+
+[[case]]
+id = "scope_abstain_hypothetical_i"
+axis = "scope"
+query = "if I moved to Lisbon, what visa would I need?"
+expect = "abstain"
+note = "Two first-person pronouns and no personal history whatsoever — the answer is an external fact about visa rules. The sharpest negative available for an axis whose positive class is saturated with the word \"I\"."
+
+# ══════════════════════════════════════════════════════════════════
+# CURRENT-INFO AXIS — needs live data vs evergreen
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "cur_brent_price"
+axis = "current_info"
+query = "what's Brent crude trading at right now?"
+expect = "current"
+note = "Explicitly live. A miss here means a stale answer presented as fact — the failure this axis prevents."
+
+[[case]]
+id = "cur_abstain_1973_shock"
+axis = "current_info"
+query = "what caused the 1973 oil shock?"
+expect = "abstain"
+note = "Same domain, firmly historical. A false positive sends a settled question to an external tool for no reason."
+
+[[case]]
+id = "cur_abstain_how_oil_priced"
+axis = "current_info"
+query = "how does oil pricing actually work?"
+expect = "abstain"
+note = "Mechanism question — evergreen despite the market vocabulary. The hardest negative for this axis: topical overlap with cur_brent_price is near-total."
+
+[[case]]
+id = "cur_central_bank_head"
+axis = "current_info"
+query = "who's running the central bank in Argentina these days?"
+expect = "current"
+note = "Incumbent identity. Changes without warning and lives outside any installed corpus, so a confident stale answer is indistinguishable from a correct one — the exact failure this axis exists to prevent."
+
+[[case]]
+id = "cur_site_still_down"
+axis = "current_info"
+query = "is the site still down?"
+expect = "current"
+note = "Six words, no named entity, no date. The degenerate lower bound for the positive class: if the axis needs a temporal keyword to fire, this is where it will miss."
+
+[[case]]
+id = "cur_did_they_release"
+axis = "current_info"
+query = "did they end up releasing the thing they announced in the spring?"
+expect = "current"
+note = "Past-tense verb, present-tense question. The answer is 'has it happened yet', which is time-sensitive; a tense-based heuristic reads it as history and gets it backwards."
+
+[[case]]
+id = "cur_situation_now"
+axis = "current_info"
+query = "what's the situation on the ground in Port-au-Prince now?"
+expect = "current"
+note = "Live situational report. Sits close to the evergreen exemplars about regional history, so it tests whether the axis separates 'about a place' from 'about that place right now'."
+
+[[case]]
+id = "cur_abstain_world_cup_month"
+axis = "current_info"
+query = "is the World Cup in June or July next year?"
+expect = "abstain"
+note = "A scheduled future date does not change day-to-day, so it is evergreen — the carve-out the shipped negatives state explicitly. Phrased as a disjunction rather than the exemplars' \"when is the next…\" so it tests the rule and not the template."
+
+[[case]]
+id = "cur_abstain_pound_after_2019"
+axis = "current_info"
+query = "what happened to the Lebanese pound after 2019?"
+expect = "abstain"
+note = "\"What happened\" plus a currency plus a recent year — every surface cue of a live-markets question, and a settled historical one. Sending it to an external search wastes a tool call and answers a worse question."
+
+[[case]]
+id = "cur_abstain_how_to_check_version"
+axis = "current_info"
+query = "how would I check whether a package has a newer version?"
+expect = "abstain"
+note = "A method question ABOUT currency rather than a request FOR current data. Saturated with the positive class's vocabulary while being permanently answerable; the sharpest negative on this axis."
+
+# ══════════════════════════════════════════════════════════════════
+# EFFORT AXIS — deep slot vs fast slot
+#
+# NOTE: scored in the UNPREFIXED (`d:`) embedding space. The fit
+# command must embed these cases without the retrieval instruction
+# prefix or the numbers are meaningless — see
+# `EffortClassifier::score_from_embedding`.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "eff_work_through_implications"
+axis = "effort"
+query = "work through what this means for our retrieval design, step by step"
+expect = "high"
+note = "Explicit request for extended reasoning. The effort floor is 0.30, far below every other axis — worth knowing whether that is calibrated or merely inherited."
+
+[[case]]
+id = "eff_abstain_capital"
+axis = "effort"
+query = "what's the capital of Peru?"
+expect = "abstain"
+note = "Single-hop lookup. Escalating this to the deep slot costs a model load for nothing."
+
+[[case]]
+id = "eff_abstain_thanks"
+axis = "effort"
+query = "thanks, that's helpful"
+expect = "abstain"
+note = "Pure acknowledgement. The degenerate lower bound for this axis."
+
+[[case]]
+id = "eff_not_the_summary"
+axis = "effort"
+query = "I don't want the summary version — take it apart properly."
+expect = "high"
+note = "A depth request with NO topic at all. The axis's stated claim is that it reads request SHAPE rather than subject matter; every shipped exemplar carries a topic, so this is the only case that actually tests the claim."
+
+[[case]]
+id = "eff_every_angle_incl_against"
+axis = "effort"
+query = "cover every angle on this, including the ones that argue against it"
+expect = "high"
+note = "Exhaustiveness plus an adversarial-completeness clause. Escalating is right: the fast slot reliably produces the one-sided version of this answer."
+
+[[case]]
+id = "eff_cpu_every_stage"
+axis = "effort"
+query = "lay out how a modern CPU actually executes an instruction — every stage, nothing hand-waved"
+expect = "high"
+note = "The topic-bearing positive, kept so the class is not all bare depth requests. Technical rather than historical, unlike every shipped exemplar, which is where a topic-keyed axis would fail."
+
+[[case]]
+id = "eff_dont_skip_boring"
+axis = "effort"
+query = "go through the whole argument and don't skip the parts that are boring"
+expect = "high"
+note = "Exhaustiveness expressed as a negative constraint. Included because the shipped exemplars all ask for completeness affirmatively (\"complete\", \"exhaustive\", \"in depth\") and a bank that only ever says it one way measures one phrasing."
+
+[[case]]
+id = "eff_abstain_exhaustive_but_shallow"
+axis = "effort"
+query = "list every country in South America"
+expect = "abstain"
+note = "The trap case for this axis, and the reason it is worth calibrating at all: \"every\" is the positive class's strongest lexical marker, and the request is a long ANSWER requiring no reasoning. Output length is not effort. A false positive here loads the deep slot to recite twelve names."
+
+[[case]]
+id = "eff_abstain_quick_sanity"
+axis = "effort"
+query = "quick sanity check — did I get the units right there?"
+expect = "abstain"
+note = "Explicitly scoped as cheap by the user. If the axis cannot honour a stated low-effort request it will escalate against the user's own instruction, which is worse than merely being wrong."
+
+[[case]]
+id = "eff_abstain_reformat"
+axis = "effort"
+query = "can you put that last bit in a table?"
+expect = "abstain"
+note = "A formatting request: imperative, references prior content, requires no new reasoning. Sits near the locator axis's positives and must fire on neither."
+
+# Grown 2026-07-29 from 10 to 18 cases. The fitted gate was strictly
+# dominant over the shipped one on the original 10 (5/5 fires kept, the
+# single FP cleared), but a constant that ships to every user should not
+# move on ten cases — and eight of those ten shared a shape with the
+# exemplar bank. These eight are chosen to be the cases most likely to
+# BREAK the dominant gate, not to confirm it.
+#
+# The load-bearing addition is the missing half of the axis's own
+# thesis. `eff_abstain_exhaustive_but_shallow` tests "long answer, low
+# effort"; nothing tested "short answer, high effort". Every shipped
+# HIGH exemplar is an exhaustive expository essay, so an axis keyed on
+# length rather than reasoning depth would score perfectly on the old
+# bank. eff_short_but_hard and eff_abstain_thorough_but_trivial are the
+# two cases that can tell those apart.
+
+[[case]]
+id = "eff_short_but_hard"
+axis = "effort"
+query = "think this through carefully, then give me your answer in one paragraph"
+expect = "high"
+note = "Effort WITHOUT length — the inverse of eff_abstain_exhaustive_but_shallow and the case the original bank had no way to fail. Explicitly caps the output while asking for extended reasoning. Every HIGH exemplar in effort_examples.toml asks for a long answer; if the centroid has learned length rather than depth, this is where it shows."
+
+[[case]]
+id = "eff_abstain_thorough_but_trivial"
+axis = "effort"
+query = "explain thoroughly what HTTP stands for"
+expect = "abstain"
+note = "Carries the positive class's lexical marker (\"thoroughly\") on a one-line answer. Paired trap to eff_abstain_exhaustive_but_shallow, which uses \"every\" — a bank that only traps one depth-marker word measures one word. Escalating here loads the deep slot to expand an acronym."
+
+[[case]]
+id = "eff_diagnose_latency"
+axis = "effort"
+query = "our p90 latency doubled after the last deploy and I can't see why — reason it out"
+expect = "high"
+note = "Diagnostic reasoning. High effort with no exhaustiveness marker and no expository shape at all: the ask is to FORM a hypothesis, not to lay out a known subject. Every shipped HIGH exemplar is a survey of established material, so this tests whether the axis reads reasoning demand or essay register."
+
+[[case]]
+id = "eff_counterfactual_architecture"
+axis = "effort"
+query = "if we had gone with the other architecture two years ago, where would we be now?"
+expect = "high"
+note = "Counterfactual synthesis — genuinely expensive, and phrased as a short conversational question. Shares surface form with cheap speculation, which is the trap: the cost is in the reasoning, not the wording."
+
+[[case]]
+id = "eff_tradeoff_pick_one"
+axis = "effort"
+query = "weigh these three options against each other and tell me which one you'd actually pick"
+expect = "high"
+note = "Comparative synthesis terminating in a single choice. Demands the full comparison internally while asking for a short verdict — a second, differently-phrased probe of the depth-vs-length split, so eff_short_but_hard is not carrying that claim alone."
+
+[[case]]
+id = "eff_abstain_convert_units"
+axis = "effort"
+query = "convert 30 celsius to fahrenheit for me"
+expect = "abstain"
+note = "Mechanical computation. Distinct from the existing lookup abstains (capital of Peru) because it is a transformation rather than a recall — the low side of the axis should not be all trivia questions."
+
+[[case]]
+id = "eff_abstain_yes_no_fact"
+axis = "effort"
+query = "is the Danube longer than the Rhine?"
+expect = "abstain"
+note = "A COMPARISON that is nonetheless a single lookup. Comparative framing is a weak signal for effort — eff_tradeoff_pick_one is also comparative and must fire — so this is the negative that stops the axis from keying on \"compare\"."
+
+[[case]]
+id = "eff_abstain_list_codes"
+axis = "effort"
+query = "give me the ISO country codes for the Nordic countries"
+expect = "abstain"
+note = "Long mechanical output in a technical register, where eff_abstain_exhaustive_but_shallow is long mechanical output in a general one. The register is the variable: an axis that escalates on technical vocabulary rather than reasoning demand fails here and passes there."
+
+# ══════════════════════════════════════════════════════════════════
+# Class balance to MIN_CASES_PER_CLASS (2026-08-04)
+#
+# WHY THIS BLOCK EXISTS. Three separate decisions were blocked on this
+# bank being too small to pin a constant:
+#
+#   1. The intent gate could not be recalibrated — `fit` reported
+#      wildly different optima on this bank vs the holdout (margin
+#      0.065 vs 2.077, a 32x spread) purely from sample size.
+#   2. The embedding-instruction bake-off produced a clear winner
+#      (`speech-act`, 8% -> 33% coverage at 100% transferred precision)
+#      but its gate could not be written down with confidence.
+#   3. `FitReport::underpowered()` fires below five cases in any class,
+#      and EVERY class here was at two or three.
+#
+# Bringing all eleven to >=5 takes the bank 40 -> 70 cases (55 firing,
+# 15 abstaining). Authoring rules are unchanged and still binding: no
+# case restates an exemplar, no case restates a `holdout/` frame, and
+# every case carries a `note` saying what it probes.
+#
+# TOPIC DISCIPLINE. The pre-existing cases cluster on a few subjects
+# (Bretton Woods, Los Alamos, the transatlantic cable, Rawls/Nozick).
+# Every case below uses a DIFFERENT subject on purpose: with a k=1
+# scorer, topic proximity is itself a confound, and a bank that reuses
+# four topics measures those topics as much as the axis.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "int_know_venice_peak"
+axis = "intent"
+query = "how many people were living in Venice at its peak?"
+expect = "knowledge_query"
+note = "Atomic population statistic behind a superlative ('at its peak'), which reads like it needs synthesis but resolves to one number. Probes the knowledge/deep boundary from the knowledge side."
+
+[[case]]
+id = "int_know_westphalia_treaty"
+axis = "intent"
+query = "which treaty formally ended the Thirty Years' War?"
+expect = "knowledge_query"
+note = "Named-entity retrieval in the 'which X' frame. The bank's other knowledge cases are all 'when/who' — this checks the class is not a date-and-person centroid."
+
+[[case]]
+id = "int_deep_printing_authority"
+axis = "intent"
+query = "how did the printing press change who got to be an authority?"
+expect = "deep_query"
+note = "Causal, multi-source, social consequence. No named pair to contrast, which is what separates it from comparison_query."
+
+[[case]]
+id = "int_deep_bronze_age_totality"
+axis = "intent"
+query = "what made the Bronze Age collapse so total when earlier shocks weren't?"
+expect = "deep_query"
+note = "Contrastive 'why this and not that' — carries comparison's surface shape over an UNNAMED counterfactual, so it pins the deep/comparison boundary from the deep side."
+
+[[case]]
+id = "int_cmp_keynes_hayek"
+axis = "intent"
+query = "Keynes versus Hayek — where does the disagreement actually bite?"
+# Re-adjudicated 2026-08-05 to deep_query, applying the SHAPE rule that reconciles this bank with `bench/routing/cells_v1.toml`'s 2026-06-10 ruling (which had adjudicated "Compare the leadership styles of Lincoln and FDR" as DeepQuery while this bank called the same shape bounded): "Compare/Contrast X and Y" asks for an open-ended qualitative essay -> deep_query; "what's the difference between X and Y" / "how do X and Y differ" asks a bounded contrast -> comparison_query. The two banks had asserted opposite answers for the same shape since 2026-06-10; the contradiction was unreachable while exemplars embedded in retrieval space (topic dominated, so these never matched each other) and became live under the classifier instruction, which matches on the MOVE. `int_cmp_hawk_dove` and `int_cmp_parliamentary_presidential` keep comparison_query — they carry the bounded surface — so the class is still pinned from both sides.
+expect = "deep_query"
+note = "Explicit 'X versus Y' over two named thinkers. The bank's existing comparison cases avoid the literal 'versus' token; this one supplies it so the class is not tested only on its indirect frames. STILL PINS: the imperative/versus/where-do surface must not steal into conation_query or metalingual_query — only the intent class changed."
+
+[[case]]
+id = "int_cmp_parliamentary_presidential"
+axis = "intent"
+query = "how does a parliamentary system differ from a presidential one in practice?"
+expect = "comparison_query"
+note = "Bounded institutional contrast over CATEGORIES rather than named individuals — checks the class generalises past two-proper-nouns."
+
+[[case]]
+id = "int_meta_lane_here"
+axis = "intent"
+query = "when we say 'lane' in this project, what's actually meant?"
+expect = "metalingual_query"
+note = "In-project vocabulary with an explicit 'in this project' anchor. 'Lane' is also a common English word, so it doubles as a check that the anchor and not the noun drives the route."
+
+[[case]]
+id = "int_meta_gate_same_sense"
+axis = "intent"
+query = "earlier you called something a 'gate' — same sense as before?"
+expect = "metalingual_query"
+note = "Vocabulary continuity across turns: asks whether a term was used consistently, which is metalingual in the strict sense (about the code, not the world)."
+
+[[case]]
+id = "int_code_slot_decision"
+axis = "intent"
+query = "where does the daemon decide which slot to load?"
+expect = "code_query"
+note = "Where-is-it-implemented over control flow. Existing code cases ask what a component HANDS to another; this one asks where a DECISION lives."
+
+[[case]]
+id = "int_code_reranker_callers"
+axis = "intent"
+query = "what calls into the reranker, and from where?"
+expect = "code_query"
+note = "Call-graph direction question. Nothing else in the bank probes the inbound-edges shape, which is the one a SCIP-backed answer serves best."
+
+[[case]]
+id = "int_conation_drop_preamble"
+axis = "intent"
+query = "drop the preamble"
+expect = "conation_query"
+note = "Bare three-word imperative on the prior output, no content nouns. The short end of the class, where it is most likely to be swallowed by simple_query small talk."
+
+[[case]]
+id = "int_conation_less_hedging"
+axis = "intent"
+query = "try that once more, less hedging"
+expect = "conation_query"
+note = "Redo-with-a-style-constraint. Adjacent to int_conation_three_sentences but constrains VOICE rather than length, so it checks the class is not a length-instruction centroid."
+
+[[case]]
+id = "int_commissive_release_notes"
+axis = "intent"
+query = "I've got the release notes, don't worry about them"
+expect = "commissive_query"
+note = "Self-assignment paired with an instruction to the assistant to stand down — carries BOTH a commissive and a conative clause, and the commissive is the head. The hardest routine case in this class."
+
+[[case]]
+id = "int_commissive_put_me_down"
+axis = "intent"
+query = "put me down for the Thursday review"
+expect = "commissive_query"
+note = "Self-enrolment via imperative. Surface is a command to the assistant (conation) while the committed actor is the speaker — the exact boundary that makes this class fragile."
+
+[[case]]
+id = "int_commissive_after_this_lands"
+axis = "intent"
+query = "after this lands I'm picking up the migration work"
+expect = "commissive_query"
+note = "Sequenced future commitment with a dependency clause. Third commissive positive; the class had two and produced twelve of the routing bench's misroutes."
+
+[[case]]
+id = "int_expressive_same_paragraph"
+axis = "intent"
+query = "I've read the same paragraph four times and none of it is going in"
+expect = "expressive_query"
+note = "Fatigue reported as behaviour with no emotion word. The register the routing bench showed losing to deep_query eight times."
+
+[[case]]
+id = "int_expressive_makes_it_worse"
+axis = "intent"
+query = "everything I try just makes it worse"
+expect = "expressive_query"
+note = "Escalating frustration stated as a generalisation about the work. Reads like a technical claim, which is why it is a good probe."
+
+[[case]]
+id = "int_expressive_proud_of_team"
+axis = "intent"
+query = "genuinely proud of how the team handled that"
+expect = "expressive_query"
+note = "Positive affect directed at OTHER PEOPLE. int_expressive_pleased is positive affect about the speaker's own output; this checks the class is not a self-reference centroid."
+
+[[case]]
+id = "int_gen_bakery_limerick"
+axis = "intent"
+query = "make up a limerick about a cat who runs a bakery"
+expect = "generative_query"
+note = "Light verse with a named form. Both existing generative cases carry real affect (a toast, a memorial); this one is purely playful, so it checks the class is not an emotion centroid."
+
+[[case]]
+id = "int_gen_lighthouse_epitaph"
+axis = "intent"
+query = "write me a two-line epitaph for a fictional lighthouse keeper"
+expect = "generative_query"
+note = "Very short creative artifact with an explicit length bound — the shape most likely to be misread as conation, since 'two-line' looks like a formatting constraint."
+
+[[case]]
+id = "int_simple_seven_cubed"
+axis = "intent"
+query = "what's 7 cubed?"
+expect = "simple_query"
+note = "Closed-form arithmetic, four words. The short end of the class, where length alone keeps it below the similarity band any gate can reach."
+
+[[case]]
+id = "int_simple_weeks_in_year"
+axis = "intent"
+query = "how many weeks in a year, roughly?"
+expect = "simple_query"
+note = "Approximate count — computed, not looked up, and the hedge 'roughly' signals the asker knows it is derivable. Pins the simple/knowledge boundary from the simple side."
+
+[[case]]
+id = "int_simple_round_decimal"
+axis = "intent"
+query = "round 8.47 to one decimal place."
+expect = "simple_query"
+note = "Imperative arithmetic. Surface is a command to the assistant, which collides with conation; the operation is closed-form, which is what makes it simple."
+
+[[case]]
+id = "int_complex_shared_feedback"
+axis = "intent"
+query = "go through this feedback and pull out only the things more than one person said"
+expect = "complex_task"
+note = "Filter by cross-source agreement — two chained operations with a frequency condition. complex_task had two cases and both misrouted before the exemplar work."
+
+[[case]]
+id = "int_complex_expand_outline"
+axis = "intent"
+query = "take this outline and expand each bullet into a paragraph, keeping my ordering"
+expect = "complex_task"
+note = "Per-item transformation under a global constraint. Adjacent to conation (it is an instruction about text) but operates over SUPPLIED material rather than the prior turn."
+
+[[case]]
+id = "int_complex_section_and_title"
+axis = "intent"
+query = "split this document into sections and give each one a heading"
+expect = "complex_task"
+note = "Segmentation plus generation, two operations over one supplied artifact. The 'give each a heading' half overlaps generative_query, so it pins that boundary too."
+
+# ── Four more abstains, keeping the negative share near 20% ───────
+# As the firing set grew 29 -> 55, eleven abstains would have fallen to
+# 17% of the bank. These four are also deliberately commissive- and
+# conation-adjacent, the two classes this session widened.
+
+[[case]]
+id = "int_abstain_that_one"
+axis = "intent"
+query = "that one"
+expect = "abstain"
+note = "Two words, pure deixis. There is no recoverable move without the prior turn; any gate that fires here is guessing."
+
+[[case]]
+id = "int_abstain_hmm_maybe"
+axis = "intent"
+query = "hmm, maybe"
+expect = "abstain"
+note = "A hedge with no propositional content. Could be expressive, conative (keep going), or neither. Guards the expressive widening from the short end."
+
+[[case]]
+id = "int_abstain_come_back_later"
+axis = "intent"
+query = "can we come back to this later"
+expect = "abstain"
+note = "Commissive (I will return to it), conative (park this), or expressive (I am done for now)? The 'can we' frame leaves the actor genuinely open — directly adjacent to the commissive frames added this session."
+
+[[case]]
+id = "int_abstain_not_sure_i_want"
+axis = "intent"
+query = "I don't know if that's what I want"
+expect = "abstain"
+note = "States dissatisfaction without naming a remedy: expressive if the user wants to be heard, conation if they want a redo. Nothing in the surface chooses, and committing either way narrows the turn wrongly."

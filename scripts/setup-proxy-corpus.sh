@@ -44,7 +44,7 @@ set -euo pipefail
 CONTACT_UA="commonwealth-ai/0.1 (proxy-voting-corpus; alexbryan01@gmail.com)"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CANONICAL_RECIPE="${REPO_ROOT}/sovereign-recipes/proxy-company/recipe.toml"
+CANONICAL_RECIPE="${REPO_ROOT}/ingest/crates/sovereign-recipes/proxy-company/recipe.toml"
 CACHE_DIR="${HOME}/.svrnmesh/cache/sec"
 TICKERS_JSON="${CACHE_DIR}/company_tickers.json"
 FROM_DATE="2024-01-01"

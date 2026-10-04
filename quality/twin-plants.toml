@@ -128,10 +128,10 @@ minted  = "2026-09-10"
 [[family]]
 id          = "turn-driver"
 crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/turn_driver_census.rs"
+census      = "clients/desktop/src-tauri/tests/turn_driver_census.rs"
 mustFail    = ["exactly_one_reader_of_the_turn_socket_in_chat_commands"]
 breaks      = "a second reader of the daemon's turn socket in commands/chat.rs — the split that dropped a leading Prompt (RB3/T4)"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs"
+target      = "clients/desktop/src-tauri/src/commands/chat.rs"
 expect_red  = "exactly ONE reader"
 find        = '''    let mut frames_seen = 0u32;'''
 replace     = '''    let mut frames_seen = 0u32;
@@ -144,10 +144,10 @@ replace     = '''    let mut frames_seen = 0u32;
 [[family]]
 id          = "reading-wire"
 crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/reading_wire_types_census.rs"
+census      = "clients/desktop/src-tauri/tests/reading_wire_types_census.rs"
 mustFail    = ["the_reading_surface_has_one_path_and_no_mirror"]
 breaks      = "a local mirror of a reading wire shape in commands/reading.rs — the deleted *Dto set coming back"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs"
+target      = "clients/desktop/src-tauri/src/commands/reading.rs"
 expect_red  = "a struct/enum is defined in commands/reading.rs again"
 find        = '''use std::sync::Arc;'''
 replace     = '''use std::sync::Arc;
@@ -163,10 +163,10 @@ struct PlantedChunkDto {
 [[family]]
 id          = "conversation-wire"
 crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/conversation_wire_census.rs"
+census      = "clients/desktop/src-tauri/tests/conversation_wire_census.rs"
 mustFail    = ["the_desktop_holds_no_conversation_route_urls"]
 breaks      = "a hand-rolled daemon route URL in the desktop — a private client minting itself beside sovereign-turn-client"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/conversation.rs"
+target      = "clients/desktop/src-tauri/src/commands/conversation.rs"
 expect_red  = "hand-rolled daemon route URLs"
 # Re-planted 2026-09-10: the old `find` (`use crate::state::{self, AppState,
 # DesktopConfig};`) occurred 0x — D9b took the local seeding path out and the
@@ -203,10 +203,10 @@ const PLANTED_CONVERSATIONS_ROUTE: &str = "/v1/conversations";'''
 # connect status to give (ARCH §18.3).
 id          = "mcp-config-wire"
 crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/d8_wire_census.rs"
+census      = "clients/desktop/src-tauri/tests/d8_wire_census.rs"
 mustFail    = ["the_mcp_pane_reads_the_daemons_config"]
 breaks      = "a green connect dot derived from live_tool_count — the fact the host declined to invent, invented one layer up"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/mcp_servers.rs"
+target      = "clients/desktop/src-tauri/src/commands/mcp_servers.rs"
 expect_red  = "folds a connect flag out of"
 find        = '''            connected: None,'''
 replace     = '''            // TWIN-CENSUS PLANT (scripts/twin-census.py) — the green dot
@@ -217,10 +217,10 @@ replace     = '''            // TWIN-CENSUS PLANT (scripts/twin-census.py) — t
 [[family]]
 id          = "turn-capability"
 crate       = "sovereign-core"
-census      = "sovereign/crates/sovereign-core/tests/main/turn_capability_census.rs"
+census      = "svrn/crates/sovereign-core/tests/main/turn_capability_census.rs"
 mustFail    = ["no_runtime_site_reads_a_per_turn_capability_off_the_runtime_member"]
 breaks      = "a per-turn capability read off the Runtime member — compiles, passes in-process, resolves to the no-op sink on the daemon"
-target      = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
+target      = "svrn/crates/sovereign-core/src/runtime/streaming.rs"
 expect_red  = "process-wide capability read(s) are back"
 find        = '''impl Runtime {'''
 replace     = '''impl Runtime {
@@ -238,10 +238,10 @@ replace     = '''impl Runtime {
 [[family]]
 id          = "mobile-wire-mirror"
 crate       = "sovereign-mobile"
-census      = "sovereign-mobile/src-tauri/tests/census.rs"
+census      = "clients/mobile/src-tauri/tests/census.rs"
 mustFail    = ["no_wire_mirror_in_this_crate"]
 breaks      = "a wire-frame mirror declared in the phone crate — remote/dto.rs's deleted ServerEvent"
-target      = "sovereign-mobile/src-tauri/src/remote/dto.rs"
+target      = "clients/mobile/src-tauri/src/remote/dto.rs"
 expect_red  = "sv-one-client: the client family must be the only consumer"
 find        = '''use serde::{Deserialize, Serialize};'''
 replace     = '''use serde::{Deserialize, Serialize};
@@ -297,7 +297,7 @@ crate       = "sovereign-mesh"
 census      = "sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs"
 mustFail    = ["every_router_refuses_a_request_no_handler_of_ours_can_refuse"]
 breaks      = "a loopback-only router wired without the guard middleware — the LAN-reachable admin surface"
-target      = "sovereign/crates/sovereign-daemon/src/mesh_http.rs"
+target      = "svrn/crates/sovereign-daemon/src/mesh_http.rs"
 guard_paths = [
     "sovereign/crates/sovereign-mesh/tests/main.rs",
     "sovereign/crates/sovereign-mesh/tests/main/common/mod.rs",
