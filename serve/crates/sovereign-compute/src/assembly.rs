@@ -125,7 +125,7 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     let engine = config.engine.kind.clone();
     // A remote engine holds no chat slots, so it needs no `[models]`; every
     // other engine reads its slots from there.
-    let models = if engine == EngineKind::Remote {
+    let models = if !engine.needs_models() {
         config.models().ok()
     } else {
         Some(config.models()?)
@@ -153,8 +153,7 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             in_process.insert(PlannedSlot::Rerank);
         }
         engine_factory::embed_family_for(&models.embed)
-    } else if let (EngineKind::Remote, Some(path)) = (&engine, config.engine.embed_path.as_deref())
-    {
+    } else if let Some(path) = config.engine.own_embed_path() {
         in_process.insert(PlannedSlot::Embed);
         engine_factory::embed_family_for(path)
     } else {
@@ -222,7 +221,7 @@ impl ReloadFactory {
             reason,
         };
         // Required by every engine but a remote one, as in `plan_serving`.
-        let models = if config.engine.kind == EngineKind::Remote {
+        let models = if !config.engine.kind.needs_models() {
             config.models().ok()
         } else {
             Some(config.models().map_err(fail)?)

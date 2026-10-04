@@ -153,24 +153,15 @@ async fn hosted_setup(raw: &str, opts: &Opts) -> Result<(), String> {
     let client_port = opts
         .client_port
         .unwrap_or_else(sovereign_contracts::setup_config::default_client_port);
-    let mut cfg = SetupConfig::unconfigured();
-    cfg.models = None;
-    cfg.engine = EngineSection {
-        kind: EngineKind::Remote,
-        endpoint: Some(vendor.endpoint.clone()),
-        api_key: Some(key),
-        model_id: Some(model.clone()),
-        fast_model_id: opts.fast_model.clone(),
-        context_size: vendor.context_size,
-        embed_path: Some(embed_path),
-        extra_params: vendor.extra_params,
-        ..Default::default()
-    };
-    cfg.daemon.client_port = client_port;
-    cfg.daemon.internal_port = client_port + 1;
-    cfg.data = DataSection {
-        dir: data_dir.clone(),
-    };
+    let cfg = hosted_config(
+        vendor,
+        model,
+        key,
+        opts.fast_model.clone(),
+        embed_path,
+        data_dir,
+        client_port,
+    );
     cfg.save_to(&cfg_path)?;
     owner_only(&cfg_path)?;
     println!(
@@ -187,9 +178,67 @@ async fn hosted_setup(raw: &str, opts: &Opts) -> Result<(), String> {
     Ok(())
 }
 
+/// The config this command writes: no `[models]`, the vendor as a remote
+/// `[engine]` that embeds from `embed_path` in this process.
+fn hosted_config(
+    vendor: Vendor,
+    model: String,
+    key: String,
+    fast_model: Option<String>,
+    embed_path: std::path::PathBuf,
+    data_dir: std::path::PathBuf,
+    client_port: u16,
+) -> SetupConfig {
+    let mut cfg = SetupConfig::unconfigured();
+    cfg.models = None;
+    cfg.engine = EngineSection {
+        kind: EngineKind::Remote,
+        endpoint: Some(vendor.endpoint),
+        api_key: Some(key),
+        model_id: Some(model),
+        fast_model_id: fast_model,
+        context_size: vendor.context_size,
+        embed_path: Some(embed_path),
+        extra_params: vendor.extra_params,
+        ..Default::default()
+    };
+    cfg.daemon.client_port = client_port;
+    cfg.daemon.internal_port = client_port + 1;
+    cfg.data = DataSection { dir: data_dir };
+    cfg
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What this command writes, the daemon loads: a node whose chat model
+    /// is hosted serves its own turns and names its embed space from the
+    /// local GGUF. The boot refused this file until the class check learned
+    /// that a remote engine needs no `[models]`.
+    #[test]
+    fn the_written_config_loads_as_a_holder() {
+        use sovereign_core::setup_config::NodeClass;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let embed = dir.path().join("models/Qwen3-Embedding-0.6B-Q8_0.gguf");
+        let cfg = hosted_config(
+            vendor("deepseek").unwrap(),
+            "deepseek-flash".into(),
+            "not-a-key".into(),
+            None,
+            embed,
+            dir.path().to_path_buf(),
+            19751,
+        );
+        let path = SetupConfig::path_in(dir.path());
+        cfg.save_to(&path).expect("save");
+        let loaded = SetupConfig::load_from(&path).expect("the daemon must load what setup wrote");
+        assert_eq!(loaded.node_class(), NodeClass::Holder);
+        assert_eq!(
+            loaded.advertised_embed_model_id().as_deref(),
+            Some("Qwen3-Embedding-0.6B-Q8_0")
+        );
+    }
 
     /// A named vendor carries its base and default model; a URL needs
     /// `--model`; anything else is refused naming what is accepted.

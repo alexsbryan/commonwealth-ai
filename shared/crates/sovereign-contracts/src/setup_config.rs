@@ -345,7 +345,8 @@ impl NodeSection {
 /// there at the same time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeClass {
-    /// Holds model weights and serves them — the ordinary node.
+    /// Serves turns itself — from weights it holds, or from the hosted model
+    /// a remote `[engine]` names.
     Holder,
     /// Holds no weights. A full mesh member that routes every turn to
     /// `[node] entry`.
@@ -1694,10 +1695,12 @@ impl SetupConfig {
     /// the wizard's mid-flight config keeps loading. One implementation each;
     /// they are not two answers to one question (§10.6).
     pub fn node_class(&self) -> NodeClass {
-        let holds_models = self
-            .models
-            .as_ref()
-            .is_some_and(ModelsSection::is_populated);
+        // A remote engine serves turns here from the vendor model it names.
+        let holds_models = !self.engine.kind.needs_models()
+            || self
+                .models
+                .as_ref()
+                .is_some_and(ModelsSection::is_populated);
         match (holds_models, self.node.binding().is_some()) {
             (true, _) => NodeClass::Holder,
             (false, true) => NodeClass::Terminal,
@@ -1789,7 +1792,10 @@ impl SetupConfig {
     /// the result lands in (`sovereign-cli-shared::models`'s doc states that
     /// split, and `build_daemon_embed_fn` is the side that refuses).
     pub fn embed_model_stem(&self) -> Option<String> {
-        self.models.as_ref()?.embed_stem()
+        match self.engine.own_embed_path() {
+            Some(path) => path.file_stem()?.to_str().map(str::to_string),
+            None => self.models.as_ref()?.embed_stem(),
+        }
     }
 
     /// The embed model this node's own embedding calls land in — the local
@@ -1863,13 +1869,15 @@ impl SetupConfig {
                 path.display(),
             ));
         }
-        match self.models.is_some() || self.node.binding().is_some() {
+        let serves = self.models.is_some() || !self.engine.kind.needs_models();
+        match serves || self.node.binding().is_some() {
             true => Ok(()),
             false => Err(format!(
-                "{} declares neither `[models]` nor a `[node]` entry binding, \
-                 so this node can neither serve a turn nor route one. Run \
-                 `svrn setup` to hold models locally, or `svrn setup \
-                 --terminal <join-link>` to route to a peer that does.",
+                "{} declares neither `[models]`, a remote `[engine]`, nor a \
+                 `[node]` entry binding, so this node can neither serve a turn \
+                 nor route one. Run `svrn setup` to hold models locally, \
+                 `svrn setup --hosted <vendor>` to use a hosted model, or \
+                 `svrn setup --terminal <join-link>` to route to a peer.",
                 path.display(),
             )),
         }

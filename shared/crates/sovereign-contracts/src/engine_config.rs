@@ -61,6 +61,13 @@ impl EngineKind {
     pub fn is_builtin(&self) -> bool {
         matches!(self, Self::Llama | Self::Remote)
     }
+
+    /// Does this engine read its chat slots from `[models]`? Every engine
+    /// but a remote one: its chat model is the vendor's, so its config may
+    /// carry no `[models]` at all (`svrn setup --hosted` writes none).
+    pub fn needs_models(&self) -> bool {
+        !matches!(self, Self::Remote)
+    }
 }
 
 impl From<String> for EngineKind {
@@ -163,6 +170,18 @@ pub struct EngineSection {
 
 fn default_engine_context_size() -> u32 {
     8192
+}
+
+impl EngineSection {
+    /// The embed GGUF this engine loads in process when it holds no
+    /// `[models]`: a remote engine's `embed_path`. `None` for every other
+    /// engine, which embeds from `[models]`.
+    pub fn own_embed_path(&self) -> Option<&std::path::Path> {
+        match self.kind.needs_models() {
+            true => None,
+            false => self.embed_path.as_deref(),
+        }
+    }
 }
 
 impl Default for EngineSection {
