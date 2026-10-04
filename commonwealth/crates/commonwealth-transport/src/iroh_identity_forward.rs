@@ -545,5 +545,5 @@ pub async fn pump_by_name(
 }
 
 #[cfg(test)]
-#[path = "iroh_identity_forward_tests.rs"]
+#[path = "tests/iroh_identity_forward.rs"]
 mod tests;
