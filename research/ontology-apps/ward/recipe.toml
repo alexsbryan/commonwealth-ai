@@ -1,0 +1,81 @@
+[corpus]
+id = "crm-ward"
+name = "CRM from a mailbox: Kim Ward, Enron West Gas Origination (1,000-message sample)"
+description = "The ontology-apps CRM sketch, unchanged but for id and source, over research/ontology-apps/ward/prepare.py's sample of Ward's CMU maildir."
+license = "personal-data"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.0
+size_indexed_gb = 0.3
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/bench-corpora/enron-ward/sample"
+
+[extract]
+type = "email"
+max_body_bytes = 4194304
+max_attachment_bytes = 0
+
+[[filter]]
+type = "boilerplate"
+strip_signatures = true
+strip_quoted_replies = true
+strip_disclaimers = true
+min_body_chars_after_strip = 20
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "email", type = "text" }, { name = "employer", type = "ref", of = "company" }]
+identity = ["email"]
+
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+
+[[enrichment.ontology.types]]
+name = "deal"
+kind = "entity"
+attributes = [
+  { name = "counterparty", type = "ref", of = "company" },
+  { name = "amount", type = "quantity", unit = "USD" },
+]
+
+[[enrichment.ontology.types]]
+name = "stage_update"
+kind = "claim"
+force = "assertive"
+subject = "deal"
+attributes = [{ name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost"] }]
+
+[[enrichment.ontology.types]]
+name = "commitment"
+kind = "claim"
+force = "commissive"
+subject = "person"
+attributes = [{ name = "due", type = "time" }]
+
+[enrichment.ontology.change]
+supersedes = { stage_update = "document_date" }
+
+[enrichment.ontology.tension]
+between = ["stage_update"]
