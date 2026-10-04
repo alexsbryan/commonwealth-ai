@@ -563,6 +563,7 @@ fn a_revoked_session_is_denied_immediately() {
         issued_at_ms: 0,
         expires_at_ms: u64::MAX,
         revoked: false,
+        holder: crate::GrantHolder::Guest,
     };
     let session = store.claim("h1", &grant, "Ada", 10).expect("claims");
     assert!(session.is_live(11), "live before the revoke");

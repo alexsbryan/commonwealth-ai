@@ -241,7 +241,7 @@ async fn mint_rail_grant(namespace: &str) -> Result<String, String> {
     let body = serde_json::json!({
         "scopes": { "rail": namespace },
         "ttl_secs": DEV_GRANT_TTL_SECS,
-        "label": format!("ring show: {namespace}"),
+        "label": format!("ring show: {namespace}"), "holder": "member_page",
     });
     let resp = http_client()?
         .post(&url)

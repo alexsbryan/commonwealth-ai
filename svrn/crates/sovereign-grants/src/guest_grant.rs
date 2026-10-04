@@ -167,6 +167,23 @@ impl Scope {
     }
 }
 
+/// Who holds a grant's bearer, which decides whose words its writes are. A
+/// closed set (ARCH 9), minted by the operator's own route and never by the
+/// holder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GrantHolder {
+    /// A person holding a link — one QR serves a room, so the door makes each
+    /// write claim a name (operator decision 2026-09-23).
+    #[default]
+    Guest,
+    /// `svrn ring show`, holding it for the member's own app on the member's
+    /// own machine. Nobody to tell apart, so its writes are the member's, as
+    /// the page's shim already assumes (`ring_shim.js`: "holds the grant
+    /// itself").
+    MemberPage,
+}
+
 /// One live guest authorization.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuestGrant {
@@ -183,6 +200,8 @@ pub struct GuestGrant {
     pub issued_at_ms: u64,
     pub expires_at_ms: u64,
     pub revoked: bool,
+    /// Whose words this grant's writes are.
+    pub holder: GrantHolder,
 }
 
 impl GuestGrant {
@@ -311,6 +330,19 @@ impl GuestGrantStore {
         ttl_secs: u64,
         now_ms: u64,
     ) -> GuestGrant {
+        self.issue_held(GrantHolder::Guest, token, scopes, label, ttl_secs, now_ms)
+    }
+
+    /// [`Self::issue`] for a named [`GrantHolder`].
+    pub fn issue_held(
+        &self,
+        holder: GrantHolder,
+        token: impl Into<String>,
+        scopes: Vec<Scope>,
+        label: Option<String>,
+        ttl_secs: u64,
+        now_ms: u64,
+    ) -> GuestGrant {
         let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);
         let token = token.into();
         let grant = GuestGrant {
@@ -320,6 +352,7 @@ impl GuestGrantStore {
             issued_at_ms: now_ms,
             expires_at_ms: now_ms + ttl * 1000,
             revoked: false,
+            holder,
         };
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         guard.insert(token, grant.clone());

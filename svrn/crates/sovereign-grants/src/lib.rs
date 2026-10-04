@@ -9,7 +9,7 @@ pub mod work_queue;
 
 pub use auto_recover::{FoldRecovery, RecoveryOutcome};
 
-pub use guest_grant::{GuestGrant, GuestGrantStore, Scope};
+pub use guest_grant::{GrantHolder, GuestGrant, GuestGrantStore, Scope};
 pub use guest_session::{
     GuestSession, GuestSessionBinding, GuestSessionStore, NameHeld, UnknownBinding,
 };

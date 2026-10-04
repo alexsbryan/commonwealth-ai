@@ -466,6 +466,7 @@ fn permits_path_is_exact_and_grants_no_children() {
         issued_at_ms: 0,
         expires_at_ms: u64::MAX,
         revoked: false,
+        holder: sovereign_grants::GrantHolder::Guest,
     };
     assert!(grant.permits_path("/v1/models"));
     assert!(grant.permits_path("/v1/chat/completions"));

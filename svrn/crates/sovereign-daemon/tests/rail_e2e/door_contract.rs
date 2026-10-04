@@ -79,6 +79,47 @@ async fn a_guest_append_with_no_name_is_refused_by_name() {
     );
 }
 
+/// **C1's other half: a member's own page writes in the member's name.**
+/// `svrn ring show` holds its grant as [`GrantHolder::MemberPage`], and its
+/// shim claims no name ("holds the grant itself"), so the same unnamed append
+/// the test above refuses lands here as the member's own act. Failing input:
+/// the door that applied the name rule to every grant, which refused every
+/// `ring show` page's writes from 8a6680d4f on.
+#[tokio::test]
+async fn a_member_pages_unnamed_append_is_the_members_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let state = state_with_rail(dir.path(), &key).await;
+    state.inner.node.guest_grants.issue_held(
+        GrantHolder::MemberPage,
+        GUEST_TOKEN,
+        vec![Scope::Rails(NS.into())],
+        Some(format!("ring show: {NS}")),
+        3_600,
+        sovereign_time::unix_millis(),
+    );
+
+    let (status, body) = call(
+        state.clone(),
+        request(
+            "POST",
+            "/v1/rail/append",
+            LAN_PEER,
+            Some(GUEST_TOKEN),
+            Some(groceries()),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let log = operator_log(&state).await;
+    assert_eq!(log["held"], 1, "{log}");
+    let person = log["ops"][0]["person"].as_str().expect("a person");
+    assert!(
+        !person.contains("guest of"),
+        "the member's own words read as a guest's: {person}"
+    );
+}
+
 /// **C3b: a replayed append yields one act.** The key rides OUTSIDE the act —
 /// door state, never the permanent journal — and the door replays the
 /// recorded answer. Failing input: two POSTs with one key, which minted two

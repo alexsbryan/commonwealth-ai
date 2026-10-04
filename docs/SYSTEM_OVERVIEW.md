@@ -1147,7 +1147,11 @@ A non-loopback caller presents one of two bearers. `client_token` is
 daemon-wide. An **ephemeral guest grant** is the narrow one: short-lived,
 revocable, bound to a closed `Scope` enum whose `paths()` is the only route
 allowlist there is. A guest is not a mesh member and cannot mint further
-grants, because no `Scope` variant names `/internal/*`.
+grants, because no `Scope` variant names `/internal/*`. A grant also names its
+`GrantHolder`: `Guest` (the default, every link a person holds), whose writes
+must claim a name at the rail door, or `MemberPage`, which only the operator's
+mint route sets and only `svrn ring show` asks for, whose writes are the
+member's own.
 
 A daemon holding on-prem API keys (`<data_dir>/client-tokens/<sub>.key`,
 written by `svrn daemon key`) is KEYED: `api_keys::seal` wraps every client

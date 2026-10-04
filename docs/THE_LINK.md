@@ -45,7 +45,9 @@ produces is signed by the host's node, with the guest carried as a display
 name the host vouches for. The record honestly contains *"the host vouches
 the guest said X"* — never *"the guest said X."* — and the door enforces it:
 a guest append with no claimed name is refused by name (2026-09-23), so the
-sentence is true by construction rather than by the shim's cooperation.
+sentence is true by construction rather than by the shim's cooperation. The
+rule is a guest's alone: the grant `svrn ring show` holds for the member's own
+app is minted as `GrantHolder::MemberPage`, and its writes are the member's.
 Grants are short-lived, in-memory, and revocable by the host, which is
 exactly what makes them suitable for strangers: the guest tier is where this
 system's credentials can be killed, and it is the only one.

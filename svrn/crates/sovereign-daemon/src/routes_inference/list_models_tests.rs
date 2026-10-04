@@ -348,6 +348,7 @@ fn guest_for(models: &[&str]) -> Option<axum::Extension<crate::client_auth::Gues
             issued_at_ms: 0,
             expires_at_ms: u64::MAX,
             revoked: false,
+            holder: sovereign_grants::GrantHolder::Guest,
         }),
         // A model grant is not a room; nobody claims a name on it.
         session: None,
