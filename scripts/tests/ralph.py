@@ -7,6 +7,7 @@ input is explicit.
 """
 import contextlib
 import io
+import itertools
 import json
 import os
 import pathlib
@@ -1093,14 +1094,22 @@ class RalphCheckTests(unittest.TestCase):
 # The legacy queues' hand-made PROMPT.md files were factored from the base as
 # of 865cdc92b. five-programs-65 (1cc169511) moved the base on purpose, and
 # those files are their queues' to change, so the factoring proofs render
-# against the base they were factored from.
+# against the base they were factored from. Top level programs (#68, 6c51bba85)
+# rewrote the repo paths inside those files, so the base carries the same
+# renames; nothing else in it moved.
 FACTORED_BASE = "865cdc92b"
+LAYOUT_MOVE_RENAMES = (("sovereign/ARCH_PRINCIPLES.md", "docs/ARCH_PRINCIPLES.md"),
+                       ("sovereign/SYSTEM_OVERVIEW.md", "docs/SYSTEM_OVERVIEW.md"),
+                       ("sovereign/apps/", "cmnwlth/apps/"))
 
 
 def factored_base():
-    return subprocess.run(["git", "-C", str(REPO), "show",
+    base = subprocess.run(["git", "-C", str(REPO), "show",
                            f"{FACTORED_BASE}:ralph/PROMPT.base.md"],
                           capture_output=True, text=True, check=True).stdout
+    for old, new in LAYOUT_MOVE_RENAMES:
+        base = base.replace(old, new)
+    return base
 
 
 class PromptRenderTests(unittest.TestCase):
@@ -1927,6 +1936,40 @@ class SupervisorCooldownTests(unittest.TestCase):
             self.assertEqual(n["i"], 5)
 
 
+class SupervisorResolverDidNotRunTests(SupervisorCooldownTests):
+    """12 of the ersilia supervisor's 23 "changed nothing" escalations came from
+    resolvers that lasted two minutes or less, 9 of them 30-32s: they never ran,
+    yet each one counted, and parked or ended the night."""
+
+    test_a_stop_that_names_no_row_cools_down_and_relaunches = None
+    test_cool_downs_are_bounded_and_then_the_stop_stands = None
+    test_an_operator_stop_during_a_cool_down_is_honoured = None
+    test_a_unit_done_resets_the_cool_downs = None
+
+    def test_a_resolver_that_ends_at_once_did_not_run_and_parks_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = []
+
+            def inner():
+                runs.append(1)
+                if len(runs) == 1:
+                    write(tmp, "ralph/STATE.md",
+                          "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n")
+                    write(tmp, "ralph/NEEDS_HUMAN.md", "# NEEDS_HUMAN — dm-a: premise false\n")
+                else:
+                    write(tmp, "ralph/DONE", "")
+            s = self.make(tmp, run_inner=inner)
+            s.clock = itertools.count(0, 30).__next__
+            out = io.StringIO()
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    mock.patch.object(ralph, "commit_state", return_value=None), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(s.run(), 0)
+            self.assertFalse(pathlib.Path(tmp, "ralph/parked/dm-a.md").exists())
+            self.assertIn("did not run", out.getvalue())
+            self.assertEqual(len(runs), 2)
+
+
 class WatchTests(unittest.TestCase):
     def make(self, tmp, *, running=True, free=100_000, stall_secs=300):
         (pathlib.Path(tmp) / "ralph").mkdir(exist_ok=True)
@@ -2594,6 +2637,35 @@ class HaltTailTests(unittest.TestCase):
                 self.assertEqual(pool.run(), 3)
             self.assertIn("1 new commit(s) — continuing, no failure count (1/1)", out.getvalue())
             self.assertEqual(len(runs), 2)
+            self.assertIn("lane dm-a failed 1 waves", (root / "ralph/NEEDS_HUMAN.md").read_text())
+
+    def test_a_lane_session_that_ends_at_once_having_done_nothing_is_not_struck(self):
+        # 30-90s session deaths — a provider error, a quota, a harness refusal —
+        # struck ersilia lanes out (2026-09-22, three halts); the unit did
+        # nothing wrong. Such an end costs no strike, within its own bound, and
+        # the pool backs off before the next wave.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            runs = []
+
+            class QuickLane:
+                def __init__(self, cwd):
+                    pass
+
+                def run(self, model_args, prompt, log):
+                    runs.append(1)
+                    return 1                # refused at once; nothing committed
+
+            slept = []
+            pool = self.make(root, lambda cwd, env=None: QuickLane(cwd), max_lane_failures=1,
+                             clock=itertools.count(0, 30).__next__, sleep=slept.append)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 3)
+            said = out.getvalue()
+            self.assertEqual(said.count("the session did not run"), ralph.MAX_NEVER_RAN)
+            self.assertEqual(len(runs), ralph.MAX_NEVER_RAN + 1)
+            self.assertIn(ralph.NEVER_RAN_BACKOFF, slept)
             self.assertIn("lane dm-a failed 1 waves", (root / "ralph/NEEDS_HUMAN.md").read_text())
 
     def test_a_review_exhaustion_halt_carries_the_last_error_line(self):
