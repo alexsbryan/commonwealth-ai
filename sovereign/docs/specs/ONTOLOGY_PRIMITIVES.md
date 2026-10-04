@@ -734,3 +734,57 @@ absorbed. The order of landing is unchanged: M0 (ground on build), Axis
 1, then Change and Derivation because six and seven users need them,
 then Identity as the counted types show up. The ten users are the
 acceptance set; a facet none of them would write does not land.
+
+## 8. Proposed: types composed from what is said (2026-10-03, not built)
+
+Some types are never mentioned, only done. A deal in a mailbox is the joint
+commitment a run of acts builds (a request, an indication, a counter, an
+accept, a confirm); a support case is the tickets and requests one customer
+files about one feature (§1.10). No single section carries their identity or
+their state, so Phase 1 cannot extract them. Measured on the crm-proof
+baseline (`quality/campaigns/crm-proof.toml`): 22 deal atoms for 79 gold
+transactions, 153 of 222 stage claims with no subject, 0 of 206 holdout
+stage updates matched. Header structure alone regroups the gold deals at
+B-cubed F1 0.60 (thread subject; counterparty domain 0.57).
+
+Kinds stay closed (§0). A composed type is an ENTITY type with a `compose`
+facet, so claims about it keep using `subject`. Four pieces, each on its axis,
+each reusing what exists:
+
+| Axis | Piece | Reuses |
+|---|---|---|
+| 1 Shape | `source = { metadata = ..., attributes = {...} }`: typed atoms from a document's own fields (email headers, front matter), no model | `SourceDecl` (decl.rs:553, no consumer today); per-document fields ride `ChapterEntry.metadata` into chapters.json, which resolution already reads |
+| 3 Identity | a declared `identity` key match merges (what `recipe validate` already prints as "strict merge") | the identity veto (`resolution_identity.rs`); `ExternalIdSignal` |
+| 4 Change | `clock` from a declared metadata field, stamped per atom as `document_date`; a state type `of` a composed type derives one state per member, ordered by that clock, so "current" is the latest | the ResolutionPolicy chapters read; trajectories (ordering by section id today, no clock) |
+| 5 Derivation | `compose = { of, block, link, anchor, adjudicate }`: member claims grouped where `block` attributes are equal, `link` attributes compatible or the document thread shared, an `anchor` attribute (a deal number) deciding outright; ambiguous pairs optionally put to the model as "same X?" | the reconciler's blocked pairs and union-find; the Phase-6 chat loop and `same_as` reification; Configuration's post-resolution write (after Resolve, before Tensions) with `Composes` edges to members |
+
+```toml
+[[enrichment.ontology.types]]
+name = "deal"
+kind = "entity"
+compose = { of = ["deal_act"], block = ["counterparty"], link = ["commodity", "delivery_point", "period"],
+            anchor = "deal_ref", adjudicate = true }
+
+[[enrichment.ontology.types]]
+name = "deal_act"
+kind = "claim"
+force = "commissive"
+subject = "deal"
+attributes = [{ name = "act", type = "text", values = ["request", "offer", "counter", "accept", "decline", "confirm"] },
+              { name = "counterparty", type = "ref", of = "company" }, { name = "commodity", type = "text" },
+              { name = "delivery_point", type = "text" }, { name = "period", type = "time" }, { name = "deal_ref", type = "text" }]
+
+[[enrichment.ontology.types]]
+name = "deal_stage"
+kind = "state"
+of = "deal"
+derive = { from = "deal_act.act", map = { request = "lead", offer = "proposal", counter = "negotiating",
+                                          accept = "won", confirm = "won", decline = "lost" } }
+```
+
+The §1.10 support lead writes the same facet: `case` composed of `request`
+and `ticket`, blocked on `customer` and `feature`. Lands only after a
+prototype over the declaration (not over deals) moves crm-proof's deal and
+stage bars on the holdout; then Rust, with `deny_unknown_fields` on the new
+facets (unknown per-type keys are dropped silently today), a `derived_facets`
+line per facet, and the composed type added to the pipeline's `emits()`.
