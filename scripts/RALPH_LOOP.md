@@ -117,7 +117,10 @@ disagrees with is named and one `git revert` away. The director runs on
 
 `pool` runs a ring's ready units concurrently, each in its own git worktree on
 its own branch; waves of up to `--lanes`; merges are serial; a conflict aborts
-and halts, never auto-resolved. REVIEW units run serially in the main tree.
+the merge, never auto-resolved by the pool, and goes back to the lane as a
+strike — its resume merges the base in and its session resolves it — so the
+pool halts on a lane that conflicts `--max-lane-failures` times, not on the
+first. REVIEW units run serially in the main tree.
 
 ```sh
 nohup python3 scripts/ralph.py supervise --workdir . --label ring2 \

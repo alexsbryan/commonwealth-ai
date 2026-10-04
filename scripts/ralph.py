@@ -2084,6 +2084,7 @@ class Pool:
         self._session_base = {}
         self._session_secs = {}
         self._never_ran = {}
+        self._merge_failures = {}
         self.clock = clock
         self._held = frozenset()
         self.jobs_share = jobs_share or cargo_jobs_share
@@ -2123,6 +2124,7 @@ class Pool:
             saved = json.loads(state.read_text())
             self._lane_failures = dict(saved.get("failures", {}))
             self._lane_continuations = dict(saved.get("continuations", {}))
+            self._merge_failures = dict(saved.get("merge_failures", {}))
         except (OSError, ValueError) as e:
             say(f"pool: {state} unreadable ({e}) — counters start fresh")
         state.unlink(missing_ok=True)
@@ -2154,7 +2156,8 @@ class Pool:
         state = self._state_file()
         state.parent.mkdir(parents=True, exist_ok=True)
         state.write_text(json.dumps({"failures": self._lane_failures,
-                                     "continuations": self._lane_continuations}))
+                                     "continuations": self._lane_continuations,
+                                     "merge_failures": self._merge_failures}))
         say(f"pool: ralph.py changed ({self._loaded[:12]} → {now[:12]}) — re-exec between "
             "waves, no session running")
         sys.stdout.flush()
@@ -2840,8 +2843,21 @@ class Pool:
             r = self._git("merge", "--no-ff", "-m", f"merge {unit}", branch)
             if r.returncode != 0:
                 self._git("merge", "--abort")
-                return self._halt(f"merge conflict merging {branch} — resolve in the "
-                                  "main tree, then resume")
+                # The base moved under the lane: its resume merges the base in and
+                # its session resolves the conflict, so the lane gets it back as a
+                # strike rather than the pool halting (8 settle-time halts,
+                # 2026-09-17 → 10-04). Its own counter: the lane's end counters
+                # were cleared when it finished.
+                n = self._merge_failures.get(unit, 0) + 1
+                self._merge_failures[unit] = n
+                why = error_tail(r.stderr or r.stdout) or "the merge was refused"
+                say(f"pool: merging {branch} failed ({why}) — back to the lane to merge "
+                    f"{self.base_branch} in and resolve (failure {n}/{self.max_lane_failures})")
+                if n >= self.max_lane_failures:
+                    return self._halt(f"merge conflict merging {branch}, {n} time(s) — resolve "
+                                      "in the main tree, then resume")
+                continue
+            self._merge_failures.pop(unit, None)
             refused = self._regenerate_decisions(unit)
             queue = self._queue()
             if queue is not None:

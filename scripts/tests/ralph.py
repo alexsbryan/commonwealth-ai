@@ -2236,14 +2236,29 @@ class PoolTests(unittest.TestCase):
             self.assertEqual(pool.run(), 0)
             self.assertEqual((root / "dm-a.txt").read_text(), "the order")
 
-    def test_merge_conflict_halts(self):
+    def test_a_merge_conflict_goes_back_to_the_lane_and_the_pool_runs_on(self):
+        # A settle-time conflict halted the whole pool 8 times (2026-09-17 →
+        # 10-04); the base had moved under the lane, which is the lane's to
+        # resolve — its resume merges the base in and its session resolves it.
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd, body=cwd.name, shared=True))
-            self.assertEqual(pool.run(), 3)
-            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
-            self.assertIn("merge conflict", pkg)
-            self.assertIn("halt: merge conflict", (root / "ralph/STOP").read_text())
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertIn("back to the lane", out.getvalue())
+            state = (root / "ralph/STATE.md").read_text()
+            self.assertIn("- [x] dm-a", state)
+            self.assertIn("- [x] dm-b", state)
+
+    def test_a_lane_that_keeps_conflicting_halts_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd, body=cwd.name, shared=True),
+                             max_lane_failures=1)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(pool.run(), 3)
+            self.assertIn("merge conflict", (root / "ralph/NEEDS_HUMAN.md").read_text())
 
     def test_a_failed_done_commit_halts_by_name_not_as_the_next_merge_conflict(self):
         # phase-c-19: the done commit after one merge failed unchecked, the
@@ -3184,9 +3199,12 @@ class PoolQueueTests(unittest.TestCase):
 
     def test_without_the_renumber_the_second_merge_halts(self):
         # The failing input the renumber exists for (its PLANT, kept as a test).
+        # One strike: the subject is that the second merge conflicts, not how a
+        # lane resolves it (a conflict goes back to the lane otherwise).
         with tempfile.TemporaryDirectory() as tmp:
             root = self.decisions_fixture(tmp)
-            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd))
+            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd),
+                             max_lane_failures=1)
             with mock.patch.object(pool, "_renumber_decisions", return_value=None):
                 self.assertEqual(pool.run(), 3)
             self.assertIn("merge conflict", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
