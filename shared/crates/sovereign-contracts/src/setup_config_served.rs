@@ -24,13 +24,19 @@ impl SetupConfig {
     /// The primary model's GGUF file stem — the id the slot manager resolves
     /// by, and the name a caller passes as `model` over HTTP.
     ///
+    /// On a hosted node (a remote `[engine]`) it is the vendor's model id,
+    /// which that node serves as its primary.
+    ///
     /// `None` on a terminal (no slots) and on a primary path with no stem.
     /// Collapses a chain that was copy-pasted at six call sites
     /// (`audit_extract`, `code_cmd`, `chat_cmd::bootstrap`,
     /// `recipe_agent_live_trial`, `deep_research::launch`, `mesh_bench`), each
     /// of which had to be updated in lockstep to stay right (§10.6).
     pub fn primary_model_stem(&self) -> Option<String> {
-        self.models.as_ref()?.primary_stem()
+        match self.engine.kind.needs_models() {
+            true => self.models.as_ref()?.primary_stem(),
+            false => self.engine.model_id.clone(),
+        }
     }
 
     /// The embed model's GGUF file stem. `None` on a terminal.

@@ -234,6 +234,12 @@ mod tests {
         cfg.save_to(&path).expect("save");
         let loaded = SetupConfig::load_from(&path).expect("the daemon must load what setup wrote");
         assert_eq!(loaded.node_class(), NodeClass::Holder);
+        // The name a caller passes as `model`, and the chat model watched-folder
+        // enrichment defaults to: the vendor's, which this node serves as primary.
+        assert_eq!(
+            loaded.primary_model_stem().as_deref(),
+            Some("deepseek-flash")
+        );
         assert_eq!(
             loaded.advertised_embed_model_id().as_deref(),
             Some("Qwen3-Embedding-0.6B-Q8_0")
