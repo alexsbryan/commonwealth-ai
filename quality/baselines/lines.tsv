@@ -25,11 +25,11 @@
 2445	commonwealth/crates/commonwealth-transport::tests
 2533	commonwealth/crates/commonwealth-work
 1840	commonwealth/crates/commonwealth-work::tests
-63086	corpus-engine
+63418	corpus-engine
 1297	corpus-engine-archaeology
 582	corpus-engine-archaeology::tests
-10849	corpus-engine-atlas-reader
-2311	corpus-engine-atlas-reader::tests
+10944	corpus-engine-atlas-reader
+2337	corpus-engine-atlas-reader::tests
 4979	corpus-engine-notes
 5874	corpus-engine-notes::tests
 6213	corpus-engine-scip
@@ -42,7 +42,7 @@
 60	corpus-engine-yield::tests
 6592	corpus-engine/xtask
 7301	corpus-engine/xtask::tests
-48903	corpus-engine::tests
+49421	corpus-engine::tests
 8414	corpus-index
 1982	corpus-index::tests
 1160	corpus-mcp
@@ -115,7 +115,7 @@
 2011	sovereign/crates/sovereign-compute::tests
 19039	sovereign/crates/sovereign-contracts
 8593	sovereign/crates/sovereign-contracts::tests
-56332	sovereign/crates/sovereign-core
+56639	sovereign/crates/sovereign-core
 40759	sovereign/crates/sovereign-core::tests
 39155	sovereign/crates/sovereign-daemon
 31358	sovereign/crates/sovereign-daemon::tests
@@ -178,8 +178,8 @@
 1678	studio/crates/sovereign-workflow-host
 611	studio/crates/sovereign-workflow-host::tests
 1213	studio/crates/sovereign-workflow::tests
-3787	understanding-atlas
-2665	understanding-atlas::tests
+4034	understanding-atlas
+2724	understanding-atlas::tests
 8	understanding-host::tests
 3186	understanding-vocab
 874	understanding-vocab::tests
