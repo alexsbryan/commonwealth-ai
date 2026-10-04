@@ -37,10 +37,15 @@
 # through any door. The gap between "any admitted member may write either"
 # and what the doors and sync will carry is the join surface's work.
 #
-# TOPOLOGY, named because the goodhart demands it: three daemons on ONE
-# host, one clock, one mesh (the join link — the leak — is ada's mesh key;
-# mdns off, they meet only through it). Nothing here says anything about
-# cross-host latency.
+# TOPOLOGY, named because the goodhart demands it: three nodes on ONE host,
+# one clock, one mesh (the join link — the leak — is ada's mesh key; mdns
+# off, they meet only through it). A node is a `cw-rails` — its mesh
+# endpoint and, since pb-mesh-exit-transport, the holder of its ring
+# journals and the side that runs ring-sync — and the daemon that dials it
+# through `[daemon] rails_base`, whose /v1/rail/* doors forward there. Each
+# cw-rails is local-only (no relay, no --mdns): the three dial each other by
+# the direct addresses the invite and gossip carry. Nothing here says
+# anything about cross-host latency.
 #
 #   scripts/ring-membership-demo.sh sitting    up + the demo + down
 #   scripts/ring-membership-demo.sh up         bring the three up, join, seed
@@ -54,6 +59,8 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 D="${RING_MEMBERSHIP_DIR:-${TMPDIR:-/tmp}/ring-membership-demo}"
 DAEMON="$REPO/target/debug/sovereign-cli-daemon"
 CLI="$REPO/target/debug/sovereign-cli"
+# CW_RAILS_BIN: the name `svrn mesh up` reads too (rails_up.rs locate_rails).
+RAILS="${CW_RAILS_BIN:-$REPO/target/debug/cw-rails}"
 STAGER="$REPO/target/debug/examples/stage_member_act"
 RING=house-ring
 export SOVEREIGN_NO_STALE_WARN=1
@@ -61,38 +68,72 @@ export SOVEREIGN_NO_STALE_WARN=1
 ADA_C=19941;  ADA_I=19942
 MIRA_C=19951; MIRA_I=19952
 SAM_C=19961;  SAM_I=19962
+# svrn binds client, internal and its ring rail at client + 2 (guest_pages.rs
+# rail_port); cw-rails' API is client + 5 and serve (hosted in the daemon)
+# client + 6, so nothing falls back to the house's :9747/:9748.
+declare -A CPORT=([ada]=$ADA_C [mira]=$MIRA_C [sam]=$SAM_C)
+rport() { echo $(( CPORT[$1] + 5 )); }
+sport() { echo $(( CPORT[$1] + 6 )); }
+rails_url() { echo "http://127.0.0.1:$(rport "$1")"; }
+# cw-rails' root, beside the daemon's data dir: where the ring journals and
+# roster files live now.
+rdir() { echo "$D/$1-rails"; }
 
 # Deterministic on purpose: reruns reproduce the same actors and op ids.
 SAM_SEED="a5$(printf 'd1%.0s' {1..31})"
 FRIEND_SEED="b7$(printf 'e2%.0s' {1..31})"
 
-sv() { local n=$1; shift; SOVEREIGN_DATA_DIR="$D/$n" "$CLI" "$@" 2>/dev/null | grep -v '^svrnmesh: bridged'; }
+# A CLI call on node n. CW_RAILS_DIR is load-bearing: `ring roster add`
+# writes under it, and unset it is the house's ~/.commonwealth-rails.
+sv() { local n=$1; shift; SOVEREIGN_DATA_DIR="$D/$n" SOVEREIGN_SERVE_PORT="$(sport "$n")" CW_RAILS_DIR="$(rdir "$n")" "$CLI" "$@" 2>/dev/null | grep -v '^svrnmesh: bridged'; }
 
 need_binaries() {
   local missing=0
-  for b in "$DAEMON" "$CLI" "$STAGER"; do [ -x "$b" ] || { echo "missing: $b" >&2; missing=1; }; done
+  for b in "$DAEMON" "$CLI" "$RAILS" "$STAGER"; do [ -x "$b" ] || { echo "missing: $b" >&2; missing=1; }; done
   [ "$missing" = 0 ] && return 0
   echo "build first:" >&2
-  echo "  cargo build -p sovereign-cli-daemon -p sovereign-cli --features sovereign-cli/dev-tools -p commonwealth-rail --example stage_member_act" >&2
+  echo "  cargo build -p sovereign-cli-daemon -p sovereign-cli --features sovereign-cli/dev-tools -p commonwealth-rails -p commonwealth-rail --example stage_member_act" >&2
   exit 3
 }
 
 mkcfg() { # name client internal
-  local dir="$D/$1"; mkdir -p "$dir"
+  local dir="$D/$1" rd; rd=$(rdir "$1"); mkdir -p "$dir" "$rd"
   {
     echo 'mcp_servers = []'; echo
     echo '[daemon]'
     echo "client_port = $2"; echo "internal_port = $3"
+    echo "rails_base = \"$(rails_url "$1")\""
     echo 'autostart = false'
     echo 'client_bind = "127.0.0.1"'; echo 'internal_bind = "127.0.0.1"'; echo
     echo '[data]'; echo "dir = \"$dir\""; echo
     echo '[node]'; echo 'entry = "http://127.0.0.1:9741"'; echo
-    echo '[iroh]'; echo 'enabled = true'; echo
     echo '[discovery]'; echo 'mdns = false'; echo 'seed_addrs = []'
   } > "$dir/config.toml"
+  # cw-rails' own config: `name` is the member name the mesh shows and what
+  # /v1/mesh/join's node_name must equal (membership.rs check_node_name).
+  printf 'name = "%s"\nlisten = %s\n\n[relay]\ndiscovery = "none"\n' "${1^}" "$(rport "$1")" > "$rd/rails.toml"
+  # One node identity in both roots, as `svrn mesh up`'s handover leaves it
+  # (identity_handover.rs), before either boots.
+  [ -f "$rd/node_id" ] || head -c 16 /dev/urandom > "$rd/node_id"
+  cp "$rd/node_id" "$dir/node_id"
 }
 
-start_daemon() { local n=$1; SOVEREIGN_DATA_DIR="$D/$n" RUST_LOG="${RING_MEMBERSHIP_RUST_LOG:-warn,sovereign_mesh::ring_sync=debug,sovereign_daemon::routes_internal::ring_sync=debug}" "$DAEMON" daemon run > "$D/$n/daemon.out" 2> "$D/$n/daemon.err" & echo $! > "$D/$n/pid"; }
+# Ring-sync is cw-rails' now, so its log is where the roster gate's refusal
+# lands (ring_routes.rs, a warn on target `rails`, which info shows).
+start_rails() { local n=$1; RUST_LOG="${RING_MEMBERSHIP_RUST_LOG:-info}" "$RAILS" run --data-dir "$(rdir "$n")" > "$D/$n/rails.out" 2> "$D/$n/rails.err" & echo $! > "$D/$n/rails.pid"; }
+start_daemon() { local n=$1; SOVEREIGN_DATA_DIR="$D/$n" SOVEREIGN_SERVE_PORT="$(sport "$n")" CW_RAILS_DIR="$(rdir "$n")" RUST_LOG=warn "$DAEMON" daemon run > "$D/$n/daemon.out" 2> "$D/$n/daemon.err" & echo $! > "$D/$n/pid"; }
+
+wait_rails_up() { # node…
+  local deadline=$(( $(date +%s) + 60 )) n missing
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    missing=""
+    for n in "$@"; do curl -sf --max-time 2 -o /dev/null "$(rails_url "$n")/v1/mesh/status" || missing="$missing $n"; done
+    [ -z "$missing" ] && return 0
+    sleep 1
+  done
+  echo "cw-rails on$missing never answered /v1/mesh/status inside 60s" >&2
+  return 1
+}
 
 wait_all_up() {
   local deadline=$(( $(date +%s) + 240 )) p missing
@@ -108,14 +149,13 @@ wait_all_up() {
   return 1
 }
 
-join_one() { # node-name client-port — through ada's join link, verbatim.
-  # $JOIN_LINK was read once in `cmd_up` right after the rotation that
-  # minted it: the founder's status serves it in that moment, and the
-  # product's own link is the leak this demo undoes (it carries ada's dial
-  # addresses — how a joiner on this host reaches the founder, mDNS off).
+join_one() { # node-name node — through ada's join link, verbatim.
+  # $JOIN_LINK is the invite ada's cw-rails answered `create` with: the
+  # product's own link is the leak this demo undoes (it carries ada's iroh
+  # dial — how a joiner on this host reaches the founder, mDNS off).
   local link="${JOIN_LINK:-}"
   [ -n "$link" ] || { echo "join: no join link was captured at up" >&2; return 1; }
-  curl -s --max-time 90 -X POST "http://127.0.0.1:$2/v1/mesh/join" \
+  curl -s --max-time 90 -X POST "$(rails_url "$2")/v1/mesh/join" \
     -H 'content-type: application/json' \
     -d "{\"key_or_url\":\"$link\",\"node_name\":\"$1\"}" \
     > "$D/join-$1.json"
@@ -124,17 +164,17 @@ join_one() { # node-name client-port — through ada's join link, verbatim.
   fi
 }
 
-key_of() { # node name -> node_pubkey from the FOUNDER's mesh status
-  curl -s --max-time 5 "http://127.0.0.1:$ADA_C/v1/mesh/status" \
+key_of() { # node name -> node_pubkey from the FOUNDER's mesh status (its cw-rails)
+  curl -s --max-time 5 "$(rails_url "$1")/v1/mesh/status" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);print(next((m['node_pubkey'] for m in d['members'] if m['name']=='$2'), ''))"
 }
 
 seed_rosters() {
   # The founder's row is --self (its key never crossed a wire); its member
-  # name on every node's status is this host's HOSTNAME — all three daemons
-  # share one machine, so that is how mira and sam find ada's key.
+  # name on every node's status is the `name` its rails.toml gives, "Ada",
+  # which is how mira and sam find ada's key.
   local ada_key mira_key
-  ada_key=$(key_of ada "$(hostname)")
+  ada_key=$(key_of ada Ada)
   mira_key=$(key_of ada Mira)
   [ -n "$ada_key" ] && [ -n "$mira_key" ] || { echo "seed: the founder never saw both keys (ada='$ada_key' mira='$mira_key')" >&2; return 1; }
   # The SAME two lines on every node: the seed is the pre-amendment ring's
@@ -148,13 +188,11 @@ seed_rosters() {
 }
 
 wait_members() { # the founder's mesh status names all three WITH keys, or nothing starts
-  # Counted, not name-matched: the founder's node name is this host's
-  # hostname (there is no rename verb), and the two joiners carry the names
-  # the join route set. Three members with keys is the state, whatever they
-  # are called.
+  # Counted, not name-matched: three members with keys is the state,
+  # whatever they are called.
   local deadline=$(( $(date +%s) + 90 )) have=0
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    have=$(curl -s --max-time 5 "http://127.0.0.1:$ADA_C/v1/mesh/status" \
+    have=$(curl -s --max-time 5 "$(rails_url ada)/v1/mesh/status" \
       | python3 -c '
 import sys, json
 try: ms = json.load(sys.stdin)["members"]
@@ -167,23 +205,20 @@ print(len([m for m in ms if m.get("node_pubkey")]))' 2>/dev/null)
   return 1
 }
 
-# A node that joins before both endpoints have a relay home is handed a
-# contact with no iroh path, and syncs at the peer's dead plain addresses
-# forever — ring-doc-demo's measured 2026-09-17 trap, ported whole: wait for
-# `relay_homed` before any join.
-wait_homed() { # client-port…
-  local deadline=$(( $(date +%s) + 120 )) p missing
-  while [ "$(date +%s)" -lt "$deadline" ]; do
-    missing=""
-    for p in "$@"; do
-      curl -s --max-time 3 "http://127.0.0.1:$p/v1/mesh/status" 2>/dev/null \
-        | python3 -c "import sys,json; sys.exit(0 if (json.load(sys.stdin).get('self_reachability') or {}).get('relay_homed') else 1)" 2>/dev/null \
-        || missing="$missing :$p"
-    done
-    [ -z "$missing" ] && return 0
-    sleep 2
-  done
-  echo "daemons on$missing never homed on an iroh relay inside 120s" >&2
+# Ada's cw-rails founds the mesh (`POST /v1/mesh/create`, what `svrn mesh
+# create` sends after its bring-up, which this script must not run: it would
+# install a cw-rails user unit). Its answer carries the invite — the leak —
+# with ada's iroh dial (`iroh=`); cw-rails refuses a join with none (join.rs
+# NoIrohDial). The daemon-era wait for a relay home is gone with the relay:
+# cw-rails stamps its own dial before a joiner can read it (69c023a45).
+found_mesh() {
+  local out code
+  out=$(curl -s --max-time 20 -w $'\n%{http_code}' -X POST "$(rails_url ada)/v1/mesh/create" \
+    -H 'content-type: application/json' -d '{"name":"house","node_name":"Ada"}')
+  code="${out##*$'\n'}"; out="${out%$'\n'*}"
+  JOIN_LINK=$(printf '%s' "$out" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("join_link") or "")' 2>/dev/null)
+  case "$code:$JOIN_LINK" in 200:*iroh=*) return 0;; esac
+  echo "up: ada's cw-rails answered $code with no iroh= invite: ${out:0:300}" >&2
   return 1
 }
 
@@ -194,31 +229,16 @@ cmd_up() {
   # Throwaway nodes, wiped on every up: mesh state persists across daemon
   # restarts by design, and a rerun must not inherit the last sitting's
   # roster, join keys or members.
-  for n in ada mira sam; do rm -rf "$D/$n"; done
+  for n in ada mira sam; do rm -rf "$D/$n" "$(rdir $n)"; done
   rm -f "$D"/join-*.json "$D"/admit-*.json "$D"/void-*.json "$D"/walk-*.json "$D"/summary.json
   mkcfg ada $ADA_C $ADA_I; mkcfg mira $MIRA_C $MIRA_I; mkcfg sam $SAM_C $SAM_I
+  for n in ada mira sam; do start_rails $n; done
+  wait_rails_up ada mira sam || exit 3
   for n in ada mira sam; do start_daemon $n; done
   wait_all_up $ADA_C $MIRA_C $SAM_C || exit 3
-  wait_homed $ADA_C $MIRA_C $SAM_C || exit 3
-  # A fresh daemon has no live invite: mint one, and the join link the
-  # founder then serves IS the leak this demo undoes. Rotated as a RETRIED
-  # pair, because a rotation in the daemon's first seconds can leave the
-  # invite cache unservable (status answers, the link never comes; measured
-  # 2026-09-30) — and no member exists yet, so re-rotating costs nothing.
-  local tries=0 link=""
-  while [ $tries -lt 3 ] && [ -z "$link" ]; do
-    tries=$((tries + 1))
-    sv ada mesh rotate > "$D/rotate.txt" 2>&1
-    local deadline=$(( $(date +%s) + 25 ))
-    while [ "$(date +%s)" -lt "$deadline" ] && [ -z "$link" ]; do
-      link=$(sv ada mesh status | awk '/^join link:/{print $3}')
-      [ -n "$link" ] || sleep 3
-    done
-  done
-  [ -n "$link" ] || { echo "up: ada served no join link after $tries rotations" >&2; exit 3; }
-  JOIN_LINK="$link"
-  join_one Mira $MIRA_C || exit 3
-  join_one Sam  $SAM_C || exit 3
+  found_mesh || exit 3
+  join_one Mira mira || exit 3
+  join_one Sam  sam || exit 3
   wait_members || exit 3
   seed_rosters || exit 3
   echo "up: ada(founder) mira(member) sam(the stranger's machine, on the mesh through ada's link)"
@@ -230,7 +250,8 @@ sweep_ports() {
   # ghost whose data dir was wiped underneath it (measured 2026-09-30:
   # mira's "join" answered from a daemon born two runs earlier).
   local p pid
-  for p in $ADA_C $ADA_I $MIRA_C $MIRA_I $SAM_C $SAM_I; do
+  for p in $ADA_C $ADA_I $MIRA_C $MIRA_I $SAM_C $SAM_I \
+           $(rport ada) $(sport ada) $(rport mira) $(sport mira) $(rport sam) $(sport sam); do
     pid=$(lsof -ti :$p 2>/dev/null)
     [ -n "$pid" ] && kill $pid 2>/dev/null
   done
@@ -239,7 +260,10 @@ sweep_ports() {
 
 cmd_down() {
   local n
-  for n in ada mira sam; do [ -f "$D/$n/pid" ] && kill "$(cat "$D/$n/pid")" 2>/dev/null; done
+  for n in ada mira sam; do
+    [ -f "$D/$n/pid" ] && kill "$(cat "$D/$n/pid")" 2>/dev/null
+    [ -f "$D/$n/rails.pid" ] && kill "$(cat "$D/$n/rails.pid")" 2>/dev/null
+  done
   sweep_ports
 }
 
@@ -285,11 +309,14 @@ PY
   return 1
 }
 
+# Hashed by python3's hashlib, the judge's own `roster_sha`, so the before
+# and after columns cannot differ by tool: `shasum` is absent on Fedora, and
+# its empty output read as three blank hashes the judge could never match.
 roster_hashes() {
+  local n
   for n in ada mira sam; do
-    if [ -f "$D/$n/rings/$RING/roster.json" ]; then
-      printf '%s ' "$(shasum -a 256 "$D/$n/rings/$RING/roster.json" | cut -d' ' -f1)"
-    else printf 'absent '; fi
+    python3 -c 'import hashlib,os,sys; p=sys.argv[1]; print(hashlib.sha256(open(p,"rb").read()).hexdigest() if os.path.exists(p) else "absent", end=" ")' \
+      "$(rdir $n)/rings/$RING/roster.json"
   done
 }
 
@@ -323,7 +350,7 @@ cmd_run() {
   echo "   act-standing key yet), entering through Mira's journal: the stranger's"
   echo "   node is refused at the roster gate and cannot carry the ring."
   # Mira's node is quiescent here: it authored nothing since the sync above.
-  "$STAGER" --root "$D/mira" --namespace "$RING" --seed "$SAM_SEED" \
+  "$STAGER" --root "$(rdir mira)" --namespace "$RING" --seed "$SAM_SEED" \
     --person Friendo --admit-key "$friend_key" > "$D/admit-friend.txt" || exit 3
   sed 's/^/   /' "$D/admit-friend.txt"
   wait_agrees 90 $HOLDERS || exit 1
@@ -366,11 +393,12 @@ def names_of(m):
     return sorted(m["bindings"].get(k, "?") for k in m["standing"])
 
 def roster_sha(node):
-    p = os.path.join(d, node, "rings", "house-ring", "roster.json")
+    p = os.path.join(d, node + "-rails", "rings", "house-ring", "roster.json")
     return hashlib.sha256(open(p, "rb").read()).hexdigest() if os.path.exists(p) else "absent"
 
-def daemon_log(node):
-    p = os.path.join(d, node, "daemon.err")
+def rails_log(node):
+    # Ring-sync, and so the roster gate's refusal, is cw-rails'.
+    p = os.path.join(d, node, "rails.err")
     return open(p, errors="replace").read() if os.path.exists(p) else ""
 
 legs = {}
@@ -400,7 +428,7 @@ legs["strangers_act_is_a_named_gap"] = any(
 # Leg 4 — the finding, as a held fact: sync REFUSED the stranger's node by
 # name, and that node carries none of the record — yet agrees on WHO IS IN
 # from its seed (the floor every member accepted by joining).
-refusal = "ring sync: refused — this ring's roster does not name the asker" in daemon_log("ada")
+refusal = "ring sync: refused — this ring's roster does not name the asker" in rails_log("ada")
 sam_held = get("sam", "/v1/rail/log?namespace=house-ring")["held"]
 legs["strangers_node_refused_and_agrees_on_names_only"] = (
     refusal and sam_held == 0 and names_of(w["sam"]) == ["Ada", "Mira"])
@@ -433,5 +461,5 @@ case "${1:-}" in
   up)   cmd_up ;;
   down) cmd_down; echo "stopped" ;;
   run)  cmd_run ;;
-  *) sed -n '2,32p' "$0"; exit 2 ;;
+  *) awk 'NR >= 2 && /^#/ { print; next } NR >= 2 { exit }' "$0"; exit 2 ;;
 esac
