@@ -51,14 +51,28 @@ findspot 0.312, +0.107, 29 strays. 80 of 112 members are beyond the records
 (stages: no hoard 2 rows, no link 3, members missing 13; Demanhur links 4 of
 22). Records coverage binds; no producer fix carries the bar here.
 
-**Flip condition.** `k1_bound.py`'s full|oracle clears bare by more than 0.15
-on two extraction runs of the atlas; then a producer that resolves the hoard
-(structural — the named example moved 0/18 in read 1); then O-T2 on all K1,
-three runs, K0 guard, fabricated members reported, at >= 0.15 over the better
-of bare k=20 and wide k=80. Lose O-T2 and the chat arm (`atom_enum_typed.rs`)
-is deleted; the executor stays for `atlas-query --typed`.
-Settled by: campaign `feature-fidelity` write side (the deferred ei7-ans
-re-extract), then O-T2.
+**What these numbers do not show (operator, 2026-10-03: the leg is closed,
+not refuted).** They measure our pipeline, not ontologies, for four reasons:
+(1) the gold is the domain's own populated ontology — CoinHoards/IGCH NUDS
+records labelled through Nomisma, 3,759 cached in `ans/raw/coinhoards` — used
+only as held-out truth, while a local model rebuilt it from monograph prose
+under a six-type schema we wrote; (2) the read path asks the model to
+describe the hoard as filters instead of linking the mention to an
+identifier first (value or entity linking), so identity, the thing an
+ontology is for, was never given a step; (3) the bar asks the typed path
+alone to beat retrieval by 0.15 on a 29-section fixture that top-k mostly
+covers, where an ontology has nothing to add over reading; (4) single runs
+under a three-iteration cap with a ledger exit turn a bad setup into a fast
+negative. Nothing here is evidence against declared ontologies.
+
+**Flip condition.** The typed surface is proven where it is used: records
+read directly, scored on a records gold, in `svrn-docs/ontology-apps` (CRM
+from a mailbox). A chat-turn arm is re-measured only on a fixture whose typed
+records come from structured sources where they exist, with a linking step
+before the query, on questions whose answers exceed any top-k. Until then
+the chat arm (`atom_enum_typed.rs`) stays off; if the CRM work never routes
+a chat turn through it, it is deleted.
+Settled by: the ontology-apps CRM proof.
 
 **Review-by 2026-10-31.**
 
