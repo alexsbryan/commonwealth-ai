@@ -1853,6 +1853,8 @@ DISK_FLOOR_GB = 40
 # of time mid-work, not into a wall: it continues without a strike, at most this
 # many times in a row before the strikes count again (12h at a 2h session cap).
 MAX_LANE_CONTINUATIONS = 6
+# This file, as the pool re-execs onto it between waves (Pool._maybe_reexec).
+SELF = pathlib.Path(__file__).resolve()
 # Where a lane reads its share: a file, because `toolbox run` forwards no env.
 LANE_JOBS_FILE = "target/ralph/lane.env"
 LANE_JOBS_VARS = ("SOVEREIGN_LINT_JOBS", "SOVEREIGN_TEST_JOBS")
@@ -1930,7 +1932,8 @@ class Pool:
                  model="", review_model="", variant="", max_review_attempts=3,
                  max_lane_failures=3, probe=None, jobs_share=None, lane_root=None,
                  disk_floor_gb=DISK_FLOOR_GB, disk_free_gb=None,
-                 max_lane_continuations=MAX_LANE_CONTINUATIONS):
+                 max_lane_continuations=MAX_LANE_CONTINUATIONS,
+                 code_digest=None, compiles=None, reexec=None, argv=None):
         self.paths = paths
         self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
@@ -1957,10 +1960,62 @@ class Pool:
         self.disk_floor_gb = disk_floor_gb
         self.disk_free_gb = disk_free_gb or (
             lambda: shutil.disk_usage(self.lane_root).free // 2**30)
+        self.code_digest = code_digest or (lambda: hashlib.sha256(SELF.read_bytes()).hexdigest())
+        self.compiles = compiles or (lambda: compile(SELF.read_text(), str(SELF), "exec"))
+        self.reexec = reexec or (lambda argv: os.execv(argv[0], argv))
+        self.argv = argv or [sys.executable, str(SELF), *sys.argv[1:]]
+        self._loaded = self.code_digest()
+        self._refused = None
+        self._resume_state()
 
     def _git(self, *args, cwd=None):
         return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
                               capture_output=True, text=True)
+
+    # The counters a re-exec carries across: everything else the pool knows
+    # lives on disk (STATE.md, worktrees, markers, parked/).
+    def _state_file(self):
+        return self.paths.workdir / "target" / "ralph" / "pool-state.json"
+
+    def _resume_state(self):
+        state = self._state_file()
+        if not state.exists():
+            return
+        try:
+            saved = json.loads(state.read_text())
+            self._lane_failures = dict(saved.get("failures", {}))
+            self._lane_continuations = dict(saved.get("continuations", {}))
+        except (OSError, ValueError) as e:
+            say(f"pool: {state} unreadable ({e}) — counters start fresh")
+        state.unlink(missing_ok=True)
+
+    def _maybe_reexec(self):
+        """Between waves, when no session runs: hand the process to ralph.py as
+        it is on disk if it changed and compiles. A fix reached the ersilia pool
+        only when a halt happened to relaunch it, because a restart kills every
+        session in flight — four sat undeployed for a day (2026-10-04)."""
+        try:
+            now = self.code_digest()
+        except OSError:
+            return
+        if now in (self._loaded, self._refused):
+            return
+        try:
+            self.compiles()
+        except SyntaxError as e:
+            self._refused = now
+            say(f"pool: ralph.py changed but does not compile ({e.msg}, line {e.lineno}) "
+                "— staying on the loaded code")
+            return
+        state = self._state_file()
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({"failures": self._lane_failures,
+                                     "continuations": self._lane_continuations}))
+        say(f"pool: ralph.py changed ({self._loaded[:12]} → {now[:12]}) — re-exec between "
+            "waves, no session running")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        self.reexec(self.argv)
 
     def _queue(self):
         try:
@@ -2072,6 +2127,7 @@ class Pool:
             if self.paths.p(self.paths.stop).exists():
                 say("pool: STOP")
                 return 0
+            self._maybe_reexec()
             queue = self._queue()
             if queue is None:
                 self.sleep(60)

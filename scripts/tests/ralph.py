@@ -7,6 +7,7 @@ input is explicit.
 """
 import contextlib
 import io
+import json
 import os
 import pathlib
 import shutil
@@ -28,6 +29,13 @@ def setUpModule():
     patcher = mock.patch.object(ralph, "cargo_jobs_share", lambda lanes: (2, "test budget"))
     patcher.start()
     unittest.addModuleCleanup(patcher.stop)
+    # A pool re-execs when ralph.py changes on disk; an edit landing mid-run must
+    # fail the test that saw it, never replace the test process.
+    def no_exec(*a):
+        raise RuntimeError("a test pool tried to re-exec: ralph.py changed during the run")
+    execv = mock.patch.object(ralph.os, "execv", no_exec)
+    execv.start()
+    unittest.addModuleCleanup(execv.stop)
 
 
 def write(root, rel, text):
@@ -2662,6 +2670,73 @@ class QueueLane(FakeLane):
     def run(self, model_args, prompt, log):
         QueueLane.prompts.append(prompt)
         return super().run(model_args, prompt, log)
+
+
+class Reexec(Exception):
+    """Raised by a test's stand-in for os.execv: the pool handed itself over."""
+
+
+class PoolReexecTests(unittest.TestCase):
+    """A fix to ralph.py reached the ersilia pool only when a halt happened to
+    relaunch it: four fixes sat undeployed for a day while two lane sessions ran
+    (2026-10-04), because a restart kills every session in flight. Between
+    waves no session runs, so the pool re-execs onto the changed file there,
+    carrying its strike and continuation counters across."""
+
+    fixture = PoolTests.fixture
+    make = PoolTests.make
+
+    def test_a_changed_ralph_py_reexecs_the_pool_between_waves_with_its_counters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            digests = iter(["old", "new"])
+            argvs = []
+
+            def reexec(argv):
+                argvs.append(argv)
+                raise Reexec()
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             code_digest=lambda: next(digests, "new"), reexec=reexec,
+                             compiles=lambda: None, argv=["python3", "ralph.py", "pool"])
+            pool._lane_failures["dm-b"] = 2
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), self.assertRaises(Reexec):
+                pool.run()
+            self.assertEqual(argvs, [["python3", "ralph.py", "pool"]])
+            self.assertIn("ralph.py changed (old → new) — re-exec between waves", out.getvalue())
+            self.assertNotIn("lane start", out.getvalue())
+            saved = json.loads((root / "target/ralph/pool-state.json").read_text())
+            self.assertEqual(saved["failures"], {"dm-b": 2})
+
+    def test_a_reexeced_pool_resumes_its_counters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            write(root, "target/ralph/pool-state.json",
+                  json.dumps({"failures": {"dm-b": 2}, "continuations": {"dm-c": 1}}))
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
+            self.assertEqual(pool._lane_failures, {"dm-b": 2})
+            self.assertEqual(pool._lane_continuations, {"dm-c": 1})
+            self.assertFalse((root / "target/ralph/pool-state.json").exists())
+
+    def test_a_changed_ralph_py_that_does_not_compile_is_refused_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            digests = iter(["old"])
+
+            def broken():
+                raise SyntaxError("invalid syntax", ("ralph.py", 12, 1, "def ("))
+
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             code_digest=lambda: next(digests, "broken"),
+                             reexec=lambda argv: self.fail("re-exec'd onto code that does not compile"),
+                             compiles=broken)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            said = out.getvalue()
+            self.assertEqual(said.count("does not compile"), 1)
+            self.assertIn("line 12", said)
+            self.assertIn("pool: DONE", said)
 
 
 class PoolQueueTests(unittest.TestCase):

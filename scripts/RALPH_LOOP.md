@@ -54,6 +54,11 @@ and `watch` and run the printed `launchctl bootstrap`.
   under it the pool first deletes `target/debug` and `target/release` from
   idle lanes, least recently built first — never a lane in the wave, never one
   holding `ralph/waiting` — and waits only when that is not enough;
+- the pool deploys its own fixes: between waves, when no session runs, it
+  re-execs onto `ralph.py` as it is on disk if the file changed and compiles
+  (its strike and continuation counters ride across in
+  `target/ralph/pool-state.json`); a change that does not compile is refused
+  once, by name, and the pool stays on the code it has;
 - every poll tick writes `ralph/.heartbeat`; `watch` notifies when it goes
   stale, when a package sits unresolved, when the job is down without
   DONE/operator-STOP, or when disk drops below 5 GB;
