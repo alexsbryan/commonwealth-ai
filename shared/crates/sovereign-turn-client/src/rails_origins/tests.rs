@@ -16,6 +16,8 @@ struct Rails {
     renewed: AtomicUsize,
     /// Each register's and renew's declared `loaded_models`, in order.
     declared: Mutex<Vec<Option<Vec<String>>>>,
+    /// Each register's and renew's declared ring namespaces, in order.
+    namespaces: Mutex<Vec<Option<Vec<String>>>>,
 }
 
 /// A cw-rails double: every registration is taken, and the FIRST renew is
@@ -32,6 +34,7 @@ async fn double() -> (String, Arc<Rails>) {
                         .lock()
                         .unwrap()
                         .push(req.claims.map(|c| c.loaded_models));
+                    r.namespaces.lock().unwrap().push(Some(req.namespaces));
                     // A slow re-registration holds the lapse open long
                     // enough to observe: a watch keeps only the latest value.
                     if n > 0 {
@@ -55,6 +58,9 @@ async fn double() -> (String, Arc<Rails>) {
                     .unwrap()
                     .map(|c| c.loaded_models),
                 );
+                    r.namespaces.lock().unwrap().push(
+                        serde_json::from_value(body["namespaces"].clone()).unwrap(),
+                    );
                     if r.renewed.fetch_add(1, Ordering::SeqCst) == 0 {
                         (
                             StatusCode::NOT_FOUND,
@@ -228,5 +234,57 @@ async fn a_claims_source_is_declared_at_every_register_and_renew() {
     assert!(
         rails.declared.lock().unwrap().iter().all(Option::is_none),
         "no source, no declaration on any renew"
+    );
+}
+
+/// The namespaces source is read at every register and renew, as a claims
+/// source is: a page opened between two renews is declared at the next one,
+/// and cw-rails' live lane holds it from then. With no source a renew sends
+/// none and cw-rails keeps the registration's. Failing input: the loop
+/// before it carried namespaces, whose renews never sent any.
+#[tokio::test]
+async fn a_namespaces_source_is_declared_at_every_register_and_renew() {
+    let (base, rails) = double().await;
+    let reads = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&reads);
+    let source: super::NamespacesSource =
+        Arc::new(move || vec![format!("ns{}", counter.fetch_add(1, Ordering::SeqCst))]);
+    let task = tokio::spawn(super::keep_registered_with(
+        base,
+        registration(),
+        60,
+        Duration::from_millis(10),
+        None,
+        None,
+        Some(source),
+    ));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while rails.renewed.load(Ordering::SeqCst) < 2 {
+        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    task.abort();
+    let seen = rails.namespaces.lock().unwrap().clone();
+    // register ns0, renew ns1 (refused), register ns2, renew ns3.
+    let want: Vec<Option<Vec<String>>> = (0..4).map(|n| Some(vec![format!("ns{n}")])).collect();
+    assert_eq!(seen[..4], want[..]);
+
+    let (base, rails) = double().await;
+    let task = tokio::spawn(super::keep_registered(
+        base,
+        registration(),
+        60,
+        Duration::from_millis(10),
+    ));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while rails.renewed.load(Ordering::SeqCst) < 2 {
+        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    task.abort();
+    let renews: Vec<_> = rails.namespaces.lock().unwrap().iter().skip(1).cloned().collect();
+    assert!(
+        renews.iter().all(|n| n.is_none() || n.as_deref() == Some(&[][..])),
+        "no source, no namespaces on any renew: {renews:?}"
     );
 }

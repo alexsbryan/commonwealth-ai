@@ -1808,7 +1808,7 @@ impl EmbeddedDaemon {
                 rails_base.clone(),
                 internal_port,
                 &app_state.inner.node.peer_origin_tie,
-                crate::peer_origin::claims_source(app_state.clone()),
+                app_state.clone(),
             );
             if peer_origin_handle.is_some() {
                 running_services.record(crate::local_only::MeshService::PeerOrigin);

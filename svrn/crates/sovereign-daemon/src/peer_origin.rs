@@ -22,7 +22,8 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use oicp_types::origin::{Admit, Framing, OriginRegistration};
-use sovereign_turn_client::rails_origins::ClaimsSource;
+use sovereign_grants::{GuestGrant, Scope};
+use sovereign_turn_client::rails_origins::{ClaimsSource, NamespacesSource};
 use subtle::ConstantTimeEq;
 use tokio::sync::watch;
 use tracing::{debug, info};
@@ -97,6 +98,46 @@ pub fn claims_source(state: AppState) -> ClaimsSource {
     })
 }
 
+/// The ring namespaces this daemon's pages drain: every live grant's rail
+/// namespace, and for a live wall grant every namespace the wall declares.
+/// cw-rails buffers a peer's live payload only for a namespace a
+/// registration declares, so a namespace missing here is a page whose
+/// presence never arrives. Sorted, once each.
+pub fn live_namespaces(grants: &[GuestGrant], wall: &[&str], now_ms: u64) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for grant in grants.iter().filter(|g| g.is_live(now_ms)) {
+        for scope in &grant.scopes {
+            match scope {
+                Scope::Rails(ns) => out.push(ns.clone()),
+                Scope::Wall => out.extend(wall.iter().map(|ns| ns.to_string())),
+                Scope::Models(_) => {}
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// What this registration declares as its ring namespaces at every register
+/// and renew: [`live_namespaces`] over the grant store and the wall's
+/// declaration, read at that moment, so a page `svrn ring show` just opened
+/// is held within one renew.
+pub fn namespaces_source(state: AppState) -> NamespacesSource {
+    Arc::new(move || {
+        let pages = state.guest_pages();
+        let wall: Vec<&str> = pages.declared_namespaces().collect();
+        let held = live_namespaces(
+            &state.inner.node.guest_grants.all(),
+            &wall,
+            sovereign_time::unix_millis(),
+        );
+        debug!(target: TRACE_TARGET, namespaces = ?held,
+               "peer origin: declaring the ring namespaces this daemon's pages drain");
+        held
+    })
+}
+
 /// The live claim's tie, as the register/renew loop publishes it. Empty
 /// until [`spawn`] runs; `None` inside while no claim holds.
 #[derive(Default)]
@@ -136,14 +177,15 @@ impl Drop for PeerOriginHandle {
 }
 
 /// Register [`registration`] with cw-rails at `rails_base` and keep it
-/// registered while the handle lives, declaring `claims` at every register
-/// and renew and publishing each claim's tie into `tie`. A second call on the
+/// registered while the handle lives, declaring [`claims_source`] and
+/// [`namespaces_source`] over `state` at every register and renew and
+/// publishing each claim's tie into `tie`. A second call on the
 /// same cell registers nothing and says so.
 pub fn spawn(
     rails_base: String,
     internal_port: u16,
     tie: &PeerOriginTie,
-    claims: ClaimsSource,
+    state: AppState,
 ) -> Option<PeerOriginHandle> {
     let (tx, rx) = watch::channel(None);
     if tie.install(rx).is_err() {
@@ -154,16 +196,15 @@ pub fn spawn(
     info!(target: TRACE_TARGET, rails = %rails_base, internal_port,
           prefixes = ?PEER_PREFIXES,
           "peer origin: registering svrn's peer routes with cw-rails");
-    let register = tokio::spawn(
-        sovereign_turn_client::rails_origins::keep_registered_declaring(
-            rails_base,
-            registration(internal_port),
-            ORIGIN_TTL_SECS,
-            ORIGIN_RENEW_EVERY,
-            Some(tx),
-            Some(claims),
-        ),
-    );
+    let register = tokio::spawn(sovereign_turn_client::rails_origins::keep_registered_with(
+        rails_base,
+        registration(internal_port),
+        ORIGIN_TTL_SECS,
+        ORIGIN_RENEW_EVERY,
+        Some(tx),
+        Some(claims_source(state.clone())),
+        Some(namespaces_source(state)),
+    ));
     Some(PeerOriginHandle { register })
 }
 
@@ -253,5 +294,35 @@ mod tests {
                 .any(|p| p == "/internal/corpus/partition_evict"),
             "partition_evict must be a registered peer prefix"
         );
+    }
+
+    /// The live lane holds what this daemon's pages drain: a live rail
+    /// grant's namespace, every namespace the wall declares for a live wall
+    /// grant, and nothing for a lapsed grant or a model grant. Failing input:
+    /// the registration that declared none, so cw-rails refused every peer's
+    /// presence for every page.
+    #[test]
+    fn the_live_namespaces_are_the_live_grants_rings() {
+        let grant = |scopes: Vec<Scope>, expires_at_ms: u64| GuestGrant {
+            token: "t".into(),
+            scopes,
+            label: None,
+            issued_at_ms: 0,
+            expires_at_ms,
+            revoked: false,
+            holder: sovereign_grants::GrantHolder::MemberPage,
+        };
+        let grants = vec![
+            grant(vec![Scope::Rails("ring-doc".into())], 2_000),
+            grant(vec![Scope::Rails("lapsed".into())], 500),
+            grant(vec![Scope::Wall], 2_000),
+            grant(vec![Scope::Models(vec!["m".into()])], 2_000),
+            grant(vec![Scope::Rails("ring-doc".into())], 2_000),
+        ];
+        assert_eq!(
+            live_namespaces(&grants, &["expenses", "chores"], 1_000),
+            vec!["chores", "expenses", "ring-doc"]
+        );
+        assert!(live_namespaces(&grants, &[], 3_000).is_empty(), "all lapsed");
     }
 }

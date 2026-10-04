@@ -390,6 +390,37 @@ fn a_renew_replaces_the_declaration_and_none_keeps_it() {
     );
 }
 
+/// A renew that names namespaces replaces the ones the claim declared, on
+/// one slot of a multi-slot claim, and a renew naming none keeps them — the
+/// live lane holds exactly what a registrant drains now (ring_routes.rs).
+/// Failing input: a renew that could not carry namespaces, so a page opened
+/// after registration was refused at every peer.
+#[test]
+fn a_renew_replaces_the_declared_namespaces() {
+    let r = OriginRegistry::new(PublishedApps::default());
+    let mut two = reg(ALPN, &["/b/x", "/a/x"], 9, Admit::Members(Vec::new()));
+    two.namespaces = vec!["first".into()];
+    let c = r.register(two).unwrap();
+    assert_eq!(r.namespaces(), vec!["first".to_string()]);
+    r.renew_declaring(
+        &c.claim_id,
+        Duration::from_secs(60),
+        None,
+        Some(vec!["ring-doc".into(), "house".into()]),
+    )
+    .unwrap();
+    assert_eq!(
+        r.namespaces(),
+        vec!["house".to_string(), "ring-doc".to_string()],
+        "replaced, and not left on the other slot"
+    );
+    r.renew(&c.claim_id, Duration::from_secs(60), None).unwrap();
+    assert_eq!(r.namespaces().len(), 2, "none keeps them");
+    r.renew_declaring(&c.claim_id, Duration::from_secs(60), None, Some(Vec::new()))
+        .unwrap();
+    assert!(r.namespaces().is_empty(), "an empty set withdraws them");
+}
+
 /// **A local origin is listed and never reachable from the mesh**
 /// (pb-work-donor). The execute origin a donor finds through the listing
 /// is on this node's loopback for this node's processes; a member or a

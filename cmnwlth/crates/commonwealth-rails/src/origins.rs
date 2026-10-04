@@ -111,6 +111,9 @@ pub struct Renew {
     /// Replaces the claim's declaration; absent keeps it.
     #[serde(default)]
     pub claims: Option<NodeCapabilities>,
+    /// Replaces the ring namespaces the claim declares; absent keeps them.
+    #[serde(default)]
+    pub namespaces: Option<Vec<String>>,
 }
 
 /// `POST /v1/mesh/origins/{claim_id}/renew`
@@ -119,9 +122,13 @@ pub async fn renew(
     Path(claim_id): Path<String>,
     body: Option<Json<Renew>>,
 ) -> Response {
-    let (ttl_secs, claims) = body.map_or((None, None), |Json(b)| (b.ttl_secs, b.claims));
+    let (ttl_secs, claims, namespaces) =
+        body.map_or((None, None, None), |Json(b)| (b.ttl_secs, b.claims, b.namespaces));
     let ttl = crate::api::ttl_of(ttl_secs);
-    match daemon.origins.renew(&claim_id, ttl, claims) {
+    match daemon
+        .origins
+        .renew_declaring(&claim_id, ttl, claims, namespaces)
+    {
         Ok(secs) => Json(serde_json::json!({ "claim_id": claim_id, "expires_in_secs": secs }))
             .into_response(),
         Err(e) => refused(e),

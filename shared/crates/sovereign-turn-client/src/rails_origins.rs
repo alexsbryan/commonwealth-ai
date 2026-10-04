@@ -75,10 +75,22 @@ pub async fn renew_origin(
     ttl_secs: u64,
     claims: Option<&NodeCapabilities>,
 ) -> Result<(), String> {
+    renew_origin_declaring(base, claim_id, ttl_secs, claims, None).await
+}
+
+/// [`renew_origin`], and `Some(namespaces)` replaces the ring namespaces the
+/// claim declares; `None` keeps them.
+pub async fn renew_origin_declaring(
+    base: &str,
+    claim_id: &str,
+    ttl_secs: u64,
+    claims: Option<&NodeCapabilities>,
+    namespaces: Option<&[String]>,
+) -> Result<(), String> {
     let _: serde_json::Value = post(
         base,
         &format!("/v1/mesh/origins/{claim_id}/renew"),
-        &serde_json::json!({ "ttl_secs": ttl_secs, "claims": claims }),
+        &serde_json::json!({ "ttl_secs": ttl_secs, "claims": claims, "namespaces": namespaces }),
     )
     .await?;
     Ok(())
@@ -88,6 +100,11 @@ pub async fn renew_origin(
 /// renew so the declaration moves with the registrant's state.
 pub type ClaimsSource =
     Arc<dyn Fn() -> Pin<Box<dyn Future<Output = NodeCapabilities> + Send>> + Send + Sync>;
+
+/// The ring namespaces a registrant drains NOW, read at every register and
+/// renew: cw-rails buffers a live payload only for a namespace some
+/// registration declares (commonwealth-rails ring_routes.rs `ring_live`).
+pub type NamespacesSource = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
 
 /// Register, then renew every `every` for `ttl_secs`; a renew cw-rails
 /// refuses (it restarted, or the claim lapsed) registers again. cw-rails being
@@ -123,11 +140,25 @@ pub async fn keep_registered_tied(
 /// the registration carries at register and keeps it on every renew.
 pub async fn keep_registered_declaring(
     rails_base: String,
+    registration: OriginRegistration,
+    ttl_secs: u64,
+    every: Duration,
+    tie: Option<tokio::sync::watch::Sender<Option<String>>>,
+    claims: Option<ClaimsSource>,
+) {
+    keep_registered_with(rails_base, registration, ttl_secs, every, tie, claims, None).await
+}
+
+/// [`keep_registered_declaring`], declaring `namespaces`' answer at every
+/// register and renew in place of the registration's fixed `namespaces`.
+pub async fn keep_registered_with(
+    rails_base: String,
     mut registration: OriginRegistration,
     ttl_secs: u64,
     every: Duration,
     tie: Option<tokio::sync::watch::Sender<Option<String>>>,
     claims: Option<ClaimsSource>,
+    namespaces: Option<NamespacesSource>,
 ) {
     let slot = registration.alpn.clone();
     let publish = |value: Option<String>| {
@@ -143,10 +174,14 @@ pub async fn keep_registered_declaring(
                 if let Some(source) = &claims {
                     registration.claims = Some(source().await);
                 }
+                if let Some(source) = &namespaces {
+                    registration.namespaces = source();
+                }
                 match register_origin(&rails_base, &registration).await {
                     Ok(c) => {
                         info!(target: TRACE_TARGET, claim = %c.claim_id, %slot,
                           prefixes = ?registration.prefixes, port = registration.port,
+                          namespaces = ?registration.namespaces,
                           tie_published = tie.is_some(),
                           "origin registered with cw-rails");
                         publish(Some(c.tie));
@@ -168,7 +203,11 @@ pub async fn keep_registered_declaring(
                     Some(source) => Some(source().await),
                     None => None,
                 };
-                if let Err(e) = renew_origin(&rails_base, id, ttl_secs, declared.as_ref()).await {
+                let held = namespaces.as_ref().map(|source| source());
+                if let Err(e) =
+                    renew_origin_declaring(&rails_base, id, ttl_secs, declared.as_ref(), held.as_deref())
+                        .await
+                {
                     info!(target: TRACE_TARGET, claim = %id, %slot, error = %e,
                           "the origin's renew was refused — registering again");
                     publish(None);
@@ -176,7 +215,7 @@ pub async fn keep_registered_declaring(
                     continue;
                 }
                 debug!(target: TRACE_TARGET, claim = %id, %slot,
-                       declares = declared.is_some(), "origin renewed");
+                       declares = declared.is_some(), namespaces = ?held, "origin renewed");
             }
         }
         tokio::time::sleep(every).await;
