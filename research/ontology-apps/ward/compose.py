@@ -177,7 +177,8 @@ def main():
             parties = sorted({pid for pid, e in ent.items() if e.get("entity_type") == "company" and not e.get("own")
                               and c["_doc"] in proj.get("company", {}).get((e.get("attributes") or {}).get("domain"), {}).get("docs", set())})
             attr = (c.get("attributes") or {}).get(spec["block"][0])
-            own_attr = attr in own_ids
+            # the owner is never a block, whether the member names it by id or by name
+            own_attr = attr in own_ids or bool(company_by_name.get(fold(attr), set()) & own_ids)
             if attr in keyed and not own_attr:
                 c["_block"], why = attr, "member attribute, keyed"
             elif len(parties) == 1:
@@ -189,6 +190,33 @@ def main():
             else:
                 c["_block"], why = None, ("several outside parties" if len(parties) > 1 else "no counterparty")
             report[f"{spec['type']}: block from {why}"] += 1
+        if spec.get("thread"):
+            # a thread links its members, so an unblocked member inherits its thread's block when there
+            # is exactly one: first from blocked members in the thread, else from the thread's documents
+            outside = {e["id"]: e for e in ent.values() if e.get("entity_type") == "company" and not e.get("own")}
+            doc_parties = collections.defaultdict(set)
+            for key, p in proj.get("company", {}).items():
+                if f"company:{key}" in outside:
+                    for mid in p["docs"]:
+                        doc_parties[mid].add(f"company:{key}")
+            thread_blocks, thread_parties = collections.defaultdict(set), collections.defaultdict(set)
+            for c in members:
+                if c["_block"] and c["_thread"]:
+                    thread_blocks[c["_thread"]].add(c["_block"])
+            for mid, d in docs.items():
+                if d["thread"]:
+                    thread_parties[d["thread"]] |= doc_parties.get(mid, set())
+            for c in members:
+                if c["_block"] or not c["_thread"]:
+                    continue
+                for src, cand in (("thread's one member block", thread_blocks), ("thread's one outside party", thread_parties)):
+                    if len(cand.get(c["_thread"], ())) == 1:
+                        c["_block"] = next(iter(cand[c["_thread"]]))
+                        report[f"{spec['type']}: block inherited from {src}"] += 1
+                        break
+                else:
+                    report[f"{spec['type']}: block not inherited ({len(thread_blocks.get(c['_thread'], ()))} member blocks, "
+                           f"{len(thread_parties.get(c['_thread'], ()))} outside parties in thread)"] += 1
         parent = {id(c): id(c) for c in members}
 
         def find(x):
