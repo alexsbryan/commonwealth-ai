@@ -28,8 +28,15 @@ and `watch` and run the printed `launchctl bootstrap`.
   first `[~]` row, else the first dependency-ready `[ ]` row.
 - **Progress is a commit** in the serial driver (the stall bound halts and
   escalates) and **a unit completed** in the supervisor (a resolution that
-  changes nothing escalates immediately; a resolver committing junk cannot
-  reset the bound).
+  changes nothing parks the row its package names; a resolver committing junk
+  cannot reset the bound).
+- **A stop that names no row is the loop's, not the operator's** (a dead
+  roster, a full disk, an I/O error, a crash): the supervisor archives its
+  package under `target/ralph/halts/`, cools down (`SUPERVISOR_COOLDOWNS`: 10,
+  20, 40, 80, 120, 120 min) and relaunches; a unit done resets the backoff, and
+  only past the last cool-down does the stop stand. DONE, an empty STOP and an
+  `operator-only:` package (an empty queue is one: queueing orders) still stop
+  at once.
 - **Commit as you go.** A session killed at any moment costs at most the
   in-flight step; the next session is told the tree is dirty.
 

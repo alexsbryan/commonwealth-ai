@@ -1537,6 +1537,12 @@ class Campaign:
                     return self.halt("operator approval required — every ready row waits "
                                      f"on the operator: {', '.join(waiting)}",
                                      operator_clause="HUMAN- rows and parked rows")
+                if not queue.rows:
+                    # Nothing queued is the operator's to fix (queueing orders),
+                    # so it stops at once rather than cooling down as a loop
+                    # block would under the supervisor.
+                    return self.halt(f"{self.paths.state} has no rows — nothing is queued",
+                                     operator_clause="queueing orders")
                 return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
             self._announce_waiting(waiting)
             refusal = dispatch_refusal(self.paths, queue, unit)
@@ -1644,13 +1650,20 @@ class Campaign:
 PARKED = "parked"
 
 
+# A stop that names no row is the loop's (a dead roster, a full disk, an I/O
+# error, a crash), not the operator's: the supervisor waits these out and
+# relaunches, and only past the last one with no unit done does the stop stand.
+SUPERVISOR_COOLDOWNS = (600, 1200, 2400, 4800, 7200, 7200)
+
+
 class Supervisor:
     """Runs a campaign command; a stop short of DONE is either terminal, an
     operator escalation, a parked row, or a bounded resolution. Progress is a
     unit completed."""
 
     def __init__(self, paths, *, run_inner, resolver_run, notifier=notify,
-                 notify_enabled=True, resolve_max=4, state_path=None, max_parks=3):
+                 notify_enabled=True, resolve_max=4, state_path=None, max_parks=3,
+                 cooldowns=SUPERVISOR_COOLDOWNS, sleep=time.sleep):
         self.paths = paths
         self.run_inner = run_inner
         self.resolver_run = resolver_run
@@ -1661,6 +1674,9 @@ class Supervisor:
         # block is the loop's, not a row's, and the stop stands.
         self.max_parks = max_parks
         self.parks_without_progress = 0
+        self.cooldowns = tuple(cooldowns)
+        self.cooldowns_without_progress = 0
+        self.sleep = sleep
 
     def _queue(self):
         # A worker may be mid-write; the frequent checks tolerate that, the
@@ -1719,6 +1735,51 @@ class Supervisor:
         self.notifier("OPERATOR — row parked, loop continues",
                       f"{row.id}: {first_line(dest)}", self.notify_enabled)
         return row.id
+
+    def cool_down(self, reason):
+        """For a stop no row can be parked on: archive its package, wait out the
+        next backoff, and let the loop relaunch the campaign — the ersilia
+        supervisor exited on 23 such stops and sat down for 76.9 of its 143
+        stuck hours, 9.4 of them the operator's (2026-09-17 → 10-04). False when
+        the backoffs are spent with no unit done: the stop stands then. An empty
+        STOP written during the wait ends it at once."""
+        n = self.cooldowns_without_progress
+        if n >= len(self.cooldowns):
+            return False
+        self.cooldowns_without_progress = n + 1
+        wait = self.cooldowns[n]
+        pkg = self.paths.p(self.paths.needs_human)
+        kept = "no package"
+        if pkg.exists() and pkg.stat().st_size:
+            halts = self.paths.workdir / "target" / "ralph" / "halts"
+            try:
+                halts.mkdir(parents=True, exist_ok=True)
+                dest = halts / f"{int(time.time())}-{n + 1}.md"
+                dest.write_text(pkg.read_text())
+                kept = f"package kept at {dest}"
+            except OSError as e:
+                kept = f"package not kept ({e})"
+            pkg.unlink(missing_ok=True)
+        stop = self.paths.p(self.paths.stop)
+        if stop.exists() and stop.stat().st_size:
+            stop.unlink()
+        say(f"supervisor: {reason} — no row to park; cooling down {wait // 60} min "
+            f"({n + 1}/{len(self.cooldowns)}) and relaunching; {kept}")
+        self.notifier("auto — cooling down", f"{reason} ({n + 1}/{len(self.cooldowns)})",
+                      self.notify_enabled)
+        left = wait
+        while left > 0:
+            if stop.exists() and not stop.stat().st_size:
+                return True
+            try:
+                self.paths.p(self.paths.heartbeat).write_text(
+                    f"{int(time.time())} supervisor cooling down {left}s\n")
+            except OSError:
+                pass
+            step = min(60, left)
+            self.sleep(step)
+            left -= step
+        return True
 
     def terminal_stop(self):
         if self.paths.p(self.paths.done).exists():
@@ -1779,12 +1840,16 @@ class Supervisor:
                 attempt = 0
                 last_done = done_now
                 self.parks_without_progress = 0
+                self.cooldowns_without_progress = 0
             pkg = self.paths.p(self.paths.needs_human)
             reason = first_line(pkg) if pkg.exists() and pkg.stat().st_size else "campaign exited"
             say(f"supervisor: campaign stopped — {reason}")
             attempt += 1
             if attempt > self.resolve_max:
                 if self.park(f"{self.resolve_max} resolutions did not clear it") is not None:
+                    attempt = 0
+                    continue
+                if self.cool_down(f"{self.resolve_max} resolutions did not clear it"):
                     attempt = 0
                     continue
                 say(f"supervisor: {self.resolve_max} resolution attempts did not clear it "
@@ -1812,6 +1877,9 @@ class Supervisor:
             if pkg.exists() and pkg.stat().st_size:
                 if file_hash(pkg) == pkg_before and head_of(self.paths.workdir) == head_before:
                     if self.park(f"resolution {attempt} changed nothing") is not None:
+                        attempt = 0
+                        continue
+                    if self.cool_down(f"resolution {attempt} changed nothing"):
                         attempt = 0
                         continue
                     say(f"supervisor: resolution {attempt} changed nothing — escalating")
