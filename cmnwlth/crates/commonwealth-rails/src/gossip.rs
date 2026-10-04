@@ -142,19 +142,7 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
     let self_id = daemon.node.self_id;
     let threshold = daemon.node.config.offline_threshold_secs;
 
-    let dial = {
-        let addr = daemon.endpoint().addr();
-        // Each read is its OWN statement so the borrowing iterator
-        // `relay_urls()` hands back is dropped at that statement's end. As a
-        // struct literal in the block's tail expression this is E0597 —
-        // `addr` is dropped while the iterator's borrow is still live.
-        let relay_url = addr.relay_urls().next().map(|r| r.to_string());
-        let direct_addrs: Vec<std::net::SocketAddr> = addr.ip_addrs().copied().collect();
-        DialInfo {
-            relay_url,
-            direct_addrs,
-        }
-    };
+    let dial = live_dial(daemon);
     // Exactly the origin kinds whose ALPN a registration serves (media from
     // `rails.toml`, apps while published, any program's offer), and what
     // every live registration declares — never a guess of cw-rails' own.
@@ -263,6 +251,54 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
     }
 }
 
+/// The relay and direct addresses the daemon's endpoint holds right now —
+/// what step 1 writes into our row.
+fn live_dial(daemon: &RailsDaemon) -> DialInfo {
+    let addr = daemon.endpoint().addr();
+    // Each read is its OWN statement so the borrowing iterator
+    // `relay_urls()` hands back is dropped at that statement's end. As a
+    // struct literal in the block's tail expression this is E0597 —
+    // `addr` is dropped while the iterator's borrow is still live.
+    let relay_url = addr.relay_urls().next().map(|r| r.to_string());
+    let direct_addrs: Vec<std::net::SocketAddr> = addr.ip_addrs().copied().collect();
+    DialInfo {
+        relay_url,
+        direct_addrs,
+    }
+}
+
+/// Step 1 on a mesh that is about to become the active one, before anyone can
+/// read it ([`RailsDaemon::swap_membership`]). Returns the dial it stamped.
+///
+/// A row is otherwise stamped only by the round, up to `gossip_interval_secs`
+/// after the mesh went live, and a joiner admitted inside that window leaves
+/// with a founder row that carries no address — its only route back, since
+/// the invite's dial string is not kept and a joiner may not author another
+/// node's row. With no relay and no discovery (local-only) neither side could
+/// ever dial the other (2026-10-03: a join 0 s after `POST /v1/mesh/create`
+/// gossiped `no-addresses` on both nodes forever; one 12 s later converged).
+///
+/// The hardware the round merges is left to the next round: a mesh just made
+/// active has no measurement owed yet.
+pub(crate) fn stamp_before_publishing(daemon: &RailsDaemon, mesh: &mut Mesh, now: u64) -> DialInfo {
+    let dial = live_dial(daemon);
+    let origins = daemon.origins.advertised_kinds();
+    let media_available = *daemon
+        .media_presence
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    self_stamp(
+        mesh,
+        daemon.node.self_id,
+        now,
+        &dial,
+        &origins,
+        &daemon.node.key,
+        media_available,
+    );
+    dial
+}
+
 /// Step 1. Our own row is the only one this node may author.
 pub fn self_stamp(
     mesh: &mut Mesh,
@@ -282,7 +318,13 @@ pub fn self_stamp(
         );
         return;
     };
-    me.last_seen = now;
+    // Strictly newer than our row as it stands, as `announce_departure`
+    // writes it: a departure in this same second pushes our event time past
+    // the wall clock, and a stamp that wrote `now` under it moved the row
+    // backwards — a tombstone sent next then landed at or below the copy the
+    // founder held, which its merge kept (watched 2026-10-03: switch, then
+    // leave, inside one second once a mesh going live was stamped).
+    me.last_seen = now.max(me.event_time() + 1);
     me.status = NodeStatus::Online;
     me.node_pubkey = Some(pubkey);
     me.capabilities = minimal_capabilities(now, origins, media_available);
@@ -673,6 +715,37 @@ mod tests {
             None,
         );
         assert_eq!(mesh.members[&NodeId::from_u128(ME)].dial_info_version, 2);
+    }
+
+    /// **The failing input for the event time.** A departure leaves our row
+    /// a second ahead of the wall clock; the stamp that follows it in the same
+    /// second must land after it, never at `now` beneath it, or every peer
+    /// holding the departure keeps it and the next departure is lost.
+    #[test]
+    fn a_stamp_never_moves_our_row_back_in_time() {
+        let mut ahead = member(ME, "me", NodeStatus::Offline, false);
+        ahead.last_seen = 200;
+        let mut mesh = mesh_of(vec![ahead]);
+        let dial = DialInfo {
+            relay_url: None,
+            direct_addrs: vec!["127.0.0.1:41231".parse().unwrap()],
+        };
+        self_stamp(
+            &mut mesh,
+            NodeId::from_u128(ME),
+            150,
+            &dial,
+            &[],
+            &key(),
+            None,
+        );
+        let me = &mesh.members[&NodeId::from_u128(ME)];
+        assert_eq!(me.status, NodeStatus::Online);
+        assert_eq!(
+            me.event_time(),
+            201,
+            "strictly after the departure it follows"
+        );
     }
 
     /// The catalogue's input. A configured origin is what puts `Media` on the

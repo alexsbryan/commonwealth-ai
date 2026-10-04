@@ -540,9 +540,28 @@ impl RailsDaemon {
     /// membership state changes. The caller holds `verbs` and has already
     /// written (or cleared) the files at the root, so a restart comes up in
     /// the same state this leaves.
-    pub(crate) async fn swap_membership(&self, mesh: Mesh, join_key: Option<String>, solo: bool) {
+    pub(crate) async fn swap_membership(
+        &self,
+        mut mesh: Mesh,
+        join_key: Option<String>,
+        solo: bool,
+    ) {
+        // Our row carries our dial from the instant the mesh is readable: the
+        // join door hands a joiner this roster, and a row the round has not
+        // stamped yet strands that joiner (gossip::stamp_before_publishing).
+        // A solo roster is never served to anyone.
+        let stamped = (!solo).then(|| {
+            gossip::stamp_before_publishing(
+                self,
+                &mut mesh,
+                commonwealth_core::clock::unix_now_secs(),
+            )
+        });
         tracing::info!(target: "rails", mesh = %mesh.name, mesh_id = %mesh.id, solo,
-                       holds_invite = join_key.is_some(), "membership: the active mesh changed");
+                       holds_invite = join_key.is_some(),
+                       self_relay = ?stamped.as_ref().and_then(|d| d.relay_url.as_deref()),
+                       self_direct_addrs = stamped.as_ref().map(|d| d.direct_addrs.len()),
+                       "membership: the active mesh changed");
         *self.mesh.write().await = mesh;
         self.set_join_key(join_key);
         self.solo.store(solo, Ordering::SeqCst);

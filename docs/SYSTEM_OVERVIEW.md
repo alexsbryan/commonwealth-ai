@@ -1370,7 +1370,11 @@ founder), all keyed by its own node key; its closure did not grow (319 crates vs
 measure; the rail doors cost three more). Since phase-b pb-rails-membership a running cw-rails also
 serves the daemon's membership doors (`/v1/mesh/{create,join,join/preview,rotate,leave,switch,forget}`,
 `commonwealth-rails/src/membership.rs`) over its own known-mesh store (`known.rs`, parked meshes under
-`<data-dir>/meshes/<id>/`), listed as `meshes` on its status. Since phase-b pb-rails-origins its acceptor holds no arm per
+`<data-dir>/meshes/<id>/`), listed as `meshes` on its status. A mesh a door makes active is
+self-stamped before anyone can read it (`RailsDaemon::swap_membership` → `gossip::stamp_before_publishing`),
+so a joiner admitted before the founder's first round on it still leaves with the founder's dial — without
+it, a join inside that window on a local-only mesh never gossiped (2026-10-03) — and a stamp never moves our
+row's event time back (`self_stamp` writes `now.max(event_time + 1)`, as a departure does). Since phase-b pb-rails-origins its acceptor holds no arm per
 protocol: `/v1/mesh/origins` registers any program's loopback origin (an ALPN, or `cwth/http/0` path
 prefixes) in commonwealth-media's `OriginRegistry`, from which the acceptor table, the advertised ALPNs
 and the gossiped capabilities are all read (a renew carrying `claims` replaces its registration's

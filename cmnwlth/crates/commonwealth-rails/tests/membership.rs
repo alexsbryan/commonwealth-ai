@@ -329,6 +329,90 @@ async fn every_membership_verb_answers_through_cw_rails_alone() {
     }
 }
 
+/// A node that joins the instant a mesh is created leaves with a founder row
+/// it can dial. The founder's row used to be stamped only by its gossip round,
+/// so a joiner admitted before the first round on the new mesh held a row with
+/// no address; local-only, neither side could ever reach the other (measured
+/// 2026-10-03 by scripts/mesh-soak.sh, which joins right after founding). The
+/// hour-long interval keeps any round out of the window, so this is the
+/// create door alone.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_join_right_after_create_holds_a_founder_row_it_can_dial() {
+    let founder_dir = tempfile::tempdir().unwrap();
+    let node_dir = tempfile::tempdir().unwrap();
+    let (fport, nport) = (free_port(), free_port());
+    let no_round = |name: &str, port: u16| Config {
+        gossip_interval_secs: 3600,
+        ..hermetic(name, port)
+    };
+    let founder = RailsDaemon::start_from_disk(
+        RailsNode::bind(founder_dir.path().to_path_buf(), no_round("founder", fport))
+            .await
+            .expect("the founder binds"),
+    )
+    .await
+    .expect("the founder starts");
+    let node = RailsDaemon::start_from_disk(
+        RailsNode::bind(node_dir.path().to_path_buf(), no_round("member", nport))
+            .await
+            .expect("the node binds"),
+    )
+    .await
+    .expect("the node starts");
+    assert!(
+        founder.is_solo() && node.is_solo(),
+        "both start with no mesh"
+    );
+
+    let script = async {
+        assert!(solo(fport).await && solo(nport).await);
+        let (code, created) = post(
+            fport,
+            "/v1/mesh/create",
+            json!({"name": "Lab", "node_name": "founder"}),
+        )
+        .await;
+        assert_eq!(code, 200, "create: {created}");
+        let link = created["join_link"]
+            .as_str()
+            .expect("an invite")
+            .to_string();
+        let (code, joined) = post(
+            nport,
+            "/v1/mesh/join",
+            json!({"key_or_url": link, "node_name": "member"}),
+        )
+        .await;
+        assert_eq!(code, 200, "join: {joined}");
+
+        // Read once, not polled: no round can have run, so what the joiner
+        // holds is exactly what the join door handed it.
+        let doc: Value = reqwest::get(format!("http://127.0.0.1:{nport}/v1/mesh/status"))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let founder_row = doc["members"]
+            .as_array()
+            .and_then(|ms| ms.iter().find(|m| m["name"] == "founder"))
+            .unwrap_or_else(|| panic!("the joiner lists the founder: {doc}"));
+        let direct = founder_row["dial"]["iroh_direct_addrs"]
+            .as_array()
+            .map(Vec::len)
+            .unwrap_or(0);
+        assert!(
+            direct > 0 || founder_row["dial"]["relay_url"].is_string(),
+            "the founder row the joiner left with has no address to dial: {founder_row}"
+        );
+    };
+    tokio::select! {
+        exit = founder.run() => panic!("the founder stopped serving: {exit:?}"),
+        exit = node.run() => panic!("the node stopped serving: {exit:?}"),
+        () = script => {}
+    }
+}
+
 /// A mesh resumed from disk whose invite key file is gone still starts, on
 /// its mesh, and names the missing invite rather than serving a stale one.
 /// Successor of the daemon's join_key_persistence
