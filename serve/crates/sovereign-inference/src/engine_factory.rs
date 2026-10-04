@@ -348,7 +348,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
     // a chat model reaches `/embeddings`. So an embed endpoint must name its
     // model. A vendor is never sent texts at all, so a hosted engine names
     // `embed_path` instead: the small embedding GGUF, in this process.
-    let embed = match section.embed_path.as_deref() {
+    let (embed, embed_family) = match section.embed_path.as_deref() {
         Some(path) => {
             let family = embed_family_for(path);
             let model_id = path
@@ -374,23 +374,27 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
                 %model_id,
                 "remote engine: embeddings run in this process"
             );
-            EngineEmbed::Local {
+            let embed = EngineEmbed::Local {
                 provider: Arc::new(provider),
                 model_id,
-            }
+            };
+            (embed, family)
         }
-        None => EngineEmbed::Remote {
-            endpoint_v1: section
-                .embed_endpoint
-                .as_deref()
-                .unwrap_or(endpoint)
-                .to_string(),
-            model_id: section
-                .embed_model_id
-                .as_deref()
-                .unwrap_or(model_id)
-                .to_string(),
-        },
+        None => {
+            let embed = EngineEmbed::Remote {
+                endpoint_v1: section
+                    .embed_endpoint
+                    .as_deref()
+                    .unwrap_or(endpoint)
+                    .to_string(),
+                model_id: section
+                    .embed_model_id
+                    .as_deref()
+                    .unwrap_or(model_id)
+                    .to_string(),
+            };
+            (embed, ModelFamily::Unknown)
+        }
     };
     // One shape for every remote engine. The pair decides each half's far
     // end (an endpoint off this machine is a third party, never sent texts)
@@ -413,7 +417,12 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
         "remote engine constructed — this node holds no chat weights"
     );
     let provider: Arc<dyn InferenceProvider> = Arc::new(provider);
-    Ok(BuiltEngine::external(provider))
+    // The family the embed slot loaded with, not `external`'s `Unknown`:
+    // serve reports it and the mesh advertises pooling from it.
+    Ok(BuiltEngine {
+        embed_family,
+        ..BuiltEngine::external(provider)
+    })
 }
 
 #[cfg(test)]
@@ -517,6 +526,28 @@ mod tests {
         section.endpoint = Some("http://localhost:8000/v1".to_string());
         let err = build_remote(&section).expect_err("no model_id must refuse");
         assert!(err.contains("model_id"), "got: {err}");
+    }
+
+    /// A hosted engine that embeds in process reports the family it loaded
+    /// with: serve's self report carries it and the mesh advertises pooling
+    /// from it, so `Unknown` there is a Mean-pooling claim about a
+    /// last-token model. Loads a real GGUF, so ignored in the suite; run by
+    /// hand with `SOVEREIGN_MODELS_DIR` naming the directory that holds it.
+    #[test]
+    #[ignore]
+    fn a_hosted_engine_reports_the_embed_family_it_loaded() {
+        let dir = std::env::var_os("SOVEREIGN_MODELS_DIR")
+            .map(std::path::PathBuf::from)
+            .expect("SOVEREIGN_MODELS_DIR names the directory holding the embed GGUF");
+        let section = EngineSection {
+            kind: EngineKind::Remote,
+            endpoint: Some("https://api.example.com/v1".to_string()),
+            model_id: Some("vendor-model".to_string()),
+            embed_path: Some(dir.join("Qwen3-Embedding-0.6B-Q8_0.gguf")),
+            ..Default::default()
+        };
+        let built = build_remote(&section).expect("a hosted engine with a local embed builds");
+        assert_eq!(built.embed_family, ModelFamily::Qwen3Embedding);
     }
 
     /// Embeddings come from one place. A local embed model that cannot load
