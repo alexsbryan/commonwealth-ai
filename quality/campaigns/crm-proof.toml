@@ -1,0 +1,92 @@
+# Flight rules — read raw. Verdicts come from measurement rows
+# (~/.sovereign/comaintainer/bar-measurements.jsonl), never from prose here.
+# Pre-registered 2026-10-03 BEFORE any score: the gold was still being drafted
+# and no pipeline output had been compared to it.
+id        = "crm-proof"
+objective = "A small business gets people, companies, deals, stages and commitments from its mailbox as typed records with citations, read directly from the atlas, at a cost that fits a 50k-message mailbox in a day of GPU"
+spec      = "svrn-docs ontology-apps/README.md (The story; Where it converges: one gold set); research/ontology-apps/ward/GOLD_SPEC.md (the gold)"
+declared  = "2026-10-03"
+status    = "active"
+
+# All bars are scored by research/ontology-apps/ward/score.py over the ten
+# customer folders of research/ontology-apps/ward/prepare.py's sample (286
+# messages), gold drafted per GOLD_SPEC v1 by a different model family than the
+# extractor and reviewed by the operator. A pipeline record matches a gold record
+# only through the evidence it cites: the same message file, plus the key named
+# per bar. No judge model. Tuning runs on the 50 smoke sections
+# (research/ontology-apps/ward/smoke_sections.txt), so every bar is READ on the gold messages outside them; the full
+# 286 is reported beside.
+
+[predicate]
+statement = "crm-people, crm-deals, crm-stage and crm-cost each read met on their newest measurement row."
+check     = '''python3 - <<'PY'
+import json, pathlib, sys
+rows = [json.loads(l) for l in (pathlib.Path.home() / ".sovereign/comaintainer/bar-measurements.jsonl").read_text().splitlines() if l.strip()]
+ok = True
+for bar in ("crm-people", "crm-deals", "crm-stage", "crm-cost"):
+    mine = [r for r in rows if r.get("campaign") == "crm-proof" and r.get("bar") == bar]
+    met = bool(mine) and mine[-1].get("verdict") == "met"
+    print(f"{bar}: {'met' if met else 'OPEN'}")
+    ok &= met
+sys.exit(0 if ok else 1)
+PY'''
+
+[[bar]]
+id           = "crm-people"
+one_line     = "Share of gold people with an email that the atlas holds as ONE person atom carrying that email"
+status       = "open"
+direction    = "higher_is_better"
+floor        = 0.0
+floor_basis  = "unmeasured at registration; smoke (50 sections) had 56 of 100 person atoms carrying any email and one email on two atoms"
+target       = 0.9
+goodhart     = "hits target while the contact list fills with junk — person atoms matching no gold person are reported beside it, and an email split across atoms counts as a miss"
+
+[[bar]]
+id           = "crm-companies"
+one_line     = "Share of gold companies the atlas holds as a company atom, matched by a gold domain or the folded name"
+status       = "open"
+direction    = "higher_is_better"
+floor        = 0.0
+floor_basis  = "unmeasured at registration"
+target       = 0.8
+goodhart     = "company atoms matching no gold company are reported beside it"
+
+[[bar]]
+id           = "crm-deals"
+one_line     = "Share of gold transaction deals matched by a deal atom whose evidence cites one of the deal's messages and whose counterparty resolves to the gold counterparty"
+status       = "open"
+direction    = "higher_is_better"
+floor        = 0.0
+floor_basis  = "unmeasured at registration; smoke had 2 deal atoms in 50 customer-folder sections"
+target       = 0.6
+goodhart     = "a deal atom citing many messages could match many gold deals — each atom matches at most one gold deal, and deal atoms matching none are reported"
+
+[[bar]]
+id           = "crm-stage"
+one_line     = "Share of gold stage_updates matched by a stage_update claim citing the same message, whose subject is the matched deal and whose stage equals gold's"
+status       = "open"
+direction    = "higher_is_better"
+floor        = 0.0
+floor_basis  = "unmeasured at registration; smoke had 7 of 55 stage_update claims with a deal subject"
+target       = 0.6
+goodhart     = "the CRM shows a deal's CURRENT stage: per-deal current-stage accuracy (latest by message date) is reported beside it, and stage_update claims on messages gold left unlabelled are reported as made-up"
+
+[[bar]]
+id           = "crm-commitments"
+one_line     = "Share of gold commitments matched by a commitment claim citing the same message whose subject is the committing person (by email, else name)"
+status       = "open"
+direction    = "higher_is_better"
+floor        = 0.0
+floor_basis  = "unmeasured at registration; smoke had 20 of 45 commitment claims with a person subject"
+target       = 0.5
+goodhart     = "commitment claims on messages gold left without one are reported as made-up"
+
+[[bar]]
+id           = "crm-cost"
+one_line     = "Wall seconds of the atlas build's LLM phases per message over the 286 gold messages"
+status       = "open"
+direction    = "lower_is_better"
+floor        = 25.5
+floor_basis  = "smoke 2026-10-03: 50 sections, 21 m 13 s, 25.5 s per section (3,476 prompt + 999 completion tokens per call); per-message figure is written by the first scored run"
+target       = 1.7
+goodhart     = "hits target by extracting less — it is read only beside crm-people, crm-deals and crm-stage on the same run, and a cut that loses any of them below its floor voids the read"
