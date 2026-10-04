@@ -19,6 +19,7 @@ mod checks_commonwealth;
 mod checks_freshness;
 mod checks_omo;
 mod checks_sovereign;
+mod machine;
 mod probe;
 mod repair;
 
@@ -262,6 +263,7 @@ fn status_symbol(s: &CheckStatus) -> &'static str {
 }
 
 fn print_human(results: &[CheckResult]) {
+    println!("\n  {}", machine::machine().summary());
     let layers = [
         (Layer::Sovereign, "Sovereign"),
         (Layer::Commonwealth, "Commonwealth"),
@@ -304,6 +306,11 @@ fn print_human(results: &[CheckResult]) {
         println!("  All checks passed.");
     } else {
         println!("  {total_issues} issue(s) found. Run `svrn doctor --fix` to auto-repair where possible.");
+        println!(
+            "  Still stuck? Open an issue at {} and attach `svrn doctor --json`:\n  \
+             it names this machine and every check, and nothing is sent for you.",
+            sovereign_contracts::project_links::ISSUES_URL
+        );
     }
 }
 
@@ -314,6 +321,8 @@ fn print_json(results: &[CheckResult]) {
         .collect();
     let out = serde_json::json!({
         "issues": issues.len(),
+        "machine": machine::machine(),
+        "report_to": sovereign_contracts::project_links::ISSUES_URL,
         "checks": results,
     });
     println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());

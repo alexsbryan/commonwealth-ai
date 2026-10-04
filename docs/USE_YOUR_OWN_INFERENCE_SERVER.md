@@ -140,7 +140,10 @@ a vendor does not speak it.
 embedded. Name the embedding GGUF in `embed_path` and this process loads it
 (Qwen3-Embedding-0.6B is about 600 MB and runs on CPU), so no `[models]`
 section and no second server are needed. A llama-server on this machine,
-named in `embed_endpoint`, also works.
+named in `embed_endpoint`, also works. With no GPU it runs on the CPU and the
+daemon's log says so. If it will not run on your machine at all, `svrn doctor`
+says which check failed and names the machine; open an issue with
+`svrn doctor --json` attached.
 
 **Peers can use it.** The node advertises the vendor model to the mesh like
 any loaded model, so a peer's turn can be served from it, on this node's key.

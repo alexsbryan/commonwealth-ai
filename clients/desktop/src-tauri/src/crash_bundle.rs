@@ -493,8 +493,8 @@ pub(crate) fn desktop_dir() -> Option<PathBuf> {
 /// crash flow hands this to the frontend instead of an email address:
 /// the user opens an issue and attaches the locally-written report.
 ///
-/// `alexsbryan` is the current code owner; update the URL if the repo moves.
-const GITHUB_ISSUES_URL: &str = "https://github.com/alexsbryan/commonwealth-ai/issues/new";
+/// One URL for every surface: `sovereign_contracts::project_links`.
+const GITHUB_ISSUES_URL: &str = sovereign_contracts::project_links::ISSUES_URL;
 
 pub(crate) fn issues_url() -> String {
     GITHUB_ISSUES_URL.to_string()

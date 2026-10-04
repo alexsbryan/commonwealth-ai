@@ -115,6 +115,8 @@ pub mod memory_config;
 /// (`Pipeline`, the registry) stays host code.
 pub mod middleware;
 /// The daemon's own rings and the one decider over them (`is_daemon_owned`).
+/// The URLs every surface prints for reaching the project.
+pub mod project_links;
 pub mod ring_namespaces;
 /// What every surface that ran the mobile host answers — `svrn mobile` and
 /// the desktop's Mobile access toggle — now that its binary is deleted.

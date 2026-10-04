@@ -151,10 +151,14 @@ async fn hosted_setup(raw: &str, opts: &Opts) -> Result<(), String> {
     let probed = tokio::task::spawn_blocking(|| probe::ask::<ProbedPlan>("plan", &[]))
         .await
         .map_err(|e| format!("the setup probe did not finish: {e}"))??;
-    let embed = probed
-        .plan
-        .embed
-        .ok_or("the bundled manifest names no embed model for this machine")?;
+    let embed = probed.plan.embed.ok_or_else(|| {
+        format!(
+            "the bundled manifest names no embed model for this machine. A hosted \
+                 node still embeds here, so it cannot be set up yet; open an issue at {} \
+                 with `svrn doctor --json` attached, which names this machine",
+            sovereign_contracts::project_links::ISSUES_URL
+        )
+    })?;
     let url = url_for(&probed.urls, &embed)?;
     let data_dir = run_data_dir(opts);
     let models_dir = data_dir.join("models");

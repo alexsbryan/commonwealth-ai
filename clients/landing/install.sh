@@ -43,18 +43,18 @@ case "$os" in
   Linux)
     case "$arch" in
       x86_64 | amd64) target="x86_64-unknown-linux-gnu" ;;
-      *) err "no prebuilt for Linux/$arch yet — build from source: https://github.com/$REPO" ;;
+      *) err "no prebuilt for Linux/$arch yet — build from source: https://github.com/$REPO, or ask for one: https://github.com/$REPO/issues/new?title=Prebuilt+for+Linux/$arch" ;;
     esac
     ;;
   Darwin)
     case "$arch" in
       arm64 | aarch64) target="aarch64-apple-darwin" ;;
       x86_64) target="x86_64-apple-darwin" ;;
-      *) err "no prebuilt for macOS/$arch — build from source: https://github.com/$REPO" ;;
+      *) err "no prebuilt for macOS/$arch — build from source: https://github.com/$REPO, or ask for one: https://github.com/$REPO/issues/new?title=Prebuilt+for+macOS/$arch" ;;
     esac
     ;;
   *)
-    err "unsupported OS '$os' — build from source: https://github.com/$REPO"
+    err "unsupported OS '$os' — build from source: https://github.com/$REPO, or ask for it: https://github.com/$REPO/issues/new?title=Support+for+$os/$arch"
     ;;
 esac
 
