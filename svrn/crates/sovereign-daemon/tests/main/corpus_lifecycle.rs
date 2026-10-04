@@ -64,6 +64,10 @@ struct Ingests {
     run: Mutex<Run>,
     disk: Mutex<HashMap<String, CorpusDiskStatus>>,
     held: Mutex<HashMap<String, Arc<Notify>>>,
+    /// The port's `index_dir`. A completed install reads it on the spot to
+    /// place a staged SEC fact store (`corpus_ingest.rs`); empty, so nothing
+    /// is staged and nothing is placed.
+    indexes: tempfile::TempDir,
 }
 
 fn absent(corpus_id: &str) -> CorpusDiskStatus {
@@ -87,6 +91,7 @@ impl Ingests {
             run: Mutex::new(run),
             disk: Mutex::default(),
             held: Mutex::default(),
+            indexes: tempfile::tempdir().expect("an index dir"),
         })
     }
 
@@ -181,6 +186,7 @@ impl Ingests {
             Arc::clone(self),
         );
         IngestPortDouble::new()
+            .with_index_dir(self.indexes.path())
             .on_prepare_registry_install(move |id| prepare.prepare(id))
             .on_cancel_corpus_ingest(move |id| cancel.cancel(id))
             .on_remove_corpus_everything(move |id| {
@@ -540,6 +546,17 @@ async fn install_cancel_reinstall_lifecycle() {
         calls_among(&engine, &["prepare_registry_install"]),
         vec!["prepare_registry_install"],
     );
+    // The progress write is a spawned task (`ingest_progress_callback`), so
+    // the task can leave `active_ingests` before its progress lands: probed
+    // 2026-10-04, 2 of 40 reads right after idle saw no entry yet. Wait for
+    // it, as phase 1 does, before asking status to report it.
+    wait_until_progress(
+        &state,
+        |snap| snap.progress.contains_key(corpus_id),
+        Duration::from_secs(10),
+        "reinstall progress visible",
+    )
+    .await;
     let (_, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
     let statuses: StatusResponse = serde_json::from_slice(&body).unwrap();
     let entry = statuses
