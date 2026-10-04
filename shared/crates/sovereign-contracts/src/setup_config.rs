@@ -127,7 +127,7 @@ pub struct SetupConfig {
     pub mcp_servers: Vec<crate::mcp_config::McpServerConfig>,
 }
 
-pub use crate::engine_config::{EngineKind, EngineSection};
+pub use crate::engine_config::{EngineKind, EngineSection, StructuredOutputMode};
 
 /// `[search]` — the web-search provider the operator configured.
 ///

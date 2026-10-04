@@ -21,6 +21,7 @@ fn a_hosted_engine_advertises_its_vendor_model_and_vendor_features() {
         None,
         65536,
         None,
+        Default::default(),
     )
     .unwrap();
     let manifest = build_self_manifest(&engine, &NoManifest);

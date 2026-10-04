@@ -171,7 +171,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
              svrn setup --plan --json\n\
              svrn setup --terminal <entry> [--reset] [--data-dir <path>] \
              [--client-port <n>]\n\
-             svrn setup --hosted <deepseek|openrouter|url> [--model <id>] [--fast-model <id>] \
+             svrn setup --hosted <anthropic|deepseek|openrouter|url> [--model <id>] [--fast-model <id>] \
              [--reset] [--data-dir <path>] [--client-port <n>] < key.txt\n\
              svrn setup --fim [--quant <rung>] [--yes] [--skip-editor]",
         ),
@@ -209,7 +209,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ),
             (
                 "--hosted <vendor>",
-                "Chat on a hosted model: deepseek, openrouter, or any OpenAI-compatible \
+                "Chat on a hosted model: anthropic, deepseek, openrouter, or any OpenAI-compatible \
                  /v1 URL. Reads the API key from stdin, downloads only the small \
                  embedding model (embeddings stay on this machine), and writes a remote \
                  [engine] with no [models]. Writing it is the consent for this node's \

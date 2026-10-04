@@ -791,7 +791,12 @@ reports its vendor models (and the local embed model) as resident slots
 (`oicp_client::outbound::Hosted`), so its manifest advertises them to peers
 like any loaded model, with `OPENAI_COMPATIBLE_FEATURES` instead of the
 embedded set; `[engine] fast_model_id` names a second model for fast turns,
-and a turn that names no model is pinned to the one for its speed.
+and a turn that names no model is pinned to the one for its speed. `[engine]
+structured_output` is how the host is asked for a schema: unset is
+`json-schema`, re-asked once as a forced function call after a 400 and
+remembered; `tool-use-forced` sends that from the first request, for a host
+that ignores `response_format` rather than refusing it (Anthropic's
+OpenAI-compatible endpoint; `svrn setup --hosted anthropic` writes it).
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers

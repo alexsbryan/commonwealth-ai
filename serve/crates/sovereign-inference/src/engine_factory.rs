@@ -407,6 +407,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
         section.fast_model_id.clone(),
         section.context_size,
         section.extra_params.clone(),
+        section.structured_output.unwrap_or_default(),
     )
     .map_err(|e| format!("[engine] kind = \"remote\": {e}"))?;
     tracing::info!(
@@ -597,6 +598,7 @@ mod tests {
             embed_endpoint: None,
             embed_path: None,
             extra_params: None,
+            structured_output: None,
         };
         // Deliberately absent paths: if this engine touched a GGUF the
         // build would fail, and that failure is the assertion.
@@ -639,6 +641,7 @@ mod tests {
             embed_model_id: Some("BAAI/bge-m3".to_string()),
             embed_path: None,
             extra_params: None,
+            structured_output: None,
         };
         let built = build_engine(&config).expect("split chat/embed builds without I/O");
         assert!(built.llama.is_none());

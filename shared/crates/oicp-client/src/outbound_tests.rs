@@ -128,7 +128,7 @@ fn an_engine_off_this_machine_is_a_third_party() {
             endpoint_v1: embed.into(),
             model_id: "e".into(),
         };
-        SplitInferenceProvider::engine(chat, embed, None, "c".into(), None, 8192, None).unwrap()
+        SplitInferenceProvider::engine(chat, embed, None, "c".into(), None, 8192, None, Default::default()).unwrap()
     };
     let vendor = pair("https://api.example.com/v1", "http://127.0.0.1:8001/v1");
     assert_eq!(vendor.serving_locus(), ServingLocus::ForwardsToThirdParty);
@@ -152,7 +152,7 @@ async fn a_hosted_engine_embeds_in_this_process() {
         model_id: "Qwen3-Embedding-0.6B-Q8_0".into(),
     };
     let engine =
-        SplitInferenceProvider::engine(&url, embed, None, "vendor-model".into(), None, 8192, None)
+        SplitInferenceProvider::engine(&url, embed, None, "vendor-model".into(), None, 8192, None, Default::default())
             .unwrap();
     assert_eq!(engine.embed("chunk").await.unwrap(), vec![5.0; 4]);
     assert_eq!(engine.embed_query("q").await.unwrap(), vec![1.0; 4]);
@@ -186,6 +186,7 @@ async fn a_hosted_engine_reports_its_models_and_pins_unnamed_turns() {
         Some("small".into()),
         8192,
         None,
+        Default::default(),
     )
     .unwrap();
     let slots: Vec<_> = engine
@@ -271,4 +272,42 @@ fn an_engine_endpoint_is_this_machine_only_when_it_says_loopback() {
     ] {
         assert_eq!(FarEnd::of_engine_endpoint(endpoint), far_end, "{endpoint}");
     }
+}
+
+
+/// A host that IGNORES `response_format` (Anthropic's OpenAI-compatible
+/// endpoint documents it so) answers 200 with unconstrained text, which the
+/// 400-driven fallback never sees. `[engine] structured_output` tells the
+/// engine up front: the first schema request goes out as a forced function
+/// call, with no `response_format` at all.
+#[tokio::test]
+async fn an_engine_told_tool_use_forced_sends_schemas_as_a_function_call() {
+    let (url, _, bodies) = vendor().await;
+    let local = sovereign_contracts::double::TestProvider::new().with_embed_marker(|_| vec![0.0]);
+    let embed = EngineEmbed::Local {
+        provider: Arc::new(local),
+        model_id: "embed-gguf".into(),
+    };
+    let engine = SplitInferenceProvider::engine(
+        &url,
+        embed,
+        None,
+        "vendor-model".into(),
+        None,
+        8192,
+        None,
+        crate::StructuredOutputMode::ToolUseForced,
+    )
+    .unwrap();
+    let schema = json!({"title": "atoms", "type": "object", "properties": {"a": {"type": "string"}}});
+    let asked = CompletionRequest {
+        structured_output: Some(schema),
+        ..request(None)
+    };
+    // The miniature vendor answers in text whatever it is asked, so the
+    // answer is not the subject here: the body that left is.
+    let _ = engine.complete(&asked).await;
+    let body = bodies.lock().unwrap().last().cloned().expect("the vendor was asked");
+    assert!(body.get("response_format").is_none(), "{body}");
+    assert_eq!(body["tool_choice"]["function"]["name"], "atoms", "{body}");
 }

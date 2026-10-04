@@ -14,7 +14,9 @@ use std::io::{BufRead as _, IsTerminal as _};
 use std::path::Path;
 
 use sovereign_contracts::daemon_wire::ProbedPlan;
-use sovereign_core::setup_config::{DataSection, EngineKind, EngineSection, SetupConfig};
+use sovereign_core::setup_config::{
+    DataSection, EngineKind, EngineSection, SetupConfig, StructuredOutputMode,
+};
 
 use super::{
     download::download_with_progress, probe, run_config_path, run_data_dir, url_for, Opts,
@@ -27,6 +29,7 @@ struct Vendor {
     model: Option<&'static str>,
     context_size: u32,
     extra_params: Option<serde_json::Value>,
+    structured_output: Option<StructuredOutputMode>,
 }
 
 fn vendor(raw: &str) -> Result<Vendor, String> {
@@ -36,6 +39,7 @@ fn vendor(raw: &str) -> Result<Vendor, String> {
         model,
         context_size: 65536,
         extra_params,
+        structured_output: None,
     };
     match raw {
         "deepseek" => Ok(named(
@@ -50,16 +54,25 @@ fn vendor(raw: &str) -> Result<Vendor, String> {
             None,
             Some(serde_json::json!({ "provider": { "require_parameters": true } })),
         )),
+        // Its OpenAI-compatible endpoint documents `response_format` as
+        // ignored: a schema request answers 200 in free text, and no 400 ever
+        // comes to teach the client, so schemas go as a forced function call
+        // from the first request.
+        "anthropic" => Ok(Vendor {
+            structured_output: Some(StructuredOutputMode::ToolUseForced),
+            ..named("https://api.anthropic.com/v1", Some("claude-opus-5"), None)
+        }),
         url if url.starts_with("https://") || url.starts_with("http://") => Ok(Vendor {
             name: url.to_string(),
             endpoint: url.trim_end_matches('/').to_string(),
             model: None,
             context_size: 32768,
             extra_params: None,
+            structured_output: None,
         }),
         other => Err(format!(
-            "--hosted {other}: name a vendor (deepseek, openrouter) or an OpenAI-compatible \
-             base URL ending in /v1"
+            "--hosted {other}: name a vendor (anthropic, deepseek, openrouter) or an \
+             OpenAI-compatible base URL ending in /v1"
         )),
     }
 }
@@ -200,6 +213,7 @@ fn hosted_config(
         context_size: vendor.context_size,
         embed_path: Some(embed_path),
         extra_params: vendor.extra_params,
+        structured_output: vendor.structured_output,
         ..Default::default()
     };
     cfg.daemon.client_port = client_port;
@@ -216,6 +230,42 @@ mod tests {
     /// is hosted serves its own turns and names its embed space from the
     /// local GGUF. The boot refused this file until the class check learned
     /// that a remote engine needs no `[models]`.
+    #[test]
+    fn the_anthropic_config_sends_schemas_as_a_function_call() {
+        use sovereign_core::setup_config::StructuredOutputMode;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let anthropic = vendor("anthropic").unwrap();
+        assert_eq!(anthropic.endpoint, "https://api.anthropic.com/v1");
+        let cfg = hosted_config(
+            anthropic,
+            "claude-opus-5".into(),
+            "not-a-key".into(),
+            None,
+            dir.path().join("models/Qwen3-Embedding-0.6B-Q8_0.gguf"),
+            dir.path().to_path_buf(),
+            19751,
+        );
+        let path = SetupConfig::path_in(dir.path());
+        cfg.save_to(&path).expect("save");
+        let loaded = SetupConfig::load_from(&path).expect("loads");
+        // Its OpenAI-compatible endpoint ignores `response_format`, so no 400
+        // ever comes to teach the client; the config has to say it.
+        assert_eq!(
+            loaded.engine.structured_output,
+            Some(StructuredOutputMode::ToolUseForced)
+        );
+        let deepseek = hosted_config(
+            vendor("deepseek").unwrap(),
+            "deepseek-flash".into(),
+            "k".into(),
+            None,
+            dir.path().join("e.gguf"),
+            dir.path().to_path_buf(),
+            19751,
+        );
+        assert_eq!(deepseek.engine.structured_output, None, "a 400 teaches DeepSeek's");
+    }
+
     #[test]
     fn the_written_config_loads_as_a_holder() {
         use sovereign_core::setup_config::NodeClass;

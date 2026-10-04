@@ -92,6 +92,39 @@ impl std::fmt::Display for EngineKind {
     }
 }
 
+/// How a host is asked for output that matches a JSON Schema. A property of
+/// the HOST, not of the request: the request carries the schema, and the
+/// provider spells it the way its host accepts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StructuredOutputMode {
+    /// `response_format: {type: "json_schema", json_schema: {...}}`. The host
+    /// enforces the schema (a Commonwealth daemon, OpenAI).
+    #[default]
+    JsonSchema,
+    /// `response_format: {type: "json_object"}`: valid JSON, schema not
+    /// enforced. The OICP-compliant spelling for a host that advertises
+    /// `constraint:json_object` and not `constraint:json_schema`.
+    JsonObject,
+    /// The schema as the one function's `parameters`, `tool_choice: "auto"`:
+    /// the model may answer in text instead.
+    ToolUseAuto,
+    /// The schema as the one function's `parameters`, the call forced. On a
+    /// host with no schema-enforcing `response_format` this is the strongest
+    /// adherence there is: DeepSeek's chat API (2026-10-03) answers
+    /// `json_schema` with 400, and under `json_object` 15 of 20 wessex-hoard
+    /// Phase 1 chapters dropped the required `questions_raised`.
+    ToolUseForced,
+}
+
+impl StructuredOutputMode {
+    /// True when the answer comes back as a function call's arguments rather
+    /// than as the message content.
+    pub fn via_tool(self) -> bool {
+        matches!(self, Self::ToolUseAuto | Self::ToolUseForced)
+    }
+}
+
 /// `[engine]` — the engine selection, plus the fields a non-local engine
 /// needs to reach its backend.
 ///
@@ -166,6 +199,15 @@ pub struct EngineSection {
     /// the schema.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra_params: Option<serde_json::Value>,
+    /// How `remote` asks this host for schema-shaped output. Unset is
+    /// `json-schema`, and a host that refuses that with a 400 is asked again
+    /// as a forced function call and remembered (`oicp_client`'s
+    /// `send_chat`). A host that IGNORES `response_format` answers 200 with
+    /// unconstrained text, which nothing can learn from, so it must be told:
+    /// Anthropic's OpenAI-compatible endpoint documents `response_format` as
+    /// ignored, and `svrn setup --hosted anthropic` writes `tool-use-forced`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_output: Option<StructuredOutputMode>,
 }
 
 fn default_engine_context_size() -> u32 {
@@ -197,6 +239,7 @@ impl Default for EngineSection {
             embed_endpoint: None,
             embed_path: None,
             extra_params: None,
+            structured_output: None,
         }
     }
 }

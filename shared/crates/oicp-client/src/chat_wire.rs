@@ -4,7 +4,6 @@
 //! peer daemon and enrich's dispatch to a vendor say the same thing the same
 //! way ([`crate::RemoteApiProvider::build_request`] is their one builder).
 
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::CompletionRequest;
@@ -12,38 +11,7 @@ use std::sync::atomic::Ordering;
 
 use crate::{error_excerpt, ChatMessage, RemoteApiProvider};
 
-/// How a host is asked for output that matches a JSON Schema. A property of
-/// the HOST, not of the request: the request carries the schema, and the
-/// provider spells it the way its host accepts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum StructuredOutputMode {
-    /// `response_format: {type: "json_schema", json_schema: {...}}`. The host
-    /// enforces the schema (a Commonwealth daemon, OpenAI).
-    #[default]
-    JsonSchema,
-    /// `response_format: {type: "json_object"}`: valid JSON, schema not
-    /// enforced. The OICP-compliant spelling for a host that advertises
-    /// `constraint:json_object` and not `constraint:json_schema`.
-    JsonObject,
-    /// The schema as the one function's `parameters`, `tool_choice: "auto"`:
-    /// the model may answer in text instead.
-    ToolUseAuto,
-    /// The schema as the one function's `parameters`, the call forced. On a
-    /// host with no schema-enforcing `response_format` this is the strongest
-    /// adherence there is: DeepSeek's chat API (2026-10-03) answers
-    /// `json_schema` with 400, and under `json_object` 15 of 20 wessex-hoard
-    /// Phase 1 chapters dropped the required `questions_raised`.
-    ToolUseForced,
-}
-
-impl StructuredOutputMode {
-    /// True when the answer comes back as a function call's arguments rather
-    /// than as the message content.
-    pub fn via_tool(self) -> bool {
-        matches!(self, Self::ToolUseAuto | Self::ToolUseForced)
-    }
-}
+pub use sovereign_contracts::setup_config::StructuredOutputMode;
 
 /// Write `schema` onto `body` in `mode`'s spelling, named after the schema's
 /// own `title` (JSON Schema's annotation for exactly that, which a grammar
