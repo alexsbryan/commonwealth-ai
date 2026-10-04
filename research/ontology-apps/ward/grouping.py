@@ -31,17 +31,14 @@ def labelled(corpus, atoms_p):
     return out, amb
 
 def bcubed(rows, cluster_of):
-    pred = collections.defaultdict(set); gold = collections.defaultdict(set)
-    for r in rows:
-        pred[cluster_of(r)].add(r[0]); gold[r[1]].add(r[0])
-    lab = {r[0]: r[1] for r in rows}; cl = {r[0]: cluster_of(r) for r in rows}
-    P = sum(len({m for m in pred[cl[i]] if lab[m] == lab[i]}) / len(pred[cl[i]]) for i in lab) / len(lab)
-    R = sum(len({m for m in pred[cl[i]] if lab[m] == lab[i]}) / len(gold[lab[i]]) for i in lab) / len(lab)
-    return round(P, 3), round(R, 3), round(2 * P * R / (P + R), 3) if P + R else 0
+    """B-cubed of rows under a clustering; one formula, deals.bcubed's."""
+    import deals  # noqa: PLC0415
+    return deals.bcubed([(r[0], r[1], cluster_of(r)) for r in rows])
+
 
 if __name__ == "__main__":
     rows, amb = labelled(sys.argv[1], sys.argv[2])
     print(f"labelled members {len(rows)} (ambiguous {amb}), gold deals {len({r[1] for r in rows})}")
-    print("  composed           P/R/F", bcubed(rows, lambda r: r[2] or ("solo", r[0])))
-    print("  ref: singletons    P/R/F", bcubed(rows, lambda r: ("solo", r[0])))
-    print("  ref: one per block P/R/F", bcubed(rows, lambda r: r[3] or ("solo", r[0])))
+    print("  composed          ", bcubed(rows, lambda r: r[2] or ("solo", r[0])))
+    print("  ref: singletons   ", bcubed(rows, lambda r: ("solo", r[0])))
+    print("  ref: one per block", bcubed(rows, lambda r: r[3] or ("solo", r[0])))

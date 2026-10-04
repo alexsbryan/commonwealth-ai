@@ -16,6 +16,14 @@ exclude_domains = ["aol.com", "hotmail.com", "yahoo.com", "msn.com", "earthlink.
                    "juno.com", "compuserve.com", "pdq.net"]
 own = "enron.com"                        # the mailbox owner's organisation: a company, never a counterparty
 
+# Axis 2: identity adjudicated over the whole candidate set — every name and domain a company was seen
+# under, grouped by one model pass (acronyms, legal suffixes, divisions, the owner's affiliates).
+[[identity]]
+type = "company"
+names_from = ["deal_act.counterparty", "deal_mention.counterparty", "deal_mention.via"]   # raw counterparty strings join the candidate names
+description = "any organization that can be a party to a deal: a business, utility, municipality, agency or cooperative"
+hierarchy = "fold"                       # a division or affiliate is its parent for every downstream use
+
 # Axis 4: the document clock.
 [clock]
 metadata = "date"
@@ -23,16 +31,30 @@ metadata = "date"
 # Axis 5: a composed type.
 [[compose]]
 type = "deal"
-of = ["deal_act"]
+of = ["deal_mention"]
 block = ["counterparty"]                 # a member's own value, else its document's outside party
-link = ["commodity", "delivery_point", "period"]
+# link: attributes whose agreement is EVIDENCE of one deal (discriminating). A low-cardinality attribute
+# (commodity) is a necessary condition only, so it sits in distinct, never here.
+link = ["deal_ref", "delivery_point", "period_start"]
+distinct = { commodity = "equal", period = "overlap" }   # two deals, never one: illegal to compose
 anchor = "deal_ref"
 thread = "subject"                       # a shared document thread is linking evidence
-adjudicate = false                       # arm 2 puts ambiguous pairs to the model
+adjudicate = false                       # true: a block's timeline is partitioned by the model, held to the type by code (tune 0.59 vs rules 0.744, 2026-10-04: kinds misroute)
+kinds = { transaction = "a specific sale, purchase, supply arrangement or trade", master_agreement = "an enabling contract (ISDA, GISB, EEI or another master agreement) with no specific trade of its own" }
+route = { master_agreement = "agreement" }   # a master agreement is its own composed type, never a deal
 
 # Axis 4: a state type of the composed type, one state per member, ordered by the clock.
 [[derive]]
 type = "deal_stage"
 of = "deal"
-from = "deal_act.act"
-map = { request = "lead", offer = "proposal", counter = "negotiating", accept = "won", confirm = "won", decline = "lost" }
+from = "deal_mention.stage"
+map = { lead = "lead", proposal = "proposal", negotiating = "negotiating", won = "won", lost = "lost" }
+
+# Refinements of declared attribute types that the Rust declaration language cannot carry yet; focus.py
+# builds its output schema from them so a wrong value cannot be written (a citation is a sentence index,
+# a ref is a registry member that is not the owner, a period is a pair of months, a commodity a closed set).
+[shape.deal_mention]
+period = { kind = "month_range" }
+commodity = { kind = "values", values = ["natural_gas", "power", "pipeline_capacity", "financial", "services", "other"] }
+counterparty = { kind = "registry", exclude_owner = true }
+via = { kind = "registry", exclude_owner = true }

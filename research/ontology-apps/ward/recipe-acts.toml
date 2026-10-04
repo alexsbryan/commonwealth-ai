@@ -67,6 +67,24 @@ attributes = [
   { name = "deal_ref", type = "text", description = "a deal number, RFP or contract name the message gives, if any" },
 ]
 
+# The first-order unit a deal is composed from (ONTOLOGY_PRIMITIVES §8): what a message SAYS about one
+# deal, not only the step it takes. Read per message by focus.py; deal_act stays for the Phase-1 arm.
+[[enrichment.ontology.types]]
+name = "deal_mention"
+kind = "claim"
+force = "assertive"
+description = "A specific deal this message talks about: one prospective or actual sale, purchase, supply arrangement or trade with one counterparty, whether asked about, offered, negotiated, agreed, confirmed, delivered, billed or declined. One item per distinct deal; general market talk is not a deal."
+attributes = [
+  { name = "counterparty", type = "ref", of = "company", description = "the organization on the other side of the deal from the mailbox owner's company; when a broker, agent or energy manager writes for a client, the client" },
+  { name = "via", type = "ref", of = "company", description = "the broker, agent or energy manager acting for the counterparty, if one appears" },
+  { name = "commodity", type = "text", description = "what is traded, e.g. natural gas, power, pipeline capacity, a swap" },
+  { name = "delivery_point", type = "text", description = "where or to which site it is delivered, e.g. PG&E Citygate, Malin, a named plant" },
+  { name = "period", type = "text", description = "the term as written, e.g. March 2001, Jan'02-Dec'03, five years" },
+  { name = "price", type = "text", description = "the price as written, e.g. $4.12/MMBtu, NYMEX plus basis" },
+  { name = "deal_ref", type = "text", description = "a deal number, RFP, term sheet or contract name the message gives" },
+  { name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost", "none"], description = "where this message shows the deal standing: lead = an inquiry, RFP or interest received; proposal = an indication, price or offer sent; negotiating = terms, credit or contract drafts exchanged; won = confirmed, executed or awarded to the owner's company; lost = declined, awarded elsewhere or withdrawn; none = the message does not say" },
+]
+
 [[enrichment.ontology.types]]
 name = "commitment"
 kind = "claim"
