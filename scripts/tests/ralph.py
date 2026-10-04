@@ -7,6 +7,7 @@ input is explicit.
 """
 import contextlib
 import io
+import json
 import os
 import pathlib
 import shutil
@@ -28,6 +29,13 @@ def setUpModule():
     patcher = mock.patch.object(ralph, "cargo_jobs_share", lambda lanes: (2, "test budget"))
     patcher.start()
     unittest.addModuleCleanup(patcher.stop)
+    # A pool re-execs when ralph.py changes on disk; an edit landing mid-run must
+    # fail the test that saw it, never replace the test process.
+    def no_exec(*a):
+        raise RuntimeError("a test pool tried to re-exec: ralph.py changed during the run")
+    execv = mock.patch.object(ralph.os, "execv", no_exec)
+    execv.start()
+    unittest.addModuleCleanup(execv.stop)
 
 
 def write(root, rel, text):
@@ -570,6 +578,10 @@ class CampaignTests(unittest.TestCase):
                 result = c.run()
             self.assertEqual(result.outcome, ralph.Outcome.HALT)
             self.assertFalse((pathlib.Path(tmp) / "ralph/DONE").exists())
+            # Queueing orders is the operator's: under the supervisor this stops
+            # at once instead of cooling down as a loop block would.
+            self.assertEqual(ralph.operator_only(pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md"),
+                             "queueing orders")
 
     def test_the_unit_note_names_the_queue_it_was_launched_on(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1572,11 +1584,15 @@ class AuditCadenceDemoTests(unittest.TestCase):
 
 
 class SupervisorTests(unittest.TestCase):
-    def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
+    # No cool-downs here: these pin the escalation each exit reaches once the
+    # cool-downs are spent (SupervisorCooldownTests covers the cool-downs).
+    def make(self, tmp, *, run_inner, resolver_run, resolve_max=2, cooldowns=(),
+             sleep=lambda s: None):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
         paths = ralph.Paths(pathlib.Path(tmp))
         return ralph.Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
-                                notify_enabled=False, resolve_max=resolve_max)
+                                notify_enabled=False, resolve_max=resolve_max,
+                                cooldowns=cooldowns, sleep=sleep)
 
     def test_done_returns_zero(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1805,6 +1821,92 @@ class SupervisorTests(unittest.TestCase):
                         os.kill(int(ready.read_text()), signal.SIGKILL)
             term = d / "pool-term"
             self.assertEqual(term.read_text() if term.exists() else "SIGKILLed", "SIGTERM")
+
+
+class SupervisorCooldownTests(unittest.TestCase):
+    """A stop that names no row — a dead roster, a full disk, an I/O error, a
+    crash — is the loop's, not the operator's. The ersilia supervisor exited on
+    23 of them ("changed nothing — escalating") and sat down for 76.9 of its
+    143 stuck hours, 9.4 of them the operator's (2026-09-17 → 10-04). It cools
+    down and relaunches instead; past the last cool-down with no unit done, the
+    stop stands."""
+
+    def make(self, tmp, *, run_inner, cooldowns=(600, 1200), resolver_run=lambda *a: None):
+        write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+        self.slept = []
+        paths = ralph.Paths(pathlib.Path(tmp))
+        return ralph.Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
+                                notify_enabled=False, resolve_max=2,
+                                cooldowns=cooldowns, sleep=self.slept.append)
+
+    def test_a_stop_that_names_no_row_cools_down_and_relaunches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = []
+
+            def inner():
+                runs.append(1)
+                if len(runs) == 1:
+                    write(tmp, "ralph/NEEDS_HUMAN.md", "# no healthy model in the roster\n")
+                    write(tmp, "ralph/STOP", "halt: no healthy model in the roster\n")
+                else:
+                    write(tmp, "ralph/DONE", "")
+            s = self.make(tmp, run_inner=inner)
+            out = io.StringIO()
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(s.run(), 0)
+            self.assertEqual(len(runs), 2)
+            self.assertEqual(sum(self.slept), 600)
+            self.assertIn("cooling down 10 min (1/2)", out.getvalue())
+            halts = list(pathlib.Path(tmp, "target/ralph/halts").glob("*.md"))
+            self.assertEqual(len(halts), 1)
+            self.assertIn("no healthy model", halts[0].read_text())
+            self.assertFalse(pathlib.Path(tmp, "ralph/STOP").exists())
+
+    def test_cool_downs_are_bounded_and_then_the_stop_stands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            def inner():
+                write(tmp, "ralph/NEEDS_HUMAN.md", "# disk full\n")
+            s = self.make(tmp, run_inner=inner)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(s.run(), 2)
+            self.assertEqual(sum(self.slept), 600 + 1200)
+
+    def test_an_operator_stop_during_a_cool_down_is_honoured(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            def inner():
+                write(tmp, "ralph/NEEDS_HUMAN.md", "# disk full\n")
+            s = self.make(tmp, run_inner=inner)
+
+            def sleep(secs):
+                self.slept.append(secs)
+                write(tmp, "ralph/STOP", "")
+            s.sleep = sleep
+            runs = []
+            s.run_inner = lambda: (runs.append(1), inner())
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(s.run(), 0)
+            self.assertEqual(len(runs), 1)
+
+    def test_a_unit_done_resets_the_cool_downs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            n = {"i": 0}
+
+            def inner():
+                n["i"] += 1
+                if n["i"] == 3:
+                    write(tmp, "ralph/STATE.md", "- [x] dm-a — depends []\n- [ ] dm-b — depends []\n")
+                if n["i"] < 5:
+                    write(tmp, "ralph/NEEDS_HUMAN.md", "# disk full\n")
+                else:
+                    write(tmp, "ralph/DONE", "")
+            s = self.make(tmp, run_inner=inner)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(s.run(), 0)     # two cool-downs, then two more after dm-a
+            self.assertEqual(n["i"], 5)
 
 
 class WatchTests(unittest.TestCase):
@@ -2662,6 +2764,73 @@ class QueueLane(FakeLane):
     def run(self, model_args, prompt, log):
         QueueLane.prompts.append(prompt)
         return super().run(model_args, prompt, log)
+
+
+class Reexec(Exception):
+    """Raised by a test's stand-in for os.execv: the pool handed itself over."""
+
+
+class PoolReexecTests(unittest.TestCase):
+    """A fix to ralph.py reached the ersilia pool only when a halt happened to
+    relaunch it: four fixes sat undeployed for a day while two lane sessions ran
+    (2026-10-04), because a restart kills every session in flight. Between
+    waves no session runs, so the pool re-execs onto the changed file there,
+    carrying its strike and continuation counters across."""
+
+    fixture = PoolTests.fixture
+    make = PoolTests.make
+
+    def test_a_changed_ralph_py_reexecs_the_pool_between_waves_with_its_counters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            digests = iter(["old", "new"])
+            argvs = []
+
+            def reexec(argv):
+                argvs.append(argv)
+                raise Reexec()
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             code_digest=lambda: next(digests, "new"), reexec=reexec,
+                             compiles=lambda: None, argv=["python3", "ralph.py", "pool"])
+            pool._lane_failures["dm-b"] = 2
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), self.assertRaises(Reexec):
+                pool.run()
+            self.assertEqual(argvs, [["python3", "ralph.py", "pool"]])
+            self.assertIn("ralph.py changed (old → new) — re-exec between waves", out.getvalue())
+            self.assertNotIn("lane start", out.getvalue())
+            saved = json.loads((root / "target/ralph/pool-state.json").read_text())
+            self.assertEqual(saved["failures"], {"dm-b": 2})
+
+    def test_a_reexeced_pool_resumes_its_counters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            write(root, "target/ralph/pool-state.json",
+                  json.dumps({"failures": {"dm-b": 2}, "continuations": {"dm-c": 1}}))
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
+            self.assertEqual(pool._lane_failures, {"dm-b": 2})
+            self.assertEqual(pool._lane_continuations, {"dm-c": 1})
+            self.assertFalse((root / "target/ralph/pool-state.json").exists())
+
+    def test_a_changed_ralph_py_that_does_not_compile_is_refused_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            digests = iter(["old"])
+
+            def broken():
+                raise SyntaxError("invalid syntax", ("ralph.py", 12, 1, "def ("))
+
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             code_digest=lambda: next(digests, "broken"),
+                             reexec=lambda argv: self.fail("re-exec'd onto code that does not compile"),
+                             compiles=broken)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            said = out.getvalue()
+            self.assertEqual(said.count("does not compile"), 1)
+            self.assertIn("line 12", said)
+            self.assertIn("pool: DONE", said)
 
 
 class PoolQueueTests(unittest.TestCase):

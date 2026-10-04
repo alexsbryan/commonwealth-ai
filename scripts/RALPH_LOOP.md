@@ -28,8 +28,15 @@ and `watch` and run the printed `launchctl bootstrap`.
   first `[~]` row, else the first dependency-ready `[ ]` row.
 - **Progress is a commit** in the serial driver (the stall bound halts and
   escalates) and **a unit completed** in the supervisor (a resolution that
-  changes nothing escalates immediately; a resolver committing junk cannot
-  reset the bound).
+  changes nothing parks the row its package names; a resolver committing junk
+  cannot reset the bound).
+- **A stop that names no row is the loop's, not the operator's** (a dead
+  roster, a full disk, an I/O error, a crash): the supervisor archives its
+  package under `target/ralph/halts/`, cools down (`SUPERVISOR_COOLDOWNS`: 10,
+  20, 40, 80, 120, 120 min) and relaunches; a unit done resets the backoff, and
+  only past the last cool-down does the stop stand. DONE, an empty STOP and an
+  `operator-only:` package (an empty queue is one: queueing orders) still stop
+  at once.
 - **Commit as you go.** A session killed at any moment costs at most the
   in-flight step; the next session is told the tree is dirty.
 
@@ -54,6 +61,11 @@ and `watch` and run the printed `launchctl bootstrap`.
   under it the pool first deletes `target/debug` and `target/release` from
   idle lanes, least recently built first — never a lane in the wave, never one
   holding `ralph/waiting` — and waits only when that is not enough;
+- the pool deploys its own fixes: between waves, when no session runs, it
+  re-execs onto `ralph.py` as it is on disk if the file changed and compiles
+  (its strike and continuation counters ride across in
+  `target/ralph/pool-state.json`); a change that does not compile is refused
+  once, by name, and the pool stays on the code it has;
 - every poll tick writes `ralph/.heartbeat`; `watch` notifies when it goes
   stale, when a package sits unresolved, when the job is down without
   DONE/operator-STOP, or when disk drops below 5 GB;
