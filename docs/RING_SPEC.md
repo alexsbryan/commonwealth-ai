@@ -3,8 +3,10 @@
 > **The design moved to its own repository.** svrngs — the product this work
 > became — stands apart from commonwealth-ai by operator direction of
 > 2026-10-03, and its design is `docs/DESIGN.md` in the svrngs repository
-> (`~/dev/svrngs`). svrngs links no crate from this repository; it ports code
-> from here by citation. What remains below is the inventory of the ring code in
+> (`~/dev/svrngs`). svrngs links no crate from this repository; it forks the
+> ring slice from here and owns it (operator, 2026-10-03, over shipping
+> `cw-rails` as a sidecar) — `commonwealth-rail-core` first, as svrngs'
+> `svrngs-core` at `e1a43bcd2`. What remains below is the inventory of the ring code in
 > commonwealth-ai as of 2026-10-02 — the rail, the ring routes and sync, the
 > phone shell, ring-doc and ring-runtime, `ring_cmd` and `mesh_media` — which
 > svrngs replaces and which retires as it does. The design record — rationale,
@@ -33,12 +35,12 @@ date or a promise.
 mesh membership solve one owner's machines, not a group of people, and may
 diverge from svrngs freely.
 
-**Converges on svrngs.** The door that forwards with a verified identity
-(`commonwealth/crates/commonwealth-transport/src/iroh_identity_forward.rs`) and the signing and
-canonical-form code are shared primitives: once `svrngs-node` passes
-`node-library` (E1.8), this repository may adopt it as any outside builder
-would. Until then, a fix to either copy is checked against svrngs'
-`scripts/ports.py`, which lists every port beside its original.
+**Forked, not shared.** `commonwealth-rail-core` stays here for the work plane,
+and the door that forwards with a verified identity
+(`commonwealth/crates/commonwealth-transport/src/iroh_identity_forward.rs`) stays for
+the mesh; svrngs holds its own copies. No wire joins the two systems, so the
+copies diverge freely. A fix to either is checked against svrngs'
+`scripts/ports.py`, which lists every forked file beside its original here.
 
 ## The inventory (2026-10-02)
 
