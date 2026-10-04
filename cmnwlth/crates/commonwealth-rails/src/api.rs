@@ -192,6 +192,9 @@ pub async fn serve(
 
 /// `GET /v1/mesh/status` — who I am, who is on the roster, who offers media.
 pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
+    // Read before the mesh lock below: `paths` takes that lock itself, and a
+    // second read queued behind a writer would never be granted.
+    let paths: std::collections::HashMap<_, _> = daemon.paths().await.into_iter().collect();
     let mesh = daemon.mesh.read().await;
     // The summary counts svrn's `/v1/mesh/status` carried, under the same
     // names, so its clients (`sovereign_contracts::daemon_wire::
@@ -252,6 +255,25 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             })
             .collect()
     };
+    // Each peer's live iroh path (`commonwealth_media::path_to`, the one
+    // classifier the watchdog reads too), under the name and shape svrn's
+    // status carried it (`daemon_wire::MemberReachView`), so `svrn mesh
+    // transport` and the desktop read it again. `path` is absent while the
+    // endpoint has no record of the peer.
+    let iroh_transport: Vec<serde_json::Value> = mesh
+        .members
+        .values()
+        .filter(|m| m.removed_at.is_none() && m.node_id != daemon.node.self_id)
+        .map(|m| {
+            serde_json::json!({
+                "name": m.name,
+                "node_id": m.node_id.to_string(),
+                "path": paths.get(&m.node_id),
+            })
+        })
+        .collect();
+    tracing::debug!(target: "rails", peers = iroh_transport.len(), with_path = paths.len(),
+                    "api: status read the peers' iroh paths");
     let addr = daemon.endpoint().addr();
     // The posture the endpoint was bound with (`RailsNode::bind` reads the
     // same `relay_config`), so a client can refuse an n0-homed cw-rails.
@@ -299,6 +321,7 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             }),
         },
         "members": members,
+        "iroh_transport": iroh_transport,
         "meshes": meshes.as_ref().ok(),
         "meshes_absent": meshes.as_ref().err().map(|e| e.to_string()),
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),

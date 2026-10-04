@@ -413,6 +413,70 @@ async fn a_join_right_after_create_holds_a_founder_row_it_can_dial() {
     }
 }
 
+/// The founder's status names each peer's live iroh path under
+/// `iroh_transport`, the block svrn's status carried and `svrn mesh
+/// transport` reads. Failing input: the status before it published one, where
+/// the field was absent and the CLI printed no paths for a mesh gossiping over
+/// iroh.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_founders_status_names_each_peers_iroh_path() {
+    let founder_dir = tempfile::tempdir().unwrap();
+    let node_dir = tempfile::tempdir().unwrap();
+    let (fport, nport) = (free_port(), free_port());
+    let founder = RailsDaemon::start_from_disk(
+        RailsNode::bind(founder_dir.path().to_path_buf(), hermetic("founder", fport))
+            .await
+            .expect("the founder binds"),
+    )
+    .await
+    .expect("the founder starts");
+    let node = RailsDaemon::start_from_disk(
+        RailsNode::bind(node_dir.path().to_path_buf(), hermetic("member", nport))
+            .await
+            .expect("the node binds"),
+    )
+    .await
+    .expect("the node starts");
+
+    let script = async {
+        // Both listeners answer before the first POST, as the tests above wait.
+        assert!(solo(fport).await && solo(nport).await);
+        let (code, created) = post(
+            fport,
+            "/v1/mesh/create",
+            json!({"name": "Lab", "node_name": "founder"}),
+        )
+        .await;
+        assert_eq!(code, 200, "create: {created}");
+        let link = created["join_link"].as_str().expect("an invite");
+        let (code, joined) = post(
+            nport,
+            "/v1/mesh/join",
+            json!({"key_or_url": link, "node_name": "member"}),
+        )
+        .await;
+        assert_eq!(code, 200, "join: {joined}");
+
+        let path = poll_status(fport, "the member's iroh path", |d| {
+            d["iroh_transport"]
+                .as_array()?
+                .iter()
+                .find(|r| r["name"] == "member")?["path"]["path"]
+                .as_str()
+                .filter(|p| matches!(*p, "direct" | "relayed" | "mixed"))
+                .map(str::to_string)
+        })
+        .await;
+        // Hermetic: no relay exists, so a live path can only be direct.
+        assert_eq!(path, "direct");
+    };
+    tokio::select! {
+        exit = founder.run() => panic!("the founder stopped serving: {exit:?}"),
+        exit = node.run() => panic!("the node stopped serving: {exit:?}"),
+        () = script => {}
+    }
+}
+
 /// A mesh resumed from disk whose invite key file is gone still starts, on
 /// its mesh, and names the missing invite rather than serving a stale one.
 /// Successor of the daemon's join_key_persistence
