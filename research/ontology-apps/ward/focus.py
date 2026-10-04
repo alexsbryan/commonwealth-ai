@@ -181,10 +181,17 @@ def main():
         ans, cached = K.ask(a.cache, system, user, shape.schema(len(sents), labels), model=a.model)
         return mid, ans, cached, time.time() - t0, sents, label_id
 
+    def ref(i):
+        """A registry member as the next identity pass reads it: its key when it has one, else its name. A
+        name-derived id is minted from the canonical the model chose in the registry's run, so it is no
+        key once it leaves that run (51 of 131 tune mentions became junk companies, 2026-10-04)."""
+        e = comp[i]
+        return i if (e.get("provenance") or {}).get("signal_kind") == "metadata_projection" else e.get("canonical_name") or i
+
     def resolve(item, name, label_id, rep, words):
         v = item.get(name)
         if v in label_id:
-            return label_id[v]
+            return ref(label_id[v])
         if v == UNLISTED:
             raw = (item.get(f"{name}_unlisted") or "").strip()
             ids = alias.get(K.fold(raw), set())
@@ -193,7 +200,7 @@ def main():
                 return None
             if len(ids) == 1:
                 rep[f"{name}: unlisted name resolved through the registry"] += 1
-                return next(iter(ids))
+                return ref(next(iter(ids)))
             if not raw or f" {K.fold(raw)} " not in words:  # a party the message never names cannot be its party
                 rep[f"{name}: unlisted name not said in the message, refused"] += 1
                 return None

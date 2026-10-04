@@ -510,6 +510,13 @@ def main():
         members = [c for c in claims if c.get("claim_kind") in spec["of"]]
         own_ids = {i for i, e in ent.items() if e.get("own")}
         keyed = {i for i, e in ent.items() if (e.get("provenance") or {}).get("signal_kind") == "metadata_projection"}
+
+        def company(v):  # a member's value as a company atom: its id, else a name with an atom
+            return v if v in ent else sorted(company_by_name[fold(v)])[0] if v and company_by_name.get(fold(v)) else None
+        # an agent is a role a company plays across the mailbox: named as some member's via, it is never the
+        # block of the documents it writes, whose members then keep their own party
+        agents = {company(c["attributes"]["via"]) for c in members if (c.get("attributes") or {}).get("via")} - {None}
+        report[f"{spec['type']}: companies named as an agent (via)"] += len(agents)
         for c in members:
             ev = (c.get("evidence") or [{}])[0].get("chunk_id")
             c["_doc"] = doc_of(ev, c.get("anchor"))
@@ -521,15 +528,20 @@ def main():
             # the owner is never a block, whether the member names it by id or by name
             own_attr = attr in own_ids or bool(company_by_name.get(fold(attr), set()) & own_ids)
             c["_block"], why = None, ("several outside parties" if len(parties) > 1 else "no counterparty")
-            # a correspondent is not a counterparty (an agent writes for its principal), so the order the
-            # block is read in is declared; the default reads the member's own party first
+            via_id = company((c.get("attributes") or {}).get("via"))
+            # the order the block is read in is declared: member = the member's own party; document = its
+            # document's one outside party unless that party is an agent; agent = the member's own party
+            # when the member names that correspondent as its via (an agent writes for its principal)
             for src in spec.get("block_from", ["member", "document"]):
-                if src == "member" and attr in ent and not own_attr:
-                    c["_block"], why = attr, "member's own party"
-                elif src == "member" and attr in keyed and not own_attr:
-                    c["_block"], why = attr, "member's own party"
-                elif src == "member" and attr and not own_attr and company_by_name.get(fold(attr)):
-                    c["_block"], why = sorted(company_by_name[fold(attr)])[0], "member's own party by name"
+                if src == "agent" and not (len(parties) == 1 and via_id == parties[0]):
+                    continue
+                if src == "document" and len(parties) == 1 and parties[0] in agents:
+                    report[f"{spec['type']}: document's one outside party is an agent, not its block"] += 1
+                    continue
+                if src in ("member", "agent") and attr in ent and not own_attr:
+                    c["_block"], why = attr, "member's own party" + (", its via the correspondent" if src == "agent" else "")
+                elif src in ("member", "agent") and attr and not own_attr and company_by_name.get(fold(attr)):
+                    c["_block"], why = sorted(company_by_name[fold(attr)])[0], "member's own party by name" + (", its via the correspondent" if src == "agent" else "")
                 elif src == "document" and len(parties) == 1:
                     c["_block"], why = parties[0], "document's one outside party"
                 else:

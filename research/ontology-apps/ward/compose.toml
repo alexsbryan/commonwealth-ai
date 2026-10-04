@@ -32,7 +32,11 @@ metadata = "date"
 [[compose]]
 type = "deal"
 of = ["deal_mention"]
-block = ["counterparty"]                 # a member's own value, else its document's outside party
+block = ["counterparty"]
+# A correspondent is its mail's counterparty, unless some member names it as an agent (via): a member's
+# own pick named Pasadena's suppliers and BHP's bidders (23 tune mentions, gold says the correspondent),
+# while Summit writes for six clients. Tune 2026-10-04 vs member-first: bar .641 -> .667, wrong_party 1 -> 0.
+block_from = ["agent", "document", "member"]
 # link: attributes whose agreement is EVIDENCE of one deal (discriminating). A low-cardinality attribute
 # (commodity) is a necessary condition only, so it sits in distinct, never here.
 link = ["deal_ref", "delivery_point", "period_start"]
@@ -53,6 +57,15 @@ type = "deal_stage"
 of = "deal"
 from = "deal_mention.stage"
 map = { lead = "lead", proposal = "proposal", negotiating = "negotiating", won = "won", lost = "lost" }
+
+# Axis 4, first order: a mention's stage is a fold over the events its message shows (stage.py), never a
+# state the model picks. Each event is a yes/no the model answers per mention; the stage is the furthest
+# event in `order`. Wording mirrors GOLD_SPEC's stage definitions (existing contracts read as won, its v1 note).
+[events.deal_mention]
+attribute = "stage"
+order = ["asked", "offered", "terms", "agreed", "declined"]
+stage = { asked = "lead", offered = "proposal", terms = "negotiating", agreed = "won", declined = "lost" }
+say = { asked = "the counterparty asked for a price or an offer, sent a request for proposal, or said it wants to buy, sell or hedge", offered = "a price, bid, indication, offer, proposal or term sheet was given or sent, by either side", terms = "contract drafts, credit or deal terms were sent back and forth, commented on or changed", agreed = "the deal was accepted, confirmed, executed or awarded to the owner's company, or is an existing contract already in place", declined = "the deal was declined, awarded to someone else, or withdrawn" }
 
 # Refinements of declared attribute types that the Rust declaration language cannot carry yet; focus.py
 # builds its output schema from them so a wrong value cannot be written (a citation is a sentence index,
