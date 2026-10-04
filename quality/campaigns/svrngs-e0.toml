@@ -10,7 +10,7 @@ declared  = "2026-10-03"
 # DESCOPED 2026-10-03: the bot it measures is deleted (svrngs tag `e0-bot`);
 # svrngs forks the ring slice instead (svrngs DESIGN, Direction). Its bars never
 # ran; the experiments are re-derived from the fork's units.
-status    = "descoped"
+status    = "closed"
 
 [predicate]
 statement = "On one computer, a Discord channel bound by `svrngs start` lets five people with no svrngs app, account or key add, confirm and settle an expense through the bot, every balance the bot posts equals the Expenses fold over the group's journal, the bridge executable imports no app code, and nothing a key wrote renders into the chat unless the chat wrote it"
