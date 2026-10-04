@@ -771,6 +771,39 @@ class CampaignTests(unittest.TestCase):
             self.assertFalse((pathlib.Path(tmp) / "ralph/waiting").exists())
 
 
+class WaitingMarkerTests(unittest.TestCase):
+    """The marker is the first line's, never one the notes below it mention,
+    and never a done marker the loop writes itself (ersilia r12-real-sweep,
+    2026-10-03: a waiting file whose first line was prose and whose notes
+    ended "then ralph/lanes/r12-real-sweep.done" held the lane on the marker
+    only its own resumed session writes, after the field run had landed its
+    real one)."""
+
+    def test_a_marker_named_only_in_the_notes_is_not_waited_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = write(tmp, "ralph/waiting",
+                      "the field run is in flight, detached\non resume read ralph/job.done\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertIsNone(ralph.waiting_marker(tmp, "ralph/waiting"))
+            self.assertFalse(w.exists())
+
+    def test_the_first_line_names_the_marker_and_the_notes_follow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/waiting",
+                  "waiting on ralph/field-x.done — health check #3\nthen ralph/other.done\n")
+            _, marker = ralph.waiting_marker(tmp, "ralph/waiting")
+            self.assertEqual(marker, pathlib.Path(tmp) / "ralph/field-x.done")
+
+    def test_a_lane_done_marker_is_refused_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = write(tmp, "ralph/waiting", "ralph/lanes/dm-a.done\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertIsNone(ralph.waiting_marker(tmp, "ralph/waiting"))
+            self.assertIn("ralph/lanes/dm-a.done", out.getvalue())
+            self.assertFalse(w.exists())
+
+
 class TwoQueueControlTests(unittest.TestCase):
     """Two loops in one checkout share no control file."""
 
@@ -2118,6 +2151,18 @@ class PoolWaitingTests(unittest.TestCase):
             self.assertIn("field-x.done", pkg)
             self.assertIn("49h", pkg)
             self.assertEqual(WaitingLane.runs, 1)
+
+    def test_a_lane_waiting_on_its_own_done_marker_is_not_held(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
+            write(root, ".ralph/wt/dm-wait/ralph/waiting",
+                  "unit: dm-wait — the field run is in flight\n"
+                  "on resume: read its log, then ralph/lanes/dm-wait.done\n")
+            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd))
+            with contextlib.redirect_stdout(io.StringIO()):
+                reason, still = pool.poll_waiting_lanes()
+            self.assertIsNone(reason)
+            self.assertNotIn("dm-wait", still)
 
 
 class RosterProbeTests(unittest.TestCase):

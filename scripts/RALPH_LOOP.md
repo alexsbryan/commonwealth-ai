@@ -42,6 +42,10 @@ and `watch` and run the printed `launchctl bootstrap`.
 - `ralph/waiting` is bounded (`--marker-timeout`; default `WAIT_LIMIT_S` from
   `ralph/models.env`, else 86400s) — a detached
   run that never writes its marker halts with a package;
+- the marker is the one `ralph/waiting`'s FIRST line names; the lines after it
+  are notes, and a marker they mention is never waited on. A first line that
+  names no `*.done`, or names a lane completion marker under `ralph/lanes/`
+  (the loop writes those; no detached run ever will), is ignored and unlinked;
 - a lane ending on `ralph/waiting` (a detached run outliving its session) is
   WAITING, not a failure: the pool polls the named marker on its tick,
   respawns the lane when it lands, and escalates with a package after 48h

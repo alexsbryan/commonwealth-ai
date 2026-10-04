@@ -415,17 +415,32 @@ def guarded(fn, paths, *, notifier=notify, notify_enabled=True):
         return 3
 
 
+# Where a lane session writes its completion marker. The loop writes these;
+# a detached run never does, so no waiting file may name one.
+LANE_DONE_DIR = "ralph/lanes"
+
+
 def waiting_marker(root, waiting_rel):
-    """The waiting file under `root` and the marker it names, or None when
-    the file is absent or names no `*.done` marker (ignored and unlinked —
-    the convention wait_for_marker has always enforced). One parse for the
-    main-tree control file and for a lane worktree's `ralph/waiting`."""
+    """The waiting file under `root` and the marker its FIRST line names, or
+    None when the file is absent, its first line names no `*.done` marker, or
+    the marker is a lane's own completion marker (ignored and unlinked — the
+    convention wait_for_marker has always enforced). The lines after the first
+    are the session's notes: a marker they mention is never the one waited on
+    (ersilia r12-real-sweep, 2026-10-03, held on "then ralph/lanes/…done" from
+    its notes while its field run's real marker sat on disk). One parse for
+    the main-tree control file and for a lane worktree's `ralph/waiting`."""
     waiting = pathlib.Path(root) / waiting_rel
     if not waiting.exists():
         return None
-    m = re.search(r"[A-Za-z0-9._/-]+\.done", waiting.read_text())
+    first = waiting.read_text().partition("\n")[0]
+    m = re.search(r"[A-Za-z0-9._/-]+\.done", first)
     if not m:
-        say(f"{waiting_rel} names no *.done marker — ignoring it")
+        say(f"{waiting_rel}'s first line names no *.done marker — ignoring it")
+        waiting.unlink()
+        return None
+    if m.group(0).startswith(f"{LANE_DONE_DIR}/"):
+        say(f"{waiting_rel} names {m.group(0)}, a lane completion marker the loop "
+            "writes and no detached run ever will — ignoring it")
         waiting.unlink()
         return None
     return waiting, pathlib.Path(root) / m.group(0)
@@ -2030,7 +2045,7 @@ class Pool:
         # `ralph/lanes/` not `ralph/done/`: on a case-insensitive filesystem
         # (macOS) the lane-marker directory and `ralph/DONE` are one path, and
         # the completion marker could never be written.
-        (self.paths.workdir / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
+        (self.paths.workdir / LANE_DONE_DIR).mkdir(parents=True, exist_ok=True)
         self.lane_root.mkdir(parents=True, exist_ok=True)
         self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
         say(f"pool: lanes={self.lanes} base={self.base_branch}"
@@ -2293,7 +2308,10 @@ class Pool:
         self._provision_host_pointers(wt)
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
-                f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
+                f"{LANE_DONE_DIR}/{unit}.done and commit it — the pool merges your branch then.\n"
+                f"If a detached run outlives your session, the FIRST line of "
+                f"{self.paths.waiting} names the marker that run writes (never "
+                f"{LANE_DONE_DIR}/{unit}.done); the lines after it are notes.\n"
                 f"Do NOT edit {self.paths.state} except to correct your own row's premises "
                 "(PROMPT §6); the pool marks the unit done after the merge.\n\n"
                 + self._lane_note())
@@ -2401,7 +2419,7 @@ class Pool:
         reopened pc-knowledge-gym-noresults started from a base carrying
         7fb5bfd10's marker, and the pool would have merged the lane whenever
         its session ended, readings taken or not."""
-        rel = f"ralph/lanes/{unit}.done"
+        rel = f"{LANE_DONE_DIR}/{unit}.done"
         if not (wt / rel).exists():
             return False
         own = self._git("diff", "--name-only", f"HEAD...{branch}", "--", rel)
@@ -2486,7 +2504,7 @@ class Pool:
                 # dm-daemon-api-edge). Bound it and hand the row to the director.
                 n = self._lane_failures.get(unit, 0) + 1
                 self._lane_failures[unit] = n
-                say(f"pool: lane {unit} ended without ralph/lanes/{unit}.done "
+                say(f"pool: lane {unit} ended without {LANE_DONE_DIR}/{unit}.done "
                     f"(failure {n}/{self.max_lane_failures}) — branch {branch} kept")
                 if n >= self.max_lane_failures:
                     return self._halt(f"lane {unit} failed {n} waves — see "
