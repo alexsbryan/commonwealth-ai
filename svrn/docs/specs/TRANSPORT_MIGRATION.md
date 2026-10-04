@@ -43,7 +43,11 @@ added, as PR-sized increments each landed green:
   topology already does; Option B (iroh sidecar) stays specced.
 - **Soak axis.** `mesh-soak.sh --iroh` boots every node iroh-first,
   joins over the `dial=` invite, and asserts each node carried mesh
-  traffic over iroh — passing across kill-9 + restart.
+  traffic over iroh — passing across kill-9 + restart. Since
+  pb-mesh-exit-transport the flag is a no-op: each soak node is a
+  cw-rails plus its daemon, iroh is cw-rails' only mesh transport, and
+  every run joins over the `iroh=` invite and makes the same assertion
+  against cw-rails' gossip log.
 
 Encrypted meshes remain the fail-closed variant (all classes REQUIRE
 iroh, loopback-only listeners, signed dial info). §5 is the

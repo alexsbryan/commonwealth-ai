@@ -76,14 +76,16 @@ slow tail.
 
 ## Layer 2 — Multi-process soak (real bytes)
 
-Real `sovereign daemon` processes forming one mesh over real TCP gossip, driven
-through real faults — a genuine `kill -9` crash, real wall-clock offline-decay, a
-**resume** restart (a production restart resumes from `mesh.json`; it does not
-re-join), and a **kill-9-startup-window torture** (kill again mid-startup) — in
-repeated cycles, asserting the invariant pack at every checkpoint *after an
-agreement-based quiesce* (`wait_online_eq`). On any violation it writes a
-**forensic bundle** to `mesh-soak-repro/` (each node's live id vs node_id-file vs
-`mesh.json` self-id, config ports, daemon identity events) so an intermittent
+Real nodes — each a `cw-rails` (membership, gossip, iroh) plus the `sovereign
+daemon` that dials it through `[daemon] rails_base` — forming one mesh over iroh,
+driven through real faults — a genuine `kill -9` crash of both processes, real
+wall-clock offline-decay, a **resume** restart (cw-rails resumes from its
+`node_id` + `mesh.json`; it does not re-join), and a **kill-9-startup-window
+torture** (kill again mid-startup) — in repeated cycles, asserting the invariant
+pack against each node's cw-rails at every checkpoint *after an agreement-based
+quiesce* (`wait_online_eq`). On any violation it writes a **forensic bundle** to
+`mesh-soak-repro/` (each node's live id vs cw-rails' `node_id` vs svrn's copy,
+config, cw-rails identity events) so an intermittent
 failure is root-causable offline without re-running — this is what cracked the
 restart-identity bug (a leaked-loop-var data-dir cross-wire in the harness, not a
 daemon bug). The verdict prints a **coverage-accounting** grid (faults ×
@@ -114,9 +116,12 @@ the eager model load just has to succeed. `primary` points at a small embedding
 GGUF (~600 MB/node, override with `MESH_SOAK_MODEL`), so N nodes fit in RAM.
 
 - Assertion engine: `sovereign mesh check-invariants --nodes <a:port,...> [--expect-live <id,...>] [--json]`
-  polls `GET /v1/mesh/status` (the **client** port — the internal port 404s) and
-  evaluates convergence / no-ghost / liveness; exits non-zero on violation. Pure
-  eval is unit-tested in `sovereign-cli-llm/src/mesh_soak.rs`.
+  polls `GET /v1/mesh/status` on each node's **cw-rails** (svrn's answers 410
+  since pb-mesh-exit-transport) and evaluates convergence / no-ghost / liveness;
+  exits non-zero on violation. Pure eval is unit-tested in
+  `cmnwlth/crates/sovereign-cli-mesh/src/mesh_soak.rs`. `admission_safety`,
+  `bounded_fan_out` and `shared_model_single_host` pass vacuously in every lane:
+  no status the checker polls carries their fields any more.
 - Findings stream to `mesh-soak-findings.jsonl`; `--gate` runs Layer 3 at the end.
 - The local backend needs only a `cargo build --bins` plus `ip` + `unshare`. The
   podman backend's OOM / partition / netem faults are its reason to exist in CI.
@@ -136,7 +141,7 @@ sovereign mesh soak-gate mesh-soak-findings.jsonl --baseline mesh-slo-baseline.j
 SLIs gated today: `invariant_violation_rate`, `load_success_rate`, `load_p50_ms`,
 `load_p99_ms` (from the soak's per-request load samples). Recovery-time and
 sustained throughput are the next SLIs to add as the load driver grows. The
-extraction + gate logic is unit-tested in `sovereign-cli-llm/src/mesh_soak.rs`.
+extraction + gate logic is unit-tested in `cmnwlth/crates/sovereign-cli-mesh/src/mesh_soak.rs`.
 
 ## The invariant pack
 
@@ -212,6 +217,10 @@ memory / a bad file / a blocked link — none of which require a separate rootfs
 
 - **corrupt-persisted-state** (`--workload corrupt`, **landed; recovery
   validated**) — pre-write garbage into a node's durable `mesh.json`, then resume.
+  Since pb-mesh-exit-transport the store is cw-rails', and cw-rails refuses it by
+  name (exit 1, "`<path>` is not a mesh") rather than boot with an empty roster;
+  the lane asserts that refusal with `node_id` unchanged, moves the file aside,
+  and re-joins under the same id. The history below is the daemon-era run.
   The daemon must fail-safe (never adopt a colliding or garbage id); `UniqueIds` +
   `NoGhost` + convergence are the net. Container-free, runs in the existing netns.
   Real netns run: the daemon **resumed with an intact, consistent identity** — the
