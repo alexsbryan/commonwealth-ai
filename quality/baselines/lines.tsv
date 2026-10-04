@@ -35,8 +35,8 @@
 1027	cmnwlth/crates/commonwealth-media::tests
 1587	cmnwlth/crates/commonwealth-rail
 127	cmnwlth/crates/commonwealth-rail::tests
-11770	cmnwlth/crates/commonwealth-rails
-4899	cmnwlth/crates/commonwealth-rails::tests
+11804	cmnwlth/crates/commonwealth-rails
+4996	cmnwlth/crates/commonwealth-rails::tests
 2768	cmnwlth/crates/commonwealth-state
 851	cmnwlth/crates/commonwealth-state::tests
 1425	cmnwlth/crates/commonwealth-transport
@@ -97,7 +97,7 @@
 1042	quality/arch-layers::tests
 6624	quality/xtask
 7301	quality/xtask::tests
-61038	scripts
+61130	scripts
 2	serve/crates/serving-policy
 7393	serve/crates/sovereign-compute
 2014	serve/crates/sovereign-compute::tests
