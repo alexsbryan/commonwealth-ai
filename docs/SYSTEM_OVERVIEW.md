@@ -782,8 +782,11 @@ OICP envelope, and texts to embed or rerank never do (`FarEnd::admit`, the
 one rule, applied by `RemoteApiProvider::outbound`, the only way to build a
 request). A hosted engine therefore embeds on this machine: `[engine]
 embed_path` loads the embedding GGUF in this process as an
-`EmbedOnlyProvider` (`EngineEmbed::Local`), and `plan_serving` reads
-`[models]` for no engine but llama, so a hosted node needs none. The engine
+`EmbedOnlyProvider` (`EngineEmbed::Local`) and reports the family it loaded
+with, which serve's self report and the mesh embed advertisement carry.
+`EngineKind::needs_models` (every engine but remote) is the one answer to
+whether `[models]` is read — by the load-time class check, `node_class()`,
+`plan_serving` and the reload — so a hosted node needs none. The engine
 reports its vendor models (and the local embed model) as resident slots
 (`oicp_client::outbound::Hosted`), so its manifest advertises them to peers
 like any loaded model, with `OPENAI_COMPATIBLE_FEATURES` instead of the
@@ -1612,7 +1615,10 @@ svrn's MCP call log), and `notes.db` is the code program's (pb-notes-memory).
 
 **`[models]` is optional.** Absent — or present naming no primary — plus a
 `[node] entry` is `NodeClass::Terminal`: a full mesh member holding no weights
-that forwards what it cannot do to a named entry node. The class is DERIVED by
+that forwards what it cannot do to a named entry node. A remote `[engine]`
+with no `[models]` (what `svrn setup --hosted` writes) is a `Holder`: it
+serves turns from the vendor model it names, which `primary_model_stem()`
+returns. The class is DERIVED by
 `SetupConfig::node_class()`, never stored, and judged on CONTENT via
 `ModelsSection::is_populated()`. A terminal plans zero VRAM slots, registers
 no local models, and advertises **no embed model either** — probing would
