@@ -2404,6 +2404,37 @@ class HaltTailTests(unittest.TestCase):
             self.assertIn("target/ralph/lane-dm-a.out", pkg)
             self.assertIn("last error: Error: Unexpected server error (500)", pkg)
 
+    def test_a_lane_that_commits_but_runs_out_of_time_continues_without_a_strike(self):
+        # ersilia r12-edges-demoted (2026-10-04) committed four lanes of work and
+        # was killed at the session cap, and the pool struck it as a failure: a
+        # productive lane walks toward a human at the same pace as a stuck one.
+        # A session that ends without its marker but with new commits continues;
+        # the continuations have their own bound, and after it the strikes count.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            runs = []
+
+            class ProgressLane:
+                def __init__(self, cwd):
+                    self.cwd = pathlib.Path(cwd)
+
+                def run(self, model_args, prompt, log):
+                    runs.append(1)
+                    (self.cwd / f"work-{len(runs)}.txt").write_text("progress")
+                    subprocess.run(["git", "-C", str(self.cwd), "add", "-A"], check=True)
+                    subprocess.run(["git", "-C", str(self.cwd), "commit", "-q", "-m",
+                                    f"dm-a: step {len(runs)}"], check=True)
+                    return 0                # out of time before its done marker
+
+            pool = self.make(root, lambda cwd, env=None: ProgressLane(cwd),
+                             max_lane_failures=1, max_lane_continuations=1)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 3)
+            self.assertIn("1 new commit(s) — continuing, no failure count (1/1)", out.getvalue())
+            self.assertEqual(len(runs), 2)
+            self.assertIn("lane dm-a failed 1 waves", (root / "ralph/NEEDS_HUMAN.md").read_text())
+
     def test_a_review_exhaustion_halt_carries_the_last_error_line(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
@@ -2844,7 +2875,10 @@ class PoolQueueTests(unittest.TestCase):
                     commit_all(str(self.cwd), "q-a: half done")
                     return 0
 
-            pool = self.make(root, lambda cwd, env=None: StaleLane(cwd), max_lane_failures=1)
+            # The subject is the stale marker, not the continuation bound: the
+            # half-done commit would otherwise continue the lane, not strike it.
+            pool = self.make(root, lambda cwd, env=None: StaleLane(cwd), max_lane_failures=1,
+                             max_lane_continuations=0)
             self.assertEqual(pool.run(), 3)
             self.assertFalse((root / "q-a.txt").exists())
             self.assertIn("- [ ] q-a", (root / "ralph/next/q/STATE.md").read_text())

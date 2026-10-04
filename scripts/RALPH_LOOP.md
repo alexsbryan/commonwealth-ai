@@ -116,7 +116,11 @@ passes its own tests; the pool merges a lane whose marker is present. Lanes do
 not edit `STATE.md`; the pool marks a unit `[x]` after merging. A lane that
 instead ends holding `ralph/waiting` naming a `*.done` marker (a detached
 field run still going) is WAITING — no strike against the 3-failure bound;
-the tick resumes it when the marker appears and escalates past 48h.
+the tick resumes it when the marker appears and escalates past 48h. A lane
+whose session ends without its marker but with new commits on its branch (it
+ran out of session time mid-unit) CONTINUES — no strike — up to
+`MAX_LANE_CONTINUATIONS` (6) times in a row; only an end with no new commits
+counts toward the bound.
 
 `pool --queue <name>` runs a queue's manifest as `run` does: its prompt
 (base + addendum), heavy.txt, conflicts.txt, scope_file and parked rows (held

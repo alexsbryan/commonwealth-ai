@@ -1849,6 +1849,10 @@ CARGO_JOBS_LIB = pathlib.Path(__file__).resolve().parent / "lib" / "cargo-jobs.s
 # first reclaims idle lanes' build output (Pool._reclaim_disk), and waits only
 # when that is not enough.
 DISK_FLOOR_GB = 40
+# A lane session that ends without its done marker but with new commits ran out
+# of time mid-work, not into a wall: it continues without a strike, at most this
+# many times in a row before the strikes count again (12h at a 2h session cap).
+MAX_LANE_CONTINUATIONS = 6
 # Where a lane reads its share: a file, because `toolbox run` forwards no env.
 LANE_JOBS_FILE = "target/ralph/lane.env"
 LANE_JOBS_VARS = ("SOVEREIGN_LINT_JOBS", "SOVEREIGN_TEST_JOBS")
@@ -1925,7 +1929,8 @@ class Pool:
                  marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
                  max_lane_failures=3, probe=None, jobs_share=None, lane_root=None,
-                 disk_floor_gb=DISK_FLOOR_GB, disk_free_gb=None):
+                 disk_floor_gb=DISK_FLOOR_GB, disk_free_gb=None,
+                 max_lane_continuations=MAX_LANE_CONTINUATIONS):
         self.paths = paths
         self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
@@ -1941,8 +1946,11 @@ class Pool:
         self.variant = variant
         self.max_review_attempts = max_review_attempts
         self.max_lane_failures = max_lane_failures
+        self.max_lane_continuations = max_lane_continuations
         self.probe = probe or (lambda model: probe_model(model, paths))
         self._lane_failures = {}
+        self._lane_continuations = {}
+        self._session_base = {}
         self._held = frozenset()
         self.jobs_share = jobs_share or cargo_jobs_share
         self._jobs = None
@@ -2374,9 +2382,21 @@ class Pool:
             jobs_file = wt / LANE_JOBS_FILE
             jobs_file.parent.mkdir(parents=True, exist_ok=True)
             jobs_file.write_text("".join(f"{k}={v}\n" for k, v in share.items()))
+        head = self._git("rev-parse", "HEAD", cwd=wt)
+        if head.returncode == 0:
+            self._session_base[unit] = head.stdout.strip()
         session = self.session_for(wt, env=env)
         session.run(model_args, note + self._prompt_text(),
                     str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
+
+    def _session_commits(self, unit, wt):
+        """How many commits the lane's last session added to its branch (0 when
+        its starting head was not recorded)."""
+        base = self._session_base.pop(unit, None)
+        if base is None:
+            return 0
+        r = self._git("rev-list", "--count", f"{base}..HEAD", cwd=wt)
+        return int(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip().isdigit() else 0
 
     def _renumber_decisions(self, unit, wt, branch):
         """Lanes in one wave each mint `<campaign>-<max+1>` from the same tree,
@@ -2541,6 +2561,18 @@ class Pool:
                     say(f"pool: lane {unit} waiting on {parsed[1].relative_to(wt)} "
                         "— no failure count")
                     continue
+                # A session that committed work and ran out of time is mid-unit,
+                # not stuck: ersilia r12-edges-demoted committed four lanes of
+                # work, was killed at the session cap and struck (2026-10-04).
+                # It continues without a strike, within its own bound.
+                made = self._session_commits(unit, wt)
+                k = self._lane_continuations.get(unit, 0) + 1 if made else 0
+                self._lane_continuations[unit] = k
+                if made and k <= self.max_lane_continuations:
+                    say(f"pool: lane {unit} ended without {LANE_DONE_DIR}/{unit}.done after "
+                        f"{made} new commit(s) — continuing, no failure count "
+                        f"({k}/{self.max_lane_continuations})")
+                    continue
                 # A lane that keeps ending without its marker would otherwise be
                 # re-run forever (2026-09-17: ~50 sessions over 2.5h on
                 # dm-daemon-api-edge). Bound it and hand the row to the director.
@@ -2556,6 +2588,8 @@ class Pool:
                                           / f"lane-{unit}.out"))
                 continue
             self._lane_failures.pop(unit, None)
+            self._lane_continuations.pop(unit, None)
+            self._session_base.pop(unit, None)
             refused = self._renumber_decisions(unit, wt, branch)
             if refused is not None:
                 return self._halt(refused)
