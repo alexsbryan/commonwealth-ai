@@ -19,9 +19,12 @@
 //! by its `Content-Length` untouched, and the next head is read after it, so
 //! keep-alive connections carry the identity on every request. Responses are
 //! never parsed: the origin→client direction is a byte copy, which is why a
-//! `Range` response stays byte-exact. A chunked request body is the one shape
-//! this does not frame (media clients do not send them); the rest of that
-//! connection passes through unrewritten, and the branch says so at info.
+//! `Range` response stays byte-exact. A head whose body this cannot delimit
+//! exactly as any origin would — `Transfer-Encoding` of any kind, two
+//! `Content-Length`s, or one that is not a single decimal number — ends the
+//! connection there, at warn ([`body_framing`]): the bytes behind it would
+//! otherwise reach the origin as requests no rewrite touched, carrying
+//! whatever identity the client typed. Media clients send none of these.
 use std::net::SocketAddr;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
@@ -216,45 +219,63 @@ pub fn split_app_name(head: &[u8]) -> Option<(String, Vec<u8>)> {
     Some((String::from_utf8_lossy(name).into_owned(), out))
 }
 
-/// How the bytes after a request head are framed.
+/// How the bytes after a request head are framed, or why this forward will
+/// not frame them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BodyFraming {
     /// No body follows; the next head starts immediately.
     None,
     /// Exactly this many body bytes follow.
     Length(u64),
-    /// `Transfer-Encoding: chunked` — not framed here.
-    Chunked,
+    /// This forward cannot say where the body ends exactly as every origin
+    /// would, so the connection carries no further request. The reason is
+    /// for the log.
+    Refused(&'static str),
 }
 
-/// Read a request head's framing. `Transfer-Encoding: chunked` wins over a
-/// `Content-Length`, as RFC 9112 §6.3 says it must.
+/// Read a request head's framing — strictly, because the forward and the
+/// origin must agree on where every request starts.
+///
+/// Where they disagree, bytes the forward copied as a body are parsed by the
+/// origin as a request whose head no rewrite touched, so a member could name
+/// another member's key, or none. A chunked body was copied through that way
+/// until 2026-10-04. So anything but one plain `Content-Length` is refused:
+/// `Transfer-Encoding` of any kind (this forward decodes none; RFC 9112 §6.3
+/// lets a server reject any it does not), a second `Content-Length` (origins
+/// differ on duplicates), and a value that is not one decimal number (`5, 5`
+/// is a body to hyper and no body to a stricter reader). Header names are
+/// compared as [`rewrite_head`] compares them, so the two cannot read one
+/// line two ways.
 pub fn body_framing(head: &[u8]) -> BodyFraming {
-    let mut length = BodyFraming::None;
+    let mut length = None;
     for line in head.split(|&b| b == b'\n').skip(1) {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         let Some(colon) = line.iter().position(|&b| b == b':') else {
             continue;
         };
-        let name = String::from_utf8_lossy(&line[..colon])
-            .trim()
-            .to_ascii_lowercase();
-        let value = String::from_utf8_lossy(&line[colon + 1..])
-            .trim()
-            .to_string();
+        let name = compare_name(&String::from_utf8_lossy(&line[..colon]));
+        let raw = String::from_utf8_lossy(&line[colon + 1..]);
+        let value = raw.trim_matches(|c| c == ' ' || c == '\t');
         match name.as_str() {
-            "transfer-encoding" if value.to_ascii_lowercase().contains("chunked") => {
-                return BodyFraming::Chunked;
+            "transfer-encoding" => {
+                return BodyFraming::Refused("a Transfer-Encoding request body is not framed here")
+            }
+            "content-length" if length.is_some() => {
+                return BodyFraming::Refused("a request with more than one Content-Length")
             }
             "content-length" => {
-                if let Ok(n) = value.parse::<u64>() {
-                    length = BodyFraming::Length(n);
+                if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+                    return BodyFraming::Refused("a Content-Length that is not one decimal number");
+                }
+                match value.parse::<u64>() {
+                    Ok(n) => length = Some(n),
+                    Err(_) => return BodyFraming::Refused("a Content-Length past 2^64"),
                 }
             }
             _ => {}
         }
     }
-    length
+    length.map_or(BodyFraming::None, BodyFraming::Length)
 }
 
 /// A header value the wire can carry: visible ASCII only. A member name is
@@ -386,6 +407,15 @@ where
 {
     use std::ops::ControlFlow::{Break, Continue};
     let framing = body_framing(head);
+    if let BodyFraming::Refused(why) = framing {
+        tracing::warn!(
+            target: "transport",
+            why,
+            "iroh acceptor: refused a request whose body this forward cannot frame — \
+             nothing more on this connection reaches the origin"
+        );
+        return Break(());
+    }
     let (out, stripped) = rewrite_head(head, headers);
     if stripped > 0 {
         tracing::info!(
@@ -406,14 +436,8 @@ where
             }
             Continue(())
         }
-        BodyFraming::Chunked => {
-            tracing::info!(
-                target: "transport",
-                "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
-            );
-            let _ = tokio::io::copy(reader, writer).await;
-            Break(())
-        }
+        // Answered above, before the head was written.
+        BodyFraming::Refused(_) => Break(()),
     }
 }
 
@@ -728,22 +752,69 @@ mod tests {
         assert_eq!(stripped, 0);
     }
 
+    /// One plain `Content-Length` is a body; no framing header is no body;
+    /// everything a forward and an origin could read two ways is refused.
     #[test]
-    fn body_framing_reads_content_length_and_chunked_wins() {
+    fn body_framing_reads_one_content_length_and_refuses_the_rest() {
+        let framing =
+            |headers: &str| body_framing(format!("POST / HTTP/1.1\r\n{headers}\r\n").as_bytes());
+        assert_eq!(framing("Host: x\r\n"), BodyFraming::None);
+        assert_eq!(framing("Content-Length: 12\r\n"), BodyFraming::Length(12));
         assert_eq!(
-            body_framing(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n"),
-            BodyFraming::None
-        );
-        assert_eq!(
-            body_framing(b"POST / HTTP/1.1\r\nContent-Length: 12\r\n\r\n"),
+            framing("content-length:\t 12 \r\n"),
             BodyFraming::Length(12)
         );
-        assert_eq!(
-            body_framing(
-                b"POST / HTTP/1.1\r\nContent-Length: 12\r\nTransfer-Encoding: chunked\r\n\r\n"
-            ),
-            BodyFraming::Chunked
-        );
+        for refused in [
+            "Transfer-Encoding: chunked\r\n",
+            "Content-Length: 12\r\nTransfer-Encoding: chunked\r\n",
+            "Transfer-Encoding: gzip\r\n",
+            "TRANSFER-ENCODING: identity\r\n",
+            "Transfer-Encoding\u{7f}: chunked\r\n",
+            "Content-Length: 5\r\nContent-Length: 5\r\n",
+            "Content-Length: 5, 5\r\n",
+            "Content-Length: +5\r\n",
+            "Content-Length: \r\n",
+            "Content-Length: 99999999999999999999\r\n",
+        ] {
+            assert!(
+                matches!(framing(refused), BodyFraming::Refused(_)),
+                "{refused:?} must be refused, got {:?}",
+                framing(refused)
+            );
+        }
+    }
+
+    /// THE failing input for the framing rule. A member opens with a chunked
+    /// request and puts a second request behind it naming another member's
+    /// key — or naming none, which the ring routes serve as a local process
+    /// (commonwealth-rails `ring_routes.rs` `roster_refusal`). Nothing after a
+    /// head this forward cannot frame may reach the origin, or the bytes
+    /// behind it are a request no rewrite touched.
+    #[tokio::test]
+    async fn a_request_behind_an_unframeable_one_never_reaches_the_origin() {
+        let attacks: [&[u8]; 3] = [
+            b"POST /internal/ring/sync HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nGET /internal/ring/sync HTTP/1.1\r\nX-Mesh-Pubkey: victim\r\n\r\n",
+            b"POST /internal/ring/sync HTTP/1.1\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nGET /internal/ring/sync HTTP/1.1\r\n\r\n",
+            b"POST /internal/ring/sync HTTP/1.1\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\nGET /internal/ring/sync HTTP/1.1\r\nX-Mesh-Pubkey: victim\r\n\r\n",
+        ];
+        let stamp = vec![("X-Mesh-Pubkey".to_string(), "dialer".to_string())];
+        for attack in attacks {
+            let mut reader = tokio::io::BufReader::new(std::io::Cursor::new(attack.to_vec()));
+            let mut origin = Vec::new();
+            let mut buf = Vec::new();
+            assert!(read_head(&mut reader, &mut buf).await.unwrap());
+            let flow = forward_request(&buf, &mut reader, &mut origin, &stamp).await;
+            let seen = String::from_utf8_lossy(&origin);
+            assert!(flow.is_break(), "the connection must end here: {seen}");
+            assert!(
+                !seen.contains("victim"),
+                "a forged key reached the origin: {seen}"
+            );
+            assert!(
+                !seen.contains("GET /internal/ring/sync"),
+                "a request no rewrite touched reached the origin: {seen}"
+            );
+        }
     }
 
     /// Keep-alive: two requests on one connection, a body between them, and
