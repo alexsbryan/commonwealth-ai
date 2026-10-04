@@ -1,0 +1,38 @@
+# ONTOLOGY_PRIMITIVES.md §8 facets for the crm-ward-acts arm, in their proposed syntax. Read only
+# by compose.py: Rust's SourceDecl requires `file` and drops unknown per-type keys, so these live
+# beside recipe-acts.toml until the facets land in the declaration language.
+
+# Axis 1: typed atoms from the document's own fields, no model.
+[[source]]
+type = "person"
+metadata = ["from", "to", "cc"]          # address lists
+attributes = { email = "address", name = "display_name" }
+
+[[source]]
+type = "company"
+metadata = ["from", "to", "cc"]
+attributes = { domain = "domain" }
+exclude_domains = ["aol.com", "hotmail.com", "yahoo.com", "msn.com", "earthlink.net", "worldnet.att.net",
+                   "juno.com", "compuserve.com", "pdq.net"]
+own = "enron.com"                        # the mailbox owner's organisation: a company, never a counterparty
+
+# Axis 4: the document clock.
+[clock]
+metadata = "date"
+
+# Axis 5: a composed type.
+[[compose]]
+type = "deal"
+of = ["deal_act"]
+block = ["counterparty"]                 # a member's own value, else its document's outside party
+link = ["commodity", "delivery_point", "period"]
+anchor = "deal_ref"
+thread = "subject"                       # a shared document thread is linking evidence
+adjudicate = false                       # arm 2 puts ambiguous pairs to the model
+
+# Axis 4: a state type of the composed type, one state per member, ordered by the clock.
+[[derive]]
+type = "deal_stage"
+of = "deal"
+from = "deal_act.act"
+map = { request = "lead", offer = "proposal", counter = "negotiating", accept = "won", confirm = "won", decline = "lost" }

@@ -251,6 +251,7 @@ def main():
     ap.add_argument("--corpus", default="crm-ward")
     ap.add_argument("--gold", type=pathlib.Path, default=WARD / "gold")
     ap.add_argument("--json", type=pathlib.Path)
+    ap.add_argument("--atoms", type=pathlib.Path, help="score this atoms.json (e.g. compose.py's output) instead of the corpus atlas")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--bar", help="print one crm-proof bar's holdout value as {value, artifact} (co-lineage measure)")
     ap.add_argument("--run", type=pathlib.Path, default=WARD / "runs/current",
@@ -259,7 +260,7 @@ def main():
     if a.selftest:
         return selftest()
     secfiles = section_files(a.corpus)
-    atoms = json.loads((HOME / ".svrnmesh/indexes" / a.corpus / "atlas/atoms.json").read_text())["atoms"]
+    atoms = json.loads((a.atoms or HOME / ".svrnmesh/indexes" / a.corpus / "atlas/atoms.json").read_text())["atoms"]
     ent, claims = load_atlas(atoms, secfiles)
     g = load_gold(a.gold)
     done = json.loads((HOME / ".svrnmesh/enrichment" / a.corpus / "cache/questions.json").read_text())
@@ -275,7 +276,8 @@ def main():
                     "messages_extracted": messages, "s_per_message": round(wall / messages, 2) if messages and snaps else None,
                     "prompt_tokens": sum(t["prompt_tokens"] for t in snaps),
                     "completion_tokens": sum(t["completion_tokens"] for t in snaps)},
-           "holdout": score(g, ent, claims, covered - smoke_files), "all": score(g, ent, claims, covered)}
+           "holdout": score(g, ent, claims, covered - smoke_files), "all": score(g, ent, claims, covered),
+           "dev": score(g, ent, claims, covered & smoke_files)}
     if a.bar:
         a.run.mkdir(parents=True, exist_ok=True)
         art = a.run / "score.json"
