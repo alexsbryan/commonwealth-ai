@@ -59,3 +59,28 @@ first. Never invent a field the text does not support; null is a label.
 
 Ids are local to a folder; scoring matches people by email, companies by domain or
 name, deals by counterparty plus description.
+
+## Open after drafting v1 (2026-10-03) — the operator decides, then v1.1
+
+v1 drafted ten folders: 349 people (267 with an email), 91 companies, 119 deals (79
+transactions), 266 stage updates, 102 commitments; every quote verbatim, every file read.
+127 labels are flagged uncertain and listed for review in `gold/REVIEW.md` beside the gold.
+Where v1 did not fit the mail, and what the drafters did:
+
+- Duplicate messages from Ward's two mailbox exports, Date headers hours apart (about 20
+  pairs; `prepare.py` keys on Date, so it kept both): labelled once, at the earlier file.
+- Mass mail (cruises, retail, press releases, a 150-address list): recipients not labelled.
+- Monthly nomination emails: no record type fits; unlabelled.
+- Enron affiliates selling (EES, EPMI, Enron Canada, EAMR): mostly folded into `enron`;
+  EAMR kept its own deal once.
+- A deal with a third party (Citizens resells Enron gas to PPL): PPL-side stages hung on
+  the Enron-Citizens deal. Many small fixed-price trades with one buyer: one deal.
+- Stages: `negotiating` says drafts "exchanged", but most master drafts are internal to
+  Enron first; nothing fits shortlisted or dormant; existing accounts were labelled `won`;
+  "term sheet accepted" and "confirm awaiting signature" split between won and negotiating.
+- Commitments made on someone else's behalf: uncertain; a company promise naming no person:
+  skipped.
+- Addresses garbled by the export (`.ward@enron.com`, city staff under @enron.com); `pdq.net`
+  is an ISP missing from the freemail list.
+- `amount_usd` when only a margin or fee is stated; which merely-mentioned companies get a
+  record; `quoted` when the quoted text is the sender's own earlier message.
