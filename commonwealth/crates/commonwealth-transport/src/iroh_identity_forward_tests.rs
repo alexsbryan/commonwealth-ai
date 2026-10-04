@@ -280,13 +280,9 @@ async fn every_request_on_a_kept_alive_connection_carries_the_identity() {
     let headers = identity();
     let mut buf = Vec::new();
     while read_head(&mut reader, &mut buf).await.unwrap() {
-        let framing = body_framing(&buf);
-        let (head, _) = rewrite_head(&buf, &headers);
-        out.extend_from_slice(&head);
-        if let BodyFraming::Length(n) = framing {
-            let mut body = (&mut reader).take(n);
-            tokio::io::copy(&mut body, &mut out).await.unwrap();
-        }
+        assert!(forward_request(&buf, &mut reader, &mut out, &headers)
+            .await
+            .is_continue());
     }
     let out = String::from_utf8(out).unwrap();
     assert_eq!(out.matches("X-Mesh-Member: LittleMac").count(), 2);
