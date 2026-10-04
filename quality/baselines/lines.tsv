@@ -103,8 +103,8 @@
 2014	serve/crates/sovereign-compute::tests
 755	serve/crates/sovereign-gliner
 1307	serve/crates/sovereign-gliner::tests
-8448	serve/crates/sovereign-inference
-20522	serve/crates/sovereign-inference::tests
+8463	serve/crates/sovereign-inference
+20549	serve/crates/sovereign-inference::tests
 2563	serve/crates/sovereign-scheduler
 2301	serve/crates/sovereign-scheduler::tests
 9213	serve/crates/sovereign-serve
@@ -142,7 +142,7 @@
 82	shared/crates/serving-policy-core::tests
 1193	shared/crates/sovereign-cli-base
 309	shared/crates/sovereign-cli-base::tests
-19106	shared/crates/sovereign-contracts
+19108	shared/crates/sovereign-contracts
 8649	shared/crates/sovereign-contracts::tests
 25	shared/crates/sovereign-peer-wire
 27	shared/crates/sovereign-time
@@ -156,8 +156,8 @@
 1160	svrn/crates/corpus-mcp
 520	svrn/crates/corpus-mcp::tests
 14703	svrn/crates/sovereign-cli
-7474	svrn/crates/sovereign-cli-daemon
-1454	svrn/crates/sovereign-cli-daemon::tests
+7544	svrn/crates/sovereign-cli-daemon
+1475	svrn/crates/sovereign-cli-daemon::tests
 30627	svrn/crates/sovereign-cli-llm
 8297	svrn/crates/sovereign-cli-llm::tests
 1074	svrn/crates/sovereign-cli-shared
