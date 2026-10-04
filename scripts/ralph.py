@@ -446,6 +446,25 @@ def waiting_marker(root, waiting_rel):
     return waiting, pathlib.Path(root) / m.group(0)
 
 
+def machine_boot_time():
+    """Unix time this machine last booted, or None when it cannot be read. A
+    detached run whose waiting file is older died with that boot: no process
+    survives one, so its marker will never be written."""
+    try:
+        if sys.platform == "darwin":
+            r = subprocess.run(["sysctl", "-n", "kern.boottime"],
+                               capture_output=True, text=True, timeout=5)
+            m = re.search(r"sec = (\d+)", r.stdout)
+            return int(m.group(1)) if m else None
+        with open("/proc/stat") as fh:
+            for line in fh:
+                if line.startswith("btime "):
+                    return int(line.split()[1])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return None
+
+
 def wait_for_marker(paths, marker_timeout):
     """None to proceed, "wait" to yield this tick, or a reason string to halt."""
     parsed = waiting_marker(paths.workdir, paths.waiting)
@@ -454,6 +473,12 @@ def wait_for_marker(paths, marker_timeout):
     waiting, marker = parsed
     if marker.exists():
         say(f"{marker} present — resuming")
+        waiting.unlink()
+        return None
+    booted = machine_boot_time()
+    if booted and waiting.stat().st_mtime < booted:
+        say(f"waiting on {marker}, but its run started before this machine booted — "
+            "it died with the reboot; resuming")
         waiting.unlink()
         return None
     age = int(time.time() - waiting.stat().st_mtime)
@@ -2001,7 +2026,8 @@ class Pool:
                  max_lane_failures=3, probe=None, jobs_share=None, lane_root=None,
                  disk_floor_gb=DISK_FLOOR_GB, disk_free_gb=None,
                  max_lane_continuations=MAX_LANE_CONTINUATIONS,
-                 code_digest=None, compiles=None, reexec=None, argv=None):
+                 code_digest=None, compiles=None, reexec=None, argv=None,
+                 boot_time=None, committed=None):
         self.paths = paths
         self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
@@ -2028,12 +2054,19 @@ class Pool:
         self.disk_floor_gb = disk_floor_gb
         self.disk_free_gb = disk_free_gb or (
             lambda: shutil.disk_usage(self.lane_root).free // 2**30)
+        self.boot_time = boot_time or machine_boot_time
         self.code_digest = code_digest or (lambda: hashlib.sha256(SELF.read_bytes()).hexdigest())
         self.compiles = compiles or (lambda: compile(SELF.read_text(), str(SELF), "exec"))
+        # The launch line runs the working tree's file, so a half-made edit that
+        # happens to compile would go live: only committed code is deployed.
+        self.committed = committed or (lambda: subprocess.run(
+            ["git", "-C", str(SELF.parent), "diff", "--quiet", "HEAD", "--", SELF.name],
+            capture_output=True).returncode == 0)
         self.reexec = reexec or (lambda argv: os.execv(argv[0], argv))
         self.argv = argv or [sys.executable, str(SELF), *sys.argv[1:]]
         self._loaded = self.code_digest()
         self._refused = None
+        self._uncommitted = None
         self._resume_state()
 
     def _git(self, *args, cwd=None):
@@ -2067,6 +2100,12 @@ class Pool:
         except OSError:
             return
         if now in (self._loaded, self._refused):
+            return
+        if not self.committed():
+            if now != self._uncommitted:
+                self._uncommitted = now
+                say("pool: ralph.py changed but holds uncommitted edits — the pool deploys "
+                    "only committed code and stays on the loaded code")
             return
         try:
             self.compiles()
@@ -2147,39 +2186,67 @@ class Pool:
 
     def poll_waiting_lanes(self):
         """Each tick, every lane worktree whose `ralph/waiting` names a marker:
-        resume the lane whose marker has landed, hold the rest out of the
-        waves, escalate past LANE_MAX_WAIT_SECS. Returns (halt reason or None,
-        the units still waiting). The filesystem is the state — a restart or a
-        previous pool generation loses nothing."""
+        resume the lane whose marker has landed or whose run died with a
+        reboot, hold the rest out of the waves, and park the row of a lane
+        waiting past LANE_MAX_WAIT_SECS while the pool runs on. A parked row's
+        lane is not polled: it waits on the operator, not on its marker. One
+        overdue run used to halt the whole pool, and kept halting it after its
+        row was parked (r9-invoice-batch, 2026-09-30, 22.9h). Returns (halt
+        reason or None, the units still waiting). The filesystem is the state —
+        a restart or a previous pool generation loses nothing."""
         still = set()
         wt_root = self.lane_root
         if not wt_root.exists():
             return None, still
+        held = parked_ids(self.paths)
+        booted = self.boot_time()
         for wt in sorted(wt_root.iterdir()):
+            if wt.name in held:
+                continue
             parsed = waiting_marker(wt, self.paths.waiting)
             if parsed is None:
                 continue
             unit, waiting, marker = wt.name, parsed[0], parsed[1]
             named = marker.relative_to(wt)
-            age = int(time.time() - waiting.stat().st_mtime)
-            if age >= LANE_MAX_WAIT_SECS:
-                return (f"lane {unit} waited {age // 3600}h on {named} "
-                        f"(limit {LANE_MAX_WAIT_SECS // 3600}h) — the detached run "
-                        "never wrote its marker"), still
             if marker.exists():
                 say(f"pool: lane {unit} waiting on {named} — marker present, resuming")
-                waiting.unlink()
-                # End the waiting ON THE LANE BRANCH, not just on disk: a
-                # committed waiting file that survives to the merge parks the
-                # main tree's loop on a marker that only ever existed in this
-                # worktree. The commit is a no-op when nothing is staged.
-                self._git("add", "-A", "--", self.paths.waiting, cwd=wt)
-                self._git("commit", "-q", "-m", f"{unit}: waiting ended — marker landed",
-                          cwd=wt)
-            else:
-                say(f"pool: lane {unit} waiting on {named} ({age}s)")
-                still.add(unit)
+                self._end_waiting(unit, wt, waiting, "marker landed")
+                continue
+            started = waiting.stat().st_mtime
+            if booted and started < booted:
+                say(f"pool: lane {unit}'s detached run ({named}) started before this machine "
+                    f"booted — it died with the reboot; resuming the lane")
+                self._end_waiting(unit, wt, waiting, "the detached run died with the reboot")
+                continue
+            age = int(time.time() - started)
+            if age >= LANE_MAX_WAIT_SECS:
+                reason = (f"lane {unit} waited {age // 3600}h on {named} "
+                          f"(limit {LANE_MAX_WAIT_SECS // 3600}h) — the detached run "
+                          "never wrote its marker")
+                notes = waiting.read_text()
+                write_parked(self.paths, unit,
+                             f"# {reason}\n\nThe lane's worktree is {wt}. Its waiting file "
+                             f"read:\n\n```\n{notes.rstrip()}\n```\n\nCheck the run. "
+                             "Unparking the row resumes the lane, whose session finds the "
+                             "run's state for itself.\n",
+                             "the detached run is overdue")
+                self._end_waiting(unit, wt, waiting, "parked — the detached run is overdue")
+                say(f"pool: {reason} — parked {unit}; the pool runs on")
+                self.notifier("OPERATOR — row parked, loop continues", f"{unit}: {reason}",
+                              self.notify_enabled)
+                continue
+            say(f"pool: lane {unit} waiting on {named} ({age}s)")
+            still.add(unit)
         return None, still
+
+    def _end_waiting(self, unit, wt, waiting, why):
+        """End a lane's waiting ON ITS BRANCH, not just on disk: a committed
+        waiting file that survives to the merge parks the main tree's loop on a
+        marker that only ever existed in this worktree. The commit is a no-op
+        when nothing is staged."""
+        waiting.unlink(missing_ok=True)
+        self._git("add", "-A", "--", self.paths.waiting, cwd=wt)
+        self._git("commit", "-q", "-m", f"{unit}: waiting ended — {why}", cwd=wt)
 
     def run(self):
         # `ralph/lanes/` not `ralph/done/`: on a case-insensitive filesystem

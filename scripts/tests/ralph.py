@@ -36,6 +36,11 @@ def setUpModule():
     execv = mock.patch.object(ralph.os, "execv", no_exec)
     execv.start()
     unittest.addModuleCleanup(execv.stop)
+    # A waiting file older than the last boot means its run died with it; on a
+    # freshly booted host every test's waiting file would read as dead.
+    boot = mock.patch.object(ralph, "machine_boot_time", lambda: None)
+    boot.start()
+    unittest.addModuleCleanup(boot.stop)
 
 
 def write(root, rel, text):
@@ -835,6 +840,19 @@ class WaitingMarkerTests(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertIsNone(ralph.waiting_marker(tmp, "ralph/waiting"))
             self.assertIn("ralph/lanes/dm-a.done", out.getvalue())
+            self.assertFalse(w.exists())
+
+
+class MainTreeWaitTests(unittest.TestCase):
+    def test_a_main_tree_wait_older_than_the_last_boot_resumes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = write(tmp, "ralph/waiting", "ralph/job.done\n")
+            started = time.time() - 1000
+            os.utime(w, (started, started))
+            paths = ralph.Paths(pathlib.Path(tmp))
+            with mock.patch.object(ralph, "machine_boot_time", return_value=started + 500), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertIsNone(ralph.wait_for_marker(paths, 86400))
             self.assertFalse(w.exists())
 
 
@@ -2259,22 +2277,63 @@ class PoolWaitingTests(unittest.TestCase):
             # that only ever existed in the worktree.
             self.assertFalse((root / "ralph/waiting").exists())
 
-    def test_a_lane_waiting_past_max_wait_escalates(self):
+    def test_a_lane_waiting_past_max_wait_parks_its_row_and_the_pool_runs_on(self):
+        # One overdue detached run halted the whole ersilia pool, and kept
+        # halting it after its row was parked (r9-invoice-batch, 2026-09-30).
         with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
+            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n- [ ] dm-b — depends []\n")
 
             def tick(secs):
-                old = time.time() - 49 * 3600   # past the 48h bound
-                os.utime(root / ".ralph/wt/dm-wait/ralph/waiting", (old, old))
+                w = root / ".ralph/wt/dm-wait/ralph/waiting"
+                if w.exists():
+                    old = time.time() - 49 * 3600   # past the 48h bound
+                    os.utime(w, (old, old))
 
-            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd), sleep=tick)
+            pool = self.make(root, lambda cwd, env=None: (
+                WaitingLane(cwd) if pathlib.Path(cwd).name == "dm-wait" else FakeLane(cwd)),
+                sleep=tick, boot_time=lambda: None)
             WaitingLane.runs = 0
-            self.assertEqual(pool.run(), 3)
-            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
-            self.assertIn("dm-wait", pkg)
-            self.assertIn("field-x.done", pkg)
-            self.assertIn("49h", pkg)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(pool.run(), 3)
+            parked = (root / "ralph/parked/dm-wait.md").read_text()
+            self.assertIn("field-x.done", parked)
+            self.assertIn("49h", parked)
+            self.assertIn("- [x] dm-b", (root / "ralph/STATE.md").read_text())
+            self.assertIn("operator approval required",
+                          (root / "ralph/NEEDS_HUMAN.md").read_text())
             self.assertEqual(WaitingLane.runs, 1)
+
+    def test_a_detached_run_older_than_the_last_boot_died_with_it_and_its_lane_resumes(self):
+        # The r9-invoice-batch battery run died when the machine shut down; the
+        # wait clock counted the 5.7 days it was off and the pool waited 22.9h
+        # more for a marker no process would ever write (2026-09-30).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
+            w = write(root, ".ralph/wt/dm-wait/ralph/waiting", "ralph/field-x.done\n")
+            started = time.time() - 1000
+            os.utime(w, (started, started))
+            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd),
+                             boot_time=lambda: started + 500)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                reason, still = pool.poll_waiting_lanes()
+            self.assertIsNone(reason)
+            self.assertNotIn("dm-wait", still)
+            self.assertFalse(w.exists())
+            self.assertIn("died with the reboot", out.getvalue())
+
+    def test_a_parked_rows_lane_is_not_polled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
+            w = write(root, ".ralph/wt/dm-wait/ralph/waiting", "ralph/field-x.done\n")
+            old = time.time() - 49 * 3600
+            os.utime(w, (old, old))
+            write(root, "ralph/parked/dm-wait.md", "# parked\n")
+            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd), boot_time=lambda: None)
+            with contextlib.redirect_stdout(io.StringIO()):
+                reason, still = pool.poll_waiting_lanes()
+            self.assertIsNone(reason)
+            self.assertNotIn("dm-wait", still)
 
     def test_a_lane_waiting_on_its_own_done_marker_is_not_held(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2791,7 +2850,7 @@ class PoolReexecTests(unittest.TestCase):
                 raise Reexec()
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
                              code_digest=lambda: next(digests, "new"), reexec=reexec,
-                             compiles=lambda: None, argv=["python3", "ralph.py", "pool"])
+                             compiles=lambda: None, argv=["python3", "ralph.py", "pool"], committed=lambda: True)
             pool._lane_failures["dm-b"] = 2
             out = io.StringIO()
             with contextlib.redirect_stdout(out), self.assertRaises(Reexec):
@@ -2823,7 +2882,7 @@ class PoolReexecTests(unittest.TestCase):
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
                              code_digest=lambda: next(digests, "broken"),
                              reexec=lambda argv: self.fail("re-exec'd onto code that does not compile"),
-                             compiles=broken)
+                             compiles=broken, committed=lambda: True)
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(pool.run(), 0)
@@ -2831,6 +2890,24 @@ class PoolReexecTests(unittest.TestCase):
             self.assertEqual(said.count("does not compile"), 1)
             self.assertIn("line 12", said)
             self.assertIn("pool: DONE", said)
+
+
+class PoolDeploysOnlyCommittedCodeTests(unittest.TestCase):
+    fixture = PoolTests.fixture
+    make = PoolTests.make
+
+    def test_uncommitted_edits_are_not_deployed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            digests = iter(["old"])
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             code_digest=lambda: next(digests, "half-made"),
+                             compiles=lambda: None, committed=lambda: False,
+                             reexec=lambda argv: self.fail("deployed an uncommitted edit"))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertEqual(out.getvalue().count("holds uncommitted edits"), 1)
 
 
 class PoolQueueTests(unittest.TestCase):

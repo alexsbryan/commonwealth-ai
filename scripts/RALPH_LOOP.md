@@ -55,14 +55,17 @@ and `watch` and run the printed `launchctl bootstrap`.
   (the loop writes those; no detached run ever will), is ignored and unlinked;
 - a lane ending on `ralph/waiting` (a detached run outliving its session) is
   WAITING, not a failure: the pool polls the named marker on its tick,
-  respawns the lane when it lands, and escalates with a package after 48h
-  (`LANE_MAX_WAIT_SECS`);
+  respawns the lane when it lands or when the waiting file is older than the
+  machine's last boot (its run died with the reboot), and after 48h
+  (`LANE_MAX_WAIT_SECS`) parks that row and runs on; a parked row's lane is not
+  polled;
 - no wave starts under the 40GB disk floor on the lane root (`DISK_FLOOR_GB`);
   under it the pool first deletes `target/debug` and `target/release` from
   idle lanes, least recently built first — never a lane in the wave, never one
   holding `ralph/waiting` — and waits only when that is not enough;
 - the pool deploys its own fixes: between waves, when no session runs, it
-  re-execs onto `ralph.py` as it is on disk if the file changed and compiles
+  re-execs onto `ralph.py` as it is on disk if the file changed, is committed
+  (no uncommitted edits — the launch line runs the working tree) and compiles
   (its strike and continuation counters ride across in
   `target/ralph/pool-state.json`); a change that does not compile is refused
   once, by name, and the pool stays on the code it has;
@@ -128,7 +131,8 @@ passes its own tests; the pool merges a lane whose marker is present. Lanes do
 not edit `STATE.md`; the pool marks a unit `[x]` after merging. A lane that
 instead ends holding `ralph/waiting` naming a `*.done` marker (a detached
 field run still going) is WAITING — no strike against the 3-failure bound;
-the tick resumes it when the marker appears and escalates past 48h. A lane
+the tick resumes it when the marker appears (or its run died with a reboot)
+and parks its row past 48h. A lane
 whose session ends without its marker but with new commits on its branch (it
 ran out of session time mid-unit) CONTINUES — no strike — up to
 `MAX_LANE_CONTINUATIONS` (6) times in a row; only an end with no new commits
