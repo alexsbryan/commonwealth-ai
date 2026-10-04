@@ -8,17 +8,18 @@ declared  = "2026-10-02"
 status    = "active"
 
 [predicate]
-statement = "Each of fi-raptor-whole-work, fi-ontology-list and fi-gliner-declared-labels reads met on its newest measurement row, or DEFAULTS_LEDGER.md carries a row naming that bar id (the feature shipped default-off)."
+statement = "Each of fi-raptor-whole-work, fi-ontology-list and fi-gliner-declared-labels reads met on its newest measurement row, or DEFAULTS_LEDGER.md carries a row whose ### heading names that bar id (the feature shipped default-off). A mention in prose is not a row: until 2026-10-03 any substring counted, and a paragraph naming fi-ontology-list as an owed measurement read as ledgered."
 check     = '''python3 - <<'PY'
 import json, pathlib, sys
 rows = [json.loads(l) for l in (pathlib.Path.home() / ".sovereign/comaintainer/bar-measurements.jsonl").read_text().splitlines() if l.strip()]
-ledger = pathlib.Path("sovereign/DEFAULTS_LEDGER.md").read_text()
+heads = [l for l in pathlib.Path("sovereign/DEFAULTS_LEDGER.md").read_text().splitlines() if l.startswith("### ")]
 ok = True
 for bar in ("fi-raptor-whole-work", "fi-ontology-list", "fi-gliner-declared-labels"):
     mine = [r for r in rows if r.get("campaign") == "feature-fidelity" and r.get("bar") == bar]
     met = bool(mine) and mine[-1].get("verdict") == "met"
-    print(f"{bar}: {'met' if met else 'ledger' if bar in ledger else 'OPEN'}")
-    ok &= met or bar in ledger
+    row = any(f"`{bar}`" in h for h in heads)
+    print(f"{bar}: {'met' if met else 'ledger' if row else 'OPEN'}")
+    ok &= met or row
 sys.exit(0 if ok else 1)
 PY'''
 
