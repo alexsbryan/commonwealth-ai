@@ -263,7 +263,10 @@ mod tests {
             dir.path().to_path_buf(),
             19751,
         );
-        assert_eq!(deepseek.engine.structured_output, None, "a 400 teaches DeepSeek's");
+        assert_eq!(
+            deepseek.engine.structured_output, None,
+            "a 400 teaches DeepSeek's"
+        );
     }
 
     #[test]
