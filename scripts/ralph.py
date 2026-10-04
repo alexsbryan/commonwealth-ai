@@ -1844,8 +1844,15 @@ class Supervisor:
             return 2
         return None
 
+    def _done_count(self):
+        """Rows done, or None while STATE.md does not parse — the campaign halts
+        on that by name; the supervisor must not die of it (a done_count() on
+        None killed it at boot, ersilia 2026-09-17)."""
+        queue = self._queue()
+        return queue.done_count() if queue is not None else None
+
     def run(self):
-        last_done = self._queue().done_count()
+        last_done = self._done_count() or 0
         attempt = 0
         while True:
             stop = self.terminal_stop()
@@ -1861,8 +1868,10 @@ class Supervisor:
                 continue
             if stop is not None:
                 return stop
-            done_now = self._queue().done_count()
-            if done_now > last_done:
+            done_now = self._done_count()
+            if done_now is None:
+                say(f"supervisor: {self.paths.state} does not parse — no progress counted")
+            elif done_now > last_done:
                 attempt = 0
                 last_done = done_now
                 self.parks_without_progress = 0

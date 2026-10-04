@@ -1940,6 +1940,20 @@ class SupervisorCooldownTests(unittest.TestCase):
             self.assertEqual(n["i"], 5)
 
 
+class SupervisorUnreadableQueueTests(unittest.TestCase):
+    make = SupervisorCooldownTests.make
+
+    def test_an_unreadable_queue_is_not_a_crash(self):
+        # Queue refused an unknown dependency, _queue() returned None, and
+        # done_count() on it raised: the supervisor died with a traceback at
+        # boot (ersilia, 2026-09-17, ~18h before anyone saw it).
+        with tempfile.TemporaryDirectory() as tmp:
+            s = self.make(tmp, run_inner=lambda: write(tmp, "ralph/DONE", ""))
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends [nope]\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(s.run(), 0)
+
+
 class SupervisorResolverDidNotRunTests(unittest.TestCase):
     """12 of the ersilia supervisor's 23 "changed nothing" escalations came from
     resolvers that lasted two minutes or less, 9 of them 30-32s: they never ran,
