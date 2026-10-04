@@ -47,6 +47,9 @@ distinct = { period = "overlap" }
 kind_from = "kind"                       # a cluster's kind is its members' majority; route reads it
 anchor = "deal_ref"
 thread = "subject"                       # a shared document thread is linking evidence
+# A mitigation, not a structural rule: a tuned constant. A bare member links to its nearest member in its
+# block within this many days (tune 2026-10-04: 5 of 5 such links right within 7 days, mixed beyond 17).
+bare_window_days = 7
 adjudicate = false                       # true: a block's timeline is partitioned by the model, held to the type by code (tune 0.59 vs rules 0.744, 2026-10-04: kinds misroute)
 kinds = { transaction = "a specific sale, purchase, supply arrangement or trade", master_agreement = "an enabling contract (ISDA, GISB, EEI or another master agreement) with no specific trade of its own" }
 route = { master_agreement = "agreement" }   # a master agreement is its own composed type, never a deal

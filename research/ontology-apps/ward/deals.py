@@ -18,7 +18,7 @@ gold deal message: noise or an unlabelled deal). Grouping is B-cubed over labell
 (grouping.py). Folds split the gold by folder, so a counterparty never sits in both: tune what you
 iterate on, read the other at gates. The pre-registered bar stays score.py's holdout read.
 """
-import argparse, collections, json, pathlib, sys
+import argparse, collections, difflib, json, pathlib, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import score as S  # noqa: E402
@@ -77,6 +77,28 @@ def ceaf_e(pairs):
     return {"P": round(P, 3), "R": round(R, 3), "F": round(2 * P * R / (P + R), 3) if P + R else 0.0}
 
 
+def labeller(g, folders, overlap=30):
+    """A member's gold deal (any kind): the one deal whose messages it cites, else, on a message several deals
+    share, the one deal whose gold quote there shares `overlap`+ verbatim characters with the member's cited
+    text; None when neither decides. Masters are candidates, so a master's mention never labels a transaction."""
+    alld = [d for d in g["deals"] if d["counterparty"].split(":", 1)[0] in folders]
+    quotes = collections.defaultdict(list)
+    for s in g["stage_updates"]:
+        quotes[(s["file"], s["deal"])].append(S.squash(s["quote"]))
+
+    def shared(a, q):
+        return difflib.SequenceMatcher(None, a, q, autojunk=False).find_longest_match(0, len(a), 0, len(q)).size
+
+    def label(c):
+        hit = [d["id"] for d in alld if d["files"] & c["_files"]]
+        if len(hit) <= 1:
+            return hit[0] if hit else None
+        a = S.squash(c.get("anchor"))
+        best = [d for d in hit if any(shared(a, q) >= overlap for f in c["_files"] for q in quotes.get((f, d), []))]
+        return best[0] if len(best) == 1 else None
+    return label
+
+
 def analyse(g, ent, claims, folders, member_kinds):
     resolves = resolver(g, ent)
     in_fold = lambda f: f.split("/", 1)[0] in folders  # noqa: E731
@@ -111,11 +133,11 @@ def analyse(g, ent, claims, folders, member_kinds):
             continue
         atom_kind["matched" if e["id"] in used else "extra_on_gold" if e["_files"] & trans_files
                   else "on_master" if e["_files"] & master_files else "unlabelled"] += 1
-    pairs = []
+    pairs, label, trans = [], labeller(g, folders), {d["id"] for d in gd}
     for c in members:
-        hit = {d["id"] for d in gd if d["files"] & c["_files"]}
-        if len(hit) == 1:
-            pairs.append((c["id"], next(iter(hit)), c.get("subject") if c.get("subject") in ent else ("solo", c["id"])))
+        lab = label(c)
+        if lab in trans:
+            pairs.append((c["id"], lab, c.get("subject") if c.get("subject") in ent else ("solo", c["id"])))
     # stage, on transaction deals only (the part score.py's crm-stage can reach): a stage_update claim on
     # the gold update's message, whose subject is the matched atom, with gold's stage; current = latest by date
     gs = [s for s in g["stage_updates"] if s["deal"] in match or s["deal"] in {d["id"] for d in gd}]

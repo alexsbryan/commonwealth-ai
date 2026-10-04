@@ -21,7 +21,7 @@ chunk store, whose per-chunk metadata is the document's own fields. Applies the 
 Every decision is counted in <dir>/compose_report.json (groups, why each link was made, members left
 uncomposed and why) — the prototype's glass box.
 """
-import argparse, collections, email.utils, hashlib, json, pathlib, re, sys, tomllib, unicodedata
+import argparse, collections, datetime, email.utils, hashlib, json, pathlib, re, sys, tomllib, unicodedata
 
 HOME = pathlib.Path.home()
 
@@ -644,6 +644,21 @@ def main():
                 shared = [k for k in spec.get("link", []) if (x.get("attributes") or {}).get(k) and (y.get("attributes") or {}).get(k)]
                 if shared and all(fold(x["attributes"][k]) == fold(y["attributes"][k]) for k in shared):
                     union(x, y, "link attributes")
+        if spec.get("bare_window_days"):
+            # a bare member (no link, anchor or distinct value) refers to the deal its block is talking about
+            # then: it links to its one nearest member in time, from another document, inside the window
+            keys = spec.get("link", []) + ([spec["anchor"]] if spec.get("anchor") else [])
+            ts = lambda c: datetime.datetime.fromisoformat(c["_date"]).timestamp()  # noqa: E731
+            for blk, cs in blocks.items():
+                for c in cs:
+                    if not c["_date"] or state[id(c)] or any((c.get("attributes") or {}).get(k) for k in keys):
+                        continue
+                    others = [o for o in cs if o["_doc"] != c["_doc"] and o["_date"]]
+                    near = min(others, key=lambda o: abs(ts(o) - ts(c)), default=None)
+                    if near is not None and abs(ts(near) - ts(c)) <= spec["bare_window_days"] * 86400:
+                        union(c, near, "nearest in time (bare member)")
+                    else:
+                        report[f"{spec['type']}: bare member, nothing in its block within the window"] += 1
         groups = collections.defaultdict(list)
         for c in members:
             if c["_block"]:
