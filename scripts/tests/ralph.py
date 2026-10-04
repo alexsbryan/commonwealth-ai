@@ -1954,6 +1954,59 @@ class SupervisorUnreadableQueueTests(unittest.TestCase):
                 self.assertEqual(s.run(), 0)
 
 
+class SurvivalTests(unittest.TestCase):
+    """On a full disk the halt itself raised (ENOSPC writing its package), the
+    guard re-halted and raised again, and the supervisor died with a traceback:
+    the ersilia loop sat 4.9h with no alert (2026-10-03). Any other uncaught
+    error ends the same way, and nothing restarts the job."""
+
+    make = SupervisorCooldownTests.make
+
+    def test_a_halt_on_a_full_disk_still_notifies_and_does_not_raise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = ralph.Paths(pathlib.Path(tmp))
+            told = []
+            full = OSError(28, "No space left on device")
+            with mock.patch.object(pathlib.Path, "write_text", side_effect=full), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                result = ralph.halt(paths, "unhandled I/O error",
+                                    notifier=lambda title, body, on: told.append(title))
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("OPERATOR — halt unwritable", told)
+
+    def test_a_log_line_on_a_full_disk_is_dropped_not_raised(self):
+        class Full(io.StringIO):
+            def write(self, _):
+                raise OSError(28, "No space left on device")
+        with contextlib.redirect_stdout(Full()):
+            ralph.say("this line cannot be written")
+
+    def test_an_unexpected_supervisor_error_cools_down_and_retries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = []
+
+            def inner():
+                runs.append(1)
+                if len(runs) == 1:
+                    raise RuntimeError("the campaign could not be launched")
+                write(tmp, "ralph/DONE", "")
+            s = self.make(tmp, run_inner=inner)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(s.run(), 0)
+            self.assertIn("supervisor error: RuntimeError", out.getvalue())
+            self.assertEqual(sum(self.slept), 600)
+
+    def test_a_supervisor_error_that_persists_still_ends_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            def inner():
+                raise RuntimeError("the campaign could not be launched")
+            s = self.make(tmp, run_inner=inner)
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(RuntimeError):
+                s.run()
+            self.assertEqual(sum(self.slept), 600 + 1200)
+
+
 class SupervisorResolverDidNotRunTests(unittest.TestCase):
     """12 of the ersilia supervisor's 23 "changed nothing" escalations came from
     resolvers that lasted two minutes or less, 9 of them 30-32s: they never ran,

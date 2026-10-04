@@ -37,6 +37,10 @@ and `watch` and run the printed `launchctl bootstrap`.
   only past the last cool-down does the stop stand. DONE, an empty STOP and an
   `operator-only:` package (an empty queue is one: queueing orders) still stop
   at once.
+- **The supervisor survives its own errors**: an exception nothing caught
+  cools down and supervises again (raised only past the last cool-down), and
+  a halt or a log line on a full disk writes what it can, still notifies, and
+  never raises.
 - **Commit as you go.** A session killed at any moment costs at most the
   in-flight step; the next session is told the tree is dirty.
 

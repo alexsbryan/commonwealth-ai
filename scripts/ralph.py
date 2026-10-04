@@ -41,6 +41,7 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
@@ -51,7 +52,12 @@ ROW_RE = re.compile(
 
 
 def say(msg: str) -> None:
-    print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}", flush=True)
+    # A log line that cannot be written (a full disk) is dropped: the loop that
+    # was saying it must not die of it (2026-10-03).
+    try:
+        print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}", flush=True)
+    except OSError:
+        pass
 
 
 class HostError(Exception):
@@ -390,14 +396,24 @@ def halt(paths, reason, *, notifier=notify, notify_enabled=True, operator_clause
     the campaign and the pool so neither can invent a quieter stop. An
     `operator_clause` marks the package operator-only, so no director runs."""
     pkg = paths.p(paths.needs_human)
-    pkg.parent.mkdir(parents=True, exist_ok=True)
     mark = f"{OPERATOR_ONLY_MARK} {operator_clause}\n\n" if operator_clause else ""
-    pkg.write_text(f"# {reason}\n\n{mark}resolve by hand, then remove "
-                   f"{paths.stop} {paths.needs_human}\n")
-    if not pkg.stat().st_size:
+    # On a full disk the package write raised, the guard re-halted and raised
+    # again, and the supervisor died with no alert (2026-10-03, 4.9h): the halt
+    # writes what it can and always says so.
+    try:
+        pkg.parent.mkdir(parents=True, exist_ok=True)
+        pkg.write_text(f"# {reason}\n\n{mark}resolve by hand, then remove "
+                       f"{paths.stop} {paths.needs_human}\n")
+        written = pkg.stat().st_size > 0
+    except OSError:
+        written = False
+    if not written:
         say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
         notifier("OPERATOR — halt unwritable", reason, notify_enabled)
-    paths.p(paths.stop).write_text(f"halt: {reason}\n")
+    try:
+        paths.p(paths.stop).write_text(f"halt: {reason}\n")
+    except OSError as e:
+        say(f"HALT could not write {paths.stop}: {e}")
     say(f"HALT: {reason}")
     notifier("auto — halted, director next", reason, notify_enabled)
     return Result(Outcome.HALT, reason)
@@ -1852,6 +1868,25 @@ class Supervisor:
         return queue.done_count() if queue is not None else None
 
     def run(self):
+        """The supervision loop, with a net under it: an error nothing above
+        caught used to kill the supervisor with a traceback, and nothing
+        restarts the job (launchd has no KeepAlive). It cools down and
+        supervises again instead; past the last cool-down it is raised."""
+        while True:
+            try:
+                return self._run()
+            except Exception as e:  # noqa: BLE001 — the net is for what nothing caught
+                say(f"supervisor error: {type(e).__name__}: {e}")
+                for line in traceback.format_exc().rstrip().splitlines()[-6:]:
+                    say(f"  {line}")
+                try:
+                    cooled = self.cool_down(f"supervisor error: {type(e).__name__}: {e}")
+                except OSError:
+                    cooled = False
+                if not cooled:
+                    raise
+
+    def _run(self):
         last_done = self._done_count() or 0
         attempt = 0
         while True:
