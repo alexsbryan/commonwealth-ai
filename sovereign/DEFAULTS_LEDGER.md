@@ -30,6 +30,38 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Typed list answer over a declared ontology — rides `SOVEREIGN_ATOM_ENUM`, off (`fi-ontology-list`, 2026-10-03)
+
+**What changed.** A list question over a declared ontology gets a typed query
+written by the primary, executed in code and injected as a cited table
+(`atom_enum_typed.rs`, 7bc206fd1), behind the Stage-1 gate of the default-off
+`SOVEREIGN_ATOM_ENUM`.
+
+**Measurements (ft-ans-dev-b, 18 dev K1 rows, 112 text-attested members, one
+run each).** Through chat (e1a43bcd2): bare 0.205, full 0.241, and 0/18 typed
+tables non-empty: the producer names the hoard by `name contains` plus a year
+or findspot its atoms cannot meet. Re-extracted with the focused relation pass
+(`holds_coins_of` links 56 -> 71, mint entities 15 -> 11), `k1_bound.py`: a
+producer that named the hoard perfectly gets the records ceiling
+(`records_recall.row`), a table at 0.286 pooled, and with full's answer
+0.339 — +0.134 over bare, short of the bar's +0.15 before the wide baseline,
+a band, or a synthesizer that drops anything. Read 1's queries relaxed to
+name only reach 0.393 with 60 strays (voided by the bar's goodhart); name +
+findspot 0.312, +0.107, 29 strays. 80 of 112 members are beyond the records
+(stages: no hoard 2 rows, no link 3, members missing 13; Demanhur links 4 of
+22). Records coverage binds; no producer fix carries the bar here.
+
+**Flip condition.** `k1_bound.py`'s full|oracle clears bare by more than 0.15
+on two extraction runs of the atlas; then a producer that resolves the hoard
+(structural — the named example moved 0/18 in read 1); then O-T2 on all K1,
+three runs, K0 guard, fabricated members reported, at >= 0.15 over the better
+of bare k=20 and wide k=80. Lose O-T2 and the chat arm (`atom_enum_typed.rs`)
+is deleted; the executor stays for `atlas-query --typed`.
+Settled by: campaign `feature-fidelity` write side (the deferred ei7-ans
+re-extract), then O-T2.
+
+**Review-by 2026-10-31.**
+
 ### `SOVEREIGN_SUMMARY_PLACEMENT` — collapsed-tree pool, shipped at `head` (feature-fidelity R0.1, 2026-10-02)
 
 **What changed.** `append_atlas_summaries` reads one switch. `head` (default,
