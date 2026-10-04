@@ -14,8 +14,8 @@ status    = "active"
 # extractor and reviewed by the operator. A pipeline record matches a gold record
 # only through the evidence it cites: the same message file, plus the key named
 # per bar. No judge model. Tuning runs on the 50 smoke sections
-# (research/ontology-apps/ward/smoke_sections.txt), so every bar is READ on the gold messages outside them; the full
-# 286 is reported beside.
+# (research/ontology-apps/ward/smoke_sections.txt), so every bar is READ on the
+# gold messages outside them; the full 286 is reported beside.
 
 [predicate]
 statement = "crm-people, crm-deals, crm-stage and crm-cost each read met on their newest measurement row."
