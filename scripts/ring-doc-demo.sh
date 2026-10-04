@@ -89,9 +89,11 @@ declare -A DPORT=([a]=19849 [b]=19859 [c]=19869)
 # a topology that re-tables CPORT (ring-room-demo.sh) moves them too. Each node
 # needs both named: unset, every daemon dials cw-rails at :9747 and binds serve
 # at :9748 — the operator's live node on the local backend, where these
-# daemons' ring journals would land in the house's cw-rails.
-rport() { echo $(( CPORT[$1] + 6 )); }
-sport() { echo $(( CPORT[$1] + 7 )); }
+# daemons' ring journals would land in the house's cw-rails. +4 and +5 because
+# the rest of client + 1..8 is taken: internal +1, the daemon's ring rail +2,
+# ring-room's GUEST_PORT +6 and DPORT2 +7 on its wall, DPORT +8.
+rport() { echo $(( CPORT[$1] + 4 )); }
+sport() { echo $(( CPORT[$1] + 5 )); }
 rails_base() { echo "http://127.0.0.1:$(rport "$1")"; }
 # cw-rails' root, beside the daemon's data dir (one nested in it would be
 # walked by anything that scans [data] dir). Under $D, so `journals` finds the
@@ -240,24 +242,35 @@ start_forwarder() { # node [port]
 # ARCH 5: a gate that cannot say what it measured makes no claim, so this is
 # could-not-judge, never a failed bar.
 stale_binaries() {
-  local newest src_s src_f bin_s
-  # `cmnwlth/apps/` is excluded: those pages are SERVED from the repo mount by
-  # `svrn ring show`, never compiled in (no include_str! names that tree), so a
-  # page-only edit is already what the run reads, and no rebuild can move the
-  # binary's mtime past it. Compiled-in JS (ring_cmd/templates, the door's
-  # shim) stays covered.
-  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' ':!cmnwlth/apps/' 2>/dev/null \
-    | xargs -0 -r stat -c '%Y %n' 2>/dev/null | sort -rn | head -1)
-  [ -n "$newest" ] || return 0
-  src_s=${newest%% *}; src_f=${newest#* }
-  # The older of the two processes a node runs is the one that can be stale.
-  local bin bin_f=""; bin_s=""
+  # Each binary against the sources cargo built it from: its dep-info file
+  # (`<bin>.d`), which names include_str!'d JS (the door's shim, ring_cmd's
+  # templates) and never the pages `ring show` serves from cmnwlth/apps/. The
+  # newest tracked file in the whole workspace was the reading until
+  # 2026-10-04, and called cw-rails stale after a daemon-only edit cargo
+  # rightly did not relink it for. A missing binary or dep-info is named,
+  # never read as fresh.
+  local bin out
   for bin in "$DAEMON" "$RAILS"; do
-    local s; s=$(stat -c %Y "$bin" 2>/dev/null || echo 0)
-    if [ -z "$bin_s" ] || [ "$s" -lt "$bin_s" ]; then bin_s=$s; bin_f=$bin; fi
+    out=$(python3 - "$bin" <<'PY'
+import os, re, sys, time
+b = sys.argv[1]
+f = lambda t: time.strftime("%F %T", time.localtime(t))
+try:
+    built = os.stat(b).st_mtime
+    text = open(b + ".d").read()
+except OSError as e:
+    print(f"{e.filename} is absent, so what {b} was built from is unknown")
+    raise SystemExit
+deps = re.split(r"(?<!\\)\s+", text.split(": ", 1)[-1].replace("\\\n", " ").strip())
+paths = [d.replace("\\ ", " ") for d in deps if d]
+newest = max(((os.stat(p).st_mtime, p) for p in paths if os.path.exists(p)), default=None)
+if newest and newest[0] > built:
+    print(f"{b} mtime {f(built)} is older than {newest[1]} mtime {f(newest[0])}")
+PY
+)
+    [ -n "$out" ] && { echo "binaries-stale: $out — rebuild with scripts/dev-build.sh"; return 0; }
   done
-  [ "$src_s" -gt "$bin_s" ] || return 0
-  echo "binaries-stale: $bin_f mtime $bin_s ($(date -d "@$bin_s" '+%F %T')) is older than $src_f mtime $src_s ($(date -d "@$src_s" '+%F %T')) — rebuild with scripts/dev-build.sh"
+  return 0
 }
 
 need_binaries() {
