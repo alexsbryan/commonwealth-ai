@@ -373,7 +373,7 @@ def partition(spec, blk, cs, ent, state, clash, cache, report):
     atoms with a declared kind. Members are offered as an enum of their own labels, so an invented member
     cannot be written; a member the answer repeats keeps its first group, one it leaves out stands alone,
     and a group that breaks a distinct attribute is split by code."""
-    kinds = list(spec.get("kinds", {"default": ""}))
+    kinds = list(spec.get("kinds", {"default": ""})) if not spec.get("kind_from") else ["any"]
     if len(cs) == 1:
         return [(kinds[0], cs)]
     cs = sorted(cs, key=lambda c: (c["_date"] or "", c["id"]))
@@ -391,7 +391,7 @@ def partition(spec, blk, cs, ent, state, clash, cache, report):
     user = (f"These are mentions of {spec['type']}s with {name}, in date order. Group them so that each group is one "
             f"{spec['type']}: mentions of the same {spec['type']} talk about the same arrangement; a different "
             f"product, a different period or a fresh round of the same business is a different {spec['type']}. "
-            f"Every mention is in exactly one group. kind: {kd}.\n\n" + "\n".join(rows))
+            f"Every mention is in exactly one group." + (f" kind: {kd}." if kinds != ["any"] else "") + "\n\n" + "\n".join(rows))
     schema = {"type": "object", "required": ["groups"], "properties": {"groups": {"type": "array", "items": {
         "type": "object", "required": ["members", "kind"], "properties": {
             "members": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": list(lab)}},
@@ -571,7 +571,7 @@ def main():
         # held per CLUSTER so no chain of links can join them either (an equal set for "equal", a common
         # window for "overlap"); a merge that would break one is refused, whatever the evidence
         distinct = spec.get("distinct", {})
-        state = {}
+        state, refusals = {}, []
         for c in members:
             at = c.get("attributes") or {}
             st = {}
@@ -605,6 +605,7 @@ def main():
             k = clash(state[rx], state[ry])
             if k:
                 report[f"{spec['type']}: link by {why} refused, {k} disagrees"] += 1
+                refusals.append({"x": x["id"], "y": y["id"], "evidence": why, "distinct": k})
                 return
             a, b = state[rx], state[ry]
             for key, kind in distinct.items():
@@ -645,7 +646,18 @@ def main():
             for blk, cs in blocks.items():
                 for kind, part in partition(spec, blk, cs, ent, state, clash, a.cache, report):
                     key = ("adj", blk, min(c["id"] for c in part))
-                    groups[key], kind_of[key] = part, kind
+                    groups[key] = part
+                    if not spec.get("kind_from"):  # a declared member kind outranks the partition's guess
+                        kind_of[key] = kind
+        if spec.get("kind_from"):  # a declared member attribute names the composed kind, by its members' majority
+            for key, cs in groups.items():
+                if key not in kind_of:
+                    ks = collections.Counter((c.get("attributes") or {}).get(spec["kind_from"]) for c in cs)
+                    ks.pop(None, None)
+                    kind_of[key] = ks.most_common(1)[0][0] if ks else None
+                    report[f"{spec['type']}: kind by majority over mixed members"] += len(ks) > 1
+        a.out.mkdir(parents=True, exist_ok=True)
+        (a.out / f"refusals-{spec['type']}.json").write_text(json.dumps(refusals))
         der = next((d for d in facets.get("derive", []) if d["of"] == spec["type"]), None)
         for key, cs in groups.items():
             ctype = spec.get("route", {}).get(kind_of.get(key), spec["type"])

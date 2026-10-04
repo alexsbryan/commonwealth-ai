@@ -36,7 +36,11 @@ block = ["counterparty"]                 # a member's own value, else its docume
 # link: attributes whose agreement is EVIDENCE of one deal (discriminating). A low-cardinality attribute
 # (commodity) is a necessary condition only, so it sits in distinct, never here.
 link = ["deal_ref", "delivery_point", "period_start"]
-distinct = { commodity = "equal", period = "overlap" }   # two deals, never one: illegal to compose
+# distinct: what two mentions of one deal can never disagree on. Measured per refused link against gold
+# (2026-10-04): period never wrong; commodity wrong 10 / right 5 (a deal around a generation asset buys gas
+# and sells power: a deal's commodities are a set), kind wrong 2 / right 0 (a per-mention error, not a type).
+distinct = { period = "overlap" }
+kind_from = "kind"                       # a cluster's kind is its members' majority; route reads it
 anchor = "deal_ref"
 thread = "subject"                       # a shared document thread is linking evidence
 adjudicate = false                       # true: a block's timeline is partitioned by the model, held to the type by code (tune 0.59 vs rules 0.744, 2026-10-04: kinds misroute)

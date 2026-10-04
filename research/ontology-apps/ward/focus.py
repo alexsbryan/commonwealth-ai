@@ -181,7 +181,7 @@ def main():
         ans, cached = K.ask(a.cache, system, user, shape.schema(len(sents), labels), model=a.model)
         return mid, ans, cached, time.time() - t0, sents, label_id
 
-    def resolve(item, name, label_id, rep):
+    def resolve(item, name, label_id, rep, words):
         v = item.get(name)
         if v in label_id:
             return label_id[v]
@@ -194,12 +194,16 @@ def main():
             if len(ids) == 1:
                 rep[f"{name}: unlisted name resolved through the registry"] += 1
                 return next(iter(ids))
+            if not raw or f" {K.fold(raw)} " not in words:  # a party the message never names cannot be its party
+                rep[f"{name}: unlisted name not said in the message, refused"] += 1
+                return None
             rep[f"{name}: unlisted name kept raw"] += 1
-            return raw or None
+            return raw
         return None
     claims, t_start = [], time.time()
     with cf.ThreadPoolExecutor(a.workers) as ex:
         for mid, ans, cached, wall, sents, label_id in ex.map(one, sorted(msgs)):
+            words = f" {K.fold(' '.join(sents))} "
             report["answers replayed from cache" if cached else "answers asked"] += 1
             if not cached:
                 walls.append(wall)
@@ -210,7 +214,7 @@ def main():
                 for at in decl.get("attributes", []):
                     nm, sh = at["name"], shape.shape.get(at["name"], {})
                     if sh.get("kind") == "registry":
-                        attrs[nm] = resolve(it, nm, label_id, report)
+                        attrs[nm] = resolve(it, nm, label_id, report, words)
                     elif sh.get("kind") == "month_range":
                         for side in ("start", "end"):
                             v = it.get(f"{nm}_{side}")

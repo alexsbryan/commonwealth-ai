@@ -82,6 +82,7 @@ attributes = [
   { name = "period", type = "text", description = "the term as written, e.g. March 2001, Jan'02-Dec'03, five years" },
   { name = "price", type = "text", description = "the price as written, e.g. $4.12/MMBtu, NYMEX plus basis" },
   { name = "deal_ref", type = "text", description = "a deal number, RFP, term sheet or contract name the message gives" },
+  { name = "kind", type = "text", values = ["transaction", "master_agreement"], description = "transaction = a specific sale, purchase, supply arrangement or trade, including its term sheet, confirm or transaction agreement; master_agreement = an enabling contract (ISDA, GISB, EEI or another master agreement) under which trades are made, with no specific trade of its own" },
   { name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost", "none"], description = "where this message shows the deal standing: lead = an inquiry, RFP or interest received; proposal = an indication, price or offer sent; negotiating = terms, credit or contract drafts exchanged; won = confirmed, executed or awarded to the owner's company; lost = declined, awarded elsewhere or withdrawn; none = the message does not say" },
 ]
 

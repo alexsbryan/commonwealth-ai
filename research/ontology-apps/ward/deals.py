@@ -59,6 +59,24 @@ def bcubed(pairs):
     return {"P": round(P, 3), "R": round(R, 3), "F": round(2 * P * R / (P + R), 3) if P + R else 0.0, "n": len(lab)}
 
 
+def ceaf_e(pairs):
+    """Entity-level CEAF (phi4 = Dice of mention sets) over labelled members: a one-to-one alignment of gold
+    deals to composed atoms, so a split and a merge both cost; greedy on Dice, which equals the optimum
+    whenever no atom overlaps two gold deals by the same amount."""
+    if not pairs:
+        return None
+    gold, pred = collections.defaultdict(set), collections.defaultdict(set)
+    for m, gd, pc in pairs:
+        gold[gd].add(m); pred[pc].add(m)
+    sims = sorted(((2 * len(G & P) / (len(G) + len(P)), gk, pk) for gk, G in gold.items() for pk, P in pred.items() if G & P), key=lambda t: -t[0])
+    used_g, used_p, total = set(), set(), 0.0
+    for sim, gk, pk in sims:
+        if gk not in used_g and pk not in used_p:
+            used_g.add(gk); used_p.add(pk); total += sim
+    P, R = total / len(pred), total / len(gold)
+    return {"P": round(P, 3), "R": round(R, 3), "F": round(2 * P * R / (P + R), 3) if P + R else 0.0}
+
+
 def analyse(g, ent, claims, folders, member_kinds):
     resolves = resolver(g, ent)
     in_fold = lambda f: f.split("/", 1)[0] in folders  # noqa: E731
@@ -118,7 +136,7 @@ def analyse(g, ent, claims, folders, member_kinds):
             "stage": {"hit": sh, "n": len(gs), "recall": round(sh / len(gs), 3) if gs else None},
             "current_stage": {"hit": cur_ok, "n": cur_n},
             "deals_recall": round(sum(v == "matched" for v in outcome.values()) / len(gd), 3) if gd else None,
-            "deal_atoms": dict(atom_kind), "grouping": bcubed(pairs),
+            "deal_atoms": dict(atom_kind), "grouping": bcubed(pairs), "entities": ceaf_e(pairs),
             "per_deal": {k: v for k, v in sorted(outcome.items())}}
 
 
@@ -137,7 +155,7 @@ def main():
     out = {f: analyse(g, ent, claims, FOLDS[f], set(a.members.split(","))) for f in folds}
     for f, r in out.items():
         print(f"[{f}] deals {r['deals_recall']} of {r['gold_deals']}  outcomes {r['outcomes']}")
-        print(f"       deal atoms {r['deal_atoms']}  grouping {r['grouping']}")
+        print(f"       deal atoms {r['deal_atoms']}  grouping {r['grouping']}  entities {r['entities']}")
         print(f"       stage {r['stage']}  current stage {r['current_stage']}")
         if a.per_deal:
             for k, v in r["per_deal"].items():
