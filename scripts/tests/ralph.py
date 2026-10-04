@@ -549,6 +549,28 @@ class CampaignTests(unittest.TestCase):
             self.assertIn("no ready unit", result.reason)
             self.assertTrue((pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").exists())
 
+    def test_a_queue_whose_rows_are_all_done_is_done_not_halted(self):
+        # svrngs U1 and U2 (2026-10-04) each ended in "no ready unit", a
+        # NEEDS_HUMAN and a resolution session whose only act was writing DONE.
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = []
+            c = self.make(tmp, "- [x] dm-a abc1234 — depends []\n- [x] dm-b def5678 — depends [dm-a]\n",
+                          session_run=lambda *a: calls.append(a) or 0)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.DONE)
+            self.assertEqual(calls, [])
+            self.assertTrue((pathlib.Path(tmp) / "ralph/DONE").exists())
+            self.assertFalse((pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").exists())
+
+    def test_an_empty_queue_halts_rather_than_reads_as_done(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = self.make(tmp, "", session_run=lambda *a: 0)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertFalse((pathlib.Path(tmp) / "ralph/DONE").exists())
+
     def test_the_unit_note_names_the_queue_it_was_launched_on(self):
         with tempfile.TemporaryDirectory() as tmp:
             seen = []

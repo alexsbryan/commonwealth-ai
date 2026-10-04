@@ -1526,6 +1526,13 @@ class Campaign:
             unit = queue.current(parked)
             waiting = queue.awaiting_operator(parked)
             if unit is None:
+                # The queue's own state says it is finished, so the loop says so
+                # rather than halting for a session to write DONE. An empty queue
+                # is a wrong path, not a finished one, and still halts.
+                if queue.rows and queue.all_done():
+                    self.paths.p(self.paths.done).write_text("")
+                    say(f"DONE — every row in {self.paths.state} is [x]")
+                    return Result(Outcome.DONE, "every row is [x]")
                 if waiting:
                     return self.halt("operator approval required — every ready row waits "
                                      f"on the operator: {', '.join(waiting)}",
