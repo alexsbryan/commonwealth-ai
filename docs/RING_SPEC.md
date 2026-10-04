@@ -14,21 +14,21 @@
 
 ## Retirement list
 
-The strategy toward this repository is svrngs' `docs/DESIGN.md` D2b, "Toward
-commonwealth-ai" (operator, 2026-10-03). Ring code here is lifted by svrngs and
-then deleted, each item when the svrngs bar proving its replacement passes; the
-deleting commit names that bar and its measurement. Nothing here retires on a
-date or a promise.
+The strategy toward this repository is svrngs' `docs/DESIGN.md` §4, "The
+fork" (operator, 2026-10-03). Ring code here is forked by svrngs and then
+deleted, each item when the svrngs unit or demo replacing it passes (svrngs
+DESIGN §8); the deleting commit names it and its measurement. Nothing here
+retires on a date or a promise.
 
 | Retires | Replaced in svrngs by | When this svrngs bar passes |
 |---|---|---|
-| `commonwealth/crates/commonwealth-rails/src/ring_sync` and `ring_routes` — group membership, sync and routes | `svrngs-node` (E1.1, E1.4) | `converge`, `one-decider` |
-| `sovereign/crates/sovereign-cli-mesh/src/ring_cmd` | the `svrngs` command (E0.5, E1.2) | `host-setup` |
-| `sovereign/apps/ring-doc` | the Doc reference app (E2.6) | `live-doc` |
-| `sovereign/apps/ring-runtime` and `sovereign/crates/sovereign-contracts/src/guest_pages/ring_shim.js` | the svrngs app and SDK (E1.5, E3.1) | `phone-to-own-key` |
-| the ring shell in `sovereign-mobile` | svrngs `app/` (E1.5) | `phone-to-own-key` |
-| the ring use of `sovereign/crates/sovereign-cli-mesh/src/mesh_media` — lending a library to a group; its use within one owner's mesh stays | Films and the Jellyfin provider (E2.2) | `lent-service`, `credential-stays-home` |
-| the campaigns `ring-apps`, `ring-doc`, `ring-room` and `ring-guest` | svrngs-e0 onward | the svrngs demo replacing each demo: ring-room's film leg at movie night (E1.7), its doc leg at write it together (E2.6), its answer leg at your group's own AI (E2.3) |
+| `commonwealth/crates/commonwealth-rails/src/ring_sync` and `ring_routes` — group membership, sync and routes | `svrngs-node`, forked (U1) | U1: a node in the group but no mesh syncs; a node outside it is refused |
+| `sovereign/crates/sovereign-cli-mesh/src/ring_cmd` | the `svrngs` command (U2, U3) | Demo A, two computers, one group |
+| `sovereign/apps/ring-runtime` and `sovereign/crates/sovereign-contracts/src/guest_pages/ring_shim.js` | the browser runtime (U5) | Demo B, split the pizza |
+| `sovereign/apps/ring-doc` | the Doc reference app (live collaboration) | that class's demo |
+| the ring use of `sovereign/crates/sovereign-cli-mesh/src/mesh_media` — lending a library to a group; its use within one owner's mesh stays | Films, on Jellyfin (lent services) | that class's demo |
+| the ring shell in `sovereign-mobile` | svrngs' phone app (waiting in its DESIGN §9) | its trigger, then its demo |
+| the campaigns `ring-apps`, `ring-doc`, `ring-room` and `ring-guest` | svrngs' demos | the svrngs demo replacing each demo |
 
 **Stays — the mesh.** The rail the work plane folds over (`commonwealth-rail-core`,
 `commonwealth-rail`), the work plane and its donor loop, inference routing and
@@ -47,8 +47,8 @@ copies diverge freely. A fix to either is checked against svrngs'
 > **Superseded where svrngs' design differs; kept for status.** Every status below was
 > checked against HEAD `571a9896b` on 2026-10-02: **built** runs today,
 > **partial** runs with a named gap, **unbuilt** is not in code. Its register
-> (§3.1), deeds and keepers (§3.4) and seq cuts are replaced by svrngs' C1 and
-> D8; its units (§5) and bars (§6) are re-derived in svrngs' D7 and D9;
+> (§3.1), deeds and keepers (§3.4) and seq cuts are replaced by svrngs' DESIGN §6
+> and §9; its units (§5) and bars (§6) are re-derived in svrngs' §8;
 > rungs, primitives and existing bars stay in `quality/campaigns/ring-apps.toml`.
 
 ## 1. The model
@@ -296,7 +296,7 @@ the host a keeper; this section wins.
 
 ## 5. Units and 6. Bars
 
-Re-derived into svrngs' `docs/DESIGN.md` D7 and D9 on 2026-10-03, ordered as experiments. Where
+Re-derived on 2026-10-03 into svrngs' `docs/DESIGN.md`, whose §8 orders the work now; the E-numbers below are that design at svrngs tag `e0-bot`. Where
 the old units went: U14 and U15 → E0.1 and E0.4; U7 → E0.3, for Expenses only;
 U2 and U16 → E1.3; U26 → E1.3, where a key per group is the default; U4 and U5
 → E1.4; U21 → E1.5; U6 → E1.7; U8 → E3.1. Retired: U1 and U3, since cuts are
