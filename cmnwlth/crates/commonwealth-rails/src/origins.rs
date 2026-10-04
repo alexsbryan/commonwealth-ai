@@ -122,8 +122,9 @@ pub async fn renew(
     Path(claim_id): Path<String>,
     body: Option<Json<Renew>>,
 ) -> Response {
-    let (ttl_secs, claims, namespaces) =
-        body.map_or((None, None, None), |Json(b)| (b.ttl_secs, b.claims, b.namespaces));
+    let (ttl_secs, claims, namespaces) = body.map_or((None, None, None), |Json(b)| {
+        (b.ttl_secs, b.claims, b.namespaces)
+    });
     let ttl = crate::api::ttl_of(ttl_secs);
     match daemon
         .origins

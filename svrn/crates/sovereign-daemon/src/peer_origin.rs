@@ -323,6 +323,9 @@ mod tests {
             live_namespaces(&grants, &["expenses", "chores"], 1_000),
             vec!["chores", "expenses", "ring-doc"]
         );
-        assert!(live_namespaces(&grants, &[], 3_000).is_empty(), "all lapsed");
+        assert!(
+            live_namespaces(&grants, &[], 3_000).is_empty(),
+            "all lapsed"
+        );
     }
 }

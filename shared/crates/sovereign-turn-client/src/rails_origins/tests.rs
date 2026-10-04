@@ -58,9 +58,10 @@ async fn double() -> (String, Arc<Rails>) {
                     .unwrap()
                     .map(|c| c.loaded_models),
                 );
-                    r.namespaces.lock().unwrap().push(
-                        serde_json::from_value(body["namespaces"].clone()).unwrap(),
-                    );
+                    r.namespaces
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_value(body["namespaces"].clone()).unwrap());
                     if r.renewed.fetch_add(1, Ordering::SeqCst) == 0 {
                         (
                             StatusCode::NOT_FOUND,
@@ -260,7 +261,10 @@ async fn a_namespaces_source_is_declared_at_every_register_and_renew() {
     ));
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while rails.renewed.load(Ordering::SeqCst) < 2 {
-        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "never renewed twice"
+        );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     task.abort();
@@ -278,13 +282,25 @@ async fn a_namespaces_source_is_declared_at_every_register_and_renew() {
     ));
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while rails.renewed.load(Ordering::SeqCst) < 2 {
-        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "never renewed twice"
+        );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     task.abort();
-    let renews: Vec<_> = rails.namespaces.lock().unwrap().iter().skip(1).cloned().collect();
+    let renews: Vec<_> = rails
+        .namespaces
+        .lock()
+        .unwrap()
+        .iter()
+        .skip(1)
+        .cloned()
+        .collect();
     assert!(
-        renews.iter().all(|n| n.is_none() || n.as_deref() == Some(&[][..])),
+        renews
+            .iter()
+            .all(|n| n.is_none() || n.as_deref() == Some(&[][..])),
         "no source, no namespaces on any renew: {renews:?}"
     );
 }

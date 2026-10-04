@@ -204,9 +204,14 @@ pub async fn keep_registered_with(
                     None => None,
                 };
                 let held = namespaces.as_ref().map(|source| source());
-                if let Err(e) =
-                    renew_origin_declaring(&rails_base, id, ttl_secs, declared.as_ref(), held.as_deref())
-                        .await
+                if let Err(e) = renew_origin_declaring(
+                    &rails_base,
+                    id,
+                    ttl_secs,
+                    declared.as_ref(),
+                    held.as_deref(),
+                )
+                .await
                 {
                     info!(target: TRACE_TARGET, claim = %id, %slot, error = %e,
                           "the origin's renew was refused — registering again");
