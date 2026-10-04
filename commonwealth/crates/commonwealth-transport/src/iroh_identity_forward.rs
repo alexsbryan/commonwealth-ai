@@ -367,6 +367,56 @@ pub(crate) async fn read_head<R: AsyncBufReadExt + Unpin>(
     }
 }
 
+/// Forward ONE request already read into `head`: rewrite it with `headers`,
+/// write it, then copy its body by its framing. `Break` when this connection
+/// must carry no further request.
+///
+/// The one step both pumps run per request ([`pump_with_identity`] and
+/// `iroh_routed_forward::pump_routed`), so how a request is framed and
+/// rewritten has one implementation (ARCH principle 8).
+pub(crate) async fn forward_request<R, W>(
+    head: &[u8],
+    reader: &mut R,
+    writer: &mut W,
+    headers: &[(String, String)],
+) -> std::ops::ControlFlow<()>
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    use std::ops::ControlFlow::{Break, Continue};
+    let framing = body_framing(head);
+    let (out, stripped) = rewrite_head(head, headers);
+    if stripped > 0 {
+        tracing::info!(
+            target: "transport",
+            stripped,
+            "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
+        );
+    }
+    if writer.write_all(&out).await.is_err() {
+        return Break(());
+    }
+    match framing {
+        BodyFraming::None => Continue(()),
+        BodyFraming::Length(n) => {
+            let mut body = reader.take(n);
+            if tokio::io::copy(&mut body, writer).await.is_err() {
+                return Break(());
+            }
+            Continue(())
+        }
+        BodyFraming::Chunked => {
+            tracing::info!(
+                target: "transport",
+                "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
+            );
+            let _ = tokio::io::copy(reader, writer).await;
+            Break(())
+        }
+    }
+}
+
 /// Pump one accepted bi-stream to `tcp`, rewriting every request head on the
 /// way in and copying the responses on the way out untouched.
 pub async fn pump_with_identity(
@@ -396,34 +446,11 @@ pub async fn pump_with_identity(
                     break;
                 }
             }
-            let framing = body_framing(&buf);
-            let (head, stripped) = rewrite_head(&buf, &headers);
-            if stripped > 0 {
-                tracing::info!(
-                    target: "transport",
-                    stripped,
-                    "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
-                );
-            }
-            if tcp_w.write_all(&head).await.is_err() {
+            if forward_request(&buf, &mut reader, &mut tcp_w, &headers)
+                .await
+                .is_break()
+            {
                 break;
-            }
-            match framing {
-                BodyFraming::None => {}
-                BodyFraming::Length(n) => {
-                    let mut body = (&mut reader).take(n);
-                    if tokio::io::copy(&mut body, &mut tcp_w).await.is_err() {
-                        break;
-                    }
-                }
-                BodyFraming::Chunked => {
-                    tracing::info!(
-                        target: "transport",
-                        "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
-                    );
-                    let _ = tokio::io::copy(&mut reader, &mut tcp_w).await;
-                    break;
-                }
             }
         }
         let _ = tcp_w.shutdown().await;

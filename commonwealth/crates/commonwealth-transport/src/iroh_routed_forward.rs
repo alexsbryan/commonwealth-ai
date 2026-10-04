@@ -14,9 +14,9 @@
 
 use std::net::SocketAddr;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 
-use crate::iroh_identity_forward::{body_framing, read_head, rewrite_head, BodyFraming};
+use crate::iroh_identity_forward::{forward_request, read_head};
 
 /// Where a stream's request goes: the key it bound under (an app name, a
 /// prefix), the local origin, the head to send (a rule may rewrite the
@@ -136,34 +136,11 @@ pub async fn pump_routed(
     let up = async {
         let mut head = first_head;
         loop {
-            let framing = body_framing(&head);
-            let (out, stripped) = rewrite_head(&head, &all);
-            if stripped > 0 {
-                tracing::info!(
-                    target: "transport",
-                    stripped,
-                    "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
-                );
-            }
-            if tcp_w.write_all(&out).await.is_err() {
+            if forward_request(&head, &mut reader, &mut tcp_w, &all)
+                .await
+                .is_break()
+            {
                 break;
-            }
-            match framing {
-                BodyFraming::None => {}
-                BodyFraming::Length(n) => {
-                    let mut body = (&mut reader).take(n);
-                    if tokio::io::copy(&mut body, &mut tcp_w).await.is_err() {
-                        break;
-                    }
-                }
-                BodyFraming::Chunked => {
-                    tracing::info!(
-                        target: "transport",
-                        "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
-                    );
-                    let _ = tokio::io::copy(&mut reader, &mut tcp_w).await;
-                    break;
-                }
             }
             match read_head(&mut reader, &mut buf).await {
                 Ok(true) => {}
