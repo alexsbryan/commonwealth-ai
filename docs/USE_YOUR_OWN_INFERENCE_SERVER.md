@@ -120,7 +120,7 @@ retrieves — plain chat needs no embedding model.
 No local model? One command sets a node up on a hosted one:
 
 ```sh
-svrn setup --hosted deepseek < key.txt   # or openrouter --model <id>, or a /v1 URL
+svrn setup --hosted deepseek < key.txt   # or anthropic, openrouter --model <id>, or a /v1 URL
 svrn daemon
 ```
 
@@ -150,6 +150,12 @@ any loaded model, so a peer's turn can be served from it, on this node's key.
 OpenRouter needs `require_parameters`, or it may route a schema request to a
 backend that ignores the schema, and that loss is silent.
 
+**Anthropic ignores the schema field** on its OpenAI-compatible endpoint, so
+`svrn setup --hosted anthropic` writes `structured_output = "tool-use-forced"`
+and schemas go as a forced function call (see "Structured output" below). Use
+Claude Opus 5 or Sonnet 5 there: Opus 5.5 and Fable 5.1 refuse a forced
+function call.
+
 ```toml
 [engine]
 kind = "remote"
@@ -178,17 +184,22 @@ itself.
 **Structured output depends on your server now.** When Sovereign wants JSON
 matching a schema it sends it as the standard `response_format` field, so a
 server with guided decoding — vLLM and SGLang both have it — will enforce it as
-before. A server that ignores the field returns ordinary text, and you'll find
-out at the point something fails to parse rather than up front. Sovereign's own
-grammar constraints are a private extension and no third-party server implements
-them, so those become suggestions.
+before. A server that refuses the field with a 400 is asked once more with the
+schema as a forced function call, and is asked that way from then on. A server
+that ignores the field returns ordinary text, which nothing can learn from, so
+tell Sovereign up front: `structured_output = "tool-use-forced"` in `[engine]`
+sends every schema as a forced function call from the first request. Sovereign's
+own grammar constraints are a private extension and no third-party server
+implements them, so those become suggestions.
 
 **Reranking is off** unless you run a reranker yourself; Sovereign's is part of
 the built-in engine. Retrieval falls back to un-reranked results, which is a
 quality step down, not a failure.
 
-**`svrn status` reports no models resident**, because none are. Ask your own
-server what it's holding.
+**`svrn status` lists the remote models as resident**, the chat model and any
+`fast_model_id`, plus the embedding model when `embed_path` loads it here.
+Resident means this node can serve them, not that their weights are in its
+memory; ask your own server what it's holding.
 
 Sovereign won't paper over any of these. A feature that needs local weights
 reports itself unavailable rather than pretending it worked.
