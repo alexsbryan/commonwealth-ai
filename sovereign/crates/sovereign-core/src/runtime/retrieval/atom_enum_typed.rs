@@ -64,6 +64,8 @@ impl Runtime {
         let started = std::time::Instant::now();
         let mut parsed: Option<TypedQuery> = None;
         let mut attempts = 0u32;
+        // What the last attempt died of: a failed call is not an unparsed reply.
+        let mut failure = "the typed query did not parse";
         while parsed.is_none() && attempts < 2 {
             attempts += 1;
             let mut request = CompletionRequest::new(&format!(
@@ -83,22 +85,26 @@ impl Runtime {
                 Ok(r) => r.text,
                 Err(e) => {
                     tracing::info!(target: "retrieval_audit", event = "atom_enum_typed_call", attempt = attempts, error = %e, "typed query call failed");
+                    failure = "the typed query call failed";
                     continue;
                 }
             };
             match serde_json::from_str::<TypedQuery>(raw.trim()) {
                 Ok(q) => parsed = Some(q),
-                Err(e) => tracing::info!(
+                Err(e) => {
+                    failure = "the typed query did not parse";
+                    tracing::info!(
                     target: "retrieval_audit",
                     event = "atom_enum_typed_parse",
                     attempt = attempts,
                     error = %e,
                     raw = %truncate_with_ellipsis(&raw, 400),
                     "typed query did not parse"
-                ),
+                    );
+                }
             }
         }
-        let query = parsed.ok_or("the typed query did not parse")?;
+        let query = parsed.ok_or(failure)?;
         let result = graph
             .typed_answer(&query)
             .ok_or("no corpus in scope declared types")?;

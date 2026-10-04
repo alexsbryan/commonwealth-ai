@@ -1,0 +1,54 @@
+{
+  "schema": "ei7-arm-manifest/v1",
+  "identity": {
+    "arm": "bare",
+    "corpus": "ft-ans-dev-b",
+    "host": "http://localhost:9741",
+    "synth_model": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+    "judge_model": "Qwopus3.5-4B-v3-MTP-Q8_0",
+    "recipe_sha256": "27385ac0e645d1690c9f3d7466a8dc368e982f8fff6b76bc8a5154a4a46ee011",
+    "ontology_sha256": "af018b9d5a42218d687627d844add51746422d73d09ac34ada6993d57f3fc11c",
+    "chunks_listing_sha256": "7570bfb559bdfffd7e7495e74e4180efa8f57fea96169217b0fc3d2cf4cb601b"
+  },
+  "variant": "both",
+  "run": 1,
+  "env": {
+    "SOVEREIGN_ATLAS_GROUNDING": "0",
+    "SOVEREIGN_ATOM_ENUM": "0",
+    "SOVEREIGN_ATOM_ENUM_OVERVIEW": "0"
+  },
+  "argv": [
+    "/Users/alexsbryan/.local/bin/sovereign",
+    "eval",
+    "run",
+    "--bank",
+    "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/bank-k1-dev.toml",
+    "--synth",
+    "--isolate",
+    "--format",
+    "json",
+    "--output",
+    "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/runs-ft-k1dev/read1/bare/run-1/eval.json",
+    "--chat-model",
+    "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+  ],
+  "eval_exit": 0,
+  "daemon_refusals": {
+    "count": 0,
+    "sample": [],
+    "turn_errors": 0,
+    "turn_error_sample": []
+  },
+  "models_source": "http://localhost:9741/v1/models",
+  "verdict": null,
+  "never_ran_reasons": [],
+  "provenance": {
+    "commit": "0f27bb700fa3f28eaac48aac6208cb5c04b4cae0",
+    "dirty": true,
+    "started_at_unix": 1791073392,
+    "paths": {
+      "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/ft-ans-dev-b",
+      "recipe": "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/recipe-dev-b.toml"
+    }
+  }
+}

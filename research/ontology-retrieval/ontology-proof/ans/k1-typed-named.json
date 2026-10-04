@@ -1,0 +1,797 @@
+{
+ "summary": {
+  "variant": "named",
+  "rows": 18,
+  "parsed": 18,
+  "table_recall_facts": 0.0,
+  "table_recall_local": 0.0,
+  "strays": 0,
+  "nonempty_tables": 0
+ },
+ "rows": [
+  {
+   "id": "list-igch0076-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "eq",
+         "value": "Kyparissia",
+         "negate": false
+        },
+        {
+         "attribute": "buried",
+         "op": "lt",
+         "value": -327,
+         "negate": true
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 11.7,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0176-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Olympia",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1922,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 7.6,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0242-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Arcadia",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1929,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 8.1,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0260-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "contains",
+         "value": "Greece",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1936,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 22.1,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0270-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Olympia",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1939,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 21.1,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0410-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Paeonia",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1968,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 5.3,
+   "table": [],
+   "notes": [
+    "1 hoard atom(s) set aside: found unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0774-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Gîldau",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": -1960,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 4.4,
+   "table": [],
+   "notes": [
+    "1 hoard atom(s) set aside: found unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0866-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Anadol",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": -1895,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 8.8,
+   "table": [],
+   "notes": [
+    "1 hoard atom(s) set aside: found unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch0958-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Marasesti",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1909,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 7.5,
+   "table": [],
+   "notes": [
+    "1 hoard atom(s) set aside: found unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1436-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "eq",
+         "value": "Asia Minor",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": -1966,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 8.7,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1438-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "contains",
+         "value": "Asia Minor",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1964,
+         "negate": false
+        },
+        {
+         "attribute": "buried",
+         "op": "lt",
+         "value": -320,
+         "negate": true
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 8.5,
+   "table": [],
+   "notes": [
+    "4 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1444-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "contains",
+         "value": "Asia Minor",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": -1960,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 18.8,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1472-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Larnaca",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": -1870,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 27.4,
+   "table": [],
+   "notes": [
+    "1 hoard atom(s) set aside: found unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1516-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Aleppo",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": -1893,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 4.3,
+   "table": [],
+   "notes": [
+    "2 hoard atom(s) set aside: found unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1664-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "eq",
+         "value": "Demanhur",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": -1905,
+         "negate": false
+        },
+        {
+         "attribute": "buried",
+         "op": "contains",
+         "value": "-318",
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 5.7,
+   "table": [],
+   "notes": [],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1668-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "findspot",
+         "op": "contains",
+         "value": "Egypt",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1912,
+         "negate": false
+        },
+        {
+         "attribute": "buried",
+         "op": "lt",
+         "value": -309,
+         "negate": false
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 9.7,
+   "table": [],
+   "notes": [
+    "1 hoard atom(s) set aside: buried unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1670-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": "Kuft",
+      "negate": false,
+      "where": null
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 5.9,
+   "table": [],
+   "notes": [
+    "'Kuft' names no hoard atom in this atlas; the constraint is judged on that."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  },
+  {
+   "id": "list-igch1678-mints",
+   "query": {
+    "target_type": "mint",
+    "filters": [],
+    "relations": [
+     {
+      "relation": "holds_coins_of",
+      "other_type": "hoard",
+      "other_name": null,
+      "negate": false,
+      "where": {
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "contains",
+         "value": "Phacous",
+         "negate": false
+        },
+        {
+         "attribute": "found",
+         "op": "eq",
+         "value": 1956,
+         "negate": false
+        },
+        {
+         "attribute": "buried",
+         "op": "gt",
+         "value": -283,
+         "negate": true
+        }
+       ],
+       "relations": []
+      }
+     }
+    ],
+    "aggregate": "none",
+    "aggregate_over": null
+   },
+   "raw": null,
+   "attempts": 1,
+   "secs": 4.2,
+   "table": [],
+   "notes": [
+    "1 hoard atom(s) set aside: found unset or unreadable."
+   ],
+   "found": [],
+   "found_local": [],
+   "strays": []
+  }
+ ]
+}
