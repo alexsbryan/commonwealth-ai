@@ -50,6 +50,10 @@ and `watch` and run the printed `launchctl bootstrap`.
   WAITING, not a failure: the pool polls the named marker on its tick,
   respawns the lane when it lands, and escalates with a package after 48h
   (`LANE_MAX_WAIT_SECS`);
+- no wave starts under the 40GB disk floor on the lane root (`DISK_FLOOR_GB`);
+  under it the pool first deletes `target/debug` and `target/release` from
+  idle lanes, least recently built first — never a lane in the wave, never one
+  holding `ralph/waiting` — and waits only when that is not enough;
 - every poll tick writes `ralph/.heartbeat`; `watch` notifies when it goes
   stale, when a package sits unresolved, when the job is down without
   DONE/operator-STOP, or when disk drops below 5 GB;

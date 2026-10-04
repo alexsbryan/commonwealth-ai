@@ -3005,6 +3005,38 @@ class PoolQueueTests(unittest.TestCase):
                           f"under the {ralph.DISK_FLOOR_GB}GB disk floor", said)
             self.assertLess(said.index("disk floor"), said.index("lane start q-a"))
 
+    def test_the_disk_floor_reclaims_idle_lanes_build_output_before_it_waits(self):
+        # A floor with no remedy sat the ersilia pool idle for 66 ticks while
+        # two idle lanes held 15GB of build output (2026-10-04). Under the floor,
+        # the pool frees cargo output from lanes that cannot need it now — never
+        # a lane in the wave, never one holding ralph/waiting (its detached run
+        # may be executing those binaries) — and the rest of target/ stays.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            lanes = root / ".ralph" / "wt"
+            write(lanes, "q-idle/target/debug/big", "x")
+            write(lanes, "q-idle/target/release/big", "x")
+            write(lanes, "q-idle/target/ralph/evidence.log", "kept")
+            write(lanes, "q-wait/ralph/waiting", "ralph/never.done\n")
+            write(lanes, "q-wait/target/release/ersilia", "in use")
+            idle_debug = lanes / "q-idle/target/debug"
+            reads = []
+
+            def free():
+                reads.append(1)
+                return 80 if not idle_debug.exists() or len(reads) > 5 else 12
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd), disk_free_gb=free)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            said = out.getvalue()
+            self.assertFalse(idle_debug.exists())
+            self.assertFalse((lanes / "q-idle/target/release").exists())
+            self.assertTrue((lanes / "q-idle/target/ralph/evidence.log").exists())
+            self.assertTrue((lanes / "q-wait/target/release/ersilia").exists())
+            self.assertIn("reclaimed", said)
+            self.assertNotIn("not started", said)
+
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
         with contextlib.redirect_stdout(io.StringIO()):

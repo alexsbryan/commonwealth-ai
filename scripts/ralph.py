@@ -1845,7 +1845,9 @@ CARGO_JOBS_LIB = pathlib.Path(__file__).resolve().parent / "lib" / "cargo-jobs.s
 # target outgrows the clone it starts from (two ersilia r12 lanes reached 68G
 # each); waves started into a shrinking disk filled it, and every session, the
 # model probes (opencode's own database) and the supervisor's halt notice then
-# failed ENOSPC — the loop died without a word (2026-10-03).
+# failed ENOSPC — the loop died without a word (2026-10-03). Under it the pool
+# first reclaims idle lanes' build output (Pool._reclaim_disk), and waits only
+# when that is not enough.
 DISK_FLOOR_GB = 40
 # Where a lane reads its share: a file, because `toolbox run` forwards no env.
 LANE_JOBS_FILE = "target/ralph/lane.env"
@@ -2137,6 +2139,8 @@ class Pool:
                 continue
             free_gb = self.disk_free_gb()
             if free_gb < self.disk_floor_gb:
+                free_gb = self._reclaim_disk(wave, free_gb)
+            if free_gb < self.disk_floor_gb:
                 say(f"pool: wave {', '.join(wave)} not started — {free_gb}GB free on "
                     f"{self.lane_root}, under the {self.disk_floor_gb}GB disk floor")
                 self.sleep(60)
@@ -2238,6 +2242,37 @@ class Pool:
     # an empty target, 2026-10-02); its -c is the APFS clonefile(2) clone.
     CLONE_TARGET = (("cp", "-a", "-c") if sys.platform == "darwin"
                     else ("cp", "-a", "--reflink=always"))
+    # Cargo's output under a lane's target/: the next build regenerates it,
+    # unlike the rest of target/ (the lane's evidence, battery and field scratch).
+    RECLAIMABLE = ("debug", "release")
+
+    def _reclaim_disk(self, wave, free_gb):
+        """Under the disk floor, free cargo output from lanes that cannot need
+        it now, least recently built first, until the lane root is back over
+        the floor; return the free GB after. A lane in the wave about to start,
+        or holding ralph/waiting (its detached run may be executing those
+        binaries), is never touched. The floor alone sat the ersilia pool idle
+        for 66 ticks while two idle lanes held 15GB of it (2026-10-04)."""
+        if not self.lane_root.is_dir():
+            return free_gb
+        idle = []
+        for wt in self.lane_root.iterdir():
+            if not wt.is_dir() or wt.name in wave or (wt / self.paths.waiting).exists():
+                continue
+            dirs = [wt / "target" / d for d in self.RECLAIMABLE if (wt / "target" / d).is_dir()]
+            if dirs:
+                idle.append((max(d.stat().st_mtime for d in dirs), wt.name, dirs))
+        for _, unit, dirs in sorted(idle):
+            if free_gb >= self.disk_floor_gb:
+                break
+            for d in dirs:
+                err = remove_tree(d)
+                if err is not None:
+                    say(f"pool: lane {unit} target/{d.name} not reclaimed: {err}")
+            before, free_gb = free_gb, self.disk_free_gb()
+            say(f"pool: reclaimed {free_gb - before}GB of build output from idle lane {unit} "
+                f"({', '.join(f'target/{d.name}' for d in dirs)}) — it rebuilds when it next runs")
+        return free_gb
 
     def _provision_target(self, unit, wt):
         """A new lane's target/ is a clone of the main tree's, and every tracked
