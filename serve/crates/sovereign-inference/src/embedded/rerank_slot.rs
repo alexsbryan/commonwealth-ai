@@ -333,11 +333,7 @@ impl RerankSlot {
             .str_to_token(&suffix_str, AddBos::Never)
             .map_err(|e| Error::Inference(format!("tokenise rerank suffix: {e}")))?;
 
-        let compute_backend = if used_gpu {
-            gpu_backend_label()
-        } else {
-            embed_compute_backend_label()
-        };
+        let compute_backend = compute_backend_label(used_gpu);
         tracing::info!(
             slot = "rerank",
             model_id = %model_id,
@@ -737,60 +733,4 @@ pub(crate) fn llama_threads_for_host() -> usize {
         .map(|n| n.get())
         .unwrap_or(4);
     raw.clamp(2, 8)
-}
-
-/// Label emitted in slot-load logs when the GPU path wasn't taken
-/// (GPU context creation failed, or caller didn't request it).
-/// Tells the operator which CPU math backend GGML is using.
-pub(crate) fn embed_compute_backend_label() -> &'static str {
-    // On Apple Silicon, GGML's CPU backend links Accelerate's SGEMM
-    // — that's where real CPU-path throughput comes from. Other
-    // platforms fall back to plain llama.cpp CPU kernels.
-    #[cfg(target_os = "macos")]
-    {
-        "cpu+accelerate"
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        "cpu"
-    }
-}
-
-/// Label emitted in slot-load logs when `wants_gpu` succeeded.
-/// The specific backend (metal / rocm / vulkan) is still visible
-/// in the nearby `ggml_*_init` llama.cpp output at startup.
-pub(crate) fn gpu_backend_label() -> &'static str {
-    #[cfg(target_os = "macos")]
-    {
-        "gpu+metal"
-    }
-    // Windows backend is feature-selected (see sovereign-inference/Cargo.toml):
-    // the matrix builds CPU / vulkan / cuda variants, and those features ARE
-    // visible as rustc cfgs here, so the label can name the actual backend.
-    #[cfg(all(target_os = "windows", feature = "windows-cuda"))]
-    {
-        "gpu+cuda"
-    }
-    #[cfg(all(
-        target_os = "windows",
-        feature = "windows-vulkan",
-        not(feature = "windows-cuda")
-    ))]
-    {
-        "gpu+vulkan"
-    }
-    #[cfg(all(
-        target_os = "windows",
-        not(feature = "windows-vulkan"),
-        not(feature = "windows-cuda")
-    ))]
-    {
-        "cpu"
-    }
-    // Linux: vulkan is selected at the workspace level and not re-exposed as a
-    // cfg here, so we just say "gpu".
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    {
-        "gpu"
-    }
 }

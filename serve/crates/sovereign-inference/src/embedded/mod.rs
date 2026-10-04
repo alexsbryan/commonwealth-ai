@@ -17,6 +17,7 @@ mod grammar;
 pub(crate) mod idle_slot;
 /// What one slot's KV cache costs, from the gguf's own metadata.
 pub(crate) mod kv_budget;
+mod compute_backend;
 pub mod kv_ops;
 mod model_slot;
 mod prefix_state;
@@ -26,6 +27,7 @@ mod rpc_distribution;
 mod rpc_warm_cache;
 mod sampler;
 
+pub(crate) use compute_backend::*;
 pub use embed_only::*;
 pub use embed_slot::*;
 pub use engine::*;

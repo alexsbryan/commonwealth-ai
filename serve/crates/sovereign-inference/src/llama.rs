@@ -418,6 +418,32 @@ pub fn describe_model_load_failure(
     s
 }
 
+/// Local GPU devices ggml can see: GPU or integrated-GPU type, RPC workers
+/// excluded (the rule `live_device_list_if_pruning_needed` keeps). Zero means
+/// a context built "for GPU" runs on the CPU: llama.cpp falls back without an
+/// error (`ggml_vulkan: No devices found`), so asking is not evidence.
+pub fn local_gpu_device_count() -> usize {
+    use std::ffi::CStr;
+    let mut n = 0;
+    unsafe {
+        for i in 0..sys::ggml_backend_dev_count() {
+            let dev = sys::ggml_backend_dev_get(i);
+            if dev.is_null() {
+                continue;
+            }
+            let t = sys::ggml_backend_dev_type(dev);
+            if t != sys::GGML_BACKEND_DEVICE_TYPE_GPU && t != sys::GGML_BACKEND_DEVICE_TYPE_IGPU {
+                continue;
+            }
+            let reg_name = sys::ggml_backend_reg_name(sys::ggml_backend_dev_backend_reg(dev));
+            if reg_name.is_null() || CStr::from_ptr(reg_name).to_bytes() != b"RPC" {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
 pub fn list_llama_ggml_backend_devices() -> Vec<BackendDevice> {
     use std::ffi::CStr;
     let mut out = Vec::new();

@@ -268,11 +268,7 @@ impl EmbedSlot {
         // (which silently bakes the wrong embedding into chunks.lance
         // without any other signal).
         let runtime_pooling = format!("{:?}", ctx.pooling_type());
-        let compute_backend = if used_gpu {
-            gpu_backend_label()
-        } else {
-            embed_compute_backend_label()
-        };
+        let compute_backend = compute_backend_label(used_gpu);
         tracing::info!(
             dims = n_embd,
             layers = model.n_layer(),

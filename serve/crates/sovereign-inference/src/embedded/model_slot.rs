@@ -1998,11 +1998,7 @@ impl ModelSlot {
             }
         };
 
-        let compute_backend = if used_gpu {
-            gpu_backend_label()
-        } else {
-            embed_compute_backend_label()
-        };
+        let compute_backend = compute_backend_label(used_gpu);
 
         // Operator-gated control-vector steering (SOVEREIGN_CVEC*). No-op
         // unless configured. Applied here so both the SingleToken path and
