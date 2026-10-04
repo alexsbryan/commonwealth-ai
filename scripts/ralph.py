@@ -1688,7 +1688,7 @@ class Supervisor:
 
     def __init__(self, paths, *, run_inner, resolver_run, notifier=notify,
                  notify_enabled=True, resolve_max=4, state_path=None, max_parks=3,
-                 cooldowns=SUPERVISOR_COOLDOWNS, sleep=time.sleep):
+                 cooldowns=SUPERVISOR_COOLDOWNS, sleep=time.sleep, clock=time.monotonic):
         self.paths = paths
         self.run_inner = run_inner
         self.resolver_run = resolver_run
@@ -1702,6 +1702,7 @@ class Supervisor:
         self.cooldowns = tuple(cooldowns)
         self.cooldowns_without_progress = 0
         self.sleep = sleep
+        self.clock = clock
 
     def _queue(self):
         # A worker may be mid-write; the frequent checks tolerate that, the
@@ -1890,7 +1891,9 @@ class Supervisor:
                 stop_file.unlink(missing_ok=True)
             say(f"supervisor: dispatching resolution session {attempt} — {reason}")
             self.notifier("auto — resolving", f"attempt {attempt}: {reason}", self.notify_enabled)
+            started = self.clock()
             self.resolver_run(attempt, reason)
+            secs = self.clock() - started
             head_after = head_of(self.paths.workdir)
             if head_after and head_after != head_before:
                 self._record_director_range(head_before, head_after, attempt, reason)
@@ -1901,6 +1904,19 @@ class Supervisor:
                 return 0
             if pkg.exists() and pkg.stat().st_size:
                 if file_hash(pkg) == pkg_before and head_of(self.paths.workdir) == head_before:
+                    if secs < NEVER_RAN_SECS:
+                        # It never ran: parking on it would charge the row for a
+                        # provider's failure, so the attempt does not count.
+                        say(f"supervisor: resolution {attempt} ended in {int(secs)}s having "
+                            "changed nothing — it did not run; not counted, no park")
+                        attempt -= 1
+                        if self.cool_down(f"the resolver did not run ({int(secs)}s)"):
+                            continue
+                        say("supervisor: the resolver keeps failing to run — leaving it to "
+                            "the operator")
+                        self.notifier("OPERATOR — the resolver does not run", reason,
+                                      self.notify_enabled)
+                        return 2
                     if self.park(f"resolution {attempt} changed nothing") is not None:
                         attempt = 0
                         continue
@@ -1946,6 +1962,15 @@ DISK_FLOOR_GB = 40
 # of time mid-work, not into a wall: it continues without a strike, at most this
 # many times in a row before the strikes count again (12h at a 2h session cap).
 MAX_LANE_CONTINUATIONS = 6
+# A session that ends this fast having changed nothing did not run — a provider
+# error, a quota, a harness refusal — and its end is not the unit's failure:
+# 30-90s deaths struck ersilia lanes out, and 12 of 23 "changed nothing"
+# resolutions lasted two minutes or less (2026-09-17 → 10-04). Lanes get
+# MAX_NEVER_RAN such ends in a row before the strikes count, and a wave of them
+# backs the pool off before the next.
+NEVER_RAN_SECS = 120
+MAX_NEVER_RAN = 3
+NEVER_RAN_BACKOFF = 300
 # This file, as the pool re-execs onto it between waves (Pool._maybe_reexec).
 SELF = pathlib.Path(__file__).resolve()
 # Where a lane reads its share: a file, because `toolbox run` forwards no env.
@@ -2027,7 +2052,7 @@ class Pool:
                  disk_floor_gb=DISK_FLOOR_GB, disk_free_gb=None,
                  max_lane_continuations=MAX_LANE_CONTINUATIONS,
                  code_digest=None, compiles=None, reexec=None, argv=None,
-                 boot_time=None, committed=None):
+                 boot_time=None, committed=None, clock=time.monotonic):
         self.paths = paths
         self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
@@ -2048,6 +2073,9 @@ class Pool:
         self._lane_failures = {}
         self._lane_continuations = {}
         self._session_base = {}
+        self._session_secs = {}
+        self._never_ran = {}
+        self.clock = clock
         self._held = frozenset()
         self.jobs_share = jobs_share or cargo_jobs_share
         self._jobs = None
@@ -2577,8 +2605,10 @@ class Pool:
         if head.returncode == 0:
             self._session_base[unit] = head.stdout.strip()
         session = self.session_for(wt, env=env)
+        started = self.clock()
         session.run(model_args, note + self._prompt_text(),
                     str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
+        self._session_secs[unit] = self.clock() - started
 
     def _session_commits(self, unit, wt):
         """How many commits the lane's last session added to its branch (0 when
@@ -2720,6 +2750,7 @@ class Pool:
         say(f"pool: wave {', '.join(wave)}" + (f" · model {model}" if model else ""))
         with ThreadPoolExecutor(max_workers=len(wave)) as ex:
             list(ex.map(lambda unit: self.run_lane(unit, model), wave))
+        never_ran = []
         if self.paths.p(self.paths.stop).exists():
             say("pool: operator STOP — leaving the lanes unmerged (their worktrees resume)")
             return 0
@@ -2764,6 +2795,16 @@ class Pool:
                         f"{made} new commit(s) — continuing, no failure count "
                         f"({k}/{self.max_lane_continuations})")
                     continue
+                secs = self._session_secs.pop(unit, None)
+                quick = not made and secs is not None and secs < NEVER_RAN_SECS
+                r = self._never_ran.get(unit, 0) + 1 if quick else 0
+                self._never_ran[unit] = r
+                if quick and r <= MAX_NEVER_RAN:
+                    never_ran.append(unit)
+                    say(f"pool: lane {unit} ended in {int(secs)}s with nothing committed — "
+                        "the session did not run (a provider, quota or harness failure); "
+                        f"no failure count ({r}/{MAX_NEVER_RAN})")
+                    continue
                 # A lane that keeps ending without its marker would otherwise be
                 # re-run forever (2026-09-17: ~50 sessions over 2.5h on
                 # dm-daemon-api-edge). Bound it and hand the row to the director.
@@ -2781,6 +2822,8 @@ class Pool:
             self._lane_failures.pop(unit, None)
             self._lane_continuations.pop(unit, None)
             self._session_base.pop(unit, None)
+            self._session_secs.pop(unit, None)
+            self._never_ran.pop(unit, None)
             refused = self._renumber_decisions(unit, wt, branch)
             if refused is not None:
                 return self._halt(refused)
@@ -2815,7 +2858,11 @@ class Pool:
             self._remove_lane(unit, wt)
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")
-        if self._lane_failures:
+        if never_ran:
+            say(f"pool: {len(never_ran)} session(s) did not run — backing off "
+                f"{NEVER_RAN_BACKOFF // 60} min before the next wave")
+            self.sleep(NEVER_RAN_BACKOFF)
+        elif self._lane_failures:
             self.sleep(60)          # backoff between failed waves, never a hot loop
         return None
 

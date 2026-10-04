@@ -1612,14 +1612,17 @@ class AuditCadenceDemoTests(unittest.TestCase):
 
 class SupervisorTests(unittest.TestCase):
     # No cool-downs here: these pin the escalation each exit reaches once the
-    # cool-downs are spent (SupervisorCooldownTests covers the cool-downs).
+    # cool-downs are spent (SupervisorCooldownTests covers the cool-downs). The
+    # clock gives every resolver a real run's length: one that ends at once did
+    # not run (SupervisorResolverDidNotRunTests).
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2, cooldowns=(),
              sleep=lambda s: None):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
         paths = ralph.Paths(pathlib.Path(tmp))
         return ralph.Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
                                 notify_enabled=False, resolve_max=resolve_max,
-                                cooldowns=cooldowns, sleep=sleep)
+                                cooldowns=cooldowns, sleep=sleep,
+                                clock=itertools.count(0, 10 * ralph.NEVER_RAN_SECS).__next__)
 
     def test_done_returns_zero(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1864,7 +1867,8 @@ class SupervisorCooldownTests(unittest.TestCase):
         paths = ralph.Paths(pathlib.Path(tmp))
         return ralph.Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
                                 notify_enabled=False, resolve_max=2,
-                                cooldowns=cooldowns, sleep=self.slept.append)
+                                cooldowns=cooldowns, sleep=self.slept.append,
+                                clock=itertools.count(0, 10 * ralph.NEVER_RAN_SECS).__next__)
 
     def test_a_stop_that_names_no_row_cools_down_and_relaunches(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1936,15 +1940,12 @@ class SupervisorCooldownTests(unittest.TestCase):
             self.assertEqual(n["i"], 5)
 
 
-class SupervisorResolverDidNotRunTests(SupervisorCooldownTests):
+class SupervisorResolverDidNotRunTests(unittest.TestCase):
     """12 of the ersilia supervisor's 23 "changed nothing" escalations came from
     resolvers that lasted two minutes or less, 9 of them 30-32s: they never ran,
     yet each one counted, and parked or ended the night."""
 
-    test_a_stop_that_names_no_row_cools_down_and_relaunches = None
-    test_cool_downs_are_bounded_and_then_the_stop_stands = None
-    test_an_operator_stop_during_a_cool_down_is_honoured = None
-    test_a_unit_done_resets_the_cool_downs = None
+    make = SupervisorCooldownTests.make
 
     def test_a_resolver_that_ends_at_once_did_not_run_and_parks_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
