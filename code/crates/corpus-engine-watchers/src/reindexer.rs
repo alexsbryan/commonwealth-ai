@@ -894,8 +894,14 @@ async fn run_worker(ctx: WorkerCtx) {
                     // overlay merge on the next debounce flush. Absolute paths
                     // outside the repo root are ignored defensively.
                     for p in &evt.paths {
-                        if let Ok(rel) = p.strip_prefix(&entry.root) {
-                            changed_files.insert(rel.to_path_buf());
+                        match p.strip_prefix(&entry.root) {
+                            Ok(rel) => {
+                                changed_files.insert(rel.to_path_buf());
+                            }
+                            Err(_) => tracing::debug!(
+                                corpus = %entry.corpus_id, path = %p.display(), root = %entry.root.display(),
+                                "fs event outside the project root; not re-parsed"
+                            ),
                         }
                     }
                     pending_fs = true;
@@ -1365,11 +1371,33 @@ fn start_fs_watcher(
 ) -> notify::Result<RecommendedWatcher> {
     let root = root.to_path_buf();
     let filter = build_ignore_filter(&root, extra_ignores);
+    // FSEvents (macOS) reports resolved paths, so a root reached through a
+    // symlink (`/var` → `/private/var`, every temp dir) came back under its
+    // canonical form and missed the root it was registered under: the worker
+    // dropped every save. Rebase onto the registered root before anything
+    // matches on it. A no-op where the backend reports paths as watched.
+    let canonical = match std::fs::canonicalize(&root) {
+        Ok(c) => (c != root).then_some(c),
+        // `watch` below refuses the same root by name; this only says why
+        // nothing was rebased.
+        Err(e) => {
+            tracing::debug!(root = %root.display(), error = %e, "fs watcher: root does not resolve; event paths not rebased");
+            None
+        }
+    };
+    let registered = root.clone();
 
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-        let Ok(event) = res else {
+        let Ok(mut event) = res else {
             return;
         };
+        if let Some(canonical) = &canonical {
+            for p in &mut event.paths {
+                if let Ok(rel) = p.strip_prefix(canonical) {
+                    *p = registered.join(rel);
+                }
+            }
+        }
         // Only forward events we care about — Create/Modify/Remove
         // on source files. Access/Open/Close spam gets dropped at
         // the watcher seam so the worker's channel buffer lasts.
