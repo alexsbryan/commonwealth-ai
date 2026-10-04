@@ -938,7 +938,7 @@ own loopback origin; the key the QUIC handshake proved is the discriminator):
 | `cwth/app/0` | one of several named HTTP apps, chosen by first path segment; each app claim carries its publisher's allow list (svrn's `[iroh] app_allow`) | REFUSED |
 | `cwth/offer/0` | svrn's `[iroh] offer_origin`, for members inside `[iroh] offer_allow` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
 | `cwth/guest/0` | — | svrn's guest listener; it reads the bearer |
-| `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring` (members), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
+| `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring/sync` and `/internal/ring/live` (members; the checkpoint is local-only), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
 
 Federated media and named apps ride that surface: the holder declares an
 origin, the viewer asks cw-rails for a loopback bridge URL, and the acceptor
@@ -1310,8 +1310,8 @@ that registration's live tie as it believes its own acceptor's mark. Outbound (p
 and the `mesh-reach` leaf's `RailsTransport` is the `PeerTransport` that asks it, so a program that is not
 the mesh endpoint dials peers through this one. Since phase-b pb-rails-parity it runs the ring round itself
 (`commonwealth-rails/src/ring_sync.rs`, moved from sovereign-mesh; the daemon runs the same code over its
-rail port until the flip), woken by its append door, and serves `/internal/ring/{sync,live,checkpoint/{ns}}`
-to members under a standing `/internal/ring` prefix (`ring_routes.rs`) and `GET /v1/mesh/relay-candidates`
+rail port until the flip), woken by its append door, and serves `/internal/ring/{sync,live}` to members, each
+path registered by name, and `/internal/ring/checkpoint/{ns}` to local callers only (`ring_routes.rs`) and `GET /v1/mesh/relay-candidates`
 (address discovery, moved to `commonwealth-discovery::mesh_discovery`). It also runs the reachability
 watchdog (`iroh_watchdog.rs`, moved from sovereign-mesh) over its own endpoint, whose rebuild re-binds and
 swaps the endpoint, transport and acceptor as one (`self_heal.rs`); `/v1/mesh/status` carries

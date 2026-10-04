@@ -102,6 +102,28 @@ fn fresh(dir: &tempfile::TempDir) -> (Arc<RingRail>, Arc<LiveBuffer>) {
     )
 }
 
+/// The failing input: a request the acceptor stamped — here even one naming
+/// the ring's own member — asks for a ring's whole record. Freezing a copy is
+/// a local operator's act (sovereign-cli-base `rail_checkpoint`); a peer syncs
+/// by digest, so a peer's ask is refused, whoever the stamp names.
+#[tokio::test]
+async fn a_checkpoint_asked_through_the_acceptor_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rail, live) = fresh(&dir);
+    append_record(&rail, 12).await;
+    let addr = serve(rail, live).await;
+    let resp = reqwest::Client::new()
+        .get(format!("http://{addr}/internal/ring/checkpoint/{NS}"))
+        .header(PUBKEY_HEADER, commonwealth_rail::actor_of(&key()))
+        .send()
+        .await
+        .unwrap();
+    let status = resp.status().as_u16();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(status, 403, "{body}");
+    assert!(body.to_string().contains("local"), "{body}");
+}
+
 #[tokio::test]
 async fn a_checkpoint_of_a_live_namespace_has_the_v1_shape() {
     let dir = tempfile::tempdir().unwrap();
