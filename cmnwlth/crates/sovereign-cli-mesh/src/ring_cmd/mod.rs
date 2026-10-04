@@ -96,21 +96,19 @@ use show::run_show;
 
 // ── shared plumbing ──────────────────────────────────────────
 
-/// This node's ring journal for one namespace.
-///
-/// Opening one is free — [`RingJournal::open`] touches no disk — and it is
-/// how the CLI and the daemon stay on ONE path and ONE roster serialisation.
-/// Until cw-lift 1c this module joined `rings/<ns>/roster.json` itself and
-/// wrote it with its own `to_string_pretty`, which was a second answer to a
-/// question a ring cannot afford two answers to (ARCH §10.6). `sovereign_root()`
-/// IS the daemon's data dir, which is what makes the two agree.
-///
-/// It also gains the namespace check for free: the daemon refuses to open a
-/// namespace that is not a plain directory name, so a roster written under
-/// one was a file nothing would ever read.
+/// Where this node's ring journals live: cw-rails' data dir, by the decider
+/// both processes call. It was `sovereign_root()` after the handover moved
+/// the journals (rail_migration.rs), so `roster add` wrote a file cw-rails
+/// never read and its own read-back refused it.
+pub(crate) fn journal_root() -> std::path::PathBuf {
+    commonwealth_media::rails_data_dir()
+}
+
+/// This node's ring journal for one namespace: ONE path and ONE roster
+/// serialisation with cw-rails (ARCH §10.6). Opening touches no disk, and a
+/// namespace that is not a plain directory name is refused.
 fn ring_journal(namespace: &str) -> Result<commonwealth_rail::RingJournal, String> {
-    commonwealth_rail::RingJournal::open(&sovereign_cli_base::dirs::sovereign_root(), namespace)
-        .map_err(|e| e.to_string())
+    commonwealth_rail::RingJournal::open(&journal_root(), namespace).map_err(|e| e.to_string())
 }
 
 /// Refuse a namespace whose roster is DERIVED rather than written here.
@@ -455,8 +453,8 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
             } else {
                 eprintln!(
                     "\nWARNING: the daemon does not report this entry. The roster was written\n\
-                     to {} but the running daemon is reading a different one — check that it\n\
-                     was started against this data directory.",
+                     to {} but the cw-rails it dials reads another root — check cw-rails'\n\
+                     --data-dir against CW_RAILS_DIR here.",
                     path.display()
                 );
                 return 1;

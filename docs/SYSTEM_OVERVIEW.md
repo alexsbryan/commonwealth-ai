@@ -1110,7 +1110,10 @@ something" lets an app state a wrong total with full confidence.
 it never comes back" is not an expense rule, and it is the rule most easily
 got wrong. **`Introduce` is evidence, never admission**: an introduction
 arriving from a peer moves no roster row, and `svrn ring roster add` is still
-the only writer of a roster.
+the only writer of a roster. It writes under cw-rails' root
+(`commonwealth_media::rails_data_dir`, `$CW_RAILS_DIR`), where cw-rails reads
+it, through `ring_cmd::journal_root`, the root `svrn mesh offers --why` reads
+warrants from too.
 
 Replication is its own loop at a 60-second cadence, syncing by digest
 (`{actor → contiguous high-water mark}`, ~600 bytes regardless of history) —

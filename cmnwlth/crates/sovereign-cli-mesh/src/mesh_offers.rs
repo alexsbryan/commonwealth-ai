@@ -419,7 +419,7 @@ const NO_KEY: &str = "warrant unknown — this member gossips no key, so there i
 /// [`sovereign_cli_base::rail::roster_and_admission`], so the catalogue and
 /// the roster page cannot say different things about the same row.
 async fn warrants_for(neighbours: &[Neighbour]) -> Result<BTreeMap<String, String>, String> {
-    let root = sovereign_cli_base::dirs::sovereign_root();
+    let root = crate::ring_cmd::journal_root();
     let namespaces = commonwealth_rail::namespaces_in(&root).map_err(|e| e.to_string())?;
     let mut rings: Vec<(
         String,

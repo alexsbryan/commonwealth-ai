@@ -255,7 +255,7 @@ cannot add a key to the ring — including its own.
 M0 is dev-server only. There is no `ring deploy`, and `window.ring` is injected
 by `ring dev` rather than shipped in a bundle, so every member runs `ring dev`
 against their own daemon from their own copy of the folder. The roster is a
-per-node file (`~/.svrnmesh/rings/<ns>/roster.json`), not gossiped state — each
+per-node file (`~/.commonwealth-rails/rings/<ns>/roster.json`, under cw-rails' root), not gossiped state — each
 member adds the others locally. Journal ops themselves do sync, once a minute.
 
 Walkthrough: [HOUSE_EXPENSES.md](../../docs/HOUSE_EXPENSES.md). Authoring

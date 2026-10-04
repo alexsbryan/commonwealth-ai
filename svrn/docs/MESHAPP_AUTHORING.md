@@ -268,7 +268,7 @@ publish verb.** `svrn ring deploy` does not exist; `window.ring` is injected by
 `meshapp publish` comes up without it. Each member gets the folder the way
 they'd get any folder — a git remote, a USB stick, `scp` — and runs `svrn ring
 dev` against their own daemon. **The roster is a local file**
-(`~/.svrnmesh/rings/<ns>/roster.json`), written by `svrn ring roster add` and
+(`~/.commonwealth-rails/rings/<ns>/roster.json`, cw-rails' root), written by `svrn ring roster add` and
 never gossiped: every member adds every other member on their own machine, or
 the ops they receive land as "signed by a key no roster claims" gaps. And the
 rail is **loopback-only** — mounted on the operator and rail listeners, on
