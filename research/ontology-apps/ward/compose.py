@@ -175,7 +175,7 @@ def main():
             d = docs.get(c["_doc"], {})
             c["_date"], c["_thread"] = d.get("date"), d.get("thread")
             parties = sorted({pid for pid, e in ent.items() if e.get("entity_type") == "company" and not e.get("own")
-                              and c["_doc"] in proj.get("company", {}).get(e["attributes"].get("domain"), {}).get("docs", set())})
+                              and c["_doc"] in proj.get("company", {}).get((e.get("attributes") or {}).get("domain"), {}).get("docs", set())})
             attr = (c.get("attributes") or {}).get(spec["block"][0])
             own_attr = attr in own_ids
             if attr in keyed and not own_attr:
