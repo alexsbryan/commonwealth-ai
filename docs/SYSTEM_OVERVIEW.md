@@ -375,6 +375,11 @@ in: a `[[package]]` row's crates under the program's own directory, leaves
 under `shared/`, distributions under `distributions/`, clients under
 `clients/` and tooling under `quality/`. `cargo xtask boundary-gate` fails a
 member outside its row's directory, and a member no row claims.
+The test-only `quality/arch-layers/examples/agent_admission.rs` spike admits
+fixed-fixture dependency proposals only after behavior and package-boundary
+checks issue a receipt bound to the candidate and governing contract. Its
+adversarial integration suite is `quality/arch-layers/tests/agent_admission.rs`;
+the fixture README carries the controls and run commands. It adds no product API.
 `baselines/` holds machine-written ratchet baselines, regenerated only via
 `--update-baseline`, banked via `--tighten`. `cargo xtask quality` runs every
 fast local gate with one table carrying FOUR verdicts: passed / failed /
