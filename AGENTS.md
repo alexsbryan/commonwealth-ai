@@ -16,7 +16,7 @@ Three harnesses are configured in this repo — `.claude/`, `.pi/`, `.opencode/`
 | Boot block + notes injection | hooks in `.claude/settings.json` | `.pi/extensions/sovereign-hooks` | `.opencode/plugins/` (boot hook not wired) | `sh .claude/hooks/session-boot.sh` by hand |
 | Skills | `/comaintainer` | `/skill:comaintainer` | `skill({name: "comaintainer"})` | read `.claude/skills/<name>/SKILL.md` |
 | Worker pool | Agent tool | `pi-subagents` package | `task` tool (background needs `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=1`) | one session, no delegation |
-| Long jobs (>25 min) | launchd one-shot | launchd one-shot | launchd one-shot | launchd one-shot |
+| Long jobs (>25 min) | launchd one-shot | launchd one-shot | launchd one-shot | launchd one-shot, its plist bootstrapped from anywhere but `~/Library/LaunchAgents` (launchd re-runs everything there at each login) |
 
 All three read `.claude/skills/` directly: Claude Code natively, pi via the
 `skills` array in `.pi/settings.json`, opencode by scanning `.claude` for

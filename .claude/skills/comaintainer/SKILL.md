@@ -379,7 +379,9 @@ work:
   is an explicit plist with
   `KeepAlive=false` + `RunAtLoad=true` and a wrapper that exits 0 once
   its DONE marker exists; `scripts/run-if-stale.sh --write-oneshot
-  <lane>` writes it, never loads it.
+  <lane>` writes it, never loads it. The plist lives beside the run,
+  never in `~/Library/LaunchAgents`: launchd re-runs everything there at
+  each login, and `launchagent-guard.py` refuses one written there.
 - **Diagnose the LABEL space first:** `launchctl list | grep -iE
   'seat|nightly|svrn'`. A submitted job has no plist, so
   `ls ~/Library/LaunchAgents` says "nothing scheduled" while the job is

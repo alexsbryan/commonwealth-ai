@@ -39,6 +39,11 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/canon-actor-guard.py",
             "type": "command",
             "timeout": 5
+          },
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/launchagent-guard.py",
+            "type": "command",
+            "timeout": 5
           }
         ]
       },
