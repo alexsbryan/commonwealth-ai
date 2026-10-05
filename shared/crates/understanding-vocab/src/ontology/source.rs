@@ -87,8 +87,9 @@ pub struct MetadataSourceDecl {
     /// The type's `identity` attributes must be among them.
     #[serde(default)]
     pub attributes: BTreeMap<String, FieldReader>,
-    /// Identity values never projected (freemail domains), compared after
-    /// the identity fold.
+    /// Identity values never projected beyond the mailbox providers a
+    /// `domain` reading already skips (a regional ISP the bundled list
+    /// lacks), compared after the identity fold.
     #[serde(default)]
     pub exclude: Vec<String>,
     /// Declared `ref` attribute → the sourced type it links to, and the reader

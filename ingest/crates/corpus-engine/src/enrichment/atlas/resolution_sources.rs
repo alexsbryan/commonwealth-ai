@@ -14,6 +14,7 @@
 //! `merge_into_existing` folds each mention in.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::OnceLock;
 
 use mailparse::{MailAddr, SingleInfo};
 use serde_json::{Map, Value};
@@ -65,6 +66,10 @@ pub struct SourceTypeReport {
     pub projected: usize,
     /// Sightings skipped because `exclude` names their identity value.
     pub excluded: usize,
+    /// Sightings skipped because a `domain`-read identity value is a mailbox
+    /// provider's (the bundled `mailbox_providers` list, or a subdomain of a
+    /// listed domain): an address there names no organization.
+    pub providers: usize,
     /// Sightings with no identity value (a bare address read by `display_name`).
     pub without_identity: usize,
     /// Field → documents that do not carry it.
@@ -105,8 +110,8 @@ impl SourceReport {
                     .collect::<Vec<_>>();
                 format!(
                     "source {t} ← {}: {} atom(s) from {} document(s); {} model atom(s) merged \
-                     on {} ({} refused, {} named an atom); {} excluded, {} without identity, \
-                     {} unreadable field(s); absent: {}",
+                     on {} ({} refused, {} named an atom); {} excluded, {} at a mailbox provider, \
+                     {} without identity, {} unreadable field(s); absent: {}",
                     r.fields.join(", "),
                     r.projected,
                     self.documents,
@@ -115,6 +120,7 @@ impl SourceReport {
                     fold.refused.get(t).copied().unwrap_or(0),
                     fold.named.get(t).copied().unwrap_or(0),
                     r.excluded,
+                    r.providers,
                     r.without_identity,
                     r.unreadable,
                     if absent.is_empty() {
@@ -179,6 +185,7 @@ pub fn project_source_atoms(
             ty = %t.name,
             projected = report.projected,
             excluded = report.excluded,
+            providers = report.providers,
             unreadable = report.unreadable,
             "atlas/resolution sources: projected from document fields"
         );
@@ -319,6 +326,15 @@ fn project_type(
                     if folded.iter().any(|f| excluded.contains(f)) {
                         trace!(document = doc, field, key = ?folded, "atlas/resolution sources: excluded");
                         report.excluded += 1;
+                        continue;
+                    }
+                    // the raw domain, not the folded key: folding turns '.' and '-' alike into spaces
+                    if identity.iter().any(|(_, r)| {
+                        *r == FieldReader::Domain
+                            && read(*r).is_some_and(|d| is_mailbox_provider(&d))
+                    }) {
+                        trace!(document = doc, field, key = ?folded, "atlas/resolution sources: a mailbox provider's address names no organization");
+                        report.providers += 1;
                         continue;
                     }
                     let key = folded.join("\u{1f}");
@@ -497,6 +513,35 @@ fn read_item(reader: FieldReader, item: &Item, scalar: &str) -> Option<String> {
             .filter(|d| !d.is_empty()),
         FieldReader::DisplayName => item.name.clone(),
         FieldReader::Value => Some(scalar.to_string()),
+    }
+}
+
+/// Whether `domain` is a mailbox provider's: on the bundled `mailbox_providers`
+/// list, or a subdomain of a listed domain (`email.msn.com` is `msn.com`'s). The
+/// list is compiled in through the asset port, so its absence is a build defect.
+fn is_mailbox_provider(domain: &str) -> bool {
+    static LISTED: OnceLock<HashSet<&'static str>> = OnceLock::new();
+    let listed = LISTED.get_or_init(|| {
+        let bytes = crate::recipe_source::default_assets()
+            .bundled_asset("mailbox_providers")
+            .expect("the mailbox_providers asset is compiled in");
+        std::str::from_utf8(bytes)
+            .expect("mailbox_providers is UTF-8")
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect()
+    });
+    let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    let mut d = domain.as_str();
+    loop {
+        if listed.contains(d) {
+            return true;
+        }
+        match d.split_once('.') {
+            Some((_, rest)) if rest.contains('.') => d = rest,
+            _ => return false,
+        }
     }
 }
 

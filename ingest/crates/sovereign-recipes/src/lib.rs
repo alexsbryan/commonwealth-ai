@@ -100,6 +100,9 @@ pub const VITAL_ARTICLES_L3: &[u8] = include_bytes!("../wikipedia/data/vital_art
 pub const VITAL_ARTICLES_L4: &[u8] = include_bytes!("../wikipedia/data/vital_articles_l4.txt");
 pub const VITAL_ARTICLES_L5: &[u8] = include_bytes!("../wikipedia/data/vital_articles_l5.txt");
 
+/// Domains whose addresses name no organization (`_assets/build_mailbox_providers.py`).
+pub const MAILBOX_PROVIDERS: &[u8] = include_bytes!("../_assets/mailbox_providers.txt");
+
 #[cfg(test)]
 mod tests {
     use super::*;

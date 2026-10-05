@@ -985,7 +985,7 @@ Allowed values:
 |---|---|---|---|---|
 | `metadata` | `Vec<String>` | **yes** | — | The document metadata fields read, by the corpus's own names. |
 | `attributes` | `BTreeMap<String, FieldReader>` | no | type default | Declared attribute name → the reader that fills it from each field. The type's `identity` attributes must be among them. |
-| `exclude` | `Vec<String>` | no | type default | Identity values never projected (freemail domains), compared after the identity fold. |
+| `exclude` | `Vec<String>` | no | type default | Identity values never projected beyond the mailbox providers a `domain` reading already skips (a regional ISP the bundled list lacks), compared after the identity fold. |
 | `refs` | `BTreeMap<String, SourceRef>` | no | type default | Declared `ref` attribute → the sourced type it links to, and the reader whose value on the same mailbox is that type's identity value. Contact → Account: `employer = { of = "company", reader = "domain" }`. A value the target type excludes or never projects links nothing; a role, never an identity key (`ONTOLOGY_METHOD.md`). |
 
 ## `SourceRef`
@@ -1303,8 +1303,15 @@ extractor's. The atom counts the documents it was seen in (`document_count`).
 A model-extracted atom of the type carrying the same identity value merges
 into it (strict merge). The atom is named by its display name when one was
 read, else by the most salient model atom merged into it, else by its
-identity value, which stays an alias; `exclude` lists identity values
-never projected. A field a document lacks is counted; one that holds no
+identity value, which stays an alias. An identity value read by `domain`
+at a mailbox provider is never projected, since an address there names no
+organization: the bundled list
+(`ingest/crates/sovereign-recipes/_assets/mailbox_providers.txt`,
+free-email-domains at a pinned commit) or a subdomain of a listed domain
+(`email.msn.com`), counted apart as `providers`. A listed parent covers its
+subdomains, so `espn.go.com` is read as `go.com`'s. `exclude` lists further
+identity values never projected, a regional ISP the list lacks. A field a
+document lacks is counted; one that holds no
 address or a value no reader reads is recorded in `resolution_failures.json`.
 `file` and `metadata` are one or the other, and an unknown key or reader
 refuses at load. `refs` links a declared `ref` attribute to another sourced
@@ -1318,7 +1325,7 @@ name = "company"
 kind = "entity"
 attributes = [{ name = "domain", type = "text" }]
 identity = ["domain"]
-source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["aol.com"] }
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["pdq.net"] }
 
 [[enrichment.ontology.types]]
 name = "person"

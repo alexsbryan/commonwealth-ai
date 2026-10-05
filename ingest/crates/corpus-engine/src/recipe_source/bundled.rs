@@ -6,8 +6,8 @@
 use corpus_engine_recipes::{RECIPES, TEMPLATES};
 
 pub use corpus_engine_recipes::{
-    REGISTRY_TOML, VITAL_ARTICLES_L1, VITAL_ARTICLES_L2, VITAL_ARTICLES_L3, VITAL_ARTICLES_L4,
-    VITAL_ARTICLES_L5,
+    MAILBOX_PROVIDERS, REGISTRY_TOML, VITAL_ARTICLES_L1, VITAL_ARTICLES_L2, VITAL_ARTICLES_L3,
+    VITAL_ARTICLES_L4, VITAL_ARTICLES_L5,
 };
 
 use super::{AssetSource, RecipeSource};
@@ -49,6 +49,7 @@ const ASSETS: &[(&str, &[u8])] = {
         ("vital_articles_l3", data::VITAL_ARTICLES_L3),
         ("vital_articles_l4", data::VITAL_ARTICLES_L4),
         ("vital_articles_l5", data::VITAL_ARTICLES_L5),
+        ("mailbox_providers", data::MAILBOX_PROVIDERS),
     ]
 };
 

@@ -593,7 +593,11 @@ question the pipeline asks about a type is a method on the resolved
   declared `ref` attribute to another sourced type's atom by the identity value
   a reader reads on the same mailbox (Contact -> Account: `employer = { of =
   "company", reader = "domain" }`), linked after every type is projected;
-  attributes merge first-wins, so a model's raw name never displaces the link. **Both tension axes degrade by REPORTING, never by
+  attributes merge first-wins, so a model's raw name never displaces the link.
+  A `domain`-read identity value at a mailbox provider (the bundled
+  `mailbox_providers` asset, free-email-domains at a pinned commit, or a
+  subdomain of a listed domain) is never projected and is counted as
+  `providers`, so no recipe lists ISPs to keep a contact's account honest. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at

@@ -576,6 +576,48 @@ async fn a_ref_links_a_person_to_the_company_its_address_domain_keys_and_survive
     assert_eq!(attr(person("carol@freemail.example"), "works_at"), None);
 }
 
+/// With no `exclude` declared, an address at a mailbox provider names no
+/// company: `dan@hotmail.com` and `eve@email.msn.com` (a provider's subdomain)
+/// project none, and their people link to none. Read off the atoms, not only
+/// off the report the projection writes about itself.
+#[tokio::test]
+async fn an_address_at_a_mailbox_provider_names_no_company_with_no_exclude_declared() {
+    let policies = policies_of(&MAIL_REFS.replace(r#", exclude = ["freemail.example"]"#, ""));
+    let rows = vec![row(
+        1,
+        "m1",
+        serde_json::json!({ "sender": "Ann Lee <ann@acme.org>",
+            "recipients": "Dan <dan@hotmail.com>, eve@email.msn.com" }),
+    )];
+    let documents = SectionDocuments::from_chunk_rows([("sec_00001", &[1u64][..])], &rows);
+    let (projection, out) =
+        project_and_resolve(&policies, &documents, vec![section("sec_00001", vec![])]).await;
+    let companies = projection
+        .report
+        .types
+        .get("company")
+        .expect("company projected");
+    assert_eq!(
+        companies.providers, 2,
+        "dan's and eve's domains: {companies:?}"
+    );
+    assert_eq!(companies.excluded, 0, "nothing declared: {companies:?}");
+    let sites: Vec<&str> = of_type(&out, "company")
+        .into_iter()
+        .filter_map(|e| attr(e, "site"))
+        .collect();
+    assert_eq!(sites, ["acme.org"]);
+    let works_at = |mailbox: &str| {
+        of_type(&out, "person")
+            .into_iter()
+            .find(|e| attr(e, "mailbox") == Some(mailbox))
+            .and_then(|e| attr(e, "works_at"))
+    };
+    assert!(works_at("ann@acme.org").is_some());
+    assert_eq!(works_at("dan@hotmail.com"), None);
+    assert_eq!(works_at("eve@email.msn.com"), None);
+}
+
 #[test]
 fn validate_refuses_a_ref_on_a_non_ref_attribute_and_a_target_without_a_source() {
     let v = validate(&MAIL_REFS.replace(

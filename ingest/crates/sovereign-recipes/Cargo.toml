@@ -3,7 +3,7 @@ name = "corpus-engine-recipes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The bundled recipe definitions: every recipe.toml, the registry catalog, the ontology-v1 templates and the Vital-Articles lists, as static data."
+description = "The bundled recipe definitions: every recipe.toml, the registry catalog, the ontology-v1 templates, the Vital-Articles lists and the mailbox-provider list, as static data."
 
 # The DIRECTORY keeps its name; the PACKAGE may not be `sovereign-*`, because
 # `[[forbid]] corpus-engine* -> sovereign-*` in quality/ARCH_LAYERS.toml would
