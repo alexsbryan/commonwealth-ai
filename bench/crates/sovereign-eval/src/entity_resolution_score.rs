@@ -202,17 +202,230 @@ pub fn pairwise(predicted: &Clustering, gold: &Clustering) -> PairwiseOutcome {
     }
 }
 
-/// Convenience wrapper running both metrics.
+/// Precision / recall / F1 of an entity-level metric (CEAF-e, LEA).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct EntityOutcome {
+    pub precision: f64,
+    pub recall: f64,
+    pub f1: f64,
+}
+
+impl EntityOutcome {
+    fn of(precision: f64, recall: f64) -> Self {
+        let f1 = if precision + recall == 0.0 {
+            0.0
+        } else {
+            2.0 * precision * recall / (precision + recall)
+        };
+        Self {
+            precision,
+            recall,
+            f1,
+        }
+    }
+}
+
+/// Each side's clusters over the mentions both sides hold, as `b_cubed`
+/// scores them.
+fn aligned_clusters(
+    predicted: &Clustering,
+    gold: &Clustering,
+) -> (Vec<BTreeSet<String>>, Vec<BTreeSet<String>>) {
+    let mut p: BTreeMap<&String, BTreeSet<String>> = BTreeMap::new();
+    let mut g: BTreeMap<&String, BTreeSet<String>> = BTreeMap::new();
+    for (m, pc) in predicted {
+        if let Some(gc) = gold.get(m) {
+            p.entry(pc).or_default().insert(m.clone());
+            g.entry(gc).or_default().insert(m.clone());
+        }
+    }
+    (p.into_values().collect(), g.into_values().collect())
+}
+
+/// Entity-level CEAF (Luo 2005, φ4): the one-to-one alignment of predicted
+/// to gold entities maximising the summed Dice of their mention sets, so a
+/// split and a merge both cost. Precision divides by the predicted entity
+/// count, recall by the gold. The alignment is exact (Kuhn–Munkres), run per
+/// connected component of entities that share a mention — entities sharing
+/// none contribute nothing — so a greedy pick never decides a tie.
+pub fn ceaf_e(predicted: &Clustering, gold: &Clustering) -> EntityOutcome {
+    let (p, g) = aligned_clusters(predicted, gold);
+    if p.is_empty() {
+        return EntityOutcome::default();
+    }
+    let dice = |a: &BTreeSet<String>, b: &BTreeSet<String>| {
+        2.0 * a.intersection(b).count() as f64 / (a.len() + b.len()) as f64
+    };
+    let mut gold_of: BTreeMap<&String, usize> = BTreeMap::new();
+    for (j, c) in g.iter().enumerate() {
+        for m in c {
+            gold_of.insert(m, j);
+        }
+    }
+    // Components over the bipartite overlap graph: predicted i joins gold j
+    // when they share a mention.
+    let mut parent: Vec<usize> = (0..p.len() + g.len()).collect();
+    fn root(parent: &mut [usize], mut x: usize) -> usize {
+        while parent[x] != x {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        x
+    }
+    for (i, c) in p.iter().enumerate() {
+        for m in c {
+            let (a, b) = (
+                root(&mut parent, i),
+                root(&mut parent, p.len() + gold_of[m]),
+            );
+            parent[a] = b;
+        }
+    }
+    let mut components: BTreeMap<usize, (Vec<usize>, Vec<usize>)> = BTreeMap::new();
+    for i in 0..p.len() {
+        let r = root(&mut parent, i);
+        components.entry(r).or_default().0.push(i);
+    }
+    for j in 0..g.len() {
+        let r = root(&mut parent, p.len() + j);
+        components.entry(r).or_default().1.push(j);
+    }
+    let total: f64 = components
+        .values()
+        .filter(|(pi, gj)| !pi.is_empty() && !gj.is_empty())
+        .map(|(pi, gj)| {
+            let sims: Vec<Vec<f64>> = pi
+                .iter()
+                .map(|&i| gj.iter().map(|&j| dice(&p[i], &g[j])).collect())
+                .collect();
+            max_assignment(&sims)
+        })
+        .sum();
+    EntityOutcome::of(total / p.len() as f64, total / g.len() as f64)
+}
+
+/// The largest summed weight of a one-to-one assignment over a rectangular
+/// matrix of non-negative weights (Kuhn–Munkres with potentials, O(n³) on the
+/// padded square).
+fn max_assignment(w: &[Vec<f64>]) -> f64 {
+    let rows = w.len();
+    let cols = w.first().map_or(0, Vec::len);
+    let n = rows.max(cols);
+    if n == 0 {
+        return 0.0;
+    }
+    let top = w.iter().flatten().copied().fold(0.0_f64, f64::max);
+    // minimise cost = top - weight on the padded square (padding weighs 0)
+    let cost = |i: usize, j: usize| top - if i < rows && j < cols { w[i][j] } else { 0.0 };
+    let (mut u, mut v) = (vec![0.0; n + 1], vec![0.0; n + 1]);
+    let (mut matched, mut way) = (vec![0usize; n + 1], vec![0usize; n + 1]);
+    for i in 1..=n {
+        matched[0] = i;
+        let mut j0 = 0;
+        let mut minv = vec![f64::INFINITY; n + 1];
+        let mut used = vec![false; n + 1];
+        loop {
+            used[j0] = true;
+            let (i0, mut delta, mut j1) = (matched[j0], f64::INFINITY, 0);
+            for j in 1..=n {
+                if !used[j] {
+                    let cur = cost(i0 - 1, j - 1) - u[i0] - v[j];
+                    if cur < minv[j] {
+                        minv[j] = cur;
+                        way[j] = j0;
+                    }
+                    if minv[j] < delta {
+                        delta = minv[j];
+                        j1 = j;
+                    }
+                }
+            }
+            for j in 0..=n {
+                if used[j] {
+                    u[matched[j]] += delta;
+                    v[j] -= delta;
+                } else {
+                    minv[j] -= delta;
+                }
+            }
+            j0 = j1;
+            if matched[j0] == 0 {
+                break;
+            }
+        }
+        loop {
+            let j1 = way[j0];
+            matched[j0] = matched[j1];
+            j0 = j1;
+            if j0 == 0 {
+                break;
+            }
+        }
+    }
+    (1..=n)
+        .filter(|&j| matched[j] >= 1 && matched[j] <= rows && j <= cols)
+        .map(|j| w[matched[j] - 1][j - 1])
+        .sum()
+}
+
+/// LEA (Moosavi & Strube 2016): each entity weighted by its size, scored by
+/// the share of its coreference links the other side keeps. A singleton has
+/// one self-link, kept when the other side also holds it alone (the
+/// reference scorer's rule). Recall reads gold entities against predicted,
+/// precision the reverse.
+pub fn lea(predicted: &Clustering, gold: &Clustering) -> EntityOutcome {
+    let (p, g) = aligned_clusters(predicted, gold);
+    if p.is_empty() {
+        return EntityOutcome::default();
+    }
+    fn side(entities: &[BTreeSet<String>], other: &[BTreeSet<String>]) -> f64 {
+        let mut of: BTreeMap<&String, usize> = BTreeMap::new();
+        for (k, c) in other.iter().enumerate() {
+            for m in c {
+                of.insert(m, k);
+            }
+        }
+        let (mut num, mut den) = (0.0, 0.0);
+        for e in entities {
+            let members: Vec<&String> = e.iter().collect();
+            let kept = if members.len() == 1 {
+                f64::from(other[of[members[0]]].len() == 1)
+            } else {
+                let links = (members.len() * (members.len() - 1) / 2) as f64;
+                let mut common = 0usize;
+                for (i, a) in members.iter().enumerate() {
+                    common += members[i + 1..]
+                        .iter()
+                        .filter(|b| of[*a] == of[**b])
+                        .count();
+                }
+                common as f64 / links
+            };
+            num += members.len() as f64 * kept;
+            den += members.len() as f64;
+        }
+        num / den
+    }
+    EntityOutcome::of(side(&p, &g), side(&g, &p))
+}
+
+/// Every metric this module computes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityResolutionReport {
     pub b_cubed: B3Outcome,
     pub pairwise: PairwiseOutcome,
+    #[serde(default)]
+    pub ceaf_e: EntityOutcome,
+    #[serde(default)]
+    pub lea: EntityOutcome,
 }
 
 pub fn score(predicted: &Clustering, gold: &Clustering) -> EntityResolutionReport {
     EntityResolutionReport {
         b_cubed: b_cubed(predicted, gold),
         pairwise: pairwise(predicted, gold),
+        ceaf_e: ceaf_e(predicted, gold),
+        lea: lea(predicted, gold),
     }
 }
 
@@ -309,6 +522,86 @@ mod tests {
         let r = b_cubed(&Clustering::new(), &Clustering::new());
         assert_eq!(r.f1, 0.0);
         assert_eq!(r.n_aligned, 0);
+    }
+
+    /// Key {a,b,c} {d,e,f,g} against response {a,b} {c,d} {f,g} {e} — the
+    /// LEA paper's shape with every mention aligned. Values computed apart
+    /// from this code (brute-force alignment, the reference LEA rule).
+    #[test]
+    fn ceaf_e_and_lea_score_a_split_and_a_cross_link() {
+        let gold = clustering(&[
+            ("a", "K1"),
+            ("b", "K1"),
+            ("c", "K1"),
+            ("d", "K2"),
+            ("e", "K2"),
+            ("f", "K2"),
+            ("g", "K2"),
+        ]);
+        let predicted = clustering(&[
+            ("a", "R1"),
+            ("b", "R1"),
+            ("c", "R2"),
+            ("d", "R2"),
+            ("f", "R3"),
+            ("g", "R3"),
+            ("e", "R4"),
+        ]);
+        let c = ceaf_e(&predicted, &gold);
+        assert!(
+            (c.precision - 1.4666666666666668 / 4.0).abs() < 1e-9,
+            "{c:?}"
+        );
+        assert!((c.recall - 1.4666666666666668 / 2.0).abs() < 1e-9, "{c:?}");
+        let l = lea(&predicted, &gold);
+        assert!((l.precision - 4.0 / 7.0).abs() < 1e-9, "{l:?}");
+        assert!((l.recall - (1.0 + 4.0 / 6.0) / 7.0).abs() < 1e-9, "{l:?}");
+        let perfect = lea(&gold, &gold);
+        assert!((perfect.f1 - 1.0).abs() < 1e-9 && (ceaf_e(&gold, &gold).f1 - 1.0).abs() < 1e-9);
+    }
+
+    /// The assignment is exact: greedy takes 0.6 then 0.0 here, the optimum
+    /// is 0.55 + 0.5. And on small random matrices it equals brute force.
+    #[test]
+    fn max_assignment_is_the_optimum_not_the_greedy_pick() {
+        assert!((max_assignment(&[vec![0.6, 0.55], vec![0.5, 0.0]]) - 1.05).abs() < 1e-9);
+        fn brute(w: &[Vec<f64>], row: usize, used: &mut Vec<bool>) -> f64 {
+            if row == w.len() {
+                return 0.0;
+            }
+            let mut best = brute(w, row + 1, used); // row left unassigned
+            for j in 0..w[row].len() {
+                if !used[j] {
+                    used[j] = true;
+                    best = best.max(w[row][j] + brute(w, row + 1, used));
+                    used[j] = false;
+                }
+            }
+            best
+        }
+        let mut seed: u64 = 0x2545_f491_4f6c_dd1d;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % 1000) as f64 / 1000.0
+        };
+        for case in 0..300 {
+            let (rows, cols) = (1 + case % 5, 1 + (case / 5) % 5);
+            let w: Vec<Vec<f64>> = (0..rows)
+                .map(|_| {
+                    (0..cols)
+                        .map(|_| if next() < 0.3 { 0.0 } else { next() })
+                        .collect()
+                })
+                .collect();
+            let want = brute(&w, 0, &mut vec![false; cols]);
+            let got = max_assignment(&w);
+            assert!(
+                (want - got).abs() < 1e-9,
+                "case {case}: {w:?} brute {want} got {got}"
+            );
+        }
     }
 
     #[test]
