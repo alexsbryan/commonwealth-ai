@@ -83,3 +83,24 @@ Tuning reads tune only. Read is opened once, at the gate.
 - **Yield**: typed atoms per declared type.
 
 Scored by `sovereign-eval`'s entity-resolution scorer, extended rather than re-written.
+
+## v1.1 — conventions the labellers converged on (2026-10-04)
+
+The spec did not say these; all three batches decided them the same way, and a re-label follows them.
+
+- **Labels.** A maintainer's `bug`, `help wanted` or `good first issue` label is `confirmed`; `wontfix`
+  is `declined`; `enhancement` alone is no state.
+- **Bare "closed".** The thread decides it, through `state_reason` and the comments around it. A
+  reporter's withdrawal is `declined` (marked uncertain), and a close that follows a fix is
+  `resolved`. A close reversed within minutes has no state.
+- **Merged PRs.** A merged PR is `resolved` only when it does what the case asks. A partial step is
+  `in_progress`.
+- **"Closed in favour of #N".** This joins the case exactly like a duplicate, even without the label.
+  A redirect to several issues makes the document a member of each.
+- **Commits in any fork** (not only zaniebot/uv), and cross-references whose title is unrelated, belong
+  to no case.
+- **Maintainer-filed issues.** Their first description is still `reported`.
+
+Joining: `merge_gold.py` applies the six cross-batch joins the labellers found, each with the
+maintainer's words. It then closes folds over threads: three threads moved so that no case spans
+both folds.
