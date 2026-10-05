@@ -535,9 +535,21 @@ async fn a_ref_links_a_person_to_the_company_its_address_domain_keys_and_survive
         )],
     )];
     let (projection, out) = project_and_resolve(&policies, &mailbox(), sections).await;
-    let report = projection.report.types.get("person").expect("person projected");
-    assert_eq!(report.refs_linked.get("works_at"), Some(&2), "ann and bob link: {report:?}");
-    assert_eq!(report.refs_unlinked.get("works_at"), Some(&1), "carol's freemail links nothing: {report:?}");
+    let report = projection
+        .report
+        .types
+        .get("person")
+        .expect("person projected");
+    assert_eq!(
+        report.refs_linked.get("works_at"),
+        Some(&2),
+        "ann and bob link: {report:?}"
+    );
+    assert_eq!(
+        report.refs_unlinked.get("works_at"),
+        Some(&1),
+        "carol's freemail links nothing: {report:?}"
+    );
 
     let company = |site: &str| {
         of_type(&out, "company")
@@ -553,8 +565,14 @@ async fn a_ref_links_a_person_to_the_company_its_address_domain_keys_and_survive
             .expect("person projected")
     };
     // the model's raw name does not displace the linked id: attributes merge first-wins
-    assert_eq!(attr(person("ann@acme.org"), "works_at"), Some(company("acme.org").as_str()));
-    assert_eq!(attr(person("bob@beta.com"), "works_at"), Some(company("beta.com").as_str()));
+    assert_eq!(
+        attr(person("ann@acme.org"), "works_at"),
+        Some(company("acme.org").as_str())
+    );
+    assert_eq!(
+        attr(person("bob@beta.com"), "works_at"),
+        Some(company("beta.com").as_str())
+    );
     assert_eq!(attr(person("carol@freemail.example"), "works_at"), None);
 }
 
@@ -565,7 +583,9 @@ fn validate_refuses_a_ref_on_a_non_ref_attribute_and_a_target_without_a_source()
         r#"{ name = "works_at", type = "text" }"#,
     ));
     assert!(
-        v.errors.iter().any(|e| e.contains("ref `works_at` is not a declared `ref` attribute of `person`")),
+        v.errors
+            .iter()
+            .any(|e| e.contains("ref `works_at` is not a declared `ref` attribute of `person`")),
         "{:?}",
         v.errors
     );
@@ -577,7 +597,9 @@ fn validate_refuses_a_ref_on_a_non_ref_attribute_and_a_target_without_a_source()
         "",
     ));
     assert!(
-        v.errors.iter().any(|e| e.contains("links to `company`, which must declare a metadata source")),
+        v.errors
+            .iter()
+            .any(|e| e.contains("links to `company`, which must declare a metadata source")),
         "{:?}",
         v.errors
     );
@@ -585,6 +607,9 @@ fn validate_refuses_a_ref_on_a_non_ref_attribute_and_a_target_without_a_source()
 
 #[test]
 fn an_unknown_key_in_a_ref_is_refused_at_load() {
-    let err = load_err(&MAIL_REFS.replace(r#"reader = "domain" }"#, r#"reader = "domain", via = "x" }"#));
+    let err = load_err(&MAIL_REFS.replace(
+        r#"reader = "domain" }"#,
+        r#"reader = "domain", via = "x" }"#,
+    ));
     assert!(err.contains("via"), "{err}");
 }

@@ -189,11 +189,15 @@ pub fn project_source_atoms(
     for (i, ty, attr, of, vals) in pending {
         let mut ranked = vals;
         ranked.sort_by(|a, b| b.1.cmp(&a.1));
-        let hit = ranked.iter().find_map(|(v, _)| keyed.get(&(of.clone(), v.clone())));
+        let hit = ranked
+            .iter()
+            .find_map(|(v, _)| keyed.get(&(of.clone(), v.clone())));
         let report = out.report.types.entry(ty).or_default();
         match hit {
             Some(id) => {
-                out.atoms[i].attributes.insert(attr.clone(), Value::String(id.as_str().to_string()));
+                out.atoms[i]
+                    .attributes
+                    .insert(attr.clone(), Value::String(id.as_str().to_string()));
                 *report.refs_linked.entry(attr).or_default() += 1;
             }
             None => {

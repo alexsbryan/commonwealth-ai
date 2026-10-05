@@ -113,7 +113,8 @@ pub struct SourceRef {
 impl MetadataSourceDecl {
     /// Whether any declared reader (attribute or ref) parses address lists.
     pub fn reads_addresses(&self) -> bool {
-        self.attributes.values().any(|r| r.reads_addresses()) || self.refs.values().any(|r| r.reader.reads_addresses())
+        self.attributes.values().any(|r| r.reads_addresses())
+            || self.refs.values().any(|r| r.reader.reads_addresses())
     }
 
     /// The reader filling each identity key, or why the declaration cannot

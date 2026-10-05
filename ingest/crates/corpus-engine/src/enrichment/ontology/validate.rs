@@ -207,8 +207,14 @@ fn check_sources(p: &OntologyPolicies, errors: &mut Vec<String>) {
                     "ref `{attr}` links to `{}`, but the attribute is declared `ref` of `{of}`",
                     r.of
                 ))),
-                Some(_) => errors.push(at(format!("ref `{attr}` is not a declared `ref` attribute of `{}`", t.name))),
-                None => errors.push(at(format!("ref `{attr}` is not a declared attribute of `{}`", t.name))),
+                Some(_) => errors.push(at(format!(
+                    "ref `{attr}` is not a declared `ref` attribute of `{}`",
+                    t.name
+                ))),
+                None => errors.push(at(format!(
+                    "ref `{attr}` is not a declared attribute of `{}`",
+                    t.name
+                ))),
             }
             let target = p.shape.types.iter().find(|x| x.name == r.of);
             match target.map(|x| (&x.source, index.effective_identity(&x.name).len())) {
