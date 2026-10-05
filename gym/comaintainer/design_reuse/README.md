@@ -54,7 +54,7 @@ named surface can actually serve the task is semantic and stays a
 refereed question; the oracle's `why_acceptable` / rejected baits are the
 reference material for that pass.
 
-## First pass — 2026-10-05 (dev cases only, n=3)
+## Registered dev run — 2026-10-05 (8 dev cases × 3 conditions)
 
 Engine: `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`. The seat pin
 (`Qwen3.8-27B-UD-Q6_K_XL`) is no longer advertised by this node; the
@@ -62,27 +62,51 @@ substitution is named in each run's `meta.json`, and these numbers are
 **not comparable** to the committed comaintainer pedigree (ENGINE_OF_RECORD
 Darwin-36B; the README there says the pedigree does not transfer).
 
-| condition | parsed | disposition | home | path | new_comp | evidence |
+24/24 parsed. Two independent full passes produced **byte-identical raw
+completions on all 24 cells**, so the deltas below are exact at n=8 —
+sampling variance is in the bank, not the instrument, on this engine.
+
+| condition | parsed | disposition | home | path | declared new_comp | evidence |
 |---|---|---|---|---|---|---|
-| A | 3/3 | 0/3 | 0/3 | 0/3 | 1 | — |
-| B | 3/3 | 1/3 | 1/3 | 1/3 | 0 | — |
-| C | 3/3 | 0/3 | 2/3 | 1/3 | 0 | 3/3 |
+| A | 8/8 | 1 | 0 | 0 | 3 | — |
+| B | 8/8 | 4 | 3 | 4 | 0 | — |
+| C | 8/8 | 2 | 5 | 2 | 4 | 8/8 |
 
-What the n=3 says and does not: the dossier visibly moved retrieval
-(home/path 0→1, and C 2/3), but the recurring miss is the **decision
-after retrieval** — given an excerpt that already describes name-free
-shape matching, the model still proposed extending the detector; given
-`IndexSource` as the safe seam, it chose the concrete `CorpusEngine` and
-kept the very dependency the task removes. That is the swept-then-invent
-failure in miniature. n=3 cannot rank conditions; that is the next run.
+Against the pre-registered expectations:
 
-Two instrument defects were found by the first pass and fixed before
-re-running: (1) selection metrics counted surfaces merely mentioned in
-evidence — a rejected alternative read as "found" until home/path were
-narrowed to the choice fields (the run rescored with zero model calls);
-(2) C's evidence grounding was a prose contract the model satisfied 0/3 —
-enumerating the ids in the schema made it 3/3. Both fixes are the lane's
-own thesis applied to itself.
+1. **MET** — `home(B) 3 > home(A) 0`; the dossier also lifts path 0→4 and
+   disposition 1→4. Retrieval-by-dossier is the lever that moves the design.
+2. **FAILED** — `disposition(C) 2 < 4 = disposition(B)`. Grounding is now
+   structural (8/8) and C has the best home rate (5/8), but the grounded
+   protocol chose a *worse* disposition than the plain dossier. The lexical
+   bait detector fired **0 times anywhere** — uninformative on this run,
+   never a pass.
+3. **INVALID AS REGISTERED** — declared new components are not comparable
+   across conditions: C's interface requires enumeration while A/B permit
+   silence, so B's 0 is a floor by omission, not evidence of abstention.
+   C declared new types/methods in 2 of 8 cases (desktop: an
+   `EnrichmentIntegrityReport` type plus `CorpusEngine::check_integrity`;
+   session-ontology: two `ClaimSketch` fields plus a `Decidability` enum).
+   A v2 needs a uniform enumeration field, or referee adjudication of the
+   deltas, before this axis can be compared at all.
+4. **CONFIRMED** — of C's 5 home hits, 4 still chose a wrong disposition,
+   and two misstate the named surface's own capability: sep claims
+   `AtlasCorpusSummary` lacks per-type counts its excerpt shows, and
+   core-read picks the concrete `CorpusEngine` over the seam the task
+   removes. The residual failure is comprehension and decision *after*
+   retrieval, not retrieval.
+
+Reading: the dossier moves the design; the extension-map protocol as
+currently worded buys grounding (8/8, and the smoke run's prose contract
+satisfied 0/3) and the best surface rate, but it did not improve — and
+sometimes loosened — the disposition choice (core-read B EXTEND → C USE;
+sep B USE → C EXTEND). The next iteration is protocol wording and
+interface, not more retrieval. History: the n=3 smoke run also exposed
+two instrument defects, both fixed before this run — selection metrics
+counted surfaces merely mentioned in evidence (a rejected alternative
+read as "found"), and C's evidence grounding was a prose request the model
+ignored; narrowing the metrics to the choice fields and enumerating the
+ids in the schema are the lane's own thesis applied to itself.
 
 ## Pre-registered directional expectations for the next run
 
@@ -95,8 +119,9 @@ Registered 2026-10-05, before any holdout use:
    invention proxy falls as grounding tightens.
 4. Failures that survive C name a surface from the dossier and still
    choose the wrong disposition or the wrong owner — i.e. decision, not
-   retrieval. The first pass already shows this shape at n=3; the
-   registered run needs n>=8 dev cases per condition.
+   retrieval. The first pass already showed this shape at n=3; the
+   registered run needs n>=8 dev cases per condition. **Run completed
+   2026-10-05 — verdicts in the section above; expectation 4 confirmed.**
 
 A kill: if B and C are indistinguishable from A on home and disposition,
 the dossier/protocol buys nothing and the lane stops before any training
