@@ -19,7 +19,11 @@ tail -f ralph/log.txt
 One process, one append-only log; the agent's output streams into it live. Stop
 with `touch ralph/STOP` — an EMPTY file is the operator's; a halt writes its
 reason into it. For a detached Mac job, add `--install-launchd` to `supervise`
-and `watch` and run the printed `launchctl bootstrap`.
+and `watch`: each writes a plist to `~/.config/ralph/jobs/`, never to
+`~/Library/LaunchAgents`. Start the loop with `python3 scripts/ralph.py start
+--label <label>` and the watchdog with `launchctl bootstrap gui/$(id -u)
+~/.config/ralph/jobs/dev.ralphwatch.<repo>-<label>.plist`. Neither comes back
+after a logout or reboot (as on Linux); start them again.
 
 ## The model
 

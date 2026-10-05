@@ -133,6 +133,11 @@ class Host:
 
 
 class MacHost(Host):
+    """launchd, with the plist loaded by path from ralph's jobs dir. Never from
+    ~/Library/LaunchAgents: launchd re-runs everything there at each login, so a
+    job written there outlived its queue and every finished loop came back at
+    boot (2026-10-05). Bootstrapped by path, a job runs until it exits or the
+    login session ends, as LinuxHost's transient unit does until a reboot."""
     notifier = "/usr/bin/osascript"
     job_tools = ("launchctl",)
 
@@ -143,7 +148,31 @@ class MacHost(Host):
         return f"gui/{os.getuid()}" + (f"/{name}" if name else "")
 
     def job_file(self, name):
-        return self.home / "Library" / "LaunchAgents" / f"{name}.plist"
+        return self.home / ".config" / "ralph" / "jobs" / f"{name}.plist"
+
+    def require_jobs(self):
+        super().require_jobs()
+        self._adopt_login_agents()
+
+    def _adopt_login_agents(self):
+        """Move the plists ralph wrote into ~/Library/LaunchAgents before
+        2026-10-05 into the jobs dir. A loaded job keeps running and `start`
+        still finds its file; only the next login stops running it."""
+        agents = self.home / "Library" / "LaunchAgents"
+        for legacy in sorted(agents.glob("dev.ralph*.plist")):
+            dest = self.job_file(legacy.stem)
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.exists():
+                    legacy.unlink()
+                    say(f"jobs: removed the login-agent copy of {legacy.stem}; {dest} is the job")
+                else:
+                    legacy.replace(dest)
+                    say(f"jobs: moved {legacy.stem} out of ~/Library/LaunchAgents to {dest}; "
+                        f"it no longer runs at login")
+            except OSError as e:
+                say(f"jobs: could not move {legacy} out of ~/Library/LaunchAgents ({e}); "
+                    f"it will run again at the next login")
 
     def _job_running(self, name):
         r = self._run(["launchctl", "print", self._domain(name)], capture_output=True, text=True)

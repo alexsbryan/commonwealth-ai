@@ -24,7 +24,9 @@ high] --label domains` writes it and restarts the loaded job. The supervisor's
 resolver uses the review model; flags still override the file.
 
 For a detached Mac job, add `--install-launchd` to `supervise` and to `watch`,
-then run the printed `launchctl bootstrap` command. The job is one-shot: an
+then `python3 scripts/ralph.py start --label domains` for the loop and
+`launchctl bootstrap gui/$(id -u) ~/.config/ralph/jobs/dev.ralphwatch.commonwealth-ai-domains.plist`
+for the watchdog; neither survives a logout or reboot. The job is one-shot: an
 operator stop (an EMPTY `ralph/STOP`) requires an explicit restart. Every
 terminal state is DONE, an operator stop, or an escalation; fixable blockers
 receive bounded resolutions, while ready `HUMAN-` rows remain operator-only.

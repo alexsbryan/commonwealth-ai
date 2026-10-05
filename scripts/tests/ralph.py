@@ -11,6 +11,7 @@ import itertools
 import json
 import os
 import pathlib
+import plistlib
 import shutil
 import signal
 import subprocess
@@ -1255,6 +1256,58 @@ class HostTests(unittest.TestCase):
                              "/w/watch.log", interval=120)
             host.start_job("dev.ralphwatch.x-a")
             self.assertIn("--on-unit-active=120", calls[-1])
+
+    def test_mac_keeps_its_job_out_of_launch_agents_and_starts_it_by_path(self):
+        # launchd re-runs every plist in ~/Library/LaunchAgents at each login, so a
+        # job written there outlived its queue: on 2026-10-05 the finished svrngs
+        # e0-u3 loops were still loaded at boot. Like Linux's transient unit, the
+        # Mac job now runs until it exits or the login session ends.
+        with tempfile.TemporaryDirectory() as home:
+            host, calls = self.host("darwin", ("launchctl",), home)
+            plist = host.install_job("dev.ralph.x-a", ["python3", "ralph.py", "run", "--queue", "a"],
+                                     "/w", "/w/log.txt")
+            self.assertEqual(plist, pathlib.Path(home) / ".config" / "ralph" / "jobs" / "dev.ralph.x-a.plist")
+            self.assertFalse((pathlib.Path(home) / "Library" / "LaunchAgents").exists())
+            self.assertEqual(plistlib.loads(plist.read_bytes())["ProgramArguments"],
+                             ["python3", "ralph.py", "run", "--queue", "a"])
+            host.start_job("dev.ralph.x-a")
+            self.assertEqual(calls[-1], ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)])
+
+    def test_mac_moves_the_login_agents_ralph_wrote_out_of_launch_agents(self):
+        # Every plist ralph wrote before that is still a login agent. The first job
+        # call moves each into the jobs dir: a loaded job keeps running, `start`
+        # still finds it, no login runs it again, and nothing else is touched.
+        with tempfile.TemporaryDirectory() as home:
+            agents = pathlib.Path(home) / "Library" / "LaunchAgents"
+            jobs = pathlib.Path(home) / ".config" / "ralph" / "jobs"
+            agents.mkdir(parents=True)
+            jobs.mkdir(parents=True)
+            for name in ("dev.ralph.x-a", "dev.ralphwatch.x-a", "com.svrnmesh.daemon"):
+                (agents / f"{name}.plist").write_text(name)
+            (jobs / "dev.ralph.x-b.plist").write_text("the job")
+            (agents / "dev.ralph.x-b.plist").write_text("a stale copy")
+            host, _ = self.host("darwin", ("launchctl",), home)
+            _, said = self.said(lambda: host.job_running("dev.ralph.x-a"))
+            self.assertEqual([p.name for p in agents.iterdir()], ["com.svrnmesh.daemon.plist"])
+            self.assertEqual((jobs / "dev.ralph.x-a.plist").read_text(), "dev.ralph.x-a")
+            self.assertEqual((jobs / "dev.ralphwatch.x-a.plist").read_text(), "dev.ralphwatch.x-a")
+            self.assertEqual((jobs / "dev.ralph.x-b.plist").read_text(), "the job")
+            self.assertIn("dev.ralphwatch.x-a", said)
+            _, said = self.said(lambda: host.job_running("dev.ralph.x-a"))
+            self.assertEqual(said, "")
+
+    def test_start_finds_a_job_that_was_installed_as_a_login_agent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, workdir = pathlib.Path(tmp) / "home", pathlib.Path(tmp) / "w"
+            workdir.mkdir()
+            (home / "Library" / "LaunchAgents").mkdir(parents=True)
+            (home / "Library" / "LaunchAgents" / "dev.ralph.w-a.plist").write_text("<plist/>")
+            host, calls = self.host("darwin", ("launchctl",), home)
+            with mock.patch.object(ralph, "host", return_value=host):
+                rc, _, err = quiet_main(["start", "--workdir", str(workdir), "--label", "a"])
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(calls[-1], ["launchctl", "bootstrap", f"gui/{os.getuid()}",
+                                         str(home / ".config" / "ralph" / "jobs" / "dev.ralph.w-a.plist")])
 
     def test_an_absent_job_backend_refuses_to_start_and_says_it_cannot_see(self):
         with tempfile.TemporaryDirectory() as home:
