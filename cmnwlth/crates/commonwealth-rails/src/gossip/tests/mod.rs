@@ -252,3 +252,35 @@ fn a_mesh_of_one_has_nobody_to_dial() {
     let mesh = mesh_of(vec![member(ME, "me", NodeStatus::Online, true)]);
     assert!(select_peers(&mesh, NodeId::from_u128(ME), 0).is_empty());
 }
+
+/// The self row carries `[media] allow` after a stamp, so a narrowed offer
+/// reaches viewers as narrowed. The failing input is the round before
+/// 2026-10-04, which stamped `minimal_capabilities` alone: the holder
+/// admitted two members and every viewer read "offered to everyone".
+#[test]
+fn the_self_row_carries_the_media_narrowing() {
+    let me = NodeId::from_u128(ME);
+    let mut mesh = mesh_of(vec![member(ME, "me", NodeStatus::Online, false)]);
+    let dial = DialInfo {
+        relay_url: None,
+        direct_addrs: Vec::new(),
+    };
+    let narrowed = crate::config::MediaSection {
+        origin: Some("127.0.0.1:8096".parse().unwrap()),
+        allow: vec!["Alex".into(), "Cy".into()],
+    };
+    self_stamp(&mut mesh, me, 100, &dial, &[], &key(), None);
+    stamp_media_allow(&mut mesh, me, &narrowed);
+    assert_eq!(mesh.members[&me].capabilities.media_allow, narrowed.allow);
+
+    let withdrawn = crate::config::MediaSection {
+        origin: None,
+        ..narrowed
+    };
+    self_stamp(&mut mesh, me, 110, &dial, &[], &key(), None);
+    stamp_media_allow(&mut mesh, me, &withdrawn);
+    assert!(
+        mesh.members[&me].capabilities.media_allow.is_empty(),
+        "no origin, nothing narrowed"
+    );
+}

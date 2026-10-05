@@ -182,6 +182,7 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
             &daemon.node.key,
             media_available,
         );
+        stamp_media_allow(&mut mesh, self_id, &daemon.media());
         // Absent self is already warned by `self_stamp`.
         if let Some(me) = mesh.members.get_mut(&self_id) {
             crate::origins::merge_declared(&mut me.capabilities, measured.as_ref(), &declared);
@@ -296,7 +297,31 @@ pub(crate) fn stamp_before_publishing(daemon: &RailsDaemon, mesh: &mut Mesh, now
         &daemon.node.key,
         media_available,
     );
+    stamp_media_allow(mesh, daemon.node.self_id, &daemon.media());
     dial
+}
+
+/// The members `[media] allow` admits, on our own row: what a viewer's rail
+/// shows as "offered to" (`commonwealth_core::mesh::offer_view`), and the
+/// same list the acceptor enforces (`origins::stand_media`). Empty is every
+/// member; with no origin offered there is nothing to narrow.
+/// [`minimal_capabilities`] leaves it empty, so a round that skipped this
+/// told every viewer a narrowed offer was open to all.
+pub(crate) fn stamp_media_allow(
+    mesh: &mut Mesh,
+    self_id: NodeId,
+    media: &crate::config::MediaSection,
+) {
+    if let Some(me) = mesh.members.get_mut(&self_id) {
+        me.capabilities.media_allow = match media.origin {
+            Some(_) => media.allow.clone(),
+            None => Vec::new(),
+        };
+        // Absent self is already warned by `self_stamp`.
+        tracing::debug!(target: "gossip", media_origin = ?media.origin,
+                        media_allow = ?me.capabilities.media_allow,
+                        "gossip: our row carries the media narrowing");
+    }
 }
 
 /// Step 1. Our own row is the only one this node may author.
