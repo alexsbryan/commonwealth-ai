@@ -276,14 +276,20 @@ async fn mail_fields_project_people_and_companies_and_model_atoms_merge_on_the_k
     assert_eq!(ann.description, "Ann Lee, as the model read it.");
     assert_eq!(ann.enrichment_depth, EnrichmentDepth::Structural);
 
-    // Folded case-insensitively on the identity fold; the model's name stays
-    // reachable as an alias, the header's bare address names the atom.
+    // Folded case-insensitively on the identity fold. No header names Bob, so
+    // the model's name does and the bare address stays reachable as an alias:
+    // a read name, then a model's, then the key.
     let bob = by_mailbox("bob@beta.com");
     assert_eq!(bob.len(), 1, "{bob:?}");
-    assert_eq!(bob[0].canonical_name, "bob@beta.com");
+    assert_eq!(bob[0].canonical_name, "Robert Bee");
     assert!(
-        bob[0].aliases.iter().any(|a| a == "Robert Bee"),
+        bob[0].aliases.iter().any(|a| a == "bob@beta.com"),
         "{:?}",
+        bob[0].aliases
+    );
+    assert!(
+        !bob[0].aliases.iter().any(|a| a == "Robert Bee"),
+        "the name is not also its own alias: {:?}",
         bob[0].aliases
     );
     assert!(
@@ -303,12 +309,24 @@ async fn mail_fields_project_people_and_companies_and_model_atoms_merge_on_the_k
     assert_eq!(out.sources.merged.get("person"), Some(&2));
     assert_eq!(out.sources.merged.get("company"), Some(&1));
     assert!(out.sources.refused.is_empty(), "{:?}", out.sources.refused);
+    // Ann's header named her; Bob and Acme took their model atom's name.
+    assert_eq!(out.sources.named.get("person"), Some(&1));
+    assert_eq!(out.sources.named.get("company"), Some(&1));
     let acme: Vec<&Entity> = of_type(&out, "company")
         .into_iter()
         .filter(|e| attr(e, "site") == Some("acme.org"))
         .collect();
     assert_eq!(acme.len(), 1);
-    assert!(acme[0].aliases.iter().any(|a| a == "Acme Corp"));
+    assert_eq!(acme[0].canonical_name, "Acme Corp");
+    assert!(acme[0].aliases.iter().any(|a| a == "acme.org"));
+    let beta: Vec<&Entity> = of_type(&out, "company")
+        .into_iter()
+        .filter(|e| attr(e, "site") == Some("beta.com"))
+        .collect();
+    assert_eq!(
+        beta[0].canonical_name, "beta.com",
+        "no model atom folded in: the key names it"
+    );
 
     // Identity from essence: the same value is the same id on every run.
     let again = project_source_atoms(&mailbox(), &policies, "fixture").unwrap();
@@ -318,7 +336,7 @@ async fn mail_fields_project_people_and_companies_and_model_atoms_merge_on_the_k
     assert!(
         lines.iter().any(
             |l| l.starts_with("source person ← sender, recipients: 3 atom(s)")
-                && l.contains("2 model atom(s) merged on mailbox")
+                && l.contains("2 model atom(s) merged on mailbox (0 refused, 1 named an atom)")
         ),
         "{lines:?}"
     );
@@ -367,7 +385,7 @@ async fn an_issue_author_field_read_whole_projects_contributors() {
     assert_eq!(
         logins,
         [
-            ("charliermarsh", "charliermarsh"),
+            ("charliermarsh", "Charlie Marsh"),
             ("konstin", "konstin"),
             ("zanieb", "zanieb")
         ]
@@ -377,7 +395,7 @@ async fn an_issue_author_field_read_whole_projects_contributors() {
         .find(|e| attr(e, "login") == Some("charliermarsh"))
         .unwrap();
     assert!(
-        charlie.aliases.iter().any(|a| a == "Charlie Marsh"),
+        charlie.aliases.iter().any(|a| a == "charliermarsh"),
         "{:?}",
         charlie.aliases
     );

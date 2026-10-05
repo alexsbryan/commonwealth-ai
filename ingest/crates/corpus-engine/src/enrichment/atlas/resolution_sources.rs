@@ -82,6 +82,9 @@ pub struct SourceFoldReport {
     pub merged: BTreeMap<String, usize>,
     /// Type → model atoms whose key agreed and the declared ontology refused.
     pub refused: BTreeMap<String, usize>,
+    /// Type → projected atoms no document named, renamed after the most
+    /// salient model atom folded in (the key stays an alias).
+    pub named: BTreeMap<String, usize>,
 }
 
 impl SourceReport {
@@ -97,14 +100,15 @@ impl SourceReport {
                     .collect::<Vec<_>>();
                 format!(
                     "source {t} ← {}: {} atom(s) from {} document(s); {} model atom(s) merged \
-                     on {} ({} refused); {} excluded, {} without identity, {} unreadable \
-                     field(s); absent: {}",
+                     on {} ({} refused, {} named an atom); {} excluded, {} without identity, \
+                     {} unreadable field(s); absent: {}",
                     r.fields.join(", "),
                     r.projected,
                     self.documents,
                     fold.merged.get(t).copied().unwrap_or(0),
                     r.identity.join(" + "),
                     fold.refused.get(t).copied().unwrap_or(0),
+                    fold.named.get(t).copied().unwrap_or(0),
                     r.excluded,
                     r.without_identity,
                     r.unreadable,
@@ -329,19 +333,16 @@ impl Accum {
             DOCUMENT_COUNT_ATTR.to_string(),
             Value::from(self.documents.len()),
         );
-        // The display name when the source reads one, else the identity value.
+        // The display name when the source reads one, else the identity value
+        // (which a model atom's name replaces in the fold).
         let names = src
             .attributes
             .iter()
             .find(|(_, r)| **r == FieldReader::DisplayName)
             .and_then(|(a, _)| self.values.get(a));
-        let canonical_name = names.and_then(|v| chosen(v)).unwrap_or_else(|| {
-            identity
-                .iter()
-                .filter_map(|(k, _)| attributes.get(*k).and_then(Value::as_str))
-                .collect::<Vec<_>>()
-                .join(" ")
-        });
+        let canonical_name = names
+            .and_then(|v| chosen(v))
+            .unwrap_or_else(|| key_name(&attributes, identity.iter().map(|(k, _)| *k)));
         let mut aliases: Vec<String> = Vec::new();
         for (n, _) in names.into_iter().flatten() {
             if !n.eq_ignore_ascii_case(&canonical_name)
@@ -372,6 +373,19 @@ impl Accum {
             concept_kind: None,
         }
     }
+}
+
+/// The name of a projected atom no document named: its identity values in key
+/// order. One decider for naming it (`into_entity`) and for recognising it in
+/// the fold, so the two cannot drift.
+fn key_name<'a>(
+    attributes: &Map<String, Value>,
+    keys: impl IntoIterator<Item = &'a str>,
+) -> String {
+    keys.into_iter()
+        .filter_map(|k| attributes.get(k).and_then(Value::as_str))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// A field's value as the scalars a reader reads: a string or number, or each
@@ -500,6 +514,19 @@ pub(super) fn fold_source_atoms(
     let mut folded: HashSet<AtomId> = HashSet::new();
     for p in sources.iter_mut() {
         let ty = p.entity_type.as_str_repr().to_string();
+        // No document named it, so a model atom folded in may: a read name,
+        // then a model's, then the key. A contact list of bare addresses is
+        // not one a person reads, and the prototype this ports named it so.
+        let named_by_key = p.canonical_name
+            == key_name(
+                &p.attributes,
+                policy
+                    .index()
+                    .effective_identity(&ty)
+                    .iter()
+                    .map(String::as_str),
+            );
+        let mut model_name: Option<(f32, String)> = None;
         for id in members.remove(&p.id).unwrap_or_default() {
             // Every non-projected id the reconciler saw came from `entities`.
             let Some(m) = at.get(&id).map(|&i| &entities[i]) else {
@@ -525,6 +552,14 @@ pub(super) fn fold_source_atoms(
                 continue;
             }
             debug!(pid, mid, name = %m.canonical_name, "atlas/resolution sources: folded");
+            // The most salient model atom names it; ids arrive sorted, so a
+            // tie goes to the first.
+            if named_by_key
+                && !m.canonical_name.trim().is_empty()
+                && model_name.as_ref().is_none_or(|(s, _)| m.salience > *s)
+            {
+                model_name = Some((m.salience, m.canonical_name.clone()));
+            }
             merge_into_existing(p, &sketch_of(m), name_index);
             for v in name_index.values_mut().filter(|v| **v == m.id) {
                 *v = p.id.clone();
@@ -532,6 +567,21 @@ pub(super) fn fold_source_atoms(
             p.salience = p.salience.max(m.salience);
             folded.insert(m.id.clone());
             *report.merged.entry(ty.clone()).or_default() += 1;
+        }
+        if let Some((_, name)) = model_name {
+            debug!(
+                pid = p.id.as_str(),
+                key = %p.canonical_name,
+                %name,
+                "atlas/resolution sources: named by its model atom"
+            );
+            let key = std::mem::replace(&mut p.canonical_name, name);
+            p.aliases
+                .retain(|a| !a.eq_ignore_ascii_case(&p.canonical_name));
+            if !p.aliases.iter().any(|a| a.eq_ignore_ascii_case(&key)) {
+                p.aliases.push(key);
+            }
+            *report.named.entry(ty.clone()).or_default() += 1;
         }
         for n in std::iter::once(&p.canonical_name).chain(&p.aliases) {
             name_index.entry(fold(n)).or_insert_with(|| p.id.clone());

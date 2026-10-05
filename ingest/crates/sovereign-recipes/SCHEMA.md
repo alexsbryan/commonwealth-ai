@@ -1289,10 +1289,11 @@ attribute names a declared attribute and the reader that fills it —
 `address` (every address of an address list), `domain` (each address's
 domain), `display_name` (the name paired with each address) or `value` (the
 field's whole value, or each one of a list); the field names are your
-extractor's. The atom is named by its display name when one was read, else by
-its identity value, and counts the documents it was seen in
-(`document_count`). A model-extracted atom of the type carrying the same
-identity value merges into it (strict merge); `exclude` lists identity values
+extractor's. The atom counts the documents it was seen in (`document_count`).
+A model-extracted atom of the type carrying the same identity value merges
+into it (strict merge). The atom is named by its display name when one was
+read, else by the most salient model atom merged into it, else by its
+identity value, which stays an alias; `exclude` lists identity values
 never projected. A field a document lacks is counted; one that holds no
 address or a value no reader reads is recorded in `resolution_failures.json`.
 `file` and `metadata` are one or the other, and an unknown key or reader
