@@ -97,6 +97,32 @@ impl MapConversion {
     }
 }
 
+/// Is `file` the map `cfg`'s pipeline declares today? The one comparison the
+/// converter and the build's resolve-staleness check both read.
+fn is_current(file: &AtlasOntologyFile, cfg: &EnrichConfig, pipeline: &dyn Pipeline) -> bool {
+    file.pipeline_id == pipeline.id()
+        && file.ontology_version == version_for(cfg)
+        && file.policies == pipeline.declared_ontology()
+}
+
+/// Was `atlas_dir` resolved under a declaration other than the one its
+/// config's pipeline holds today? The resolve step writes the map it ran
+/// under, so a recipe edited since (a source, a ref, an identity key) shows
+/// here. `Some(true)`: a different declaration; `Some(false)`: the same;
+/// `None`: nothing to judge by (no map on disk, no config, an unregistered
+/// pipeline) — never read as either. A config that cannot be read is the
+/// `Err`, for the caller to name.
+pub fn resolved_under_another_map(atlas_dir: &Path, corpus_id: &str) -> Result<Option<bool>> {
+    let Some(cfg) = EnrichConfig::load(corpus_id)? else {
+        return Ok(None);
+    };
+    let (Some(pipeline), Some(file)) = (resolve_pipeline(&cfg), read_atlas_ontology(atlas_dir))
+    else {
+        return Ok(None);
+    };
+    Ok(Some(!is_current(&file, &cfg, &*pipeline)))
+}
+
 /// Give `atlas_dir` its pipeline's map if it lacks one or carries a stale
 /// built-in one. Idempotent: a second run over the same atlas is `Current`.
 pub fn ensure_pipeline_map(atlas_dir: &Path, corpus_id: &str) -> Result<MapConversion> {
@@ -106,14 +132,9 @@ pub fn ensure_pipeline_map(atlas_dir: &Path, corpus_id: &str) -> Result<MapConve
     let Some(pipeline) = resolve_pipeline(&cfg) else {
         return Ok(MapConversion::Unregistered(cfg.pipeline_id.clone()));
     };
-    let current = |file: &AtlasOntologyFile| {
-        file.pipeline_id == pipeline.id()
-            && file.ontology_version == version_for(&cfg)
-            && file.policies == pipeline.declared_ontology()
-    };
     match read_atlas_ontology(atlas_dir) {
         Some(file) if file.is_author_declared() => Ok(MapConversion::AuthorDeclared),
-        Some(file) if current(&file) => Ok(MapConversion::Current {
+        Some(file) if is_current(&file, &cfg, &*pipeline) => Ok(MapConversion::Current {
             pipeline: pipeline.id().to_string(),
         }),
         Some(_) => Ok(MapConversion::Refreshed(write_pipeline_map(
@@ -230,6 +251,60 @@ mod tests {
         assert_eq!(
             ensure_pipeline_map(&atlas_dir, "odd").unwrap(),
             MapConversion::Unregistered("no_such_atlas".into())
+        );
+    }
+
+    /// A recipe edited after resolve: the atlas carries the map it was
+    /// resolved under, the config the author's new declaration. Same
+    /// declaration reads current; a changed one (a type added) reads stale;
+    /// no map on disk cannot be judged. Failing input: drop the `policies`
+    /// comparison from `is_current` and the edited recipe reads as current.
+    #[test]
+    fn an_edited_recipe_reads_as_resolved_under_another_map() {
+        use corpus_engine::enrichment::ontology::{OntologyTypeDecl, TypeKind};
+        use corpus_engine::enrichment::pipeline::CustomAtlasSpec;
+        let home = scoped_home();
+        let atlas_dir = home.path().join("indexes/mail/atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        let declared = |types: &[&str]| {
+            let mut p = OntologyPolicies::default();
+            p.shape.types = types
+                .iter()
+                .map(|t| OntologyTypeDecl {
+                    name: (*t).into(),
+                    kind: TypeKind::Entity,
+                    ..Default::default()
+                })
+                .collect();
+            p
+        };
+        let mut cfg = config("mail", "custom_atlas");
+        let spec = |p: OntologyPolicies| CustomAtlasSpec {
+            name: "mail".into(),
+            ontology_version: 1,
+            policies: Some(p),
+            ..Default::default()
+        };
+        cfg.ontology = Some(spec(declared(&["person"])));
+        cfg.save().unwrap();
+        assert_eq!(
+            resolved_under_another_map(&atlas_dir, "mail").unwrap(),
+            None,
+            "no map yet"
+        );
+
+        let pipeline = resolve_pipeline(&cfg).expect("custom_atlas is registered");
+        write_pipeline_map(&atlas_dir, &cfg, &*pipeline).unwrap();
+        assert_eq!(
+            resolved_under_another_map(&atlas_dir, "mail").unwrap(),
+            Some(false)
+        );
+
+        cfg.ontology = Some(spec(declared(&["person", "company"])));
+        cfg.save().unwrap();
+        assert_eq!(
+            resolved_under_another_map(&atlas_dir, "mail").unwrap(),
+            Some(true)
         );
     }
 }
