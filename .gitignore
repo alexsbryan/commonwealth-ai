@@ -8,11 +8,23 @@
 # ── Build artefacts ───────────────────────────────────────────────────────
 /target/
 
-# What stays under sovereign/ now that every program has its own dir: the
-# local models tree and an old build dir. Nothing under sovereign/ is tracked.
-/sovereign/models/
-/sovereign/target/
-/sovereign/data/
+# The pre-#68 layout (6c51bba85, "Top level programs"): every tracked file
+# moved to its program's dir, and these five hold zero tracked files — only
+# what stayed on disk: local models, old build dirs, bench run output, the
+# mobile host sandbox, private bench keys, a .env.local. 23.5k untracked files
+# on 2026-10-05, ignored whole so no `git add -A` reaches them.
+/sovereign/
+/sovereign-mobile/
+/sovereign-recipes/
+/packages/
+/landing/
+
+# A cargo target dir at a crate root (trybuild, a cargo run from inside the
+# crate): shared/crates/{corpus-index,kernel-types,understanding-vocab}/target
+# and serve/crates/sovereign-serving-host/target on 2026-10-05. Shaped to the
+# crate root, not an unanchored `target/`: see `models/` below for what an
+# unanchored directory name swallowed.
+**/crates/*/target/
 
 # Nested cargo/wasm-pack output under the app tree. `cmnwlth/apps/ring-runtime`
 # is 2009 untracked files, ALL of them build output with no source beside them
