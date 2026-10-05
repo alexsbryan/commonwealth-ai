@@ -11,7 +11,8 @@ quietly stuck.
 own state, prompt, charter, models, checks and control files (`ctl/` beside
 the manifest), so two loops share a checkout. Without it every flag and
 default is the legacy one. `audit_every = N` there makes `run` insert and
-dispatch a `REVIEW-audit-` row once N units have landed without one.
+dispatch a `REVIEW-audit-` row once N units have landed without one, and a
+closing one before a queue with units since its last audit reads as DONE.
 
 Subcommands:
   run        the serial campaign driver: one unit per session
@@ -682,6 +683,16 @@ class Queue:
         self.path.write_text("\n".join(lines) + "\n")
         self.rows = self._parse()
 
+    def append_row(self, line):
+        """Add a row below the last one, as insert_before adds one above."""
+        last = self.rows[-1]
+        lines = self.path.read_text().splitlines()
+        if lines[last.lineno - 1] != last.line:
+            raise ValueError(f"{self.path}:{last.lineno}: row moved under append_row")
+        lines.insert(last.lineno, line)
+        self.path.write_text("\n".join(lines) + "\n")
+        self.rows = self._parse()
+
     def units_since_audit(self):
         """`[x]` rows below the last `[x]` audit row. An audit still open has
         reviewed nothing, and a HUMAN- row is the operator's act, not a unit."""
@@ -810,8 +821,20 @@ def audit_due(paths, queue, unit):
                 and units_since_audit(paths, queue) >= every)
 
 
+def closing_audit_due(paths, queue):
+    """`audit_every` at a queue's end. audit_due runs where a unit is
+    dispatched, so units that landed with no row after them closed unaudited
+    (svrngs u3, 2026-10-05: four units, and the core changes landed between
+    them, never reviewed). A finished queue owes one audit while any unit
+    closed since the last."""
+    every = paths.manifest.audit_every if paths.manifest else None
+    return bool(every and queue.rows and queue.all_done()
+                and units_since_audit(paths, queue) > 0)
+
+
 def insert_audit(paths, queue, unit):
-    """(the inserted row, git's refusal or ""). The id's <prefix> is the
+    """(the inserted row, git's refusal or ""): above `unit`, or below the
+    last row as a closing audit when `unit` is None. The id's <prefix> is the
     addendum's `prefix` var, else the queue's name."""
     prefix = paths.queue
     if paths.prompt_addendum:
@@ -826,8 +849,12 @@ def insert_audit(paths, queue, unit):
     row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
     n = units_since_audit(paths, queue)
     last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
-    queue.insert_before(unit.id, audit_row(row_id, last_done))
-    subject = f"ralph: audit due after {n} units — {row_id}"
+    if unit is None:
+        queue.append_row(audit_row(row_id, last_done))
+        subject = f"ralph: closing audit after {n} unit{'' if n == 1 else 's'} — {row_id}"
+    else:
+        queue.insert_before(unit.id, audit_row(row_id, last_done))
+        subject = f"ralph: audit due after {n} units — {row_id}"
     say(subject)
     r = commit_state(paths, subject)
     refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
@@ -1530,6 +1557,17 @@ class Campaign:
         return halt(self.paths, reason, notifier=self.notifier,
                     notify_enabled=self.notify_enabled, operator_clause=operator_clause)
 
+    def _owes_closing_audit(self):
+        """A DONE a worker wrote stands unless the queue owes its closing
+        audit; a queue file that does not parse leaves it standing, as before."""
+        if not (self.paths.manifest and self.paths.manifest.audit_every):
+            return False
+        try:
+            return closing_audit_due(self.paths, Queue(self.paths.p(self.paths.state)))
+        except (OSError, ValueError) as e:
+            say(f"closing audit not judged — {self.paths.state} does not parse: {e}")
+            return False
+
     def _announce_waiting(self, waiting):
         """Say once per campaign that a row waits on the operator while the
         loop runs past it — a skipped row is a decision, and it is traced."""
@@ -1549,7 +1587,10 @@ class Campaign:
             if self.paths.p(self.paths.stop).exists():
                 return Result(Outcome.OPERATOR_STOP, "stop file present")
             if self.paths.p(self.paths.done).exists():
-                return Result(Outcome.DONE, "done file present")
+                if not self._owes_closing_audit():
+                    return Result(Outcome.DONE, "done file present")
+                self.paths.p(self.paths.done).unlink()
+                say(f"{self.paths.done} withdrawn — the queue owes a closing audit")
             if self.paths.p(self.paths.needs_human).exists() \
                     and self.paths.p(self.paths.needs_human).stat().st_size:
                 return Result(Outcome.NEEDS_HUMAN,
@@ -1566,6 +1607,11 @@ class Campaign:
             parked = held_ids(self.paths, queue)
             unit = queue.current(parked)
             waiting = queue.awaiting_operator(parked)
+            if unit is None and closing_audit_due(self.paths, queue):
+                unit, refused = insert_audit(self.paths, queue, None)
+                if refused:
+                    return self.halt(f"audit row {unit.id} is in {self.paths.state} "
+                                     f"but git refused the commit: {refused}")
             if unit is None:
                 # The queue's own state says it is finished, so the loop says so
                 # rather than halting for a session to write DONE. An empty queue
@@ -2341,6 +2387,13 @@ class Pool:
             queue = self._queue()
             if queue is None:
                 self.sleep(60)
+                continue
+            if closing_audit_due(self.paths, queue):
+                # The next pass runs it serially as a review.
+                audit, refused = insert_audit(self.paths, queue, None)
+                if refused:
+                    return self._halt(f"audit row {audit.id} is in {self.paths.state} "
+                                      f"but git refused the commit: {refused}")
                 continue
             if queue.all_done():
                 self.paths.p(self.paths.done).write_text("")

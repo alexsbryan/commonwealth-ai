@@ -1500,12 +1500,36 @@ class AuditCadenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", self.ROWS)
             self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertEqual(seen, ["u-1", "u-2", "REVIEW-audit-q-auto-1", "u-3"])
-            self.assertEqual(commits, [("ralph/next/q/STATE.md",
-                                        "ralph: audit due after 2 units — REVIEW-audit-q-auto-1")])
+            self.assertEqual(seen, ["u-1", "u-2", "REVIEW-audit-q-auto-1", "u-3",
+                                    "REVIEW-audit-q-auto-2"])
+            self.assertEqual(commits, [
+                ("ralph/next/q/STATE.md", "ralph: audit due after 2 units — REVIEW-audit-q-auto-1"),
+                ("ralph/next/q/STATE.md", "ralph: closing audit after 1 unit — REVIEW-audit-q-auto-2")])
             rows = ralph.Queue(pathlib.Path(tmp) / "ralph/next/q/STATE.md").rows
             self.assertEqual([(r.id, r.deps) for r in rows][2:],
-                             [("REVIEW-audit-q-auto-1", ("u-2",)), ("u-3", ())])
+                             [("REVIEW-audit-q-auto-1", ("u-2",)), ("u-3", ()),
+                              ("REVIEW-audit-q-auto-2", ("u-3",))])
+
+    def test_a_queue_that_ends_on_its_cadence_closes_with_an_audit(self):
+        """svrngs u3, 2026-10-05: audit_due runs only where a unit is dispatched,
+        so four units that landed with no row after them closed unaudited."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = "".join(f"- [ ] u-{n} — depends [] — do it\n" for n in (1, 2))
+            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
+            self.assertEqual(result.outcome, ralph.Outcome.DONE)
+            self.assertEqual(seen, ["u-1", "u-2", "REVIEW-audit-q-auto-1"])
+            self.assertEqual(commits, [("ralph/next/q/STATE.md",
+                                        "ralph: closing audit after 2 units — REVIEW-audit-q-auto-1")])
+            rows = ralph.Queue(pathlib.Path(tmp) / "ralph/next/q/STATE.md").rows
+            self.assertEqual((rows[-1].id, rows[-1].deps), ("REVIEW-audit-q-auto-1", ("u-2",)))
+
+    def test_a_queue_whose_last_row_is_an_audit_closes_without_another(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = ("- [ ] u-1 — depends []\n"
+                    "- [ ] REVIEW-audit-q — depends [u-1] — the author's own\n")
+            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
+            self.assertEqual(result.outcome, ralph.Outcome.DONE)
+            self.assertEqual((seen, commits), (["u-1", "REVIEW-audit-q"], []))
 
     def test_the_id_takes_the_addendums_prefix_var_and_counts_its_own_kind(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1513,14 +1537,14 @@ class AuditCadenceTests(unittest.TestCase):
             _, seen, _ = self.run_queue(tmp, "audit_every = 2\n", rows, files=(
                 ("ralph/PROMPT.base.md", "<!-- section: main -->\nwork on {{prefix}}\n"),
                 ("ralph/next/q/PROMPT.addendum.md", "<!-- section: vars -->\nprefix = zz\n")))
-            self.assertEqual(seen, ["REVIEW-audit-zz-auto-2", "u-3"])
+            self.assertEqual(seen, ["REVIEW-audit-zz-auto-2", "u-3", "REVIEW-audit-zz-auto-3"])
 
     def test_a_prefix_var_that_cannot_be_an_id_falls_back_to_the_queue_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, seen, _ = self.run_queue(tmp, "audit_every = 2\n", self.TWO_DONE, files=(
                 ("ralph/PROMPT.base.md", "<!-- section: main -->\nwork on {{prefix}}\n"),
                 ("ralph/next/q/PROMPT.addendum.md", "<!-- section: vars -->\nprefix = e7 or rb\n")))
-            self.assertEqual(seen, ["REVIEW-audit-q-auto-1", "u-3"])
+            self.assertEqual(seen, ["REVIEW-audit-q-auto-1", "u-3", "REVIEW-audit-q-auto-2"])
 
     def test_a_queue_without_the_key_never_gets_one(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1536,7 +1560,8 @@ class AuditCadenceTests(unittest.TestCase):
                     "- [ ] REVIEW-audit-q — depends [u-2] — the author's own\n"
                     "- [ ] u-3 — depends [REVIEW-audit-q]\n")
             _, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
-            self.assertEqual((seen, commits), (["REVIEW-audit-q", "u-3"], []))
+            self.assertEqual((seen, commits), (["REVIEW-audit-q", "u-3", "REVIEW-audit-q-auto-1"],
+                                               [("ralph/next/q/STATE.md", "ralph: closing audit after 1 unit — REVIEW-audit-q-auto-1")]))
 
     def test_an_audit_the_worker_left_open_is_run_again_not_inserted_again(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1552,8 +1577,8 @@ class AuditCadenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             rows = self.TWO_DONE.replace("[ ] u-3", "[~] u-3") + "- [ ] u-4 — depends []\n"
             _, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
-            self.assertEqual(seen, ["u-3", "REVIEW-audit-q-auto-1", "u-4"])
-            self.assertEqual(len(commits), 1)
+            self.assertEqual(seen, ["u-3", "REVIEW-audit-q-auto-1", "u-4", "REVIEW-audit-q-auto-2"])
+            self.assertEqual(len(commits), 2)
 
     def test_a_refused_commit_halts_with_gits_words(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1603,9 +1628,12 @@ class AuditCadenceDemoTests(unittest.TestCase):
             self.assertEqual(subjects, [
                 "u-1: work", "ralph: u-1 done", "u-2: work", "ralph: u-2 done",
                 f"ralph: audit due after 2 units — {audit}",
-                f"{audit}: work", f"ralph: {audit} done", "u-3: work", "ralph: u-3 done"])
-            self.assertEqual(git("show", "--name-only", "--format=", "HEAD~4").split(),
-                             ["ralph/next/q/STATE.md"])
+                f"{audit}: work", f"ralph: {audit} done", "u-3: work", "ralph: u-3 done",
+                "ralph: closing audit after 1 unit — REVIEW-audit-q-auto-2",
+                "REVIEW-audit-q-auto-2: work", "ralph: REVIEW-audit-q-auto-2 done"])
+            for rev in ("HEAD~7", "HEAD~2"):                  # each audit row committed alone
+                self.assertEqual(git("show", "--name-only", "--format=", rev).split(),
+                                 ["ralph/next/q/STATE.md"])
             self.assertIn("A  stray.txt", git("status", "--porcelain"))      # staged, never swept in
             self.assertIn(f"unit {audit} — ", out.getvalue())
 
@@ -3107,6 +3135,31 @@ class PoolQueueTests(unittest.TestCase):
             self.assertTrue((root / "ralph/next/q/ctl/DONE").exists())
             self.assertFalse((root / "ralph/DONE").exists())
 
+    def test_a_finished_queue_with_units_since_its_audit_closes_with_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [x] q-a abcdef1 — depends []\n"
+                                     "- [x] q-b abcdef2 — depends []\n", "audit_every = 2\n")
+            runs = []
+
+            class Review:
+                def __init__(self, cwd, env=None):
+                    self.cwd = pathlib.Path(cwd)
+
+                def run(self, model_args, prompt, log):
+                    unit = prompt.split()[2]                 # "Your unit: <id> — ..."
+                    runs.append(unit)
+                    ralph.Queue(self.cwd / "ralph/next/q/STATE.md").set_status(
+                        unit, ralph.Status.DONE)
+                    subprocess.run(["git", "-C", str(self.cwd), "commit", "-qam", unit],
+                                   check=True)
+                    return 0
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(self.make(root, Review).run(), 0)
+            self.assertEqual(runs, ["REVIEW-audit-q-auto-1"])
+            self.assertTrue(ralph.Queue(root / "ralph/next/q/STATE.md").all_done())
+            self.assertTrue((root / "ralph/next/q/ctl/DONE").exists())
+
     def test_a_lane_package_halts_into_the_queues_control_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] q-a — depends []\n")
@@ -3183,8 +3236,9 @@ class PoolQueueTests(unittest.TestCase):
                 return Lane(cwd) if pathlib.Path(cwd).parent.name == "wt" else Review(cwd)
 
             self.assertEqual(self.make(root, session_for).run(), 0)
-            self.assertEqual((set(order[:2]), order[2], set(order[3:])),
-                             ({"q-a", "q-b"}, "REVIEW-audit-q-auto-1", {"q-c", "q-d"}))
+            self.assertEqual((set(order[:2]), order[2], set(order[3:5]), order[5:]),
+                             ({"q-a", "q-b"}, "REVIEW-audit-q-auto-1", {"q-c", "q-d"},
+                              ["REVIEW-audit-q-auto-2"]))                # the closing audit
 
     def decisions_fixture(self, tmp):
         root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
