@@ -381,6 +381,13 @@ impl ServingHost {
         // launchd job, a systemd unit, an operator's `svrn daemon start`),
         // so the window is still worth spending before reporting absence.
         let remaining = within.saturating_sub(started.elapsed());
+        // Said at the start: the wait can run ten minutes (the daemon's
+        // SERVE_BRING_UP_WINDOW), and until it ends nothing else is logged.
+        tracing::info!(
+            base = %self.base,
+            within_ms = remaining.as_millis() as u64,
+            "reach: nothing answered and nothing to bring up — waiting for a host we did not start",
+        );
         if self.wait_until_serving(remaining).await {
             let waited = started.elapsed();
             tracing::info!(
