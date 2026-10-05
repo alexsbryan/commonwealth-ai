@@ -142,6 +142,14 @@ GENERIC = {"energy", "power", "electric", "electrical", "gas", "natural", "servi
 KEY_NOISE = {"com", "org", "net", "us", "gov", "edu", "co", "uk", "au", "ca", "www", "mail", "ci", "city", "state"}
 
 
+def registrable(k):
+    """A domain's organisation label: bhp.com.au -> bhp, ci.mesa.az.us -> mesa."""
+    p = k.lower().split(".")
+    if len(p) >= 3 and len(p[-1]) == 2 and (p[-2] in {"com", "co", "org", "net", "gov", "ac"} or p[-1] == "us"):
+        return p[-3]
+    return p[-2] if len(p) >= 2 else p[0]
+
+
 def candidate_blocks(names, keys):
     """High-recall candidate blocks for identity, in code: names sharing a rare word, a name and its
     acronym, a near-identical spelling, a key whose label carries a name's word or acronym, keys sharing a
@@ -160,11 +168,6 @@ def candidate_blocks(names, keys):
     def labels(k):
         return {p for p in fold(k.replace(".", " ").replace("-", "")).split() if p not in KEY_NOISE and len(p) >= 2}
 
-    def registrable(k):  # the organisation's own label: bhp.com.au -> bhp, ci.mesa.az.us -> mesa
-        p = k.lower().split(".")
-        if len(p) >= 3 and len(p[-1]) == 2 and (p[-2] in {"com", "co", "org", "net", "gov", "ac"} or p[-1] == "us"):
-            return p[-3]
-        return p[-2] if len(p) >= 2 else p[0]
     items = list(names) + list(keys)
     parent = {i: i for i in items}
 
@@ -306,9 +309,23 @@ def identity_pass(spec, facets, proj, new_atoms, report, cache):
             f"here, parent is that group's canonical, else \"\".\n\nITEMS:\n" +
             "\n".join(sorted(b))), BLOCK_SCHEMA)
         report[f"{t} identity: block question {'replayed' if cached else 'asked'}"] += 1
+        answer = []
         for gr in ans["groups"]:
             report[f"{t} identity: items outside the block, dropped"] += sum(1 for m in gr["members"] if m not in b)
-            add(gr["canonical"], [m for m in gr["members"] if m in b], gr["parent"])
+            ms = [m for m in gr["members"] if m in b]
+            if gr["canonical"] in b and gr["canonical"] not in ms:  # an item named as its group's canonical is in it
+                ms.append(gr["canonical"]); report[f"{t} identity: canonical item joined its own group"] += 1
+            answer.append([gr["canonical"], ms, gr["parent"]])
+        for g_ in [g_ for g_ in answer if g_[1] and not any(m in names for m in g_[1])]:
+            # a group of keys the answer left nameless joins the one named group holding a key's own label
+            # (bhp.com.au -> "BHP"): the label is the organisation's, not a guess
+            labs = {registrable(k) for k in g_[1] if k in keyed}
+            named = [h for h in answer if h is not g_ and any(fold(m) in labs for m in h[1] if m in names)]
+            if len(named) == 1:
+                named[0][1] += g_[1]; g_[1] = []
+                report[f"{t} identity: nameless keys joined the group holding their label"] += 1
+        for canonical, ms, par in answer:
+            add(canonical, ms, par)
         for m in b:  # an item the answer left out keeps its own group
             if m not in taken and m in names:
                 add(m, [m]); report[f"{t} identity: item the answer left out, kept alone"] += 1
@@ -668,7 +685,12 @@ def main():
         if spec.get("method") == "ledger":
             # the blocks as above; composition by legal moves over a per-party ledger (ledger.py) instead
             import ledger as L  # noqa: PLC0415
-            groups = L.compose_blocks(blocks, fold, ask if spec.get("ledger_model") else None, a.cache, report)
+            trace, ev = [], facets["events"][spec["of"][0]]
+            shape = {k: v for m in spec["of"] for k, v in facets.get("shape", {}).get(m, {}).items()}
+            groups = L.compose_blocks(blocks, spec, {**facets["protocol"][ev["protocol"]], "attribute": ev["attribute"]}, shape, fold,
+                                      report, trace)
+            a.out.mkdir(parents=True, exist_ok=True)
+            (a.out / f"ledger-{spec['type']}.json").write_text(json.dumps(trace))
         kind_of = {}
         if spec.get("adjudicate"):
             # pattern-level identity: one counterparty's whole timeline, partitioned by the model; code holds
@@ -695,8 +717,9 @@ def main():
             # identity from essence: the block plus the member set, never the group's position in a run
             did = f"{ctype}:" + hashlib.sha1("|".join([cs[0]["_block"]] + sorted(c["id"] for c in cs)).encode()).hexdigest()[:12]
             cs.sort(key=lambda c: c["_date"] or "")
+            ranged = {k for k, v in facets.get("shape", {}).get(spec["of"][0], {}).items() if v.get("kind", "").endswith("range")}
             common = {k: collections.Counter(fold(c["attributes"][k]) for c in cs if (c.get("attributes") or {}).get(k)).most_common(1)
-                      for k in spec.get("link", [])}
+                      for k in [f"{n}_start" if n in ranged else n for n in spec.get("link", [])]}  # a range shows its start
             cp = ent.get(cs[0]["_block"], {})
             new_atoms.append({"atom_type": "Entity", "data": {
                 "id": did, "entity_type": ctype, "kind": kind_of.get(key),

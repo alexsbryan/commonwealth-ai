@@ -66,9 +66,18 @@ map = { lead = "lead", proposal = "proposal", negotiating = "negotiating", won =
 # event in `order`. Wording mirrors GOLD_SPEC's stage definitions (existing contracts read as won, its v1 note).
 [events.deal_mention]
 attribute = "stage"
-order = ["asked", "offered", "terms", "agreed", "declined"]
-stage = { asked = "lead", offered = "proposal", terms = "negotiating", agreed = "won", declined = "lost" }
+protocol = "demo"
 say = { asked = "the counterparty asked for a price or an offer, sent a request for proposal, or said it wants to buy, sell or hedge", offered = "a price, bid, indication, offer, proposal or term sheet was given or sent, by either side", terms = "contract drafts, credit or deal terms were sent back and forth, commented on or changed", agreed = "the deal was accepted, confirmed, executed or awarded to the owner's company, or is an existing contract already in place", declined = "the deal was declined, awarded to someone else, or withdrawn" }
+
+# FOLD's protocol, from a registry (principle 9): the moves in order, the state each produces, the moves that
+# end an instance (a terminal state sticks) and the moves that open one (a terminal instance refuses them:
+# asking again starts a new instance). Read by stage.py (the event fold) and ledger.py (GROUP as a fold).
+# DEMO's transaction pattern; a support case or a message-built ticket would name it too.
+[protocol.demo]
+order = ["asked", "offered", "terms", "agreed", "declined"]
+state = { asked = "lead", offered = "proposal", terms = "negotiating", agreed = "won", declined = "lost" }
+terminal = ["agreed", "declined"]
+initiating = ["asked", "offered"]
 
 # Refinements of declared attribute types that the Rust declaration language cannot carry yet; focus.py
 # builds its output schema from them so a wrong value cannot be written (a citation is a sentence index,

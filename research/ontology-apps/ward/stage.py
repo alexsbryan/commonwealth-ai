@@ -36,7 +36,8 @@ def main():
     folders = D.FOLDS["tune"] | D.FOLDS["read"] if a.folders == "all" else D.FOLDS[a.folders]
     facets = tomllib.loads(a.facets.read_text())
     ev = facets["events"][a.type]
-    order, to_stage, say = ev["order"], ev["stage"], ev["say"]
+    proto = facets["protocol"][ev["protocol"]]
+    order, to_stage, say = proto["order"], proto["state"], ev["say"]
     own = next(s.get("own") for s in facets["source"] if s.get("own"))
     comp, _ = F.registry(a.registry)
     atoms = json.loads(a.atoms.read_text())["atoms"]
