@@ -1934,8 +1934,7 @@ pub fn resolve_step_3b_with(
                 .insert(attr.clone(), serde_json::Value::String(name.clone()));
         }
     }
-    let (entity_attribute_updates, ref_failures) =
-        snap_ref_attributes(policy, &snap_input, &name_index, &token_index);
+    let (entity_attribute_updates, ref_failures) = snap_ref_attributes(policy, &snap_input);
     failures.extend(ref_failures);
 
     Ok(Step3bOutput {
