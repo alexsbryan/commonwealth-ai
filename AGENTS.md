@@ -134,7 +134,8 @@ If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same com
 | `tools`, `code`, `project`, `claim` | `sovereign-cli-dev` |
 | `daemon`, `doctor`, `setup`, `install-service` | `sovereign-cli-daemon` |
 | `enrich`, `corpus`, `atlas`, `recipe`, `pipeline` (`INGEST_VERBS`, `ingest_bin.rs`) | `svrn-ingest` (`sovereign-pipeline`) |
-| `mcp`, `bench`, `chat`, `eval` | `sovereign-stock` |
+| `mcp`, `chat` | `sovereign-stock` |
+| `bench`, `eval` (white-box lanes: `bench_bin.rs`) | `sovereign-cli-bench` |
 | `mesh`, `ring`, `job` (`mesh warm-cache`/`fetch-model`: `sovereign-serve`) | `sovereign-cli-mesh` |
 | `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
 
