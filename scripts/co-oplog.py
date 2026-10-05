@@ -5038,6 +5038,19 @@ def supersedes(stmts: list[dict], kernel: Kernel) -> list[dict]:
     # (5ab14d6d), and a rounded '862k then 860,372' is one (6402486e).
     return edges
 
+def write_record(path: str, summary: list) -> int:
+    """A *-all summary to --out, unless the run judged nothing. Every row an
+    error means the daemon never answered, and `path` may hold the committed
+    record of a run where it did: on 2026-10-05 a login-fired rerun with the
+    daemon down overwrote six of them. The command's exit code: 3
+    (could-not-judge) when nothing was written for that reason."""
+    if summary and all("error" in x for x in summary):
+        print(f"not written {path}: all {len(summary)} row(s) are could-not-judge")
+        return 3
+    Path(path).write_text(json.dumps(summary, indent=1))
+    print(f"written {path}")
+    return 0
+
 def cmd_claims_all(a) -> int:
     """The definitive run: every operator-facing block with claim_load >=
     min_load over the last N sessions, translated and run through the
@@ -5062,7 +5075,10 @@ def cmd_claims_all(a) -> int:
         except DaemonDown as e:
             print(f"  {n:>2}/{len(files)} {f.stem[:8]}  could-not-judge: daemon {e}", flush=True)
             summary.append({"session": f.stem, "error": str(e)}); continue
-        rows = [json.loads(l) for l in (SESSIONS_DIR / f.stem / "claims.jsonl").open()] if rc == 0 else []
+        if rc != 0:                       # 3: the daemon died mid-session; never a zero-statement row
+            print(f"  {n:>2}/{len(files)} {f.stem[:8]}  could-not-judge: rc {rc}", flush=True)
+            summary.append({"session": f.stem, "error": f"rc {rc}"}); continue
+        rows = [json.loads(l) for l in (SESSIONS_DIR / f.stem / "claims.jsonl").open()]
         stmts = [r for r in rows if r["node"] == "statement"]
         from collections import Counter as _C
         c = _C(r["state"] for r in stmts)
@@ -5070,12 +5086,10 @@ def cmd_claims_all(a) -> int:
         print(f"  {n:>2}/{len(files)} {f.stem[:8]}  blocks={len(ops)}  statements={len(stmts)}  {dict(c)}  {round(time.time() - t1)}s", flush=True)
         summary.append({"session": f.stem, "blocks": [i for i, _ in ops], "statements": len(stmts), "states": dict(c),
                         "refuted": refuted, "supersedes": [r for r in rows if r["node"] == "supersedes"], "seconds": round(time.time() - t1)})
-    if a.out:
-        Path(a.out).write_text(json.dumps(summary, indent=1))
-        print(f"written {a.out}")
+    rc = write_record(a.out, summary) if a.out else 0
     print(f"\nclaims-all — {len(summary)} session(s) · {sum(len(x.get('refuted', [])) for x in summary)} refuted row(s) · "
           f"{sum(len(x.get('supersedes', [])) for x in summary)} supersedes edge(s) · {sum(1 for x in summary if 'error' in x)} could-not-judge · {round(time.time() - t0)}s")
-    return 0
+    return rc
 
 def cmd_claims(a) -> int:
     path = resolve(a.project, a.session)
@@ -5391,11 +5405,10 @@ def cmd_plan_claims_all(a) -> int:
         summary.append({"session": f.stem, "plan": rows[0], "statements": len(stmts), "states": dict(_C(r["state"] for r in stmts)),
                         "refuted": [r for r in stmts if r["state"] == "refuted"],
                         "sweep": [r for r in rows if r["node"] == "sweep" and (r["tagged"] != "none" or r["defined"])], "seconds": round(time.time() - t1)})
-    if a.out:
-        Path(a.out).write_text(json.dumps(summary, indent=1)); print(f"written {a.out}")
+    rc = write_record(a.out, summary) if a.out else 0
     print(f"\nplan-claims-all — {len(summary)} plan(s) · {sum(len(x.get('refuted', [])) for x in summary)} refuted row(s) · "
           f"{sum(1 for x in summary if 'error' in x)} could-not-judge · {round(time.time() - t0)}s")
-    return 0
+    return rc
 
 def cmd_investigate(a) -> int:
     path = resolve(a.project, a.session)
@@ -5487,15 +5500,13 @@ def cmd_investigate_all(a) -> int:
                         "seconds": r["seconds"], "strong": n_strong, "weak": n_weak,
                         "corroborations": len(r["corroborations"]), "dropped": len(r["dropped"]),
                         "submitted": r["submitted"], "findings": r["findings"]})
-    if a.out:
-        Path(a.out).write_text(json.dumps(summary, indent=1))
-        print(f"written {a.out}")
+    rc = write_record(a.out, summary) if a.out else 0
     tot = sum(x.get("strong", 0) for x in summary)
     print(f"\ninvestigate-all — {len(summary)} report(s) · {tot} strong finding(s) · "
           f"{sum(x.get('weak', 0) for x in summary)} weak · "
           f"{sum(x.get('corroborations', 0) for x in summary)} corroboration(s) submitted as findings · "
           f"{sum(1 for x in summary if 'error' in x)} could-not-judge")
-    return 0
+    return rc
 
 # ---- the card: what the operator sees at session end --------------------
 #
@@ -6284,6 +6295,16 @@ def cmd_self_test(_a) -> int:
                       "turn 12: test result: FAILED. 5 passed; 1 failed; 0 ignored",
                       ["turn 11: test result: ok. 6 passed; 0 failed\nturn 12: test result: FAILED. 5 passed; 1 failed; 0 ignored"]),
        "red", "and an earlier green does not")
+    import tempfile
+    with tempfile.TemporaryDirectory() as _td:
+        _rec = Path(_td) / "record.json"
+        _rec.write_text("[\"the committed record\"]")
+        eq(write_record(str(_rec), [{"session": "a", "error": "rc 3"}, {"session": "b", "error": "rc 3"}]), 3,
+           "write_record: a run that judged nothing exits could-not-judge")
+        eq(_rec.read_text(), "[\"the committed record\"]", "write_record: and leaves the record as it was")
+        eq(write_record(str(_rec), [{"session": "a", "error": "rc 3"}, {"session": "b", "statements": 4}]), 0,
+           "write_record: one judged row is a result")
+        eq(json.loads(_rec.read_text())[1]["statements"], 4, "write_record: and is written")
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
