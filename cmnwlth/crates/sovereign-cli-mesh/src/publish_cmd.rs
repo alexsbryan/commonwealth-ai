@@ -247,8 +247,20 @@ async fn list() -> i32 {
         &cfg.daemon,
     ))
     .await;
+    // cw-rails serves the media origin, so it answers for it; with cw-rails
+    // down, its rails.toml is the whole truth, as config is for apps.
+    let media_origin: Option<String> = match &live {
+        Some((_, origin)) => origin.clone(),
+        None => match crate::mesh_media::offered_origin_in_rails_toml() {
+            Ok(o) => o.map(|o| o.to_string()),
+            Err(e) => {
+                eprintln!("publish: the media origin could not be read — {e}");
+                None
+            }
+        },
+    };
     let apps: Vec<(String, String, String)> = match &live {
-        Some(rows) => rows
+        Some((rows, _)) => rows
             .iter()
             .map(|a| {
                 let tier = match a.tier {
@@ -268,14 +280,14 @@ async fn list() -> i32 {
             .map(|(n, t)| (n.clone(), t.clone(), "config".to_string()))
             .collect(),
     };
-    if apps.is_empty() && cfg.iroh.media_origin.is_none() {
+    if apps.is_empty() && media_origin.is_none() {
         println!("This node publishes nothing.");
         println!();
         println!("  svrn run --as chores -- python app.py   while it runs");
         println!("  svrn publish chores 5000               durably");
         return 0;
     }
-    if let Some(origin) = &cfg.iroh.media_origin {
+    if let Some(origin) = &media_origin {
         println!("Media origin (reached with `svrn mesh media <you>`):");
         println!("  {origin}");
         println!();
@@ -307,7 +319,11 @@ async fn list() -> i32 {
 /// The daemon's own answer, or `None` when it is not reachable. Never an
 /// empty list on a failure: "the daemon did not answer" and "the daemon
 /// publishes nothing" are different facts.
-async fn live_listing(rails: &str) -> Option<Vec<commonwealth_media::PublishedApp>> {
+/// cw-rails' published apps and the media origin it serves, or `None` when it
+/// does not answer.
+async fn live_listing(
+    rails: &str,
+) -> Option<(Vec<commonwealth_media::PublishedApp>, Option<String>)> {
     // cw-rails' app registry since pb-mesh-exit-transport.
     let url = format!("{rails}/v1/mesh/publish");
     let client = reqwest::Client::builder()
@@ -319,7 +335,12 @@ async fn live_listing(rails: &str) -> Option<Vec<commonwealth_media::PublishedAp
         return None;
     }
     let doc: serde_json::Value = resp.json().await.ok()?;
-    serde_json::from_value(doc.get("apps")?.clone()).ok()
+    let apps = serde_json::from_value(doc.get("apps")?.clone()).ok()?;
+    let media = doc
+        .get("media_origin")
+        .and_then(|o| o.as_str())
+        .map(str::to_string);
+    Some((apps, media))
 }
 
 fn publish(args: &[String]) -> i32 {

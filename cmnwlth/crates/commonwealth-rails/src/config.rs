@@ -42,6 +42,8 @@ pub struct Config {
     pub listen: u16,
     #[serde(default)]
     pub relay: RelaySection,
+    /// As loaded at start. The live value, which `POST /v1/mesh/media/reload`
+    /// re-reads, is `RailsDaemon::media`.
     #[serde(default)]
     pub media: MediaSection,
     #[serde(default = "default_gossip_interval")]
@@ -52,6 +54,10 @@ pub struct Config {
     /// names something (pb-work-donor; see [`WorkOfferSection`]).
     #[serde(default)]
     pub work_offer: WorkOfferSection,
+    /// The file named by `--config`, which a reload reads again; `None` is
+    /// `<data_dir>/rails.toml`. Never in the file itself.
+    #[serde(skip)]
+    pub source: Option<PathBuf>,
 }
 
 /// iroh reachability posture. Maps to
@@ -117,6 +123,7 @@ impl Default for Config {
             gossip_interval_secs: default_gossip_interval(),
             offline_threshold_secs: default_offline_threshold(),
             work_offer: WorkOfferSection::default(),
+            source: None,
         }
     }
 }
@@ -168,8 +175,9 @@ impl Config {
             }
             Err(e) => return Err(ConfigRefusal::Unreadable(file, e)),
         };
-        let cfg: Config =
+        let mut cfg: Config =
             toml::from_str(&text).map_err(|e| ConfigRefusal::Malformed(file.clone(), e))?;
+        cfg.source = path.map(Path::to_path_buf);
         if cfg.listen == 0 {
             return Err(ConfigRefusal::ZeroListen(file));
         }

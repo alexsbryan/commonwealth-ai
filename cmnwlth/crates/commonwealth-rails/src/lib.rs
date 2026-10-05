@@ -359,6 +359,10 @@ pub struct RailsDaemon {
     /// `GET /v1/mesh/media/presence` serves it). `None` is "nobody answered",
     /// never "free" — the poll publishes its arms, not a guess.
     pub media_presence: Arc<std::sync::RwLock<Option<f32>>>,
+    /// `[media]` as this process serves it now: `node.config.media` at start,
+    /// then whatever `POST /v1/mesh/media/reload` last read. Read it with
+    /// [`RailsDaemon::media`].
+    media: std::sync::RwLock<config::MediaSection>,
     /// Where `POST /internal/gossip` is served. Ephemeral loopback, reachable
     /// only through the acceptor.
     pub internal_addr: SocketAddr,
@@ -437,18 +441,11 @@ impl RailsDaemon {
 
         let join_key = identity::load_join_key(&node.data_dir)?;
         let published_apps = origins.apps().clone();
-        origins::stand_own(
-            &origins,
-            internal_addr,
-            node.config.media.origin,
-            node.config.media.allow.clone(),
-            // Read once, here, from the same data dir that holds the node key.
-            // Not from `rails.toml`: `MediaSection` is `deny_unknown_fields`,
-            // so a new key there would make an UN-upgraded daemon refuse to
-            // boot rather than ignore it -- see `commonwealth_media::declared`.
-            commonwealth_media::read_declared_in(&commonwealth_media::dir_under(&node.data_dir)),
-        )
-        .expect("an empty registry holds the endpoint's own origins");
+        origins::stand_own(&origins, internal_addr)
+            .expect("an empty registry holds the endpoint's own origins");
+        origins::stand_media(&origins, &node.config.media, &node.data_dir)
+            .expect("no claim exists yet to hold the media slot");
+        let media = std::sync::RwLock::new(node.config.media.clone());
         let live =
             self_heal::LiveEndpoint::stand(node.endpoint.clone(), mesh.clone(), origins.clone());
 
@@ -468,6 +465,7 @@ impl RailsDaemon {
             work_yield: Arc::default(),
             kv,
             media_presence: Arc::new(std::sync::RwLock::new(None)),
+            media,
             internal_addr,
             solo: AtomicBool::new(false),
             join_key: std::sync::RwLock::new(join_key),
@@ -475,6 +473,21 @@ impl RailsDaemon {
             lan: None,
             _internal: internal,
         })
+    }
+
+    /// `[media]` as served now (see the field).
+    pub fn media(&self) -> config::MediaSection {
+        self.media
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub(crate) fn set_media(&self, media: config::MediaSection) {
+        *self
+            .media
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = media;
     }
 
     /// Load the persisted mesh and start — or, with none on disk, start SOLO

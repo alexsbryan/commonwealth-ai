@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn mesh media origin` — declare where this machine's media server answers.
 //!
-//! The viewer half (`svrn mesh media <peer>`) already dials a member's
-//! `[iroh] media_origin`. Until this verb the declaring half was a hand edit:
-//! find `[iroh]`, add the key, do not duplicate the header, save, restart —
-//! and `publish_cmd`'s header records what the obvious `printf` does to a
-//! config that already has an `[iroh]` section. This is the same edit with the
-//! same two guarantees: the document is edited as TOML (comments survive, no
-//! default is materialised), and what was written is PARSED BACK before the
-//! command reports success.
+//! The viewer half (`svrn mesh media <peer>`) dials a member's media origin,
+//! which that member's cw-rails serves from `[media] origin` in its
+//! rails.toml. This verb is that edit with two guarantees: the document is
+//! edited as TOML (comments survive, no default is materialised), and what
+//! was written is PARSED BACK by cw-rails' own reader before the command
+//! reports success. `offer` writes the same key and also narrows and
+//! provisions a viewer account.
 //!
 //! The origin may be any address this machine can dial. Unlike `svrn publish`
 //! — which binds a local port and must stay loopback so the mesh is the only
@@ -19,12 +18,11 @@
 
 use std::net::SocketAddr;
 
-use sovereign_contracts::setup_config::SetupConfig;
 use toml_edit::{DocumentMut, Item, Value};
 
-use crate::publish_cmd::{load_doc, write_doc};
+use super::rails_media::{self, load, write};
 
-pub(crate) fn cmd_media_origin(args: &[String]) -> i32 {
+pub(crate) async fn cmd_media_origin(args: &[String]) -> i32 {
     if sovereign_cli_base::help::wants_help(args) {
         help();
         return 0;
@@ -33,7 +31,7 @@ pub(crate) fn cmd_media_origin(args: &[String]) -> i32 {
         return show();
     }
     if args.iter().any(|a| a == "--clear") {
-        return clear();
+        return clear().await;
     }
     let Some(raw) = args.iter().find(|a| !a.starts_with('-')) else {
         help();
@@ -46,15 +44,21 @@ pub(crate) fn cmd_media_origin(args: &[String]) -> i32 {
             return 2;
         }
     };
-    let (path, mut doc) = match load_doc() {
+    let (path, mut doc) = match load() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("media origin: {e}");
             return 1;
         }
     };
-    let prev = set_origin(&mut doc, &addr.to_string());
-    match write_doc(&path, &doc) {
+    let prev = match set_origin(&mut doc, &addr.to_string()) {
+        Ok(prev) => prev,
+        Err(e) => {
+            eprintln!("media origin: {e}");
+            return 1;
+        }
+    };
+    match write(&path, &doc) {
         Ok(()) => {
             match prev {
                 Some(old) if old == addr.to_string() => {
@@ -64,10 +68,8 @@ pub(crate) fn cmd_media_origin(args: &[String]) -> i32 {
                 None => println!("Media origin declared: {addr}"),
             }
             println!("  ({})", path.display());
-            println!("  Restart to serve it:  svrn daemon restart");
-            println!();
             println!("Housemates reach it with:  svrn mesh media <your-name>");
-            0
+            rails_media::reload("origin").await
         }
         Err(e) => {
             eprintln!("media origin: could not write the config — {e}");
@@ -90,41 +92,36 @@ fn resolve_origin(raw: &str) -> Result<SocketAddr, String> {
         .map_err(|_| format!("{raw:?} is neither a port nor a host:port"))
 }
 
-fn set_origin(doc: &mut DocumentMut, addr: &str) -> Option<String> {
-    let iroh = doc
-        .entry("iroh")
-        .or_insert_with(|| Item::Table(toml_edit::Table::new()))
-        .as_table_mut()?;
-    let prev = iroh
-        .get("media_origin")
+fn set_origin(doc: &mut DocumentMut, addr: &str) -> Result<Option<String>, String> {
+    let media = rails_media::media_table(doc)?;
+    let prev = media
+        .get("origin")
         .and_then(Item::as_str)
         .map(str::to_string);
-    iroh.insert("media_origin", Value::from(addr).into());
-    prev
+    media.insert("origin", Value::from(addr).into());
+    Ok(prev)
 }
 
 fn clear_origin(doc: &mut DocumentMut) -> bool {
-    doc.get_mut("iroh")
+    doc.get_mut("media")
         .and_then(Item::as_table_mut)
-        .and_then(|t| t.remove("media_origin"))
+        .and_then(|t| t.remove("origin"))
         .is_some()
 }
 
 fn show() -> i32 {
-    let cfg = match SetupConfig::load() {
-        Ok(c) => c,
+    let stored = load().and_then(|(_, doc)| super::offer::stored_origin(&doc));
+    match stored {
         Err(e) => {
-            eprintln!("media origin: could not read this node's config — {e}");
-            return 1;
+            eprintln!("media origin: {e}");
+            1
         }
-    };
-    match &cfg.iroh.media_origin {
-        Some(o) => {
+        Ok(Some(o)) => {
             println!("Media origin: {o}");
             println!("  Housemates reach it with:  svrn mesh media <your-name>");
             0
         }
-        None => {
+        Ok(None) => {
             println!("This node serves no media origin.");
             println!();
             println!("  svrn mesh media origin 8096        # Jellyfin on this machine");
@@ -134,8 +131,8 @@ fn show() -> i32 {
     }
 }
 
-fn clear() -> i32 {
-    let (path, mut doc) = match load_doc() {
+async fn clear() -> i32 {
+    let (path, mut doc) = match load() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("media origin: {e}");
@@ -146,12 +143,11 @@ fn clear() -> i32 {
         eprintln!("media origin: nothing was declared — there is nothing to clear.");
         return 1;
     }
-    match write_doc(&path, &doc) {
+    match write(&path, &doc) {
         Ok(()) => {
             println!("Media origin cleared.");
             println!("  ({})", path.display());
-            println!("  Restart to withdraw it:  svrn daemon restart");
-            0
+            rails_media::reload("origin").await
         }
         Err(e) => {
             eprintln!("media origin: could not write the config — {e}");
@@ -172,7 +168,7 @@ fn help() {
     println!("  svrn mesh media origin --clear    stop offering it");
     println!();
     println!("If your server authenticates its own clients, `svrn mesh media declare");
-    println!("<header>` stores your key locally and your daemon adds it on the way in.");
+    println!("<header>` stores your key locally and cw-rails adds it on the way in.");
 }
 
 #[cfg(test)]
@@ -181,18 +177,18 @@ mod tests {
 
     const ORIGINAL: &str = "\
 # narrowed during the knockout, restore later
-[iroh]
-enabled = true
+name = \"holder\"
 ";
 
     #[test]
     fn declaring_preserves_comments_and_adds_one_line() {
         let mut doc = ORIGINAL.parse::<DocumentMut>().unwrap();
-        set_origin(&mut doc, "127.0.0.1:8096");
+        set_origin(&mut doc, "127.0.0.1:8096").unwrap();
         let out = doc.to_string();
         assert!(out.contains("narrowed during the knockout"), "{out}");
-        assert!(out.contains("enabled = true"), "{out}");
-        assert!(out.contains("media_origin = \"127.0.0.1:8096\""), "{out}");
+        assert!(out.contains("name = \"holder\""), "{out}");
+        let read: commonwealth_rails::config::Config = toml::from_str(&out).unwrap();
+        assert_eq!(read.media.origin, Some("127.0.0.1:8096".parse().unwrap()));
         let code = |t: &str| -> Vec<String> {
             t.lines()
                 .map(str::trim)
@@ -200,29 +196,31 @@ enabled = true
                 .map(str::to_string)
                 .collect()
         };
-        assert_eq!(code(&out).len(), code(ORIGINAL).len() + 1, "{out}");
+        assert_eq!(
+            code(&out).len(),
+            code(ORIGINAL).len() + 2,
+            "[media] and origin: {out}"
+        );
     }
 
     #[test]
     fn declaring_creates_the_section_when_absent_and_never_duplicates_it() {
-        let mut bare = "[models]\nprimary = \"/a\"\n"
-            .parse::<DocumentMut>()
-            .unwrap();
-        set_origin(&mut bare, "127.0.0.1:8096");
-        assert_eq!(bare.to_string().matches("[iroh]").count(), 1);
-        set_origin(&mut bare, "127.0.0.1:8097");
+        let mut bare = "[relay]\nurls = []\n".parse::<DocumentMut>().unwrap();
+        set_origin(&mut bare, "127.0.0.1:8096").unwrap();
+        assert_eq!(bare.to_string().matches("[media]").count(), 1);
+        set_origin(&mut bare, "127.0.0.1:8097").unwrap();
         let out = bare.to_string();
-        assert_eq!(out.matches("[iroh]").count(), 1, "{out}");
-        assert!(out.contains("media_origin = \"127.0.0.1:8097\""), "{out}");
+        assert_eq!(out.matches("[media]").count(), 1, "{out}");
+        assert!(out.contains("origin = \"127.0.0.1:8097\""), "{out}");
     }
 
     #[test]
     fn clearing_reports_whether_anything_was_declared() {
         let mut doc = ORIGINAL.parse::<DocumentMut>().unwrap();
         assert!(!clear_origin(&mut doc));
-        set_origin(&mut doc, "127.0.0.1:8096");
+        set_origin(&mut doc, "127.0.0.1:8096").unwrap();
         assert!(clear_origin(&mut doc));
-        assert!(!doc.to_string().contains("media_origin"));
+        assert!(!doc.to_string().contains("origin ="));
     }
 
     /// A bare port is loopback, and nonsense is refused by name — the same

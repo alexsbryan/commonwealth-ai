@@ -127,7 +127,7 @@ async fn read_presence(
 /// store, ask the origin, and leave the reading in the shared cell the
 /// gossip round stamps from.
 async fn tick(daemon: &RailsDaemon, client: &reqwest::Client) -> Option<f32> {
-    let Some(origin) = daemon.node.config.media.origin else {
+    let Some(origin) = daemon.media().origin else {
         // A node with no origin offers nothing; the poll idles. Debug, not
         // warn — this is the config absence with a visible consequence, not
         // a failure.

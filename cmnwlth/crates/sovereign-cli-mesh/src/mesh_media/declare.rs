@@ -14,10 +14,10 @@
 /// The value is never echoed, never logged, and never printed by `--list`;
 /// whether one is SET is operational and is printed. Same discipline as
 /// `PUT /v1/mcp/servers/{name}/token`.
-pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
+pub(crate) async fn cmd_media_declare(args: &[String]) -> i32 {
     use std::io::Read;
 
-    let dir = commonwealth_media::dir_under(&sovereign_contracts::rebrand::svrnmesh_root());
+    let dir = super::rails_media::declared_dir();
 
     if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media declare <header-name>     # value on stdin");
@@ -51,10 +51,8 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
         eprintln!("config.toml on purpose: a secret there rides along with anything that is");
         eprintln!("shared, synced, backed up, or gossiped to a peer.");
         eprintln!();
-        eprintln!("Run `svrn daemon stop && svrn daemon start` after changing a");
-        eprintln!("declaration — NOT `reload`. The declarations are read once, while the");
-        eprintln!("acceptor is built, so a reload cannot apply one and will tell you there");
-        eprintln!("was nothing to do.");
+        eprintln!("cw-rails, this node's mesh endpoint, adds it, and is asked to use a");
+        eprintln!("changed declaration at once.");
         return 0;
     }
 
@@ -90,12 +88,8 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--clear") {
         return match commonwealth_media::write_declared_in(&dir, name, "") {
             Ok(()) => {
-                println!(
-                    "Cleared {}. Run `svrn daemon stop && svrn daemon start` to apply \
-                     (a reload cannot: declarations are read once, at acceptor build).",
-                    name.to_ascii_lowercase()
-                );
-                0
+                println!("Cleared {}.", name.to_ascii_lowercase());
+                super::rails_media::reload("declare").await
             }
             Err(e) => {
                 eprintln!("Could not clear {name}: {e}");
@@ -127,13 +121,11 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
         Ok(()) => {
             // What is SET, never what it is.
             println!(
-                "Stored {} (0600, {}). Run `svrn daemon stop && svrn daemon start` to \
-                 apply — NOT `reload`, which is read once at acceptor build and will \
-                 report nothing to do.",
+                "Stored {} (0600, {}).",
                 name.to_ascii_lowercase(),
                 dir.display()
             );
-            0
+            super::rails_media::reload("declare").await
         }
         Err(e) => {
             eprintln!("Could not store {name}: {e}");

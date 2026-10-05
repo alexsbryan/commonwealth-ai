@@ -525,3 +525,80 @@ fn a_non_member_is_closed_while_the_fallback_origin_is_unregistered() {
         "a released fallback closes the non-member again"
     );
 }
+
+/// The endpoint's own media origin follows its config live: a re-stand moves
+/// the address, the admit list and the declared credential at once, never
+/// takes the served set through "absent", `None` withdraws it, and a slot a
+/// program's claim holds is refused with nothing changed.
+#[test]
+fn a_restand_replaces_the_endpoints_own_origin_in_one_step() {
+    let r = OriginRegistry::new(PublishedApps::default());
+    let seen: Arc<Mutex<Vec<Vec<Vec<u8>>>>> = Arc::default();
+    let log = seen.clone();
+    r.on_alpns_change(Arc::new(move |set| log.lock().unwrap().push(set)));
+    let declared = |v: &str| vec![("authorization".to_string(), v.to_string())];
+    let header = |f: &Forward| match f {
+        Forward::Http { headers, .. } => headers
+            .iter()
+            .find(|(n, _)| n == "authorization")
+            .map(|(_, v)| v.clone()),
+        _ => None,
+    };
+    let at = |port| Some(SocketAddr::from(([127, 0, 0, 1], port)));
+
+    r.restand(
+        MEDIA_ALPN,
+        at(8096),
+        Admit::Members(Vec::new()),
+        declared("one"),
+    )
+    .unwrap();
+    let f = r.forward_for(MEDIA_ALPN, Some(&member()), DIALER).unwrap();
+    assert_eq!((port_of(&f), header(&f)), (Some(8096), Some("one".into())));
+
+    r.restand(
+        MEDIA_ALPN,
+        at(8920),
+        Admit::Members(vec!["LittleMac".into()]),
+        declared("two"),
+    )
+    .unwrap();
+    let f = r.forward_for(MEDIA_ALPN, Some(&member()), DIALER).unwrap();
+    assert_eq!((port_of(&f), header(&f)), (Some(8920), Some("two".into())));
+    assert_eq!(r.listing().len(), 1, "replaced, not added beside");
+    r.restand(
+        MEDIA_ALPN,
+        at(8920),
+        Admit::Members(vec!["Cy".into()]),
+        Vec::new(),
+    )
+    .unwrap();
+    assert!(
+        r.forward_for(MEDIA_ALPN, Some(&member()), DIALER).is_none(),
+        "a narrowing that leaves this member out closes it"
+    );
+    assert_eq!(
+        seen.lock().unwrap().iter().filter(|s| s.is_empty()).count(),
+        1,
+        "only the install-time set was empty: no re-stand passed through absent"
+    );
+
+    r.restand(MEDIA_ALPN, None, Admit::Members(Vec::new()), Vec::new())
+        .unwrap();
+    assert!(r.alpns().is_empty(), "None withdraws it");
+    assert_eq!(seen.lock().unwrap().last(), Some(&Vec::new()));
+
+    let claim = r
+        .register(reg(MEDIA_ALPN, &[], 9000, Admit::Members(Vec::new())))
+        .unwrap();
+    assert!(matches!(
+        r.restand(MEDIA_ALPN, at(8096), Admit::Members(Vec::new()), Vec::new()),
+        Err(OriginRefusal::Taken { .. })
+    ));
+    let listing = r.listing();
+    assert_eq!(listing.len(), 1);
+    assert_eq!(
+        listing[0].claim_id.as_deref(),
+        Some(claim.claim_id.as_str())
+    );
+}

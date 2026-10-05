@@ -45,6 +45,7 @@ fn hermetic(name: &str, media_origin: Option<std::net::SocketAddr>) -> Config {
         gossip_interval_secs: 1,
         offline_threshold_secs: 60,
         work_offer: Default::default(),
+        source: None,
     }
 }
 

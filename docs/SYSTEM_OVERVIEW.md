@@ -1014,7 +1014,11 @@ own loopback origin; the key the QUIC handshake proved is the discriminator):
 | `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring` (members), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
 
 Federated media and named apps ride that surface: the holder declares an
-origin, the viewer asks cw-rails for a loopback bridge URL, and the acceptor
+origin (`svrn mesh media offer | admit | withdraw | origin | declare` write
+`[media]` in cw-rails' rails.toml and the credential under its data dir, then
+`POST /v1/mesh/media/reload`, which re-stands the origin with no restart —
+`commonwealth-rails/src/origins.rs::stand_media`), the viewer asks cw-rails
+for a loopback bridge URL, and the acceptor
 tells the origin WHO is asking by rewriting request heads
 (`X-Mesh-Member`/`-Node`/`-Pubkey`, every client-supplied `x-mesh-*` header
 dropped first). Responses are a byte copy, which is why `Range` stays

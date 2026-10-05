@@ -10,7 +10,7 @@
 //! phase-b pb-rails-origins, FIVE_PROGRAMS §4 rule 8). There is no arm per
 //! protocol here: every ALPN this endpoint serves, who may reach it and where
 //! it goes is a registration — this endpoint's own gossip and join routes and
-//! its `rails.toml` media origin (`crate::origins::stand_own`), the app entry,
+//! its `rails.toml` media origin (`crate::origins::stand_own`, `stand_media`), the app entry,
 //! and each program's registered origin. The endpoint advertises exactly the
 //! registered ALPNs and re-advertises when they change, because a negotiated
 //! protocol with nothing behind it turns a clean refusal into a hang.

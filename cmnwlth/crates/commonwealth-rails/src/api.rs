@@ -80,6 +80,9 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
         // `media_available` as this node's own poll read it, `null` when
         // nobody answered — "could not ask", never "free".
         .route("/v1/mesh/media/presence", get(media_presence))
+        // `[media]` read again from rails.toml, served without a restart
+        // (`svrn mesh media offer | admit | withdraw | declare` call it).
+        .route("/v1/mesh/media/reload", post(crate::origins::reload_media))
         // One handler, two paths: the media spelling is the generic body with
         // `kind` absent, not a second implementation.
         .route("/v1/mesh/fanout", post(origin_fanout))
@@ -298,7 +301,7 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             "name": daemon.node.config.name,
             "pubkey": hex::encode(daemon.node.pubkey().0),
             "dial": dial,
-            "media_origin": daemon.node.config.media.origin,
+            "media_origin": daemon.media().origin,
         },
         "mesh": { "id": mesh.id.to_string(), "name": mesh.name },
         "running": true,
@@ -489,7 +492,7 @@ pub async fn publishing(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResp
         StatusCode::OK,
         Json(serde_json::json!({
             "apps": daemon.published_apps.listing(),
-            "media_origin": daemon.node.config.media.origin,
+            "media_origin": daemon.media().origin,
         })),
     )
 }

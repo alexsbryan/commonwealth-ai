@@ -240,6 +240,40 @@ impl OriginRegistry {
         })
     }
 
+    /// Replace the endpoint's OWN origin on `alpn` — [`stand`](Self::stand)
+    /// for an origin its config can change while it runs (cw-rails'
+    /// `[media]`). `None` withdraws it. One lock, so a re-stand that keeps the
+    /// ALPN never takes the served set through "absent"; a slot a program's
+    /// claim holds is refused by name and the old entry stays.
+    pub fn restand(
+        &self,
+        alpn: &[u8],
+        addr: Option<SocketAddr>,
+        admit: Admit,
+        declared: Vec<(String, String)>,
+    ) -> Result<(), OriginRefusal> {
+        let alpn = String::from_utf8_lossy(alpn).into_owned();
+        let entries = match addr {
+            Some(addr) => self.entries_of(&alpn, &[], addr, &admit, Framing::Http)?,
+            None => Vec::new(),
+        };
+        self.mutate(|s| {
+            let (old, others) = std::mem::take(&mut s.standing)
+                .into_iter()
+                .partition(|(_, e)| e.alpn == alpn);
+            s.standing = others;
+            if let Err(e) = Self::refuse_taken(s, &entries) {
+                s.standing.extend(old);
+                return Err(e);
+            }
+            for mut e in entries {
+                e.declared = declared.clone();
+                s.standing.insert(slot(&e.alpn, e.prefix.as_deref()), e);
+            }
+            Ok(())
+        })
+    }
+
     /// Register a program's origin. Refused by name when a slot is taken.
     pub fn register(&self, req: OriginRegistration) -> Result<OriginClaim, OriginRefusal> {
         let addr: SocketAddr = ([127, 0, 0, 1], req.port).into();

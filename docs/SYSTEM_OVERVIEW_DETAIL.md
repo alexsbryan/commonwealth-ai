@@ -6027,12 +6027,14 @@ wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing
 **Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
 `cmnwlth/crates/commonwealth-media/src/reach.rs`, the route and daemon
 glue in `sovereign-daemon/src/media_reach.rs`, 2026-09-11). The holder declares
-`[iroh] media_origin = "127.0.0.1:8096"` — `svrn mesh media offer [<origin>]
-[--admit <member>...]` writes it (and `media_allow`; with no origin it probes
-127.0.0.1:8096 then 8920; `mesh media admit <member>...` narrows the stored
-origin) and runs `daemon reload`,
-which swaps the live `MediaRoute` (`sovereign-mesh/src/media_route.rs`) with no
-restart; a value that does not parse refuses the boot or the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
+`[media] origin = "127.0.0.1:8096"` in cw-rails' rails.toml (it was svrn's
+`[iroh] media_origin` until cw-rails became the endpoint; the verbs moved
+2026-10-04) — `svrn mesh media offer [<origin>] [--admit <member>...]` writes
+it (and `allow`; with no origin it probes 127.0.0.1:8096 then 8920; `mesh
+media admit <member>...` narrows the stored origin), checks the file with
+cw-rails' own `Config::load`, and calls `POST /v1/mesh/media/reload`, which
+re-stands the origin in the registry with no restart; a value that does not
+parse is refused before it is kept, and by the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
 `svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
 transport's cached bridge for `(peer, cwth/media/0)`, minted once and retargeted
 in place when the peer's dial info moves, so a player can hold the URL. The

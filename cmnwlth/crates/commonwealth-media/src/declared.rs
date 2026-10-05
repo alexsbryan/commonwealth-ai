@@ -48,11 +48,12 @@
 //! needed a code change and a release to follow that; a filename needed a
 //! rename by the person who holds the key.
 //!
-//! Layout, mirroring `secrets/mcp/`:
+//! Layout under cw-rails' data dir ([`rails_data_dir`]), which serves the
+//! origin, mirroring `secrets/mcp/`:
 //!
 //! ```text
-//!   ~/.svrnmesh/secrets/media/authorization    0600   the value
-//!   ~/.svrnmesh/secrets/media/                 0700
+//!   ~/.commonwealth-rails/secrets/media/authorization    0600   the value
+//!   ~/.commonwealth-rails/secrets/media/                 0700
 //! ```
 //!
 //! For Jellyfin 12 the value is the whole credential the header carries,
