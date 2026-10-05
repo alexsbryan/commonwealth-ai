@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub use super::source::{FieldReader, MetadataSourceDecl, SourceDecl, TableSourceDecl};
+pub use super::source::{FieldReader, MetadataSourceDecl, SourceDecl, SourceRef, TableSourceDecl};
 use super::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
     OntologyPolicies, ProsePolicy, ShapePolicy,

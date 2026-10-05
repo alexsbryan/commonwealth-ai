@@ -503,3 +503,88 @@ fn validate_prints_where_a_sourced_type_comes_from() {
         v.notes
     );
 }
+
+// ── refs: a role read from the same mailbox, linked to another sourced type ──
+
+/// MAIL with Contact -> Account declared: a person's `works_at` is the company
+/// atom its own address's domain keys. The attribute is not called `employer`:
+/// only the declaration says which attribute links to what.
+const MAIL_REFS: &str = r#"version = 1
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "mailbox", type = "text" }, { name = "works_at", type = "ref", of = "company" }]
+identity = ["mailbox"]
+source = { metadata = ["sender", "recipients"], attributes = { mailbox = "address" }, refs = { works_at = { of = "company", reader = "domain" } } }
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+attributes = [{ name = "site", type = "text" }]
+identity = ["site"]
+source = { metadata = ["sender", "recipients"], attributes = { site = "domain" }, exclude = ["freemail.example"] }"#;
+
+#[tokio::test]
+async fn a_ref_links_a_person_to_the_company_its_address_domain_keys_and_survives_resolution() {
+    let policies = policies_of(MAIL_REFS);
+    let sections = vec![section(
+        "sec_00001",
+        vec![sketch(
+            "Ann Lee",
+            "person",
+            serde_json::json!({ "mailbox": "ann@acme.org", "works_at": "Acme Corporation" }),
+        )],
+    )];
+    let (projection, out) = project_and_resolve(&policies, &mailbox(), sections).await;
+    let report = projection.report.types.get("person").expect("person projected");
+    assert_eq!(report.refs_linked.get("works_at"), Some(&2), "ann and bob link: {report:?}");
+    assert_eq!(report.refs_unlinked.get("works_at"), Some(&1), "carol's freemail links nothing: {report:?}");
+
+    let company = |site: &str| {
+        of_type(&out, "company")
+            .into_iter()
+            .find(|e| attr(e, "site") == Some(site))
+            .map(|e| e.id.as_str().to_string())
+            .expect("company projected")
+    };
+    let person = |mailbox: &str| {
+        of_type(&out, "person")
+            .into_iter()
+            .find(|e| attr(e, "mailbox") == Some(mailbox))
+            .expect("person projected")
+    };
+    // the model's raw name does not displace the linked id: attributes merge first-wins
+    assert_eq!(attr(person("ann@acme.org"), "works_at"), Some(company("acme.org").as_str()));
+    assert_eq!(attr(person("bob@beta.com"), "works_at"), Some(company("beta.com").as_str()));
+    assert_eq!(attr(person("carol@freemail.example"), "works_at"), None);
+}
+
+#[test]
+fn validate_refuses_a_ref_on_a_non_ref_attribute_and_a_target_without_a_source() {
+    let v = validate(&MAIL_REFS.replace(
+        r#"{ name = "works_at", type = "ref", of = "company" }"#,
+        r#"{ name = "works_at", type = "text" }"#,
+    ));
+    assert!(
+        v.errors.iter().any(|e| e.contains("ref `works_at` is not a declared `ref` attribute of `person`")),
+        "{:?}",
+        v.errors
+    );
+    let v = validate(&MAIL_REFS.replace(
+        r#", exclude = ["freemail.example"] }"#,
+        r#" }"#,
+    ).replace(
+        r#"source = { metadata = ["sender", "recipients"], attributes = { site = "domain" } }"#,
+        "",
+    ));
+    assert!(
+        v.errors.iter().any(|e| e.contains("links to `company`, which must declare a metadata source")),
+        "{:?}",
+        v.errors
+    );
+}
+
+#[test]
+fn an_unknown_key_in_a_ref_is_refused_at_load() {
+    let err = load_err(&MAIL_REFS.replace(r#"reader = "domain" }"#, r#"reader = "domain", via = "x" }"#));
+    assert!(err.contains("via"), "{err}");
+}

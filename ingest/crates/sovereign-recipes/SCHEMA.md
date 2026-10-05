@@ -986,6 +986,16 @@ Allowed values:
 | `metadata` | `Vec<String>` | **yes** | — | The document metadata fields read, by the corpus's own names. |
 | `attributes` | `BTreeMap<String, FieldReader>` | no | type default | Declared attribute name → the reader that fills it from each field. The type's `identity` attributes must be among them. |
 | `exclude` | `Vec<String>` | no | type default | Identity values never projected (freemail domains), compared after the identity fold. |
+| `refs` | `BTreeMap<String, SourceRef>` | no | type default | Declared `ref` attribute → the sourced type it links to, and the reader whose value on the same mailbox is that type's identity value. Contact → Account: `employer = { of = "company", reader = "domain" }`. A value the target type excludes or never projects links nothing; a role, never an identity key (`ONTOLOGY_METHOD.md`). |
+
+## `SourceRef`
+
+One `refs` entry of a metadata source: the target type and the reader.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `of` | `String` | **yes** | — | A declared entity type with a metadata source and one identity key. |
+| `reader` | `FieldReader` | **yes** | — | The reader whose value is the target's identity value. |
 
 ## `FieldReader`
 
@@ -1297,7 +1307,10 @@ identity value, which stays an alias; `exclude` lists identity values
 never projected. A field a document lacks is counted; one that holds no
 address or a value no reader reads is recorded in `resolution_failures.json`.
 `file` and `metadata` are one or the other, and an unknown key or reader
-refuses at load.
+refuses at load. `refs` links a declared `ref` attribute to another sourced
+type: the reader's value on the same mailbox is that type's identity value
+(Contact -> Account below). A value the target excludes or never projects
+links nothing; the resolve output counts linked and unlinked per attribute.
 
 ```toml
 [[enrichment.ontology.types]]
@@ -1306,6 +1319,13 @@ kind = "entity"
 attributes = [{ name = "domain", type = "text" }]
 identity = ["domain"]
 source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["aol.com"] }
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "email", type = "text" }, { name = "employer", type = "ref", of = "company" }]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address" }, refs = { employer = { of = "company", reader = "domain" } } }
 ```
 
 `max_entities_per_section` raises how many entities Phase 1 may introduce in

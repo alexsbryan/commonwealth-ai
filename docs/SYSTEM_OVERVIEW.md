@@ -584,7 +584,11 @@ question the pipeline asks about a type is a method on the resolved
   `SignalKind::DocumentField`, id `exact_entity_content_hash` of the value; in
   Phase 3a the reconciler's strict `ExternalIdSignal` names the model atoms
   carrying that value and the resolver's `merge_into_existing` folds them in,
-  counted on the resolve step's output. **Both tension axes degrade by REPORTING, never by
+  counted on the resolve step's output. A source's `refs` (`SourceRef`) link a
+  declared `ref` attribute to another sourced type's atom by the identity value
+  a reader reads on the same mailbox (Contact -> Account: `employer = { of =
+  "company", reader = "domain" }`), linked after every type is projected;
+  attributes merge first-wins, so a model's raw name never displaces the link. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at

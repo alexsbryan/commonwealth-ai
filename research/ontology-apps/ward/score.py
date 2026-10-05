@@ -184,8 +184,9 @@ def score(g, ent, claims, scope):
     # Contact -> Account: an external gold person (an email and a company) whose one person atom names an employer
     # that resolves to that company; an employer resolving to no gold company of theirs is a wrong account
     contact_n = contact_hit = contact_wrong = 0
+    gold_companies = {c["id"] for c in g["companies"]}
     for p in gp:
-        if p.get("internal") or not p.get("company"):
+        if p.get("internal") or p.get("company") not in gold_companies:  # gold's "None" loads as "<folder>:None"
             continue
         contact_n += 1
         emp = attr_list(ent[person_atom[p["id"]]], "employer") if p["id"] in person_atom else []

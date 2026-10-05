@@ -71,6 +71,11 @@ pub struct SourceTypeReport {
     pub absent: BTreeMap<String, usize>,
     /// Fields present but unreadable, each also a failure record.
     pub unreadable: usize,
+    /// `refs` attribute → atoms it links to a projected atom of its target type.
+    pub refs_linked: BTreeMap<String, usize>,
+    /// `refs` attribute → atoms carrying a value the target never projected
+    /// (excluded, or absent from every document).
+    pub refs_unlinked: BTreeMap<String, usize>,
 }
 
 /// What the fold did, returned on `ResolutionOutput::sources`.
@@ -135,6 +140,9 @@ pub fn project_source_atoms(
     let docs = documents.each_document();
     let mut out = SourceProjection::default();
     out.report.documents = docs.len();
+    // (type, identity key) -> atom id, for `refs`; and the refs to link once every type is projected
+    let mut keyed: HashMap<(String, String), AtomId> = HashMap::new();
+    let mut pending: Vec<(usize, String, String, String, Vec<(String, usize)>)> = Vec::new();
     for t in &policies.shape.types {
         let Some(SourceDecl::Metadata(src)) = &t.source else {
             continue;
@@ -156,10 +164,17 @@ pub fn project_source_atoms(
         let accs = project_type(&t.name, src, &identity, &docs, &mut report, &mut out.report);
         report.projected = accs.len();
         let ty = EntityType::from_str_repr(&t.name);
-        out.atoms.extend(
-            accs.into_iter()
-                .map(|a| a.into_entity(src, &identity, &ty, corpus_id)),
-        );
+        for mut a in accs {
+            let refs = std::mem::take(&mut a.refs);
+            let key = a.key.clone();
+            let e = a.into_entity(src, &identity, &ty, corpus_id);
+            for (attr, vals) in refs {
+                let of = src.refs[&attr].of.clone();
+                pending.push((out.atoms.len(), t.name.clone(), attr, of, vals));
+            }
+            keyed.insert((t.name.clone(), key), e.id.clone());
+            out.atoms.push(e);
+        }
         info!(
             ty = %t.name,
             projected = report.projected,
@@ -168,6 +183,29 @@ pub fn project_source_atoms(
             "atlas/resolution sources: projected from document fields"
         );
         out.report.types.insert(t.name.clone(), report);
+    }
+    // refs: the most frequent value whose target the build projected; a value it
+    // excluded or never saw links nothing, and is counted
+    for (i, ty, attr, of, vals) in pending {
+        let mut ranked = vals;
+        ranked.sort_by(|a, b| b.1.cmp(&a.1));
+        let hit = ranked.iter().find_map(|(v, _)| keyed.get(&(of.clone(), v.clone())));
+        let report = out.report.types.entry(ty).or_default();
+        match hit {
+            Some(id) => {
+                out.atoms[i].attributes.insert(attr.clone(), Value::String(id.as_str().to_string()));
+                *report.refs_linked.entry(attr).or_default() += 1;
+            }
+            None => {
+                trace!(atom = %out.atoms[i].canonical_name, attr, values = ?ranked, "atlas/resolution sources: ref links nothing");
+                *report.refs_unlinked.entry(attr).or_default() += 1;
+            }
+        }
+    }
+    for (ty, r) in &out.report.types {
+        if !r.refs_linked.is_empty() || !r.refs_unlinked.is_empty() {
+            info!(ty = %ty, linked = ?r.refs_linked, unlinked = ?r.refs_unlinked, "atlas/resolution sources: refs linked to projected atoms");
+        }
     }
     // Salience is how many documents carry the value, against the most-seen.
     let count = |e: &Entity| {
@@ -196,6 +234,8 @@ struct Accum {
     documents: HashSet<String>,
     /// Attribute → each value read, with its count, first-seen first.
     values: BTreeMap<String, Vec<(String, usize)>>,
+    /// `refs` attribute → each folded target identity value read, with its count.
+    refs: BTreeMap<String, Vec<(String, usize)>>,
 }
 
 fn project_type(
@@ -206,7 +246,7 @@ fn project_type(
     report: &mut SourceTypeReport,
     all: &mut SourceReport,
 ) -> Vec<Accum> {
-    let reads_addresses = src.attributes.values().any(|r| r.reads_addresses());
+    let reads_addresses = src.reads_addresses();
     let excluded: HashSet<String> = src
         .exclude
         .iter()
@@ -285,11 +325,21 @@ fn project_type(
                             document: doc.to_string(),
                             documents: HashSet::new(),
                             values: BTreeMap::new(),
+                            refs: BTreeMap::new(),
                         });
                         accs.len() - 1
                     });
                     let acc = &mut accs[i];
                     acc.documents.insert(doc.to_string());
+                    for (attr, r) in &src.refs {
+                        if let Some(v) = read(r.reader).as_deref().and_then(fold_identity_value) {
+                            let seen = acc.refs.entry(attr.clone()).or_default();
+                            match seen.iter_mut().find(|(s, _)| *s == v) {
+                                Some((_, n)) => *n += 1,
+                                None => seen.push((v, 1)),
+                            }
+                        }
+                    }
                     for (attr, r) in &src.attributes {
                         if let Some(v) = read(*r) {
                             let seen = acc.values.entry(attr.clone()).or_default();

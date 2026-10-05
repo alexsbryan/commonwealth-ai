@@ -195,6 +195,31 @@ fn check_sources(p: &OntologyPolicies, errors: &mut Vec<String>) {
         if let Err(e) = s.identity_readers(index.effective_identity(&t.name)) {
             errors.push(at(e));
         }
+        for (attr, r) in &s.refs {
+            let family = index
+                .effective_attributes(&t.name)
+                .iter()
+                .find(|a| a.name == *attr)
+                .map(|a| a.family.clone());
+            match family {
+                Some(AttrFamily::Ref { of }) if of == r.of => {}
+                Some(AttrFamily::Ref { of }) => errors.push(at(format!(
+                    "ref `{attr}` links to `{}`, but the attribute is declared `ref` of `{of}`",
+                    r.of
+                ))),
+                Some(_) => errors.push(at(format!("ref `{attr}` is not a declared `ref` attribute of `{}`", t.name))),
+                None => errors.push(at(format!("ref `{attr}` is not a declared attribute of `{}`", t.name))),
+            }
+            let target = p.shape.types.iter().find(|x| x.name == r.of);
+            match target.map(|x| (&x.source, index.effective_identity(&x.name).len())) {
+                Some((Some(SourceDecl::Metadata(_)), 1)) => {}
+                Some(_) => errors.push(at(format!(
+                    "ref `{attr}` links to `{}`, which must declare a metadata source and exactly one identity key",
+                    r.of
+                ))),
+                None => errors.push(at(format!("ref `{attr}` links to `{}`, which is not a declared type", r.of))),
+            }
+        }
     }
 }
 

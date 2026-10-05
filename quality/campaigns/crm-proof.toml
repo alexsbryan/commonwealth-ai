@@ -63,8 +63,8 @@ derives_from = "Demo D2 'employer resolved'; ONTOLOGY_METHOD.md 'a role is a JOI
 one_line     = "Share of external gold people (an email and a company) whose one person atom names an employer resolving to their gold company"
 status       = "open"
 direction    = "higher_is_better"
-floor        = 0.161
-floor_basis  = "registered 2026-10-05 before any change aimed at it: baseline 2026-10-03 atlas, current pipeline, 14/87 (people carry no file, so holdout = all); 3 person atoms name a wrong account"
+floor        = 0.169
+floor_basis  = "registered 2026-10-05 before any change aimed at it: baseline 2026-10-03 atlas, current pipeline, 14/83 (people carry no file, so holdout = all); 3 person atoms name a wrong account. First registered as 14/87: 4 gold people whose company is None (loaded as '<folder>:None') sat in the denominator and could never match"
 target       = 0.8
 goodhart     = "hits target by giving everyone their address's domain as employer, an ISP or a consultant's domain included — person atoms naming a wrong account are reported beside it (contacts_wrong_account)"
 instrument   = "python3 research/ontology-apps/ward/score.py --bar crm-contacts"

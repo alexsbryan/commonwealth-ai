@@ -91,9 +91,31 @@ pub struct MetadataSourceDecl {
     /// the identity fold.
     #[serde(default)]
     pub exclude: Vec<String>,
+    /// Declared `ref` attribute → the sourced type it links to, and the reader
+    /// whose value on the same mailbox is that type's identity value. Contact
+    /// → Account: `employer = { of = "company", reader = "domain" }`. A value
+    /// the target type excludes or never projects links nothing; a role, never
+    /// an identity key (`ONTOLOGY_METHOD.md`).
+    #[serde(default)]
+    pub refs: BTreeMap<String, SourceRef>,
+}
+
+/// One `refs` entry of a metadata source: the target type and the reader.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceRef {
+    /// A declared entity type with a metadata source and one identity key.
+    pub of: String,
+    /// The reader whose value is the target's identity value.
+    pub reader: FieldReader,
 }
 
 impl MetadataSourceDecl {
+    /// Whether any declared reader (attribute or ref) parses address lists.
+    pub fn reads_addresses(&self) -> bool {
+        self.attributes.values().any(|r| r.reads_addresses()) || self.refs.values().any(|r| r.reader.reads_addresses())
+    }
+
     /// The reader filling each identity key, or why the declaration cannot
     /// project: an atom's identity value IS its identity keys' values, so a
     /// type with no key, or a key no reader fills, has none. The one check,

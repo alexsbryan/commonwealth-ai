@@ -60,7 +60,7 @@ pub use crate::recipe_ontology::language::{OntologyLanguage, OntologyLanguageReg
 pub use understanding_vocab::ontology::decl::{
     AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Deontic, DeriveDecl, DocumentFieldsDecl,
     FieldReader, Force, MetadataSourceDecl, OntologyTypeDecl, OntologyV1, OntologyVocabulary,
-    SourceDecl, SupersessionClock, TableSourceDecl, TensionDecl, TypeKind, VoicesDecl,
+    SourceDecl, SourceRef, SupersessionClock, TableSourceDecl, TensionDecl, TypeKind, VoicesDecl,
 };
 pub use understanding_vocab::ontology::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, DocumentStamp, IdentityPolicy,
