@@ -112,7 +112,7 @@ use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 /// scope at all.
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceScope {
-    /// Path prefixes that count. Empty = everything not excluded.
+    /// Paths that count, on whole components (`path_scope::under`). Empty = all.
     pub include_prefixes: Vec<String>,
     /// Whole `/`-separated path segments that disqualify a path. A pattern
     /// never matches a substring of a longer segment.
@@ -186,7 +186,7 @@ impl SourceScope {
             || self
                 .include_prefixes
                 .iter()
-                .any(|p| path.starts_with(p.as_str()))
+                .any(|p| crate::path_scope::under(p, path))
     }
 }
 

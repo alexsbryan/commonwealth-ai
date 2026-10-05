@@ -92,7 +92,7 @@ model, no build.
 
 Common:
   --corpus-id <id>        default: the sole indexed code corpus
-  --include <prefix>      restrict to a path prefix (repeatable)
+  --include <path>        restrict to a dir or file, whole components (repeatable)
   --json                  machine output, carrying the scope that produced it
 
 Four discovery feeds, and they do not overlap:

@@ -40,6 +40,7 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine_scip::capability_map::{is_function, pkg_and_desc};
 use corpus_engine_scip::converge::SourceScope;
+use corpus_engine_scip::path_scope;
 use corpus_engine_scip::ScipGraph;
 use corpus_index::index::CorpusIndex;
 use kernel_types::judgement::Judgement;
@@ -71,7 +72,7 @@ pub struct DryInputs<'a> {
     /// Cosine threshold for the near-clone tier.
     pub near_threshold: f32,
     /// Optional path (e.g. a crate dir) — restricts the report to one subtree,
-    /// matched on whole path components ([`scope_admits`]).
+    /// matched on whole path components ([`path_scope::under`]).
     pub scope: Option<&'a str>,
 }
 
@@ -212,7 +213,7 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         total_symbols += 1;
 
         if let Some(scope) = inputs.scope {
-            if !scope_admits(scope, file) {
+            if !path_scope::under(scope, file) {
                 let sibling = prefix_sibling(scope, file);
                 if sibling.is_some_and(|s| scope_excluded.insert(s.to_string())) {
                     tracing::debug!(scope, ?sibling, "dry_report: scope skips prefix sibling");
@@ -519,20 +520,7 @@ fn corpus_source_root(index_path: &Path) -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-/// Does `file` lie under `scope` on a whole path component? `crates/svrngs`
-/// takes in `crates/svrngs/src/a.rs` (or a file at exactly that path), never
-/// `crates/svrngs-core/…`, which a raw `starts_with` did (I3). A trailing `/`
-/// is dropped first, so `crates/svrngs/` is the same scope.
-fn scope_admits(scope: &str, file: &str) -> bool {
-    let scope = scope.trim_end_matches('/');
-    scope.is_empty()
-        || file == scope
-        || file
-            .strip_prefix(scope)
-            .is_some_and(|rest| rest.starts_with('/'))
-}
-
-/// For a `file` that [`scope_admits`] refused: the path a raw prefix match
+/// For a `file` that [`path_scope::under`] refused: the path a raw prefix match
 /// would have taken in (`crates/svrngs-core` for `crates/svrngs`), so the
 /// report can name it. `None` when the file does not share the prefix at all.
 fn prefix_sibling<'f>(scope: &str, file: &'f str) -> Option<&'f str> {
@@ -620,7 +608,7 @@ async fn exact_clones_from_source(
             continue;
         }
         if let Some(scope) = scope {
-            if !scope_admits(scope, &rec.file_path) {
+            if !path_scope::under(scope, &rec.file_path) {
                 continue;
             }
         }
