@@ -516,6 +516,15 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
         Class::LocalDaemon,
         1,
     ),
+    // NEW ROW (2026-10-05, 71d38be52): the media verbs' `reload` POSTs this
+    // node's own cw-rails at `[daemon] rails_base` (`mesh_cmd::rails_base`,
+    // loopback by default) so it re-reads `[media]`. Nothing leaves the
+    // machine; cw-rails is what members reach. Same class as publish_cmd's.
+    (
+        "cmnwlth/crates/sovereign-cli-mesh/src/mesh_media/rails_media.rs",
+        Class::LocalDaemon,
+        1,
+    ),
     // mesh_app.rs (2026-09-12): the viewer half of published apps — asks the
     // local daemon who publishes, then probes ONE app through the loopback
     // bridge the daemon minted. Same shape and same class as mesh_media's
