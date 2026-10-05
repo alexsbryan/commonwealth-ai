@@ -26,6 +26,7 @@
 
 pub mod decl;
 pub mod navigation;
+pub mod source;
 
 use std::collections::BTreeMap;
 
@@ -154,6 +155,9 @@ pub const DOCUMENT_DATE_ATTR: &str = "document_date";
 pub const DOCUMENT_THREAD_ATTR: &str = "document_thread";
 /// The claim attribute carrying the identifier of the claim's own document.
 pub const DOCUMENT_ID_ATTR: &str = "document_id";
+/// The entity attribute a metadata `source` writes on each atom it projects:
+/// how many documents carry its identity value.
+pub const DOCUMENT_COUNT_ATTR: &str = "document_count";
 
 /// One stamp `change.document` can declare. Closed: the declaration's three
 /// keys, each mapped to the reserved claim attribute it writes — the one

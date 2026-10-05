@@ -50,6 +50,7 @@ pub mod atlas_configuration;
 pub mod atlas_gaps;
 pub mod atlas_phase_cmd;
 pub mod atlas_resolve;
+mod atlas_resolve_documents;
 pub mod atlas_tensions;
 pub mod atlas_tensions_classify;
 pub mod atlas_tensions_holistic;

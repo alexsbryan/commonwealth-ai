@@ -576,7 +576,15 @@ question the pipeline asks about a type is a method on the resolved
   from the ONE document its evidence anchor lands in
   (`enrichment/atlas/resolution_documents.rs`, rows from
   `corpus_io::section_documents`), and records a claim it cannot place in
-  `resolution_failures.json` instead of guessing. **Both tension axes degrade by REPORTING, never by
+  `resolution_failures.json` instead of guessing. An entity type's
+  `source = { metadata = [...], attributes = {...} }` (`MetadataSourceDecl`)
+  projects one atom per distinct identity value read from those same rows'
+  fields through a closed reader set (`address`, `domain`, `display_name`,
+  `value`; `enrichment/atlas/resolution_sources.rs`), provenance
+  `SignalKind::DocumentField`, id `exact_entity_content_hash` of the value; in
+  Phase 3a the reconciler's strict `ExternalIdSignal` names the model atoms
+  carrying that value and the resolver's `merge_into_existing` folds them in,
+  counted on the resolve step's output. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at

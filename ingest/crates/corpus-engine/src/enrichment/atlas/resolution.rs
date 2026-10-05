@@ -131,7 +131,8 @@ pub async fn resolve_entities_and_events(
     sections: &[SectionExtraction],
     embed_fn: &EmbedFn,
 ) -> Result<ResolutionOutput> {
-    resolve_entities_and_events_with(sections, embed_fn, &ResolutionPolicy::default()).await
+    resolve_entities_and_events_with(sections, embed_fn, &ResolutionPolicy::default(), Vec::new())
+        .await
 }
 
 /// [`resolve_entities_and_events`] with a declared ontology in hand.
@@ -141,11 +142,13 @@ pub async fn resolve_entities_and_events(
 /// (`ruler` → `person`), and an event of a declared type keeps only
 /// participants the declaration admits. Everything else — the merge rules, the
 /// id order, the salience normalisation — is the same code the shim runs, so a
-/// version-0 corpus resolves byte-for-byte as it did.
+/// version-0 corpus resolves byte-for-byte as it did. `sources` are atoms
+/// projected from document fields (`resolution_sources`); empty is inert.
 pub async fn resolve_entities_and_events_with(
     sections: &[SectionExtraction],
     embed_fn: &EmbedFn,
     policy: &ResolutionPolicy<'_>,
+    sources: Vec<Entity>,
 ) -> Result<ResolutionOutput> {
     let mut entity_result = resolve_entities(sections, embed_fn, policy).await?;
     // Materialize Entity atoms for event participants the LLM named
@@ -189,6 +192,12 @@ pub async fn resolve_entities_and_events_with(
             debug!(loser, survivor, "phase 3a: typo-merge");
         }
     }
+    let sources = super::resolution_sources::fold_source_atoms(
+        &mut entity_result.entities,
+        &mut entity_result.name_index,
+        sources,
+        policy,
+    );
     // Token-inverted index for fuzzy participant lookup — covers
     // LLM-typo names like `Alyshka` / `Alysha` / `Adeladа Miюsova`
     // that share a long token with the canonical entity but do not
@@ -224,6 +233,7 @@ pub async fn resolve_entities_and_events_with(
         events: event_result.events,
         edges: event_result.involves_edges,
         failures,
+        sources,
     })
 }
 
@@ -542,6 +552,8 @@ pub struct ResolutionOutput {
     /// missed Phase 1 extraction or the seed list diverged). Empty
     /// for a clean run.
     pub failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
+    /// What folding the document-field atoms did; default with none.
+    pub sources: super::resolution_sources::SourceFoldReport,
 }
 
 /// Bundle returned by [`resolve_step_3b`].
@@ -676,12 +688,7 @@ async fn resolve_entities(
             );
             match target {
                 Some(existing_idx) => {
-                    merge_into_existing(
-                        &mut entities[existing_idx],
-                        sketch,
-                        section,
-                        &mut name_index,
-                    );
+                    merge_into_existing(&mut entities[existing_idx], sketch, &mut name_index);
                     if !touched_this_section.contains(&existing_idx) {
                         section_refs[existing_idx] += 1;
                         touched_this_section.push(existing_idx);
@@ -944,10 +951,9 @@ fn find_merge_target(
     None
 }
 
-fn merge_into_existing(
+pub(super) fn merge_into_existing(
     entity: &mut Entity,
     sketch: &EntitySketch,
-    _section: &SectionExtraction,
     name_index: &mut HashMap<String, AtomId>,
 ) {
     // Union aliases — canonical_name from the new sketch + every

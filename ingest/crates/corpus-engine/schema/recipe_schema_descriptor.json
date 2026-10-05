@@ -259,7 +259,15 @@
       "file",
       "from",
       "to",
-      "attributes"
+      "attributes",
+      "metadata",
+      "exclude"
+    ],
+    "source_reader": [
+      "address",
+      "domain",
+      "display_name",
+      "value"
     ],
     "tension": [
       "label",

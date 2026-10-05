@@ -34,6 +34,8 @@ const SOURCES: &[&str] = &[
     // `understanding-vocab` leaf since 2026-09-03; the generator parses
     // SOURCE, so it reads them where they are declared.
     "shared/crates/understanding-vocab/src/ontology/decl.rs",
+    // A declared type's `source` facet, split from `decl.rs` beside it.
+    "shared/crates/understanding-vocab/src/ontology/source.rs",
     // The navigation section (`[enrichment.ontology.navigation]`): the policy
     // struct IS the TOML shape, so it is rendered from where it is declared.
     "shared/crates/understanding-vocab/src/ontology/navigation.rs",
@@ -422,6 +424,15 @@ fn recipe_schema_descriptor_is_fresh() {
     // investigation decls — is in the leaf now (enrichment-as-plugin Step 3).
     let ontology_file =
         descriptor::parse(&ws.join("shared/crates/understanding-vocab/src/ontology/decl.rs"));
+    let source_file =
+        descriptor::parse(&ws.join("shared/crates/understanding-vocab/src/ontology/source.rs"));
+    // `source` takes one of two forms; the tool offers the keys of both.
+    let mut source_keys = descriptor::struct_fields(&source_file, "TableSourceDecl");
+    for k in descriptor::struct_fields(&source_file, "MetadataSourceDecl") {
+        if !source_keys.contains(&k) {
+            source_keys.push(k);
+        }
+    }
     let registry = corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin();
     let versions: Vec<u32> = registry.versions().map(|l| l.version()).collect();
     // The `[enrichment.ontology]` surface, for the recipe-author tool schema's
@@ -439,7 +450,8 @@ fn recipe_schema_descriptor_is_fresh() {
         "derive":             descriptor::struct_fields(&ontology_file, "DeriveDecl"),
         "force":              descriptor::variant_keys(&ontology_file, "Force"),
         "kind":               descriptor::variant_keys(&ontology_file, "TypeKind"),
-        "source":             descriptor::struct_fields(&ontology_file, "SourceDecl"),
+        "source":             source_keys,
+        "source_reader":      descriptor::variant_keys(&source_file, "FieldReader"),
         "tension":            descriptor::struct_fields(&ontology_file, "TensionDecl"),
         "type":               descriptor::struct_fields(&ontology_file, "OntologyTypeDecl"),
         "v1":                 descriptor::struct_fields(&ontology_file, "OntologyV1"),

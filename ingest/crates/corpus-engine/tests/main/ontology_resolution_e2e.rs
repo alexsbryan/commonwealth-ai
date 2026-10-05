@@ -138,7 +138,7 @@ async fn resolve(
     sections: Vec<SectionExtraction>,
 ) -> (ResolutionOutput, Step3bOutput) {
     let policy = ResolutionPolicy::new(policies);
-    let step_3a = resolve_entities_and_events_with(&sections, &fake_embed(), &policy)
+    let step_3a = resolve_entities_and_events_with(&sections, &fake_embed(), &policy, Vec::new())
         .await
         .expect("3a resolves");
     let step_3b = resolve_step_3b_with(&sections, &step_3a.entities, &step_3a.events, &policy)

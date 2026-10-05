@@ -543,6 +543,10 @@ fn vocabulary_schema() -> Value {
 /// the rest are per-kind facets (see the descriptor's `type` field list).
 fn ontology_type_schema(descriptor: &Value) -> Value {
     let str_array = json!({ "type": "array", "items": { "type": "string" } });
+    let readers: Vec<String> = desc_ontology(descriptor, "source_reader")
+        .iter()
+        .filter_map(|r| r.as_str().map(str::to_string))
+        .collect();
     json!({
         "type": "object",
         "required": ["name", "kind"],
@@ -558,15 +562,25 @@ fn ontology_type_schema(descriptor: &Value) -> Value {
             "to":                { "type": "string" },
             "participants":      { "type": "object", "additionalProperties": { "type": "string" } },
             "of":                { "type": "string" },
+            // `file` (a table) or `metadata` (the documents' own fields),
+            // never both; each form is `deny_unknown_fields`.
             "source": {
                 "type": "object",
-                "required": ["file"],
-                "additionalProperties": true,
+                "additionalProperties": false,
                 "properties": {
                     "file":       { "type": "string" },
                     "from":       { "type": "string" },
                     "to":         { "type": "string" },
-                    "attributes": { "type": "object", "additionalProperties": { "type": "string" } }
+                    "metadata":   str_array.clone(),
+                    "attributes": {
+                        "type": "object",
+                        "description": format!(
+                            "attribute → a column (with `file`) or a reader (with `metadata`): {}",
+                            readers.join(" | ")
+                        ),
+                        "additionalProperties": { "type": "string" }
+                    },
+                    "exclude":    str_array.clone()
                 }
             },
             "label":             { "type": "string" },

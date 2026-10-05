@@ -334,7 +334,7 @@ async fn acme_is_one_organization_atom_with_a_party_state() {
         .collect();
 
     let policy = ResolutionPolicy::new(&policies);
-    let step_3a = resolve_entities_and_events_with(&sections, &fake_embed(), &policy)
+    let step_3a = resolve_entities_and_events_with(&sections, &fake_embed(), &policy, Vec::new())
         .await
         .expect("resolution succeeds");
 

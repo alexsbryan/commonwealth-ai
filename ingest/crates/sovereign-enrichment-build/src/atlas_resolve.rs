@@ -28,6 +28,8 @@ use corpus_engine::enrichment::pipeline::{
 };
 use corpus_engine::types::EmbedFn;
 
+use super::atlas_resolve_documents::DocumentInputs;
+pub use super::atlas_resolve_documents::SourceCounts;
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
@@ -147,6 +149,7 @@ pub enum ResolveReport {
         events: usize,
         edges: usize,
         failures: usize,
+        sources: SourceCounts,
     },
     /// `--phase 3b` or `all`: 3a plus the typed extensions.
     Full {
@@ -162,6 +165,7 @@ pub enum ResolveReport {
         edges: usize,
         trajectories: usize,
         failures: usize,
+        sources: SourceCounts,
     },
 }
 
@@ -169,15 +173,17 @@ impl ResolveReport {
     /// One line naming what this step resolved, for the build
     /// orchestrator's `StepDone` event.
     pub fn summary(&self) -> String {
-        let (head, failures) = match self {
+        let (head, failures, sources) = match self {
             Self::Step3aOnly {
                 entities,
                 events,
                 edges,
                 failures,
+                sources,
             } => (
                 format!("3a only: {entities} entity, {events} event atom(s), {edges} edge(s)"),
                 *failures,
+                *sources,
             ),
             Self::Full {
                 entities,
@@ -189,6 +195,7 @@ impl ResolveReport {
                 edges,
                 trajectories,
                 failures,
+                sources,
                 ..
             } => (
                 format!(
@@ -198,7 +205,16 @@ impl ResolveReport {
                     entities + events + states + relations + claims + questions
                 ),
                 *failures,
+                *sources,
             ),
+        };
+        let head = if sources.projected == 0 {
+            head
+        } else {
+            format!(
+                "{head}; {} document-field atom(s), {} model atom(s) merged into them",
+                sources.projected, sources.merged
+            )
         };
         if failures == 0 {
             head
@@ -270,22 +286,37 @@ pub async fn resolve_into_dir(
         }
     }
 
-    // Step 3a: always runs. Step 3b is re-resolved from 3a's
-    // output so the atom ids remain consistent regardless of
-    // whether the caller chose 3a-only or 3b/all.
-    let step_3a = resolve_entities_and_events_with(sections, embed, &policy)
-        .await
-        .map_err(|e| format!("atlas resolution (3a) failed: {e}"))?;
-
-    let atlas_dir = target_atlas_dir;
     let want_3b = matches!(phase, ResolvePhase::P3b | ResolvePhase::All);
-
     // Collect structured drops across both resolution phases so the
     // aggregator (`svrn enrich errors`) can surface them grouped
     // by kind. Empty in the clean-run case.
     let mut resolution_failures: Vec<corpus_engine::enrichment::pipeline::PhaseFailure> =
         Vec::new();
+
+    let DocumentInputs {
+        documents,
+        projection,
+    } = super::atlas_resolve_documents::load(cfg, &policies, want_3b)?;
+    let sources = projection
+        .as_ref()
+        .map(|p| p.atoms.clone())
+        .unwrap_or_default();
+
+    // Step 3a: always runs. Step 3b is re-resolved from 3a's
+    // output so the atom ids remain consistent regardless of
+    // whether the caller chose 3a-only or 3b/all.
+    let step_3a = resolve_entities_and_events_with(sections, embed, &policy, sources)
+        .await
+        .map_err(|e| format!("atlas resolution (3a) failed: {e}"))?;
+    let atlas_dir = target_atlas_dir;
     resolution_failures.extend(step_3a.failures.iter().cloned());
+    if let Some(p) = projection {
+        for line in p.report.summary_lines(&step_3a.sources) {
+            println!("  ✓ {line}");
+        }
+        resolution_failures.extend(p.report.failures);
+    }
+    let merged: usize = step_3a.sources.merged.values().sum();
 
     // Deferred init, not `Option` + `expect`: both branches assign
     // before yielding `w`, and the compiler proves it — so there is no
@@ -314,7 +345,8 @@ pub async fn resolve_into_dir(
             &step_3a.entities,
             &[], // no pre-existing positions on first run
             &step_3b.claims,
-            step_3a.entities.len() + 1,
+            // Not `len() + 1`: folds leave gaps, projected atoms hash ids.
+            corpus_engine::enrichment::atlas::next_entity_index(&step_3a.entities),
             step_3b.claims.len() + 1,
             1,
             1,
@@ -348,11 +380,9 @@ pub async fn resolve_into_dir(
 
         // `change.document`: every claim carries its OWN document's declared
         // fields; one it cannot be placed in is a recorded failure, not a guess.
-        if let Some(decl) = policies.change.document.as_ref() {
-            let docs = super::corpus_io::section_documents(cfg)
-                .map_err(|e| format!("loading section documents for change.document: {e}"))?;
+        if let (Some(decl), Some(docs)) = (policies.change.document.as_ref(), &documents) {
             let stamps =
-                corpus_engine::enrichment::atlas::stamp_claim_documents(&mut claims, &docs, decl);
+                corpus_engine::enrichment::atlas::stamp_claim_documents(&mut claims, docs, decl);
             println!("  ✓ {}", stamps.summary());
             resolution_failures.extend(stamps.failures);
         }
@@ -408,6 +438,10 @@ pub async fn resolve_into_dir(
                     edges: edges.len(),
                     trajectories: step_3b.trajectories.len(),
                     failures: 0,
+                    sources: SourceCounts {
+                        projected: step_3a.sources.projected,
+                        merged,
+                    },
                 };
                 w
             }
@@ -432,6 +466,10 @@ pub async fn resolve_into_dir(
                     events: step_3a.events.len(),
                     edges: step_3a.edges.len(),
                     failures: 0,
+                    sources: SourceCounts {
+                        projected: step_3a.sources.projected,
+                        merged,
+                    },
                 };
                 w
             }

@@ -806,7 +806,7 @@ One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are requi
 | `to` | `Option<String>` | no | type default | Relations only: the declared type at the target end. |
 | `participants` | `BTreeMap<String, String>` | no | type default | Events only: role name → declared type of the participant. |
 | `of` | `Option<String>` | no | type default | States only: the declared type the state is of. |
-| `source` | `Option<SourceDecl>` | no | type default | A file + column mapping to ingest this type structurally (no model call), for corpora that already hold it as a table. |
+| `source` | `Option<SourceDecl>` | no | type default | Where instances come from without a model call: a table file (`TableSourceDecl`), or the documents' own metadata fields, one atom per identity value (`MetadataSourceDecl`). |
 | `label` | `Option<String>` | no | type default | What the UI calls instances of this type. Defaults to `name`. On the first claim type that sets it, this also becomes the position term. |
 | `identity` | `Vec<String>` | no | type default | External identifiers that make two mentions one thing (`rxnorm_id`). An external key merges strictly. |
 | `identity_fallback` | `Vec<String>` | no | type default | Descriptive keys used when no external identifier is present (`["name", "employer"]`). A descriptive key is judged, not trusted. |
@@ -916,17 +916,6 @@ Allowed values:
 - `in_work` — True inside the work (what Alyosha believes).
 - `about_work` — Said about the work (what a critic argues).
 
-## `SourceDecl`
-
-A structural source for a declared type: a file already holding it as a table, ingested without a model call. `from`/`to` name the endpoint columns of a relation; `attributes` maps attribute name → column.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `file` | `String` | **yes** | — | Path of the table (CSV or JSONL), relative to the corpus source. |
-| `from` | `Option<String>` | no | type default | Relations: the column holding the `from` endpoint's identity. |
-| `to` | `Option<String>` | no | type default | Relations: the column holding the `to` endpoint's identity. |
-| `attributes` | `BTreeMap<String, String>` | no | type default | Declared attribute name → column name. |
-
 ## `VoicesDecl`
 
 `[enrichment.ontology.voices]` — who speaks, and who is not subject matter. Enforced in the Phase-1 parser, not only asked of the model.
@@ -976,6 +965,38 @@ A structural source for a declared type: a file already holding it as a table, i
 |---|---|---|---|---|
 | `configurations` | `Option<bool>` | no | type default | Run the interpretive-configuration rollups (Phase 8). Default true. |
 | `arguments` | `Option<bool>` | no | type default | Reconstruct arguments. Default false. |
+
+## `TableSourceDecl`
+
+`source = { file = … }`: a file already holding the type as a table, ingested without a model call. `from`/`to` name the endpoint columns of a relation; `attributes` maps attribute name → column. Declared only: no stage reads a table source yet.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `file` | `String` | **yes** | — | Path of the table (CSV or JSONL), relative to the corpus source. |
+| `from` | `Option<String>` | no | type default | Relations: the column holding the `from` endpoint's identity. |
+| `to` | `Option<String>` | no | type default | Relations: the column holding the `to` endpoint's identity. |
+| `attributes` | `BTreeMap<String, String>` | no | type default | Declared attribute name → column name. |
+
+## `MetadataSourceDecl`
+
+`source = { metadata = [...], attributes = {...} }`: one entity atom per distinct value of the type's `identity` attribute seen in the named fields of any document, no model call. A model-extracted atom of the type carrying the same identity value merges into it (strict merge). Mail: `metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `metadata` | `Vec<String>` | **yes** | — | The document metadata fields read, by the corpus's own names. |
+| `attributes` | `BTreeMap<String, FieldReader>` | no | type default | Declared attribute name → the reader that fills it from each field. The type's `identity` attributes must be among them. |
+| `exclude` | `Vec<String>` | no | type default | Identity values never projected (freemail domains), compared after the identity fold. |
+
+## `FieldReader`
+
+What a metadata source reads out of one field's value. Closed: the only fixed vocabulary a source has.
+
+Allowed values:
+
+- `address` — Every address in an address list (`Ann <ann@x.org>, bob@y.com`), lowercased.
+- `domain` — Each address's domain, lowercased.
+- `display_name` — The name paired with each address; nothing for a bare address.
+- `value` — The field's whole value: a string or number, or each one of a list.
 
 ## `QuestionKind`
 
@@ -1261,6 +1282,31 @@ date that does not parse. An unknown key inside `document` refuses at load.
 document = { date = "date", thread = "thread_id", id = "message_id" }
 ```
 
+An entity type's `source` can name the documents' own metadata fields instead
+of a table (`MetadataSourceDecl`): one atom per distinct value of the type's
+`identity` attribute seen in those fields, no model call. Each source
+attribute names a declared attribute and the reader that fills it —
+`address` (every address of an address list), `domain` (each address's
+domain), `display_name` (the name paired with each address) or `value` (the
+field's whole value, or each one of a list); the field names are your
+extractor's. The atom is named by its display name when one was read, else by
+its identity value, and counts the documents it was seen in
+(`document_count`). A model-extracted atom of the type carrying the same
+identity value merges into it (strict merge); `exclude` lists identity values
+never projected. A field a document lacks is counted; one that holds no
+address or a value no reader reads is recorded in `resolution_failures.json`.
+`file` and `metadata` are one or the other, and an unknown key or reader
+refuses at load.
+
+```toml
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["aol.com"] }
+```
+
 `max_entities_per_section` raises how many entities Phase 1 may introduce in
 one section (5–60; omit it to take the shipped cap of 15). Raise it for a
 corpus whose sections enumerate — a data table, a list of recipients — where
@@ -1296,11 +1342,14 @@ already emits (`person`, `concept`, `institution`, `work`, `place`,
 `clock` or a declared attribute; that a `state` type names `of` and declares no
 attributes; that `deontic` appears only on directive claims; that no
 claim type takes a reserved kind name; that `change.document` names at least
-one field and no declared attribute takes a stamp's name; and that the caps
+one field and no declared attribute takes a stamp's name; that a metadata
+`source` is on an entity type, names its fields, fills only declared
+attributes and reads every identity key; and that the caps
 hold (12 types per kind, 8 attributes per type, 12 values per closed set). It
 then prints what was derived — the clock, the tension selector, the identity
-default for each entity type, the question shapes the corpus will answer, and
-which document field becomes which claim stamp — so an inference you disagree
+default for each entity type, the question shapes the corpus will answer,
+which document fields each sourced type is read from, and which document
+field becomes which claim stamp — so an inference you disagree
 with can be overridden in the recipe.
 
 The worked declarations for ten kinds of user are in

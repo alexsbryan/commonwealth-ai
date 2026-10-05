@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub use super::source::{FieldReader, MetadataSourceDecl, SourceDecl, TableSourceDecl};
 use super::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
     OntologyPolicies, ProsePolicy, ShapePolicy,
@@ -378,8 +379,9 @@ pub struct OntologyTypeDecl {
     /// States only: the declared type the state is of.
     #[serde(default)]
     pub of: Option<String>,
-    /// A file + column mapping to ingest this type structurally (no model
-    /// call), for corpora that already hold it as a table.
+    /// Where instances come from without a model call: a table file
+    /// (`TableSourceDecl`), or the documents' own metadata fields, one atom
+    /// per identity value (`MetadataSourceDecl`).
     #[serde(default)]
     pub source: Option<SourceDecl>,
     /// What the UI calls instances of this type. Defaults to `name`. On the
@@ -546,24 +548,6 @@ pub enum ClaimScopeDecl {
     InWork,
     /// Said about the work (what a critic argues).
     AboutWork,
-}
-
-/// A structural source for a declared type: a file already holding it as a
-/// table, ingested without a model call. `from`/`to` name the endpoint
-/// columns of a relation; `attributes` maps attribute name → column.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct SourceDecl {
-    /// Path of the table (CSV or JSONL), relative to the corpus source.
-    pub file: String,
-    /// Relations: the column holding the `from` endpoint's identity.
-    #[serde(default)]
-    pub from: Option<String>,
-    /// Relations: the column holding the `to` endpoint's identity.
-    #[serde(default)]
-    pub to: Option<String>,
-    /// Declared attribute name → column name.
-    #[serde(default)]
-    pub attributes: BTreeMap<String, String>,
 }
 
 /// `[enrichment.ontology.voices]` — who speaks, and who is not subject

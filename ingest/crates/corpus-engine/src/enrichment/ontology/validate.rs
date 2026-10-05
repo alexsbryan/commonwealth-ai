@@ -17,7 +17,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     AttrFamily, DocumentFieldsDecl, DocumentStamp, Force, OntologyLanguageRegistry,
-    OntologyPolicies, SupersessionClock, TypeKind, DOCUMENT_DATE_ATTR,
+    OntologyPolicies, SourceDecl, SupersessionClock, TypeIndex, TypeKind, DOCUMENT_COUNT_ATTR,
+    DOCUMENT_DATE_ATTR,
 };
 use crate::enrichment::atlas::analysis::{TensionStrategy, SAME_FIELD_CLOCK, SAME_FIELD_SUBJECT};
 use crate::enrichment::pipeline::atlas::EntityType;
@@ -108,6 +109,7 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
     });
     if policies.has_declarations() {
         check_declarations(&policies, &mut out.errors);
+        check_sources(&policies, &mut out.errors);
         derived_facets(&policies, &mut out.notes);
     }
     out.notes.extend(document_note);
@@ -146,6 +148,52 @@ fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &
                     stamp.key()
                 ));
             }
+        }
+    }
+}
+
+/// A metadata `source`: on an entity type, naming its fields, filling only
+/// declared attributes, and reading every identity key — the last through
+/// `MetadataSourceDecl::identity_readers`, the check the projection runs.
+fn check_sources(p: &OntologyPolicies, errors: &mut Vec<String>) {
+    let index = TypeIndex::from_policies(p);
+    for t in &p.shape.types {
+        let Some(SourceDecl::Metadata(s)) = &t.source else {
+            continue;
+        };
+        let at = |e: String| format!("ontology type `{}` (metadata source): {e}", t.name);
+        if t.kind != TypeKind::Entity {
+            errors.push(at(format!(
+                "only an entity type is projected from document fields, and this is a `{}`",
+                kind_key(t.kind)
+            )));
+        }
+        if s.metadata.is_empty() || s.metadata.iter().any(|f| f.trim().is_empty()) {
+            errors.push(at("`metadata` must name the fields read, none blank".into()));
+        }
+        let declared: BTreeSet<&str> = index
+            .effective_attributes(&t.name)
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect();
+        for a in s
+            .attributes
+            .keys()
+            .filter(|a| !declared.contains(a.as_str()))
+        {
+            errors.push(at(format!(
+                "`{a}` is not a declared attribute of `{}` (attributes: {})",
+                t.name,
+                join_or_none(declared.iter().copied())
+            )));
+        }
+        if declared.contains(DOCUMENT_COUNT_ATTR) {
+            errors.push(at(format!(
+                "the source writes `{DOCUMENT_COUNT_ATTR}` on every atom; rename the attribute"
+            )));
+        }
+        if let Err(e) = s.identity_readers(index.effective_identity(&t.name)) {
+            errors.push(at(e));
         }
     }
 }
@@ -512,6 +560,21 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
     }
 
     for t in p.shape.types.iter().filter(|t| t.kind == TypeKind::Entity) {
+        if let Some(SourceDecl::Metadata(s)) = &t.source {
+            let read: Vec<String> = s
+                .attributes
+                .iter()
+                .map(|(a, r)| format!("{a}: {}", r.key()))
+                .collect();
+            notes.push(format!(
+                "source: {} ← document fields {} ({}) — one atom per identity value, model \
+                 atoms with that value merge into it; {} value(s) excluded",
+                t.name,
+                s.metadata.join(", "),
+                read.join(", "),
+                s.exclude.len()
+            ));
+        }
         let (primary, fallback, inherited) = resolve_identity(p, &t.name);
         let mut line = if !primary.is_empty() {
             format!(

@@ -51,6 +51,7 @@ pub mod resolution;
 pub mod resolution_documents;
 pub mod resolution_identity;
 pub mod resolution_ontology;
+pub mod resolution_sources;
 pub use corpus_engine_atlas_reader::resolve;
 pub mod schema_validation;
 pub mod seed_population;
@@ -94,6 +95,9 @@ pub use resolution::{
 };
 pub use resolution_documents::{stamp_claim_documents, DocumentStampReport, SectionDocuments};
 pub use resolution_ontology::ResolutionPolicy;
+pub use resolution_sources::{
+    next_entity_index, project_source_atoms, SourceFoldReport, SourceProjection, SourceReport,
+};
 pub use resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, ResolvedChunk};
 pub use schema_validation::{
     build_report as build_schema_validation_report, compare_across_corpora, count_open_questions,

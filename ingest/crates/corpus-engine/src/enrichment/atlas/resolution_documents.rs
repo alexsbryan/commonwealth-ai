@@ -42,6 +42,9 @@ struct SourceDocument {
 #[derive(Debug, Clone, Default)]
 pub struct SectionDocuments {
     by_section: HashMap<String, Vec<SourceDocument>>,
+    /// Section ids in manifest order, so a walk over every document is
+    /// deterministic (`each_document`).
+    order: Vec<String>,
 }
 
 impl SectionDocuments {
@@ -56,7 +59,9 @@ impl SectionDocuments {
     ) -> Self {
         let by_id: HashMap<u64, &EnrichmentChunkRow> = rows.iter().map(|r| (r.id, r)).collect();
         let mut by_section = HashMap::new();
+        let mut order = Vec::new();
         for (section_id, chunk_ids) in sections {
+            order.push(section_id.to_string());
             let mut docs: Vec<SourceDocument> = Vec::new();
             for id in chunk_ids {
                 let Some(row) = by_id.get(id) else {
@@ -90,12 +95,30 @@ impl SectionDocuments {
             }
             by_section.insert(section_id.to_string(), docs);
         }
-        Self { by_section }
+        Self { by_section, order }
     }
 
     /// How many documents, across every section.
     pub fn document_count(&self) -> usize {
         self.by_section.values().map(Vec::len).sum()
+    }
+
+    /// Every document ONCE, in manifest order, as `(section it is first
+    /// seen in, document key, metadata fields)`.
+    pub(super) fn each_document(&self) -> Vec<(&str, &str, &Map<String, Value>)> {
+        let mut seen = std::collections::HashSet::new();
+        self.order
+            .iter()
+            .flat_map(|s| {
+                self.by_section
+                    .get(s)
+                    .into_iter()
+                    .flatten()
+                    .map(move |d| (s, d))
+            })
+            .filter(|(_, d)| seen.insert(d.key.as_str()))
+            .map(|(s, d)| (s.as_str(), d.key.as_str(), &d.fields))
+            .collect()
     }
 }
 
@@ -244,7 +267,7 @@ pub fn stamp_claim_documents(
     report
 }
 
-fn failure(subject: String, kind: PhaseFailureKind, reason: String) -> PhaseFailure {
+pub(super) fn failure(subject: String, kind: PhaseFailureKind, reason: String) -> PhaseFailure {
     PhaseFailure {
         phase: PipelinePhase::Questions, // resolution rides on the Questions cache
         subject,
