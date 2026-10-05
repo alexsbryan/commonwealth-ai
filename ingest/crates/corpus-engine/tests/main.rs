@@ -58,6 +58,8 @@ mod investigation_pipeline_e2e;
 mod newsworthy_integration;
 #[path = "main/on_demand_guard.rs"]
 mod on_demand_guard;
+#[path = "main/ontology_document_stamps_e2e.rs"]
+mod ontology_document_stamps_e2e;
 #[path = "main/ontology_identity_e2e.rs"]
 mod ontology_identity_e2e;
 #[path = "main/ontology_prompt_snapshots.rs"]

@@ -316,6 +316,7 @@ impl OntologyV1 {
             change: ChangePolicy {
                 clock: self.change.clock.unwrap_or_default(),
                 supersedes: self.change.supersedes,
+                document: self.change.document,
             },
             derivation: DerivationPolicy {
                 tension: self.tension,
@@ -593,6 +594,33 @@ pub struct ChangeDecl {
     /// instance retires the earlier one for the same subject.
     #[serde(default)]
     pub supersedes: BTreeMap<String, String>,
+    /// The metadata fields each document carries that place a claim in time
+    /// and in its thread (`{ date = "date", thread = "thread_id", id =
+    /// "message_id" }` for mail). Every claim is stamped from the ONE
+    /// document its evidence lands in. Omit when documents carry no metadata.
+    #[serde(default)]
+    pub document: Option<DocumentFieldsDecl>,
+}
+
+/// `change.document` — which of a document's own metadata fields to stamp
+/// on every claim it carries. The names are the corpus's, whatever its
+/// extractor wrote; nothing else is read. A field a document lacks, or a date
+/// that is neither RFC 2822 nor ISO 8601, stamps nothing and is counted.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentFieldsDecl {
+    /// The field holding the document's date, RFC 2822 or ISO 8601. Stamped
+    /// as `document_date` in ISO 8601 — the clock supersession folds on.
+    #[serde(default)]
+    pub date: Option<String>,
+    /// The field naming the thread the document belongs to. Stamped as
+    /// `document_thread`.
+    #[serde(default)]
+    pub thread: Option<String>,
+    /// The field holding the document's own identifier. Stamped as
+    /// `document_id`.
+    #[serde(default)]
+    pub id: Option<String>,
 }
 
 /// `[enrichment.ontology.tension]` — which claims can conflict, and what makes

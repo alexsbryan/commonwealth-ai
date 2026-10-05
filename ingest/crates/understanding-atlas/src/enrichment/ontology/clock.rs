@@ -20,8 +20,48 @@
 //! number that is not a date and folding a rule that is still in force. A
 //! title it cannot read yields `None`, which the fold reads as "no clock
 //! for this rule" and therefore "nothing supersedes it".
+//!
+//! [`metadata_date`] is the second reader, for corpora whose documents carry
+//! their own date field (mail, front matter): the recipe names the field in
+//! `change.document.date` and resolution stamps the result on each claim as
+//! `document_date`.
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, NaiveDateTime, SecondsFormat, Utc};
+
+/// A document's own date — the value of the metadata field the recipe's
+/// `change.document.date` names — as ISO 8601, or `None`.
+///
+/// Unlike [`section_date`] this reads a field whose whole job is to be a
+/// date, so it parses the two shapes such fields carry: RFC 2822 (a mail
+/// `Date:` header) and ISO 8601 (RFC 3339 date-times, calendar dates, and
+/// date-times with no offset). An instant with an offset is written in UTC
+/// (`2001-05-14T23:39:00Z`), so the supersession fold's string order is
+/// time order across zones; a bare date stays a date; a date-time with no
+/// offset keeps its wall-clock reading and invents no zone. Anything else is
+/// `None` — the caller counts it, never defaults it.
+pub fn metadata_date(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let utc = |d: DateTime<chrono::FixedOffset>| {
+        d.with_timezone(&Utc)
+            .to_rfc3339_opts(SecondsFormat::Secs, true)
+    };
+    if let Ok(d) = DateTime::parse_from_rfc3339(s) {
+        return Some(utc(d));
+    }
+    if let Ok(d) = DateTime::parse_from_rfc2822(s) {
+        return Some(utc(d));
+    }
+    if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        return Some(d.format("%Y-%m-%d").to_string());
+    }
+    ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f"]
+        .iter()
+        .find_map(|f| NaiveDateTime::parse_from_str(s, f).ok())
+        .map(|d| d.format("%Y-%m-%dT%H:%M:%S").to_string())
+}
 
 /// The first ISO-8601 date in a section title, or `None`.
 ///
@@ -115,6 +155,43 @@ mod tests {
         assert_eq!(section_date("2025-13-01 nonsense"), None);
         // A longer digit run must not be sliced into a date.
         assert_eq!(section_date("ref 12025-01-02"), None);
+    }
+
+    #[test]
+    fn metadata_date_reads_rfc2822_and_iso8601() {
+        // An Enron-shaped mail header, comment and all, lands in UTC.
+        assert_eq!(
+            metadata_date("Mon, 14 May 2001 16:39:00 -0700 (PDT)").as_deref(),
+            Some("2001-05-14T23:39:00Z")
+        );
+        assert_eq!(
+            metadata_date("Tue, 15 May 2001 09:05:00 +0000").as_deref(),
+            Some("2001-05-15T09:05:00Z")
+        );
+        assert_eq!(
+            metadata_date("2025-03-14T10:00:00+02:00").as_deref(),
+            Some("2025-03-14T08:00:00Z")
+        );
+        assert_eq!(metadata_date(" 2025-03-14 ").as_deref(), Some("2025-03-14"));
+        // No offset written, none invented.
+        assert_eq!(
+            metadata_date("2025-03-14T10:00:00").as_deref(),
+            Some("2025-03-14T10:00:00")
+        );
+    }
+
+    #[test]
+    fn metadata_date_refuses_what_is_not_a_date() {
+        for raw in [
+            "",
+            "   ",
+            "yesterday",
+            "14/3/25",
+            "2025-13-01",
+            "Mon, 32 May 2001",
+        ] {
+            assert_eq!(metadata_date(raw), None, "{raw:?}");
+        }
     }
 
     #[test]

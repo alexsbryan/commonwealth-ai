@@ -220,7 +220,8 @@
     ],
     "change": [
       "clock",
-      "supersedes"
+      "supersedes",
+      "document"
     ],
     "claim_scope": [
       "in_work",

@@ -945,6 +945,17 @@ A structural source for a declared type: a file already holding it as a table, i
 |---|---|---|---|---|
 | `clock` | `Option<SupersessionClock>` | no | type default | The clock supersession folds on. Omit to derive `document_date`. |
 | `supersedes` | `BTreeMap<String, String>` | no | type default | Claim type → the clock it supersedes on: `"document_date"` or a time-family attribute of that type (`{ rule = "valid" }`). A later instance retires the earlier one for the same subject. |
+| `document` | `Option<DocumentFieldsDecl>` | no | type default | The metadata fields each document carries that place a claim in time and in its thread (`{ date = "date", thread = "thread_id", id = "message_id" }` for mail). Every claim is stamped from the ONE document its evidence lands in. Omit when documents carry no metadata. |
+
+## `DocumentFieldsDecl`
+
+`change.document` — which of a document's own metadata fields to stamp on every claim it carries. The names are the corpus's, whatever its extractor wrote; nothing else is read. A field a document lacks, or a date that is neither RFC 2822 nor ISO 8601, stamps nothing and is counted.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `date` | `Option<String>` | no | type default | The field holding the document's date, RFC 2822 or ISO 8601. Stamped as `document_date` in ISO 8601 — the clock supersession folds on. |
+| `thread` | `Option<String>` | no | type default | The field naming the thread the document belongs to. Stamped as `document_thread`. |
+| `id` | `Option<String>` | no | type default | The field holding the document's own identifier. Stamped as `document_id`. |
 
 ## `TensionDecl`
 
@@ -1235,6 +1246,21 @@ rest name declared attributes. Omit the key for the default, `["subject",
 tensions ACROSS subjects: a conflict between two characters is two claims with
 different subjects, and the default rules out exactly those pairs.
 
+`change.document` names the metadata fields each document carries — the
+names are your extractor's, nothing is assumed. Every claim is stamped from
+the ONE document its evidence anchor lands in: `date` becomes
+`document_date` (RFC 2822 or ISO 8601, written as ISO 8601 — the clock
+supersession folds on), `thread` becomes `document_thread`, `id` becomes
+`document_id`. A section can hold several documents (a mail thread), so a
+claim whose anchor is in none of them, or in several, is left unstamped and
+counted in `resolution_failures.json`, as is a field a document lacks or a
+date that does not parse. An unknown key inside `document` refuses at load.
+
+```toml
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id" }
+```
+
 `max_entities_per_section` raises how many entities Phase 1 may introduce in
 one section (5–60; omit it to take the shipped cap of 15). Raise it for a
 corpus whose sections enumerate — a data table, a list of recipients — where
@@ -1269,11 +1295,13 @@ already emits (`person`, `concept`, `institution`, `work`, `place`,
 `change.supersedes` name claim types and `tension.same` names `subject`,
 `clock` or a declared attribute; that a `state` type names `of` and declares no
 attributes; that `deontic` appears only on directive claims; that no
-claim type takes a reserved kind name; and that the caps hold (12 types per
-kind, 8 attributes per type, 12 values per closed set). It then prints what
-was derived — the clock, the tension selector, the identity default for each
-entity type, and the question shapes the corpus will answer — so an inference
-you disagree with can be overridden in the recipe.
+claim type takes a reserved kind name; that `change.document` names at least
+one field and no declared attribute takes a stamp's name; and that the caps
+hold (12 types per kind, 8 attributes per type, 12 values per closed set). It
+then prints what was derived — the clock, the tension selector, the identity
+default for each entity type, the question shapes the corpus will answer, and
+which document field becomes which claim stamp — so an inference you disagree
+with can be overridden in the recipe.
 
 The worked declarations for ten kinds of user are in
 `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md` §1; `svrn recipe new --ontology

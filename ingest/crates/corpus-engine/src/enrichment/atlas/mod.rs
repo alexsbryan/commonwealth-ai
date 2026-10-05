@@ -48,6 +48,7 @@ pub mod migrate_ids;
 pub mod ontology_coverage;
 pub mod registry;
 pub mod resolution;
+pub mod resolution_documents;
 pub mod resolution_identity;
 pub mod resolution_ontology;
 pub use corpus_engine_atlas_reader::resolve;
@@ -91,6 +92,7 @@ pub use resolution::{
     resolve_step_3b_with, ResolutionOutput, Step3bOutput, Trajectory, TrajectoryState,
     TrajectoryTransition,
 };
+pub use resolution_documents::{stamp_claim_documents, DocumentStampReport, SectionDocuments};
 pub use resolution_ontology::ResolutionPolicy;
 pub use resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, ResolvedChunk};
 pub use schema_validation::{

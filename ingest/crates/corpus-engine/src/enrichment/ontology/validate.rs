@@ -16,7 +16,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    AttrFamily, Force, OntologyLanguageRegistry, OntologyPolicies, SupersessionClock, TypeKind,
+    AttrFamily, DocumentFieldsDecl, DocumentStamp, Force, OntologyLanguageRegistry,
+    OntologyPolicies, SupersessionClock, TypeKind, DOCUMENT_DATE_ATTR,
 };
 use crate::enrichment::atlas::analysis::{TensionStrategy, SAME_FIELD_CLOCK, SAME_FIELD_SUBJECT};
 use crate::enrichment::pipeline::atlas::EntityType;
@@ -99,12 +100,75 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         );
     }
 
-    if !policies.has_declarations() {
-        return out;
+    // `change.document` stamps every claim, declared types or not, so it is
+    // checked and reported outside the types-only block below.
+    let document_note = policies.change.document.as_ref().map(|d| {
+        check_document_fields(&policies, d, &mut out.errors);
+        document_fields_note(d)
+    });
+    if policies.has_declarations() {
+        check_declarations(&policies, &mut out.errors);
+        derived_facets(&policies, &mut out.notes);
     }
-    check_declarations(&policies, &mut out.errors);
-    derived_facets(&policies, &mut out.notes);
+    out.notes.extend(document_note);
     out
+}
+
+/// `change.document`: at least one field, no blank name, and no declared
+/// attribute under a key a stamp would overwrite.
+fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &mut Vec<String>) {
+    let keys = DocumentStamp::ALL.map(DocumentStamp::key).join(", ");
+    if d.declared().next().is_none() {
+        errors.push(format!(
+            "change.document names no field. Declare at least one of {keys}, or drop the key."
+        ));
+    }
+    for (stamp, field) in d.declared() {
+        if field.trim().is_empty() {
+            errors.push(format!(
+                "change.document.{} is blank. Name the metadata field your documents carry.",
+                stamp.key()
+            ));
+        }
+    }
+    for t in &p.shape.types {
+        for a in &t.attributes {
+            if let Some(stamp) = d
+                .declared()
+                .map(|(s, _)| s)
+                .find(|s| s.attr() == a.name.as_str())
+            {
+                errors.push(format!(
+                    "ontology type `{}` declares attribute `{}`, which change.document.{} \
+                     stamps on every claim from its document. Rename the attribute.",
+                    t.name,
+                    a.name,
+                    stamp.key()
+                ));
+            }
+        }
+    }
+}
+
+/// The derived line for `change.document`: which field becomes which stamp.
+fn document_fields_note(d: &DocumentFieldsDecl) -> String {
+    let pairs: Vec<String> = d
+        .declared()
+        .map(|(stamp, field)| match stamp {
+            DocumentStamp::Date => {
+                format!(
+                    "{} ← `{field}` (RFC 2822 or ISO 8601, written as ISO 8601)",
+                    stamp.attr()
+                )
+            }
+            DocumentStamp::Thread | DocumentStamp::Id => format!("{} ← `{field}`", stamp.attr()),
+        })
+        .collect();
+    format!(
+        "document fields: {} — stamped on each claim from the one document its evidence \
+         lands in; a claim in none or several is left unstamped and counted",
+        join_or_none(pairs.iter().map(String::as_str))
+    )
 }
 
 fn kind_key(kind: TypeKind) -> &'static str {
@@ -304,7 +368,7 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
             ));
             continue;
         }
-        if clock == "document_date" {
+        if clock == DOCUMENT_DATE_ATTR {
             continue;
         }
         let Some(t) = p.type_decl(claim) else {

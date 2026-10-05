@@ -58,11 +58,12 @@ pub const SAME_FIELD_SUBJECT: &str = "subject";
 /// [`DOCUMENT_DATE_ATTR`] under the default document-date clock.
 pub const SAME_FIELD_CLOCK: &str = "clock";
 
-/// The attribute key the document-date clock reads. Stamped by the
-/// resolution step from the section title (`ontology::clock::section_date`);
-/// absent on a corpus whose sections carry no date, which under the rule
-/// above makes the clock vacuous rather than fatal.
-pub const DOCUMENT_DATE_ATTR: &str = "document_date";
+/// The attribute key the document-date clock reads. Stamped at resolution
+/// from the field the recipe's `change.document.date` names
+/// (`atlas::resolution_documents`); absent on a corpus that declares none,
+/// which under the rule above makes the clock vacuous rather than fatal.
+/// One spelling, owned by the leaf beside the declaration.
+pub use crate::enrichment::ontology::DOCUMENT_DATE_ATTR;
 
 /// What one comparability pass removed, and on what evidence.
 ///

@@ -735,7 +735,7 @@ absorbed. The order of landing is unchanged: M0 (ground on build), Axis
 then Identity as the counted types show up. The ten users are the
 acceptance set; a facet none of them would write does not land.
 
-## 8. Proposed: types composed from what is said (2026-10-03, not built)
+## 8. Proposed: types composed from what is said (2026-10-03; only step 1, per-claim document stamps, built)
 
 Some types are never mentioned, only done. A deal in a mailbox is the joint
 commitment a run of acts builds (a request, an indication, a counter, an
@@ -753,10 +753,10 @@ each reusing what exists:
 
 | Axis | Piece | Reuses |
 |---|---|---|
-| 1 Shape | `source = { metadata = ..., attributes = {...} }`: typed atoms from a document's own fields (email headers, front matter), no model | `SourceDecl` (decl.rs:553, no consumer today); per-document fields ride `ChapterEntry.metadata` into chapters.json, which resolution already reads |
+| 1 Shape | `source = { metadata = ..., attributes = {...} }`: typed atoms from a document's own fields (email headers, front matter), no model | `SourceDecl` (decl.rs:555, no consumer today). Per-document fields do NOT reach chapters.json: `build_manifest_from_corpus_rows` (`sovereign-enrichment-build/src/corpus_io.rs`) writes only section-level keys into `ChapterEntry.metadata`, and resolution reads only chapter `id` and `title` from it. They ride each chunk's `metadata` JSON in the index, which step 1 below reads |
 | 3 Identity | a declared `identity` key match merges (what `recipe validate` already prints as "strict merge") | the identity veto (`resolution_identity.rs`); `ExternalIdSignal` |
-| 4 Change | `clock` from a declared metadata field, stamped per atom as `document_date`; a state type `of` a composed type derives one state per member, ordered by that clock, so "current" is the latest | the ResolutionPolicy chapters read; trajectories (ordering by section id today, no clock) |
-| 5 Derivation | `compose = { of, block, link, anchor, adjudicate }`: member claims grouped where `block` attributes are equal, `link` attributes compatible or the document thread shared, an `anchor` attribute (a deal number) deciding outright; ambiguous pairs optionally put to the model as "same X?" | the reconciler's blocked pairs and union-find; the Phase-6 chat loop and `same_as` reification; Configuration's post-resolution write (after Resolve, before Tensions) with `Composes` edges to members |
+| 4 Change | `clock` from a declared metadata field, stamped per atom as `document_date`; a state type `of` a composed type derives one state per member, ordered by that clock, so "current" is the latest | **Step 1, built 2026-10-04:** `change.document = { date, thread, id }` (`DocumentFieldsDecl`) names the fields; `atlas::resolution_documents` stamps every claim with `document_date` (RFC 2822 / ISO 8601 → ISO 8601), `document_thread`, `document_id` from the ONE document its evidence anchor lands in, reading the chunk rows the build already loads (`corpus_io::section_documents`). An anchor in no document or several, or an unreadable field, stamps nothing and is a `resolution_failures.json` record. The governance clock fold reads the stamp (`governance_change::rule_clock`); `ThreadRootSignal` still has no installed lookup. Trajectories still order by section id |
+| 5 Derivation | `compose = { of, block, link, anchor, adjudicate }`: member claims grouped where `block` attributes are equal, `link` attributes compatible or the document thread shared, an `anchor` attribute (a deal number) deciding outright; ambiguous pairs optionally put to the model as "same X?" | the reconciler's blocked pairs and union-find; the Phase-6 chat loop and `same_as` reification. NOT Configuration: it is a Phase-8 LLM rollup (`analysis/configuration.rs`) whose edges are `Configures` (`store/configures.rs`), and `Composes` is emitted only by the RAPTOR summary tree (`sovereign-tools/src/summary_atoms.rs:568`) — the composed write and its member edges are new |
 
 ```toml
 [[enrichment.ontology.types]]

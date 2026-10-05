@@ -570,7 +570,13 @@ question the pipeline asks about a type is a method on the resolved
   version-1 declaration drives the Phase-1 prompt, the generated response
   schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
   the navigation map; a relation declared with both ends also gets one focused
-  Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`). **Both tension axes degrade by REPORTING, never by
+  Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`).
+  `change.document` names per-document metadata fields; resolution stamps each
+  claim with `document_date` (ISO 8601), `document_thread` and `document_id`
+  from the ONE document its evidence anchor lands in
+  (`enrichment/atlas/resolution_documents.rs`, rows from
+  `corpus_io::section_documents`), and records a claim it cannot place in
+  `resolution_failures.json` instead of guessing. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at

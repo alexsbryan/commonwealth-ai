@@ -450,7 +450,18 @@ fn ontology_schema(descriptor: &Value) -> Value {
                 "additionalProperties": true,
                 "properties": {
                     "clock":      { "enum": desc_ontology(descriptor, "clock") },
-                    "supersedes": { "type": "object", "additionalProperties": { "type": "string" } }
+                    "supersedes": { "type": "object", "additionalProperties": { "type": "string" } },
+                    // `DocumentFieldsDecl` is `deny_unknown_fields`, so the
+                    // tool closes the object too.
+                    "document": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "date":   { "type": "string" },
+                            "thread": { "type": "string" },
+                            "id":     { "type": "string" }
+                        }
+                    }
                 }
             },
             "tension": {

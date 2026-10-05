@@ -346,6 +346,17 @@ pub async fn resolve_into_dir(
         // Merge new edges.
         edges.extend(typed.new_edges.iter().cloned());
 
+        // `change.document`: every claim carries its OWN document's declared
+        // fields; one it cannot be placed in is a recorded failure, not a guess.
+        if let Some(decl) = policies.change.document.as_ref() {
+            let docs = super::corpus_io::section_documents(cfg)
+                .map_err(|e| format!("loading section documents for change.document: {e}"))?;
+            let stamps =
+                corpus_engine::enrichment::atlas::stamp_claim_documents(&mut claims, &docs, decl);
+            println!("  ✓ {}", stamps.summary());
+            resolution_failures.extend(stamps.failures);
+        }
+
         let result = write_atlas_full(
             atlas_dir,
             &entities,

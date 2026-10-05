@@ -32,8 +32,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use decl::{
-    OntologyTypeDecl, OntologyVocabulary, PatternDecl, SupersessionClock, TensionDecl, TypeKind,
-    VoicesDecl,
+    DocumentFieldsDecl, OntologyTypeDecl, OntologyVocabulary, PatternDecl, SupersessionClock,
+    TensionDecl, TypeKind, VoicesDecl,
 };
 pub use navigation::{
     NavigationPolicy, QuestionKind, SeedPolicy, SummarySource, WalkPolicy, DEFAULT_BUDGET,
@@ -139,6 +139,70 @@ pub struct ChangePolicy {
     /// Claim type → `"document_date"` or the time attribute it supersedes on.
     #[serde(default)]
     pub supersedes: BTreeMap<String, String>,
+    /// The per-document metadata fields stamped onto every claim. `None`
+    /// stamps nothing; absent on the wire then, so older `ontology.json`
+    /// files read and write unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<DocumentFieldsDecl>,
+}
+
+/// The claim attribute the document-date clock reads. Stamped from the
+/// field `change.document.date` names; read by the supersession fold and
+/// the tension `clock` field.
+pub const DOCUMENT_DATE_ATTR: &str = "document_date";
+/// The claim attribute carrying the thread of the claim's own document.
+pub const DOCUMENT_THREAD_ATTR: &str = "document_thread";
+/// The claim attribute carrying the identifier of the claim's own document.
+pub const DOCUMENT_ID_ATTR: &str = "document_id";
+
+/// One stamp `change.document` can declare. Closed: the declaration's three
+/// keys, each mapped to the reserved claim attribute it writes — the one
+/// table the validator and the resolver both read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum DocumentStamp {
+    Date,
+    Thread,
+    Id,
+}
+
+impl DocumentStamp {
+    pub const ALL: [DocumentStamp; 3] = [Self::Date, Self::Thread, Self::Id];
+
+    /// The claim attribute this stamp writes.
+    pub const fn attr(self) -> &'static str {
+        match self {
+            Self::Date => DOCUMENT_DATE_ATTR,
+            Self::Thread => DOCUMENT_THREAD_ATTR,
+            Self::Id => DOCUMENT_ID_ATTR,
+        }
+    }
+
+    /// The `change.document` key that declares it.
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Date => "date",
+            Self::Thread => "thread",
+            Self::Id => "id",
+        }
+    }
+}
+
+impl DocumentFieldsDecl {
+    /// The metadata field the author named for `stamp`, if any.
+    pub fn field(&self, stamp: DocumentStamp) -> Option<&str> {
+        match stamp {
+            DocumentStamp::Date => self.date.as_deref(),
+            DocumentStamp::Thread => self.thread.as_deref(),
+            DocumentStamp::Id => self.id.as_deref(),
+        }
+    }
+
+    /// Every declared `(stamp, field)` pair, in [`DocumentStamp::ALL`] order.
+    pub fn declared(&self) -> impl Iterator<Item = (DocumentStamp, &str)> {
+        DocumentStamp::ALL
+            .into_iter()
+            .filter_map(|s| self.field(s).map(|f| (s, f)))
+    }
 }
 
 /// Axis 5 — what the system infers.
@@ -329,5 +393,37 @@ impl AtlasOntologyFile {
     /// by a built-in genre? The custom pipeline reports `custom_atlas`.
     pub fn is_author_declared(&self) -> bool {
         self.pipeline_id == "custom_atlas"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `DocumentStamp::key` is the hand-spelled twin of the serde field names
+    /// on `DocumentFieldsDecl`; read the struct back through serde so the two
+    /// cannot drift.
+    #[test]
+    fn document_stamp_keys_are_the_declaration_keys() {
+        let all = DocumentFieldsDecl {
+            date: Some("a".into()),
+            thread: Some("b".into()),
+            id: Some("c".into()),
+        };
+        let json = serde_json::to_value(&all).unwrap();
+        let mut wire: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        wire.sort_unstable();
+        let mut keys: Vec<&str> = DocumentStamp::ALL.map(DocumentStamp::key).to_vec();
+        keys.sort_unstable();
+        assert_eq!(wire, keys);
+        for s in DocumentStamp::ALL {
+            assert!(s.attr().starts_with("document_"), "{}", s.attr());
+            assert_eq!(all.field(s).is_some(), true);
+        }
     }
 }

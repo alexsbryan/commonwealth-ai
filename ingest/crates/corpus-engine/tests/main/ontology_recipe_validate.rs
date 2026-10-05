@@ -483,3 +483,79 @@ subject = "topic""#,
     assert!(!r.notes.is_empty());
     assert_eq!(r.source_reachable, None);
 }
+
+// ── change.document ──────────────────────────────────────────────────────────
+
+const DOCUMENT_FIELDS: &str = r#"version = 1
+[[enrichment.ontology.types]]
+name = "deal_act"
+kind = "claim"
+force = "commissive"
+[enrichment.ontology.change]
+document = { date = "sent", thread = "conversation", id = "msg" }"#;
+
+/// What `svrn recipe validate` prints under "Derived from your
+/// declarations:" is `ValidationResult::notes`, line for line.
+#[test]
+fn validate_prints_which_document_field_becomes_which_stamp() {
+    let recipe = Recipe::from_toml(&recipe_with_ontology(DOCUMENT_FIELDS)).unwrap();
+    let r = validate_recipe_offline(&recipe);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    let line = r
+        .notes
+        .iter()
+        .find(|n| n.starts_with("document fields: "))
+        .unwrap_or_else(|| panic!("no document line in {:?}", r.notes));
+    assert_eq!(
+        line,
+        "document fields: document_date ← `sent` (RFC 2822 or ISO 8601, written as ISO 8601), \
+         document_thread ← `conversation`, document_id ← `msg` — stamped on each claim from \
+         the one document its evidence lands in; a claim in none or several is left \
+         unstamped and counted"
+    );
+    // Printed with no declared types too: the stamps apply to every claim.
+    let bare = validate(
+        r#"version = 1
+[enrichment.ontology.change]
+document = { date = "sent" }"#,
+    );
+    assert!(
+        bare.notes
+            .iter()
+            .any(|n| n.starts_with("document fields: document_date ← `sent`")),
+        "{:?}",
+        bare.notes
+    );
+}
+
+#[test]
+fn validate_refuses_an_empty_or_colliding_change_document() {
+    let e = first_error_containing(
+        r#"version = 1
+[enrichment.ontology.change]
+document = {}"#,
+        "names no field",
+    );
+    assert!(e.contains("date, thread, id"), "{e}");
+    first_error_containing(
+        r#"version = 1
+[enrichment.ontology.change]
+document = { thread = " " }"#,
+        "change.document.thread is blank",
+    );
+    let e = first_error_containing(
+        r#"version = 1
+[[enrichment.ontology.types]]
+name = "deal_act"
+kind = "claim"
+force = "commissive"
+attributes = [{ name = "document_date", type = "time" }]
+[enrichment.ontology.change]
+document = { date = "sent" }"#,
+        "Rename the attribute",
+    );
+    assert!(
+        e.contains("`deal_act` declares attribute `document_date`"),
+        "{e}"
+    );
+}

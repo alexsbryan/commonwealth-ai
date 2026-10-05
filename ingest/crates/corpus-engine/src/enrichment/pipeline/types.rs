@@ -840,6 +840,14 @@ pub enum PhaseFailureKind {
     /// A declared `ref` attribute's value did not resolve to any Entity
     /// atom. The attribute keeps the NAME the model wrote.
     UnresolvedAttributeRef,
+    /// `change.document` is declared and a claim's evidence lands in no
+    /// source document, or in several. The claim keeps its content; only its
+    /// document stamps are lost.
+    UnresolvedClaimDocument,
+    /// A claim's document resolved but lacks a field `change.document`
+    /// names, or its date is neither RFC 2822 nor ISO 8601. That stamp is
+    /// left off; the others still land.
+    UnreadableDocumentField,
 
     // Clustering / naming
     NoClusterableItems,
@@ -898,6 +906,12 @@ impl PhaseFailureKind {
             }
             Self::UnresolvedAttributeRef => {
                 "A `ref` attribute's value didn't match any Entity. The attribute keeps the name the model wrote, so nothing is lost — but the graph has no edge. Usually the referenced entity missed Phase 1 extraction."
+            }
+            Self::UnresolvedClaimDocument => {
+                "The claim's anchor is in none, or several, of its section's documents, so no document is guessed. Usually a paraphrased anchor or text quoted in a reply."
+            }
+            Self::UnreadableDocumentField => {
+                "The document lacks a field `change.document` names, or its date is not RFC 2822 / ISO 8601. Check the field names against the extractor's metadata."
             }
             Self::NoClusterableItems => {
                 "Facet had 0 sketches. Structural — not a bug. If unexpected, check whether the corpus genuinely exercises this facet (e.g. philosophical essays vs. narrative fiction)."
