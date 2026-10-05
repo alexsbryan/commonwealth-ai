@@ -261,7 +261,8 @@
       "to",
       "attributes",
       "metadata",
-      "exclude"
+      "exclude",
+      "refs"
     ],
     "source_reader": [
       "address",
