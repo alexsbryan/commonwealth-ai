@@ -111,22 +111,47 @@ def attr_list(e, k):
     return [x for x in (v if isinstance(v, list) else [v]) if x]
 
 
+# The scorer's own name normalisation, kept apart from the system's (compose.py) so a bug in one cannot hide
+# in the other: legal forms, a trailing state code and a leading article do not change which company it is.
+LEGAL_FORMS = {"inc", "incorporated", "corp", "corporation", "co", "company", "llc", "llp", "lp", "ltd", "limited", "plc"}
+
+
+def name_core(n):
+    n = re.sub(r"\(.*?\)", " ", n or "")
+    n = re.sub(r",\s*[A-Z]{2}\.?\s*$", " ", n.strip())
+    words = [w for w in fold(n).replace(".", " ").replace("@", " ").split() if w not in LEGAL_FORMS]  # fold keeps them for addresses
+    return " ".join(words[1:] if words[:1] == ["the"] else words)
+
+
+def gold_forms(c):
+    """A gold company's written forms: its name, and each alias its name gives in parentheses."""
+    inner = [x for par in re.findall(r"\(([^)]*)\)", c.get("name") or "") for x in re.split(r"[;/]", par)]
+    return {name_core(x) for x in [c.get("name")] + inner} - {""}
+
+
+def atom_forms(e):
+    """The atom's canonical name only: its aliases are the system's own identity claims (an over-merge writes the
+    absorbed name there), and an instrument never matches on what the subject supplies about itself."""
+    return {name_core(e.get("canonical_name"))} - {""}
+
+
 def company_resolver(g, ent):
     """The one rule matching a gold company to the atlas's company atoms (every bar and deals.py read it):
-    a shared domain, else the same folded name. -> (atoms_of: gold id -> atom ids, resolves(atom value, gold
-    id)), where an atom value is an atom id or a raw name."""
+    a shared domain, else a shared written form (gold_forms against the atom's canonical name, equal after
+    name_core; never a subset, so "Citizens" is not "Citizens Insurance"). -> (atoms_of: gold id -> atom ids,
+    resolves(atom value, gold id)), where an atom value is an atom id or a raw name."""
     companies = [e for e in ent.values() if e.get("entity_type") == "company"]
-    atoms_of, name_of = {}, {c["id"]: fold(c.get("name")) for c in g["companies"]}
+    atoms_of, forms_of = {}, {c["id"]: gold_forms(c) for c in g["companies"]}
     for c in g["companies"]:
         doms = {fold(d) for d in c.get("domains") or []}
-        hit = {e["id"] for e in companies if doms & {fold(d) for d in attr_list(e, "domain")}
-               or fold(e.get("canonical_name")) == name_of[c["id"]]}
+        hit = {e["id"] for e in companies if doms & {fold(d) for d in attr_list(e, "domain")} or forms_of[c["id"]] & atom_forms(e)}
         if hit:
             atoms_of[c["id"]] = hit
 
     def resolves(v, gold_id):
-        name = name_of.get(gold_id, "")
-        return v in atoms_of.get(gold_id, set()) or bool(name and fold(ent.get(v, {}).get("canonical_name", v)) == name)
+        if v in atoms_of.get(gold_id, set()):
+            return True
+        return bool(forms_of.get(gold_id, set()) & (atom_forms(ent[v]) if v in ent else {name_core(v)}))
     return atoms_of, resolves
 
 
