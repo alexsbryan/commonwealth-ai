@@ -15,6 +15,7 @@ extracted (coverage is reported), read on the holdout (files outside the smoke s
 the full set beside:
   people       gold people with an email held by exactly ONE person atom carrying that email
   companies    gold companies matched by a domain or the folded name
+  contacts     external gold people whose person atom's employer resolves to their gold company
   deals        gold transaction deals matched by a deal atom citing one of their messages whose
                counterparty resolves to the gold counterparty; each atom used once
   stage        gold stage_updates matched by a stage_update claim citing the file, subject = the
@@ -180,6 +181,17 @@ def score(g, ent, claims, scope):
     def resolves(deal_atom, gold_cp):
         return any(company_resolves(v, gold_cp) for v in attr_list(deal_atom, "counterparty"))
 
+    # Contact -> Account: an external gold person (an email and a company) whose one person atom names an employer
+    # that resolves to that company; an employer resolving to no gold company of theirs is a wrong account
+    contact_n = contact_hit = contact_wrong = 0
+    for p in gp:
+        if p.get("internal") or not p.get("company"):
+            continue
+        contact_n += 1
+        emp = attr_list(ent[person_atom[p["id"]]], "employer") if p["id"] in person_atom else []
+        ok = any(company_resolves(v, p["company"]) for v in emp)
+        contact_hit += ok
+        contact_wrong += bool(emp) and not ok
     gd = [d for d in g["deals"] if d.get("kind", "transaction") == "transaction" and d["files"] & scope]
     deal_atom, used = {}, set()
     for d in gd:
@@ -211,6 +223,7 @@ def score(g, ent, claims, scope):
     # people and companies carry no file in the gold, so they are not scoped: read them on a
     # build that covers every gold file
     return {"people": r(ph, len(gp)), "emails_split": split,
+            "contacts": r(contact_hit, contact_n), "contacts_wrong_account": contact_wrong,
             "companies": r(len(company_atom), len(g["companies"])),
             "deals": r(len(deal_atom), len(gd)), "deal_atoms_unmatched": len(deals) - len(used),
             "stage": r(sh, len(gs)), "current_stage": r(cur_ok, cur_n),
@@ -318,7 +331,7 @@ def main():
         art = a.run / "score.json"
         art.write_text(json.dumps(out, indent=1) + "\n")
         key = {"crm-people": "people", "crm-companies": "companies", "crm-deals": "deals", "crm-stage": "stage",
-               "crm-commitments": "commitments"}.get(a.bar)
+               "crm-commitments": "commitments", "crm-contacts": "contacts"}.get(a.bar)
         value = out["cost"]["s_per_message"] if a.bar == "crm-cost" else (out["holdout"][key]["recall"] if key else None)
         if value is None:
             print(f"no value for {a.bar}", file=sys.stderr)
