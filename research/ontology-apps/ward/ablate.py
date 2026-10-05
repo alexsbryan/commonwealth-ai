@@ -191,6 +191,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--run", type=pathlib.Path, required=True)
     ap.add_argument("--out", type=pathlib.Path, required=True)
+    ap.add_argument("--facets", type=pathlib.Path, default=HERE / "compose.toml", help="the composer under test (e.g. method = \"ledger\")")
+    ap.add_argument("--only", default="", help="comma-separated arm-name prefixes to run (default: all)")
     a = ap.parse_args()
     g = S.load_gold(S.WARD / "gold")
     label = D.labeller(g, FOLD)
@@ -202,7 +204,7 @@ def main():
     members = [c for c in sc if c.get("claim_kind") == "deal_mention" and any(f.split("/", 1)[0] in FOLD for f in c["_files"])]
     report = {"steps": step_measures(g, members, label, C_ent, resolves)}
     reg = registry_ids(g, C_ent)
-    facets = (HERE / "compose.toml").read_text()
+    facets = a.facets.read_text()
     member_first = edit(facets, 'block_from = ["agent", "document", "member"]', 'block_from = ["member", "document"]')
     # the anchor as a cluster-level cannot-link (a join), not only a pairwise one
     anchor_join = lambda t: edit(t, 'distinct = { period = "overlap" }', 'distinct = { period = "overlap", deal_ref = "equal" }')  # noqa: E731
@@ -221,7 +223,8 @@ def main():
         ("V3 facts joined, kind split", set(), edit(anchor_join(facets), 'deal_ref = "equal" }', 'deal_ref = "equal", delivery_point = "equal", kind = "equal" }')),
     ]
     report["arms"] = {}
-    for name, oracles, text in arms:
+    only = [x.strip() for x in a.only.split(",") if x.strip()]
+    for name, oracles, text in [x for x in arms if not only or any(x[0].startswith(o) for o in only)]:
         key = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
         r = arm(key, base, g, label, reg, a.out, oracles, text)
         report["arms"][name] = r

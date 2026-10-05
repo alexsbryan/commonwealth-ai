@@ -665,6 +665,10 @@ def main():
                 groups[find(id(c))].append(c)
             else:
                 report[f"{spec['type']}: member left uncomposed"] += 1
+        if spec.get("method") == "ledger":
+            # the blocks as above; composition by legal moves over a per-party ledger (ledger.py) instead
+            import ledger as L  # noqa: PLC0415
+            groups = L.compose_blocks(blocks, fold, ask if spec.get("ledger_model") else None, a.cache, report)
         kind_of = {}
         if spec.get("adjudicate"):
             # pattern-level identity: one counterparty's whole timeline, partitioned by the model; code holds

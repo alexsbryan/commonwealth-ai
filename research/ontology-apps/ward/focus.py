@@ -66,13 +66,64 @@ def sentences(text):
     return out[:150]
 
 
+# Where quoted history starts: everything from here on was written earlier, by someone else.
+QUOTED = re.compile(r"^\s*(-{2,}\s*(Original Message|Forwarded by)|>|From:\s.*\bSent:)", re.I)
+MAX_UNITS = 30
+
+
+def units(body):
+    """The body's own structure as reading units, cut in code so the model cannot skip one: a paragraph; a
+    table's rows (lines with 2+ tabs) one unit each, read under their header; everything from the first
+    quoted-history marker flagged quoted. -> [{"sents": [...], "quoted": bool, "kind": str}]"""
+    out, quoted, para = [], False, []
+
+    def flush():
+        lines = [l for l in para if l.strip()]
+        rows = [l for l in lines if l.count("\t") >= 2]
+        if len(rows) >= 2:  # a table: the first row names the columns of the rest
+            head = [c.strip() for c in rows[0].split("\t")]
+            text = [l for l in lines if l.count("\t") < 2]
+            if text:
+                out.append({"sents": sentences("\n".join(text)), "quoted": quoted, "kind": "paragraph"})
+            for r in rows[1:]:
+                cells = [c.strip() for c in r.split("\t")]
+                pairs = [f"{h}: {c}" for h, c in zip(head, cells) if c]
+                out.append({"sents": ["; ".join(pairs)], "quoted": quoted, "kind": "table row"})
+        elif lines:
+            out.append({"sents": sentences("\n".join(lines)), "quoted": quoted, "kind": "paragraph"})
+        para.clear()
+
+    for line in body.splitlines():
+        if QUOTED.match(line) and not quoted:
+            flush(); quoted = True
+        if not line.strip():
+            flush()
+        else:
+            para.append(line)
+    flush()
+    out = [u for u in out if u["sents"]]
+    if len(out) > MAX_UNITS:  # the tail of a long chain reads as one unit rather than not at all
+        tail = out[MAX_UNITS - 1:]
+        out = out[:MAX_UNITS - 1] + [{"sents": [s for u in tail for s in u["sents"]], "quoted": True, "kind": "rest of the thread"}]
+    return out
+
+
 class Shape:
     """The per-message output type: declaration attributes refined by [shape], bound to this message."""
 
     def __init__(self, decl, shape, months):
         self.decl, self.shape, self.months = decl, shape, months
 
-    def schema(self, n_sent, labels):
+    def schema(self, n_sent, labels, unit_sents=None):
+        """unit_sents: unit key -> the sentence indices it may cite. Given, every unit is a required key whose
+        items cite only that unit (and the headers), so the grain is held by the schema, not asked for."""
+        if unit_sents is not None:
+            per = {k: self.schema(n_sent, labels)["properties"]["items"] for k in unit_sents}
+            for k, ids in unit_sents.items():
+                per[k] = json.loads(json.dumps(per[k]))
+                per[k]["items"]["properties"]["evidence"]["items"]["enum"] = [f"s{i}" for i in ids]
+            return {"type": "object", "required": ["units"], "properties": {"units": {
+                "type": "object", "required": list(unit_sents), "properties": per}}}
         props = {"evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": [f"s{i}" for i in range(n_sent)]}}}
         for a in self.decl.get("attributes", []):
             sh, name = self.shape.get(a["name"], {}), a["name"]
@@ -104,8 +155,17 @@ class Shape:
         return "\n".join(lines)
 
 
-def messages(corpus, folders):
-    """message id -> {section, path, meta, head, body}: headers from chunk metadata, body = filtered chunks."""
+def raw_body(path):
+    """The message file's own body: one document, not its index chunks re-joined (they overlap, so 14 of
+    92 tune messages read their quoted history twice)."""
+    m = email.message_from_string((S.WARD / "sample" / path).read_text(errors="replace"))
+    parts = [p for p in m.walk() if p.get_content_type() == "text/plain"] if m.is_multipart() else [m]
+    return "\n".join(str(p.get_payload()) for p in parts)
+
+
+def messages(corpus, folders, body="chunks"):
+    """message id -> {section, path, meta, head, body}: headers from chunk metadata, body = filtered chunks,
+    or with body="raw" the message file's own body."""
     import lance  # noqa: PLC0415
     idx = HOME / ".svrnmesh/indexes" / corpus
     rows = lance.dataset(str(idx / "chunks.lance")).to_table(columns=["id", "metadata", "content"]).to_pylist()
@@ -123,7 +183,7 @@ def messages(corpus, folders):
     for d in out.values():
         m = d["meta"]
         d["head"] = [f"{k.capitalize()}: {K.meta_value(m.get(k)) or ''}" for k in ("from", "to", "cc", "date", "subject")]
-        d["body"] = "\n".join(d["body"])[:12000]
+        d["body"] = (raw_body(d["path"]) if body == "raw" else "\n".join(d["body"]))[:12000]
     return out
 
 
@@ -149,6 +209,9 @@ def main():
     ap.add_argument("--atoms", type=pathlib.Path, help="base atoms (default: the corpus atlas)")
     ap.add_argument("--cache", type=pathlib.Path, default=S.WARD / "cache/focus")
     ap.add_argument("--out", type=pathlib.Path, required=True)
+    ap.add_argument("--grain", choices=["message", "unit"], default="message",
+                    help="unit: the body cut into paragraphs, table rows and quoted history in code, each a required key")
+    ap.add_argument("--body", choices=["chunks", "raw"], default="chunks", help="raw: the message file's body, not its chunks")
     a = ap.parse_args()
     folders = D.FOLDS["tune"] | D.FOLDS["read"] if a.folders == "all" else D.FOLDS[a.folders]
     facets = tomllib.loads(a.facets.read_text())
@@ -156,7 +219,7 @@ def main():
     own = next(s.get("own") for s in facets["source"] if s.get("own"))
     comp, alias = registry(a.registry)
     owners = {i for i, e in comp.items() if e.get("own")}
-    msgs = messages(a.corpus, folders)
+    msgs = messages(a.corpus, folders, a.body)
     dates = [email.utils.parsedate_to_datetime(K.meta_value(m["meta"].get("date"))) for m in msgs.values() if K.meta_value(m["meta"].get("date"))]
     shape = Shape(decl, facets.get("shape", {}).get(a.type, {}),
                   months_between((min(dates).year - 1, 1), (max(dates).year + 3, 12)))
@@ -170,16 +233,35 @@ def main():
             lab = comp[i].get("canonical_name") or i
             lab = lab if lab not in label_id else f"{lab} ({(comp[i].get('attributes') or {}).get('domain', i)})"
             labels.append(lab); label_id[lab] = i
-        sents = msg["head"] + sentences(msg["body"])
-        numbered = "\n".join(f"[s{i}] {s}" for i, s in enumerate(sents))
         system = f"You extract records from one email in the mailbox of a person at {own}. Answer only from the email."
-        user = (f"List every {decl['name']} in this email: {decl.get('description', '')}\n"
-                f"An email can hold several, for different counterparties or different deals, or none (an empty list).\n"
-                f"For each give:\n{shape.guide()}\n\nORGANIZATIONS IN THIS EMAIL: {', '.join(labels) or '(none listed)'}\n\n"
-                f"EMAIL (numbered sentences):\n{numbered}")
+        if a.grain == "message":
+            sents = msg["head"] + sentences(msg["body"])
+            numbered = "\n".join(f"[s{i}] {s}" for i, s in enumerate(sents))
+            user = (f"List every {decl['name']} in this email: {decl.get('description', '')}\n"
+                    f"An email can hold several, for different counterparties or different deals, or none (an empty list).\n"
+                    f"For each give:\n{shape.guide()}\n\nORGANIZATIONS IN THIS EMAIL: {', '.join(labels) or '(none listed)'}\n\n"
+                    f"EMAIL (numbered sentences):\n{numbered}")
+            schema, unit_of = shape.schema(len(sents), labels), {}
+        else:
+            sents, blocks, unit_sents, unit_of = list(msg["head"]), [], {}, {}
+            head_ids = list(range(len(sents)))
+            for k, u in enumerate(units(msg["body"])):
+                key, ids = f"u{k}", []
+                for s in u["sents"]:
+                    ids.append(len(sents)); sents.append(s)
+                unit_sents[key], unit_of[key] = head_ids + ids, u
+                tag = f"{u['kind']}, quoted: written earlier by someone else" if u["quoted"] else u["kind"]
+                blocks.append(f"UNIT {key} ({tag}):\n" + "\n".join(f"[s{i}] {sents[i]}" for i in ids))
+            header = "\n".join(f"[s{i}] {sents[i]}" for i in head_ids)
+            user = (f"For EVERY unit of this email, list each {decl['name']} it states: {decl.get('description', '')}\n"
+                    f"A unit can hold several deals, one, or none (an empty list); a table row is one deal. Answer for "
+                    f"every unit, citing only its own sentences or the headers.\n"
+                    f"For each give:\n{shape.guide()}\n\nORGANIZATIONS IN THIS EMAIL: {', '.join(labels) or '(none listed)'}\n\n"
+                    f"HEADERS:\n{header}\n\n" + "\n\n".join(blocks))
+            schema = shape.schema(len(sents), labels, unit_sents)
         t0 = time.time()
-        ans, cached = K.ask(a.cache, system, user, shape.schema(len(sents), labels), model=a.model)
-        return mid, ans, cached, time.time() - t0, sents, label_id
+        ans, cached = K.ask(a.cache, system, user, schema, model=a.model)
+        return mid, ans, cached, time.time() - t0, sents, label_id, unit_of
 
     def ref(i):
         """A registry member as the next identity pass reads it: its key when it has one, else its name. A
@@ -209,12 +291,18 @@ def main():
         return None
     claims, t_start = [], time.time()
     with cf.ThreadPoolExecutor(a.workers) as ex:
-        for mid, ans, cached, wall, sents, label_id in ex.map(one, sorted(msgs)):
+        for mid, ans, cached, wall, sents, label_id, unit_of in ex.map(one, sorted(msgs)):
             words = f" {K.fold(' '.join(sents))} "
             report["answers replayed from cache" if cached else "answers asked"] += 1
             if not cached:
                 walls.append(wall)
-            for it in ans.get("items", []):
+            if unit_of:
+                report["units"] += len(unit_of)
+                report["units answered empty"] += sum(not (ans.get("units") or {}).get(k) for k in unit_of)
+                found = [(k, it) for k in unit_of for it in (ans.get("units") or {}).get(k) or []]
+            else:
+                found = [(None, it) for it in ans.get("items", [])]
+            for unit, it in found:
                 ev = sorted({int(s[1:]) for s in it.get("evidence", []) if s[1:].isdigit() and int(s[1:]) < len(sents)})
                 quote = " ".join(sents[i] for i in ev)
                 attrs = {}
@@ -238,8 +326,11 @@ def main():
                 claims.append({"atom_type": "Claim", "data": {
                     "id": cid, "claim_kind": a.type, "attributes": attrs, "anchor": quote, "evidence_sentences": ev,
                     "evidence": [{"chunk_id": msgs[mid]["section"]}], "message_id": mid,
-                    "provenance": {"signal_kind": "focused_pass", "model": a.model}}})
+                    "provenance": {"signal_kind": "focused_pass", "model": a.model},
+                    **({"unit": unit, "unit_kind": unit_of[unit]["kind"], "quoted": unit_of[unit]["quoted"]} if unit else {})}})
                 report["items"] += 1
+                if unit:
+                    report[f"items from a {unit_of[unit]['kind']}{' (quoted)' if unit_of[unit]['quoted'] else ''}"] += 1
                 report[f"items with a counterparty"] += bool(attrs.get("counterparty"))
     elapsed = time.time() - t_start
     base = json.loads((a.atoms or HOME / ".svrnmesh/indexes" / a.corpus / "atlas/atoms.json").read_text())["atoms"]
