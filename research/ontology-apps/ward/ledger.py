@@ -15,8 +15,9 @@ the protocol's furthest state reached, and a terminal state sticks. For each mem
   NEW      always legal
 
 A member whose `status` (the spec's information-status attribute: is the composed particular new to the
-discourse, or given?) is read is decided by it after a forcing anchor: new -> NEW; given -> the latest legal
-instance with evidence, else the latest legal one. Otherwise structure decides: no legal instance -> NEW; one
+discourse, or presented as known?) is read is decided by it after a forcing anchor: new -> NEW; given -> the
+latest legal instance with evidence, else the latest legal one in its thread, else NEW (an antecedent outside
+the corpus: the record is accommodated). Otherwise structure decides: no legal instance -> NEW; one
 legal instance with evidence (a shared thread, a shared document, a term in common) -> join it; several with
 evidence -> the latest; none -> NEW. Every decision is counted by why it was made.
 """
@@ -99,9 +100,13 @@ def compose_blocks(blocks, spec, protocol, shape, fold, report=None, trace=None,
                 t, why = forced[0], "forced: an anchor it already holds"
             elif status == "new":
                 t, why = None, "status new: new"
-            elif status == "given" and legal:
-                t = max(backed or legal, key=lambda t: t.last)
-                why = f"status given: the latest of {len(backed)} with evidence" if backed else f"status given: the latest of {len(legal)} legal"
+            elif status == "given":
+                # presented as known: resolve by evidence, then salience within the conversation (its thread); with
+                # no antecedent the record began outside the corpus, so it is accommodated as new
+                same = [t for t in legal if c["_thread"] and c["_thread"] in t.threads]
+                t = max(backed or same, key=lambda t: t.last) if backed or same else None
+                why = (f"status given: the latest of {len(backed)} with evidence" if backed else
+                       f"status given: the latest of {len(same)} in its thread" if same else "status given: no antecedent, accommodated as new")
             elif not legal:
                 t, why = None, "new: no legal instance"
             elif len(backed) == 1:

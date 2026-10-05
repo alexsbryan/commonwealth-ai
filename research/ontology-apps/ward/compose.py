@@ -595,6 +595,26 @@ def main():
                 else:
                     report[f"{spec['type']}: block not inherited ({len(thread_blocks.get(c['_thread'], ()))} member blocks, "
                            f"{len(thread_parties.get(c['_thread'], ()))} outside parties in thread)"] += 1
+        if "keyed_context" in spec.get("block_from", []):
+            # Axis 3: an external key outranks a descriptive one. A member blocked on a party known only by name
+            # (no document field keys it: a third party named in the text, mostly) takes the one keyed block of
+            # its document's members, else of its thread's, when there is exactly one
+            ctx = {"document": collections.defaultdict(set), "thread": collections.defaultdict(set)}
+            for c in members:
+                if c["_block"] in keyed:
+                    ctx["document"][c["_doc"]].add(c["_block"])
+                    if c["_thread"]:
+                        ctx["thread"][c["_thread"]].add(c["_block"])
+            for c in members:
+                if not c["_block"] or c["_block"] in keyed:
+                    continue
+                for src, key in (("document", c["_doc"]), ("thread", c["_thread"])):
+                    if key and len(ctx[src].get(key, ())) == 1:
+                        c["_via"], c["_block"] = c.get("_via") or [c["_block"]], next(iter(ctx[src][key]))
+                        report[f"{spec['type']}: name-only party gave way to its {src}'s one keyed block"] += 1
+                        break
+                else:
+                    report[f"{spec['type']}: name-only party kept (no single keyed block in its document or thread)"] += 1
         parent = {id(c): id(c) for c in members}
         # distinct: typed identity attributes two members of one composed atom can never disagree on,
         # held per CLUSTER so no chain of links can join them either (an equal set for "equal", a common

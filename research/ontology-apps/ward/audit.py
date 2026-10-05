@@ -21,6 +21,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--run", type=pathlib.Path, required=True)
     ap.add_argument("--examples", type=int, default=0, help="print this many rows per error class")
+    ap.add_argument("--status", default="status", help="the member attribute carrying a read information status")
     ap.add_argument("--rule", default="", help="dump every labelled act decided by this rule (a prefix), with its candidates")
     a = ap.parse_args()
     g = S.load_gold(S.WARD / "gold")
@@ -84,6 +85,18 @@ def main():
     for (_, v), n in out.items():
         tot[v.split(",")[0]] += n
     print("totals:", dict(tot))
+    # a read information status against gold's: the first member of its deal in its block (ledger order) is new
+    seen, conf = set(), collections.Counter()
+    for r in trace:
+        mine = lab.get(r["act"])
+        if mine:
+            gold = "new" if (r["block"], mine) not in seen else "given"
+            seen.add((r["block"], mine))
+            conf[(gold, attrs[r["act"]].get(a.status))] += 1
+    if any(read for _, read in conf):
+        for v in ("new", "given"):
+            tp, said, real = conf[(v, v)], sum(n for (g, r), n in conf.items() if r == v), sum(n for (g, r), n in conf.items() if g == v)
+            print(f"status {v:5}: precision {tp}/{said}  recall {tp}/{real}  (unread: {conf[(v, None)]})")
     print("attach decisions on labelled acts, by the evidence the chosen transaction had:")
     for e in sorted({e for e, _ in ev_by}, key=lambda e: -(ev_by[(e, "right")] + ev_by[(e, "MERGE")])):
         print(f"      {e:34} right {ev_by[(e, 'right')]:3}  merge {ev_by[(e, 'MERGE')]:3}")
