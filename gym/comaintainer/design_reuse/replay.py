@@ -6,6 +6,9 @@ Conditions (identical scoring; deliberately different inputs):
   B  dossier      A + candidate existing surfaces found at BASE
   C  protocol     B + binding design protocol (grounded evidence, explicit
                   new_components, stated limits) enforced by the schema
+  D  verifier     C's dossier + per-candidate checkable observations graded
+                  by the controller; contradicted answers and inconsistent
+                  dispositions are refused (loop.py)
 
 Every call persists the full prompt, raw completion and served model under
 `runs/<stamp>/`, so `--rescore <dir>` reproduces every metric with ZERO
@@ -33,11 +36,12 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
 import common as C  # noqa: E402
+import loop as D  # noqa: E402
 from markers import SEAT_ENGINE_OF_RECORD  # noqa: E402
 from score import EngineDrift, call_daemon  # noqa: E402  (one HTTP client)
 
 RUNS = HERE / "runs"
-CONDITIONS = ("A", "B", "C")
+CONDITIONS = ("A", "B", "C", "D")
 
 
 def ask(prompt: str, schema: dict, pin: str, max_tokens: int, tries: int):
@@ -94,9 +98,13 @@ def progress_line(row: dict) -> str:
     if row["verdict"] != "parsed":
         return f"[{row['case']}/{row['condition']}] {row['verdict']}: {row['reason']}"
     m = row["metrics"]
+    extra = ""
+    if row["condition"] == "D":
+        extra = (f" refused={row.get('refusals', 0)} wrongobs={row.get('wrong_observations', 0)}"
+                 f" attempts={row.get('attempts', 0)}")
     return (f"[{row['case']}/{row['condition']}] parsed disp={m['disposition']} "
             f"home={int(m['home_match'])} path={int(m['path_match'])} "
-            f"new={m['new_components']} baits={len(m['bait_hits'])}")
+            f"new={m['new_components']} baits={len(m['bait_hits'])}{extra}")
 
 
 def select_cases(cases, args) -> list[dict]:
@@ -126,7 +134,9 @@ def rescore_dir(run_dir: Path) -> dict:
     summary = {"stamp": json.loads((run_dir / "meta.json").read_text())["stamp"],
                "rescore": True, "aggregate": agg,
                "rows": [{k: r.get(k) for k in ("case", "condition", "verdict",
-                                               "reason", "metrics")} for r in rows]}
+                                               "reason", "metrics", "refusals",
+                                               "wrong_observations", "attempts",
+                                               "finished")} for r in rows]}
     (run_dir / "rescore.json").write_text(json.dumps(summary, indent=2) + "\n")
     return summary
 
@@ -141,6 +151,8 @@ def main() -> int:
     ap.add_argument("--max-tokens", type=int, default=700)
     ap.add_argument("--tries", type=int, default=3)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-restate", action="store_true",
+                    help="condition D v2.2: facts are canonical state, not restated")
     ap.add_argument("--rescore", type=Path)
     args = ap.parse_args()
 
@@ -181,6 +193,7 @@ def main() -> int:
         "cases": [c["id"] for c in selected],
         "splits": {c["id"]: C.assign_splits(cases)[c["id"]] for c in selected},
         "include_holdout": args.include_holdout,
+        "d_restate": not args.no_restate,
     }
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
@@ -188,7 +201,12 @@ def main() -> int:
     with (run_dir / "calls.jsonl").open("w") as log:
         for case in selected:
             for cond in conditions:
-                row = run_one(case, cond, args.pin, args.max_tokens, args.tries)
+                if cond == "D":
+                    row = D.run_case_loop(
+                        case, lambda p, s: ask(p, s, args.pin, args.max_tokens, args.tries),
+                        restate=not args.no_restate)
+                else:
+                    row = run_one(case, cond, args.pin, args.max_tokens, args.tries)
                 rows.append(row)
                 log.write(json.dumps(row) + "\n")
                 log.flush()
@@ -197,7 +215,9 @@ def main() -> int:
     summary = {"stamp": stamp, "pin": args.pin, "conditions": conditions,
                "aggregate": C.aggregate(rows),
                "rows": [{k: r.get(k) for k in ("case", "condition", "verdict",
-                                               "reason", "metrics")} for r in rows]}
+                                               "reason", "metrics", "refusals",
+                                               "wrong_observations", "attempts",
+                                               "finished")} for r in rows]}
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print()
     print(C.render_aggregate(summary["aggregate"]))

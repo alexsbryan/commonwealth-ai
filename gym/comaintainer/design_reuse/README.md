@@ -39,6 +39,7 @@ text is a reconstruction and says so.
 | A | task + constraints | disposition/owner/seam/delta required |
 | B | + dossier | same schema |
 | C | + dossier + binding protocol | all fields required; `evidence` **enumerated to the candidate ids** (+ `none-of-these`); limits and delta minimum lengths |
+| D | + dossier with the controller's recorded facts | disposition refused when it contradicts a recorded fact; default v2.1 restates the record (graded); `--no-restate` = v2.2, facts are state. See "v2 iteration" below |
 
 C's grounding is structural on purpose: the decoder can only emit
 candidate ids, so "I grounded my answer" cannot be a free-text claim
@@ -108,6 +109,58 @@ read as "found"), and C's evidence grounding was a prose request the model
 ignored; narrowing the metrics to the choice fields and enumerating the
 ids in the schema are the lane's own thesis applied to itself.
 
+## v2 iteration — verifier-gated observations (2026-10-05)
+
+The iteration the accountability pass prescribed: move the design decision
+into a state machine where the model may not build on an unverified
+reading. Three variants, same bank, same engine; each variant exists
+because the previous one's measurement demanded it.
+
+**v2 — the model derives the facts, the controller grades them.** For every
+candidate the model answered `usable` / `serves`; wrong answers were
+refused with field-level feedback ("`converge-cli-shape.serves` is
+contradicted — re-read"). Across three smokes the model would not classify
+a surface it could accurately describe as serving (the renamed-fork
+detector), and insisted the prohibited concrete engine (`CorpusEngine`)
+was usable while the safe interface was not — identically across
+attempts, under refusal pressure. The historical miss, reproduced at the
+fact layer.
+
+**v2.1 — the facts are printed in the dossier; the model restates them.**
+Full dev run: **4/8 finished** (4 hit the refusal cap), **43 wrong
+restatements, 21 refusals**. On exactly the fields that cut against its
+plan the model overrode the printed record (e.g. `index-source` recorded
+usable=yes, restated no). The recorded pre-registered kill — "cannot
+finish a majority" — tripped.
+
+**v2.2 — the facts are canonical state; the gate checks only the
+disposition against them (`--no-restate`).** Full dev run:
+
+| condition | finished | disposition | home | path | refusals | evidence |
+|---|---|---|---|---|---|---|
+| D v2.2 | **8/8** | **7/8** | **7/8** | 6/8 | 3 | 8/8 |
+
+Zero false facts admitted (no fact assertions pass through the interface).
+The three refusals are the gate working: desktop tried to extend the
+engine → cited its own record → switched to USE; core-read reached for
+the prohibited concrete engine (refused by the constraint), then for USE
+on the interface (refused — the record says it does not serve), then
+settled on the gold EXTEND(index-source). The single residual disposition
+miss is session-ontology: EXTEND(tiered-conversation), gold ADAPT/ADD — a
+choice made *within* the legal set, which is what remains a referee
+question.
+
+Bars as registered: no false claim admitted — met; USE-gold 4/4 — met
+(vs B 2/4, C 1/4); non-USE dispositions 3/4 — met (vs B 2/4, C 1/4); kill
+— not tripped at v2.2.
+
+The reading: the same model, same facts, three divisions of labour —
+derived (fails), restated (won't), supplied-and-enforced (completes and
+matches gold 7/8). This is the founding concept's rule measured on our
+own task: *do not ask the model to enforce what the machine can know*.
+Runs: v2.1 `20261005T225201Z`, v2.2 `20261005T225938Z`; attempt logs are
+in each `calls.jsonl`.
+
 ## Pre-registered directional expectations for the next run
 
 Registered 2026-10-05, before any holdout use:
@@ -134,6 +187,7 @@ python3 gym/comaintainer/design_reuse/validate.py
 python3 gym/comaintainer/design_reuse/test_design_reuse.py
 python3 gym/comaintainer/design_reuse/replay.py --dry-run
 python3 gym/comaintainer/design_reuse/replay.py --pin <advertised-model-id> --limit 8
+python3 gym/comaintainer/design_reuse/replay.py --pin <advertised-model-id> --limit 8 --conditions D --no-restate
 python3 gym/comaintainer/design_reuse/replay.py --rescore runs/<stamp>
 ```
 

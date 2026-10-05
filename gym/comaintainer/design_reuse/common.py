@@ -118,6 +118,14 @@ def verify_case(case: dict) -> list[str]:
             bad.append(f"{cid}/{cand_id}: {path} is absent at base")
         elif norm(cand.get("excerpt", "")) not in norm(blob):
             bad.append(f"{cid}/{cand_id}: excerpt not found verbatim at {path}@{base[:9]}")
+        facts = cand.get("facts") or {}
+        if not isinstance(facts.get("usable"), bool) or not isinstance(facts.get("serves"), bool):
+            bad.append(f"{cid}/{cand_id}: facts.usable and facts.serves must both be booleans")
+        # The one mechanically-groundable fact: a pub(crate) excerpt cannot be
+        # usable from outside its crate. Everything else is pre-registered and
+        # inherits the case's label tier.
+        elif facts["usable"] and "pub(crate)" in (cand.get("excerpt") or ""):
+            bad.append(f"{cid}/{cand_id}: usable=true but the excerpt shows pub(crate)")
     oracle = case.get("oracle", {})
     for field in ("expected_disposition", "acceptable_owner_identities",
                   "acceptable_path_identities", "correction_quote", "bad_alternatives"):
@@ -265,7 +273,7 @@ def score_proposal(case: dict, proposal: dict, condition: str) -> dict:
         "new_components": len(proposal.get("new_components") or []),
         "new_component_list": proposal.get("new_components") or [],
         "evidence_grounded": (bool(evidence) and all(e in dossier_ids for e in evidence))
-                              if condition == "C" else None,
+                              if condition in ("C", "D") else None,
         "bait_hits": bait_hits,
     }
 
@@ -277,8 +285,11 @@ def aggregate(rows: list[dict]) -> dict:
             "n": 0, "malformed": 0, "could_not_judge": 0, "disposition_match": 0,
             "home_match": 0, "path_match": 0, "new_components": 0, "bait_rows": 0,
             "evidence_grounded": 0, "evidence_required": 0,
+            "refusals": 0, "wrong_observations": 0,
         })
         d["n"] += 1
+        d["refusals"] += int(row.get("refusals") or 0)
+        d["wrong_observations"] += int(row.get("wrong_observations") or 0)
         if row.get("verdict") == "malformed":
             d["malformed"] += 1
             continue
@@ -291,19 +302,19 @@ def aggregate(rows: list[dict]) -> dict:
         d["path_match"] += bool(m.get("path_match"))
         d["new_components"] += int(m.get("new_components", 0))
         d["bait_rows"] += bool(m.get("bait_hits"))
-        if row["condition"] == "C":
+        if row["condition"] in ("C", "D"):
             d["evidence_required"] += 1
             d["evidence_grounded"] += bool(m.get("evidence_grounded"))
     return out
 
 
 def render_aggregate(agg: dict) -> str:
-    lines = ["condition  n  parsed  disp  home  path  new_comp  bait_rows  evidence"]
+    lines = ["condition  n  parsed  disp  home  path  new_comp  bait_rows  evidence  refused  wrongobs"]
     for cond in sorted(agg):
         d = agg[cond]
         parsed = d["n"] - d["malformed"] - d["could_not_judge"]
         ev = f"{d['evidence_grounded']}/{d['evidence_required']}" if d["evidence_required"] else "-"
         lines.append(f"{cond:>9}  {d['n']}  {parsed:>6}  {d['disposition_match']:>4}  "
                      f"{d['home_match']:>4}  {d['path_match']:>4}  {d['new_components']:>8}  "
-                     f"{d['bait_rows']:>9}  {ev:>8}")
+                     f"{d['bait_rows']:>9}  {ev:>8}  {d['refusals']:>7}  {d['wrong_observations']:>8}")
     return "\n".join(lines)

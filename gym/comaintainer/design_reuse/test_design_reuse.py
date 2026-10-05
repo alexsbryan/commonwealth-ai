@@ -21,6 +21,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
 import common as C  # noqa: E402
+import loop as D  # noqa: E402
 import replay as R  # noqa: E402
 
 GOOD = {
@@ -113,6 +114,150 @@ class BankTests(unittest.TestCase):
         b = C.schema_for(case, "B")
         self.assertNotIn("evidence", b["required"])
         self.assertNotIn("limits", b["required"])
+
+
+class LoopTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.cases = C.load_cases()
+        cls.by_id = {c["id"]: c for c in cls.cases}
+
+    @staticmethod
+    def obs_for(case, **overrides):
+        out = []
+        for cand in case["dossier"]["candidates"]:
+            out.append({"candidate": cand["id"], "usable": cand["facts"]["usable"],
+                        "serves": cand["facts"]["serves"]})
+        for cid, fields in overrides.items():
+            for obs in out:
+                if obs["candidate"] == cid:
+                    obs.update(fields)
+        return out
+
+    @staticmethod
+    def action(case, observations, disposition, candidate):
+        return json.dumps({
+            "observations": observations, "disposition": disposition,
+            "candidate": candidate, "delta": "Reuse the recorded surface. " * 3,
+            "new_components": [], "limits": "No known limitation for this task.",
+            "evidence": [case["dossier"]["candidates"][0]["id"]],
+        })
+
+    @staticmethod
+    def scripted(replies):
+        pending = list(replies)
+        prompts = []
+
+        def ask(prompt, schema):
+            prompts.append(prompt)
+            return pending.pop(0), "scripted"
+        ask.prompts = prompts
+        return ask
+
+    def test_loop_grading_and_consistency(self):
+        converge = self.by_id["reuse-tool-discovery-converge-shape"]
+        self.assertEqual(D.grade_observations(converge, self.obs_for(converge)),
+                         ([], set(), []))
+        wrong, _, _ = D.grade_observations(
+            converge, self.obs_for(converge, **{"converge-cli-shape": {"serves": False}}))
+        self.assertEqual(wrong, ["converge-cli-shape.serves"])
+        # Reading: a serving surface admits only USE; every build is refused.
+        self.assertIsNone(D.consistency(converge, {"disposition": "USE", "candidate": "converge-cli-shape"}))
+        self.assertIsNotNone(D.consistency(converge, {"disposition": "EXTEND", "candidate": "converge-cli-shape"}))
+        self.assertIsNotNone(D.consistency(converge, {"disposition": "EXTEND", "candidate": "behaviour-detector-scope"}))
+        self.assertIsNotNone(D.consistency(converge, {"disposition": "ADD", "candidate": "none"}))
+        self.assertIsNotNone(D.consistency(converge, {"disposition": "USE", "candidate": "behaviour-detector-scope"}))
+        core = self.by_id["contrast-core-read-port"]
+        self.assertIsNone(D.consistency(core, {"disposition": "EXTEND", "candidate": "index-source"}))
+        self.assertIsNotNone(D.consistency(core, {"disposition": "USE", "candidate": "index-source"}))
+        self.assertIsNotNone(D.consistency(core, {"disposition": "EXTEND", "candidate": "corpus-engine-concrete"}))
+        self.assertIsNone(D.consistency(core, {"disposition": "ADD", "candidate": "none"}))
+
+    def test_loop_driver_refuses_false_observation_then_accepts(self):
+        case = self.by_id["reuse-tool-discovery-converge-shape"]
+        bad = self.action(case, self.obs_for(case, **{"converge-cli-shape": {"serves": False}}),
+                          "USE", "converge-cli-shape")
+        good = self.action(case, self.obs_for(case), "USE", "converge-cli-shape")
+        row = D.run_case_loop(case, self.scripted([bad, good]))
+        self.assertTrue(row["finished"])
+        self.assertEqual(row["refusals"], 1)
+        self.assertEqual(row["wrong_observations"], 1)
+        self.assertEqual(row["attempts"], 2)
+        self.assertEqual(row["first_attempt_wrong"], 1)
+        self.assertIn("converge-cli-shape.serves", row["attempt_log"][0]["refused"])
+        m = row["metrics"]
+        self.assertTrue(m["disposition_match"])
+        self.assertTrue(m["home_match"])
+        self.assertTrue(m["evidence_grounded"])
+
+    def test_loop_driver_refuses_inconsistent_disposition(self):
+        case = self.by_id["reuse-tool-discovery-converge-shape"]
+        add = self.action(case, self.obs_for(case), "ADD", "none")
+        use = self.action(case, self.obs_for(case), "USE", "converge-cli-shape")
+        row = D.run_case_loop(case, self.scripted([add, use]))
+        self.assertTrue(row["finished"])
+        self.assertEqual(row["refusals"], 1)
+        self.assertEqual(row["wrong_observations"], 0)
+        self.assertTrue(row["metrics"]["disposition_match"])
+
+    def test_loop_missing_observation_is_refused_with_message(self):
+        case = self.by_id["reuse-tool-discovery-converge-shape"]
+        short = dict(json.loads(self.action(case, self.obs_for(case), "USE", "converge-cli-shape")))
+        short["observations"] = short["observations"][:-1]
+        good = self.action(case, self.obs_for(case), "USE", "converge-cli-shape")
+        ask = self.scripted([json.dumps(short), good])
+        row = D.run_case_loop(case, ask)
+        self.assertTrue(row["finished"])
+        self.assertEqual(row["refusals"], 1)
+        self.assertIn("observed exactly once", ask.prompts[1])
+
+    def test_loop_cap_is_not_a_pass(self):
+        case = self.by_id["reuse-tool-discovery-converge-shape"]
+        wrong = self.action(case, self.obs_for(case, **{"converge-cli-shape": {"serves": False}}),
+                            "USE", "converge-cli-shape")
+        row = D.run_case_loop(case, self.scripted([wrong]), max_refusals=0)
+        self.assertFalse(row["finished"])
+        self.assertEqual(row["verdict"], "could-not-judge")
+        self.assertIn("refusal cap", row["reason"])
+
+    def test_loop_schema_enumerates_observations_and_evidence(self):
+        case = self.by_id["contrast-core-read-port"]
+        s = D.schema_d(case)
+        ids = [c["id"] for c in case["dossier"]["candidates"]]
+        self.assertEqual(s["properties"]["observations"]["minItems"], len(ids))
+        self.assertEqual(s["properties"]["observations"]["maxItems"], len(ids))
+        self.assertEqual(
+            s["properties"]["observations"]["items"]["properties"]["candidate"]["enum"], ids)
+        self.assertIn("none-of-these", s["properties"]["evidence"]["items"]["enum"])
+        self.assertEqual(s["properties"]["candidate"]["enum"][-1], "none")
+
+    def test_loop_no_restate_treats_record_as_state(self):
+        case = self.by_id["reuse-tool-discovery-converge-shape"]
+        s = D.schema_d(case, restate=False)
+        self.assertNotIn("observations", s["properties"])
+        self.assertNotIn("observations", s["required"])
+        good = json.dumps({
+            "disposition": "USE", "candidate": "converge-cli-shape",
+            "delta": "Adopt the existing detector; no new code. " * 2,
+            "new_components": [], "limits": "Discovery only; ownership is adjudicated.",
+            "evidence": ["converge-cli-shape"],
+        })
+        ask = self.scripted([good])
+        row = D.run_case_loop(case, ask, restate=False)
+        self.assertTrue(row["finished"])
+        self.assertEqual(row["refusals"], 0)
+        self.assertTrue(row["metrics"]["disposition_match"])
+        self.assertTrue(row["metrics"]["home_match"])
+        bad = json.dumps({
+            "disposition": "ADD", "candidate": "none",
+            "delta": "Build a new detector from scratch. " * 2,
+            "new_components": ["detector"], "limits": "None known.",
+            "evidence": ["converge-cli-shape"],
+        })
+        ask = self.scripted([bad, good])
+        row = D.run_case_loop(case, ask, restate=False)
+        self.assertTrue(row["finished"])
+        self.assertEqual(row["refusals"], 1)
 
 
 class RescoreTests(unittest.TestCase):
