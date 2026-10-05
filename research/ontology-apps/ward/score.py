@@ -111,6 +111,25 @@ def attr_list(e, k):
     return [x for x in (v if isinstance(v, list) else [v]) if x]
 
 
+def company_resolver(g, ent):
+    """The one rule matching a gold company to the atlas's company atoms (every bar and deals.py read it):
+    a shared domain, else the same folded name. -> (atoms_of: gold id -> atom ids, resolves(atom value, gold
+    id)), where an atom value is an atom id or a raw name."""
+    companies = [e for e in ent.values() if e.get("entity_type") == "company"]
+    atoms_of, name_of = {}, {c["id"]: fold(c.get("name")) for c in g["companies"]}
+    for c in g["companies"]:
+        doms = {fold(d) for d in c.get("domains") or []}
+        hit = {e["id"] for e in companies if doms & {fold(d) for d in attr_list(e, "domain")}
+               or fold(e.get("canonical_name")) == name_of[c["id"]]}
+        if hit:
+            atoms_of[c["id"]] = hit
+
+    def resolves(v, gold_id):
+        name = name_of.get(gold_id, "")
+        return v in atoms_of.get(gold_id, set()) or bool(name and fold(ent.get(v, {}).get("canonical_name", v)) == name)
+    return atoms_of, resolves
+
+
 def score(g, ent, claims, scope):
     """scope: the set of message files counted (gold labels outside it are not scored)."""
     of = lambda t: [e for e in ent.values() if e.get("entity_type") == t]  # noqa: E731
@@ -131,19 +150,10 @@ def score(g, ent, claims, scope):
             hit = [e["id"] for e in persons if fold(e.get("canonical_name")) == fold(p.get("name"))]
             if len(hit) == 1:
                 person_atom.setdefault(p["id"] + "#name", hit[0])
-    company_atom = {}
-    for c in g["companies"]:
-        doms = {fold(d) for d in c.get("domains") or []}
-        hit = [e["id"] for e in companies if doms & {fold(d) for d in attr_list(e, "domain")}
-               or fold(e.get("canonical_name")) == fold(c.get("name"))]
-        if hit:
-            company_atom[c["id"]] = set(hit)
+    company_atom, company_resolves = company_resolver(g, ent)
 
     def resolves(deal_atom, gold_cp):
-        cp = attr_list(deal_atom, "counterparty")
-        want = company_atom.get(gold_cp, set())
-        name = fold(next((c["name"] for c in g["companies"] if c["id"] == gold_cp), ""))
-        return any(v in want or (name and fold(ent.get(v, {}).get("canonical_name", v)) == name) for v in cp)
+        return any(company_resolves(v, gold_cp) for v in attr_list(deal_atom, "counterparty"))
 
     gd = [d for d in g["deals"] if d.get("kind", "transaction") == "transaction" and d["files"] & scope]
     deal_atom, used = {}, set()

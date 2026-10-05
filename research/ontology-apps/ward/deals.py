@@ -29,20 +29,11 @@ FOLDS = {"tune": {"smurfit", "mesa", "pasadena", "bhp", "tep"},
 
 
 def resolver(g, ent):
-    companies = [e for e in ent.values() if e.get("entity_type") == "company"]
-    atom_of = {}
-    for c in g["companies"]:
-        doms = {S.fold(d) for d in c.get("domains") or []}
-        hit = {e["id"] for e in companies if doms & {S.fold(d) for d in S.attr_list(e, "domain")}
-               or S.fold(e.get("canonical_name")) == S.fold(c.get("name"))}
-        if hit:
-            atom_of[c["id"]] = hit
-    name_of = {c["id"]: S.fold(c.get("name")) for c in g["companies"]}
+    """score.py's one company rule, over a deal atom's counterparty values."""
+    _, company_resolves = S.company_resolver(g, ent)
 
     def resolves(deal_atom, gold_cp):
-        want, name = atom_of.get(gold_cp, set()), name_of.get(gold_cp, "")
-        return any(v in want or (name and S.fold(ent.get(v, {}).get("canonical_name", v)) == name)
-                   for v in S.attr_list(deal_atom, "counterparty"))
+        return any(company_resolves(v, gold_cp) for v in S.attr_list(deal_atom, "counterparty"))
     return resolves
 
 
