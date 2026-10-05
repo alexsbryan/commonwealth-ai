@@ -1,0 +1,32 @@
+[corpus]
+id = "uv-support"
+name = "Support cases from an issue tracker: astral-sh/uv (152 issues, their comments and timeline events)"
+description = "The second example for composed types (svrn/docs/specs/ONTOLOGY_METHOD.md): cases composed from issue, comment and event documents, scored against research/ontology-apps/support/GOLD_SPEC.md. The same code path as crm-ward-acts; only the declaration differs."
+license = "evaluation-only"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.0
+size_indexed_gb = 0.05
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/bench-corpora/uv-support/raw/documents.jsonl"
+
+# Every field the extractor does not consume (id, thread, kind, author, author_association, created_at,
+# labels, event_type, url) passes through as document metadata: the declared document fields read it.
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+[enrichment]
+enabled = false
