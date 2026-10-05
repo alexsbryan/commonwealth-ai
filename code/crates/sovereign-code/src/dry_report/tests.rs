@@ -546,3 +546,69 @@ async fn an_unreadable_scip_graph_is_could_not_judge_for_the_exact_tier() {
     let reason = json["exact_tier"]["reason"].as_str().unwrap_or_default();
     assert!(reason.starts_with("SCIP graph unreadable"), "{json}");
 }
+
+/// Lines reach people (`file:line` in the report, fieldglass tooltips) and
+/// scripts (refactor orders read `Site.line` 1-based), but both tiers carried
+/// the stores' 0-based numbers: a fn on line 2 rendered as `:1`.
+#[tokio::test]
+async fn rendered_lines_are_one_based_in_both_tiers() {
+    let commented = format!("/// Same comment.\n{BUMP}");
+    let two = "fn one(a: u8) -> u8 {\n    a\n        .wrapping_add(1)\n}\n\
+               fn two(b: u16) -> u16 {\n    b\n        .wrapping_mul(3)\n}\n";
+    let f = fixture(
+        &[
+            ("crates/a/src/lib.rs", &commented),
+            ("crates/b/src/lib.rs", &commented),
+            ("crates/c/src/lib.rs", two),
+        ],
+        &[
+            // `fn bump` on 1-based line 2, `}` on 5 → SCIP 1..4.
+            Def {
+                file: "crates/a/src/lib.rs",
+                name: "bump",
+                scip: Some((1, 4)),
+                vector: E[0],
+            },
+            Def {
+                file: "crates/b/src/lib.rs",
+                name: "bump",
+                scip: Some((1, 4)),
+                vector: E[1],
+            },
+            // Different bodies, one vector: a near pair on lines 1–4 and 5–8.
+            Def {
+                file: "crates/c/src/lib.rs",
+                name: "one",
+                scip: Some((0, 3)),
+                vector: E[2],
+            },
+            Def {
+                file: "crates/c/src/lib.rs",
+                name: "two",
+                scip: Some((4, 7)),
+                vector: E[2],
+            },
+        ],
+    )
+    .await;
+    let (_, text, json) = run(&f, None).await;
+    assert!(text.contains("`bump` — crates/a/src/lib.rs:2\n"), "{text}");
+    assert!(
+        text.contains("`one` — crates/c/src/lib.rs:1–4 (4 lines)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("`two` — crates/c/src/lib.rs:5–8 (4 lines)"),
+        "{text}"
+    );
+    let exact = &json["exact_clones"][0]["members"][0];
+    assert_eq!(
+        (exact["line_start"].as_u64(), exact["line_end"].as_u64()),
+        (Some(2), Some(5))
+    );
+    let near = &json["near_clusters"][0]["members"][0];
+    assert_eq!(
+        (near["line_start"].as_u64(), near["line_end"].as_u64()),
+        (Some(1), Some(4))
+    );
+}

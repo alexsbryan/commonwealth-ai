@@ -81,6 +81,7 @@ pub struct SymbolRef {
     pub symbol: String,
     pub kind: String,
     pub file: String,
+    /// 1-based, as people and `file:line` readers count (`line1`).
     pub line_start: u32,
     pub line_end: u32,
     pub lines: usize,
@@ -240,8 +241,8 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
                 symbol: symbol.to_string(),
                 kind: kind.to_string(),
                 file: file.to_string(),
-                line_start,
-                line_end,
+                line_start: line1(line_start),
+                line_end: line1(line_end),
                 lines,
                 is_public: v
                     .get("is_public")
@@ -665,8 +666,8 @@ async fn exact_clones_from_source(
                 symbol: name,
                 kind: "function".to_string(),
                 file: file.clone(),
-                line_start: start as u32,
-                line_end: end as u32,
+                line_start: line1(start as u32),
+                line_end: line1(end as u32),
                 lines: (end - start + 1).max(0) as usize,
                 is_public: false, // not carried by the SCIP record
             });
@@ -693,6 +694,12 @@ async fn exact_clones_from_source(
             .then(b.lines.cmp(&a.lines))
     });
     Ok((out, alias_syms, in_scope))
+}
+
+/// A store's 0-based line (SCIP and the chunk index both count from 0) as the
+/// 1-based line a report, fieldglass and refactor's `Site.line` show.
+fn line1(zero_based: u32) -> u32 {
+    zero_based + 1
 }
 
 /// Unit-length copy of `v`, or `None` when it has no direction (norm ≤ ε,
