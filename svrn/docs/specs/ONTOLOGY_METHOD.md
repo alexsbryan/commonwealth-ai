@@ -43,15 +43,20 @@ in the recipe. Best-in-class results come through this architecture, not through
    to the renaming.
 2. **Identity is decided two ways only:** equality on a key the recipe declares sufficient, or a model answer
    whose cited span code finds. The decision type has those constructors and "none: open a record".
-3. **Candidates come only from declared structure** (the same thread, the same party, a declared reference).
+3. **Candidates come from declared structure** (the same thread, the same party, a declared reference) **or
+   from generic, domain-free retrieval** (similar names, similar descriptions); a proposer never decides, and
+   its recall (how often the right record is among the candidates) is reported.
 4. **Every decision is traced and counted;** an uncitable answer is counted as refused, never defaulted.
-5. **One table per loop over three different systems;** a change is adopted only if no example regresses.
+5. **One table per loop over three different systems,** model calls per document beside the measures; a
+   change is adopted only if no example regresses.
 
 ## The generality test
 
 A piece belongs in the layer only if it is stated without a domain word and the examples exercise it:
 crm-ward mail; uv-support issue cases (`research/ontology-apps/support/GOLD_SPEC.md`); and a public
-benchmark we did not label, so best in class is read against the literature. Code naming a type, attribute
+benchmark we did not label, so best in class is read against the literature: the Gun Violence Corpus
+(cross-document event coreference, CC BY 4.0), with ECB+ as the literature anchor, each read twice — gold
+mentions as statements (RESOLVE alone) and end to end. Code naming a type, attribute
 or state is domain-shaped; the declaration carries those. A code change needed to fit one example marks
 where the layer is still domain-shaped.
 
