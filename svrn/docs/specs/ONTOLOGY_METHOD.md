@@ -19,18 +19,47 @@ Start from what a record is, not from the bar. Every record unfolds to three rea
 
 Before building a lever, name the first-principles piece it is; a lever that is none fits the test.
 
+## The core (agreed 2026-10-05)
+
+Records are declared types, each with an identity criterion (keys that suffice, and the criterion in the
+author's words) and a protocol. Documents are read into cited statements; each statement is RESOLVED to an
+open record or to none (which opens one) under its type's criterion, against candidates the declared
+structure proposes; records FOLD their statements into state through the protocol.
+
+RESOLVE is GROUP and JOIN as one step. Novelty is not a primitive: it is RESOLVE answering "none of these".
+A question that gives the model neither the criterion nor the candidates ("is this comment a different
+problem?") is not RESOLVE, and it fails (uv-support spin-offs: precision .206, 4f705dede).
+
+## What code may do
+
+Code READS what the recipe declares, PROPOSES candidates from declared structure, VERIFIES that a model's
+citation is in the text, and FOLDS by the declared protocol. It never decides identity by pattern: no
+phrase matcher for "duplicate of", no owner by domain, no thread from a subject line. Domain knowledge lives
+in the recipe. Best-in-class results come through this architecture, not through knowing a domain.
+
+## Invariants
+
+1. **The code knows no domain.** Rename every type and attribute in a recipe; the composition is the same up
+   to the renaming.
+2. **Identity is decided two ways only:** equality on a key the recipe declares sufficient, or a model answer
+   whose cited span code finds. The decision type has those constructors and "none: open a record".
+3. **Candidates come only from declared structure** (the same thread, the same party, a declared reference).
+4. **Every decision is traced and counted;** an uncitable answer is counted as refused, never defaulted.
+5. **One table per loop over three different systems;** a change is adopted only if no example regresses.
+
 ## The generality test
 
-A piece belongs in the layer only if it is stated without a domain word and at least two examples exercise
-it (crm-ward mail; uv-support issue cases, `research/ontology-apps/support/GOLD_SPEC.md`). Code naming a
-type, attribute or state is domain-shaped; the declaration carries those. A code change needed to fit the
-second example marks where the layer is still domain-shaped.
+A piece belongs in the layer only if it is stated without a domain word and the examples exercise it:
+crm-ward mail; uv-support issue cases (`research/ontology-apps/support/GOLD_SPEC.md`); and a public
+benchmark we did not label, so best in class is read against the literature. Code naming a type, attribute
+or state is domain-shaped; the declaration carries those. A code change needed to fit one example marks
+where the layer is still domain-shaped.
 
 ## Pieces agreed so far
 
 - **A composed record is event coreference.** An act introduces a new particular or refers back to an open
-  one (new or given). A given act resolves by anchor, then by matching description, then by salience within
-  its conversation segment. The protocol limits legal moves.
+  one (new or given), decided by RESOLVE: a declared anchor key settles it; otherwise a cited answer under
+  the criterion does. Salience orders candidates, never decides. The protocol limits legal moves.
 - **Participant is not mention.** The other side of a conversation comes from fields through derived roles.
 - **An act in a record is not a report about it.** Who speaks to whom is part of the reading.
 - **A role is a JOIN on stable keys** (employer: address domain to company). Dated, never identity.
@@ -47,5 +76,7 @@ reader's variance before trusting a small delta.
 ## The loop
 
 Instrument every decision; judge each against gold; let gold decide one class at a time through the same
-code to find its ceiling; name the piece that could fill it; write bars before data; run once; adopt or
-refuse (a refusal ships its data). Open the held-out fold once per adopted design.
+code to find its ceiling; name the piece that could fill it; write bars before data; run once on every
+example's tune fold, one table (B-cubed, CEAF-e, LEA, state); adopt or refuse (a refusal ships its data).
+Research drives the core through recipes; it never reimplements the core with domain heuristics. Each
+example's own bars are lagging checks. Open the held-out folds once per adopted design.
