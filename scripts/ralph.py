@@ -21,6 +21,7 @@ Subcommands:
   pool       the parallel loop: units in worktree lanes, reviews in the main tree
   result     how a session ends (on a session's PATH as `ralph-result`)
   status     what the loop holds, and what waits on the operator
+  follow     status, then the live output of the units it holds (sessions and runs)
   stop       an operator stop (--drain: let running sessions finish)
   start      clear the operator stop and start the installed job
   unpark     release a row the loop parked for the operator
@@ -3673,27 +3674,43 @@ def cmd_unpark(args):
     return 0
 
 
-def cmd_status(args):
-    """The loop's state: what it holds, what waits on the operator, and its
-    heartbeat. With no ledger yet, what a start would adopt."""
-    paths = paths_for(args)
-    queue = Queue(paths.p(paths.state))
+def heartbeat_line(paths):
     beat = paths.p(paths.heartbeat)
-    if beat.exists():
-        age = int(time.time() - beat.stat().st_mtime)
-        print(f"heartbeat {age}s ago: {beat.read_text().strip()}")
-    else:
-        print("no heartbeat")
-    done = queue.done_count()
-    print(f"queue {paths.state}: {done}/{len(queue.rows)} done")
-    path = ledger_for(paths, args.label)
+    try:
+        return f"heartbeat {int(time.time() - beat.stat().st_mtime)}s ago: {beat.read_text().strip()}"
+    except OSError:
+        return "no heartbeat"
+
+
+def active_logs(entries):
+    """{unit: (state, what, log)} for every unit holding a process: a session's
+    transcript, or an awaiting unit's run output."""
+    out = {}
+    for unit, entry in entries.items():
+        state = entry.get("state")
+        if state in (U.RUNNING.value, U.DIRECTING.value):
+            s = entry["session"]
+            out[unit] = (state, f"{s['role']} session {s['n']}, pid {s['pid']}", s["log"])
+        elif state == U.AWAITING.value:
+            r = entry["run"]
+            out[unit] = (state, f"run {r['argv']}, pid {r['pid']}, budget "
+                                f"{fmt_secs(r['budget_s'])}", r["log"])
+    return out
+
+
+def status_lines(paths, label, pool=False):
+    """The loop's state: its heartbeat, what it holds, what waits on the
+    operator. With no ledger yet, what a start would adopt."""
+    queue = Queue(paths.p(paths.state))
+    yield heartbeat_line(paths)
+    yield f"queue {paths.state}: {queue.done_count()}/{len(queue.rows)} done"
+    path = ledger_for(paths, label)
     if not path.exists():
-        loop = Loop(paths, label=args.label, lane_mode=args.pool, lanes=2 if args.pool else 1,
+        loop = Loop(paths, label=label, lane_mode=pool, lanes=2 if pool else 1,
                     state_dir=path.parent)
-        print(f"no ledger at {path} — a start would adopt:")
-        for line in adopt_legacy(loop, dry=True):
-            print(f"  {line}")
-        return 0
+        yield f"no ledger at {path} — a start would adopt:"
+        yield from (f"  {line}" for line in adopt_legacy(loop, dry=True))
+        return
     ledger = Ledger(path)
     now = time.time()
     for unit, entry in ledger.units.items():
@@ -3702,20 +3719,96 @@ def cmd_status(args):
                              if entry.get(k))
         if state in (U.RUNNING.value, U.DIRECTING.value):
             s = entry["session"]
-            print(f"  {unit}: {state} — {s['role']} session {s['n']}, pid {s['pid']}, "
-                  f"{fmt_secs(now - s['begun'])} in, log {s['log']}"
-                  + (f" ({counters})" if counters else ""))
+            yield (f"  {unit}: {state} — {s['role']} session {s['n']}, pid {s['pid']}, "
+                   f"{fmt_secs(now - s['begun'])} in, log {s['log']}"
+                   + (f" ({counters})" if counters else ""))
         elif state == U.AWAITING.value:
             r = entry["run"]
-            print(f"  {unit}: awaiting {r['argv']} — pid {r['pid']}, "
-                  f"{fmt_secs(now - r['begun'])} of {fmt_secs(r['budget_s'])}, log {r['log']}")
+            yield (f"  {unit}: awaiting {r['argv']} — pid {r['pid']}, "
+                   f"{fmt_secs(now - r['begun'])} of {fmt_secs(r['budget_s'])}, log {r['log']}")
         elif state:
-            print(f"  {unit}: {state}")
+            yield f"  {unit}: {state}"
         elif counters or entry.get("parked"):
-            print(f"  {unit}: {'parked, ' if entry.get('parked') else ''}{counters}")
+            yield f"  {unit}: {'parked, ' if entry.get('parked') else ''}{counters}"
     for unit in sorted(parked_ids(paths)):
-        print(f"  parked {unit}: {first_line(paths.p(paths.parked) / f'{unit}.md')[:120]}")
+        yield f"  parked {unit}: {first_line(paths.p(paths.parked) / f'{unit}.md')[:120]}"
+
+
+def cmd_status(args):
+    for line in status_lines(paths_for(args), args.label, args.pool):
+        print(line)
     return 0
+
+
+def follow(paths, label, *, unit=None, lines=40, out=sys.stdout, poll=1.0, sleep=time.sleep,
+           stop=lambda: False):
+    """Status, then the pipe: the log of every unit the loop holds, followed
+    as it grows. When a unit's session ends and its next session or its run
+    starts, the pipe switches to that log, with a `==` line saying so; a line
+    from the log is prefixed `[unit]` unless one unit was asked for. The
+    ledger is the loop's own record, read, never written."""
+    for line in status_lines(paths, label):
+        out.write(line + "\n")
+    path = ledger_for(paths, label)
+    tracked, pending, first, beat = {}, {}, True, None
+    while True:
+        try:
+            entries = Ledger(path).units if path.exists() else {}
+        except (OSError, ValueError):
+            entries = None              # mid-write on a full disk; read it next poll
+        if entries is not None:
+            try:
+                now_beat = paths.p(paths.heartbeat).read_text().split()[1:2]
+            except OSError:
+                now_beat = []
+            if now_beat != beat:
+                beat = now_beat
+                out.write(f"== loop: {heartbeat_line(paths)} ==\n")
+            logs = active_logs(entries)
+            if unit:
+                logs = {u: v for u, v in logs.items() if u == unit}
+            for gone in [u for u in tracked if u not in logs]:
+                out.write(f"== {gone}: left {tracked.pop(gone)[0]} ==\n")
+                pending.pop(gone, None)
+            for u, (state, what, log) in logs.items():
+                if tracked.get(u, (None, None, None))[2] == log:
+                    continue
+                out.write(f"== {u}: {state} — {what} · {log} ==\n")
+                offset = 0
+                if first:               # attaching: show the tail, not the whole transcript
+                    try:
+                        text = pathlib.Path(log).read_bytes()
+                        offset = len(text) - len(b"".join(text.splitlines(True)[-lines:]))
+                    except OSError:
+                        pass
+                tracked[u] = (state, offset, log)
+                pending[u] = b""
+            first = False
+            for u, (state, offset, log) in list(tracked.items()):
+                try:
+                    with open(log, "rb") as fh:
+                        fh.seek(offset)
+                        data = fh.read()
+                except OSError:
+                    continue
+                tracked[u] = (state, offset + len(data), log)
+                *done, pending[u] = (pending[u] + data).split(b"\n")
+                prefix = "" if unit else f"[{u}] "
+                for raw in done:
+                    out.write(prefix + raw.decode(errors="replace") + "\n")
+            out.flush()
+        if stop():
+            return 0
+        sleep(poll)
+
+
+def cmd_follow(args):
+    paths = paths_for(args)
+    try:
+        return follow(paths, args.label, unit=args.unit, lines=args.lines,
+                      stop=(lambda: True) if args.no_follow else (lambda: False))
+    except KeyboardInterrupt:
+        return 0
 
 
 def cmd_plan(args):
@@ -3832,6 +3925,14 @@ def build_parser():
     queue_flag(p)
     p.add_argument("--pool", action="store_true", help="preview a pool's adoption")
     p.set_defaults(fn=cmd_status)
+
+    p = sub.add_parser("follow", help="status, then the live output of the units the loop "
+                                      "holds")
+    queue_flag(p)
+    p.add_argument("--unit", default=None, help="follow one row only")
+    p.add_argument("--lines", type=int, default=40, help="lines of each log shown on attach")
+    p.add_argument("--no-follow", action="store_true", help="print once and exit")
+    p.set_defaults(fn=cmd_follow)
 
     p = sub.add_parser("watch")
     queue_flag(p)

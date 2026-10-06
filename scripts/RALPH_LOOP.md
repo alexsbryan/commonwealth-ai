@@ -14,7 +14,14 @@ that way: `docs/RALPH_STATE_MACHINE.md`.
 python3 scripts/ralph.py run --workdir . --queue <name> --install-launchd
 python3 scripts/ralph.py start --workdir . --queue <name>
 python3 scripts/ralph.py status --workdir . --queue <name>
+python3 scripts/ralph.py follow --workdir . --queue <name> [--unit <row>]
 ```
+
+`follow` prints the status, then pipes the output of every unit the loop
+holds as it grows: a session's transcript while it runs, its background run's
+log while it awaits. It switches log when a unit moves on, and marks each
+switch and each change of the loop's state with a `==` line. `--no-follow`
+prints a snapshot and exits.
 
 `run` is the serial loop: one unit at a time, in the main tree. `pool` runs
 units in worktree lanes beside the main tree (`--lanes N`) and reviews in the

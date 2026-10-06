@@ -1028,6 +1028,51 @@ class EndToEndTests(unittest.TestCase):
             self.assertIn("DONE — campaign complete", notes)
 
 
+class FollowTests(unittest.TestCase):
+    """`ralph.py follow`: the status, then each held unit's log as it grows,
+    switching logs when the unit moves from its session to its run."""
+
+    def test_the_pipe_follows_a_unit_from_its_session_to_its_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wd = make_repo(tmp, "- [ ] a — depends []\n")
+            paths = ralph.Paths(wd)
+            ledger = ralph.Ledger(pathlib.Path(tmp) / "state" / "loop.json")
+            session_log = write(tmp, "s.out", "".join(f"line {i}\n" for i in range(50)))
+            run_log = write(tmp, "r.log", "")
+            ledger.unit("a").update(state="running", session={
+                "role": "worker", "n": 1, "pid": 1, "begun": time.time(), "log": str(session_log)})
+            ledger.save()
+            write(wd, "ralph/.heartbeat", "1 running sessions=1 awaiting=0\n")
+            steps = []
+
+            def sleep(_):
+                steps.append(1)
+                if len(steps) == 1:
+                    with open(session_log, "a") as fh:
+                        fh.write("committed the parser\npartial")
+                elif len(steps) == 2:
+                    ledger.units["a"].update(state="awaiting", run={
+                        "argv": ["cargo", "xtask", "cut"], "pid": 2, "budget_s": 3600,
+                        "log": str(run_log), "begun": time.time()})
+                    ledger.save()
+                    run_log.write_text("the cut refused: dirty tree\n")
+                    write(wd, "ralph/.heartbeat", "2 idle sessions=0 awaiting=1\n")
+
+            out = io.StringIO()
+            with mock.patch.object(ralph, "state_dir_for", lambda p, l: pathlib.Path(tmp) / "state"):
+                ralph.follow(paths, "t", lines=3, out=out, sleep=sleep, stop=lambda: len(steps) >= 3)
+            text = out.getvalue()
+            self.assertIn("a: running — worker session 1", text)
+            self.assertIn("[a] line 49", text)
+            self.assertNotIn("line 46", text)             # attach shows the tail only
+            self.assertIn("[a] committed the parser", text)
+            self.assertNotIn("partial", text)              # a line is written once it ends
+            self.assertIn("== a: awaiting — run ['cargo', 'xtask', 'cut']", text)
+            self.assertIn("[a] the cut refused: dirty tree", text)
+            self.assertIn("idle sessions=0 awaiting=1", text)
+            self.assertLess(text.index("committed the parser"), text.index("the cut refused"))
+
+
 # ---------------------------------------------------------------------------
 # Taking over from the file protocol.
 
