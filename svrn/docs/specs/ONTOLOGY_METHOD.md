@@ -75,7 +75,8 @@ built for closed sets: `identity_necessary` attributes READ as one forced choice
 differing value forbidding the candidate; the model's choice and the proposed answer weighed as evidence at
 their measured precision); **2** the decider: constraints, calibrated
 evidence, the unsettled band; **3** the layer's other identity deciders onto it (about fifteen today, with
-three ways of combining keys). A precision is measured on the rule as it runs, never under gold alone: a field
+three ways of combining keys; begun: an entity type with a criterion and no source is RESOLVE's alone in the
+atlas build, over the claims whose subject it is, `resolution_records.rs`). A precision is measured on the rule as it runs, never under gold alone: a field
 follows whatever decision put its value in a record (uv thread .905 under gold, .71 live).
 
 ## The generality test

@@ -586,6 +586,14 @@ document = {{ thread = "thread" }}
         "{:?}",
         v.notes
     );
+    // A criterion makes RESOLVE the decider, not the canonical name.
+    assert!(
+        v.notes
+            .iter()
+            .any(|n| n.starts_with("identity: case → RESOLVE under its identity_criterion")),
+        "{:?}",
+        v.notes
+    );
     first_error_containing(&typ(ok, ""), "no `identity_bar`");
     first_error_containing(&typ(ok, "identity_bar = 0"), "is not in (0, 1]");
     first_error_containing(

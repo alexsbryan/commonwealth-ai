@@ -687,7 +687,17 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
             ));
         }
         let (primary, fallback, inherited) = resolve_identity(p, &t.name);
-        let mut line = if !primary.is_empty() {
+        let resolved = crate::enrichment::atlas::resolution_records::decides(
+            &TypeIndex::from_policies(p),
+            &t.name,
+        );
+        let mut line = if resolved {
+            format!(
+                "identity: {} → RESOLVE under its identity_criterion, over the claims declaring \
+                 it their subject; atoms Phase 1 named are retired",
+                t.name
+            )
+        } else if !primary.is_empty() {
             format!(
                 "identity: {} → {} (external key, strict merge)",
                 t.name,

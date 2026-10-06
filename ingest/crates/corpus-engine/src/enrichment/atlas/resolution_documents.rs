@@ -29,13 +29,24 @@ use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, Pipelin
 
 /// One source document as a section holds it.
 #[derive(Debug, Clone)]
-struct SourceDocument {
+pub(super) struct SourceDocument {
     /// The index's identity of the document (`source_doc_id`).
-    key: String,
+    pub(super) key: String,
+    /// The index's title for it, from its first chunk that has one.
+    pub(super) title: Option<String>,
     /// The extractor's metadata object, parsed once.
-    fields: Map<String, Value>,
+    pub(super) fields: Map<String, Value>,
     /// Each chunk's text, whitespace-folded for the anchor match.
     texts: Vec<String>,
+}
+
+impl SourceDocument {
+    /// The text RESOLVE reads: the chunk texts as folded here, joined by one
+    /// space, so the byte span of a folded anchor is a span of it. Chunks
+    /// that overlap repeat their overlap.
+    pub(super) fn body(&self) -> String {
+        self.texts.join(" ")
+    }
 }
 
 /// Section id → the source documents whose chunks the section holds.
@@ -84,11 +95,22 @@ impl SectionDocuments {
                     }
                 };
                 let text = fold_ws(&row.content);
+                let title = row
+                    .title
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty());
                 match docs.iter_mut().find(|d| d.key == key) {
-                    Some(d) => d.texts.push(text),
+                    Some(d) => {
+                        d.texts.push(text);
+                        if d.title.is_none() {
+                            d.title = title.map(str::to_string);
+                        }
+                    }
                     None => docs.push(SourceDocument {
                         fields: metadata_object(row, section_id),
                         key,
+                        title: title.map(str::to_string),
                         texts: vec![text],
                     }),
                 }
@@ -279,7 +301,8 @@ pub(super) fn failure(subject: String, kind: PhaseFailureKind, reason: String) -
 }
 
 /// The one document `claim`'s evidence lands in, or why there is not one.
-fn locate<'d>(
+/// RESOLVE places its statements with it too (`resolution_records`).
+pub(super) fn locate<'d>(
     claim: &Claim,
     documents: &'d SectionDocuments,
 ) -> Result<&'d SourceDocument, String> {

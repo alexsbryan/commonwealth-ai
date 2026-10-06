@@ -1649,7 +1649,10 @@ pub fn resolve_step_3b_with(
             // type: "Series Y sceattas of Aldfrith" is a coin, not the king
             // whose name it carries.
             let declared_subject = declared_subject_type(policy, sketch.claim_kind.as_deref());
-            let subject = sketch.subject.as_ref().and_then(|name| {
+            // A subject RESOLVE decides is left to it (`resolution_records`).
+            let left = declared_subject
+                .is_some_and(|t| super::resolution_records::decides(policy.index(), t));
+            let subject = sketch.subject.as_ref().filter(|_| !left).and_then(|name| {
                 let resolved = resolve_within_declared_type(
                     name,
                     declared_subject,

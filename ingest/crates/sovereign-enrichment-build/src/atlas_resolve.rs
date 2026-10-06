@@ -19,6 +19,7 @@
 
 use std::path::{Path, PathBuf};
 
+use corpus_engine::enrichment::atlas::resolution_records::BuildAtoms;
 use corpus_engine::enrichment::atlas::{
     ann_store::AtlasSeeding, resolve_entities_and_events_with, resolve_step_3b_with, write_atlas,
     write_atlas_full, ResolutionPolicy, ATLAS_DIRNAME,
@@ -27,6 +28,7 @@ use corpus_engine::enrichment::pipeline::{
     ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction,
 };
 use corpus_engine::types::EmbedFn;
+use corpus_engine::InferenceFn;
 
 use super::atlas_resolve_documents::DocumentInputs;
 pub use super::atlas_resolve_documents::SourceCounts;
@@ -102,14 +104,14 @@ pub async fn run(parsed: &ParsedResolve) -> Result<ResolveReport, String> {
     // used by `extract`.
     let client = DaemonInferenceClient::from_enrich_config(&cfg)
         .map_err(|e| format!("building daemon client: {e}"))?;
-    let (embed, _chat) = client.into_closures();
+    let (embed, chat) = client.into_closures();
 
     // Resolve into the live atlas dir. The `enrich delta` command
     // calls `resolve_into_dir` directly with a staging tempdir; this
     // wrapper preserves the original "write to the corpus's canonical
     // atlas/" behaviour byte-for-byte.
     let atlas_dir = atlas_dir_for(&cfg.corpus_id);
-    resolve_into_dir(&cfg, &sections, &embed, &atlas_dir, parsed.phase).await
+    resolve_into_dir(&cfg, &sections, &embed, &chat, &atlas_dir, parsed.phase).await
 }
 
 /// Resolve the section sketches into `target_atlas_dir` (Step 3a +
@@ -234,6 +236,7 @@ pub async fn resolve_into_dir(
     cfg: &EnrichConfig,
     sections: &[SectionExtraction],
     embed: &EmbedFn,
+    infer: &InferenceFn,
     target_atlas_dir: &Path,
     phase: ResolvePhase,
 ) -> Result<ResolveReport, String> {
@@ -305,7 +308,7 @@ pub async fn resolve_into_dir(
     // Step 3a: always runs. Step 3b is re-resolved from 3a's
     // output so the atom ids remain consistent regardless of
     // whether the caller chose 3a-only or 3b/all.
-    let step_3a = resolve_entities_and_events_with(sections, embed, &policy, sources)
+    let mut step_3a = resolve_entities_and_events_with(sections, embed, &policy, sources)
         .await
         .map_err(|e| format!("atlas resolution (3a) failed: {e}"))?;
     let atlas_dir = target_atlas_dir;
@@ -324,8 +327,9 @@ pub async fn resolve_into_dir(
     let counts: ResolveReport;
 
     let written = if want_3b {
-        let step_3b = resolve_step_3b_with(sections, &step_3a.entities, &step_3a.events, &policy)
-            .map_err(|e| format!("atlas resolution (3b) failed: {e}"))?;
+        let mut step_3b =
+            resolve_step_3b_with(sections, &step_3a.entities, &step_3a.events, &policy)
+                .map_err(|e| format!("atlas resolution (3b) failed: {e}"))?;
         resolution_failures.extend(step_3b.failures.iter().cloned());
 
         // Merge 3a + 3b edges — they use distinct id ranges so no
@@ -340,7 +344,7 @@ pub async fn resolve_into_dir(
         // against the existing Concept entities and EvidenceFor /
         // Concedes edges can target already-resolved positions /
         // claims.
-        let typed = corpus_engine::enrichment::atlas::resolution::resolve_type_extensions(
+        let mut typed = corpus_engine::enrichment::atlas::resolution::resolve_type_extensions(
             sections,
             &step_3a.entities,
             &[], // no pre-existing positions on first run
@@ -378,14 +382,23 @@ pub async fn resolve_into_dir(
         // Merge new edges.
         edges.extend(typed.new_edges.iter().cloned());
 
-        // `change.document`: every claim carries its OWN document's declared
-        // fields; one it cannot be placed in is a recorded failure, not a guess.
-        if let (Some(decl), Some(docs)) = (policies.change.document.as_ref(), &documents) {
-            let stamps =
-                corpus_engine::enrichment::atlas::stamp_claim_documents(&mut claims, docs, decl);
-            println!("  ✓ {}", stamps.summary());
-            resolution_failures.extend(stamps.failures);
-        }
+        // `change.document` stamps, then RESOLVE: one decider per declared type.
+        let atoms = BuildAtoms {
+            entities: &mut entities,
+            events: &mut step_3a.events,
+            states: &mut step_3b.states,
+            relations: &mut step_3b.relations,
+            claims: &mut claims,
+            argument_reconstructions: &mut step_3b.argument_reconstructions,
+            positions: &mut typed.new_positions,
+            oppositions: &mut typed.new_oppositions,
+            edges: &mut edges,
+            trajectories: &mut step_3b.trajectories,
+        };
+        let (docs, corpus) = (documents.as_ref(), cfg.corpus_id.as_str());
+        let applied =
+            super::atlas_resolve_documents::apply(atoms, docs, &policies, corpus, infer, atlas_dir);
+        resolution_failures.extend(applied.await?);
 
         let result = write_atlas_full(
             atlas_dir,

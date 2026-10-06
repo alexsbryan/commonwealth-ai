@@ -632,9 +632,19 @@ question the pipeline asks about a type is a method on the resolved
   choice after the model's own bounded reasoning (`reasoned_choice`).
   `Decision` is `Key | Field | Cited | Selected | Proposed | Opened`; anything else is a counted `Refusal`,
   never defaulted. Records keep the passage around each statement, which is
-  what later calls compare. It runs alone today, over supplied statements
-  (`svrn enrich resolve-statements`, the gold-mention setting); no atlas phase
-  calls it yet. **Both tension axes degrade by REPORTING, never by
+  what later calls compare. `svrn enrich resolve-statements` runs it alone over
+  supplied statements (the gold-mention setting). The atlas build runs it after
+  3b (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
+  as the ONE decider of every entity type that declares an `identity_criterion`
+  and no `source` (`decides`): its statements are the claims of each kind whose
+  `subject` is the type, placed by their anchor in the one document `locate`
+  finds; documents go in clock order under `Answerer::Select` with the adopted
+  proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
+  MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
+  statement, and each claim's subject its statement's record. 3b leaves such a
+  subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
+  retired with every reference to them, dropped and recorded, never repointed.
+  Decisions land in `atlas/resolve_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at

@@ -236,6 +236,11 @@ pub(super) fn describe(rec: &Record, why: &str) -> String {
 /// .672).
 const SAME_WORDING_SIMILARITY: f32 = 0.4;
 
+/// Below this a record is not proposed for its similarity alone. Chosen with
+/// no model on the three systems' train folds (resolve-prereg.md §Knobs: the
+/// smallest ratio, ward's .851); every adopted run was measured with it.
+const SIMILAR_SIMILARITY: f32 = 0.7;
+
 /// What the proposed answer reads beyond declared threads. Thresholds are
 /// chosen on every example's train fold with no model (`Answerer::Proposed`);
 /// they propose, they decide nothing.
@@ -253,7 +258,7 @@ impl Default for ProposalRule {
     fn default() -> Self {
         Self {
             same_wording: SAME_WORDING_SIMILARITY,
-            similar: None,
+            similar: Some(SIMILAR_SIMILARITY),
         }
     }
 }

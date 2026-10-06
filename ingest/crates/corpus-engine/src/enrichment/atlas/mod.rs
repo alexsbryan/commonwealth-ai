@@ -51,6 +51,7 @@ pub mod resolution;
 pub mod resolution_documents;
 pub mod resolution_identity;
 pub mod resolution_ontology;
+pub mod resolution_records;
 pub mod resolution_sources;
 pub mod resolve_records;
 pub use corpus_engine_atlas_reader::resolve;

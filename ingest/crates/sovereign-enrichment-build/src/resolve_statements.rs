@@ -28,8 +28,10 @@ use serde::{Deserialize, Serialize};
 use super::inference_client::{DaemonInferenceClient, TokenUsageSnapshot};
 
 pub const DEFAULT_MODEL: &str = "commonwealth/primary";
-pub const DEFAULT_NEIGHBOURS: usize = 3;
-pub const DEFAULT_MAX_CANDIDATES: usize = 12;
+pub use corpus_engine::enrichment::atlas::resolve_records::propose::{
+    MAX_CANDIDATES as DEFAULT_MAX_CANDIDATES, MIN_SIMILARITY as DEFAULT_MIN_SIMILARITY,
+    NEIGHBOURS as DEFAULT_NEIGHBOURS,
+};
 
 /// Who answers: the model's cited partition, the model's forced choice per
 /// statement, or the proposed answer as given (no call).
@@ -130,7 +132,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
             .unwrap_or_else(|| DEFAULT_MODEL.into()),
         neighbours: count("--neighbours", DEFAULT_NEIGHBOURS)?,
         max_candidates: count("--max-candidates", DEFAULT_MAX_CANDIDATES)?,
-        min_similarity: share("--min-similarity")?.unwrap_or(0.0),
+        min_similarity: share("--min-similarity")?.unwrap_or(DEFAULT_MIN_SIMILARITY),
         rule: ProposalRule {
             same_wording: share("--same-wording-similarity")?.unwrap_or(default_rule.same_wording),
             similar: share("--similar")?.or(default_rule.similar),

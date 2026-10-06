@@ -136,6 +136,13 @@ struct Seen {
     records: Vec<String>,
 }
 
+/// The similar-documents proposer every adopted run was measured with
+/// (resolve-prereg.md §Knobs; min_similarity .1, since at .2 ward's recall fell
+/// from .698 to .581). The atlas build runs it; `resolve-statements` defaults to it.
+pub const NEIGHBOURS: usize = 3;
+pub const MAX_CANDIDATES: usize = 12;
+pub const MIN_SIMILARITY: f32 = 0.1;
+
 impl SimilarDocuments {
     pub fn new(neighbours: usize, max_candidates: usize, min_similarity: f32) -> Self {
         Self {
