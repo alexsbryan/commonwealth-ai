@@ -1285,7 +1285,7 @@ class HostTests(unittest.TestCase):
     """Backend SELECTION and the absent-backend path, with the platform and the
     `which` lookup injected. The Linux backends are not exercised on a Linux host here."""
 
-    ARGV = ["python3", "ralph.py", "run", "--queue", "a"]
+    ARGV = ["/opt/py/bin/python3", "ralph.py", "run", "--queue", "a"]
 
     def host(self, platform, present, home):
         calls = []
@@ -1340,7 +1340,7 @@ class HostTests(unittest.TestCase):
             self.assertEqual(start[:4], ["systemd-run", "--user", "--unit", "dev.ralph.x-a"])
             self.assertIn("--working-directory=/w", start)
             self.assertEqual(start[-5:], self.ARGV)
-            host.install_job("dev.ralphwatch.x-a", ["python3", "ralph.py", "watch"], "/w",
+            host.install_job("dev.ralphwatch.x-a", ["/opt/py/bin/python3", "ralph.py", "watch"], "/w",
                              "/w/watch.log", interval=120)
             host.start_job("dev.ralphwatch.x-a")
             self.assertIn("--on-unit-active=120", calls[-1])
