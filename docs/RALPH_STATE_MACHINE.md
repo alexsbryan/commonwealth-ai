@@ -26,6 +26,19 @@ parked the row at 48 hours (`LANE_MAX_WAIT_SECS`). The ring's close (`DEMO-DAY-1
 then `REVIEW-18`) depended on that lane. So the campaign's end sat behind a
 failure that took seconds to happen and one session to fix.
 
+It was resolved by hand after about five hours, in six steps:
+1. Read the notes in the waiting file to learn what the run was.
+2. Find the run's log and see that it ended with `exit=1` on a dirty tree.
+3. Check that no run process was left.
+4. Commit the four untracked files on the lane's branch (ersilia 0ef0e70).
+5. Annotate the row, so that the lane's next session knows what happened and
+   relaunches with a marker written on every end (ersilia b30f5f5).
+6. Delete `ralph/waiting`.
+
+The target machine below does every one of these by itself. The run's exit
+arrives as an event carrying its code and log path, and the lane's next session
+reads them and does the rest.
+
 ## Eighteen fixes, sorted by cause
 
 These are the fix commits to `scripts/ralph.py` from 2026-10-02 to 2026-10-06,
