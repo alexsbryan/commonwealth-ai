@@ -144,3 +144,27 @@ selections were right 10 times (.48): an argmax at .48 deciding a join, and the 
 And a field that links a spin-off keeps its thread held by one record, where gold's second chain would stop
 it. Precision must be measured on the live rule, not under gold. uv stays below its floor (.778 vs .801) for
 that reason: the model's choice decides without clearing the bar, which invariant 2 forbids.
+
+## Why the forced choice is below .5 (diagnosis, 2026-10-06, no bar)
+
+Read on Ring 0's prompts, captured exactly (a local proxy on the daemon wire; 21 GVC, 88 ward, 80 uv calls,
+each reproducing Ring 0 decision for decision) and replayed. Not the cause: thinking (no free generation opens
+a think block; the client sends `think_budget: 0`); label position (with the candidates reversed the argmax
+stays on the same candidate 13 of 17 GVC, 71 of 87 ward, 56 of 72 uv; the first-listed record's pull on GVC
+is mostly its content, .396 as A against .335 listed last).
+
+The cause, by gold structure: the model resolves one level coarser than the criterion. GVC: of 451 wrong
+argmax links, 347 join two happenings of one incident and different kinds (firing, a person hit, an injury,
+a death, the incident as a whole; the kind is in the gold chain id), 41 differ only in participants, 34 cross
+incidents; without the kind errors precision would be .73 in-document and .66 across. Ward: 11 of 13 wrong
+links keep the counterparty and miss the deal; the misses are statements whose counterparty is only in the
+message's participants (the "Chart" mail to ci.mesa.az.us), which no question shows. uv: 43 of 85 are
+content-free events joined across threads by their words (Ring 1a's thread field decides them now).
+
+Reading the field apart works where the whole question does not. Asked only the kind, one forced choice over
+five declared kinds, the model is right .767 on 400 GVC-train mentions (.875 at p >= .9) and .721 on GVC
+dev's 848 gradable ones (death .92, firing .57). As a veto on Ring 0's 697 GVC links its own reads lift
+precision from .353 to .616, losing 58 of 246 right links; gold kinds give .703. Reasoning before answering,
+by contrast, does not fix GVC (7 of 21 right reasoned against 9 by the argmax) but does on ward: of 32
+statements shown their deal, the argmax finds 6 and a reasoned answer 16 (link precision .32 to .48); free
+generation opens with reasoning on 43% of ward prompts, 38% of GVC's, 10% of uv's.
