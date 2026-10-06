@@ -28,6 +28,7 @@ pub mod capabilities;
 pub mod capability;
 pub mod completion;
 pub mod error;
+pub mod forced_choice;
 // Crate-private: `model_aliases` is its only caller and always was. It was
 // `pub mod glob` in `commonwealth-core` and the move is what makes the
 // privacy true rather than intended — a `git grep` before the move found zero

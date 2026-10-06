@@ -533,3 +533,160 @@ async fn the_proposed_engine_takes_the_proposed_answer_without_a_call() {
     assert_eq!((r0.calls, r1.calls), (0, 0));
     assert_eq!(res.records().len(), 2);
 }
+
+#[tokio::test]
+async fn a_forced_choice_per_statement_offers_what_the_document_opened_and_keeps_the_distribution()
+{
+    let (infer, seen) = scripted(vec![
+        json!({"A": 0.9, "0": 0.1}),
+        json!({"A": 0.3, "0": 0.7}),
+        Value::String("A".into()),
+    ]);
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    let b0 = "A fire broke out downtown; the blaze spread.";
+    let r0 = res
+        .resolve_document(
+            &c,
+            doc("d0", b0),
+            &[
+                stmt("a", b0, "fire", 0, &[]),
+                stmt("b", b0, "blaze", 0, &[]),
+            ],
+            &[],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(labels(&r0), ["opened", "opened"]);
+    assert_eq!(
+        r0.calls, 1,
+        "the first statement had no candidate to ask about"
+    );
+    assert_eq!(res.records()[0].statements, ["a", "b"]);
+    assert_eq!(
+        r0.outcomes[1].choice,
+        Some(Choice {
+            candidates: vec![("a".into(), 0.9)],
+            none: 0.1
+        })
+    );
+    let b1 = "Crews fought a fire all night.";
+    let r1 = res
+        .resolve_document(
+            &c,
+            doc("d1", b1),
+            &[stmt("c", b1, "fire", 0, &[])],
+            &[similar("a", 0.5)],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(labels(&r1), ["opened"], "none was the most probable");
+    let b2 = "The fire was out by noon.";
+    let r2 = res
+        .resolve_document(
+            &c,
+            doc("d2", b2),
+            &[stmt("d", b2, "fire", 0, &[])],
+            &[similar("a", 0.5)],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(
+        labels(&r2),
+        ["refused:no_answer"],
+        "a label is not a distribution"
+    );
+    let prompts = seen.lock().unwrap();
+    assert!(
+        prompts[0]
+            .user
+            .contains("A (opened earlier in this document), said as \"fire\""),
+        "{}",
+        prompts[0].user
+    );
+    assert!(
+        prompts[0].user.contains("the [[blaze]] spread"),
+        "{}",
+        prompts[0].user
+    );
+    assert_eq!(
+        prompts[0].response_schema,
+        Some(oicp_types::forced_choice::schema(&["A", "0"]))
+    );
+}
+
+#[tokio::test]
+async fn the_most_probable_shown_record_is_selected_with_its_probability() {
+    let (infer, _) = scripted(vec![json!({"A": 0.2, "B": 0.7, "0": 0.1})]);
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    let seed = "Fire downtown. Flood uptown.";
+    let (s, _) = scripted(vec![answer(vec![
+        part("none", &[("s0", "Fire downtown")]),
+        part("none", &[("s1", "Flood uptown")]),
+    ])]);
+    res.resolve_document(
+        &c,
+        doc("d0", seed),
+        &[
+            stmt("x", seed, "Fire", 0, &[]),
+            stmt("y", seed, "Flood", 0, &[]),
+        ],
+        &[],
+        Answerer::Model(&s),
+    )
+    .await;
+    let b = "The flood receded.";
+    let r = res
+        .resolve_document(
+            &c,
+            doc("d1", b),
+            &[stmt("z", b, "flood", 0, &[])],
+            &[similar("x", 0.4), similar("y", 0.6)],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(
+        r.outcomes[0].outcome,
+        Outcome::Decided(Decision::Selected {
+            record: "y".into(),
+            probability: 0.7
+        })
+    );
+    assert_eq!(res.records()[1].statements, ["y", "z"]);
+}
+
+#[tokio::test]
+async fn a_distribution_that_leaves_a_shown_label_out_is_refused_not_read_as_zero() {
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    let seed = "Fire downtown.";
+    let (s, _) = scripted(vec![answer(vec![part("none", &[("s0", "Fire downtown")])])]);
+    res.resolve_document(
+        &c,
+        doc("d0", seed),
+        &[stmt("x", seed, "Fire", 0, &[])],
+        &[],
+        Answerer::Model(&s),
+    )
+    .await;
+    // Read as 0, the missing "A" would leave "0" the argmax and open a record.
+    let (infer, _) = scripted(vec![json!({"0": 0.4})]);
+    let b = "The fire spread.";
+    let r = res
+        .resolve_document(
+            &c,
+            doc("d1", b),
+            &[stmt("z", b, "fire", 0, &[])],
+            &[similar("x", 0.6)],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(
+        r.outcomes[0].outcome,
+        Outcome::Refused(Refusal::NoAnswer {
+            reason: "distribution lacks label(s) [\"A\"]".into()
+        })
+    );
+    assert_eq!(res.records().len(), 1);
+}

@@ -29,11 +29,13 @@ pub const DEFAULT_MODEL: &str = "commonwealth/primary";
 pub const DEFAULT_NEIGHBOURS: usize = 3;
 pub const DEFAULT_MAX_CANDIDATES: usize = 12;
 
-/// Who answers: the model, or the proposed answer as given (no call).
+/// Who answers: the model's cited partition, the model's forced choice per
+/// statement, or the proposed answer as given (no call).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnswerBy {
     Model,
+    Select,
     Proposed,
 }
 
@@ -132,8 +134,13 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
         },
         answer: match flags.get("--answer").map(String::as_str) {
             None | Some("model") => AnswerBy::Model,
+            Some("select") => AnswerBy::Select,
             Some("proposed") => AnswerBy::Proposed,
-            Some(v) => return Err(format!("--answer is `model` or `proposed`, not `{v}`")),
+            Some(v) => {
+                return Err(format!(
+                    "--answer is `model`, `select` or `proposed`, not `{v}`"
+                ))
+            }
         },
         limit: flags
             .get("--limit")
@@ -305,6 +312,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
     let (_embed, infer) = client.into_closures();
     let answerer = match p.answer {
         AnswerBy::Model => Answerer::Model(&infer),
+        AnswerBy::Select => Answerer::Select(&infer),
         AnswerBy::Proposed => Answerer::Proposed,
     };
 
@@ -330,6 +338,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         p.type_name,
         match p.answer {
             AnswerBy::Model => format!("model {} at {base}", p.model),
+            AnswerBy::Select => format!("model {} at {base}, one forced choice per statement", p.model),
             AnswerBy::Proposed => "the proposed answer (no model)".to_string(),
         },
         proposer.describe(),

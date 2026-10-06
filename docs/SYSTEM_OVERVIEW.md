@@ -612,8 +612,13 @@ question the pipeline asks about a type is a method on the resolved
   document's statements into particulars, each the same as one candidate or
   none, with a passage per statement code must find in the document.
   `--answer proposed` takes that proposed answer with no call: the zero-model
-  floor a model answer is held to, judged and folded by the same code. The closed
-  `Decision` is `Key | Cited | Opened`; anything else is a counted `Refusal`,
+  floor a model answer is held to, judged and folded by the same code.
+  `--answer select` (`resolve_records/select.rs`) asks instead one forced
+  choice per statement, in document order, over the shown candidates and the
+  records this document opened, read as a distribution in one forward pass and
+  kept on the outcome (`Choice`); the argmax decides (`Decision::Selected`),
+  Ring 0 of `research/ontology-apps/resolve-prereg.md`. The closed
+  `Decision` is `Key | Cited | Selected | Opened`; anything else is a counted `Refusal`,
   never defaulted. Records keep the passage around each statement, which is
   what later calls compare. It runs alone today, over supplied statements
   (`svrn enrich resolve-statements`, the gold-mention setting); no atlas phase
@@ -794,7 +799,10 @@ accounting, a concurrent bounded claim fan-out, an audit pass with a plan and
 an outcome, a citation stage whose support decider is the gate's own judge,
 and a value-presence veto. Every fail-open exit names WHY at one site. Judges
 run against ONE register, enforced by `cargo xtask judge-funnel-gate`, and a
-register change is priced in both directions or it is not judged.
+register change is priced in both directions or it is not judged. The
+forced-choice body itself is built in one place for every subsystem,
+`oicp_types::forced_choice::schema` beside its detector, and each caller issues
+it through a census (`gate_call` here, RESOLVE's `decision_call` in ingest).
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER

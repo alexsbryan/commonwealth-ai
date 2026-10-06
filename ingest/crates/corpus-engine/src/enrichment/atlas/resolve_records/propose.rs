@@ -250,6 +250,7 @@ mod tests {
                         record: r.to_string(),
                         cite: None,
                     }),
+                    choice: None,
                 })
                 .collect(),
         }

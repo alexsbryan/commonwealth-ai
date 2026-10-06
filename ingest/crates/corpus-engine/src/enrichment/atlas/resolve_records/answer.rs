@@ -92,52 +92,11 @@ pub(super) fn prompt(
     }
     for &(r, proposal) in shown {
         let rec = &records[r];
-        let mut surfaces: Vec<&str> = Vec::new();
-        for e in &rec.evidence {
-            if surfaces.len() < SHOWN_SURFACES && !surfaces.contains(&e.surface.as_str()) {
-                surfaces.push(&e.surface);
-            }
-        }
-        let cites: Vec<String> = rec
-            .evidence
-            .iter()
-            .filter_map(|e| e.cite.as_deref())
-            .take(SHOWN_CITES)
-            .map(|c| format!("{:?}", fold_ws(c)))
-            .collect();
-        let mut why: Vec<String> = Vec::new();
-        if proposal.same_thread() {
-            why.push("same thread".into());
-        }
-        if proposal.similarity() > 0.0 {
-            why.push(format!("document similarity {:.2}", proposal.similarity()));
-        }
         u.push_str(&format!(
-            "- {} ({}), said as {}; cited: {}\n",
+            "- {} {}",
             rec.handle,
-            why.join("; "),
-            surfaces
-                .iter()
-                .map(|s| format!("{s:?}"))
-                .collect::<Vec<_>>()
-                .join(", "),
-            if cites.is_empty() {
-                "nothing".to_string()
-            } else {
-                cites.join(" | ")
-            }
+            describe(rec, &reasons(proposal))
         ));
-        let mut documents: Vec<&str> = Vec::new();
-        for e in &rec.evidence {
-            if documents.contains(&e.document.as_str()) || documents.len() == SHOWN_DOCUMENTS {
-                continue;
-            }
-            documents.push(&e.document);
-            match &e.title {
-                Some(t) => u.push_str(&format!("    {t:?}: \"…{}…\"\n", e.context)),
-                None => u.push_str(&format!("    \"…{}…\"\n", e.context)),
-            }
-        }
     }
     let mut marks: Vec<(usize, usize)> = asked
         .iter()
@@ -212,6 +171,63 @@ pub(super) fn prompt(
         .with_phase_id("resolve")
         .with_temperature(0.0)
         .with_max_output_tokens(output_budget(asked.len()))
+}
+
+/// Why a candidate was offered, as the model is shown it.
+pub(super) fn reasons(proposal: &Proposal) -> String {
+    let mut why: Vec<String> = Vec::new();
+    if proposal.same_thread() {
+        why.push("same thread".into());
+    }
+    if proposal.similarity() > 0.0 {
+        why.push(format!("document similarity {:.2}", proposal.similarity()));
+    }
+    why.join("; ")
+}
+
+/// A candidate record as every RESOLVE question shows it: why it was
+/// offered, its distinct surfaces, its first cites, and the passages around
+/// its statements in up to `SHOWN_DOCUMENTS` documents. One renderer for the
+/// partition and the forced choice, so the two arms differ only in the question.
+pub(super) fn describe(rec: &Record, why: &str) -> String {
+    let mut surfaces: Vec<&str> = Vec::new();
+    for e in &rec.evidence {
+        if surfaces.len() < SHOWN_SURFACES && !surfaces.contains(&e.surface.as_str()) {
+            surfaces.push(&e.surface);
+        }
+    }
+    let cites: Vec<String> = rec
+        .evidence
+        .iter()
+        .filter_map(|e| e.cite.as_deref())
+        .take(SHOWN_CITES)
+        .map(|c| format!("{:?}", fold_ws(c)))
+        .collect();
+    let mut out = format!(
+        "({why}), said as {}; cited: {}\n",
+        surfaces
+            .iter()
+            .map(|s| format!("{s:?}"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        if cites.is_empty() {
+            "nothing".to_string()
+        } else {
+            cites.join(" | ")
+        }
+    );
+    let mut documents: Vec<&str> = Vec::new();
+    for e in &rec.evidence {
+        if documents.contains(&e.document.as_str()) || documents.len() == SHOWN_DOCUMENTS {
+            continue;
+        }
+        documents.push(&e.document);
+        match &e.title {
+            Some(t) => out.push_str(&format!("    {t:?}: \"…{}…\"\n", e.context)),
+            None => out.push_str(&format!("    \"…{}…\"\n", e.context)),
+        }
+    }
+    out
 }
 
 /// Below this TF-IDF similarity a shared wording is not proposed as the same

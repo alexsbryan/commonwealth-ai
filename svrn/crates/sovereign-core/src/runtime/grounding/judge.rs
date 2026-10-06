@@ -116,7 +116,8 @@ pub enum JudgeRouting<'a> {
 /// **The one forced-choice A/B logprob pass in this tree.** Returns
 /// `(p_A, p_B)`.
 ///
-/// Every judge-side `x_forced_choice` request body is built here. Until
+/// Every judge-side forced-choice request is issued here, its body from
+/// `oicp_types::forced_choice::schema`, the one constructor. Until
 /// 2026-09-12 there were three — this one, `bench_cmd/live_runner.rs`'s own
 /// copy, and an inline one in `runtime/evidence_loop` — and only this one
 /// reached [`gate_call`], so two thirds of the judge traffic the verifier loop
@@ -166,9 +167,7 @@ pub async fn forced_choice_ab(
             JudgeRouting::PinnedSlot(m) => Some(m.to_string()),
         },
         max_tokens: Some(1),
-        structured_output: Some(serde_json::json!({
-            "type": "string", "enum": ["A", "B"], "x_forced_choice": true
-        })),
+        structured_output: Some(oicp_types::forced_choice::schema(&["A", "B"])),
         think_budget: Some(0),
         enable_thinking: Some(false),
         temperature: Some(0.0),
@@ -176,8 +175,7 @@ pub async fn forced_choice_ab(
     };
     match gate_call(inference, &req, call).await {
         Ok(resp) => {
-            let m: std::collections::HashMap<String, f64> =
-                serde_json::from_str(resp.text.trim()).ok()?;
+            let m = oicp_types::forced_choice::parse(&resp.text)?;
             Some((
                 m.get("A").copied().unwrap_or(0.0),
                 m.get("B").copied().unwrap_or(0.0),

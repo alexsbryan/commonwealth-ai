@@ -60,3 +60,17 @@ spin-off read was refused at (.206). On GVC, v5 made 2261 cross-document links a
 floor made 662 at .618. On ward, where no free signal is strong (proposer recall .744), the model adds what the
 floor cannot: within-message F1 .500 against .222. Method gap, not example gap: shown a strong signal, the
 model departs from it far more often than it is right to, on two of three systems.
+
+## Ring 0: one forced choice per statement (registered 2026-10-06, before its data)
+
+`--answer select` asks, per statement in document order, one forced choice over the shown candidates (v5's
+proposers, rule and bounds) plus the records this document already opened, read in one forward pass as a
+distribution over single-token labels (`oicp_types::forced_choice`); the most probable label decides. The
+information the verdict carries is measured as for the partition, by `score_resolve.py`'s verdict block over
+shown candidates: LR+ and LR- in nats with 90% bootstrap intervals over documents. v5 (the partition):
+ward +1.74 [1.12, 2.29] / -0.33; uv +1.42 [1.23, 1.64] / -0.30; GVC +1.83 [1.49, 2.13] / -0.19.
+
+**Bar.** On all three systems the forced choice's LR+ is above v5's and its LR- below v5's. Met: the forced
+choice is the model's evidence form for Rings 1 and 2. Otherwise refused with its data. Not controlled: the
+argmax shapes which records exist, so the candidate sets differ from v5's. Read beside it, no bar: Brier and ECE
+of p(candidate), the clustering table against floor and v5, calls and wall seconds per document.

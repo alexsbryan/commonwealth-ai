@@ -99,7 +99,7 @@ pub struct Evidence {
 }
 
 /// How a statement's record was decided. Closed: there is no other way.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "decision", rename_all = "snake_case")]
 pub enum Decision {
     /// A declared sufficient key equals one the record holds.
@@ -111,6 +111,11 @@ pub enum Decision {
     /// The model put the statement in a particular it said is the record,
     /// and the statement's cited passage was found.
     Cited { record: String, cite: String },
+    /// A forced choice named the record as the statement's most probable
+    /// candidate (`Answerer::Select`, Ring 0: the argmax decides, so what the
+    /// choice carries can be measured). Its whole distribution is the
+    /// outcome's `choice`.
+    Selected { record: String, probability: f64 },
     /// None of the candidates: a record was opened. `cite` is `None` only for
     /// a statement alone in its document with no candidate, where no call is made.
     Opened {
@@ -142,7 +147,7 @@ pub enum Refusal {
     Contradiction { targets: Vec<String> },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
     Decided(Decision),
@@ -155,6 +160,7 @@ impl Outcome {
         match self {
             Outcome::Decided(Decision::Key { .. }) => "key",
             Outcome::Decided(Decision::Cited { .. }) => "cited",
+            Outcome::Decided(Decision::Selected { .. }) => "selected",
             Outcome::Decided(Decision::Opened { .. }) => "opened",
             Outcome::Refused(r) => match r {
                 Refusal::Unreadable { .. } => "refused:unreadable",
@@ -174,6 +180,7 @@ impl Outcome {
             Outcome::Decided(
                 Decision::Key { record, .. }
                 | Decision::Cited { record, .. }
+                | Decision::Selected { record, .. }
                 | Decision::Opened { record, .. },
             ) => Some(record),
             Outcome::Refused(_) => None,
@@ -185,6 +192,18 @@ impl Outcome {
 pub struct StatementOutcome {
     pub statement: String,
     pub outcome: Outcome,
+    /// What a forced choice answered for it, when one was asked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub choice: Option<Choice>,
+}
+
+/// A forced choice's whole answer for one statement: each candidate's record
+/// id (for a record this document opened, the id of the statement that opened
+/// it) with its probability, in the order shown, and the probability of none.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Choice {
+    pub candidates: Vec<(String, f64)>,
+    pub none: f64,
 }
 
 /// Why a record was offered. Closed: declared structure or generic,
@@ -232,6 +251,8 @@ pub enum Answerer<'a> {
     /// own words. The zero-model floor a model answer is held to, judged and
     /// folded by the same code; it is never the layer's decider.
     Proposed,
+    /// The model, one forced choice per statement (`select.rs`).
+    Select(&'a InferenceFn),
 }
 
 /// One document's resolution: what was shown, what it cost, what was decided.
@@ -266,6 +287,10 @@ enum Plan {
     Join {
         record: usize,
         cite: String,
+    },
+    Selected {
+        record: usize,
+        probability: f64,
     },
     Open {
         group: usize,
@@ -364,7 +389,27 @@ impl Resolver {
         let shown_records: Vec<usize> = shown.iter().map(|&(r, _)| r).collect();
         let key_edges = key_edges(&asked, &folded_keys);
         let mut calls = 0;
-        let decided: Vec<Plan> = if asked.is_empty() {
+        let mut choices: Vec<Option<Choice>> = vec![None; n];
+        let decided: Vec<Plan> = if let (Answerer::Select(infer), false) =
+            (answerer, asked.is_empty())
+        {
+            let chosen = select::choose(
+                criterion,
+                doc,
+                statements,
+                &asked,
+                &shown,
+                &self.records,
+                &key_edges,
+                infer,
+            )
+            .await;
+            calls = chosen.calls;
+            for (&i, c) in asked.iter().zip(chosen.choices) {
+                choices[i] = c;
+            }
+            chosen.plans
+        } else if asked.is_empty() {
             Vec::new()
         } else if asked.len() == 1 && shown.is_empty() {
             vec![Plan::Open {
@@ -379,6 +424,11 @@ impl Resolver {
                             .as_answer(doc, statements, &asked, &self.records),
                     )
                 }
+                // A forced choice is asked statement by statement above; no
+                // partition is ever asked for it.
+                Answerer::Select(_) => Err(Refusal::NoAnswer {
+                    reason: "a forced choice is not a partition".into(),
+                }),
                 Answerer::Model(_) if criterion.same_when.is_none() => Err(Refusal::NoCriterion),
                 Answerer::Model(infer) => {
                     calls = 1;
@@ -454,6 +504,23 @@ impl Resolver {
                         cite,
                     })
                 }
+                Plan::Selected {
+                    record,
+                    probability,
+                } => {
+                    self.fold(
+                        record,
+                        doc,
+                        &statements[i],
+                        surface[i],
+                        &folded_keys[i],
+                        None,
+                    );
+                    Outcome::Decided(Decision::Selected {
+                        record: self.records[record].id.clone(),
+                        probability,
+                    })
+                }
                 Plan::Open { group, cite } => {
                     let record = *opened
                         .entry(group)
@@ -483,6 +550,7 @@ impl Resolver {
             outcomes[i] = Some(StatementOutcome {
                 statement: statements[i].id.clone(),
                 outcome,
+                choice: choices[i].take(),
             });
         }
         let resolution = DocumentResolution {
@@ -578,8 +646,8 @@ fn key_edges(asked: &[usize], keys: &[Vec<(String, String)>]) -> Vec<(usize, usi
 }
 
 /// `CONTEXT_BYTES` of `body` either side of a span, cut back to whitespace so
-/// no word is split, with whitespace folded.
-fn context(body: &str, start: usize, end: usize) -> String {
+/// no word is split: the bounds of a statement's passage.
+fn window(body: &str, start: usize, end: usize) -> (usize, usize) {
     let mut lo = start.saturating_sub(CONTEXT_BYTES);
     while !body.is_char_boundary(lo) {
         lo -= 1;
@@ -588,23 +656,39 @@ fn context(body: &str, start: usize, end: usize) -> String {
     while !body.is_char_boundary(hi) {
         hi += 1;
     }
-    let mut window = &body[lo..hi];
     if lo > 0 {
-        if let Some(cut) = window[..start - lo].find(char::is_whitespace) {
-            window = &window[cut..];
+        if let Some(cut) = body[lo..start].find(char::is_whitespace) {
+            lo += cut;
         }
     }
     if hi < body.len() {
-        let from = window.len() - (hi - end);
-        if let Some(cut) = window[from..].rfind(char::is_whitespace) {
-            window = &window[..from + cut];
+        if let Some(cut) = body[end..hi].rfind(char::is_whitespace) {
+            hi = end + cut;
         }
     }
-    fold_ws(window)
+    (lo, hi)
+}
+
+/// A statement's passage, whitespace folded.
+fn context(body: &str, start: usize, end: usize) -> String {
+    let (lo, hi) = window(body, start, end);
+    fold_ws(&body[lo..hi])
+}
+
+/// A statement's passage with its own words in `[[` `]]`.
+fn marked_context(body: &str, start: usize, end: usize) -> String {
+    let (lo, hi) = window(body, start, end);
+    fold_ws(&format!(
+        "{}[[{}]]{}",
+        &body[lo..start],
+        &body[start..end],
+        &body[end..hi]
+    ))
 }
 
 mod answer;
 pub mod propose;
+mod select;
 
 pub use answer::{cite_found, ProposalRule};
 use answer::{judge, prompt, Proposed};

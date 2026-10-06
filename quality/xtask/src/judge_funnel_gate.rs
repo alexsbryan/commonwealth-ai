@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! judge-funnel-gate — ONE place builds a forced-choice judge request, and it
-//! is the place that hands the request to the census.
+//! judge-funnel-gate — ONE place builds a forced-choice request body, and
+//! every caller of it hands the request to a census.
 //!
 //! # The blindness this ends
 //!
@@ -20,6 +20,19 @@
 //! Rung `vl-1` of `quality/campaigns/verifier-loop.toml`, bar
 //! `vl-one-primitive`.
 //!
+//! # Two subsystems, one constructor (2026-10-06)
+//!
+//! Until 2026-10-06 the one site was `grounding/judge.rs`, and rule 2 asked
+//! that its own file call `gate_call`. RESOLVE in ingest now asks forced
+//! choices too, and ingest cannot reach the grounding gate's per-turn census.
+//! So the body moved down to the wire contract, beside the detector that reads
+//! it: `oicp_types::forced_choice::schema` is the one construction site, and
+//! rule 2 binds its CALLERS: every file that calls the constructor must call a
+//! census funnel ([`FUNNELS`]: the grounding gate's `gate_call`, RESOLVE's
+//! `decision_call`). Two censuses for two subsystems, for the reason
+//! `call_census.rs` gives for not merging into the stage ledger: they answer
+//! different questions (which call in a turn; which decision in a document).
+//!
 //! # The rule, and why it is two counts rather than one
 //!
 //! A single "sites == 1" count passes the day someone writes a second body in
@@ -32,8 +45,8 @@
 //!      constructing one, which is why `CompletionRequest::
 //!      forced_choice_candidates` (the detector) and every doc comment naming
 //!      the key fall out of the census by the rule rather than by an exception.
-//!   2. **sites whose file never calls `gate_call(` == 0** — a body built
-//!      where the funnel is not is a judge call the census cannot see.
+//!   2. **callers of the constructor whose file never calls a funnel == 0** —
+//!      a body issued where no census is is a call the census cannot see.
 //!
 //! # Scope, and the one exception, which lives at the site
 //!
@@ -63,8 +76,11 @@ const INSTRUMENT_MARKER: &str = "judge-funnel: instrument-of-the-mechanism";
 /// The sentinel key, as it appears in a constructed body.
 const SENTINEL: &str = "x_forced_choice";
 
-/// The funnel every constructed body must be handed to.
-const FUNNEL: &str = "gate_call(";
+/// The one constructor every caller builds its body with.
+const CONSTRUCTOR: &str = "forced_choice::schema(";
+
+/// The census funnels a caller's file must issue its calls through.
+const FUNNELS: &[&str] = &["gate_call(", "decision_call("];
 
 #[derive(Debug, PartialEq, Eq)]
 struct Site {
@@ -99,20 +115,17 @@ pub fn run(args: &[String]) -> i32 {
     };
 
     let members = crate::manifests::workspace_members(&root);
-    let mut sites: Vec<Site> = Vec::new();
-    let mut files_read = 0usize;
-    let mut funnel_files: Vec<String> = Vec::new();
+    let mut found = Found::default();
     for m in &members {
         let src = root.join(&m.dir).join("src");
-        collect(
-            &src,
-            &root,
-            &scope,
-            &mut sites,
-            &mut files_read,
-            &mut funnel_files,
-        );
+        collect(&src, &root, &scope, &mut found);
     }
+    let Found {
+        sites,
+        callers,
+        files_read,
+        funnel_files,
+    } = found;
 
     if files_read == 0 {
         // Never-ran, not passed. A walk that read nothing renders exactly like
@@ -127,7 +140,7 @@ pub fn run(args: &[String]) -> i32 {
 
     let used: Vec<&Site> = sites.iter().filter(|s| !s.instrument).collect();
     let instruments: Vec<&Site> = sites.iter().filter(|s| s.instrument).collect();
-    let unfunnelled: Vec<&&Site> = used
+    let unfunnelled: Vec<&Site> = callers
         .iter()
         .filter(|s| !funnel_files.iter().any(|f| *f == s.file))
         .collect();
@@ -139,13 +152,16 @@ pub fn run(args: &[String]) -> i32 {
         scope.ignored_dir_count()
     );
     for s in &used {
-        let funnelled = if unfunnelled.iter().any(|u| ***u == **s) {
-            "NOT handed to the funnel"
+        eprintln!("  builds a forced-choice body  {}:{}", s.file, s.line);
+    }
+    for s in &callers {
+        let funnelled = if unfunnelled.iter().any(|u| *u == s) {
+            "NOT handed to a census"
         } else {
-            "reaches gate_call"
+            "reaches a census"
         };
         eprintln!(
-            "  builds a forced-choice body  {}:{}  — {funnelled}",
+            "  calls the constructor        {}:{}  — {funnelled}",
             s.file, s.line
         );
     }
@@ -156,7 +172,7 @@ pub fn run(args: &[String]) -> i32 {
         );
     }
     eprintln!(
-        "  construction sites: {} (target 1) · not reaching the funnel: {} (target 0)",
+        "  construction sites: {} (target 1) · callers not reaching a census: {} (target 0)",
         used.len(),
         unfunnelled.len()
     );
@@ -169,10 +185,9 @@ pub fn run(args: &[String]) -> i32 {
     eprintln!();
     if used.len() != 1 {
         eprintln!(
-            "FAIL: {} judge-side sites construct an `{SENTINEL}` request body. There may be \
-             ONE. Call `sovereign_core::runtime::forced_choice_ab` — it takes the system \
-             message, the routing (OICP envelope or a pinned slot) and the `JudgeCall` name, \
-             which is every difference the three collapsed sites actually had. If the site is \
+            "FAIL: {} sites construct an `{SENTINEL}` request body. There may be ONE: build \
+             the body with `oicp_types::forced_choice::schema` and issue it through a census \
+             (`sovereign_core::runtime::forced_choice_ab` for a judge). If the site is \
              measuring the sentinel rather than using it, say so at the site with a \
              `{INSTRUMENT_MARKER}` comment and the reason.",
             used.len()
@@ -180,29 +195,34 @@ pub fn run(args: &[String]) -> i32 {
     }
     for s in &unfunnelled {
         eprintln!(
-            "FAIL: {}:{} builds a forced-choice body in a file that never calls `{FUNNEL}` — \
-             every call it issues is a judge call no census can see, which is the exact \
-             blindness this gate exists to end.",
-            s.file, s.line
+            "FAIL: {}:{} calls the constructor in a file that calls no census ({}) — every \
+             call it issues is one no census can see, which is the exact blindness this gate \
+             exists to end.",
+            s.file,
+            s.line,
+            FUNNELS.join(", ")
         );
     }
     // Deliberately NOT `common::fix_footer` — this gate has no baseline to
     // update, and offering one would name a command that refuses.
     eprintln!(
-        "Fix: collapse the extra site onto `sovereign_core::runtime::forced_choice_ab`, or \
-         declare it at the site with `{INSTRUMENT_MARKER}` and the reason."
+        "Fix: build the body with `oicp_types::forced_choice::schema` and issue it through a \
+         census funnel, or declare a measuring site with `{INSTRUMENT_MARKER}` and the reason."
     );
     1
 }
 
-fn collect(
-    dir: &Path,
-    root: &Path,
-    scope: &common::SourceTree,
-    out: &mut Vec<Site>,
-    files_read: &mut usize,
-    funnel_files: &mut Vec<String>,
-) {
+/// What one walk found: construction sites, constructor calls, the files
+/// that call a census funnel, and how many files it read.
+#[derive(Default)]
+struct Found {
+    sites: Vec<Site>,
+    callers: Vec<Site>,
+    files_read: usize,
+    funnel_files: Vec<String>,
+}
+
+fn collect(dir: &Path, root: &Path, scope: &common::SourceTree, found: &mut Found) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -212,26 +232,26 @@ fn collect(
         let rel = common::rel_path(&path, root);
         if path.is_dir() {
             if !scope.excludes_dir(&rel) && path.file_name().is_some_and(|n| n != "tests") {
-                collect(&path, root, scope, out, files_read, funnel_files);
+                collect(&path, root, scope, found);
             }
             continue;
         }
         if path.extension().is_some_and(|e| e == "rs") && !rel.ends_with("/tests.rs") {
             if let Ok(text) = std::fs::read_to_string(&path) {
-                *files_read += 1;
-                if text.contains(FUNNEL) {
-                    funnel_files.push(rel.clone());
+                found.files_read += 1;
+                if FUNNELS.iter().any(|f| text.contains(f)) {
+                    found.funnel_files.push(rel.clone());
                 }
-                scan(&rel, &text, out);
+                scan(&rel, &text, &mut found.sites, &mut found.callers);
             }
         }
     }
 }
 
-/// Scan one file for construction sites, skipping comments and `#[cfg(test)]`
-/// modules. The marker may sit on the site's own line or in the comment block
-/// directly above it — where a reason belongs.
-fn scan(rel: &str, text: &str, out: &mut Vec<Site>) {
+/// Scan one file for construction sites and constructor calls, skipping
+/// comments and `#[cfg(test)]` modules. The marker may sit on the site's own
+/// line or in the comment block directly above it — where a reason belongs.
+fn scan(rel: &str, text: &str, out: &mut Vec<Site>, callers: &mut Vec<Site>) {
     let mut test_depth: Option<i32> = None;
     let mut pending_test_mod = false;
     let mut marker_pending = false;
@@ -284,6 +304,17 @@ fn scan(rel: &str, text: &str, out: &mut Vec<Site>) {
                 instrument: marker_pending,
             });
         }
+        // A call, not the definition and not a string naming it (this gate's own).
+        if line.contains(CONSTRUCTOR)
+            && !line.contains("fn schema(")
+            && !line.contains(&format!("\"{CONSTRUCTOR}"))
+        {
+            callers.push(Site {
+                file: rel.to_string(),
+                line: i + 1,
+                instrument: false,
+            });
+        }
     }
 }
 
@@ -309,9 +340,35 @@ mod tests {
     use super::*;
 
     fn hits(text: &str) -> Vec<(usize, bool)> {
-        let mut out = Vec::new();
-        scan("x.rs", text, &mut out);
+        let (mut out, mut callers) = (Vec::new(), Vec::new());
+        scan("x.rs", text, &mut out, &mut callers);
         out.iter().map(|s| (s.line, s.instrument)).collect()
+    }
+
+    fn calls(text: &str) -> Vec<usize> {
+        let (mut out, mut callers) = (Vec::new(), Vec::new());
+        scan("x.rs", text, &mut out, &mut callers);
+        callers.iter().map(|s| s.line).collect()
+    }
+
+    /// A caller of the constructor is found wherever it is live, and neither
+    /// prose about it nor a test module counts. The run then holds each
+    /// caller's file to a census funnel.
+    #[test]
+    fn a_call_to_the_constructor_is_a_caller_and_prose_or_tests_are_not() {
+        let text = r#"
+//! Built by `oicp_types::forced_choice::schema(&labels)`.
+fn ask() {
+    let s = oicp_types::forced_choice::schema(&["A", "B"]);
+}
+
+#[cfg(test)]
+mod tests {
+    fn t() { let _ = forced_choice::schema(&["A"]); }
+}
+"#;
+        assert_eq!(calls(text), [4]);
+        assert!(calls("pub fn schema(labels: &[&str]) -> serde_json::Value {").is_empty());
     }
 
     /// The body under construction fires; the detector reading the same key
