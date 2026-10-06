@@ -28,6 +28,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))          # gym/comaintainer, for markers
 
 import markers as M  # noqa: E402
+import repo_access as P
 
 REPO = HERE.parents[2]
 CASES = HERE / "cases.jsonl"
@@ -57,8 +58,32 @@ def is_first_parent(base: str, outcome: str) -> bool:
 
 
 def blob_at(base: str, path: str) -> str | None:
-    rc, out, _ = git("show", f"{base}:{path}")
-    return out if rc == 0 else None
+    p = subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True,
+                       text=True, cwd=REPO)
+    return p.stdout if p.returncode == 0 else None
+
+
+def source_window(case: dict, candidate: dict) -> dict:
+    """Read the actual declared window, never substitute a short excerpt."""
+    base, path = case["provenance"]["base_sha"], candidate["path"]
+    if not re.fullmatch(r"[0-9a-f]{40}", base):
+        raise ValueError("source revision must be a full commit id")
+    if not path or path.startswith("/") or ".." in Path(path).parts or "\n" in path:
+        raise ValueError("source path must stay inside the historical tree")
+    lines = candidate.get("lines")
+    if (not isinstance(lines, list) or len(lines) != 2
+            or any(type(n) is not int for n in lines)):
+        raise ValueError("source window requires two integer line coordinates")
+    start, end = lines
+    observed = P.read_window(base, path, start, end)
+    text = observed["code"]
+    excerpt = candidate.get("excerpt", "")
+    if not excerpt.strip() or norm(excerpt) not in norm(text):
+        raise ValueError(f"excerpt not present in declared window: {path}:{start}-{end}")
+    return {"candidate": candidate["id"], "base": base, "path": path,
+            "lines": lines, "blob": observed["git_blob"],
+            "sha256": observed["window_sha256"], "source_sha256": observed["source_sha256"],
+            "receipt": observed["receipt_id"], "text": text}
 
 
 # ---- text ----------------------------------------------------------------
@@ -83,7 +108,11 @@ def load_cases(path: Path = CASES) -> list[dict]:
 
 def request_text(case: dict) -> str:
     parts = [case["request"]["requirement"], *case["request"]["constraints"]]
-    parts += [c["excerpt"] for c in case["dossier"]["candidates"]]
+    for cand in case["dossier"]["candidates"]:
+        try:
+            parts.append(source_window(case, cand)["text"])
+        except ValueError:
+            parts.append(cand.get("excerpt", ""))
     return "\n".join(parts)
 
 
@@ -113,11 +142,10 @@ def verify_case(case: dict) -> list[str]:
         if not path or path.startswith("/"):
             bad.append(f"{cid}/{cand_id}: candidate path must be repo-relative: {path!r}")
             continue
-        blob = blob_at(base, path)
-        if blob is None:
-            bad.append(f"{cid}/{cand_id}: {path} is absent at base")
-        elif norm(cand.get("excerpt", "")) not in norm(blob):
-            bad.append(f"{cid}/{cand_id}: excerpt not found verbatim at {path}@{base[:9]}")
+        try:
+            source_window(case, cand)
+        except ValueError as exc:
+            bad.append(f"{cid}/{cand_id}: {exc}")
         facts = cand.get("facts") or {}
         if not isinstance(facts.get("usable"), bool) or not isinstance(facts.get("serves"), bool):
             bad.append(f"{cid}/{cand_id}: facts.usable and facts.serves must both be booleans")
@@ -190,8 +218,9 @@ INTRO = ("You are a senior engineer doing technical design in a large, "
 def render_dossier(case: dict) -> str:
     lines = []
     for cand in case["dossier"]["candidates"]:
-        lines.append(f"[{cand['id']}] {cand['path']}")
-        lines.append(f"    {cand['excerpt']}")
+        window = cand.get("source_window") or source_window(case, cand)
+        lines.append(f"[{cand['id']}] {cand['path']}:{window['lines'][0]}-{window['lines'][1]}")
+        lines.append(window["text"])
     return "\n".join(lines)
 
 
@@ -218,14 +247,14 @@ def schema_for(case: dict, condition: str) -> dict:
         "disposition": {"type": "string", "enum": list(DISPOSITIONS)},
         "owner": {"type": "string"},
         "seam": {"type": "string"},
-        "delta": {"type": "string"},
+        "delta": {"type": "string", "minLength": 40},
         "new_components": {"type": "array", "items": {"type": "string"}},
-        "limits": {"type": "string"},
+        "limits": {"type": "string", "minLength": 20},
         "evidence": {"type": "array", "items": {"type": "string"}},
     }
+    required = list(props)
     if condition == "C":
         ids = [c["id"] for c in case["dossier"]["candidates"]]
-        required = list(props)
         # Grounding is STRUCTURAL under C: the decoder can only emit
         # candidate ids, so "I cited something" cannot be a free-text claim
         # (principle 10 — an enumerated set is a type, not a request). The
@@ -235,8 +264,6 @@ def schema_for(case: dict, condition: str) -> dict:
         props["evidence"]["minItems"] = 1
         props["limits"]["minLength"] = 20
         props["delta"]["minLength"] = 40
-    else:
-        required = ["disposition", "owner", "seam", "delta"]
     return {"type": "object", "properties": props, "required": required,
             "additionalProperties": False}
 
@@ -286,10 +313,14 @@ def aggregate(rows: list[dict]) -> dict:
             "home_match": 0, "path_match": 0, "new_components": 0, "bait_rows": 0,
             "evidence_grounded": 0, "evidence_required": 0,
             "refusals": 0, "wrong_observations": 0,
+            "failed": 0, "never_ran": 0,
         })
         d["n"] += 1
         d["refusals"] += int(row.get("refusals") or 0)
         d["wrong_observations"] += int(row.get("wrong_observations") or 0)
+        if row.get("verdict") in ("failed", "never-ran"):
+            d["failed" if row["verdict"] == "failed" else "never_ran"] += 1
+            continue
         if row.get("verdict") == "malformed":
             d["malformed"] += 1
             continue
@@ -312,7 +343,7 @@ def render_aggregate(agg: dict) -> str:
     lines = ["condition  n  parsed  disp  home  path  new_comp  bait_rows  evidence  refused  wrongobs"]
     for cond in sorted(agg):
         d = agg[cond]
-        parsed = d["n"] - d["malformed"] - d["could_not_judge"]
+        parsed = d["n"] - sum(d[k] for k in ("malformed", "could_not_judge", "failed", "never_ran"))
         ev = f"{d['evidence_grounded']}/{d['evidence_required']}" if d["evidence_required"] else "-"
         lines.append(f"{cond:>9}  {d['n']}  {parsed:>6}  {d['disposition_match']:>4}  "
                      f"{d['home_match']:>4}  {d['path_match']:>4}  {d['new_components']:>8}  "

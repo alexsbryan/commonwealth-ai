@@ -70,10 +70,19 @@ pub fn run(
 }
 
 pub fn edges(metadata: &str, snapshot: &Path) -> Result<Vec<DepEdge>, String> {
+    edges_for(metadata, snapshot, &super::fixture::PACKAGES, &[])
+}
+
+pub fn edges_for(
+    metadata: &str,
+    snapshot: &Path,
+    expected: &[&str],
+    registry: &[&str],
+) -> Result<Vec<DepEdge>, String> {
     let v: Value = serde_json::from_str(metadata).map_err(|e| format!("metadata JSON: {e}"))?;
     let packages = v["packages"].as_array().ok_or("metadata has no packages")?;
     let names: BTreeSet<&str> = packages.iter().filter_map(|p| p["name"].as_str()).collect();
-    if names != super::fixture::PACKAGES.into_iter().collect() || packages.len() != names.len() {
+    if names != expected.iter().copied().collect() || packages.len() != names.len() {
         return Err("metadata does not contain exactly the four fixture packages".into());
     }
     let members: BTreeSet<&str> = v["workspace_members"]
@@ -83,7 +92,7 @@ pub fn edges(metadata: &str, snapshot: &Path) -> Result<Vec<DepEdge>, String> {
         .filter_map(Value::as_str)
         .collect();
     let ids: BTreeSet<&str> = packages.iter().filter_map(|p| p["id"].as_str()).collect();
-    if members != ids || ids.len() != 4 {
+    if members != ids || ids.len() != expected.len() {
         return Err("incomplete workspace membership".into());
     }
     let mut edges = Vec::new();
@@ -98,6 +107,14 @@ pub fn edges(metadata: &str, snapshot: &Path) -> Result<Vec<DepEdge>, String> {
                 .as_str()
                 .ok_or("dependency without actual name")?;
             if !names.contains(to) {
+                if registry.contains(&to)
+                    && dep["path"].is_null()
+                    && dep["source"]
+                        .as_str()
+                        .is_some_and(|s| s.starts_with("registry+"))
+                {
+                    continue;
+                }
                 return Err(format!("unexpected dependency {to}"));
             }
             let path = dep["path"].as_str().ok_or("non-local fixture dependency")?;
@@ -133,4 +150,40 @@ pub fn render_edges(edges: &[DepEdge]) -> Value {
             |e| json!({"from":e.from,"to":e.to,"kind":format!("{:?}",e.kind),"optional":e.optional})
         )
         .collect::<Vec<_>>())
+}
+
+pub fn missing_reads(stdout: &str, required: &[String]) -> bool {
+    let mut missing = BTreeSet::new();
+    for line in stdout.lines() {
+        let Ok(event) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if event["reason"] != "compiler-message" || event["message"]["level"] != "error" {
+            continue;
+        }
+        let diagnostic = &event["message"];
+        let message = diagnostic["message"].as_str().unwrap_or("");
+        let location = diagnostic["spans"].as_array().is_some_and(|spans| {
+            spans.iter().any(|s| {
+                s["is_primary"] == true
+                    && s["file_name"]
+                        .as_str()
+                        .is_some_and(|p| p.ends_with("core-probe/src/lib.rs"))
+            })
+        });
+        if diagnostic["code"]["code"] != "E0599"
+            || !location
+            || !message.contains("&dyn IndexSource")
+        {
+            return false;
+        }
+        let Some(method) = required
+            .iter()
+            .find(|m| message.contains(&format!("no method named `{m}`")))
+        else {
+            return false;
+        };
+        missing.insert(method.as_str());
+    }
+    missing == required.iter().map(String::as_str).collect()
 }

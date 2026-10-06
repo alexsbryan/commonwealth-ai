@@ -1,0 +1,9 @@
+[package]
+name = "core-probe"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+corpus-engine-yield = { path = "../corpus-engine-yield" }
+corpus-index = { path = "../corpus-index" }
+engine-probe = { path = "../engine-probe" }

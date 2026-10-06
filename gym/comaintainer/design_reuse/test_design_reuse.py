@@ -14,6 +14,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -23,6 +24,8 @@ sys.path.insert(0, str(HERE.parent))
 import common as C  # noqa: E402
 import loop as D  # noqa: E402
 import replay as R  # noqa: E402
+import frozen as F
+import historical as T
 
 GOOD = {
     "disposition": "USE",
@@ -112,8 +115,48 @@ class BankTests(unittest.TestCase):
         self.assertIn("converge-cli-shape", enum)          # grounding is enumerated
         self.assertIn("none-of-these", enum)               # ADD escape stays expressible
         b = C.schema_for(case, "B")
-        self.assertNotIn("evidence", b["required"])
-        self.assertNotIn("limits", b["required"])
+        self.assertIn("evidence", b["required"])
+        self.assertIn("limits", b["required"])
+        self.assertEqual(b["required"], c["required"])
+
+    def test_false_or_empty_window_cannot_validate(self):
+        case = copy.deepcopy(self.cases[0])
+        case["dossier"]["candidates"][0]["lines"] = [999999, 999999]
+        self.assertTrue(C.verify_case(case))
+        case = copy.deepcopy(self.cases[0])
+        case["dossier"]["candidates"][0]["excerpt"] = ""
+        self.assertTrue(C.verify_case(case))
+
+    def test_sep_prompt_contains_actual_counts_field(self):
+        case = self.by_id["reuse-sep-installed-claim-inventory"]
+        self.assertIn("atom_counts: BTreeMap<AtomType, u64>", C.build_prompt(case, "B"))
+
+    def test_historical_tools_do_not_accept_future_or_escape(self):
+        case = self.cases[0]
+        cand = case["dossier"]["candidates"][0]
+        observed = T.lookup(case, {"action": "read", "path": cand["path"],
+                                  "start": cand["lines"][0], "end": cand["lines"][1]})
+        self.assertEqual(observed["base"], case["provenance"]["base_sha"])
+        self.assertIn("NO type name is ever compared", observed["text"])
+        with self.assertRaises(ValueError):
+            T.lookup(case, {"action": "read", "path": cand["path"], "start": 1,
+                            "end": 10, "revision": case["provenance"]["outcome_sha"]})
+        with self.assertRaises(ValueError):
+            T.lookup(case, {"action": "read", "path": "../Cargo.toml", "start": 1, "end": 5})
+
+    def test_source_feedback_does_not_recursively_embed_prior_prompts(self):
+        case = self.cases[0]
+        replies = [json.dumps({"action": "list", "prefix": "corpus-index"})] * T.MAX_TOOL_REQUESTS
+        replies.append(json.dumps({"action":"propose","proposal":GOOD}))
+        prompts = []
+        def ask(prompt, schema, *args):
+            prompts.append(prompt)
+            return replies.pop(0), "scripted"
+        with patch.object(R, "ask", side_effect=ask), patch.object(T, "lookup", return_value={"paths":["corpus-index/src/source.rs"]}):
+            result = R.run_one(case, "A", "scripted", 700, 1)
+        self.assertEqual(result["verdict"], "parsed")
+        self.assertEqual(len(prompts), 7)
+        self.assertLess(len(prompts[-1]), len(prompts[0]) + 2000)
 
 
 class LoopTests(unittest.TestCase):
@@ -209,7 +252,7 @@ class LoopTests(unittest.TestCase):
         row = D.run_case_loop(case, ask)
         self.assertTrue(row["finished"])
         self.assertEqual(row["refusals"], 1)
-        self.assertIn("observed exactly once", ask.prompts[1])
+        self.assertIn("host contract refused", ask.prompts[1])
 
     def test_loop_cap_is_not_a_pass(self):
         case = self.by_id["reuse-tool-discovery-converge-shape"]
@@ -265,23 +308,35 @@ class RescoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp)
             (run / "meta.json").write_text(json.dumps({"stamp": "test"}))
+            case = next(c for c in C.load_cases() if c["id"] == "reuse-tool-discovery-converge-shape")
+            F.record(run, [case], {"stamp": "test", "d_restate": False})
             rows = [
                 {"case": "reuse-tool-discovery-converge-shape", "condition": "A",
                  "verdict": "parsed", "reason": None, "parsed": GOOD,
-                 "raw": "{}", "model": "test", "metrics": None},
+                 "raw": json.dumps({"action": "propose", "proposal": GOOD}),
+                 "model": "test", "metrics": None},
                 {"case": "reuse-tool-discovery-converge-shape", "condition": "A",
                  "verdict": "could-not-judge", "reason": "http503",
                  "parsed": None, "raw": None, "model": None, "metrics": None},
             ]
             (run / "calls.jsonl").write_text(
                 "".join(json.dumps(r) + "\n" for r in rows))
-            summary = R.rescore_dir(run)
+            rows[0]["parsed"] = BAD  # stale/tampered parsed cache must be ignored
+            (run / "calls.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+            with patch.object(C, "load_cases", side_effect=AssertionError("live bank read")), \
+                    patch.object(R, "ask", side_effect=AssertionError("model call")):
+                summary = R.rescore_dir(run)
             agg = summary["aggregate"]["A"]
             self.assertEqual(agg["n"], 2)
             self.assertEqual(agg["could_not_judge"], 1)
             self.assertEqual(agg["home_match"], 1)
             self.assertEqual(agg["path_match"], 1)
             self.assertTrue((run / "rescore.json").exists())
+
+    def test_legacy_run_is_not_rescored_against_current_bank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "legacy run"):
+                R.rescore_dir(Path(tmp))
 
 
 if __name__ == "__main__":

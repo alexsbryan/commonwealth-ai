@@ -1,0 +1,49 @@
+schema_version = 1
+projection = "source-bound compiler projection; compile shape only"
+
+[base]
+commit = "8830c59c457098c2ea852c5ad864744e86630c77"
+path = "corpus-index/src/source.rs"
+blob = "36011268302365ffc8d4c2089fdcfd8cc4a095af"
+selection = "IndexSource trait is copied verbatim from this blob."
+
+[outcome]
+commit = "1b289e3351954bab24dcfd770296869a60c23944"
+path = "corpus-index/src/source.rs"
+blob = "b1a2b539489a1aa619d90d62cceee8e8c98ee106"
+selection = "The six CorpusReadPort read declarations and their documented return types are projected from this blob."
+
+[binding]
+crate = "async-trait"
+version = "=0.1.89"
+root_lock_version = "0.1.89"
+trait_owner_targets = ["contract", "engine"]
+caller_bindings = ["port", "engine"]
+
+[[substitution]]
+name = "CorpusIndex"
+shape = "nominal unit struct; no LanceDB handle or index behavior"
+
+[[substitution]]
+name = "IndexInfo"
+shape = "nominal unit struct; no on-disk metadata behavior"
+
+[[substitution]]
+name = "Result"
+shape = "type alias to std::result::Result<T, String>; no historical error semantics"
+
+[[substitution]]
+name = "ForegroundLease"
+shape = "nominal unit struct; no signal or lease lifecycle"
+
+[[preservation]]
+name = "BuiltinCorpus"
+shape = "historical outcome DTO fields, types, serde derives, and Option defaults copied from corpus-index/src/types.rs at the outcome commit"
+
+[[limit]]
+name = "runtime behavior"
+disposition = "not represented; this fixture makes no LanceDB, caching, embedding, filesystem, lease, or engine behavior claim"
+
+[[limit]]
+name = "generated inputs"
+disposition = "only closed target and binding enums plus registry-selected method IDs influence materialization; source and tests are fixed templates"

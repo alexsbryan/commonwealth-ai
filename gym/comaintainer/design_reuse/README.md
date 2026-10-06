@@ -1,198 +1,109 @@
-# Design-reuse lane — home selection before plan generation
+# Design reuse — source evidence before extension
 
-The question this lane exists for: **given a task, can a model find the
-existing owner and extend it, or does it treat the task as the first
-thing ever built?** It is scored on the decision, not on the prose that
-follows it. Register: a real dev's design begins with "what here can
-absorb this?"; the failure being measured is the swept-then-invented
-7-phase plan.
+## Correction to the original results
 
-## Provenance model
+The earlier 7/8 result was agreement with supplied `usable`/`serves` labels,
+not independently verified technical-design quality. A consistent `USE`
+header could accompany a delta explicitly building a redundant detector;
+the old loop admitted it. The SEP prompt showed only the struct header,
+not the `atom_counts` field previously described as visible to the model.
+A was task-only, not normal repository discovery. Byte-identical repeats
+establish identical received outputs, not a general zero-noise floor or
+independent fresh generation. Original logs remain under `runs/`.
 
-Eleven cases, each with a BASE revision (the outcome's first parent, or a
-verified ancestor for artifact-introduction cases, stated per case), an
-OUTCOME revision, and candidate surfaces that existed at BASE. Three
-sides:
+The label loop is retained only as an explicit `--legacy-label-ablation`.
+It is not an artifact-admission path. Its fact booleans are curated,
+mostly unrefereed task judgments; checking their types does not verify
+their truth. None of these results establishes semantic adequacy.
 
-- **request** — requirement and constraints. The only task material.
-- **dossier** — candidate existing surfaces at BASE, each with a path and
-  a verbatim excerpt. Supplied to conditions B and C, withheld from A.
-- **oracle** — expected disposition, acceptable owner/seam/path
-  identities, correction quote, and rejected baits. Answer-side only.
+## Source-selection experiment
 
-`validate.py` checks every base/outcome object resolves, every excerpt
-appears verbatim in the BASE tree, the oracle is non-empty, and no
-correction quote or outcome sha leaks onto the request side. Split is
-recomputed, never stored: every third id within (label) stratum goes to
-holdout; **holdout stays frozen during iteration**.
+The bank contains eleven **reconstructed** historical cases. BASE/outcome
+commits and actual line windows are checked; nine labels require a referee
+and two cite recorded operator corrections. These are not original-session
+replays. The bank does not prove that a final commit was the only good design.
 
-Two labels, deliberately different weights: `historic_operator` (a
-recorded operator correction names the miss) and `proposed_referee_needed`
-(strong historical correction evidence, not yet refereed). These are
-reconstructed replays, not the original task transcripts; the request
-text is a reconstruction and says so.
+All three source-selection arms now have the same BASE-only `list`, `read`,
+and literal `search` interface, the same lookup/generation budget, and the
+same required final fields. A starts without a curated dossier; B receives
+validated source windows; C additionally restricts evidence IDs. Source
+windows include their commit, blob, coordinates, and content digest.
+Source provenance and reference membership are separate from semantic support.
 
-## Conditions
+Each run freezes `inputs.json`, its digest, split membership, final schemas,
+instrument files/hashes, and generation settings. Per-step prompts, schemas,
+raw replies, and host lookup results are retained. Rescore reparses **raw**
+against the frozen bank, ignores cached `parsed`, makes no model calls, and
+refuses legacy inputs or changed instruments instead of silently substituting
+the live bank or scorer. A scorer correction requires a named new version.
+Transport model labels are recorded but are not independent served-engine
+attestation. No fresh-source-search improvement rate has been measured yet.
 
-| | prompt | interface |
-|---|---|---|
-| A | task + constraints | disposition/owner/seam/delta required |
-| B | + dossier | same schema |
-| C | + dossier + binding protocol | all fields required; `evidence` **enumerated to the candidate ids** (+ `none-of-these`); limits and delta minimum lengths |
-| D | + dossier with the controller's recorded facts | disposition refused when it contradicts a recorded fact; default v2.1 restates the record (graded); `--no-restate` = v2.2, facts are state. See "v2 iteration" below |
+Metrics are lexical selection/label agreement and protocol completion.
+`home_match` does not prove that the selected home can serve the requirement;
+`evidence_grounded` means ID membership, not entailment. Human refereeing or
+an appropriate independent probe must establish task coverage and minimality.
 
-C's grounding is structural on purpose: the decoder can only emit
-candidate ids, so "I grounded my answer" cannot be a free-text claim
-(principle 10). A and B keep free-text evidence — that difference is the
-experiment.
+## Core-read artifact episode
 
-Deterministic metrics per call: parsed / malformed / could-not-judge,
-disposition match, home match and path match (**over the choice fields
-only** — owner, seam, delta, new_components; the evidence list records
-what was *surveyed*, including surfaces considered and rejected), new
-component count, lexical bait hits, evidence grounding under C. Whether a
-named surface can actually serve the task is semantic and stays a
-refereed question; the oracle's `why_acceptable` / rejected baits are the
-reference material for that pass.
+The concrete admission path extends the existing Rust example rather than
+the label scorer:
 
-## Registered dev run — 2026-10-05 (8 dev cases × 3 conditions)
+```
+lookup BASE interface
+    -> probe_existing (fixed consumer, real compiler)
+    -> propose_extension (typed operations, managed source artifact)
+    -> check (compiler + observed Cargo edges + pinned package policy)
+    -> accept (controller-issued receipt bound to exact artifact/contract)
+```
 
-Engine: `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`. The seat pin
-(`Qwen3.8-27B-UD-Q6_K_XL`) is no longer advertised by this node; the
-substitution is named in each run's `meta.json`, and these numbers are
-**not comparable** to the committed comaintainer pedigree (ENGINE_OF_RECORD
-Darwin-36B; the README there says the pedigree does not transfer).
+The baseline is the actual historical `IndexSource` blob. The small compiler
+projection preserves its two methods and requires six additional typed reads.
+Missing-method diagnostics must be observed before the extension operation
+is offered. The candidate can choose contract/engine placement, port/engine
+binding, and registry-selected methods; prose labels, arbitrary source,
+new services, and self-authored verdicts are not operative actions.
 
-24/24 parsed. Two independent full passes produced **byte-identical raw
-completions on all 24 cells**, so the deltas below are exact at n=8 —
-sampling variance is in the bank, not the instrument, on this engine.
+The fixed consumer compiles every required call. Engine placement can pass
+the compiler while failing the dependency gate. An incomplete method set or
+wrong return type fails the compiler. Acceptance requires both checks and a
+fresh artifact digest; forged, mismatched, or stale receipts cannot authorize it.
 
-| condition | parsed | disposition | home | path | declared new_comp | evidence |
-|---|---|---|---|---|---|---|
-| A | 8/8 | 1 | 0 | 0 | 3 | — |
-| B | 8/8 | 4 | 3 | 4 | 0 | — |
-| C | 8/8 | 2 | 5 | 2 | 4 | 8/8 |
+**Scope:** source-bound projected compiler surface and package closure.
+Nominal substitutions for heavy index/error/lease types are listed in
+`quality/arch-layers/tests/fixtures/core-read/source-contract.toml`. This is
+not a historical engine build, proof of caching/embedding/lease behavior,
+whole-core migration, general architectural taste, or an OS sandbox against
+another same-UID process. The consumer, policy and projection are host-owned.
 
-Against the pre-registered expectations:
+### Controls
 
-1. **MET** — `home(B) 3 > home(A) 0`; the dossier also lifts path 0→4 and
-   disposition 1→4. Retrieval-by-dossier is the lever that moves the design.
-2. **FAILED** — `disposition(C) 2 < 4 = disposition(B)`. Grounding is now
-   structural (8/8) and C has the best home rate (5/8), but the grounded
-   protocol chose a *worse* disposition than the plain dossier. The lexical
-   bait detector fired **0 times anywhere** — uninformative on this run,
-   never a pass.
-3. **INVALID AS REGISTERED** — declared new components are not comparable
-   across conditions: C's interface requires enumeration while A/B permit
-   silence, so B's 0 is a floor by omission, not evidence of abstention.
-   C declared new types/methods in 2 of 8 cases (desktop: an
-   `EnrichmentIntegrityReport` type plus `CorpusEngine::check_integrity`;
-   session-ontology: two `ClaimSketch` fields plus a `Decidability` enum).
-   A v2 needs a uniform enumeration field, or referee adjudication of the
-   deltas, before this axis can be compared at all.
-4. **CONFIRMED** — of C's 5 home hits, 4 still chose a wrong disposition,
-   and two misstate the named surface's own capability: sep claims
-   `AtlasCorpusSummary` lacks per-type counts its excerpt shows, and
-   core-read picks the concrete `CorpusEngine` over the seam the task
-   removes. The residual failure is comprehension and decision *after*
-   retrieval, not retrieval.
-
-Reading: the dossier moves the design; the extension-map protocol as
-currently worded buys grounding (8/8, and the smoke run's prose contract
-satisfied 0/3) and the best surface rate, but it did not improve — and
-sometimes loosened — the disposition choice (core-read B EXTEND → C USE;
-sep B USE → C EXTEND). The next iteration is protocol wording and
-interface, not more retrieval. History: the n=3 smoke run also exposed
-two instrument defects, both fixed before this run — selection metrics
-counted surfaces merely mentioned in evidence (a rejected alternative
-read as "found"), and C's evidence grounding was a prose request the model
-ignored; narrowing the metrics to the choice fields and enumerating the
-ids in the schema are the lane's own thesis applied to itself.
-
-## v2 iteration — verifier-gated observations (2026-10-05)
-
-The iteration the accountability pass prescribed: move the design decision
-into a state machine where the model may not build on an unverified
-reading. Three variants, same bank, same engine; each variant exists
-because the previous one's measurement demanded it.
-
-**v2 — the model derives the facts, the controller grades them.** For every
-candidate the model answered `usable` / `serves`; wrong answers were
-refused with field-level feedback ("`converge-cli-shape.serves` is
-contradicted — re-read"). Across three smokes the model would not classify
-a surface it could accurately describe as serving (the renamed-fork
-detector), and insisted the prohibited concrete engine (`CorpusEngine`)
-was usable while the safe interface was not — identically across
-attempts, under refusal pressure. The historical miss, reproduced at the
-fact layer.
-
-**v2.1 — the facts are printed in the dossier; the model restates them.**
-Full dev run: **4/8 finished** (4 hit the refusal cap), **43 wrong
-restatements, 21 refusals**. On exactly the fields that cut against its
-plan the model overrode the printed record (e.g. `index-source` recorded
-usable=yes, restated no). The recorded pre-registered kill — "cannot
-finish a majority" — tripped.
-
-**v2.2 — the facts are canonical state; the gate checks only the
-disposition against them (`--no-restate`).** Full dev run:
-
-| condition | finished | disposition | home | path | refusals | evidence |
-|---|---|---|---|---|---|---|
-| D v2.2 | **8/8** | **7/8** | **7/8** | 6/8 | 3 | 8/8 |
-
-Zero false facts admitted (no fact assertions pass through the interface).
-The three refusals are the gate working: desktop tried to extend the
-engine → cited its own record → switched to USE; core-read reached for
-the prohibited concrete engine (refused by the constraint), then for USE
-on the interface (refused — the record says it does not serve), then
-settled on the gold EXTEND(index-source). The single residual disposition
-miss is session-ontology: EXTEND(tiered-conversation), gold ADAPT/ADD — a
-choice made *within* the legal set, which is what remains a referee
-question.
-
-Bars as registered: no false claim admitted — met; USE-gold 4/4 — met
-(vs B 2/4, C 1/4); non-USE dispositions 3/4 — met (vs B 2/4, C 1/4); kill
-— not tripped at v2.2.
-
-The reading: the same model, same facts, three divisions of labour —
-derived (fails), restated (won't), supplied-and-enforced (completes and
-matches gold 7/8). This is the founding concept's rule measured on our
-own task: *do not ask the model to enforce what the machine can know*.
-Runs: v2.1 `20261005T225201Z`, v2.2 `20261005T225938Z`; attempt logs are
-in each `calls.jsonl`.
-
-## Pre-registered directional expectations for the next run
-
-Registered 2026-10-05, before any holdout use:
-
-1. `home_match(B) > home_match(A)` — retrieval is a real bottleneck.
-2. `disposition_match(C) >= disposition_match(B)` — grounding does not
-   degrade the choice, and `bait_hits(C) <= bait_hits(B)`.
-3. `new_components(A) >= new_components(B) >= new_components(C)` — the
-   invention proxy falls as grounding tightens.
-4. Failures that survive C name a surface from the dossier and still
-   choose the wrong disposition or the wrong owner — i.e. decision, not
-   retrieval. The first pass already showed this shape at n=3; the
-   registered run needs n>=8 dev cases per condition. **Run completed
-   2026-10-05 — verdicts in the section above; expectation 4 confirmed.**
-
-A kill: if B and C are indistinguishable from A on home and disposition,
-the dossier/protocol buys nothing and the lane stops before any training
-talk. Cost is 3 calls per case (one per condition) at temp 0.
+- No extension before complete source observation and a definite baseline gap.
+- Complete contract-owned surface with port binding is accepted.
+- Behaviorally green engine-owned surface with engine binding is refused.
+- Missing read and wrong return type fail the compiler.
+- Fake disposition/delta/new-service fields and duplicate method IDs are refused.
+- Mutation after checking invalidates the receipt.
+- Removing the architecture requirement from acceptance makes the engine-coupling
+  test fail (`accepted` versus required `refused`); the guard was restored.
 
 ## Run
 
 ```sh
 python3 gym/comaintainer/design_reuse/validate.py
 python3 gym/comaintainer/design_reuse/test_design_reuse.py
-python3 gym/comaintainer/design_reuse/replay.py --dry-run
-python3 gym/comaintainer/design_reuse/replay.py --pin <advertised-model-id> --limit 8
-python3 gym/comaintainer/design_reuse/replay.py --pin <advertised-model-id> --limit 8 --conditions D --no-restate
-python3 gym/comaintainer/design_reuse/replay.py --rescore runs/<stamp>
+python3 gym/comaintainer/design_reuse/replay.py --pin <advertised-model-id> --limit 3
+python3 gym/comaintainer/design_reuse/replay.py --rescore <new-run-directory>
+./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package arch-layers
+./scripts/with-cargo-lock.sh cargo run -p arch-layers --example agent_admission -- --root /tmp/new-core-read-run --episode core-read
 ```
 
-Runs persist full prompts, raw completions and served model under
-`runs/<stamp>/` (gitignored); `--rescore` reproduces every metric with
-zero model calls. Headline numbers land here. `--case <id>` may name a
-holdout case but iteration must not; `--include-holdout` runs everything
-deliberately.
+The example prints state and legal schema, then reads JSON actions on stdin.
+Start with `{"action":"lookup","path":"corpus-index/src/source.rs","start":1,"end":20}`
+and `{"action":"probe_existing"}`. Propose an extension with `target`, `binding`,
+and a selected `methods` list from the offered schema; `check` names its candidate
+digest and `accept` names that digest and the issued passing receipt.
+
+Holdout requires explicit `--include-holdout`; archived split membership is
+frozen per run. Referee the semantic labels and retain independent known-bad
+and valid-new-capability controls before making a design-quality claim.

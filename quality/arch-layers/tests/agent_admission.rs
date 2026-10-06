@@ -1,10 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #[path = "../examples/agent_admission/controller.rs"]
 mod controller;
+#[path = "../examples/agent_admission/core_read.rs"]
+mod core_read;
+#[path = "agent_admission/core_read.rs"]
+mod core_read_cases;
+#[path = "../examples/agent_admission/episode.rs"]
+mod episode;
 #[path = "../examples/agent_admission/fixture.rs"]
 mod fixture;
 #[path = "../examples/agent_admission/oracle.rs"]
 mod oracle;
+#[path = "../examples/agent_admission/source.rs"]
+mod source;
 
 use controller::AdmissionController;
 use serde_json::{json, Value};
@@ -305,7 +313,7 @@ fn agent_admission_green_text_zero_tests_and_killed_runner_are_not_passes() {
         ),
         ("printf '0 passed; 0 failed\\n'", "could-not-judge"),
         ("kill -KILL $$", "could-not-judge"),
-        ("sleep 5", "could-not-judge"),
+        ("sleep 30", "could-not-judge"),
     ] {
         let dir = tempfile::tempdir().unwrap();
         let runner = dir.path().join("cargo-control");
@@ -318,7 +326,7 @@ fn agent_admission_green_text_zero_tests_and_killed_runner_are_not_passes() {
         let mut host = AdmissionController::with_runner(
             &dir.path().join("run"),
             &runner,
-            Duration::from_secs(2),
+            Duration::from_secs(10),
         )
         .unwrap();
         let candidate = propose(&mut host, "ask-format");

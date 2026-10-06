@@ -375,11 +375,13 @@ in: a `[[package]]` row's crates under the program's own directory, leaves
 under `shared/`, distributions under `distributions/`, clients under
 `clients/` and tooling under `quality/`. `cargo xtask boundary-gate` fails a
 member outside its row's directory, and a member no row claims.
-The test-only `quality/arch-layers/examples/agent_admission.rs` spike admits
-fixed-fixture dependency proposals only after behavior and package-boundary
-checks issue a receipt bound to the candidate and governing contract. Its
-adversarial integration suite is `quality/arch-layers/tests/agent_admission.rs`;
-the fixture README carries the controls and run commands. It adds no product API.
+The test-only `quality/arch-layers/examples/agent_admission.rs` admits managed
+dependency proposals after candidate-bound checks. Its `--episode core-read`
+observes historical source, probes the existing interface, and checks a typed
+extension artifact with the compiler and package policy before receipt-bound
+acceptance. This is a source-bound compiler projection, not an engine runtime
+proof. Controls live in `quality/arch-layers/tests/agent_admission.rs` and its
+core-read sibling; it adds no product API.
 `baselines/` holds machine-written ratchet baselines, regenerated only via
 `--update-baseline`, banked via `--tighten`. `cargo xtask quality` runs every
 fast local gate with one table carrying FOUR verdicts: passed / failed /
@@ -1629,7 +1631,7 @@ the shared report.
 | See what the CLI promises and how much can fail | **`svrn contract`** (`map` / `census` / `nightly`). `census` splits the manifest into steps a lane RUNS and steps nothing runs, because a step in a never-run journey is a written intention |
 | Judge architecture health at a glance | **`svrn code fieldglass [corpus] --open`** — one deterministic self-contained HTML, evidence only: no scores, no gates. [`docs/FIELDGLASS.md`](FIELDGLASS.md) |
 | Price or execute a refactor | `svrn code refactor plan` / `gate` / `status`; `code suggest-seams <file> --plan` → `cargo xtask refactor-apply`; `code wire-check`. Process [`quality/REFACTOR_FACTORY.md`](../quality/REFACTOR_FACTORY.md) |
-| Judge the judgment, not just the code | `gym/comaintainer/` + [`docs/COMAINTAINER.md`](COMAINTAINER.md); landing seat `scripts/co-review.sh`. Its `design_reuse/` lane replays frozen historical design decisions in three conditions (unaided / dossier / grounded protocol) and scores owner selection deterministically |
+| Judge the judgment, not just the code | `gym/comaintainer/` + [`docs/COMAINTAINER.md`](COMAINTAINER.md); landing seat `scripts/co-review.sh`. Its `design_reuse/` lane compares bounded BASE-only source discovery with supplied dossiers, freezes run inputs, and reports reference/label agreement separately from unjudged semantic adequacy |
 | Is any quality subsystem's posture stale? | **`svrn posture`** — one table: drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines, each row naming its refresh command |
 | Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>]`** — the curated ~30-minute check. Lanes are DATA in `quality/instruments.toml`; each states its verdict as a `kernel_types::Judgement` on its last stdout line. `--distribute` runs the same selection as work on the `work` ring |
 | Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh`** (~2-4h) — the FULL nightly, where drift against committed baselines is judged |

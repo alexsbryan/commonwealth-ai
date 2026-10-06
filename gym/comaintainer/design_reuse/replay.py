@@ -36,6 +36,9 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
 import common as C  # noqa: E402
+import contracts as H  # noqa: E402
+import frozen as F  # noqa: E402
+import historical as T  # noqa: E402
 import loop as D  # noqa: E402
 from markers import SEAT_ENGINE_OF_RECORD  # noqa: E402
 from score import EngineDrift, call_daemon  # noqa: E402  (one HTTP client)
@@ -70,27 +73,50 @@ def ask(prompt: str, schema: dict, pin: str, max_tokens: int, tries: int):
 
 
 def run_one(case: dict, condition: str, pin: str, max_tokens: int, tries: int) -> dict:
-    prompt = C.build_prompt(case, condition)
-    schema = C.schema_for(case, condition)
-    row: dict = {"case": case["id"], "condition": condition, "prompt": prompt,
-                 "raw": None, "model": None, "parsed": None, "verdict": None,
-                 "reason": None, "metrics": None}
-    text, result = ask(prompt, schema, pin, max_tokens, tries)
-    if text is None:
-        row["verdict"], row["reason"] = "could-not-judge", result
-        return row
-    row["raw"], row["model"] = text, result
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        row["verdict"], row["reason"] = "malformed", f"json: {exc}"
-        return row
-    if not isinstance(parsed, dict) or parsed.get("disposition") not in C.DISPOSITIONS:
-        row["verdict"], row["reason"] = "malformed", "missing or unknown disposition"
-        return row
-    row["parsed"] = parsed
-    row["verdict"] = "parsed"
-    row["metrics"] = C.score_proposal(case, parsed, condition)
+    base_prompt = C.build_prompt(case, condition)
+    base_prompt += (f"\nBASE: {case['provenance']['base_sha']}\n"
+                    "You may list source paths, read at most 120 lines, or search a literal query. "
+                    "All lookups use BASE; no live checkout or future revision is accessible. "
+                    f"Budget: {T.MAX_TOOL_REQUESTS} lookups, {T.MAX_GENERATIONS} generations. "
+                    "Emit a read/search/list action, or propose with the required proposal object.")
+    proposal_arm = {"type": "object", "properties": {
+        "action": {"const": "propose"}, "proposal": C.schema_for(case, condition)},
+        "required": ["action", "proposal"], "additionalProperties": False}
+    transcript, used = [], 0
+    row = {"case": case["id"], "condition": condition, "prompt": base_prompt,
+           "raw": None, "model": None, "parsed": None, "verdict": "never-ran",
+           "reason": None, "metrics": None, "steps": transcript,
+           "measurement_kind": "historical_source_selection", "semantic_verdict": "could-not-judge"}
+    for _ in range(T.MAX_GENERATIONS):
+        arms = [proposal_arm] + (T.schema()["oneOf"] if used < T.MAX_TOOL_REQUESTS else [])
+        schema = {"oneOf": arms}
+        feedback = [{k: e[k] for k in ("action", "observation", "refused") if k in e} for e in transcript]
+        prompt = base_prompt + "\nPrevious actions and host observations:\n" + json.dumps(feedback)
+        if len(prompt) > 60000:
+            row.update(verdict="could-not-judge", reason="source context budget exceeded; no silent truncation")
+            return row
+        text, model = ask(prompt, schema, pin, max_tokens, tries)
+        if text is None:
+            row.update(verdict="could-not-judge", reason=model)
+            return row
+        row.update(raw=text, model=model)
+        event = {"prompt": prompt, "schema": schema, "raw": text, "model": model}
+        transcript.append(event)
+        try:
+            action = json.loads(text)
+            event["action"] = action
+            errors = H.problems(action, schema)
+            if errors:
+                raise ValueError("; ".join(errors))
+            if action["action"] == "propose":
+                row.update(parsed=action["proposal"], verdict="parsed")
+                row["metrics"] = C.score_proposal(case, row["parsed"], condition)
+                return row
+            used += 1
+            event["observation"] = T.lookup(case, action)
+        except (ValueError, OSError, json.JSONDecodeError) as exc:
+            event["refused"] = str(exc)
+    row.update(verdict="failed", reason="generation budget exhausted without a valid proposal")
     return row
 
 
@@ -111,6 +137,8 @@ def select_cases(cases, args) -> list[dict]:
     splits = C.assign_splits(cases)
     if args.case:
         picked = [c for c in cases if c["id"] in set(args.case)]
+        if not args.include_holdout and any(splits[c["id"]] == "holdout" for c in picked):
+            raise ValueError("holdout selection requires explicit --include-holdout")
     elif args.include_holdout:
         picked = cases
     else:
@@ -120,15 +148,31 @@ def select_cases(cases, args) -> list[dict]:
 
 def rescore_dir(run_dir: Path) -> dict:
     """Recompute metrics from persisted raw completions; never calls a model."""
-    cases = {c["id"]: c for c in C.load_cases()}
+    inputs = F.read(run_dir)
+    cases = {c["id"]: c for c in inputs["cases"]}
     rows = []
     for line in (run_dir / "calls.jsonl").read_text().splitlines():
         if not line.strip():
             continue
         row = json.loads(line)
-        if row.get("parsed") and row["verdict"] == "parsed":
-            row["metrics"] = C.score_proposal(cases[row["case"]], row["parsed"],
-                                              row["condition"])
+        row["metrics"] = None
+        row["parsed"] = None
+        if row.get("raw") and row["verdict"] == "parsed":
+            case = cases[row["case"]]
+            try:
+                raw = json.loads(row["raw"])
+                if row["condition"] == "D":
+                    errors = H.problems(raw, D.schema_d(case, inputs["settings"]["d_restate"]))
+                    parsed = D.compose(case, raw)
+                else:
+                    parsed = raw.get("proposal") if isinstance(raw, dict) and raw.get("action") == "propose" else None
+                    errors = H.problems(parsed, C.schema_for(case, row["condition"]))
+                if errors:
+                    raise ValueError("; ".join(errors))
+                row["parsed"] = parsed
+                row["metrics"] = C.score_proposal(case, parsed, row["condition"])
+            except (ValueError, json.JSONDecodeError) as exc:
+                row.update(verdict="failed", reason=f"stored raw contract violation: {exc}")
         rows.append(row)
     agg = C.aggregate(rows)
     summary = {"stamp": json.loads((run_dir / "meta.json").read_text())["stamp"],
@@ -154,11 +198,21 @@ def main() -> int:
     ap.add_argument("--no-restate", action="store_true",
                     help="condition D v2.2: facts are canonical state, not restated")
     ap.add_argument("--rescore", type=Path)
+    ap.add_argument("--legacy-label-ablation", action="store_true",
+                    help="explicitly permit D's supplied-label consistency experiment")
     args = ap.parse_args()
 
     if args.rescore:
-        summary = rescore_dir(args.rescore)
+        try:
+            summary = rescore_dir(args.rescore)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 3
         print(C.render_aggregate(summary["aggregate"]))
+        if any(r["verdict"] in ("failed", "malformed") for r in summary["rows"]):
+            return 1
+        if any(r["verdict"] == "could-not-judge" for r in summary["rows"]):
+            return 3
         return 0
 
     cases = C.load_cases()
@@ -170,7 +224,18 @@ def main() -> int:
     if bad:
         print(f"replay: unknown condition(s) {bad}", file=sys.stderr)
         return 2
-    selected = select_cases(cases, args)
+    if "D" in conditions and not args.legacy_label_ablation:
+        print("D requires --legacy-label-ablation; it does not independently verify design adequacy", file=sys.stderr)
+        return 2
+    defects = [bad for case in cases for bad in C.verify_case(case)]
+    if defects:
+        print("\n".join(defects), file=sys.stderr)
+        return 1
+    try:
+        selected = select_cases(cases, args)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if not selected:
         print("replay: no cases selected", file=sys.stderr)
         return 4
@@ -194,7 +259,13 @@ def main() -> int:
         "splits": {c["id"]: C.assign_splits(cases)[c["id"]] for c in selected},
         "include_holdout": args.include_holdout,
         "d_restate": not args.no_restate,
+        "generation": {"temperature": 0, "max_tokens": args.max_tokens,
+                       "timeout_s": 240, "tries": args.tries, "retry_sleep_s": 10,
+                       "tool_requests": T.MAX_TOOL_REQUESTS, "generations": T.MAX_GENERATIONS},
+        "served_engine_identity_verified": False,
     }
+    inputs = F.record(run_dir, cases, meta)
+    selected = [c for c in inputs["cases"] if c["id"] in {s["id"] for s in selected}]
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
     rows = []
@@ -205,6 +276,8 @@ def main() -> int:
                     row = D.run_case_loop(
                         case, lambda p, s: ask(p, s, args.pin, args.max_tokens, args.tries),
                         restate=not args.no_restate)
+                    row["measurement_kind"] = "legacy_supplied_label_ablation"
+                    row["semantic_verdict"] = "could-not-judge"
                 else:
                     row = run_one(case, cond, args.pin, args.max_tokens, args.tries)
                 rows.append(row)
@@ -222,6 +295,10 @@ def main() -> int:
     print()
     print(C.render_aggregate(summary["aggregate"]))
     print(f"\nrun: {run_dir}")
+    if any(r["verdict"] in ("failed", "malformed") for r in rows):
+        return 1
+    if any(r["verdict"] == "could-not-judge" for r in rows):
+        return 3
     return 0
 
 

@@ -1,0 +1,31 @@
+schema_version = 3
+backstage = ["core-read-checker"]
+
+[[layer]]
+name = "fixture"
+crates = ["*"]
+
+[[package]]
+name = "svrn"
+doc = "README.md"
+crates = ["core-probe"]
+leaf_budget = ["corpus-index", "corpus-engine-yield"]
+
+[[package]]
+name = "ingest"
+doc = "README.md"
+crates = ["engine-probe"]
+leaf_budget = ["corpus-index", "corpus-engine-yield"]
+
+[[package_leaf]]
+name = "corpus-index"
+allow = ["corpus-engine-yield"]
+
+[[package_leaf]]
+name = "corpus-engine-yield"
+allow = []
+
+[[forbid]]
+from = "core-probe"
+to = "engine-probe"
+reason = "The svrn reader must not depend on the ingest engine package."

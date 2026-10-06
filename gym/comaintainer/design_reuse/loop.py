@@ -37,6 +37,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
 import common as C  # noqa: E402
+import contracts as H
 
 MAX_REFUSALS = 4
 
@@ -263,6 +264,13 @@ def run_case_loop(case: dict, ask, max_refusals: int = MAX_REFUSALS,
             action = json.loads(text)
         except json.JSONDecodeError as exc:
             reason = f"malformed JSON ({exc})"
+            record["refused"] = reason
+            attempt_log.append(record)
+            refusals.append(reason)
+            continue
+        violations = H.problems(action, schema_d(case, restate=restate))
+        if violations:
+            reason = "host contract refused: " + "; ".join(violations)
             record["refused"] = reason
             attempt_log.append(record)
             refusals.append(reason)
