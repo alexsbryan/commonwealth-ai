@@ -409,6 +409,36 @@ pub fn lea(predicted: &Clustering, gold: &Clustering) -> EntityOutcome {
     EntityOutcome::of(side(&p, &g), side(&g, &p))
 }
 
+/// MUC (Vilain et al. 1995): the links each side keeps. Recall counts, per
+/// gold entity, its size less the number of predicted clusters it is split
+/// across, over its size less one; precision the reverse.
+pub fn muc(predicted: &Clustering, gold: &Clustering) -> EntityOutcome {
+    let (p, g) = aligned_clusters(predicted, gold);
+    if p.is_empty() {
+        return EntityOutcome::default();
+    }
+    fn side(entities: &[BTreeSet<String>], other: &[BTreeSet<String>]) -> f64 {
+        let mut of: BTreeMap<&String, usize> = BTreeMap::new();
+        for (k, c) in other.iter().enumerate() {
+            for m in c {
+                of.insert(m, k);
+            }
+        }
+        let (mut num, mut den) = (0usize, 0usize);
+        for e in entities {
+            let parts: BTreeSet<usize> = e.iter().map(|m| of[m]).collect();
+            num += e.len() - parts.len();
+            den += e.len() - 1;
+        }
+        if den == 0 {
+            0.0
+        } else {
+            num as f64 / den as f64
+        }
+    }
+    EntityOutcome::of(side(&p, &g), side(&g, &p))
+}
+
 /// Every metric this module computes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityResolutionReport {
@@ -418,6 +448,12 @@ pub struct EntityResolutionReport {
     pub ceaf_e: EntityOutcome,
     #[serde(default)]
     pub lea: EntityOutcome,
+    #[serde(default)]
+    pub muc: EntityOutcome,
+    /// The CoNLL-2012 score the coreference literature reports: the mean F1 of
+    /// MUC, B³ and CEAF-e.
+    #[serde(default)]
+    pub conll_f1: f64,
 }
 
 pub fn score(predicted: &Clustering, gold: &Clustering) -> EntityResolutionReport {
@@ -426,6 +462,16 @@ pub fn score(predicted: &Clustering, gold: &Clustering) -> EntityResolutionRepor
         pairwise: pairwise(predicted, gold),
         ceaf_e: ceaf_e(predicted, gold),
         lea: lea(predicted, gold),
+        muc: muc(predicted, gold),
+        conll_f1: 0.0,
+    }
+    .with_conll()
+}
+
+impl EntityResolutionReport {
+    fn with_conll(mut self) -> Self {
+        self.conll_f1 = (self.muc.f1 + self.b_cubed.f1 + self.ceaf_e.f1) / 3.0;
+        self
     }
 }
 
@@ -558,6 +604,50 @@ mod tests {
         assert!((l.recall - (1.0 + 4.0 / 6.0) / 7.0).abs() < 1e-9, "{l:?}");
         let perfect = lea(&gold, &gold);
         assert!((perfect.f1 - 1.0).abs() < 1e-9 && (ceaf_e(&gold, &gold).f1 - 1.0).abs() < 1e-9);
+    }
+
+    /// Vilain's example (key {a,b,c,d}, response {a,b} {c,d}) and the LEA-paper
+    /// case; values computed apart from this code. CoNLL is the mean of the
+    /// three F1s.
+    #[test]
+    fn muc_matches_vilain_and_conll_is_the_mean_of_three() {
+        let gold = clustering(&[("a", "K"), ("b", "K"), ("c", "K"), ("d", "K")]);
+        let predicted = clustering(&[("a", "R1"), ("b", "R1"), ("c", "R2"), ("d", "R2")]);
+        let m = muc(&predicted, &gold);
+        assert!(
+            (m.precision - 1.0).abs() < 1e-9 && (m.recall - 2.0 / 3.0).abs() < 1e-9,
+            "{m:?}"
+        );
+        let gold = clustering(&[
+            ("a", "K1"),
+            ("b", "K1"),
+            ("c", "K1"),
+            ("d", "K2"),
+            ("e", "K2"),
+            ("f", "K2"),
+            ("g", "K2"),
+        ]);
+        let predicted = clustering(&[
+            ("a", "R1"),
+            ("b", "R1"),
+            ("c", "R2"),
+            ("d", "R2"),
+            ("f", "R3"),
+            ("g", "R3"),
+            ("e", "R4"),
+        ]);
+        let r = score(&predicted, &gold);
+        assert!(
+            (r.muc.precision - 2.0 / 3.0).abs() < 1e-9 && (r.muc.recall - 0.4).abs() < 1e-9,
+            "{:?}",
+            r.muc
+        );
+        // computed apart: MUC F1 .5, B³ F1 .592, CEAF-e F1 .489
+        assert!(
+            (r.conll_f1 - 0.5270322270322271).abs() < 1e-9,
+            "{}",
+            r.conll_f1
+        );
     }
 
     /// The assignment is exact: greedy takes 0.6 then 0.0 here, the optimum
