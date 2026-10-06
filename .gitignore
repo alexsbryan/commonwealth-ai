@@ -272,3 +272,9 @@ phone-qr.svg
 
 # ralph pool lane worktrees (scripts/ralph.py Pool.run_lane: .ralph/wt/<unit>); whole checkouts, never committed
 .ralph/
+
+# ralph permission bridge: its transient request and answer files and its log,
+# written in a loop's control dir (scripts/ralph-permission-bridge.py).
+ralph/**/PERMISSION_REQUEST*.md
+ralph/**/PERMISSION_ANSWER*
+ralph/**/log-permissions.txt

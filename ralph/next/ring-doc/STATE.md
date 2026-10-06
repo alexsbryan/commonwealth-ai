@@ -25,7 +25,7 @@ nohup python3 scripts/ralph.py supervise --workdir . --label ring-doc \
 
 On the Halo: `toolbox enter sovereign-vulkan` first. The worker is `claude -p` on the
 logged-in plan via `scripts/ralph-claude-shim.sh` (permissions: `ralph/claude-settings.json`;
-the gray zone asks you through `ralph/PERMISSION_REQUEST.md` → answer in `ralph/PERMISSION_ANSWER`).
+the gray zone asks you through `ralph/next/ring-doc/ctl/PERMISSION_REQUEST.md` → answer in `ralph/next/ring-doc/ctl/PERMISSION_ANSWER`).
 Models: `python3 scripts/ralph.py models --model <W> --review-model <R> --label ring-doc`.
 Control files (`ralph/STOP`, `ralph/NEEDS_HUMAN.md`, `ralph/DONE`, `ralph/.heartbeat`)
 are shared with any other loop on this host — run one loop per checkout.

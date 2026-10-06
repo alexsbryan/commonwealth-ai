@@ -1457,10 +1457,12 @@ def session_env(paths):
     ralph-mark.sh and ralph-check.sh need no per-campaign default. RALPH_QUEUE
     is set even when empty: a legacy loop launched from inside a queue's
     session must not inherit that queue. RALPH_CLAUDE_SETTINGS likewise (the
-    shim reads empty as its default)."""
+    shim reads empty as its default). RALPH_WORKDIR is the loop's checkout, not
+    a pool lane's worktree: the permission bridge asks the operator there."""
     settings = paths.manifest.settings if paths.manifest else ""
     return {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
             "RALPH_CONTROL_DIR": paths.control_dir,
+            "RALPH_WORKDIR": str(paths.workdir.resolve()),
             "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else ""}
 
 

@@ -64,7 +64,7 @@ echo "ralph-claude-shim: model=${model:-default} effort=${effort:-default}" >&2
 # default), said "when it finishes I'll paste the rows", ended its turn 36 s
 # in, and the next session repeated it - a stall that would have halted the
 # loop. This is the harness's property, so it is said here, not in PROMPT.md.
-args+=(--append-system-prompt "HARNESS: you are a one-shot print-mode session. The process exits the moment you end your turn, and every background task you started is killed with it - no notification will ever reach you. Never run a command in the background and never end your turn while a check is running. Run long checks (DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the Bash tool's timeout parameter set to 600000; if a single check cannot finish inside ten minutes, split it or write ralph/NEEDS_HUMAN.md saying so. Commit before you end your turn - an uncommitted turn is lost.")
+args+=(--append-system-prompt "HARNESS: you are a one-shot print-mode session. The process exits the moment you end your turn, and every background task you started is killed with it - no notification will ever reach you. Never run a command in the background and never end your turn while a check is running. Run long checks (DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the Bash tool's timeout parameter set to 600000; if a single check cannot finish inside ten minutes, split it or write ${RALPH_CONTROL_DIR:-ralph}/NEEDS_HUMAN.md saying so. Commit before you end your turn - an uncommitted turn is lost.")
 # The directories .opencode/opencode.json's external_directory already
 # granted: /run (the PROMPT's containerenv premise check), /tmp (the cargo
 # lock), and ralph's own state under ~/.svrnmesh. Anything else outside the
@@ -74,8 +74,10 @@ for d in /run /tmp "$HOME/.svrnmesh/ralph"; do
 done
 
 # The gray zone — a call the settings neither allow nor deny — bubbles to the
-# operator through scripts/ralph-permission-bridge.py (ralph/PERMISSION_REQUEST.md,
-# answered by ralph/PERMISSION_ANSWER, denied after RALPH_PERMISSION_WAIT_SECS).
+# operator through scripts/ralph-permission-bridge.py (PERMISSION_REQUEST.md in
+# the loop's control dir, answered by PERMISSION_ANSWER beside it, denied after
+# RALPH_PERMISSION_WAIT_SECS). RALPH_SESSION_CWD tells it which pool lane asks.
+export RALPH_SESSION_CWD="$PWD"
 # RALPH_PERMISSION_BRIDGE=0 falls back to refusing the gray zone outright.
 #
 # MCP is pinned: the repo's .mcp.json (code intel) plus the bridge, and
