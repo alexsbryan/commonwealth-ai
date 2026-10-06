@@ -245,6 +245,8 @@ mod tests {
             document: doc.into(),
             candidates: vec![],
             calls: 0,
+            vetoed: 0,
+            unread: 0,
             outcomes: records
                 .iter()
                 .map(|r| StatementOutcome {

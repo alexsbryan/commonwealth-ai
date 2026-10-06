@@ -17,13 +17,17 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use super::resolution_documents::fold_ws;
-use crate::enrichment::ontology::{DocumentStamp, OntologyTypeDecl};
+use crate::enrichment::ontology::{AttrFamily, DocumentStamp, OntologyTypeDecl};
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 use crate::InferenceFn;
 
 /// Bytes of the document kept either side of a statement as its record's
 /// context. A cost knob: it bounds the prompt, it decides nothing.
 const CONTEXT_BYTES: usize = 200;
+
+/// The most values a necessary attribute may declare: READ labels each with
+/// one single-token letter (`select::LABELS`).
+const MAX_READ_VALUES: usize = 25;
 
 /// What RESOLVE reads from a declared type.
 #[derive(Debug, Clone)]
@@ -41,21 +45,58 @@ pub struct Criterion {
     pub evidential: Vec<(DocumentStamp, f64)>,
     /// The precision a link decided by evidence alone must have.
     pub bar: Option<f64>,
+    /// The measured precision of the forced choice's most probable candidate
+    /// (`model_choice`). `None`: unmeasured, and the argmax decides (Ring 0),
+    /// so it can be measured.
+    pub model_choice: Option<f64>,
+    /// The measured precision of the proposed answer (`proposed_answer`).
+    /// `None`: it decides nothing in a forced-choice run.
+    pub proposed_answer: Option<f64>,
+    /// The attributes whose read values must agree, each with its values.
+    pub necessary: Vec<(String, Vec<String>)>,
 }
 
 impl Criterion {
     /// `keys` is the type's effective identity, its parents' included. An
     /// evidential field that is no document stamp is refused, never skipped.
     pub fn of(decl: &OntologyTypeDecl, keys: Vec<String>) -> Result<Self, String> {
-        let evidential = decl
-            .identity_evidential
+        let (mut evidential, mut model_choice, mut proposed_answer) = (Vec::new(), None, None);
+        for e in &decl.identity_evidential {
+            match (DocumentStamp::from_attr(&e.evidence), e.evidence.as_str()) {
+                (Some(stamp), _) => evidential.push((stamp, e.precision)),
+                (None, "model_choice") => model_choice = Some(e.precision),
+                (None, "proposed_answer") => proposed_answer = Some(e.precision),
+                (None, other) => {
+                    return Err(format!(
+                        "type `{}`: evidence `{other}` is no source",
+                        decl.name
+                    ))
+                }
+            }
+        }
+        let necessary = decl
+            .identity_necessary
             .iter()
-            .map(|e| match DocumentStamp::from_attr(&e.field) {
-                Some(stamp) => Ok((stamp, e.precision)),
-                None => Err(format!(
-                    "type `{}`: evidential field `{}` is no document stamp",
-                    decl.name, e.field
-                )),
+            .map(|n| {
+                decl.attributes
+                    .iter()
+                    .find_map(|a| match &a.family {
+                        AttrFamily::Text { values }
+                            if a.name == *n
+                                && !values.is_empty()
+                                && values.len() <= MAX_READ_VALUES =>
+                        {
+                            Some((n.clone(), values.clone()))
+                        }
+                        _ => None,
+                    })
+                    .ok_or_else(|| {
+                        format!(
+                            "type `{}`: necessary attribute `{n}` declares no values, or more than \
+                             {MAX_READ_VALUES} (one single-token label each)",
+                            decl.name
+                        )
+                    })
             })
             .collect::<Result<_, _>>()?;
         Ok(Self {
@@ -65,6 +106,9 @@ impl Criterion {
             keys,
             evidential,
             bar: decl.identity_bar,
+            model_choice,
+            proposed_answer,
+            necessary,
         })
     }
 }
@@ -111,8 +155,9 @@ pub struct Record {
     pub statements: Vec<String>,
     /// Folded values of the declared keys its statements carried.
     pub keys: BTreeMap<String, BTreeSet<String>>,
-    /// The document stamps of its statements' documents, by stamp attribute.
-    pub fields: BTreeMap<&'static str, BTreeSet<String>>,
+    /// The document stamps of its statements' documents, by stamp attribute,
+    /// and the values READ for its statements' necessary attributes.
+    pub fields: BTreeMap<String, BTreeSet<String>>,
     /// One entry per folded statement; later calls are shown these.
     pub evidence: Vec<Evidence>,
 }
@@ -155,6 +200,9 @@ pub enum Decision {
         value: String,
         precision: f64,
     },
+    /// The proposed answer named the record, and its measured precision
+    /// cleared the bar and outranked the model's choice (`select.rs`).
+    Proposed { record: String, precision: f64 },
     /// None of the candidates: a record was opened. `cite` is `None` only for
     /// a statement alone in its document with no candidate, where no call is made.
     Opened {
@@ -201,6 +249,7 @@ impl Outcome {
             Outcome::Decided(Decision::Cited { .. }) => "cited",
             Outcome::Decided(Decision::Selected { .. }) => "selected",
             Outcome::Decided(Decision::Field { .. }) => "field",
+            Outcome::Decided(Decision::Proposed { .. }) => "proposed",
             Outcome::Decided(Decision::Opened { .. }) => "opened",
             Outcome::Refused(r) => match r {
                 Refusal::Unreadable { .. } => "refused:unreadable",
@@ -222,6 +271,7 @@ impl Outcome {
                 | Decision::Cited { record, .. }
                 | Decision::Selected { record, .. }
                 | Decision::Field { record, .. }
+                | Decision::Proposed { record, .. }
                 | Decision::Opened { record, .. },
             ) => Some(record),
             Outcome::Refused(_) => None,
@@ -303,6 +353,10 @@ pub struct DocumentResolution {
     /// The candidate records the model was shown, in the proposer's order.
     pub candidates: Vec<String>,
     pub calls: u32,
+    /// Candidates not offered because a necessary value READ differs.
+    pub vetoed: u32,
+    /// Necessary attributes READ as none of their values, or refused.
+    pub unread: u32,
     pub outcomes: Vec<StatementOutcome>,
 }
 
@@ -337,6 +391,10 @@ enum Plan {
         record: usize,
         stamp: DocumentStamp,
         value: String,
+        precision: f64,
+    },
+    Proposed {
+        record: usize,
         precision: f64,
     },
     Open {
@@ -446,9 +504,20 @@ impl Resolver {
         let key_edges = key_edges(&asked, &folded_keys);
         let mut calls = 0;
         let mut choices: Vec<Option<Choice>> = vec![None; n];
+        let mut read_of: Vec<BTreeMap<String, String>> = vec![BTreeMap::new(); n];
+        let (mut vetoed, mut unread) = (0, 0);
         let decided: Vec<Plan> = if let (Answerer::Select(infer), false) =
             (answerer, asked.is_empty())
         {
+            // READ each asked statement's necessary attributes first: a
+            // candidate whose value differs is never offered.
+            let read = read::read(criterion, doc, statements, &asked, infer).await;
+            for (&i, values) in asked.iter().zip(&read.values) {
+                read_of[i] = values.clone();
+            }
+            let proposed = criterion
+                .proposed_answer
+                .map(|_| Proposed::of(self.rule, doc, statements, &asked, &shown, &self.records));
             let chosen = select::choose(
                 criterion,
                 doc,
@@ -457,10 +526,14 @@ impl Resolver {
                 &shown,
                 &self.records,
                 &key_edges,
+                &read.values,
+                proposed.as_ref(),
                 infer,
             )
             .await;
-            calls = chosen.calls;
+            calls = read.calls + chosen.calls;
+            vetoed = chosen.vetoed;
+            unread = read.unknown;
             for (&i, c) in asked.iter().zip(chosen.choices) {
                 choices[i] = c;
             }
@@ -538,6 +611,7 @@ impl Resolver {
                         &statements[i],
                         surface[i],
                         &folded_keys[i],
+                        &read_of[i],
                         None,
                     );
                     Outcome::Decided(Decision::Key {
@@ -553,6 +627,7 @@ impl Resolver {
                         &statements[i],
                         surface[i],
                         &folded_keys[i],
+                        &read_of[i],
                         Some(&cite),
                     );
                     Outcome::Decided(Decision::Cited {
@@ -570,6 +645,7 @@ impl Resolver {
                         &statements[i],
                         surface[i],
                         &folded_keys[i],
+                        &read_of[i],
                         None,
                     );
                     Outcome::Decided(Decision::Selected {
@@ -589,12 +665,28 @@ impl Resolver {
                         &statements[i],
                         surface[i],
                         &folded_keys[i],
+                        &read_of[i],
                         None,
                     );
                     Outcome::Decided(Decision::Field {
                         record: self.records[record].id.clone(),
                         field: stamp.attr(),
                         value,
+                        precision,
+                    })
+                }
+                Plan::Proposed { record, precision } => {
+                    self.fold(
+                        record,
+                        doc,
+                        &statements[i],
+                        surface[i],
+                        &folded_keys[i],
+                        &read_of[i],
+                        None,
+                    );
+                    Outcome::Decided(Decision::Proposed {
+                        record: self.records[record].id.clone(),
                         precision,
                     })
                 }
@@ -608,6 +700,7 @@ impl Resolver {
                         &statements[i],
                         surface[i],
                         &folded_keys[i],
+                        &read_of[i],
                         cite.as_deref(),
                     );
                     Outcome::Decided(Decision::Opened {
@@ -637,6 +730,8 @@ impl Resolver {
                 .map(|&(r, _)| self.records[r].id.clone())
                 .collect(),
             calls,
+            vetoed,
+            unread,
             outcomes: outcomes.into_iter().flatten().collect(),
         };
         info!(
@@ -678,9 +773,17 @@ impl Resolver {
         statement: &Statement,
         surface: &str,
         keys: &[(String, String)],
+        read: &BTreeMap<String, String>,
         cite: Option<&str>,
     ) {
         let record = &mut self.records[r];
+        for (attr, v) in read {
+            record
+                .fields
+                .entry(attr.clone())
+                .or_default()
+                .insert(v.clone());
+        }
         record.statements.push(statement.id.clone());
         for (k, v) in keys {
             record.keys.entry(k.clone()).or_default().insert(v.clone());
@@ -689,7 +792,7 @@ impl Resolver {
         for (stamp, v) in doc.stamps {
             record
                 .fields
-                .entry(stamp.attr())
+                .entry(stamp.attr().to_string())
                 .or_default()
                 .insert(v.clone());
             self.by_field
@@ -778,10 +881,11 @@ fn marked_context(body: &str, start: usize, end: usize) -> String {
 mod answer;
 mod fields;
 pub mod propose;
+mod read;
 mod select;
 
 pub use answer::{cite_found, ProposalRule};
-use answer::{judge, prompt, Proposed};
+use answer::{judge, prompt, Proposed, ProposedVerdict};
 
 #[cfg(test)]
 mod tests;

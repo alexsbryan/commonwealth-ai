@@ -622,7 +622,14 @@ question the pipeline asks about a type is a method on the resolved
   records this document opened, read as a distribution in one forward pass and
   kept on the outcome (`Choice`); the argmax decides (`Decision::Selected`),
   Ring 0 of `research/ontology-apps/resolve-prereg.md`. The closed
-  `Decision` is `Key | Field | Cited | Selected | Opened`; anything else is a counted `Refusal`,
+  A type's `identity_necessary` attributes (each with declared `values`) are READ
+  per asked statement as one forced choice over those values
+  (`resolve_records/read.rs`); a candidate whose value differs is not offered.
+  `identity_evidential` also weighs `model_choice` and `proposed_answer` at their
+  measured precision: of those that name a candidate, the more precise that
+  clears `identity_bar` decides (`Decision::Proposed` for the proposed answer),
+  and a choice below the bar is never asked.
+  `Decision` is `Key | Field | Cited | Selected | Proposed | Opened`; anything else is a counted `Refusal`,
   never defaulted. Records keep the passage around each statement, which is
   what later calls compare. It runs alone today, over supplied statements
   (`svrn enrich resolve-statements`, the gold-mention setting); no atlas phase

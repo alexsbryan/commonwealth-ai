@@ -196,6 +196,15 @@ pub struct ResolveStatementsSummary {
     /// The evidential fields and bar the type declares (`identity_evidential`).
     pub evidential: Vec<(&'static str, f64)>,
     pub bar: Option<f64>,
+    /// The measured precision of the model's choice and of the proposed
+    /// answer; `None` for the choice means the argmax decides (Ring 0).
+    pub model_choice: Option<f64>,
+    pub proposed_answer: Option<f64>,
+    /// The necessary attributes READ, candidates not offered because one
+    /// differed, and reads that came back none of the values or refused.
+    pub necessary: Vec<String>,
+    pub vetoed: u32,
+    pub unread: u32,
     pub proposer: String,
     pub documents: usize,
     pub statements: usize,
@@ -355,6 +364,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
     let mut clustering: BTreeMap<String, String> = BTreeMap::new();
     let mut tally: BTreeMap<String, usize> = BTreeMap::new();
     let (mut calls, mut statements) = (0u32, 0usize);
+    let (mut vetoed, mut unread) = (0u32, 0u32);
     let started = Instant::now();
     eprintln!(
         "resolve-statements: {} document(s) ({} in a declared thread), type `{}`, answer by {}, proposer {}, rule {:?}",
@@ -393,6 +403,8 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
             clustering.insert(o.statement.clone(), cluster);
         }
         calls += r.calls;
+        vetoed += r.vetoed;
+        unread += r.unread;
         statements += r.outcomes.len();
         eprintln!(
             "  [{}/{}] {id}: {} statement(s), {} candidate(s), {} call(s) {:?}",
@@ -424,6 +436,11 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
             .map(|&(s, p)| (s.attr(), p))
             .collect(),
         bar: criterion.bar,
+        model_choice: criterion.model_choice,
+        proposed_answer: criterion.proposed_answer,
+        necessary: criterion.necessary.iter().map(|(n, _)| n.clone()).collect(),
+        vetoed,
+        unread,
         proposer: proposer.describe(),
         documents: order.len(),
         statements,

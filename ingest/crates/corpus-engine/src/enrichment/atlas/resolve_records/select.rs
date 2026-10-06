@@ -17,7 +17,7 @@ use std::time::Instant;
 use oicp_types::forced_choice;
 use tracing::{debug, warn};
 
-use super::answer::{describe, reasons};
+use super::answer::{describe, reasons, Proposed, ProposedVerdict};
 use super::{
     context, marked_context, Choice, Criterion, Document, Evidence, Plan, Proposal, Record,
     Refusal, Statement,
@@ -29,11 +29,11 @@ const SYSTEM: &str = include_str!("../resolve_select_prompt.md");
 
 /// Candidate labels, single tokens on the tokenizers in use; `NONE` answers
 /// "none of them". At most `LABELS.len()` candidates are shown, a cost cap.
-const LABELS: [&str; 25] = [
+pub(super) const LABELS: [&str; 25] = [
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
     "T", "U", "V", "W", "X", "Y",
 ];
-const NONE: &str = "0";
+pub(super) const NONE: &str = "0";
 
 /// What a candidate is: an open record a proposer offered, or a record an
 /// earlier statement of this document opened (its position in `asked`).
@@ -48,6 +48,8 @@ pub(super) struct Chosen {
     pub plans: Vec<Plan>,
     pub choices: Vec<Option<Choice>>,
     pub calls: u32,
+    /// Candidates not offered because a necessary value differs.
+    pub vetoed: u32,
 }
 
 /// RESOLVE's census funnel: every forced-choice call RESOLVE makes is issued
@@ -106,6 +108,12 @@ pub(super) async fn decision_call(
 }
 
 /// Ask each asked statement, in document order, which candidate it is about.
+/// A candidate whose necessary value differs from the statement's, both READ
+/// (`read.rs`), is not offered. Where the model's choice is measured
+/// (`model_choice`) it is weighed beside the proposed answer
+/// (`proposed_answer`): of those that name a candidate, the more precise that
+/// clears the type's bar decides, and a choice below the bar is never asked.
+/// Unmeasured, the argmax decides (Ring 0), so the choice can be measured.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn choose(
     criterion: &Criterion,
@@ -115,12 +123,20 @@ pub(super) async fn choose(
     shown: &[(usize, &Proposal)],
     records: &[Record],
     key_edges: &[(usize, usize)],
+    read: &[BTreeMap<String, String>],
+    proposed: Option<&Proposed>,
     infer: &InferenceFn,
 ) -> Chosen {
     let mut plans: Vec<Plan> = Vec::with_capacity(asked.len());
     let mut choices: Vec<Option<Choice>> = Vec::with_capacity(asked.len());
     let mut opened: Vec<usize> = Vec::new();
     let mut calls = 0;
+    let mut vetoed = 0;
+    let clears = |p: f64| criterion.bar.is_some_and(|b| p >= b);
+    let ask_model = criterion.model_choice.is_none_or(clears);
+    if !ask_model {
+        debug!(document = doc.id, model_choice = ?criterion.model_choice, bar = ?criterion.bar, "atlas/resolve: the model's choice is below the bar; it is not asked");
+    }
     for (j, &i) in asked.iter().enumerate() {
         // A declared key shared with an earlier statement of this document
         // settles it: the same plan, no question.
@@ -131,92 +147,158 @@ pub(super) async fn choose(
         }
         let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
         candidates.extend(shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
-        candidates.truncate(LABELS.len());
-        if candidates.is_empty() {
-            opened.push(j);
-            plans.push(Plan::Open {
-                group: j,
-                cite: None,
-            });
-            choices.push(None);
-            continue;
+        let offered = candidates.len();
+        candidates.retain(|c| !differs(criterion, &read[j], c, records, read));
+        if candidates.len() < offered {
+            let n = offered - candidates.len();
+            vetoed += n as u32;
+            debug!(document = doc.id, statement = %statements[i].id, vetoed = n, "atlas/resolve: candidates whose necessary value differs are not offered");
         }
-        let Some(same_when) = criterion.same_when.as_deref() else {
-            plans.push(Plan::Refuse(Refusal::NoCriterion));
-            choices.push(None);
-            continue;
+        candidates.truncate(LABELS.len());
+        // The proposed answer, where it is weighed and clears the bar: an
+        // offered record, or the plan of an earlier statement of its wording
+        // whose necessary values agree.
+        let proposal: Option<(Plan, f64)> = match (proposed, criterion.proposed_answer) {
+            (Some(pr), Some(pa)) if clears(pa) => match pr.verdict(j) {
+                Some(ProposedVerdict::Record(r))
+                    if candidates
+                        .iter()
+                        .any(|c| matches!(c, Candidate::Record(x, _) if *x == r)) =>
+                {
+                    Some((
+                        Plan::Proposed {
+                            record: r,
+                            precision: pa,
+                        },
+                        pa,
+                    ))
+                }
+                Some(ProposedVerdict::Earlier(f))
+                    if !differs(criterion, &read[j], &Candidate::Opened(f), records, read) =>
+                {
+                    Some((plans[f].clone(), pa))
+                }
+                _ => None,
+            },
+            _ => None,
         };
-        let s = &statements[i];
-        let labels: Vec<&str> = LABELS[..candidates.len()]
-            .iter()
-            .copied()
-            .chain([NONE])
-            .collect();
-        let prompt = question(
-            criterion,
-            same_when,
-            doc,
-            s,
-            &candidates,
-            &labels,
-            statements,
-            asked,
-            records,
-        );
-        calls += 1;
-        let dist = match decision_call(infer, &prompt, &labels, doc.id, &s.id).await {
-            Ok(dist) => dist,
-            Err(refusal) => {
-                plans.push(Plan::Refuse(refusal));
+        let mut model: Option<Plan> = None;
+        let mut choice: Option<Choice> = None;
+        if ask_model && !candidates.is_empty() {
+            let Some(same_when) = criterion.same_when.as_deref() else {
+                plans.push(Plan::Refuse(Refusal::NoCriterion));
                 choices.push(None);
                 continue;
-            }
-        };
-        let id_of = |c: &Candidate| match *c {
-            Candidate::Record(r, _) => records[r].id.clone(),
-            Candidate::Opened(g) => statements[asked[g]].id.clone(),
-        };
-        // decision_call refused any answer that left a label out.
-        let p = |label: &str| dist[label];
-        let choice = Choice {
-            candidates: candidates
+            };
+            let s = &statements[i];
+            let labels: Vec<&str> = LABELS[..candidates.len()]
+                .iter()
+                .copied()
+                .chain([NONE])
+                .collect();
+            let prompt = question(
+                criterion,
+                same_when,
+                doc,
+                s,
+                &candidates,
+                &labels,
+                statements,
+                asked,
+                records,
+            );
+            calls += 1;
+            let dist = match decision_call(infer, &prompt, &labels, doc.id, &s.id).await {
+                Ok(dist) => dist,
+                Err(refusal) => {
+                    plans.push(Plan::Refuse(refusal));
+                    choices.push(None);
+                    continue;
+                }
+            };
+            let id_of = |c: &Candidate| match *c {
+                Candidate::Record(r, _) => records[r].id.clone(),
+                Candidate::Opened(g) => statements[asked[g]].id.clone(),
+            };
+            // decision_call refused any answer that left a label out.
+            let p = |label: &str| dist[label];
+            choice = Some(Choice {
+                candidates: candidates
+                    .iter()
+                    .zip(LABELS)
+                    .map(|(c, l)| (id_of(c), p(l)))
+                    .collect(),
+                none: p(NONE),
+            });
+            // The most probable label; a tie goes to the later one, so to none.
+            let (best, probability) = candidates
                 .iter()
                 .zip(LABELS)
-                .map(|(c, l)| (id_of(c), p(l)))
-                .collect(),
-            none: p(NONE),
-        };
-        // The most probable label; a tie goes to the later one, so to none.
-        let (best, probability) = candidates
-            .iter()
-            .zip(LABELS)
-            .map(|(c, l)| (Some(*c), p(l)))
-            .chain([(None, p(NONE))])
-            .fold(
-                (None, f64::NEG_INFINITY),
-                |a, b| if b.1 >= a.1 { b } else { a },
-            );
-        plans.push(match best {
-            Some(Candidate::Record(record, _)) => Plan::Selected {
-                record,
-                probability,
+                .map(|(c, l)| (Some(*c), p(l)))
+                .chain([(None, p(NONE))])
+                .fold(
+                    (None, f64::NEG_INFINITY),
+                    |a, b| if b.1 >= a.1 { b } else { a },
+                );
+            model = match best {
+                Some(Candidate::Record(record, _)) => Some(Plan::Selected {
+                    record,
+                    probability,
+                }),
+                Some(Candidate::Opened(group)) => Some(Plan::Open { group, cite: None }),
+                None => None,
+            };
+        }
+        let decided = match criterion.model_choice {
+            // Unmeasured: the argmax decides, so it can be measured (Ring 0).
+            None => model,
+            // Measured (and asked only if it clears the bar): the more precise
+            // of the model's choice and the proposed answer; a tie goes to the
+            // proposed answer, which costs no call to reproduce.
+            Some(mc) => match (model, proposal) {
+                (Some(m), Some((_, qp))) if mc > qp => Some(m),
+                (_, Some((q, _))) => Some(q),
+                (m, None) => m,
             },
-            Some(Candidate::Opened(group)) => Plan::Open { group, cite: None },
-            None => {
-                opened.push(j);
-                Plan::Open {
-                    group: j,
-                    cite: None,
-                }
+        };
+        plans.push(decided.unwrap_or_else(|| {
+            opened.push(j);
+            Plan::Open {
+                group: j,
+                cite: None,
             }
-        });
-        choices.push(Some(choice));
+        }));
+        choices.push(choice);
     }
     Chosen {
         plans,
         choices,
         calls,
+        vetoed,
     }
+}
+
+/// Whether candidate `c` holds, for some necessary attribute, a value other
+/// than the statement's (`mine`), both READ. One unread side decides nothing.
+fn differs(
+    criterion: &Criterion,
+    mine: &BTreeMap<String, String>,
+    c: &Candidate,
+    records: &[Record],
+    read: &[BTreeMap<String, String>],
+) -> bool {
+    criterion.necessary.iter().any(|(attr, _)| {
+        let Some(v) = mine.get(attr) else {
+            return false;
+        };
+        match *c {
+            Candidate::Record(r, _) => records[r]
+                .fields
+                .get(attr)
+                .is_some_and(|held| !held.is_empty() && !held.contains(v)),
+            Candidate::Opened(g) => read[g].get(attr).is_some_and(|w| w != v),
+        }
+    })
 }
 
 /// The one-statement question. The type, criterion and document come first

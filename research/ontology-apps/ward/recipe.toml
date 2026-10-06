@@ -63,6 +63,11 @@ name = "deal"
 kind = "entity"
 description = "one prospective or actual sale, purchase, supply arrangement or trade, with one counterparty"
 identity_criterion = "Two mentions are one deal when they are about the same transaction with the same counterparty: the same product, delivery point and term being asked about, offered, negotiated, agreed, confirmed or delivered, however differently it is worded and whoever writes. Two transactions with one counterparty (two terms, two delivery points, two separate purchases) are different deals, and a master or enabling agreement with no specific trade (ISDA, GISB, EEI) is a deal of its own, apart from the trades done under it."
+identity_evidential = [
+  { evidence = "model_choice", precision = 0.316, measured_on = "ward tune, Ring 0 run, live: 6 of 19 argmax links (resolve-prereg.md, diagnosis)" },
+  { evidence = "proposed_answer", precision = 0.8, measured_on = "ward tune floor run, live: 4 of 5 links (resolve-prereg.md Ring 1b)" },
+]
+identity_bar = 0.5
 attributes = [
   { name = "counterparty", type = "ref", of = "company" },
   { name = "amount", type = "quantity", unit = "USD" },

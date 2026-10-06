@@ -270,6 +270,15 @@ enum Why {
     Similar(f32),
 }
 
+/// The proposed answer for one asked statement (`Proposed::verdict`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum ProposedVerdict {
+    /// A shown record, by position in the records.
+    Record(usize),
+    /// An earlier asked statement of the same wording, by position in `asked`.
+    Earlier(usize),
+}
+
 /// The answer declared threads, wording and document similarity alone give:
 /// a document's statements of one wording are one particular, proposed the
 /// same as one shown record (`Why`) or none. The model is shown it and
@@ -330,6 +339,20 @@ impl Proposed {
             })
             .collect();
         Self { groups }
+    }
+
+    /// What the proposed answer says of asked statement `j`: the shown record
+    /// its wording is proposed as, or else the first statement of its wording
+    /// earlier in this document, whose plan it shares.
+    pub(super) fn verdict(&self, j: usize) -> Option<ProposedVerdict> {
+        let (js, target) = self.groups.iter().find(|(js, _)| js.contains(&j))?;
+        match target {
+            Some((r, _)) => Some(ProposedVerdict::Record(*r)),
+            None => js
+                .first()
+                .filter(|&&f| f != j)
+                .map(|&f| ProposedVerdict::Earlier(f)),
+        }
     }
 
     /// The prompt's closing lines: one per particular, `r3: s0 s2 (why)`.

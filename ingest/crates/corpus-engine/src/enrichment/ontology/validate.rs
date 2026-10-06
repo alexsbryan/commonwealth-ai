@@ -153,50 +153,56 @@ fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &
     }
 }
 
-/// `identity_evidential`: each field a stamp `change.document` declares (the
-/// only fields filled before READ), each precision a probability measured
-/// somewhere named, and a bar beside them in (0, 1].
+/// `identity_evidential`: each source a stamp `change.document` declares,
+/// `model_choice` or `proposed_answer`, each precision a probability measured
+/// somewhere named, and a bar beside them in (0, 1]. `identity_necessary`:
+/// each a declared attribute with `values`, the closed set READ chooses from.
 fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
-    // No `change.document` declares no stamp, so every evidential field is unfilled.
+    // No `change.document` declares no stamp, so every stamp source is unfilled.
     let declared: Vec<DocumentStamp> = match &p.change.document {
         Some(d) => d.declared().map(|(s, _)| s).collect(),
         None => Vec::new(),
     };
-    let stamps = DocumentStamp::ALL.map(DocumentStamp::attr).join(", ");
+    let sources = DocumentStamp::ALL
+        .map(DocumentStamp::attr)
+        .into_iter()
+        .chain(NON_STAMP_EVIDENCE)
+        .collect::<Vec<_>>()
+        .join(", ");
     for t in &p.shape.types {
         for e in &t.identity_evidential {
-            match DocumentStamp::from_attr(&e.field) {
+            match DocumentStamp::from_attr(&e.evidence) {
                 Some(s) if declared.contains(&s) => {}
                 Some(s) => errors.push(format!(
-                    "ontology type `{}` lists evidential field `{}`, which change.document.{} \
-                     would fill, and it is not declared. Declare it, or drop the field.",
+                    "ontology type `{}` lists evidence `{}`, which change.document.{} would \
+                     fill, and it is not declared. Declare it, or drop the source.",
                     t.name,
-                    e.field,
+                    e.evidence,
                     s.key()
                 )),
+                None if NON_STAMP_EVIDENCE.contains(&e.evidence.as_str()) => {}
                 None => errors.push(format!(
-                    "ontology type `{}` lists evidential field `{}`. Only document stamps are \
-                     filled before READ: {stamps}.",
-                    t.name, e.field
+                    "ontology type `{}` lists evidence `{}`, which is no source: {sources}.",
+                    t.name, e.evidence
                 )),
             }
             if !(0.0..=1.0).contains(&e.precision) {
                 errors.push(format!(
-                    "ontology type `{}`: evidential field `{}` has precision {}, not in [0, 1].",
-                    t.name, e.field, e.precision
+                    "ontology type `{}`: evidence `{}` has precision {}, not in [0, 1].",
+                    t.name, e.evidence, e.precision
                 ));
             }
             if e.measured_on.trim().is_empty() {
                 errors.push(format!(
-                    "ontology type `{}`: evidential field `{}` says nothing in `measured_on`. Name \
-                     the labelled fold and the count behind its precision.",
-                    t.name, e.field
+                    "ontology type `{}`: evidence `{}` says nothing in `measured_on`. Name the \
+                     labelled fold and the count behind its precision.",
+                    t.name, e.evidence
                 ));
             }
         }
         match (t.identity_evidential.is_empty(), t.identity_bar) {
             (false, None) => errors.push(format!(
-                "ontology type `{}` lists evidential fields and no `identity_bar`. Declare the \
+                "ontology type `{}` lists identity evidence and no `identity_bar`. Declare the \
                  precision a link decided by evidence alone must have.",
                 t.name
             )),
@@ -206,8 +212,24 @@ fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
             )),
             _ => {}
         }
+        for n in &t.identity_necessary {
+            let readable = t.attributes.iter().any(|a| {
+                a.name == *n
+                    && matches!(&a.family, AttrFamily::Text { values } if !values.is_empty())
+            });
+            if !readable {
+                errors.push(format!(
+                    "ontology type `{}` lists necessary attribute `{n}`, which is not one of its \
+                     attributes with `values`. Only a closed set is READ as one forced choice.",
+                    t.name
+                ));
+            }
+        }
     }
 }
+
+/// Evidence sources that are no document stamp (`identity_evidential`).
+const NON_STAMP_EVIDENCE: [&str; 2] = ["model_choice", "proposed_answer"];
 
 /// A metadata `source`: on an entity type, naming its fields, filling only
 /// declared attributes, and reading every identity key — the last through
@@ -707,7 +729,7 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
                 };
                 format!(
                     "{} (precision {:.2}, {}; {acts})",
-                    e.field, e.precision, e.measured_on
+                    e.evidence, e.precision, e.measured_on
                 )
             })
             .collect();

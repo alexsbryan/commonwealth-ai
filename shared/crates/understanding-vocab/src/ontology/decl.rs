@@ -340,13 +340,15 @@ impl OntologyV1 {
     }
 }
 
-/// An evidential identity field and what its agreement was measured to be
-/// worth: `{ field = "document_thread", precision = 0.83, measured_on = "…" }`.
-/// The field is a `change.document` stamp; `measured_on` names the labelled
-/// fold and the count behind `precision`, so the number can be checked.
+/// A source of identity evidence and what its links were measured to be worth
+/// on the live rule: `{ evidence = "document_thread", precision = 0.83,
+/// measured_on = "…" }`. The source is a `change.document` stamp,
+/// `model_choice` (the forced choice's most probable candidate) or
+/// `proposed_answer` (threads, wording and similarity alone); `measured_on`
+/// names the labelled fold and the count behind `precision`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EvidentialFieldDecl {
-    pub field: String,
+    pub evidence: String,
     pub precision: f64,
     pub measured_on: String,
 }
@@ -420,6 +422,11 @@ pub struct OntologyTypeDecl {
     /// The precision a link decided by evidence alone must have.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_bar: Option<f64>,
+    /// Attributes whose values must agree: two mentions whose values differ,
+    /// both read, are different particulars. Each a declared attribute with
+    /// `values`, READ per statement as one forced choice over them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identity_necessary: Vec<String>,
     /// Claims only, REQUIRED there: what a source does with the claim.
     #[serde(default)]
     pub force: Option<Force>,

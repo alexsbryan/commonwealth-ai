@@ -576,7 +576,7 @@ document = {{ thread = "thread" }}
 "#
         )
     };
-    let ok = r#"{ field = "document_thread", precision = 0.83, measured_on = "uv tune, 257/311" }"#;
+    let ok = r#"{ evidence = "document_thread", precision = 0.83, measured_on = "uv tune, 257/311" }"#;
     let v = validate(&typ(ok, "identity_bar = 0.5"));
     assert!(v.errors.is_empty(), "{:?}", v.errors);
     assert!(
@@ -590,30 +590,42 @@ document = {{ thread = "thread" }}
     first_error_containing(&typ(ok, "identity_bar = 0"), "is not in (0, 1]");
     first_error_containing(
         &typ(
-            r#"{ field = "author", precision = 0.9, measured_on = "x" }"#,
+            r#"{ evidence = "author", precision = 0.9, measured_on = "x" }"#,
             "identity_bar = 0.5",
         ),
-        "Only document stamps are filled before READ",
+        "which is no source",
     );
     first_error_containing(
         &typ(
-            r#"{ field = "document_date", precision = 0.9, measured_on = "x" }"#,
+            r#"{ evidence = "document_date", precision = 0.9, measured_on = "x" }"#,
             "identity_bar = 0.5",
         ),
         "change.document.date",
     );
     first_error_containing(
         &typ(
-            r#"{ field = "document_thread", precision = 1.3, measured_on = "x" }"#,
+            r#"{ evidence = "document_thread", precision = 1.3, measured_on = "x" }"#,
             "identity_bar = 0.5",
         ),
         "not in [0, 1]",
     );
     first_error_containing(
         &typ(
-            r#"{ field = "document_thread", precision = 0.9, measured_on = " " }"#,
+            r#"{ evidence = "document_thread", precision = 0.9, measured_on = " " }"#,
             "identity_bar = 0.5",
         ),
         "says nothing in `measured_on`",
     );
+    let v = validate(&typ(
+        r#"{ evidence = "model_choice", precision = 0.4, measured_on = "x" }, { evidence = "proposed_answer", precision = 0.8, measured_on = "y" }"#,
+        "identity_bar = 0.5",
+    ));
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+    first_error_containing(
+        &typ(ok, "identity_bar = 0.5\nidentity_necessary = [\"kind\"]"),
+        "necessary attribute `kind`, which is not one of its attributes with `values`",
+    );
+    let with_kind = typ(ok, "identity_bar = 0.5\nidentity_necessary = [\"kind\"]\nattributes = [{ name = \"kind\", type = \"text\", values = [\"firing\", \"death\"] }]");
+    let v = validate(&with_kind);
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
 }

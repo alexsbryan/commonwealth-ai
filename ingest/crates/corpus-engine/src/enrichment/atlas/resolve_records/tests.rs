@@ -14,6 +14,9 @@ fn criterion(keys: &[&str]) -> Criterion {
         keys: keys.iter().map(|k| k.to_string()).collect(),
         evidential: vec![],
         bar: None,
+        model_choice: None,
+        proposed_answer: None,
+        necessary: vec![],
     }
 }
 
@@ -796,4 +799,127 @@ async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
         )
         .await;
     assert_eq!(below.outcomes[0].outcome.label(), "opened");
+}
+
+/// A criterion with `kind` necessary over two values.
+fn kind_necessary() -> Criterion {
+    Criterion {
+        necessary: vec![("kind".into(), vec!["firing".into(), "death".into()])],
+        ..criterion(&[])
+    }
+}
+
+#[tokio::test]
+async fn a_candidate_whose_read_kind_differs_is_not_offered() {
+    let mut res = Resolver::default();
+    let a = "The victim died.";
+    // d0's statement is READ as a death (B), then opens: no candidate.
+    let (read0, _) = scripted(vec![json!({"A": 0.1, "B": 0.85, "0": 0.05})]);
+    res.resolve_document(
+        &kind_necessary(),
+        doc("d0", a),
+        &[stmt("x", a, "died", 0, &[])],
+        &[],
+        Answerer::Select(&read0),
+    )
+    .await;
+    assert_eq!(res.records()[0].fields["kind"].len(), 1);
+    // d1's is READ as a firing (A): the death is not offered, so no choice is asked.
+    let (read1, seen) = scripted(vec![json!({"A": 0.9, "B": 0.05, "0": 0.05})]);
+    let b = "Shots were fired.";
+    let r = res
+        .resolve_document(
+            &kind_necessary(),
+            doc("d1", b),
+            &[stmt("z", b, "Shots", 0, &[])],
+            &[similar("x", 0.6)],
+            Answerer::Select(&read1),
+        )
+        .await;
+    assert_eq!((r.vetoed, r.calls, seen.lock().unwrap().len()), (1, 1, 1));
+    assert_eq!(r.outcomes[0].outcome.label(), "opened");
+}
+
+/// d0 opens record "x" said as "Fire downtown"; returns the resolver.
+async fn fire_downtown() -> Resolver {
+    let mut res = Resolver::default();
+    let a = "Fire downtown.";
+    res.resolve_document(
+        &criterion(&[]),
+        doc("d0", a),
+        &[stmt("x", a, "Fire downtown", 0, &[])],
+        &[],
+        Answerer::Proposed,
+    )
+    .await;
+    res
+}
+
+#[tokio::test]
+async fn a_choice_below_the_bar_is_not_asked_and_the_proposed_answer_decides() {
+    let mut res = fire_downtown().await;
+    let c = Criterion {
+        bar: Some(0.5),
+        model_choice: Some(0.3),
+        proposed_answer: Some(0.8),
+        ..criterion(&[])
+    };
+    let (infer, seen) = scripted(vec![]);
+    let b = "Fire downtown, again.";
+    let r = res
+        .resolve_document(
+            &c,
+            doc("d1", b),
+            &[stmt("z", b, "Fire downtown", 0, &[])],
+            &[similar("x", 0.6)],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!((r.calls, seen.lock().unwrap().len()), (0, 0));
+    assert_eq!(
+        r.outcomes[0].outcome,
+        Outcome::Decided(Decision::Proposed {
+            record: "x".into(),
+            precision: 0.8
+        })
+    );
+}
+
+#[tokio::test]
+async fn of_the_choice_and_the_proposed_answer_the_more_precise_decides() {
+    for (model_choice, want) in [(0.9, "selected"), (0.7, "proposed")] {
+        let mut res = fire_downtown().await;
+        let y = "Flood uptown.";
+        res.resolve_document(
+            &criterion(&[]),
+            doc("d0b", y),
+            &[stmt("y", y, "Flood uptown", 0, &[])],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+        let c = Criterion {
+            bar: Some(0.5),
+            model_choice: Some(model_choice),
+            proposed_answer: Some(0.8),
+            ..criterion(&[])
+        };
+        // The proposed answer names x (same wording); the model's argmax is y (B).
+        let (infer, _) = scripted(vec![json!({"A": 0.1, "B": 0.8, "0": 0.1})]);
+        let b = "Fire downtown, again.";
+        let r = res
+            .resolve_document(
+                &c,
+                doc("d1", b),
+                &[stmt("z", b, "Fire downtown", 0, &[])],
+                &[similar("x", 0.6), similar("y", 0.5)],
+                Answerer::Select(&infer),
+            )
+            .await;
+        assert_eq!(
+            r.outcomes[0].outcome.label(),
+            want,
+            "model_choice {model_choice}"
+        );
+    }
 }

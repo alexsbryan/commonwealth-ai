@@ -792,11 +792,11 @@ Allowed values:
 
 ## `EvidentialFieldDecl`
 
-An evidential identity field and what its agreement was measured to be worth: `{ field = "document_thread", precision = 0.83, measured_on = "…" }`. The field is a `change.document` stamp; `measured_on` names the labelled fold and the count behind `precision`, so the number can be checked.
+A source of identity evidence and what its links were measured to be worth on the live rule: `{ evidence = "document_thread", precision = 0.83, measured_on = "…" }`. The source is a `change.document` stamp, `model_choice` (the forced choice's most probable candidate) or `proposed_answer` (threads, wording and similarity alone); `measured_on` names the labelled fold and the count behind `precision`.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `field` | `String` | **yes** | — |  |
+| `evidence` | `String` | **yes** | — |  |
 | `precision` | `f64` | **yes** | — |  |
 | `measured_on` | `String` | **yes** | — |  |
 
@@ -823,6 +823,7 @@ One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are requi
 | `identity_criterion` | `Option<String>` | no | type default | When two mentions are one particular, in the author's words. RESOLVE gives it to the model beside the candidates whenever no `identity` key settles the question (ONTOLOGY_METHOD.md §The core). |
 | `identity_evidential` | `Vec<EvidentialFieldDecl>` | no | type default | Fields whose agreement is evidence that two mentions are one particular, each with the precision measured for it (ONTOLOGY_METHOD.md §Identity). RESOLVE links on one only where that precision clears `identity_bar`. |
 | `identity_bar` | `Option<f64>` | no | type default | The precision a link decided by evidence alone must have. |
+| `identity_necessary` | `Vec<String>` | no | type default | Attributes whose values must agree: two mentions whose values differ, both read, are different particulars. Each a declared attribute with `values`, READ per statement as one forced choice over them. |
 | `force` | `Option<Force>` | no | type default | Claims only, REQUIRED there: what a source does with the claim. |
 | `deontic` | `Vec<Deontic>` | no | type default | Claims with `force = "directive"` only: the deontic modes the type can carry. `forbid X` is stored as `require not-X`. |
 | `subject` | `Option<String>` | no | type default | Claims only: the declared entity, event or state type the claim is about (the is-about relation). |

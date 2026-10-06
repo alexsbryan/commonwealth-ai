@@ -168,3 +168,28 @@ precision from .353 to .616, losing 58 of 246 right links; gold kinds give .703.
 by contrast, does not fix GVC (7 of 21 right reasoned against 9 by the argmax) but does on ward: of 32
 statements shown their deal, the argmax finds 6 and a reasoned answer 16 (link precision .32 to .48); free
 generation opens with reasoning on 43% of ward prompts, 38% of GVC's, 10% of uv's.
+
+## Ring 1b with the gate: a read necessary field, and the model's choice weighed (registered 2026-10-06, before its data)
+
+From the diagnosis above. A type lists `identity_necessary` attributes; one with declared `values` is READ per
+statement as one forced choice over those values (and "none of them", read as unknown), through RESOLVE's
+census funnel. A record carries the value read for its opening statement. Before the forced choice, a
+candidate whose value differs from the statement's, both known, is not offered (counted). GVC declares
+`kind` on `happening` with the five kinds the diagnosis read (firing; a person hit; an injury or condition;
+a death; the incident as a whole), necessary. And the model's choice links only where the precision measured
+for it on the live rule clears the bar, declared like a field (`model_choice`): uv .48 (10 of 21 under 1a)
+and ward .32 (6 of 19 under Ring 0) are below .5, so on them the model's choice links nothing; GVC's is
+measured in a first run with the kind field and an ungated choice, then declared, then run again.
+
+**Bar.** Each system's CoNLL, B3, CEAF-e and LEA at or above its floor's (GVC .572/.616/.452/.404, uv
+.801/.845/.652/.781, ward .436/.654/.504/.250). Read beside it, no bar: GVC's live link precision of the
+model's choice against the counterfactual's .616, and kind-read calls and tokens. Not in this arm: ward's
+counterparty from participants (needs registrable-domain folding and an owner side, rung 7's unbuilt part).
+
+*Amended before any data, same day:* gated off, the model's choice would leave ward's statements singletons,
+so the proposed answer (thread, then same wording, then similarity, `ProposalRule` as chosen) enters as an
+evidence source too (`proposed_answer`), at the live precision of the floor run, where it alone decides: ward
+.80 (4 of 5), uv .826, GVC .619. Of the sources that name a candidate, the most precise that clears the bar
+decides; none, the statement opens. With the floor's rule inside the decider, "at or above the floor" is
+nearly met by construction; the read that matters is GVC's: what the model's choice, kind-vetoed, adds over
+the floor where the proposed answer names nothing.
