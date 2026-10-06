@@ -229,3 +229,7 @@ its floor, GVC beyond the band on all four measures; the model adds over the flo
 ward is below the bar and never asked. Where it can add next: uv's 73 records against 83 cases (the floor's
 own ceiling; the model's cross-thread choices are .478), ward's misses (counterparty only in participants,
 rung 7) and its in-message deal splits (reasoning first found 16 of 32 against the argmax's 6).
+
+**Held-out read folds (2026-10-06), opened once for the adopted design (Ring 2a), no model call on either:**
+uv read .801 / .927 / .826 / .648 / .785 against its floor's .799 / .927 / .826 / .645 / .785; ward read equal
+to its floor (.414 / .182 / .579 / .481 / .300). The fields and counts measured on the tune folds hold out.
