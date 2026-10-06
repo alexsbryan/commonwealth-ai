@@ -604,11 +604,15 @@ question the pipeline asks about a type is a method on the resolved
   puts each statement of one document into an open record of one declared
   type, or opens one. An equal declared `identity` key decides without a call;
   otherwise ONE grammar-constrained call per document, given the type's
-  `identity_criterion` and the candidates a proposer offered
-  (`resolve_records/propose.rs`, TF-IDF over documents already resolved),
-  partitions the document's statements into particulars, each the same as one
-  candidate or none, with a passage per statement code must find in the
-  document. The closed
+  `identity_criterion`, the candidates the proposers offered
+  (`resolve_records/propose.rs`: the records of the document's declared
+  thread, `change.document.thread`, then TF-IDF over documents already
+  resolved; each candidate shown with its `Reason`s) and the answer threads,
+  wording and similarity alone propose (`ProposalRule`), partitions the
+  document's statements into particulars, each the same as one candidate or
+  none, with a passage per statement code must find in the document.
+  `--answer proposed` takes that proposed answer with no call: the zero-model
+  floor a model answer is held to, judged and folded by the same code. The closed
   `Decision` is `Key | Cited | Opened`; anything else is a counted `Refusal`,
   never defaulted. Records keep the passage around each statement, which is
   what later calls compare. It runs alone today, over supplied statements

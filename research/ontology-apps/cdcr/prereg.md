@@ -2,7 +2,7 @@
 
 Setting: `statements.py ~/.svrnmesh/bench-corpora/gvc --split dev` (78 documents, 977 event mentions, 271
 chains), resolved by `svrn enrich resolve-statements --recipe recipe-gvc.toml --type happening`, model
-commonwealth/primary, proposer similar_documents(neighbours 3, max_candidates 12); scored by `score.py`
+commonwealth/primary, proposer similar_documents(neighbours 3, max_candidates 12); scored by `../score_resolve.py`
 (er-score: MUC, B3, CEAF-e, LEA, CoNLL F1; refused statements scored alone).
 
 Zero-model floors on the same mentions (measured 2026-10-05, CoNLL F1): all singletons .239, same surface
@@ -58,3 +58,30 @@ cross-document links to another incident (the dominant error, under any reading 
 685 within- plus 580 cross-document links between different GVC event types or victims of one
 incident (the criterion says an occurrence and what it caused are different; the model lumps them).
 The proposer is not the bottleneck (recall .98-.995).
+
+## v4: the free signals as the model's input (registered 2026-10-05, before its data)
+
+The floors above were too low: a zero-model system that groups documents at TF-IDF similarity >= 0.4
+and links same-wording mentions within a group scores CoNLL .583 on GVC dev. The threshold was chosen
+on train, where 0.4 is best on both corpora (GVC train .547, ECB+ train .672), and dev was not used to
+choose it. Floors at 0.4, CoNLL / MUC / B3 / CEAF-e / LEA:
+GVC dev .583 / .655 / .627 / .467 / .423; ECB+ dev events .687 / .740 / .683 / .636 / .537.
+
+**v4** = v3 + each candidate shown with its document similarity + a proposed answer computed by code from
+wording and similarity alone (same wording in a document is one particular; it is proposed the same as
+the most similar shown record said in that wording, at similarity >= 0.4), which the model edits; the
+model's cited partition decides. One run each on GVC dev and ECB+ dev events. **Adopted** if on both
+corpora CoNLL, B3, CEAF-e and LEA each beat the floor by more than the GVC order band (.007, .000, .022,
+.001). Beating v3 on GVC but not the floor: not adopted.
+
+**v4 verdict: not adopted** (2026-10-06). Below the floor on every measure of both corpora:
+
+| corpus | arm | CoNLL | MUC | B3 | CEAF-e | LEA | within-doc F1 | cross-doc links (P) | tokens |
+|---|---|---|---|---|---|---|---|---|---|
+| GVC dev | floor 0.4 | .583 | .655 | .627 | .467 | .423 | | | 0 |
+| GVC dev | v4 | .477 | .559 | .495 | .379 | .282 | .344 | 3277 (.092) | |
+| ECB+ dev events | floor 0.4 | .687 | .740 | .683 | .636 | .537 | | | 0 |
+| ECB+ dev events | v4 | .556 | .608 | .574 | .486 | .367 | .269 | 5617 (.296) | 538k |
+
+Shown the floor's own answer, the model edits it into a worse one on both. From here arms are judged on
+all three systems in one table (ward mail, uv-support, GVC), never on CDCR alone.

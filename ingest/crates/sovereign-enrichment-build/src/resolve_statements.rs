@@ -4,18 +4,21 @@
 //! ONTOLOGY_METHOD.md §The generality test: statements stand in for READ, so
 //! the score measures RESOLVE and its proposer and nothing upstream.
 //!
-//! The inputs carry no gold. A document is `{id, title?, body}`; a statement
-//! is `{document, id, start, end, keys?}`, byte offsets into the body.
-//! Documents resolve in the order the statements file first names them.
+//! The inputs carry no gold. A document is `{id, title?, body, ...}`, its
+//! other fields read only as the recipe declares them (`change.document.thread`);
+//! a statement is `{document, id, start, end, keys?}`, byte offsets into the
+//! body. Documents resolve in the order the statements file first names them.
+//! `--answer proposed` makes no call: it takes the proposed answer as given,
+//! the zero-model floor the model's answer is held to, through the same judge.
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use corpus_engine::enrichment::atlas::resolve_records::propose::SimilarDocuments;
+use corpus_engine::enrichment::atlas::resolve_records::propose::{Proposers, SimilarDocuments};
 use corpus_engine::enrichment::atlas::resolve_records::{
-    Criterion, Document, Outcome, Resolver, Statement,
+    Answerer, Criterion, Document, Outcome, ProposalRule, Resolver, Statement,
 };
 use corpus_engine::enrichment::ontology::TypeIndex;
 use serde::{Deserialize, Serialize};
@@ -25,6 +28,14 @@ use super::inference_client::{DaemonInferenceClient, TokenUsageSnapshot};
 pub const DEFAULT_MODEL: &str = "commonwealth/primary";
 pub const DEFAULT_NEIGHBOURS: usize = 3;
 pub const DEFAULT_MAX_CANDIDATES: usize = 12;
+
+/// Who answers: the model, or the proposed answer as given (no call).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnswerBy {
+    Model,
+    Proposed,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedResolveStatements {
@@ -36,6 +47,9 @@ pub struct ParsedResolveStatements {
     pub model: String,
     pub neighbours: usize,
     pub max_candidates: usize,
+    pub min_similarity: f32,
+    pub rule: ProposalRule,
+    pub answer: AnswerBy,
     pub limit: Option<usize>,
 }
 
@@ -56,6 +70,10 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
             "--model",
             "--neighbours",
             "--max-candidates",
+            "--min-similarity",
+            "--same-wording-similarity",
+            "--similar",
+            "--answer",
             "--limit",
         ];
         let Some(&flag) = known.iter().find(|k| **k == name) else {
@@ -85,6 +103,16 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
                 .map_err(|_| format!("{f} takes a whole number, not `{v}`"))
         })
     };
+    let share = |f: &str| -> Result<Option<f32>, String> {
+        flags
+            .get(f)
+            .map(|v| match v.parse::<f32>() {
+                Ok(x) if (0.0..=1.0).contains(&x) => Ok(x),
+                _ => Err(format!("{f} takes a similarity from 0 to 1, not `{v}`")),
+            })
+            .transpose()
+    };
+    let default_rule = ProposalRule::default();
     Ok(ParsedResolveStatements {
         recipe: required("--recipe")?.into(),
         type_name: required("--type")?,
@@ -97,6 +125,16 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
             .unwrap_or_else(|| DEFAULT_MODEL.into()),
         neighbours: count("--neighbours", DEFAULT_NEIGHBOURS)?,
         max_candidates: count("--max-candidates", DEFAULT_MAX_CANDIDATES)?,
+        min_similarity: share("--min-similarity")?.unwrap_or(0.0),
+        rule: ProposalRule {
+            same_wording: share("--same-wording-similarity")?.unwrap_or(default_rule.same_wording),
+            similar: share("--similar")?.or(default_rule.similar),
+        },
+        answer: match flags.get("--answer").map(String::as_str) {
+            None | Some("model") => AnswerBy::Model,
+            Some("proposed") => AnswerBy::Proposed,
+            Some(v) => return Err(format!("--answer is `model` or `proposed`, not `{v}`")),
+        },
         limit: flags
             .get("--limit")
             .map(|_| count("--limit", 0))
@@ -110,6 +148,18 @@ struct DocRow {
     #[serde(default)]
     title: Option<String>,
     body: String,
+    /// Every other field, read only where the recipe declares it.
+    #[serde(flatten)]
+    fields: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A declared field's value as text: a string as it is, a number written out.
+fn field_text(row: &DocRow, field: &str) -> Option<String> {
+    match row.fields.get(field)? {
+        serde_json::Value::String(s) if !s.is_empty() => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
 }
 
 #[derive(Deserialize)]
@@ -127,6 +177,11 @@ pub struct ResolveStatementsSummary {
     pub same_when: Option<String>,
     pub keys: Vec<String>,
     pub model: String,
+    pub answer: AnswerBy,
+    pub rule: ProposalRule,
+    /// The field the recipe declares as a document's thread, and how many documents carry it.
+    pub thread_field: Option<String>,
+    pub threaded_documents: usize,
     pub proposer: String,
     pub documents: usize,
     pub statements: usize,
@@ -228,11 +283,30 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         order.truncate(n);
     }
 
+    let thread_field = policies
+        .change
+        .document
+        .as_ref()
+        .and_then(|d| d.thread.clone());
+    let thread_of: HashMap<&str, String> = thread_field
+        .as_deref()
+        .map(|f| {
+            order
+                .iter()
+                .filter_map(|id| Some((id.as_str(), field_text(&docs[id], f)?)))
+                .collect()
+        })
+        .unwrap_or_default();
+
     let base = sovereign_contracts::setup_config::client_daemon_base()?;
     let client = DaemonInferenceClient::new(&base, &p.model, "")
         .map_err(|e| format!("building the daemon client: {e}"))?;
     let ledger = client.usage_ledger();
     let (_embed, infer) = client.into_closures();
+    let answerer = match p.answer {
+        AnswerBy::Model => Answerer::Model(&infer),
+        AnswerBy::Proposed => Answerer::Proposed,
+    };
 
     std::fs::create_dir_all(&p.out).map_err(|e| format!("creating {}: {e}", p.out.display()))?;
     let decisions_path = p.out.join("decisions.jsonl");
@@ -240,19 +314,26 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         std::fs::File::create(&decisions_path)
             .map_err(|e| format!("creating {}: {e}", decisions_path.display()))?,
     );
-    let mut resolver = Resolver::default();
-    let mut proposer = SimilarDocuments::new(p.neighbours, p.max_candidates);
+    let mut resolver = Resolver::with_rule(p.rule);
+    let mut proposer = Proposers::new(
+        thread_field.is_some(),
+        SimilarDocuments::new(p.neighbours, p.max_candidates, p.min_similarity),
+    );
     let mut clustering: BTreeMap<String, String> = BTreeMap::new();
     let mut tally: BTreeMap<String, usize> = BTreeMap::new();
     let (mut calls, mut statements) = (0u32, 0usize);
     let started = Instant::now();
     eprintln!(
-        "resolve-statements: {} document(s), type `{}`, model {} at {base}, proposer similar_documents(neighbours {}, max {})",
+        "resolve-statements: {} document(s) ({} in a declared thread), type `{}`, answer by {}, proposer {}, rule {:?}",
         order.len(),
+        thread_of.len(),
         p.type_name,
-        p.model,
-        p.neighbours,
-        p.max_candidates
+        match p.answer {
+            AnswerBy::Model => format!("model {} at {base}", p.model),
+            AnswerBy::Proposed => "the proposed answer (no model)".to_string(),
+        },
+        proposer.describe(),
+        p.rule
     );
     for (k, id) in order.iter().enumerate() {
         let row = &docs[id];
@@ -260,10 +341,11 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
             id: &row.id,
             title: row.title.as_deref(),
             body: &row.body,
+            thread: thread_of.get(id.as_str()).map(String::as_str),
         };
         let candidates = proposer.propose(doc);
         let r = resolver
-            .resolve_document(&criterion, doc, &by_doc[id], &candidates, &infer)
+            .resolve_document(&criterion, doc, &by_doc[id], &candidates, answerer)
             .await;
         proposer.observe(doc, &r);
         serde_json::to_writer(&mut decisions, &r).map_err(|e| e.to_string())?;
@@ -297,10 +379,11 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         same_when: criterion.same_when.clone(),
         keys: criterion.keys.clone(),
         model: p.model.clone(),
-        proposer: format!(
-            "similar_documents(neighbours {}, max_candidates {})",
-            p.neighbours, p.max_candidates
-        ),
+        answer: p.answer,
+        rule: p.rule,
+        thread_field,
+        threaded_documents: thread_of.len(),
+        proposer: proposer.describe(),
         documents: order.len(),
         statements,
         records: resolver.records().len(),
@@ -332,6 +415,14 @@ mod tests {
         assert_eq!(p.type_name, "happening");
         assert_eq!(p.model, DEFAULT_MODEL);
         assert_eq!((p.neighbours, p.max_candidates, p.limit), (3, 12, Some(5)));
+        assert_eq!(p.answer, AnswerBy::Model);
+        assert_eq!(p.rule, ProposalRule::default());
+        let p = parse_args(&args(
+            "--recipe r --type t --documents d --statements s --out o --answer proposed --similar 0.3 --min-similarity=0.1",
+        ))
+        .unwrap();
+        assert_eq!(p.answer, AnswerBy::Proposed);
+        assert_eq!((p.rule.similar, p.min_similarity), (Some(0.3), 0.1));
     }
 
     fn rows(json: &[&str]) -> Vec<StatementRow> {
@@ -380,5 +471,10 @@ mod tests {
         ))
         .unwrap_err();
         assert_eq!(e, "--limit takes a whole number, not `many`");
+        let e = parse_args(&args(
+            "--recipe r --type t --documents d --statements s --out o --similar 2",
+        ))
+        .unwrap_err();
+        assert_eq!(e, "--similar takes a similarity from 0 to 1, not `2`");
     }
 }

@@ -5,12 +5,12 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::debug;
 
 use super::super::resolution_documents::fold_ws;
-use super::{Criterion, Document, Plan, Record, Refusal, Statement};
+use super::{Criterion, Document, Plan, Proposal, Record, Refusal, Statement};
 use crate::enrichment::pipeline::types::ChatPrompt;
 
 const SYSTEM: &str = include_str!("../resolve_records_prompt.md");
@@ -72,10 +72,11 @@ fn label_index(label: &str, m: usize) -> Option<usize> {
 
 pub(super) fn prompt(
     criterion: &Criterion,
+    rule: ProposalRule,
     doc: Document<'_>,
     statements: &[Statement],
     asked: &[usize],
-    shown: &[usize],
+    shown: &[(usize, &Proposal)],
     records: &[Record],
 ) -> ChatPrompt {
     let mut u = format!("Type: {}", criterion.type_name);
@@ -89,7 +90,7 @@ pub(super) fn prompt(
     if shown.is_empty() {
         u.push_str("(none: every particular is \"none\")\n");
     }
-    for &r in shown {
+    for &(r, proposal) in shown {
         let rec = &records[r];
         let mut surfaces: Vec<&str> = Vec::new();
         for e in &rec.evidence {
@@ -104,9 +105,17 @@ pub(super) fn prompt(
             .take(SHOWN_CITES)
             .map(|c| format!("{:?}", fold_ws(c)))
             .collect();
+        let mut why: Vec<String> = Vec::new();
+        if proposal.same_thread() {
+            why.push("same thread".into());
+        }
+        if proposal.similarity() > 0.0 {
+            why.push(format!("document similarity {:.2}", proposal.similarity()));
+        }
         u.push_str(&format!(
-            "- {}, said as {}; cited: {}\n",
+            "- {} ({}), said as {}; cited: {}\n",
             rec.handle,
+            why.join("; "),
             surfaces
                 .iter()
                 .map(|s| format!("{s:?}"))
@@ -162,10 +171,11 @@ pub(super) fn prompt(
         })
         .collect();
     u.push_str(&listed.join(", "));
+    u.push_str(&Proposed::of(rule, doc, statements, asked, shown, records).render(records));
 
     let labels: Vec<String> = (0..asked.len()).map(|j| format!("s{j}")).collect();
     let mut targets = vec!["none".to_string()];
-    targets.extend(shown.iter().map(|&r| records[r].handle.clone()));
+    targets.extend(shown.iter().map(|&(r, _)| records[r].handle.clone()));
     let schema = json!({
         "type": "object",
         "properties": {"particulars": {
@@ -202,6 +212,163 @@ pub(super) fn prompt(
         .with_phase_id("resolve")
         .with_temperature(0.0)
         .with_max_output_tokens(output_budget(asked.len()))
+}
+
+/// Below this TF-IDF similarity a shared wording is not proposed as the same
+/// particular. Chosen on GVC and ECB+ train with no model: same wording within
+/// documents grouped at this similarity scored best on both (CoNLL .547 and
+/// .672).
+const SAME_WORDING_SIMILARITY: f32 = 0.4;
+
+/// What the proposed answer reads beyond declared threads. Thresholds are
+/// chosen on every example's train fold with no model (`Answerer::Proposed`);
+/// they propose, they decide nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct ProposalRule {
+    /// A wording is proposed the same as a shown record said in that wording,
+    /// from a document at least this alike.
+    pub same_wording: f32,
+    /// Otherwise the same as the most similar shown record, whatever its
+    /// wording, from a document at least this alike. `None`: never.
+    pub similar: Option<f32>,
+}
+
+impl Default for ProposalRule {
+    fn default() -> Self {
+        Self {
+            same_wording: SAME_WORDING_SIMILARITY,
+            similar: None,
+        }
+    }
+}
+
+/// Why a wording's statements are proposed the same as a record. Declared
+/// structure first: a thread outranks every similarity.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Why {
+    /// The first record of this document's declared thread among the shown.
+    Thread,
+    /// The most similar shown record said in this wording.
+    Wording(f32),
+    /// The most similar shown record, at `ProposalRule::similar` or above.
+    Similar(f32),
+}
+
+/// The answer declared threads, wording and document similarity alone give:
+/// a document's statements of one wording are one particular, proposed the
+/// same as one shown record (`Why`) or none. The model is shown it and
+/// changes what the criterion says is wrong; `Answerer::Proposed` takes it.
+pub(super) struct Proposed {
+    /// Positions in `asked` of one wording's statements, and the shown record.
+    groups: Vec<(Vec<usize>, Option<(usize, Why)>)>,
+}
+
+fn wording(s: &str) -> String {
+    fold_ws(s).to_lowercase()
+}
+
+impl Proposed {
+    pub(super) fn of(
+        rule: ProposalRule,
+        doc: Document<'_>,
+        statements: &[Statement],
+        asked: &[usize],
+        shown: &[(usize, &Proposal)],
+        records: &[Record],
+    ) -> Self {
+        let mut by_wording: Vec<(String, Vec<usize>)> = Vec::new();
+        for (j, &i) in asked.iter().enumerate() {
+            let w = wording(&doc.body[statements[i].start..statements[i].end]);
+            match by_wording.iter_mut().find(|(g, _)| *g == w) {
+                Some((_, js)) => js.push(j),
+                None => by_wording.push((w, vec![j])),
+            }
+        }
+        let thread = shown
+            .iter()
+            .filter(|(_, p)| p.same_thread())
+            .map(|&(r, _)| r)
+            .min();
+        let best = |keep: &dyn Fn(usize, f32) -> bool| {
+            shown
+                .iter()
+                .map(|&(r, p)| (r, p.similarity()))
+                .filter(|&(r, sim)| keep(r, sim))
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+        };
+        let groups = by_wording
+            .into_iter()
+            .map(|(w, js)| {
+                let said = |r: usize| records[r].evidence.iter().any(|e| wording(&e.surface) == w);
+                let target = thread
+                    .map(|r| (r, Why::Thread))
+                    .or_else(|| {
+                        best(&|r, sim| sim >= rule.same_wording && said(r))
+                            .map(|(r, sim)| (r, Why::Wording(sim)))
+                    })
+                    .or_else(|| {
+                        let at = rule.similar?;
+                        best(&|_, sim| sim >= at).map(|(r, sim)| (r, Why::Similar(sim)))
+                    });
+                (js, target)
+            })
+            .collect();
+        Self { groups }
+    }
+
+    /// The prompt's closing lines: one per particular, `r3: s0 s2 (why)`.
+    pub(super) fn render(&self, records: &[Record]) -> String {
+        let lines: Vec<String> = self
+            .groups
+            .iter()
+            .map(|(js, target)| {
+                let members: Vec<String> = js.iter().map(|j| format!("s{j}")).collect();
+                let (same, why) = match target {
+                    None => ("none".to_string(), String::new()),
+                    Some((r, why)) => (
+                        records[*r].handle.clone(),
+                        match why {
+                            Why::Thread => " (same thread)".to_string(),
+                            Why::Wording(s) => format!(" (same wording, similarity {s:.2})"),
+                            Why::Similar(s) => format!(" (similarity {s:.2})"),
+                        },
+                    ),
+                };
+                format!("{same}: {}{why}", members.join(" "))
+            })
+            .collect();
+        format!(
+            "\n\nProposed answer, from threads, wording and document similarity alone (may be wrong):\n{}",
+            lines.join("\n")
+        )
+    }
+
+    /// The answer as the model's schema gives it, each statement cited by its
+    /// own words, so `judge` checks and folds it like any other.
+    pub(super) fn as_answer(
+        &self,
+        doc: Document<'_>,
+        statements: &[Statement],
+        asked: &[usize],
+        records: &[Record],
+    ) -> String {
+        let particulars: Vec<serde_json::Value> = self
+            .groups
+            .iter()
+            .map(|(js, target)| {
+                let mentions: Vec<serde_json::Value> = js
+                    .iter()
+                    .map(|&j| {
+                        let s = &statements[asked[j]];
+                        json!({"statement": format!("s{j}"), "cite": &doc.body[s.start..s.end]})
+                    })
+                    .collect();
+                let same = target.map_or("none", |(r, _)| records[r].handle.as_str());
+                json!({"same_as": same, "mentions": mentions})
+            })
+            .collect();
+        json!({ "particulars": particulars }).to_string()
+    }
 }
 
 /// Output tokens for `m` statements: generous, because a cut-off answer

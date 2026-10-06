@@ -30,3 +30,16 @@ vector = false
 
 [enrichment]
 enabled = false
+
+# Read by `svrn enrich resolve-statements --type case`; never built.
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+description = "one underlying problem or request, whatever the number of issues reporting it"
+identity_criterion = "Two mentions are one case when they are about the same underlying problem or request: the same bug, feature request or question, however many issues report it and whoever writes. Issues a maintainer closes as duplicates of each other are one case. Two issues that only look alike, or share a root cause no maintainer has stated, are different cases, and so is a comment that raises a different problem inside an existing thread."
+
+[enrichment.ontology.change]
+document = { date = "created_at", thread = "thread", id = "id" }

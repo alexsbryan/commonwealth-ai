@@ -56,6 +56,9 @@ pub struct Document<'a> {
     pub id: &'a str,
     pub title: Option<&'a str>,
     pub body: &'a str,
+    /// The value of the field the recipe declares as the document's thread
+    /// (`change.document.thread`), when it declares one and the document has it.
+    pub thread: Option<&'a str>,
 }
 
 /// One statement READ from a document: where it is, and the declared keys it carries.
@@ -184,6 +187,53 @@ pub struct StatementOutcome {
     pub outcome: Outcome,
 }
 
+/// Why a record was offered. Closed: declared structure or generic,
+/// domain-free retrieval, nothing else (§Invariants 3).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum Reason {
+    /// The record holds a statement of a document in this document's declared thread.
+    SameThread,
+    /// TF-IDF cosine between this document and the record's document the
+    /// proposer matched it through.
+    SimilarDocument { similarity: f32 },
+}
+
+/// A record a proposer offered, with every reason it was offered for.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Proposal {
+    pub record: String,
+    pub reasons: Vec<Reason>,
+}
+
+impl Proposal {
+    /// The document similarity it was offered at; 0 when no similarity offered it.
+    pub fn similarity(&self) -> f32 {
+        self.reasons
+            .iter()
+            .filter_map(|r| match r {
+                Reason::SimilarDocument { similarity } => Some(*similarity),
+                Reason::SameThread => None,
+            })
+            .fold(0.0, f32::max)
+    }
+
+    pub fn same_thread(&self) -> bool {
+        self.reasons.contains(&Reason::SameThread)
+    }
+}
+
+/// Who answers the one question RESOLVE puts for a document.
+#[derive(Clone, Copy)]
+pub enum Answerer<'a> {
+    /// The model, in one call.
+    Model(&'a InferenceFn),
+    /// No model: the proposed answer as given, each statement cited by its
+    /// own words. The zero-model floor a model answer is held to, judged and
+    /// folded by the same code; it is never the layer's decider.
+    Proposed,
+}
+
 /// One document's resolution: what was shown, what it cost, what was decided.
 #[derive(Debug, Clone, Serialize)]
 pub struct DocumentResolution {
@@ -224,9 +274,11 @@ enum Plan {
     Refuse(Refusal),
 }
 
-/// The open records of one declared type, and the declared keys they hold.
+/// The open records of one declared type, the declared keys they hold, and
+/// the rule its proposed answers follow.
 #[derive(Debug, Default)]
 pub struct Resolver {
+    rule: ProposalRule,
     records: Vec<Record>,
     /// Record id -> position in `records`.
     position: HashMap<String, usize>,
@@ -234,19 +286,26 @@ pub struct Resolver {
 }
 
 impl Resolver {
+    pub fn with_rule(rule: ProposalRule) -> Self {
+        Self {
+            rule,
+            ..Self::default()
+        }
+    }
+
     pub fn records(&self) -> &[Record] {
         &self.records
     }
 
-    /// Resolve every statement of `doc`. `candidates` are record ids a
-    /// proposer offered; unknown ids are dropped, and only these are shown.
+    /// Resolve every statement of `doc`. `proposals` are the records the
+    /// proposers offered; unknown ids are dropped, and only these are shown.
     pub async fn resolve_document(
         &mut self,
         criterion: &Criterion,
         doc: Document<'_>,
         statements: &[Statement],
-        candidates: &[String],
-        infer: &InferenceFn,
+        proposals: &[Proposal],
+        answerer: Answerer<'_>,
     ) -> DocumentResolution {
         let n = statements.len();
         let mut plan: Vec<Option<Plan>> = vec![None; n];
@@ -292,16 +351,17 @@ impl Resolver {
         // The rest go to the model, in document order.
         let mut asked: Vec<usize> = (0..n).filter(|&i| plan[i].is_none()).collect();
         asked.sort_by_key(|&i| (statements[i].start, statements[i].end));
-        let mut shown: Vec<usize> = Vec::new();
-        for c in candidates {
-            match self.position.get(c) {
-                Some(&r) if !shown.contains(&r) => shown.push(r),
+        let mut shown: Vec<(usize, &Proposal)> = Vec::new();
+        for p in proposals {
+            match self.position.get(&p.record) {
+                Some(&r) if !shown.iter().any(|&(s, _)| s == r) => shown.push((r, p)),
                 Some(_) => {}
                 None => {
-                    debug!(document = doc.id, candidate = %c, "atlas/resolve: proposed id is no open record; dropped")
+                    debug!(document = doc.id, candidate = %p.record, "atlas/resolve: proposed id is no open record; dropped")
                 }
             }
         }
+        let shown_records: Vec<usize> = shown.iter().map(|&(r, _)| r).collect();
         let key_edges = key_edges(&asked, &folded_keys);
         let mut calls = 0;
         let decided: Vec<Plan> = if asked.is_empty() {
@@ -311,26 +371,41 @@ impl Resolver {
                 group: 0,
                 cite: None,
             }]
-        } else if criterion.same_when.is_none() {
-            vec![Plan::Refuse(Refusal::NoCriterion); asked.len()]
         } else {
-            calls = 1;
-            let prompt = prompt(criterion, doc, statements, &asked, &shown, &self.records);
-            match infer(&prompt, None).await {
+            let answer = match answerer {
+                Answerer::Proposed => {
+                    Ok(
+                        Proposed::of(self.rule, doc, statements, &asked, &shown, &self.records)
+                            .as_answer(doc, statements, &asked, &self.records),
+                    )
+                }
+                Answerer::Model(_) if criterion.same_when.is_none() => Err(Refusal::NoCriterion),
+                Answerer::Model(infer) => {
+                    calls = 1;
+                    let prompt = prompt(
+                        criterion,
+                        self.rule,
+                        doc,
+                        statements,
+                        &asked,
+                        &shown,
+                        &self.records,
+                    );
+                    infer(&prompt, None).await.map_err(|e| Refusal::NoAnswer {
+                        reason: format!("call failed: {e:#}"),
+                    })
+                }
+            };
+            match answer {
                 Ok(raw) => judge(
                     &raw,
                     asked.len(),
-                    &shown,
+                    &shown_records,
                     &self.records,
                     &key_edges,
                     &fold_ws(doc.body),
                 ),
-                Err(e) => vec![
-                    Plan::Refuse(Refusal::NoAnswer {
-                        reason: format!("call failed: {e:#}")
-                    });
-                    asked.len()
-                ],
+                Err(refusal) => vec![Plan::Refuse(refusal); asked.len()],
             }
         };
         for (&i, p) in asked.iter().zip(decided) {
@@ -412,7 +487,10 @@ impl Resolver {
         }
         let resolution = DocumentResolution {
             document: doc.id.to_string(),
-            candidates: shown.iter().map(|&r| self.records[r].id.clone()).collect(),
+            candidates: shown
+                .iter()
+                .map(|&(r, _)| self.records[r].id.clone())
+                .collect(),
             calls,
             outcomes: outcomes.into_iter().flatten().collect(),
         };
@@ -528,8 +606,8 @@ fn context(body: &str, start: usize, end: usize) -> String {
 mod answer;
 pub mod propose;
 
-pub use answer::cite_found;
-use answer::{judge, prompt};
+pub use answer::{cite_found, ProposalRule};
+use answer::{judge, prompt, Proposed};
 
 #[cfg(test)]
 mod tests;

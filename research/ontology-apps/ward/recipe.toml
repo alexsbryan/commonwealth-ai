@@ -61,6 +61,8 @@ source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" } }
 [[enrichment.ontology.types]]
 name = "deal"
 kind = "entity"
+description = "one prospective or actual sale, purchase, supply arrangement or trade, with one counterparty"
+identity_criterion = "Two mentions are one deal when they are about the same transaction with the same counterparty: the same product, delivery point and term being asked about, offered, negotiated, agreed, confirmed or delivered, however differently it is worded and whoever writes. Two transactions with one counterparty (two terms, two delivery points, two separate purchases) are different deals, and a master or enabling agreement with no specific trade (ISDA, GISB, EEI) is a deal of its own, apart from the trades done under it."
 attributes = [
   { name = "counterparty", type = "ref", of = "company" },
   { name = "amount", type = "quantity", unit = "USD" },

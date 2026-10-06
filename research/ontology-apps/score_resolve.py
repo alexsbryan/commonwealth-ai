@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Score a `svrn enrich resolve-statements` run against gold: one row of the loop's table.
 
-    score.py RUN_DIR GOLD_JSON [--svrn svrn]
+    score_resolve.py RUN_DIR GOLD_JSON [--svrn svrn]
+
+The one scorer for every example (cdcr, ward, support): a statement's document is the one decisions.jsonl
+resolved it in, never parsed out of its id.
 
 Clustering measures come from `svrn bench er-score` (MUC, B3, CEAF-e, LEA, CoNLL F1), never recomputed here.
 Beside them: the proposer's recall (a statement whose gold chain already sat in a record before its document
@@ -26,9 +29,11 @@ def main():
     er = json.loads(p.stdout)
 
     chains_of = {}  # record -> gold chains folded into it so far
+    document_of = {}
     reachable = joinable = 0
     for line in (a.run / "decisions.jsonl").read_text().splitlines():
         d = json.loads(line)
+        document_of.update((o["statement"], d["document"]) for o in d["outcomes"])
         shown = set(d["candidates"])
         decided = []
         for o in d["outcomes"]:
@@ -50,7 +55,7 @@ def main():
         within, cross = set(), set()
         for ms in by.values():
             for x, y in itertools.combinations(sorted(ms), 2):
-                (within if x.split("/")[0] == y.split("/")[0] else cross).add((x, y))
+                (within if document_of[x] == document_of[y] else cross).add((x, y))
         return within, cross
 
     def prf(p, g):

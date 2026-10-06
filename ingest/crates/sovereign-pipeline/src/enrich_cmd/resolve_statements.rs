@@ -14,17 +14,22 @@ const HELP: Help = Help {
         HelpSection::Usage(
             "svrn enrich resolve-statements --recipe <recipe.toml> --type <name> --documents <docs.jsonl> \
              --statements <statements.jsonl> --out <dir> [--model <id>] [--neighbours N] \
-             [--max-candidates N] [--limit N]",
+             [--max-candidates N] [--min-similarity S] [--answer model|proposed] [--same-wording-similarity S] \
+             [--similar S] [--limit N]",
         ),
         HelpSection::Flags(&[
             ("--recipe", "The recipe whose [enrichment.ontology] declares the type: its `identity` keys and `identity_criterion`."),
             ("--type", "The declared type every statement is resolved under."),
-            ("--documents", "JSON lines {id, title?, body}."),
+            ("--documents", "JSON lines {id, title?, body, ...}; the field the recipe declares as `change.document.thread` proposes the records of the document's thread."),
             ("--statements", "JSON lines {document, id, start, end, keys?}; start/end are byte offsets into the body. Documents resolve in the order this file first names them."),
             ("--out", "Directory for decisions.jsonl, clustering.json (statement -> record; a refused statement alone), records.json, summary.json."),
             ("--model", "Chat model at the daemon. Default commonwealth/primary."),
             ("--neighbours", "How many most-similar earlier documents offer their records as candidates. Default 3."),
-            ("--max-candidates", "At most this many candidate records shown per document. Default 12."),
+            ("--max-candidates", "At most this many candidate records from similar documents per document. Default 12; a declared thread's records are never cut."),
+            ("--min-similarity", "A document less alike (TF-IDF cosine) offers no records. Default 0."),
+            ("--answer", "`model` (default) asks the model; `proposed` makes no call and takes the proposed answer as given, the zero-model floor a model answer is held to."),
+            ("--same-wording-similarity", "The proposed answer joins a wording to a record said so from a document at least this alike. Default 0.4."),
+            ("--similar", "The proposed answer joins any wording to the most similar record at or above this. Default off."),
             ("--limit", "Resolve only the first N documents."),
         ]),
         HelpSection::Examples(&[(

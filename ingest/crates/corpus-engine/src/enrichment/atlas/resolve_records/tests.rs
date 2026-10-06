@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
-use super::answer::strip_markers;
+use super::answer::{strip_markers, Proposed};
 use super::*;
 use crate::enrichment::pipeline::types::ChatPrompt;
 
@@ -20,6 +20,7 @@ fn doc<'a>(id: &'a str, body: &'a str) -> Document<'a> {
         id,
         title: None,
         body,
+        thread: None,
     }
 }
 
@@ -56,6 +57,19 @@ fn scripted(answers: Vec<Value>) -> (InferenceFn, Arc<Mutex<Vec<ChatPrompt>>>) {
     (f, seen)
 }
 
+/// A proposal for record `id` from a document `similarity` alike.
+fn similar(id: &str, similarity: f32) -> Proposal {
+    Proposal {
+        record: id.into(),
+        reasons: vec![Reason::SimilarDocument { similarity }],
+    }
+}
+
+/// A proposal for record `id` from a document as alike as can be.
+fn prop(id: &str) -> Proposal {
+    similar(id, 1.0)
+}
+
 fn labels(r: &DocumentResolution) -> Vec<&'static str> {
     r.outcomes.iter().map(|o| o.outcome.label()).collect()
 }
@@ -85,7 +99,7 @@ async fn a_declared_key_decides_without_a_call() {
             doc("d1", b1),
             &[stmt("a", b1, "Kim", 0, &[("email", "kim@x.com")])],
             &[],
-            &infer,
+            Answerer::Model(&infer),
         )
         .await;
     let b2 = "K. Ward replied.";
@@ -95,7 +109,7 @@ async fn a_declared_key_decides_without_a_call() {
             doc("d2", b2),
             &[stmt("b", b2, "K. Ward", 0, &[("email", " KIM@x.com")])],
             &[],
-            &infer,
+            Answerer::Model(&infer),
         )
         .await;
     assert_eq!(labels(&first), ["opened"]);
@@ -141,7 +155,7 @@ async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
                 stmt("b", b1, "shooting", 0, &[]),
             ],
             &[],
-            &infer,
+            Answerer::Model(&infer),
         )
         .await;
     let two = res
@@ -149,8 +163,8 @@ async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
             &c,
             doc("d2", b2),
             &[stmt("c", b2, "shooting", 0, &[])],
-            &["a".into()],
-            &infer,
+            &[prop("a")],
+            Answerer::Model(&infer),
         )
         .await;
     assert_eq!(labels(&one), ["opened", "opened"]);
@@ -177,7 +191,7 @@ async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
     assert!(
         prompts[1]
             .user
-            .contains("- r0, said as \"shot\", \"shooting\"; cited: \"shot in Salisbury on Sunday\" | \"The shooting\"\n    \"…A man was shot in Salisbury on Sunday. The shooting left him dead.…\""),
+            .contains("- r0 (document similarity 1.00), said as \"shot\", \"shooting\"; cited: \"shot in Salisbury on Sunday\" | \"The shooting\"\n    \"…A man was shot in Salisbury on Sunday. The shooting left him dead.…\""),
         "{}",
         prompts[1].user
     );
@@ -205,7 +219,7 @@ async fn an_uncitable_cite_refuses_its_statement_only_never_defaulted() {
                 stmt("b", b, "injuries", 0, &[]),
             ],
             &[],
-            &infer,
+            Answerer::Model(&infer),
         )
         .await;
     assert_eq!(labels(&r), ["refused:cite_not_found", "opened"]);
@@ -229,7 +243,7 @@ async fn keys_that_tie_two_statements_to_two_records_refuse_the_group() {
             stmt("b", b0, "Deal B", 0, &[]),
         ],
         &[],
-        &seed,
+        Answerer::Model(&seed),
     )
     .await;
     let b = "The trade, that is the swap, closed.";
@@ -245,8 +259,8 @@ async fn keys_that_tie_two_statements_to_two_records_refuse_the_group() {
                 stmt("x", b, "trade", 0, &[("ref", "77")]),
                 stmt("y", b, "swap", 0, &[("ref", "77")]),
             ],
-            &["a".into(), "b".into()],
-            &infer,
+            &[prop("a"), prop("b")],
+            Answerer::Model(&infer),
         )
         .await;
     assert_eq!(
@@ -280,7 +294,7 @@ async fn missing_duplicate_and_unknown_answers_are_each_refused() {
                 stmt("c", b, "three", 0, &[]),
             ],
             &[],
-            &infer,
+            Answerer::Model(&infer),
         )
         .await;
     assert_eq!(
@@ -304,13 +318,19 @@ async fn no_criterion_asks_nothing_and_a_failed_call_refuses_the_batch() {
     let mut bare = criterion(&[]);
     bare.same_when = None;
     let r = Resolver::default()
-        .resolve_document(&bare, doc("d", b), &ss, &[], &infer)
+        .resolve_document(&bare, doc("d", b), &ss, &[], Answerer::Model(&infer))
         .await;
     assert_eq!(labels(&r), ["refused:no_criterion", "refused:no_criterion"]);
     assert!(seen.lock().unwrap().is_empty());
 
     let r = Resolver::default()
-        .resolve_document(&criterion(&[]), doc("d", b), &ss, &[], &infer)
+        .resolve_document(
+            &criterion(&[]),
+            doc("d", b),
+            &ss,
+            &[],
+            Answerer::Model(&infer),
+        )
         .await;
     assert_eq!(labels(&r), ["refused:no_answer", "refused:no_answer"]);
     assert_eq!(r.calls, 1);
@@ -326,7 +346,13 @@ async fn a_span_outside_the_body_is_unreadable() {
         keys: Default::default(),
     };
     let r = Resolver::default()
-        .resolve_document(&criterion(&[]), doc("d", "short"), &[s], &[], &infer)
+        .resolve_document(
+            &criterion(&[]),
+            doc("d", "short"),
+            &[s],
+            &[],
+            Answerer::Model(&infer),
+        )
         .await;
     assert_eq!(labels(&r), ["refused:unreadable"]);
 }
@@ -383,7 +409,7 @@ async fn a_particular_naming_a_candidate_joins_every_statement_in_it() {
             stmt("x", b0, "broke out", 0, &[]),
         ],
         &[],
-        &infer,
+        Answerer::Model(&infer),
     )
     .await;
     let r = res
@@ -394,10 +420,116 @@ async fn a_particular_naming_a_candidate_joins_every_statement_in_it() {
                 stmt("b", b1, "fire", 0, &[]),
                 stmt("c", b1, "blaze", 0, &[]),
             ],
-            &["a".into()],
-            &infer,
+            &[prop("a")],
+            Answerer::Model(&infer),
         )
         .await;
     assert_eq!(labels(&r), ["cited", "cited"]);
     assert!(r.outcomes.iter().all(|o| o.outcome.record() == Some("a")));
+}
+
+fn record(id: &str, surface: &str) -> Record {
+    Record {
+        id: id.into(),
+        handle: format!("r{id}"),
+        statements: vec![],
+        keys: Default::default(),
+        evidence: vec![Evidence {
+            document: "d0".into(),
+            title: None,
+            surface: surface.into(),
+            cite: None,
+            context: "Police said the shooting happened at noon.".into(),
+        }],
+    }
+}
+
+#[test]
+fn the_proposed_answer_groups_one_wording_and_joins_a_similar_record_said_so() {
+    let records = vec![record("0", "shooting"), record("1", "Shooting")];
+    let b = "The Shooting left one dead; the shooting was at noon. A death followed.";
+    let ss = [
+        stmt("a", b, "Shooting", 0, &[]),
+        stmt("b", b, "dead", 0, &[]),
+        stmt("c", b, "shooting", 0, &[]),
+        stmt("d", b, "death", 0, &[]),
+    ];
+    let asked = [0, 1, 2, 3];
+    let render = |rule: ProposalRule, shown: &[Proposal]| {
+        let shown: Vec<(usize, &Proposal)> = shown.iter().enumerate().collect();
+        Proposed::of(rule, doc("d", b), &ss, &asked, &shown, &records).render(&records)
+    };
+    let rule = ProposalRule::default();
+    let got = render(rule, &[similar("0", 0.2), similar("1", 0.6)]);
+    assert!(
+        got.ends_with("r1: s0 s2 (same wording, similarity 0.60)\nnone: s1\nnone: s3"),
+        "{got}"
+    );
+    let got = render(rule, &[similar("0", 0.39), similar("1", 0.39)]);
+    assert!(got.ends_with("none: s0 s2\nnone: s1\nnone: s3"), "{got}");
+    let loose = ProposalRule {
+        similar: Some(0.3),
+        ..rule
+    };
+    let got = render(loose, &[similar("0", 0.39), similar("1", 0.2)]);
+    assert!(
+        got.ends_with(
+            "r0: s0 s2 (similarity 0.39)\nr0: s1 (similarity 0.39)\nr0: s3 (similarity 0.39)"
+        ),
+        "every wording takes the most similar record at the looser bar: {got}"
+    );
+    let threaded = Proposal {
+        record: "1".into(),
+        reasons: vec![Reason::SameThread],
+    };
+    let got = render(rule, &[similar("0", 0.9), threaded]);
+    assert!(
+        got.ends_with("r1: s0 s2 (same thread)\nr1: s1 (same thread)\nr1: s3 (same thread)"),
+        "a declared thread outranks every similarity: {got}"
+    );
+}
+
+#[tokio::test]
+async fn the_proposed_engine_takes_the_proposed_answer_without_a_call() {
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    let b0 = "A fire broke out downtown. The fire spread.";
+    let r0 = res
+        .resolve_document(
+            &c,
+            doc("d0", b0),
+            &[stmt("a", b0, "fire", 0, &[]), stmt("b", b0, "fire", 1, &[])],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    assert_eq!(labels(&r0), ["opened", "opened"]);
+    assert_eq!(
+        res.records()[0].statements,
+        ["a", "b"],
+        "one wording, one particular"
+    );
+    let b1 = "Crews fought the fire all night.";
+    let r1 = res
+        .resolve_document(
+            &c,
+            doc("d1", b1),
+            &[
+                stmt("c", b1, "fire", 0, &[]),
+                stmt("d", b1, "fought", 0, &[]),
+            ],
+            &[similar("a", 0.5)],
+            Answerer::Proposed,
+        )
+        .await;
+    assert_eq!(
+        r1.outcomes[0].outcome,
+        Outcome::Decided(Decision::Cited {
+            record: "a".into(),
+            cite: "fire".into()
+        })
+    );
+    assert_eq!(labels(&r1), ["cited", "opened"]);
+    assert_eq!((r0.calls, r1.calls), (0, 0));
+    assert_eq!(res.records().len(), 2);
 }
