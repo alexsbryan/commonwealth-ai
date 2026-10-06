@@ -46,7 +46,8 @@ mkorder() {
 # expect <name> <exit> <grep-pattern>
 expect() {
     local name="$1" want="$2" pat="$3" out rcx
-    set +e; out="$(bash "$CO" check "$name" 2>&1)"; rcx=$?; set -e
+    shift 3
+    set +e; out="$(bash "$CO" check "$name" "$@" 2>&1)"; rcx=$?; set -e
     if [ "$rcx" != "$want" ]; then
         flunk "$name" "exit $rcx want $want"; sed 's/^/          /' <<<"$out" | head -10; return
     fi
@@ -208,6 +209,86 @@ evidence:
 unresolved: (none)
 EOF
 expect ev-no-rev 0 "nothing checks it"
+
+# A foreign source revision must be looked up in the caller's repository,
+# not inferred from the checker or from the orders directory. The fixture
+# file is long enough to hold names FAR apart, so a wrong-span citation can
+# point at a real line that does not name what the claim names.
+SRC="$T/source"
+git init -q "$SRC"
+BLOB="$({
+    printf 'fn existing_home() {}\n'
+    for i in $(seq 2 39); do printf '// filler line %s\n' "$i"; done
+    printf 'fn far_from_home() {}\n'
+} | git -C "$SRC" hash-object -w --stdin)"
+TWIN="$(printf '// this file holds no owner\n' | git -C "$SRC" hash-object -w --stdin)"
+TREE="$(printf '100644 blob %s\texisting.rs\n100644 blob %s\ttwin.rs\n' "$BLOB" "$TWIN" | git -C "$SRC" mktree)"
+SRC_REV="$(GIT_AUTHOR_NAME=Fixture GIT_AUTHOR_EMAIL=fixture@example.invalid GIT_COMMITTER_NAME=Fixture GIT_COMMITTER_EMAIL=fixture@example.invalid git -C "$SRC" commit-tree "$TREE" -m 'source fixture')"
+git -C "$SRC" update-ref HEAD "$SRC_REV"
+mkorder foreign <<EOF
+## Extension
+
+revision: $SRC_REV
+home: existing.rs
+pattern: existing_home
+delta: extend the existing function
+growth: (none)
+evidence:
+- existing.rs:1
+unresolved: (none)
+EOF
+expect foreign 0 "ready:" --repo "$SRC"
+expect foreign 1 "does not resolve to a commit"
+expect foreign 2 "source repository unavailable" --repo "$T/missing-repository"
+
+# 12. WRONG HOME, valid file (the six-order pilot's 0/6 gap, as a plant):
+#     twin.rs exists at the revision but does not hold the claimed owner.
+mkorder wrong-home <<EOF
+## Extension
+
+revision: $SRC_REV
+home: twin.rs — \`existing_home\` is the owner this work extends
+pattern: same
+delta: same
+growth: (none)
+evidence:
+- existing.rs:1
+unresolved: (none)
+EOF
+expect wrong-home 1 "does not hold it" --repo "$SRC"
+
+# 13. WRONG SPAN, valid file and line: line 30 exists, but \`existing_home\`
+#     is at line 1 — the cited span does not name the claim's identifier.
+mkorder wrong-span <<EOF
+## Extension
+
+revision: $SRC_REV
+home: existing.rs — \`existing_home\`
+pattern: same
+delta: same
+growth: (none)
+evidence:
+- existing.rs:30 — \`existing_home\` is here
+unresolved: (none)
+EOF
+expect wrong-span 1 "does not name it" --repo "$SRC"
+
+# 14. The positive half: a range citation whose span DOES name the claim —
+#     and the range form itself, which the parser once misread as line 4 of
+#     a file named `existing.rs:35-3` and refused.
+mkorder right-span <<EOF
+## Extension
+
+revision: $SRC_REV
+home: existing.rs — \`existing_home\`
+pattern: same
+delta: same
+growth: (none)
+evidence:
+- existing.rs:35-40 — \`far_from_home\` sits far from the first
+unresolved: (none)
+EOF
+expect right-span 0 "ready:" --repo "$SRC"
 
 echo
 if [ "$rc" = 0 ]; then

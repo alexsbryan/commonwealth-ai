@@ -24,7 +24,7 @@
 #
 #   scripts/co-order.sh new <id> [title…]     # write the template
 #   scripts/co-order.sh list                  # open orders, one line each
-#   scripts/co-order.sh check <id>            # advisory completeness read
+#   scripts/co-order.sh check <id> [--repo <path>]  # source repository is explicit for cross-repo orders
 #   scripts/co-order.sh close <id> [landed|abandoned]   # default landed
 set -uo pipefail
 
@@ -174,7 +174,12 @@ Target derived from scope:
      Naming growth WITHOUT a revision-bound record is REFUSED — that is the
      order preventing a design that invents a parallel home while citing
      nothing. \`unresolved:\` is what still needs engineering judgment;
-     \`(none)\` is legal and more useful than pretending it is settled. -->
+     \`(none)\` is legal and more useful than pretending it is settled.
+     \`home:\` and each \`evidence:\` claim may name code identifiers
+     (backticked, or \`path::name\`): the checker refuses a home whose file
+     does not contain the names it claims, and a citation whose span does not
+     name what the claim names. Whether a home OWNS the thing stays judgment;
+     evidence entries are \`path:line\` or \`path:start-end\`. -->
 
 revision: (none)
 home: (none)
@@ -273,13 +278,18 @@ PY
     ;;
 
   check)
-    ID="${1:?usage: co-order.sh check <id>}"
+    ID="${1:?usage: co-order.sh check <id> [--repo <path>]}"; shift
+    SOURCE_REPO="$REPO"
+    if [ $# -gt 0 ]; then
+      [ $# -eq 2 ] && [ "$1" = "--repo" ] || { echo "co-order: check expects --repo <path>" >&2; exit 2; }
+      SOURCE_REPO="$(git -C "$2" rev-parse --show-toplevel 2>/dev/null)" || { echo "co-order: source repository unavailable: $2" >&2; exit 2; }
+    fi
     F="$FEATURES/$ID/order.md"
     [ -e "$F" ] || { echo "co-order: no such order $F"; exit 2; }
-    python3 - "$F" "$CO_DIR" <<'PY'
+    python3 - "$F" "$CO_DIR" "$SOURCE_REPO" <<'PY'
 import os, re, subprocess, sys
 text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
-repo = os.path.dirname(sys.argv[2])   # CO_DIR is <repo>/scripts
+repo = sys.argv[3]  # source repo is supplied by the caller; tooling stays in CO_DIR
 body = re.sub(r"<!--.*?-->", "", text, flags=re.S)
 def section(name):
     m = re.search(rf"^## {name}\n(.*?)(?=^## |\Z)", body, re.M | re.S)
@@ -416,6 +426,37 @@ if lineage is not None:
 # every evidence entry resolves at that revision, and claiming NEW
 # STRUCTURE (`growth:` not `(none)`) requires both a live revision and
 # at least one evidence entry.
+#
+# CLAIMED-NAME CONSISTENCY (2026-10-06). Reference validity alone — "the
+# path and line exist" — let every wrong-home variant through in the
+# six-order pilot (0/6 refused): a record could name a home that does not
+# even contain the owner it claims, as long as the file existed. Two
+# textual checks close the MECHANICAL slice of that and only that slice:
+# `home:` must name a file that holds the names it claims, and an evidence
+# claim must name only what its cited span names. Whether a home OWNS the
+# thing is semantic and stays unjudged — that is the evidence-run layer's
+# job (probe runs, four verdicts), not this checker's.
+def claimed_idents(text):
+    """The names a claim points at: backticked names and `path::name` forms.
+    Word-shaped names of 3+ characters only — a hyphenated header value or a
+    short token is skipped rather than guessed at."""
+    out = []
+    for raw in re.findall(r"`([^`\s]+)`", text):
+        piece = raw.split("::")[-1].strip(".,;:()")
+        if len(piece) >= 3 and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", piece):
+            out.append(piece)
+    for full in re.findall(r"\b([a-z_][A-Za-z0-9_]*::[A-Za-z_][A-Za-z0-9_]*)", text):
+        out.append(full.split("::")[-1])
+    seen, uniq = set(), []
+    for i in out:
+        if i not in seen:
+            seen.add(i)
+            uniq.append(i)
+    return uniq
+
+def holds_name(blob, ident):
+    return re.search(rf"\b{re.escape(ident)}\b", blob) is not None
+
 ext = section("Extension")
 labels, evidence = {}, []
 if ext:
@@ -427,12 +468,18 @@ if ext:
             continue
         m = re.match(r"^-\s+(\S+)\s*(?:[—-]\s*(.*))?$", s)
         if m and m.group(1) not in ("(none)", "-"):
-            spec = m.group(1)
-            lm = re.match(r"^(.*):(\d+)$", spec)
+            spec, claim = m.group(1), (m.group(2) or "")
+            # `path`, `path:line` or `path:start-end`. Before the range form
+            # was understood, `door.rs:531-534` parsed as line 4 of a file
+            # named `door.rs:531-53` and a correct record was refused
+            # (watched on a room-door-shaped fixture, 2026-10-06).
+            lm = re.match(r"^(.*):(\d+)(?:-(\d+))?$", spec)
             if lm:
-                evidence.append((lm.group(1), int(lm.group(2))))
+                start = int(lm.group(2))
+                evidence.append((lm.group(1), start,
+                                 int(lm.group(3)) if lm.group(3) else start, claim))
             else:
-                evidence.append((spec, None))
+                evidence.append((spec, None, None, claim))
 growth = labels.get("growth", "")
 claims_growth = bool(growth) and growth not in ("(none)", "-")
 rev = labels.get("revision", "")
@@ -465,18 +512,62 @@ else:
     if evidence and not rev_live:
         nudges.append("Extension evidence is present but `revision:` does not resolve — "
                       "nothing checks it; name the commit the evidence is read at")
-    for path, line in evidence:
+    # home consistency: a home that names a file must exist there, and the
+    # names the home claims must be in it. A home that names names but no
+    # file is could-not-judge — reported, never silently trusted.
+    home = labels.get("home", "")
+    hp = re.match(r"^([\w./-]+\.[A-Za-z0-9_]+)(?::\d+(?:-\d+)?)?\b", home)
+    if hp:
+        if rev_live:
+            hpath = hp.group(1)
+            if subprocess.run(["git", "cat-file", "-e", f"{rev}:{hpath}"],
+                              cwd=repo, capture_output=True).returncode != 0:
+                problems.append(f"Extension `home:` names `{hpath}` which does not exist "
+                                f"at revision {rev[:9]}")
+            else:
+                hblob = subprocess.run(["git", "show", f"{rev}:{hpath}"],
+                                       cwd=repo, capture_output=True, text=True).stdout
+                for ident in claimed_idents(home):
+                    if not holds_name(hblob, ident):
+                        problems.append(f"Extension `home:` names `{ident}` but `{hpath}` does "
+                                        f"not hold it at revision {rev[:9]} — a home that does "
+                                        "not contain what it claims is the wrong home (whether "
+                                        "it OWNS it is semantic and stays unjudged)")
+    elif claimed_idents(home):
+        nudges.append("Extension `home:` names code identifiers but no file — could-not-judge; "
+                      "name the file the names live in so `check` can look")
+    for path, start, end, claim in evidence:
         if not rev_live:
             continue
         if subprocess.run(["git", "cat-file", "-e", f"{rev}:{path}"],
                           cwd=repo, capture_output=True).returncode != 0:
             problems.append(f"Extension evidence `{path}` does not exist at revision {rev[:9]}")
-        elif line is not None:
-            blob = subprocess.run(["git", "show", f"{rev}:{path}"],
-                                  cwd=repo, capture_output=True, text=True).stdout
-            if line > len(blob.splitlines()):
-                problems.append(f"Extension evidence `{path}:{line}` is past end of "
-                                f"file at revision {rev[:9]}")
+            continue
+        blob = subprocess.run(["git", "show", f"{rev}:{path}"],
+                              cwd=repo, capture_output=True, text=True).stdout.splitlines()
+        if start is None:
+            whole = "\n".join(blob)
+            for ident in claimed_idents(claim):
+                if not holds_name(whole, ident):
+                    problems.append(f"Extension evidence `{path}` claims `{ident}` but the file "
+                                    f"does not name it at revision {rev[:9]}")
+            continue
+        end = end or start
+        shown = f"{start}" if end == start else f"{start}-{end}"
+        if end < start:
+            problems.append(f"Extension evidence `{path}:{shown}` is a backwards range")
+        elif end > len(blob):
+            problems.append(f"Extension evidence `{path}:{shown}` is past end of "
+                            f"file at revision {rev[:9]}")
+        else:
+            # The cited span plus 8 lines of context each side — the claim
+            # must name only what that span names.
+            span = "\n".join(blob[max(0, start - 9):min(len(blob), end + 8)])
+            for ident in claimed_idents(claim):
+                if not holds_name(span, ident):
+                    problems.append(f"Extension evidence `{path}:{shown}` claims `{ident}` but "
+                                    "the cited span does not name it — cite the line that does "
+                                    "(whether it OWNS it is semantic and stays unjudged)")
 
 if problems:
     # It exits 1 and, since G2 (2026-08-19), scripts/co-role.py gates R1's
