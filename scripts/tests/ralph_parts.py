@@ -112,6 +112,15 @@ def git(cwd, *args):
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
 
 
+def answering_client(tmp):
+    """A stand-in worker client whose probe answer is `OK` on a line of its own,
+    as the real clients print it."""
+    f = pathlib.Path(tmp) / "answering-client.sh"
+    f.write_text("#!/bin/sh\necho OK\n")
+    f.chmod(0o755)
+    return str(f)
+
+
 def install_script(tmp, name, source=None):
     dst = pathlib.Path(tmp) / "scripts" / name
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1542,7 +1551,7 @@ class ProbeTests(unittest.TestCase):
             ok, cause = ralph.probe_model("bare", paths)
             self.assertFalse(ok)
             self.assertIn("no provider", cause)
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": shutil.which("echo")}):
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": answering_client(tmp)}):
                 self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
 
     def test_a_declared_worker_bin_probes_a_bare_id_through_itself(self):
@@ -1550,7 +1559,7 @@ class ProbeTests(unittest.TestCase):
         # `claude-opus-5-5` and halted phase-c before its first wave.
         with tempfile.TemporaryDirectory() as tmp:
             paths = ralph.Paths(pathlib.Path(tmp),
-                                manifest=mock.Mock(worker_bin=shutil.which("echo")))
+                                manifest=mock.Mock(worker_bin=answering_client(tmp)))
             self.assertEqual(ralph.probe_model("claude-opus-5-5", paths), (True, ""))
             paths.manifest.worker_bin = shutil.which("false")
             ok, cause = ralph.probe_model("claude-opus-5-5", paths)
