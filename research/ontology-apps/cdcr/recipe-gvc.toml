@@ -38,3 +38,10 @@ name = "happening"
 kind = "event"
 description = "something that happens: an action, an occurrence, or a change of state"
 identity_criterion = "Two mentions are one happening when they refer to the same real-world occurrence: the same kind of action or change, by or to the same participants, at the same time and place, however differently it is worded. Two occurrences of the same kind (two separate attacks, two separate meetings) are different happenings, and so are an occurrence and another it caused or was part of."
+identity_evidential = [
+  { field = "document_date", precision = 0.0, measured_on = "GVC train, gold, no model: 0 of 11 links (field_precision.py; resolve-prereg.md Ring 1a)" },
+]
+identity_bar = 0.5
+
+[enrichment.ontology.change]
+document = { date = "created_at" }

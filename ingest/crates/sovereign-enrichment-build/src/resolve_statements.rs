@@ -5,7 +5,8 @@
 //! the score measures RESOLVE and its proposer and nothing upstream.
 //!
 //! The inputs carry no gold. A document is `{id, title?, body, ...}`, its
-//! other fields read only as the recipe declares them (`change.document.thread`);
+//! other fields read only as the recipe declares them (`change.document`, each
+//! through `read_stamp`, a document lacking one counted in `stamps_unread`);
 //! a statement is `{document, id, start, end, keys?}`, byte offsets into the
 //! body. Documents resolve in the order the statements file first names them.
 //! `--answer proposed` makes no call: it takes the proposed answer as given,
@@ -16,11 +17,12 @@ use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use corpus_engine::enrichment::atlas::read_stamp;
 use corpus_engine::enrichment::atlas::resolve_records::propose::{Proposers, SimilarDocuments};
 use corpus_engine::enrichment::atlas::resolve_records::{
     Answerer, Criterion, Document, Outcome, ProposalRule, Resolver, Statement,
 };
-use corpus_engine::enrichment::ontology::TypeIndex;
+use corpus_engine::enrichment::ontology::{DocumentStamp, TypeIndex};
 use serde::{Deserialize, Serialize};
 
 use super::inference_client::{DaemonInferenceClient, TokenUsageSnapshot};
@@ -189,6 +191,11 @@ pub struct ResolveStatementsSummary {
     /// The field the recipe declares as a document's thread, and how many documents carry it.
     pub thread_field: Option<String>,
     pub threaded_documents: usize,
+    /// Per declared stamp, how many documents it could not be read from.
+    pub stamps_unread: BTreeMap<&'static str, usize>,
+    /// The evidential fields and bar the type declares (`identity_evidential`).
+    pub evidential: Vec<(&'static str, f64)>,
+    pub bar: Option<f64>,
     pub proposer: String,
     pub documents: usize,
     pub statements: usize,
@@ -271,7 +278,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
             names.join(", ")
         )
     })?;
-    let criterion = Criterion::of(decl, index.effective_identity(&p.type_name).to_vec());
+    let criterion = Criterion::of(decl, index.effective_identity(&p.type_name).to_vec())?;
     if criterion.same_when.is_none() {
         eprintln!(
             "warning: `{}` declares no identity_criterion; every statement no key settles is refused",
@@ -295,15 +302,33 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         .document
         .as_ref()
         .and_then(|d| d.thread.clone());
-    let thread_of: HashMap<&str, String> = thread_field
-        .as_deref()
-        .map(|f| {
-            order
-                .iter()
-                .filter_map(|id| Some((id.as_str(), field_text(&docs[id], f)?)))
-                .collect()
+    // Every declared stamp of every document, read the one way claims are
+    // stamped; a document lacking one is counted and traced, never defaulted.
+    let declared: Vec<(DocumentStamp, String)> = match &policies.change.document {
+        Some(d) => d.declared().map(|(s, f)| (s, f.to_string())).collect(),
+        None => Vec::new(),
+    };
+    let mut stamps_unread: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let stamps_of: HashMap<&str, Vec<(DocumentStamp, String)>> = order
+        .iter()
+        .map(|id| {
+            let mut stamps = Vec::new();
+            for (stamp, field) in &declared {
+                match read_stamp(&docs[id].fields, *stamp, field) {
+                    Ok(v) => stamps.push((*stamp, v)),
+                    Err(why) => {
+                        tracing::debug!(document = %id, field = stamp.attr(), %why, "resolve-statements: stamp unread");
+                        *stamps_unread.entry(stamp.attr()).or_default() += 1;
+                    }
+                }
+            }
+            (id.as_str(), stamps)
         })
-        .unwrap_or_default();
+        .collect();
+    let threaded = stamps_of
+        .values()
+        .filter(|s| s.iter().any(|(st, _)| *st == DocumentStamp::Thread))
+        .count();
 
     let base = sovereign_contracts::setup_config::client_daemon_base()?;
     let client = DaemonInferenceClient::new(&base, &p.model, "")
@@ -334,7 +359,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
     eprintln!(
         "resolve-statements: {} document(s) ({} in a declared thread), type `{}`, answer by {}, proposer {}, rule {:?}",
         order.len(),
-        thread_of.len(),
+        threaded,
         p.type_name,
         match p.answer {
             AnswerBy::Model => format!("model {} at {base}", p.model),
@@ -350,7 +375,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
             id: &row.id,
             title: row.title.as_deref(),
             body: &row.body,
-            thread: thread_of.get(id.as_str()).map(String::as_str),
+            stamps: &stamps_of[id.as_str()],
         };
         let candidates = proposer.propose(doc);
         let r = resolver
@@ -391,7 +416,14 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         answer: p.answer,
         rule: p.rule,
         thread_field,
-        threaded_documents: thread_of.len(),
+        threaded_documents: threaded,
+        stamps_unread,
+        evidential: criterion
+            .evidential
+            .iter()
+            .map(|&(s, p)| (s.attr(), p))
+            .collect(),
+        bar: criterion.bar,
         proposer: proposer.describe(),
         documents: order.len(),
         statements,

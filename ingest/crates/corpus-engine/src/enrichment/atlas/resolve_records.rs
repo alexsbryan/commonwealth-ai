@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use super::resolution_documents::fold_ws;
-use crate::enrichment::ontology::OntologyTypeDecl;
+use crate::enrichment::ontology::{DocumentStamp, OntologyTypeDecl};
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 use crate::InferenceFn;
 
@@ -36,17 +36,36 @@ pub struct Criterion {
     pub same_when: Option<String>,
     /// The keys that suffice, inherited ones included.
     pub keys: Vec<String>,
+    /// The document fields whose agreement is evidence, each with its
+    /// measured precision (`identity_evidential`).
+    pub evidential: Vec<(DocumentStamp, f64)>,
+    /// The precision a link decided by evidence alone must have.
+    pub bar: Option<f64>,
 }
 
 impl Criterion {
-    /// `keys` is the type's effective identity, its parents' included.
-    pub fn of(decl: &OntologyTypeDecl, keys: Vec<String>) -> Self {
-        Self {
+    /// `keys` is the type's effective identity, its parents' included. An
+    /// evidential field that is no document stamp is refused, never skipped.
+    pub fn of(decl: &OntologyTypeDecl, keys: Vec<String>) -> Result<Self, String> {
+        let evidential = decl
+            .identity_evidential
+            .iter()
+            .map(|e| match DocumentStamp::from_attr(&e.field) {
+                Some(stamp) => Ok((stamp, e.precision)),
+                None => Err(format!(
+                    "type `{}`: evidential field `{}` is no document stamp",
+                    decl.name, e.field
+                )),
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
             type_name: decl.name.clone(),
             description: decl.description.clone(),
             same_when: decl.identity_criterion.clone(),
             keys,
-        }
+            evidential,
+            bar: decl.identity_bar,
+        })
     }
 }
 
@@ -56,9 +75,18 @@ pub struct Document<'a> {
     pub id: &'a str,
     pub title: Option<&'a str>,
     pub body: &'a str,
-    /// The value of the field the recipe declares as the document's thread
-    /// (`change.document.thread`), when it declares one and the document has it.
-    pub thread: Option<&'a str>,
+    /// The document's own fields the recipe declares (`change.document`), in
+    /// the stamp's form (`read_stamp`); a stamp the document lacks is absent.
+    pub stamps: &'a [(DocumentStamp, String)],
+}
+
+impl<'a> Document<'a> {
+    pub fn stamp(&self, stamp: DocumentStamp) -> Option<&'a str> {
+        self.stamps
+            .iter()
+            .find(|(s, _)| *s == stamp)
+            .map(|(_, v)| v.as_str())
+    }
 }
 
 /// One statement READ from a document: where it is, and the declared keys it carries.
@@ -83,6 +111,8 @@ pub struct Record {
     pub statements: Vec<String>,
     /// Folded values of the declared keys its statements carried.
     pub keys: BTreeMap<String, BTreeSet<String>>,
+    /// The document stamps of its statements' documents, by stamp attribute.
+    pub fields: BTreeMap<&'static str, BTreeSet<String>>,
     /// One entry per folded statement; later calls are shown these.
     pub evidence: Vec<Evidence>,
 }
@@ -116,6 +146,15 @@ pub enum Decision {
     /// choice carries can be measured). Its whole distribution is the
     /// outcome's `choice`.
     Selected { record: String, probability: f64 },
+    /// An evidential document field the statement's document holds is held
+    /// by exactly one record from an earlier document, and the field's
+    /// measured precision clears the type's bar (`fields.rs`).
+    Field {
+        record: String,
+        field: &'static str,
+        value: String,
+        precision: f64,
+    },
     /// None of the candidates: a record was opened. `cite` is `None` only for
     /// a statement alone in its document with no candidate, where no call is made.
     Opened {
@@ -161,6 +200,7 @@ impl Outcome {
             Outcome::Decided(Decision::Key { .. }) => "key",
             Outcome::Decided(Decision::Cited { .. }) => "cited",
             Outcome::Decided(Decision::Selected { .. }) => "selected",
+            Outcome::Decided(Decision::Field { .. }) => "field",
             Outcome::Decided(Decision::Opened { .. }) => "opened",
             Outcome::Refused(r) => match r {
                 Refusal::Unreadable { .. } => "refused:unreadable",
@@ -181,6 +221,7 @@ impl Outcome {
                 Decision::Key { record, .. }
                 | Decision::Cited { record, .. }
                 | Decision::Selected { record, .. }
+                | Decision::Field { record, .. }
                 | Decision::Opened { record, .. },
             ) => Some(record),
             Outcome::Refused(_) => None,
@@ -292,6 +333,12 @@ enum Plan {
         record: usize,
         probability: f64,
     },
+    Field {
+        record: usize,
+        stamp: DocumentStamp,
+        value: String,
+        precision: f64,
+    },
     Open {
         group: usize,
         cite: Option<String>,
@@ -308,6 +355,8 @@ pub struct Resolver {
     /// Record id -> position in `records`.
     position: HashMap<String, usize>,
     by_key: HashMap<(String, String), usize>,
+    /// (stamp, value) -> the records holding it, for evidential fields.
+    by_field: HashMap<(DocumentStamp, String), BTreeSet<usize>>,
 }
 
 impl Resolver {
@@ -371,6 +420,13 @@ impl Resolver {
                     targets: held.iter().map(|&r| self.records[r].id.clone()).collect(),
                 })),
             };
+        }
+
+        // An evidential field settles what no key did, before any answerer.
+        if let Some(field) = fields::settle(criterion, doc, &self.by_field) {
+            for p in plan.iter_mut().filter(|p| p.is_none()) {
+                *p = Some(field.clone());
+            }
         }
 
         // The rest go to the model, in document order.
@@ -521,6 +577,27 @@ impl Resolver {
                         probability,
                     })
                 }
+                Plan::Field {
+                    record,
+                    stamp,
+                    value,
+                    precision,
+                } => {
+                    self.fold(
+                        record,
+                        doc,
+                        &statements[i],
+                        surface[i],
+                        &folded_keys[i],
+                        None,
+                    );
+                    Outcome::Decided(Decision::Field {
+                        record: self.records[record].id.clone(),
+                        field: stamp.attr(),
+                        value,
+                        precision,
+                    })
+                }
                 Plan::Open { group, cite } => {
                     let record = *opened
                         .entry(group)
@@ -588,6 +665,7 @@ impl Resolver {
             handle: format!("r{at}"),
             statements: Vec::new(),
             keys: BTreeMap::new(),
+            fields: BTreeMap::new(),
             evidence: Vec::new(),
         });
         self.records.len() - 1
@@ -607,6 +685,17 @@ impl Resolver {
         for (k, v) in keys {
             record.keys.entry(k.clone()).or_default().insert(v.clone());
             self.by_key.entry((k.clone(), v.clone())).or_insert(r);
+        }
+        for (stamp, v) in doc.stamps {
+            record
+                .fields
+                .entry(stamp.attr())
+                .or_default()
+                .insert(v.clone());
+            self.by_field
+                .entry((*stamp, v.clone()))
+                .or_default()
+                .insert(r);
         }
         record.evidence.push(Evidence {
             document: doc.id.to_string(),
@@ -687,6 +776,7 @@ fn marked_context(body: &str, start: usize, end: usize) -> String {
 }
 
 mod answer;
+mod fields;
 pub mod propose;
 mod select;
 

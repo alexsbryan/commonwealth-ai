@@ -603,7 +603,11 @@ question the pipeline asks about a type is a method on the resolved
   RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
   puts each statement of one document into an open record of one declared
   type, or opens one. An equal declared `identity` key decides without a call;
-  otherwise ONE grammar-constrained call per document, given the type's
+  so does an `identity_evidential` document field (a `change.document` stamp,
+  read by `read_stamp`, the one reader claim stamping uses too) whose measured
+  precision clears the type's `identity_bar` and whose value exactly one record
+  from an earlier document holds (`resolve_records/fields.rs`,
+  `Decision::Field`); otherwise ONE grammar-constrained call per document, given the type's
   `identity_criterion`, the candidates the proposers offered
   (`resolve_records/propose.rs`: the records of the document's declared
   thread, `change.document.thread`, then TF-IDF over documents already
@@ -618,7 +622,7 @@ question the pipeline asks about a type is a method on the resolved
   records this document opened, read as a distribution in one forward pass and
   kept on the outcome (`Choice`); the argmax decides (`Decision::Selected`),
   Ring 0 of `research/ontology-apps/resolve-prereg.md`. The closed
-  `Decision` is `Key | Cited | Selected | Opened`; anything else is a counted `Refusal`,
+  `Decision` is `Key | Field | Cited | Selected | Opened`; anything else is a counted `Refusal`,
   never defaulted. Records keep the passage around each statement, which is
   what later calls compare. It runs alone today, over supplied statements
   (`svrn enrich resolve-statements`, the gold-mention setting); no atlas phase

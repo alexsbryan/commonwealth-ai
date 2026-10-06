@@ -259,6 +259,7 @@ fn question(
                     handle: String::new(),
                     statements: vec![],
                     keys: Default::default(),
+                    fields: Default::default(),
                     evidence: vec![Evidence {
                         document: doc.id.to_string(),
                         title: None,

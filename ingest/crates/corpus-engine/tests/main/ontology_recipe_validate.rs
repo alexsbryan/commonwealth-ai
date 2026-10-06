@@ -559,3 +559,61 @@ document = { date = "sent" }"#,
         "{e}"
     );
 }
+
+#[test]
+fn validate_evidential_fields_are_declared_stamps_measured_somewhere_beside_a_bar() {
+    let typ = |evidential: &str, bar: &str| {
+        format!(
+            r#"version = 1
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+identity_criterion = "the same problem"
+identity_evidential = [{evidential}]
+{bar}
+[enrichment.ontology.change]
+document = {{ thread = "thread" }}
+"#
+        )
+    };
+    let ok = r#"{ field = "document_thread", precision = 0.83, measured_on = "uv tune, 257/311" }"#;
+    let v = validate(&typ(ok, "identity_bar = 0.5"));
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+    assert!(
+        v.notes
+            .iter()
+            .any(|n| n.starts_with("identity evidence: case ← document_thread (precision 0.83")),
+        "{:?}",
+        v.notes
+    );
+    first_error_containing(&typ(ok, ""), "no `identity_bar`");
+    first_error_containing(&typ(ok, "identity_bar = 0"), "is not in (0, 1]");
+    first_error_containing(
+        &typ(
+            r#"{ field = "author", precision = 0.9, measured_on = "x" }"#,
+            "identity_bar = 0.5",
+        ),
+        "Only document stamps are filled before READ",
+    );
+    first_error_containing(
+        &typ(
+            r#"{ field = "document_date", precision = 0.9, measured_on = "x" }"#,
+            "identity_bar = 0.5",
+        ),
+        "change.document.date",
+    );
+    first_error_containing(
+        &typ(
+            r#"{ field = "document_thread", precision = 1.3, measured_on = "x" }"#,
+            "identity_bar = 0.5",
+        ),
+        "not in [0, 1]",
+    );
+    first_error_containing(
+        &typ(
+            r#"{ field = "document_thread", precision = 0.9, measured_on = " " }"#,
+            "identity_bar = 0.5",
+        ),
+        "says nothing in `measured_on`",
+    );
+}

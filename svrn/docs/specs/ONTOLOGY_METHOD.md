@@ -68,8 +68,11 @@ while its verdict was informative and stable across the three systems (+1.4 to +
 
 Built in rings, innermost first, each with bars before data: **0** one forced choice per statement (built,
 `--answer select`; the argmax decides only so the choice can be measured); **1** READ by pointing and per-field
-comparison; **2** the decider: constraints, calibrated evidence, the unsettled band; **3** the layer's other
-identity deciders onto it (about fifteen today, with three ways of combining keys).
+comparison (1a built: declared document fields weighed by code, `identity_evidential` and `identity_bar`; 1b
+READ by pointing among values code proposes per attribute family); **2** the decider: constraints, calibrated
+evidence, the unsettled band; **3** the layer's other identity deciders onto it (about fifteen today, with
+three ways of combining keys). A precision is measured on the rule as it runs, never under gold alone: a field
+follows whatever decision put its value in a record (uv thread .905 under gold, .71 live).
 
 ## The generality test
 

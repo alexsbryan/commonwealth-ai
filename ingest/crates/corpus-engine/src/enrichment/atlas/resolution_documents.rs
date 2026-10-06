@@ -223,7 +223,7 @@ pub fn stamp_claim_documents(
         };
         report.located += 1;
         for (stamp, field) in decl.declared() {
-            match read_field(doc, stamp, field) {
+            match read_stamp(&doc.fields, stamp, field) {
                 Ok(value) => {
                     trace!(
                         claim = %claim.id.as_str(),
@@ -339,10 +339,15 @@ fn locate<'d>(
     }
 }
 
-/// The value `field` holds on `doc`, in the stamp's form: a date as ISO
-/// 8601, a thread or id verbatim.
-fn read_field(doc: &SourceDocument, stamp: DocumentStamp, field: &str) -> Result<String, String> {
-    let raw = match doc.fields.get(field) {
+/// The value `field` holds in a document's metadata, in the stamp's form: a
+/// date as ISO 8601, a thread or id verbatim. The one reader of a stamp, for
+/// claim stamping here and for RESOLVE's document fields.
+pub fn read_stamp(
+    fields: &Map<String, Value>,
+    stamp: DocumentStamp,
+    field: &str,
+) -> Result<String, String> {
+    let raw = match fields.get(field) {
         None | Some(Value::Null) => return Err(format!("no `{field}` field")),
         Some(Value::String(s)) => s.trim().to_string(),
         Some(Value::Number(n)) => n.to_string(),

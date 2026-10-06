@@ -340,6 +340,17 @@ impl OntologyV1 {
     }
 }
 
+/// An evidential identity field and what its agreement was measured to be
+/// worth: `{ field = "document_thread", precision = 0.83, measured_on = "…" }`.
+/// The field is a `change.document` stamp; `measured_on` names the labelled
+/// fold and the count behind `precision`, so the number can be checked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvidentialFieldDecl {
+    pub field: String,
+    pub precision: f64,
+    pub measured_on: String,
+}
+
 /// One declared type (`[[enrichment.ontology.types]]`). `name` and `kind`
 /// are required; every other facet is optional and most apply to one kind
 /// only (`from`/`to` to relations, `participants` to events, `of` to states,
@@ -401,6 +412,14 @@ pub struct OntologyTypeDecl {
     /// settles the question (ONTOLOGY_METHOD.md §The core).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_criterion: Option<String>,
+    /// Fields whose agreement is evidence that two mentions are one particular,
+    /// each with the precision measured for it (ONTOLOGY_METHOD.md §Identity).
+    /// RESOLVE links on one only where that precision clears `identity_bar`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identity_evidential: Vec<EvidentialFieldDecl>,
+    /// The precision a link decided by evidence alone must have.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_bar: Option<f64>,
     /// Claims only, REQUIRED there: what a source does with the claim.
     #[serde(default)]
     pub force: Option<Force>,

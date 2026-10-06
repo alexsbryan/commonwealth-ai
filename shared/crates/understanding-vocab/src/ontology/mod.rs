@@ -181,6 +181,11 @@ impl DocumentStamp {
         }
     }
 
+    /// The stamp writing claim attribute `attr`, if one does.
+    pub fn from_attr(attr: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.attr() == attr)
+    }
+
     /// The `change.document` key that declares it.
     pub const fn key(self) -> &'static str {
         match self {

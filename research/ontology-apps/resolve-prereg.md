@@ -99,3 +99,48 @@ counterparty, and two deals in one message, deal numbers differing, are joined. 
 are inside one article, "death" and "gunshot" joined to the shooting the criterion says they are apart from.
 That is Ring 1: READ the declared fields (from declared metadata by code, from text by pointing), compare per
 field, show fields rather than mentions; the distribution is one input to the decider, not the decision.
+
+## Ring 1a: declared document fields weighed by code (registered 2026-10-06, before its data)
+
+Ring 0 showed uv's model "(same thread)" beside the gold record in 50 of its 85 wrong links, and it chose
+another thread's words. So a declared field is not shown to the model and hoped for: code weighs it
+(ONTOLOGY_METHOD invariant 2). A type lists `identity_evidential` fields, each a document stamp
+(`document_thread`, `document_date`) with its measured precision, and declares `identity_bar`, set to .5 in
+all three recipes before any precision was measured (link when more likely right than wrong). Before any
+answerer, a statement whose field value is held by exactly one open record from an earlier document is
+linked to it when that field's precision clears the bar (`Decision::Field`); held by two or more, the field
+settles nothing and the statement goes to the answerer as before. Precision is measured under gold, no
+model, by `field_precision.py` for exactly that rule (earlier documents, exactly one gold chain holding the
+value) on each system's knob fold: ward tune, uv tune, GVC train. GVC declares `change.document.date`.
+
+**Arms.** Control: Ring 0 (`--answer select`, the run above). Treatment: the same binary and flags with the
+recipes' `identity_evidential` and `identity_bar`. The verdict block counts a field link as saying "same".
+
+**Bar.** On ward tune and uv tune, the treatment's CoNLL, B3, CEAF-e and LEA are each at or above the
+control's, and LR- is below the control's. Met: GVC dev is run at the gate under the same bar, unless no GVC
+field clears .5, in which case the treatment equals the control by construction and is not run. Read beside
+it, no bar: each system against its floor and v5, and on uv how many field links gold keeps.
+
+**Ring 1a verdict (2026-10-06).** Measured precision under gold (`field_precision.py`): uv `document_thread`
+.905 (190 of 210 links), `document_date` .938 (15 of 16); GVC train `document_date` 0 of 11; ward none
+declarable (each message its own `thread_id`, 57 of 57; dates never repeat). So uv declares both, GVC its
+date below the bar (equal to the control by construction, not run), ward nothing.
+
+| uv tune | CoNLL | MUC | B3 | CEAF-e | LEA | LR+ | LR- | calls/doc | tokens |
+|---|---|---|---|---|---|---|---|---|---|
+| floor | .801 | .905 | .845 | .652 | .781 | | | 0 | 0 |
+| control (Ring 0) | .536 | .594 | .563 | .450 | .381 | 0.97 | -0.15 | 1.00 | 448k |
+| 1a | .778 | .910 | .800 | .624 | .752 | 2.17 [2.02, 2.28] | -5.33 [-5.39, -4.19] | 0.19 | 92k |
+
+Met on uv. Ward, rerun with the 1a binary and nothing declared, reproduced the control decision for decision
+and token for token (140,256): the run is deterministic at this setting, and ward's LR- equals the control's
+rather than falling below it, so the bar's letter, which did not foresee a system with nothing to declare, is
+not met there; no system regresses (invariant 5). Adopted as the decider's evidential clause.
+
+Instrument, read: live, the thread links were right 208 of 293 (.71), not .905. Gold assumes each thread's
+first decision right; live, a field follows whatever put the thread in a record. Into records the thread
+opened, 186 of 223 (.83); into records the model's selection brought it to, 22 of 70 (.31). The 21
+selections were right 10 times (.48): an argmax at .48 deciding a join, and the thread carrying its error.
+And a field that links a spin-off keeps its thread held by one record, where gold's second chain would stop
+it. Precision must be measured on the live rule, not under gold. uv stays below its floor (.778 vs .801) for
+that reason: the model's choice decides without clearing the bar, which invariant 2 forbids.

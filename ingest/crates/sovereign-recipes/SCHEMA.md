@@ -790,6 +790,16 @@ Allowed values:
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph patterns to detect over declared relation/event types. Same shapes as `[[enrichment.patterns]]` (`PatternDecl`). |
 | `navigation` | `NavigationPolicy` | no | type default | `[enrichment.ontology.navigation]` — how a reader walks the atlas per question kind (`NavigationPolicy`). Omit it, or any row, to take the spec's pre-registered defaults; the policy struct IS the TOML shape. |
 
+## `EvidentialFieldDecl`
+
+An evidential identity field and what its agreement was measured to be worth: `{ field = "document_thread", precision = 0.83, measured_on = "…" }`. The field is a `change.document` stamp; `measured_on` names the labelled fold and the count behind `precision`, so the number can be checked.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `field` | `String` | **yes** | — |  |
+| `precision` | `f64` | **yes** | — |  |
+| `measured_on` | `String` | **yes** | — |  |
+
 ## `OntologyTypeDecl`
 
 One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are required; every other facet is optional and most apply to one kind only (`from`/`to` to relations, `participants` to events, `of` to states, `force`/`deontic`/`subject`/`grades`/`anchors`/`scope` to claims). `recipe validate` checks that every reference resolves to a declared type.
@@ -811,6 +821,8 @@ One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are requi
 | `identity` | `Vec<String>` | no | type default | External identifiers that make two mentions one thing (`rxnorm_id`). An external key merges strictly. |
 | `identity_fallback` | `Vec<String>` | no | type default | Descriptive keys used when no external identifier is present (`["name", "employer"]`). A descriptive key is judged, not trusted. |
 | `identity_criterion` | `Option<String>` | no | type default | When two mentions are one particular, in the author's words. RESOLVE gives it to the model beside the candidates whenever no `identity` key settles the question (ONTOLOGY_METHOD.md §The core). |
+| `identity_evidential` | `Vec<EvidentialFieldDecl>` | no | type default | Fields whose agreement is evidence that two mentions are one particular, each with the precision measured for it (ONTOLOGY_METHOD.md §Identity). RESOLVE links on one only where that precision clears `identity_bar`. |
+| `identity_bar` | `Option<f64>` | no | type default | The precision a link decided by evidence alone must have. |
 | `force` | `Option<Force>` | no | type default | Claims only, REQUIRED there: what a source does with the claim. |
 | `deontic` | `Vec<Deontic>` | no | type default | Claims with `force = "directive"` only: the deontic modes the type can carry. `forbid X` is stored as `require not-X`. |
 | `subject` | `Option<String>` | no | type default | Claims only: the declared entity, event or state type the claim is about (the is-about relation). |

@@ -12,6 +12,8 @@ fn criterion(keys: &[&str]) -> Criterion {
         description: String::new(),
         same_when: Some("the same act by the same parties at the same time and place".into()),
         keys: keys.iter().map(|k| k.to_string()).collect(),
+        evidential: vec![],
+        bar: None,
     }
 }
 
@@ -20,7 +22,17 @@ fn doc<'a>(id: &'a str, body: &'a str) -> Document<'a> {
         id,
         title: None,
         body,
-        thread: None,
+        stamps: &[],
+    }
+}
+
+/// A document in declared thread `thread`.
+fn threaded<'a>(id: &'a str, body: &'a str, thread: &str) -> Document<'a> {
+    Document {
+        id,
+        title: None,
+        body,
+        stamps: Vec::leak(vec![(DocumentStamp::Thread, thread.to_string())]),
     }
 }
 
@@ -434,6 +446,7 @@ fn record(id: &str, surface: &str) -> Record {
         handle: format!("r{id}"),
         statements: vec![],
         keys: Default::default(),
+        fields: Default::default(),
         evidence: vec![Evidence {
             document: "d0".into(),
             title: None,
@@ -689,4 +702,98 @@ async fn a_distribution_that_leaves_a_shown_label_out_is_refused_not_read_as_zer
         })
     );
     assert_eq!(res.records().len(), 1);
+}
+
+/// A criterion weighing the declared thread at `precision` against `bar`.
+fn thread_evidence(precision: f64, bar: f64) -> Criterion {
+    Criterion {
+        evidential: vec![(DocumentStamp::Thread, precision)],
+        bar: Some(bar),
+        ..criterion(&[])
+    }
+}
+
+#[tokio::test]
+async fn an_evidential_field_one_earlier_record_holds_links_without_a_call() {
+    let mut res = Resolver::default();
+    let a = "Install fails on Windows.";
+    res.resolve_document(
+        &criterion(&[]),
+        threaded("d0", a, "7"),
+        &[stmt("x", a, "Install fails", 0, &[])],
+        &[],
+        Answerer::Proposed,
+    )
+    .await;
+    // Any call would refuse: no answer is scripted.
+    let (infer, _) = scripted(vec![]);
+    let b = "labeled bug";
+    let r = res
+        .resolve_document(
+            &thread_evidence(0.83, 0.5),
+            threaded("d1", b, "7"),
+            &[stmt("z", b, "labeled bug", 0, &[])],
+            &[],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(r.calls, 0);
+    assert_eq!(
+        r.outcomes[0].outcome,
+        Outcome::Decided(Decision::Field {
+            record: "x".into(),
+            field: "document_thread",
+            value: "7".into(),
+            precision: 0.83
+        })
+    );
+    assert_eq!(res.records()[0].statements, ["x", "z"]);
+    assert_eq!(res.records()[0].fields["document_thread"].len(), 1);
+}
+
+#[tokio::test]
+async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
+    let mut res = Resolver::default();
+    for (id, body) in [("d0", "Install fails."), ("d1", "Lockfile drifts.")] {
+        res.resolve_document(
+            &criterion(&[]),
+            threaded(id, body, "7"),
+            &[stmt(id, body, body, 0, &[])],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    }
+    let b = "labeled bug";
+    // Held by two records: the answerer decides (alone, no candidate: opened).
+    let two = res
+        .resolve_document(
+            &thread_evidence(0.83, 0.5),
+            threaded("d2", b, "7"),
+            &[stmt("z", b, b, 0, &[])],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    assert_eq!(two.outcomes[0].outcome.label(), "opened");
+
+    let mut one = Resolver::default();
+    one.resolve_document(
+        &criterion(&[]),
+        threaded("d0", "Install fails.", "7"),
+        &[stmt("x", "Install fails.", "Install fails.", 0, &[])],
+        &[],
+        Answerer::Proposed,
+    )
+    .await;
+    let below = one
+        .resolve_document(
+            &thread_evidence(0.4, 0.5),
+            threaded("d1", b, "7"),
+            &[stmt("y", b, b, 0, &[])],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    assert_eq!(below.outcomes[0].outcome.label(), "opened");
 }

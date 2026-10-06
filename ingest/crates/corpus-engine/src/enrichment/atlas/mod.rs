@@ -94,7 +94,9 @@ pub use resolution::{
     resolve_step_3b_with, ResolutionOutput, Step3bOutput, Trajectory, TrajectoryState,
     TrajectoryTransition,
 };
-pub use resolution_documents::{stamp_claim_documents, DocumentStampReport, SectionDocuments};
+pub use resolution_documents::{
+    read_stamp, stamp_claim_documents, DocumentStampReport, SectionDocuments,
+};
 pub use resolution_ontology::ResolutionPolicy;
 pub use resolution_sources::{
     next_entity_index, project_source_atoms, SourceFoldReport, SourceProjection, SourceReport,

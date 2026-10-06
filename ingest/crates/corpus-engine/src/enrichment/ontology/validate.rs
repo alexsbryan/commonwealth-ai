@@ -110,6 +110,7 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
     if policies.has_declarations() {
         check_declarations(&policies, &mut out.errors);
         check_sources(&policies, &mut out.errors);
+        check_evidential(&policies, &mut out.errors);
         derived_facets(&policies, &mut out.notes);
     }
     out.notes.extend(document_note);
@@ -148,6 +149,62 @@ fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &
                     stamp.key()
                 ));
             }
+        }
+    }
+}
+
+/// `identity_evidential`: each field a stamp `change.document` declares (the
+/// only fields filled before READ), each precision a probability measured
+/// somewhere named, and a bar beside them in (0, 1].
+fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
+    // No `change.document` declares no stamp, so every evidential field is unfilled.
+    let declared: Vec<DocumentStamp> = match &p.change.document {
+        Some(d) => d.declared().map(|(s, _)| s).collect(),
+        None => Vec::new(),
+    };
+    let stamps = DocumentStamp::ALL.map(DocumentStamp::attr).join(", ");
+    for t in &p.shape.types {
+        for e in &t.identity_evidential {
+            match DocumentStamp::from_attr(&e.field) {
+                Some(s) if declared.contains(&s) => {}
+                Some(s) => errors.push(format!(
+                    "ontology type `{}` lists evidential field `{}`, which change.document.{} \
+                     would fill, and it is not declared. Declare it, or drop the field.",
+                    t.name,
+                    e.field,
+                    s.key()
+                )),
+                None => errors.push(format!(
+                    "ontology type `{}` lists evidential field `{}`. Only document stamps are \
+                     filled before READ: {stamps}.",
+                    t.name, e.field
+                )),
+            }
+            if !(0.0..=1.0).contains(&e.precision) {
+                errors.push(format!(
+                    "ontology type `{}`: evidential field `{}` has precision {}, not in [0, 1].",
+                    t.name, e.field, e.precision
+                ));
+            }
+            if e.measured_on.trim().is_empty() {
+                errors.push(format!(
+                    "ontology type `{}`: evidential field `{}` says nothing in `measured_on`. Name \
+                     the labelled fold and the count behind its precision.",
+                    t.name, e.field
+                ));
+            }
+        }
+        match (t.identity_evidential.is_empty(), t.identity_bar) {
+            (false, None) => errors.push(format!(
+                "ontology type `{}` lists evidential fields and no `identity_bar`. Declare the \
+                 precision a link decided by evidence alone must have.",
+                t.name
+            )),
+            (_, Some(b)) if !(b > 0.0 && b <= 1.0) => errors.push(format!(
+                "ontology type `{}`: identity_bar {b} is not in (0, 1].",
+                t.name
+            )),
+            _ => {}
         }
     }
 }
@@ -630,6 +687,35 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
             line.push_str(&format!(" — inherited from `{from}`"));
         }
         notes.push(line);
+    }
+    for t in p
+        .shape
+        .types
+        .iter()
+        .filter(|t| !t.identity_evidential.is_empty())
+    {
+        // A missing bar is already an error from `check_evidential`.
+        let Some(bar) = t.identity_bar else { continue };
+        let fields: Vec<String> = t
+            .identity_evidential
+            .iter()
+            .map(|e| {
+                let acts = if e.precision >= bar {
+                    "links"
+                } else {
+                    "below the bar"
+                };
+                format!(
+                    "{} (precision {:.2}, {}; {acts})",
+                    e.field, e.precision, e.measured_on
+                )
+            })
+            .collect();
+        notes.push(format!(
+            "identity evidence: {} ← {} at bar {bar:.2}",
+            t.name,
+            fields.join(", ")
+        ));
     }
 
     let by_kind = |k: TypeKind| {

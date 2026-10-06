@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use tracing::debug;
 
 use super::{Document, DocumentResolution, Proposal, Reason};
+use crate::enrichment::ontology::DocumentStamp;
 
 /// The proposers a declaration selects, offering one list: the records of the
 /// declared thread first (when the recipe declares `change.document.thread`),
@@ -74,7 +75,7 @@ pub struct SameThread {
 
 impl SameThread {
     pub fn propose(&self, doc: Document<'_>) -> Vec<Proposal> {
-        let Some(thread) = doc.thread else {
+        let Some(thread) = doc.stamp(DocumentStamp::Thread) else {
             return Vec::new();
         };
         let out: Vec<Proposal> = self
@@ -97,7 +98,9 @@ impl SameThread {
     }
 
     pub fn observe(&mut self, doc: Document<'_>, resolution: &DocumentResolution) {
-        let Some(thread) = doc.thread else { return };
+        let Some(thread) = doc.stamp(DocumentStamp::Thread) else {
+            return;
+        };
         let held = self.records.entry(thread.to_string()).or_default();
         for r in resolution
             .outcomes
@@ -274,7 +277,7 @@ mod tests {
                     id,
                     title: None,
                     body,
-                    thread: None,
+                    stamps: &[],
                 },
                 &resolved(id, r),
             );
@@ -283,7 +286,7 @@ mod tests {
             id: "q",
             title: Some("Salisbury shooting"),
             body: "The girl shot in Salisbury on Sunday has been named.",
-            thread: None,
+            stamps: &[],
         };
         let got = p.propose(q);
         assert_eq!(got.len(), 3, "{got:?}");
@@ -298,11 +301,15 @@ mod tests {
     }
 
     fn threaded<'a>(id: &'a str, thread: Option<&'a str>, body: &'a str) -> Document<'a> {
+        let stamps: Vec<(DocumentStamp, String)> = thread
+            .map(|t| (DocumentStamp::Thread, t.to_string()))
+            .into_iter()
+            .collect();
         Document {
             id,
             title: None,
             body,
-            thread,
+            stamps: Vec::leak(stamps),
         }
     }
 
@@ -349,7 +356,7 @@ mod tests {
                 id: "q",
                 title: None,
                 body: "anything",
-                thread: None,
+                stamps: &[],
             })
             .is_empty());
     }
