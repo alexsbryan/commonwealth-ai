@@ -190,6 +190,17 @@ else:
     oid, odir, ohead = orders[0]
     jpath = os.path.join(odir, "journal.md")
     w(f"   order   {oid}")
+    # The extension decision, VERBATIM from order.md — never summarized,
+    # because the summary is where a second home creeps in. Only shown when
+    # the record is claimed (a live revision), so a small edit stays quiet.
+    otext = open(os.path.join(odir, "order.md"), encoding="utf-8", errors="replace").read()
+    obody = re.sub(r"<!--.*?-->", "", otext, flags=re.S)
+    em = re.search(r"^## Extension\n(.*?)(?=^## |\Z)", obody, re.M | re.S)
+    ebody = em.group(1).strip() if em else ""
+    if ebody and not re.search(r"^revision:\s*(\(none\)|)\s*$", ebody, re.M):
+        w("   EXTENSION (verbatim from order.md — the design record; do not depart")
+        w("   from it without recording the change in the journal and the order)")
+        w("   " + ebody.replace("\n", "\n   "))
     if not os.path.exists(jpath):
         w("   cursor  NONE — the order has no journal, so there is no record of")
         w(f"           where the last session stopped. scripts/co-journal.sh new {oid}")

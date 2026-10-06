@@ -230,6 +230,14 @@ OVERDUE rendering carries the review pressure.
    legal and stays visible; naming a bar nobody declared is caught by
    `check`. Same vocabulary as the backlog's `Objective:`.
 
+   **Fill `## Extension`** when the work changes how an existing owner
+   behaves: `revision` (the commit the citations are read at), `home`,
+   `pattern`, `delta`, `growth` (`(none)` = the home absorbs it),
+   `evidence` (`path:line — what it shows`) and `unresolved`. `check`
+   verifies every citation resolves at that revision and REFUSES growth
+   without one — that is the order stopping a design that invents a
+   parallel home while citing nothing. Small edits may leave it `(none)`.
+
    Daemon-touching orders claim it as a shared resource (order
    `seat-resource-commons`): `claim may-i daemon:<node>:<action>`, then
    `claim take daemon:<node>:<action>` (30-min TTL) while it runs, then

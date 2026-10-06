@@ -162,6 +162,27 @@ Target derived from scope:
      or respawn without operator ack through the seat. -->
 
 (none)
+
+## Extension
+
+<!-- THE DESIGN DECISION: what already exists and what this work changes in
+     it. \`revision:\` is the git commit \`co-order.sh check\` verifies every
+     \`evidence:\` entry against. \`pattern:\` names the existing implementation
+     this follows. \`growth:\` names EVERY new owner, store, state, effect or
+     dependency; \`(none)\` means the existing home absorbs the change and the
+     section may stay in this short form.
+     Naming growth WITHOUT a revision-bound record is REFUSED — that is the
+     order preventing a design that invents a parallel home while citing
+     nothing. \`unresolved:\` is what still needs engineering judgment;
+     \`(none)\` is legal and more useful than pretending it is settled. -->
+
+revision: (none)
+home: (none)
+pattern: (none)
+delta: (none)
+growth: (none)
+evidence:
+unresolved: (none)
 EOF
     echo "co-order: drafted $F"
     echo "          fill Objective (the only required section), then have the operator approve."
@@ -256,8 +277,9 @@ PY
     F="$FEATURES/$ID/order.md"
     [ -e "$F" ] || { echo "co-order: no such order $F"; exit 2; }
     python3 - "$F" "$CO_DIR" <<'PY'
-import re, sys
+import os, re, subprocess, sys
 text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+repo = os.path.dirname(sys.argv[2])   # CO_DIR is <repo>/scripts
 body = re.sub(r"<!--.*?-->", "", text, flags=re.S)
 def section(name):
     m = re.search(rf"^## {name}\n(.*?)(?=^## |\Z)", body, re.M | re.S)
@@ -385,6 +407,77 @@ if lineage is not None:
                 elif not order.serves_bars:
                     nudges.append(f"serves: names {order.serves_initiative} but no bar — the rollup "
                                   "will show this order under the initiative with no bar moved")
+
+# ── Extension: the revision-bound design record ──────────────────────────
+# A design that invents a parallel home while citing nothing is the exact
+# failure this section prevents (ARCH 11 + the design-reuse lane). An
+# ABSENT or all-(none) section is a NUDGE — small edits are legal. A
+# PRESENT section is a record and is checked strictly: revision resolves,
+# every evidence entry resolves at that revision, and claiming NEW
+# STRUCTURE (`growth:` not `(none)`) requires both a live revision and
+# at least one evidence entry.
+ext = section("Extension")
+labels, evidence = {}, []
+if ext:
+    for ln in ext.splitlines():
+        s = ln.strip()
+        m = re.match(r"^(revision|home|pattern|delta|growth|unresolved):\s*(.*)$", s)
+        if m:
+            labels[m.group(1)] = m.group(2).strip()
+            continue
+        m = re.match(r"^-\s+(\S+)\s*(?:[—-]\s*(.*))?$", s)
+        if m and m.group(1) not in ("(none)", "-"):
+            spec = m.group(1)
+            lm = re.match(r"^(.*):(\d+)$", spec)
+            if lm:
+                evidence.append((lm.group(1), int(lm.group(2))))
+            else:
+                evidence.append((spec, None))
+growth = labels.get("growth", "")
+claims_growth = bool(growth) and growth not in ("(none)", "-")
+rev = labels.get("revision", "")
+rev_live = bool(rev) and rev not in ("(none)", "-")
+if not rev_live and not claims_growth and not evidence:
+    nudges.append(
+        "Extension is (none) — fine for a small edit. If this work CHANGES how "
+        "an existing owner behaves, name the home, the pattern you follow and "
+        "the growth; `check` verifies every `evidence:` entry at `revision:`.")
+else:
+    for key in ("revision", "home", "pattern", "delta", "growth", "unresolved"):
+        if key not in labels:
+            problems.append(f"Extension `{key}:` is missing — a present design "
+                            "record is complete or it is not a record")
+    if rev_live:
+        if subprocess.run(["git", "cat-file", "-e", f"{rev}^{{commit}}"],
+                          cwd=repo, capture_output=True).returncode != 0:
+            problems.append(f"Extension revision {rev!r} does not resolve to a commit")
+            rev_live = False
+        elif subprocess.run(["git", "merge-base", "--is-ancestor", rev, "HEAD"],
+                            cwd=repo, capture_output=True).returncode != 0:
+            nudges.append(f"Extension revision {rev[:9]} is not an ancestor of HEAD — "
+                          "the tree moved since this decision; re-check the evidence")
+    if claims_growth and not rev_live:
+        problems.append("Extension `growth:` names new structure but `revision:` "
+                        "does not resolve — new structure requires a revision-bound record")
+    if claims_growth and not evidence:
+        problems.append("Extension `growth:` names new structure but `evidence:` "
+                        "is empty — cite what already exists")
+    if evidence and not rev_live:
+        nudges.append("Extension evidence is present but `revision:` does not resolve — "
+                      "nothing checks it; name the commit the evidence is read at")
+    for path, line in evidence:
+        if not rev_live:
+            continue
+        if subprocess.run(["git", "cat-file", "-e", f"{rev}:{path}"],
+                          cwd=repo, capture_output=True).returncode != 0:
+            problems.append(f"Extension evidence `{path}` does not exist at revision {rev[:9]}")
+        elif line is not None:
+            blob = subprocess.run(["git", "show", f"{rev}:{path}"],
+                                  cwd=repo, capture_output=True, text=True).stdout
+            if line > len(blob.splitlines()):
+                problems.append(f"Extension evidence `{path}:{line}` is past end of "
+                                f"file at revision {rev[:9]}")
+
 if problems:
     # It exits 1 and, since G2 (2026-08-19), scripts/co-role.py gates R1's
     # drafted order on that exit code. So it is no longer true that nothing
