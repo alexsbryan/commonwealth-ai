@@ -1,0 +1,401 @@
+use std::sync::{Arc, Mutex};
+
+use serde_json::{json, Value};
+
+use super::*;
+
+fn criterion(keys: &[&str]) -> Criterion {
+    Criterion {
+        type_name: "happening".into(),
+        description: String::new(),
+        same_when: Some("the same act by the same parties at the same time and place".into()),
+        keys: keys.iter().map(|k| k.to_string()).collect(),
+    }
+}
+
+fn doc<'a>(id: &'a str, body: &'a str) -> Document<'a> {
+    Document {
+        id,
+        title: None,
+        body,
+    }
+}
+
+/// A statement over the `nth` occurrence of `surface` in `body`.
+fn stmt(id: &str, body: &str, surface: &str, nth: usize, keys: &[(&str, &str)]) -> Statement {
+    let start = body
+        .match_indices(surface)
+        .nth(nth)
+        .expect("surface in body")
+        .0;
+    Statement {
+        id: id.into(),
+        start,
+        end: start + surface.len(),
+        keys: keys
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+    }
+}
+
+/// A model that gives `answers` in order, one per call, and keeps every prompt.
+fn scripted(answers: Vec<Value>) -> (InferenceFn, Arc<Mutex<Vec<ChatPrompt>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let queue = Arc::new(Mutex::new(answers.into_iter()));
+    let kept = seen.clone();
+    let f: InferenceFn = Arc::new(move |p: &ChatPrompt, _| {
+        kept.lock().unwrap().push(p.clone());
+        let next = queue.lock().unwrap().next().map(|v| v.to_string());
+        Box::pin(async move {
+            next.ok_or_else(|| crate::Error::Extraction("no scripted answer left".into()))
+        })
+    });
+    (f, seen)
+}
+
+fn labels(r: &DocumentResolution) -> Vec<&'static str> {
+    r.outcomes.iter().map(|o| o.outcome.label()).collect()
+}
+
+/// One particular of an answer: what it is the same as, and its statements with their cites.
+fn part(same_as: &str, mentions: &[(&str, &str)]) -> Value {
+    let mentions: Vec<Value> = mentions
+        .iter()
+        .map(|(s, c)| json!({"statement": s, "cite": c}))
+        .collect();
+    json!({"same_as": same_as, "mentions": mentions})
+}
+
+fn answer(parts: Vec<Value>) -> Value {
+    json!({ "particulars": parts })
+}
+
+#[tokio::test]
+async fn a_declared_key_decides_without_a_call() {
+    let (infer, seen) = scripted(vec![]);
+    let mut res = Resolver::default();
+    let c = criterion(&["email"]);
+    let b1 = "Kim wrote first.";
+    let first = res
+        .resolve_document(
+            &c,
+            doc("d1", b1),
+            &[stmt("a", b1, "Kim", 0, &[("email", "kim@x.com")])],
+            &[],
+            &infer,
+        )
+        .await;
+    let b2 = "K. Ward replied.";
+    let second = res
+        .resolve_document(
+            &c,
+            doc("d2", b2),
+            &[stmt("b", b2, "K. Ward", 0, &[("email", " KIM@x.com")])],
+            &[],
+            &infer,
+        )
+        .await;
+    assert_eq!(labels(&first), ["opened"]);
+    assert_eq!(
+        second.outcomes[0].outcome,
+        Outcome::Decided(Decision::Key {
+            record: "a".into(),
+            key: "email".into(),
+            // the value as compared: folded the way every identity key is (`fold_identity_value`)
+            value: "kim@x com".into()
+        })
+    );
+    assert_eq!(first.calls + second.calls, 0);
+    assert!(seen.lock().unwrap().is_empty());
+    assert_eq!(res.records()[0].statements, ["a", "b"]);
+}
+
+#[tokio::test]
+async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
+    let b1 = "A man was shot in Salisbury on Sunday. The shooting left him dead.";
+    let b2 = "Police said the Salisbury shooting on Sunday was a dispute.";
+    let (infer, seen) = scripted(vec![
+        answer(vec![part(
+            "none",
+            &[
+                ("s0", "shot in Salisbury on Sunday"),
+                ("s1", "The shooting"),
+            ],
+        )]),
+        answer(vec![part(
+            "r0",
+            &[("s0", "the Salisbury shooting on Sunday")],
+        )]),
+    ]);
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    let one = res
+        .resolve_document(
+            &c,
+            doc("d1", b1),
+            &[
+                stmt("a", b1, "shot", 0, &[]),
+                stmt("b", b1, "shooting", 0, &[]),
+            ],
+            &[],
+            &infer,
+        )
+        .await;
+    let two = res
+        .resolve_document(
+            &c,
+            doc("d2", b2),
+            &[stmt("c", b2, "shooting", 0, &[])],
+            &["a".into()],
+            &infer,
+        )
+        .await;
+    assert_eq!(labels(&one), ["opened", "opened"]);
+    assert_eq!(
+        one.outcomes[1].outcome.record(),
+        Some("a"),
+        "the opener's id"
+    );
+    assert_eq!(
+        two.outcomes[0].outcome,
+        Outcome::Decided(Decision::Cited {
+            record: "a".into(),
+            cite: "the Salisbury shooting on Sunday".into()
+        })
+    );
+    assert_eq!((one.calls, two.calls), (1, 1));
+    assert_eq!(res.records().len(), 1);
+    let prompts = seen.lock().unwrap();
+    assert!(
+        prompts[0].user.contains("shot[s0] in Salisbury"),
+        "{}",
+        prompts[0].user
+    );
+    assert!(
+        prompts[1]
+            .user
+            .contains("- r0, said as \"shot\", \"shooting\"; cited: \"shot in Salisbury on Sunday\" | \"The shooting\"\n    \"…A man was shot in Salisbury on Sunday. The shooting left him dead.…\""),
+        "{}",
+        prompts[1].user
+    );
+    assert_eq!(
+        prompts[1].response_schema.as_ref().unwrap()["properties"]["particulars"]["items"]
+            ["properties"]["same_as"]["enum"],
+        json!(["none", "r0"])
+    );
+}
+
+#[tokio::test]
+async fn an_uncitable_cite_refuses_its_statement_only_never_defaulted() {
+    let b = "Two people were hurt. The injuries were minor.";
+    let (infer, _) = scripted(vec![answer(vec![part(
+        "none",
+        &[("s0", "two people were wounded"), ("s1", "The injuries")],
+    )])]);
+    let mut res = Resolver::default();
+    let r = res
+        .resolve_document(
+            &criterion(&[]),
+            doc("d", b),
+            &[
+                stmt("a", b, "hurt", 0, &[]),
+                stmt("b", b, "injuries", 0, &[]),
+            ],
+            &[],
+            &infer,
+        )
+        .await;
+    assert_eq!(labels(&r), ["refused:cite_not_found", "opened"]);
+    assert_eq!(res.records()[0].statements, ["b"]);
+}
+
+#[tokio::test]
+async fn keys_that_tie_two_statements_to_two_records_refuse_the_group() {
+    let mut res = Resolver::default();
+    let c = criterion(&["ref"]);
+    let (seed, _) = scripted(vec![answer(vec![
+        part("none", &[("s0", "Deal A")]),
+        part("none", &[("s1", "Deal B")]),
+    ])]);
+    let b0 = "Deal A and Deal B.";
+    res.resolve_document(
+        &c,
+        doc("d0", b0),
+        &[
+            stmt("a", b0, "Deal A", 0, &[]),
+            stmt("b", b0, "Deal B", 0, &[]),
+        ],
+        &[],
+        &seed,
+    )
+    .await;
+    let b = "The trade, that is the swap, closed.";
+    let (infer, _) = scripted(vec![answer(vec![
+        part("r0", &[("s0", "The trade")]),
+        part("r1", &[("s1", "the swap")]),
+    ])]);
+    let r = res
+        .resolve_document(
+            &c,
+            doc("d", b),
+            &[
+                stmt("x", b, "trade", 0, &[("ref", "77")]),
+                stmt("y", b, "swap", 0, &[("ref", "77")]),
+            ],
+            &["a".into(), "b".into()],
+            &infer,
+        )
+        .await;
+    assert_eq!(
+        labels(&r),
+        ["refused:contradiction", "refused:contradiction"]
+    );
+    assert_eq!(
+        r.outcomes[0].outcome,
+        Outcome::Refused(Refusal::Contradiction {
+            targets: vec!["a".into(), "b".into()]
+        })
+    );
+}
+
+#[tokio::test]
+async fn missing_duplicate_and_unknown_answers_are_each_refused() {
+    let b = "One, two, three.";
+    let (infer, _) = scripted(vec![answer(vec![
+        part("none", &[("s1", "two")]),
+        part("none", &[("s1", "two")]),
+        part("r9", &[("s2", "three")]),
+    ])]);
+    let mut res = Resolver::default();
+    let r = res
+        .resolve_document(
+            &criterion(&[]),
+            doc("d", b),
+            &[
+                stmt("a", b, "One", 0, &[]),
+                stmt("b", b, "two", 0, &[]),
+                stmt("c", b, "three", 0, &[]),
+            ],
+            &[],
+            &infer,
+        )
+        .await;
+    assert_eq!(
+        labels(&r),
+        [
+            "refused:unanswered",
+            "refused:duplicated",
+            "refused:unknown_target"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn no_criterion_asks_nothing_and_a_failed_call_refuses_the_batch() {
+    let b = "First and second.";
+    let ss = [
+        stmt("a", b, "First", 0, &[]),
+        stmt("b", b, "second", 0, &[]),
+    ];
+    let (infer, seen) = scripted(vec![]);
+    let mut bare = criterion(&[]);
+    bare.same_when = None;
+    let r = Resolver::default()
+        .resolve_document(&bare, doc("d", b), &ss, &[], &infer)
+        .await;
+    assert_eq!(labels(&r), ["refused:no_criterion", "refused:no_criterion"]);
+    assert!(seen.lock().unwrap().is_empty());
+
+    let r = Resolver::default()
+        .resolve_document(&criterion(&[]), doc("d", b), &ss, &[], &infer)
+        .await;
+    assert_eq!(labels(&r), ["refused:no_answer", "refused:no_answer"]);
+    assert_eq!(r.calls, 1);
+}
+
+#[tokio::test]
+async fn a_span_outside_the_body_is_unreadable() {
+    let (infer, _) = scripted(vec![]);
+    let s = Statement {
+        id: "a".into(),
+        start: 4,
+        end: 99,
+        keys: Default::default(),
+    };
+    let r = Resolver::default()
+        .resolve_document(&criterion(&[]), doc("d", "short"), &[s], &[], &infer)
+        .await;
+    assert_eq!(labels(&r), ["refused:unreadable"]);
+}
+
+#[test]
+fn a_cite_is_found_across_markers_and_whitespace_but_not_paraphrased() {
+    let body = fold_ws("The girl\n was  shot in Salisbury.");
+    assert!(cite_found(&body, "was shot[s3] in Salisbury"));
+    assert!(cite_found(&body, "\"was shot in Salisbury\""));
+    assert!(cite_found(&body, "“shot in Salisbury.”"));
+    assert!(!cite_found(&body, "\"was shot in salisbury\""));
+    assert!(!cite_found(&body, "was shot in salisbury"));
+    assert!(!cite_found(&body, "[s1]"));
+    assert!(!cite_found(&body, "\"\""));
+    assert_eq!(strip_markers("a[s]b[s12]c[x"), "a[s]bc[x");
+}
+
+#[test]
+fn context_is_a_window_cut_at_whitespace() {
+    let body = format!(
+        "{} the girl was shot in Salisbury {}",
+        "x".repeat(300),
+        "y".repeat(300)
+    );
+    let at = body.find("shot").unwrap();
+    let c = context(&body, at, at + 4);
+    assert_eq!(
+        c, "the girl was shot in Salisbury",
+        "a partial word at either cut is dropped"
+    );
+    let short = "A man was\n shot today.";
+    assert_eq!(context(short, 11, 15), "A man was shot today.");
+}
+
+#[tokio::test]
+async fn a_particular_naming_a_candidate_joins_every_statement_in_it() {
+    let b0 = "A fire broke out downtown.";
+    let b1 = "Firefighters fought the downtown fire; the blaze is out.";
+    let (infer, _) = scripted(vec![
+        answer(vec![part("none", &[("s0", "A fire broke out downtown")])]),
+        answer(vec![part(
+            "r0",
+            &[("s0", "the downtown fire"), ("s1", "the blaze")],
+        )]),
+    ]);
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    // Two statements so the first document is asked, not opened without a call.
+    res.resolve_document(
+        &c,
+        doc("d0", b0),
+        &[
+            stmt("a", b0, "fire", 0, &[]),
+            stmt("x", b0, "broke out", 0, &[]),
+        ],
+        &[],
+        &infer,
+    )
+    .await;
+    let r = res
+        .resolve_document(
+            &c,
+            doc("d1", b1),
+            &[
+                stmt("b", b1, "fire", 0, &[]),
+                stmt("c", b1, "blaze", 0, &[]),
+            ],
+            &["a".into()],
+            &infer,
+        )
+        .await;
+    assert_eq!(labels(&r), ["cited", "cited"]);
+    assert!(r.outcomes.iter().all(|o| o.outcome.record() == Some("a")));
+}

@@ -396,6 +396,11 @@ pub struct OntologyTypeDecl {
     /// (`["name", "employer"]`). A descriptive key is judged, not trusted.
     #[serde(default)]
     pub identity_fallback: Vec<String>,
+    /// When two mentions are one particular, in the author's words. RESOLVE
+    /// gives it to the model beside the candidates whenever no `identity` key
+    /// settles the question (ONTOLOGY_METHOD.md §The core).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_criterion: Option<String>,
     /// Claims only, REQUIRED there: what a source does with the claim.
     #[serde(default)]
     pub force: Option<Force>,

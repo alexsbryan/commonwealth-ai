@@ -597,7 +597,21 @@ question the pipeline asks about a type is a method on the resolved
   A `domain`-read identity value at a mailbox provider (the bundled
   `mailbox_providers` asset, free-email-domains at a pinned commit, or a
   subdomain of a listed domain) is never projected and is counted as
-  `providers`, so no recipe lists ISPs to keep a contact's account honest. **Both tension axes degrade by REPORTING, never by
+  `providers`, so no recipe lists ISPs to keep a contact's account honest.
+  RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
+  puts each statement of one document into an open record of one declared
+  type, or opens one. An equal declared `identity` key decides without a call;
+  otherwise ONE grammar-constrained call per document, given the type's
+  `identity_criterion` and the candidates a proposer offered
+  (`resolve_records/propose.rs`, TF-IDF over documents already resolved),
+  partitions the document's statements into particulars, each the same as one
+  candidate or none, with a passage per statement code must find in the
+  document. The closed
+  `Decision` is `Key | Cited | Opened`; anything else is a counted `Refusal`,
+  never defaulted. Records keep the passage around each statement, which is
+  what later calls compare. It runs alone today, over supplied statements
+  (`svrn enrich resolve-statements`, the gold-mention setting); no atlas phase
+  calls it yet. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at

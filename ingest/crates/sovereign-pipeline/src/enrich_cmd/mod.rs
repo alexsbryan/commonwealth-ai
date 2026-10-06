@@ -66,6 +66,7 @@ pub mod phase_cmd;
 pub mod promote;
 pub mod query;
 pub mod reset;
+pub mod resolve_statements;
 pub mod schema_review;
 pub mod seed_cmd;
 pub mod sep_ingest;
@@ -146,6 +147,7 @@ const HELP: Help = Help {
                 ("cluster", "Phase 2: cluster the Phase 1 sketches by facet."),
                 ("name", "Phase 3: name each facet cluster."),
                 ("resolve", "Phase 3a/3b: resolve atoms + edges + trajectories from the sketches."),
+                ("resolve-statements", "RESOLVE alone: given statements (byte spans in documents) to records under one type a recipe declares — one model call per document, cited and verified. The gold-mention setting."),
                 ("tensions", "Phase 6 (deterministic): select tension candidates from the resolved atlas."),
                 ("tensions-classify", "Phase 6 (LLM): classify tension candidates and merge accepted ones into edges.json as Tension edges."),
                 ("gaps", "Phase 7 (deterministic): detect structural gaps (missing triggers, ungrounded claims, open questions)."),
@@ -226,6 +228,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "name" | "name-atlas-clusters" => atlas_phase_cmd::cmd_name_atlas_clusters(rest).await,
         "resolve" | "atlas-resolve" => atlas_resolve::cmd_atlas_resolve(rest).await,
         "reconcile" | "atlas-reconcile" => atlas_reconcile::cmd_atlas_reconcile(rest).await,
+        "resolve-statements" => resolve_statements::cmd_resolve_statements(rest).await,
         "tensions" | "atlas-tensions" => atlas_tensions::cmd_atlas_tensions(rest).await,
         "tensions-classify" | "atlas-tensions-classify" => {
             atlas_tensions_classify::cmd_atlas_tensions_classify(rest).await

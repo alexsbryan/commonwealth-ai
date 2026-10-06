@@ -144,8 +144,9 @@ fn metadata_object(row: &EnrichmentChunkRow, section_id: &str) -> Map<String, Va
 }
 
 /// Collapse every whitespace run to one space, so an anchor matches across
-/// the line breaks a chunker or a model moved.
-fn fold_ws(s: &str) -> String {
+/// the line breaks a chunker or a model moved. RESOLVE checks citations with
+/// it too (`resolve_records::cite_found`).
+pub(super) fn fold_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 

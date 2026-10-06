@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `svrn enrich resolve-statements`: the CLI surface for
+//! [`sovereign_enrichment_build::resolve_statements`]. Help and the entry point
+//! stay here; the work is in the capability crate.
+
+use sovereign_cli_base::help::{self, Help, HelpSection};
+
+pub use sovereign_enrichment_build::resolve_statements::*;
+
+const HELP: Help = Help {
+    command: "svrn enrich resolve-statements",
+    summary: "RESOLVE alone: statements to records under one declared type, one cited model call per document.",
+    sections: &[
+        HelpSection::Usage(
+            "svrn enrich resolve-statements --recipe <recipe.toml> --type <name> --documents <docs.jsonl> \
+             --statements <statements.jsonl> --out <dir> [--model <id>] [--neighbours N] \
+             [--max-candidates N] [--limit N]",
+        ),
+        HelpSection::Flags(&[
+            ("--recipe", "The recipe whose [enrichment.ontology] declares the type: its `identity` keys and `identity_criterion`."),
+            ("--type", "The declared type every statement is resolved under."),
+            ("--documents", "JSON lines {id, title?, body}."),
+            ("--statements", "JSON lines {document, id, start, end, keys?}; start/end are byte offsets into the body. Documents resolve in the order this file first names them."),
+            ("--out", "Directory for decisions.jsonl, clustering.json (statement -> record; a refused statement alone), records.json, summary.json."),
+            ("--model", "Chat model at the daemon. Default commonwealth/primary."),
+            ("--neighbours", "How many most-similar earlier documents offer their records as candidates. Default 3."),
+            ("--max-candidates", "At most this many candidate records shown per document. Default 12."),
+            ("--limit", "Resolve only the first N documents."),
+        ]),
+        HelpSection::Examples(&[(
+            "svrn enrich resolve-statements --recipe research/ontology-apps/cdcr/recipe-gvc.toml --type happening \
+             --documents ~/.svrnmesh/bench-corpora/gvc/raw/documents.jsonl --statements dev-statements.jsonl --out runs/gvc-dev",
+            "Resolve GVC's dev mentions; then `svrn bench er-score runs/gvc-dev/clustering.json gold.json`.",
+        )]),
+        HelpSection::Notes(
+            "Identity is decided by an equal declared key or by a model answer whose cited passage is found in the \
+             document; anything else is refused and counted in summary.json, never defaulted. Needs the daemon for \
+             any statement no key settles.",
+        ),
+    ],
+};
+
+pub async fn cmd_resolve_statements(args: &[String]) -> i32 {
+    if help::wants_help(args) {
+        help::print(&HELP);
+        return 0;
+    }
+    let parsed = match parse_args(args) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            eprintln!();
+            help::print(&HELP);
+            return 2;
+        }
+    };
+    match run(&parsed).await {
+        Ok(s) => {
+            println!(
+                "{} document(s), {} statement(s) -> {} record(s); {} call(s) ({:.2}/document); {:?}; wrote {}",
+                s.documents,
+                s.statements,
+                s.records,
+                s.calls,
+                s.calls_per_document,
+                s.tally,
+                parsed.out.display()
+            );
+            0
+        }
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            1
+        }
+    }
+}

@@ -291,6 +291,7 @@
       "label",
       "identity",
       "identity_fallback",
+      "identity_criterion",
       "force",
       "deontic",
       "subject",

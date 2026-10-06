@@ -810,6 +810,7 @@ One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are requi
 | `label` | `Option<String>` | no | type default | What the UI calls instances of this type. Defaults to `name`. On the first claim type that sets it, this also becomes the position term. |
 | `identity` | `Vec<String>` | no | type default | External identifiers that make two mentions one thing (`rxnorm_id`). An external key merges strictly. |
 | `identity_fallback` | `Vec<String>` | no | type default | Descriptive keys used when no external identifier is present (`["name", "employer"]`). A descriptive key is judged, not trusted. |
+| `identity_criterion` | `Option<String>` | no | type default | When two mentions are one particular, in the author's words. RESOLVE gives it to the model beside the candidates whenever no `identity` key settles the question (ONTOLOGY_METHOD.md §The core). |
 | `force` | `Option<Force>` | no | type default | Claims only, REQUIRED there: what a source does with the claim. |
 | `deontic` | `Vec<Deontic>` | no | type default | Claims with `force = "directive"` only: the deontic modes the type can carry. `forbid X` is stored as `require not-X`. |
 | `subject` | `Option<String>` | no | type default | Claims only: the declared entity, event or state type the claim is about (the is-about relation). |
