@@ -5,6 +5,8 @@ and it cannot resolve to quietly stuck: every terminal state is DONE, an
 operator stop, or an escalation. One Python state machine — a typed queue
 parser, a session layer, and three explicit FSMs — replacing the shell drivers
 (`ralph-{loop,supervise,pool,watch}.sh`) that had grown into string matching.
+Why its fixes have not converged, and a proposed closed machine:
+`docs/RALPH_STATE_MACHINE.md`.
 
 ## Run it
 
@@ -67,7 +69,8 @@ after a logout or reboot (as on Linux); start them again.
   machine's last boot (its run died with the reboot), and after 48h
   (`LANE_MAX_WAIT_SECS`) parks that row and runs on; a parked row's lane is not
   polled;
-- no wave starts under the 40GB disk floor on the lane root (`DISK_FLOOR_GB`);
+- no wave starts under the 5GB disk floor on the lane root (`DISK_FLOOR_GB`,
+  the same line the watchdog's disk-low alert uses);
   under it the pool first deletes `target/debug` and `target/release` from
   idle lanes, least recently built first — never a lane in the wave, never one
   holding `ralph/waiting` — and waits only when that is not enough;
@@ -77,7 +80,9 @@ after a logout or reboot (as on Linux); start them again.
   (its strike and continuation counters ride across in
   `target/ralph/pool-state.json`); a change that does not compile is refused
   once, by name, and the pool stays on the code it has;
-- every poll tick writes `ralph/.heartbeat`; `watch` notifies when it goes
+- the serial driver's every iteration and every running session write
+  `ralph/.heartbeat` (the pool writes none between waves, so an idle pool reads
+  as stalled; `docs/RALPH_STATE_MACHINE.md`); `watch` notifies when it goes
   stale, when a package sits unresolved, when the job is down without
   DONE/operator-STOP, or when disk drops below 5 GB;
 - an I/O error (a full disk) halts with a package instead of a traceback.
