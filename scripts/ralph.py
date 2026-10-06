@@ -2069,14 +2069,16 @@ def conflict_pairs(text):
 
 # The one cargo budget (lib/cargo-jobs.sh), split across the lanes of a wave.
 CARGO_JOBS_LIB = pathlib.Path(__file__).resolve().parent / "lib" / "cargo-jobs.sh"
-# No wave starts with less free disk than this on the lane root. A lane's debug
-# target outgrows the clone it starts from (two ersilia r12 lanes reached 68G
-# each); waves started into a shrinking disk filled it, and every session, the
-# model probes (opencode's own database) and the supervisor's halt notice then
-# failed ENOSPC — the loop died without a word (2026-10-03). Under it the pool
-# first reclaims idle lanes' build output (Pool._reclaim_disk), and waits only
-# when that is not enough.
-DISK_FLOOR_GB = 40
+# No wave starts with less free disk than this on the lane root: the red line,
+# the one the watchdog's disk-low alert fires at (Watch.min_free_mb). Waves
+# started into a full disk failed ENOSPC everywhere — every session, the model
+# probes (opencode's own database), the supervisor's halt notice — and the loop
+# died without a word (2026-10-03). Under it the pool first reclaims idle lanes'
+# build output (Pool._reclaim_disk), and waits only when that is not enough. It
+# was 40GB, a reserve for a lane's debug target outgrowing its clone (two ersilia
+# r12 lanes reached 68G each); that reserve sat the pool idle for hours with
+# 13-32GB free, room enough to run a lane (2026-10-04, 10-06).
+DISK_FLOOR_GB = 5
 # A lane session that ends without its done marker but with new commits ran out
 # of time mid-work, not into a wall: it continues without a strike, at most this
 # many times in a row before the strikes count again (12h at a 2h session cap).
@@ -3013,7 +3015,8 @@ class Watch:
     """The watchdog conditions, in order of precedence."""
 
     def __init__(self, paths, *, label, running=None, disk_free_mb=None,
-                 stall_secs=STALL_SECS, min_free_mb=5120, notifier=notify, dry=False):
+                 stall_secs=STALL_SECS, min_free_mb=DISK_FLOOR_GB * 1024, notifier=notify,
+                 dry=False):
         self.paths = paths
         self.label = label
         self.running = running or self._running

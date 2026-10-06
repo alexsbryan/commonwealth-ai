@@ -3556,16 +3556,34 @@ class PoolQueueTests(unittest.TestCase):
         # (2026-10-03). No lane starts until the lane root is over the floor.
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            readings = iter([12, 80])
+            readings = iter([3, 80])
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
                              disk_free_gb=lambda: next(readings, 80))
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(pool.run(), 0)
             said = out.getvalue()
-            self.assertIn(f"pool: wave q-a not started — 12GB free on {pool.lane_root}, "
+            self.assertIn(f"pool: wave q-a not started — 3GB free on {pool.lane_root}, "
                           f"under the {ralph.DISK_FLOOR_GB}GB disk floor", said)
             self.assertLess(said.index("disk floor"), said.index("lane start q-a"))
+
+    def test_a_wave_starts_while_the_disk_has_room(self):
+        # A 40GB floor held the ersilia pool idle at 13GB free, room enough to
+        # run a lane (2026-10-06). The floor is the watchdog's red line, not a
+        # reserve for what a lane might grow to.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            readings = iter([13, 13, 13])  # then 80, so a floor that waits still ends
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             disk_free_gb=lambda: next(readings, 80))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            said = out.getvalue()
+            self.assertNotIn("not started", said)
+            self.assertIn("lane start q-a", said)
+            self.assertEqual(ralph.Watch(None, label="a").min_free_mb,
+                             ralph.DISK_FLOOR_GB * 1024)
 
     def test_the_disk_floor_reclaims_idle_lanes_build_output_before_it_waits(self):
         # A floor with no remedy sat the ersilia pool idle for 66 ticks while
@@ -3586,7 +3604,7 @@ class PoolQueueTests(unittest.TestCase):
 
             def free():
                 reads.append(1)
-                return 80 if not idle_debug.exists() or len(reads) > 5 else 12
+                return 80 if not idle_debug.exists() or len(reads) > 5 else 3
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd), disk_free_gb=free)
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
