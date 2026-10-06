@@ -786,6 +786,19 @@ class IncidentTests(unittest.TestCase):
             self.assertEqual(data["KeepAlive"], {"SuccessfulExit": False})
             self.assertTrue(str(plist).startswith(f"{home}/.config/ralph/jobs/"))
 
+    def test_a_bare_program_is_installed_as_the_shells_own(self):
+        # launchd ran a bare `python3` as /usr/bin/python3, 3.9, not the
+        # installing shell's 3.13 (svrngs u6, 2026-10-06).
+        shell = {"launchctl": "/bin/launchctl", "python3": "/opt/py313/bin/python3"}
+        with tempfile.TemporaryDirectory() as home:
+            mac = ralph.MacHost(home=home, which=shell.get, run=mock.Mock())
+            plist = mac.install_job("dev.ralph.x-y", ["python3", "ralph.py", "run"], home,
+                                    f"{home}/log", keep_alive=True)
+            data = plistlib.loads(pathlib.Path(plist).read_bytes())
+            self.assertEqual(data["ProgramArguments"], ["/opt/py313/bin/python3", "ralph.py", "run"])
+            with self.assertRaises(ralph.HostError):
+                mac.install_job("dev.ralph.x-z", ["nope", "run"], home, f"{home}/log")
+
     def test_start_leaves_a_running_job_alone(self):
         rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
         fake = mock.Mock()

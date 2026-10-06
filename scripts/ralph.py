@@ -121,10 +121,21 @@ class Host:
     def install_job(self, name, argv, workdir, log_path, interval=None, keep_alive=False):
         """`keep_alive`: the host restarts the job on any exit but 0 — the
         loop exits 0 only when done or stopped, so a crash is the host's to
-        restart and a finished loop stays down."""
+        restart and a finished loop stays down.
+
+        A bare program name is resolved here, on the installing shell's PATH:
+        the host finds a job's program on its own PATH, not the job's, so a
+        `python3` installed from a 3.13 shell ran launchd's /usr/bin/python3,
+        3.9, with no tomllib (svrngs u6, 2026-10-06)."""
         self.require_jobs()
-        return self._install_job(name, [str(a) for a in argv], str(workdir), str(log_path),
-                                 interval, keep_alive)
+        argv = [str(a) for a in argv]
+        if os.sep not in argv[0]:
+            found = self._which(argv[0])
+            if not found:
+                raise HostError(f"{argv[0]} is not on PATH — {name} would not start")
+            say(f"install: {argv[0]} is {found}")
+            argv[0] = found
+        return self._install_job(name, argv, str(workdir), str(log_path), interval, keep_alive)
 
     def start_job(self, name):
         self.require_jobs()
