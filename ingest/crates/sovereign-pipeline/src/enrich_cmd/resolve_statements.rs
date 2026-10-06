@@ -14,7 +14,7 @@ const HELP: Help = Help {
         HelpSection::Usage(
             "svrn enrich resolve-statements --recipe <recipe.toml> --type <name> --documents <docs.jsonl> \
              --statements <statements.jsonl> --out <dir> [--model <id>] [--neighbours N] \
-             [--max-candidates N] [--min-similarity S] [--answer model|select|proposed] [--same-wording-similarity S] \
+             [--max-candidates N] [--min-similarity S] [--answer model|select|reason|proposed] [--same-wording-similarity S] \
              [--similar S] [--limit N]",
         ),
         HelpSection::Flags(&[
@@ -27,7 +27,7 @@ const HELP: Help = Help {
             ("--neighbours", "How many most-similar earlier documents offer their records as candidates. Default 3."),
             ("--max-candidates", "At most this many candidate records from similar documents per document. Default 12; a declared thread's records are never cut."),
             ("--min-similarity", "A document less alike (TF-IDF cosine) offers no records. Default 0."),
-            ("--answer", "`model` (default) asks the model for a cited partition of each document; `select` asks one forced choice per statement (which candidate, or none: a distribution in one forward pass, kept on each outcome); `proposed` makes no call and takes the proposed answer as given, the zero-model floor a model answer is held to."),
+            ("--answer", "`model` (default) asks the model for a cited partition of each document; `select` asks one forced choice per statement (which candidate, or none: a distribution in one forward pass, kept on each outcome); `reason` asks the same choice after the model reasons about it (`reasoned_choice`); `proposed` makes no call and takes the proposed answer as given, the zero-model floor a model answer is held to."),
             ("--same-wording-similarity", "The proposed answer joins a wording to a record said so from a document at least this alike. Default 0.4."),
             ("--similar", "The proposed answer joins any wording to the most similar record at or above this. Default off."),
             ("--limit", "Resolve only the first N documents."),

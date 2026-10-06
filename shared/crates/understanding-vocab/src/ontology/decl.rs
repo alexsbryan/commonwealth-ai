@@ -343,7 +343,8 @@ impl OntologyV1 {
 /// A source of identity evidence and what its links were measured to be worth
 /// on the live rule: `{ evidence = "document_thread", right = 190, of = 210,
 /// measured_on = "…" }`. The source is a `change.document` stamp,
-/// `model_choice` (the forced choice's most probable candidate) or
+/// `model_choice` (the forced choice's most probable candidate),
+/// `reasoned_choice` (the same, read after the model's own reasoning) or
 /// `proposed_answer` (threads, wording and similarity alone); `right` of `of`
 /// links were right where `measured_on` says.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

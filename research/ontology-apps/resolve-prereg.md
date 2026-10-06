@@ -233,3 +233,19 @@ rung 7) and its in-message deal splits (reasoning first found 16 of 32 against t
 **Held-out read folds (2026-10-06), opened once for the adopted design (Ring 2a), no model call on either:**
 uv read .801 / .927 / .826 / .648 / .785 against its floor's .799 / .927 / .826 / .645 / .785; ward read equal
 to its floor (.414 / .182 / .579 / .481 / .300). The fields and counts measured on the tune folds hold out.
+
+## Ring 1c on ward: the term READ, and a choice read after the model's own reasoning (registered 2026-10-06, before its data)
+
+Operator-agreed amendment to §Identity: where the one-pass choice cannot clear the bar, the model may reason
+first, and its answer is still read as a forced-choice distribution, after its reasoning, weighed as its own
+source (`reasoned_choice`, `--answer reason`). Ward's residual is deal granularity inside one counterparty, which
+its criterion names (product, delivery point, term): read on Ring 0's prompts, reasoning first found 16 of 32
+deals against the argmax's 6 (link precision .48), and a term-shape read as a veto kept 26 of those 33 links
+with 14 of the 16 right (.54); only 8 of 42 gold deals read as more than one term. Ward declares `term` (month
+to month or spot; a fixed term under a year; a year or more; a master or enabling agreement with no term),
+necessary. Measured in a first ward-tune run (`--answer reason`, term veto, the reasoned argmax deciding),
+declared, then run gated beside the proposed answer (5 of 7 expected .714).
+
+**Bar.** Ward tune's CoNLL, B3, CEAF-e and LEA each above its floor's (.436 / .654 / .504 / .250), beyond 0
+(the runs are deterministic). Read beside it, no bar: reasoning tokens per statement, the live precision of the
+reasoned choice against the probe's .54. Met: ward's read fold, once.

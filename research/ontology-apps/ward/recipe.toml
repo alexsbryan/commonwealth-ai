@@ -68,9 +68,16 @@ identity_evidential = [
   { evidence = "proposed_answer", right = 4, of = 5, measured_on = "ward tune floor run, live: 4 of 5 links (resolve-prereg.md Ring 1b)" },
 ]
 identity_bar = 0.5
+identity_necessary = ["term"]
 attributes = [
   { name = "counterparty", type = "ref", of = "company" },
   { name = "amount", type = "quantity", unit = "USD" },
+  { name = "term", type = "text", values = [
+    "month to month, daily or spot, with no fixed term",
+    "a fixed term shorter than a year (a month, a season, some months)",
+    "a fixed term of a year or more",
+    "a master, credit or enabling agreement with no term of its own",
+  ] },
 ]
 
 [[enrichment.ontology.types]]

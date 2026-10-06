@@ -628,7 +628,8 @@ question the pipeline asks about a type is a method on the resolved
   `identity_evidential` also weighs `model_choice` and `proposed_answer` at their
   measured precision: of those that name a candidate, the more precise that
   clears `identity_bar` decides (`Decision::Proposed` for the proposed answer),
-  and a choice below the bar is never asked.
+  and a choice below the bar is never asked. `--answer reason` reads the same
+  choice after the model's own bounded reasoning (`reasoned_choice`).
   `Decision` is `Key | Field | Cited | Selected | Proposed | Opened`; anything else is a counted `Refusal`,
   never defaulted. Records keep the passage around each statement, which is
   what later calls compare. It runs alone today, over supplied statements

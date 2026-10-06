@@ -125,6 +125,7 @@ pub(super) async fn choose(
     key_edges: &[(usize, usize)],
     read: &[BTreeMap<String, String>],
     proposed: Option<&Proposed>,
+    reason: bool,
     infer: &InferenceFn,
 ) -> Chosen {
     let mut plans: Vec<Plan> = Vec::with_capacity(asked.len());
@@ -133,9 +134,15 @@ pub(super) async fn choose(
     let mut calls = 0;
     let mut vetoed = 0;
     let clears = |p: f64| criterion.bar.is_some_and(|b| p >= b);
-    let ask_model = criterion.model_choice.is_none_or(clears);
+    // The choice weighed is the one asked: after reasoning, or in one pass.
+    let measured = if reason {
+        criterion.reasoned_choice
+    } else {
+        criterion.model_choice
+    };
+    let ask_model = measured.is_none_or(clears);
     if !ask_model {
-        debug!(document = doc.id, model_choice = ?criterion.model_choice, bar = ?criterion.bar, "atlas/resolve: the model's choice is below the bar; it is not asked");
+        debug!(document = doc.id, reason, ?measured, bar = ?criterion.bar, "atlas/resolve: the model's choice is below the bar; it is not asked");
     }
     for (j, &i) in asked.iter().enumerate() {
         // A declared key shared with an earlier statement of this document
@@ -196,17 +203,37 @@ pub(super) async fn choose(
                 .copied()
                 .chain([NONE])
                 .collect();
-            let prompt = question(
-                criterion,
-                same_when,
-                doc,
-                s,
-                &candidates,
-                &labels,
-                statements,
-                asked,
-                records,
-            );
+            let ask = |a: Ask<'_>| {
+                question(
+                    criterion,
+                    same_when,
+                    doc,
+                    s,
+                    &candidates,
+                    &labels,
+                    statements,
+                    asked,
+                    records,
+                    a,
+                )
+            };
+            let reasoning = if reason {
+                calls += 1;
+                match reason_call(infer, &ask(Ask::Reason), doc.id, &s.id).await {
+                    Ok(text) => Some(text),
+                    Err(refusal) => {
+                        plans.push(Plan::Refuse(refusal));
+                        choices.push(None);
+                        continue;
+                    }
+                }
+            } else {
+                None
+            };
+            let prompt = match &reasoning {
+                Some(text) => ask(Ask::ChooseAfter(text)),
+                None => ask(Ask::Choose),
+            };
             calls += 1;
             let dist = match decision_call(infer, &prompt, &labels, doc.id, &s.id).await {
                 Ok(dist) => dist,
@@ -229,6 +256,7 @@ pub(super) async fn choose(
                     .map(|(c, l)| (id_of(c), p(l)))
                     .collect(),
                 none: p(NONE),
+                reasoning,
             });
             // The most probable label; a tie goes to the later one, so to none.
             let (best, probability) = candidates
@@ -249,7 +277,7 @@ pub(super) async fn choose(
                 None => None,
             };
         }
-        let decided = match criterion.model_choice {
+        let decided = match measured {
             // Unmeasured: the argmax decides, so it can be measured (Ring 0).
             None => model,
             // Measured (and asked only if it clears the bar): the more precise
@@ -315,6 +343,7 @@ fn question(
     statements: &[Statement],
     asked: &[usize],
     records: &[Record],
+    ask: Ask<'_>,
 ) -> ChatPrompt {
     let mut u = format!("Type: {}", criterion.type_name);
     if !criterion.description.is_empty() {
@@ -356,11 +385,79 @@ fn question(
         u.push_str(&format!("{label} {line}"));
     }
     u.push_str(&format!(
-        "\nStatement, its words in [[ ]]: \"…{}…\"\n\nWhich record is the statement about? Answer with its letter, or {NONE} if none of them.",
+        "\nStatement, its words in [[ ]]: \"…{}…\"\n\n",
         marked_context(doc.body, s.start, s.end)
+    ));
+    match ask {
+        Ask::Reason => {
+            u.push_str(&format!("Which record is the statement about? Reason it through under the rule, then end with its letter, or {NONE} if none of them."));
+            return ChatPrompt::new(SYSTEM, u)
+                .with_phase_id("resolve_reason")
+                .with_max_output_tokens(REASON_TOKENS)
+                .with_temperature(0.0);
+        }
+        Ask::ChooseAfter(reasoning) => u.push_str(&format!("Your reasoning:\n{reasoning}\n\n")),
+        Ask::Choose => {}
+    }
+    u.push_str(&format!(
+        "Which record is the statement about? Answer with its letter, or {NONE} if none of them."
     ));
     ChatPrompt::new(SYSTEM, u)
         .with_response_schema("select", forced_choice::schema(labels))
         .with_phase_id("resolve_select")
         .with_temperature(0.0)
+}
+
+/// How a question closes: one forced choice, the model's reasoning about it
+/// (generated, bounded by `REASON_TOKENS`), or one forced choice read after
+/// that reasoning (`reasoned_choice`).
+#[derive(Clone, Copy)]
+enum Ask<'a> {
+    Choose,
+    Reason,
+    ChooseAfter(&'a str),
+}
+
+/// The reasoning budget: a cost knob, it decides nothing. Ward's reasoned
+/// answers ran to about 900 tokens; a cut answer is still read as a choice.
+const REASON_TOKENS: u32 = 2000;
+
+/// The reasoning before a reasoned choice: one bounded generation, traced
+/// and counted by the caller. Empty or failed, the statement is refused.
+async fn reason_call(
+    infer: &InferenceFn,
+    prompt: &ChatPrompt,
+    document: &str,
+    statement: &str,
+) -> Result<String, Refusal> {
+    let started = Instant::now();
+    let out = infer(prompt, Some(REASON_TOKENS)).await;
+    let ms = started.elapsed().as_millis() as u64;
+    match out {
+        Ok(text) if !text.trim().is_empty() => {
+            debug!(
+                document,
+                statement,
+                ms,
+                chars = text.len(),
+                "atlas/resolve: reasoning call"
+            );
+            Ok(text)
+        }
+        Ok(_) => {
+            warn!(
+                document,
+                statement, ms, "atlas/resolve: reasoning call answered nothing"
+            );
+            Err(Refusal::NoAnswer {
+                reason: "the reasoning was empty".into(),
+            })
+        }
+        Err(e) => {
+            warn!(document, statement, ms, error = %e, "atlas/resolve: reasoning call failed");
+            Err(Refusal::NoAnswer {
+                reason: format!("reasoning call failed: {e:#}"),
+            })
+        }
+    }
 }

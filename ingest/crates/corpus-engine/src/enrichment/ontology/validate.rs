@@ -230,7 +230,7 @@ fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
 }
 
 /// Evidence sources that are no document stamp (`identity_evidential`).
-const NON_STAMP_EVIDENCE: [&str; 2] = ["model_choice", "proposed_answer"];
+const NON_STAMP_EVIDENCE: [&str; 3] = ["model_choice", "reasoned_choice", "proposed_answer"];
 
 /// A metadata `source`: on an entity type, naming its fields, filling only
 /// declared attributes, and reading every identity key — the last through

@@ -15,6 +15,7 @@ fn criterion(keys: &[&str]) -> Criterion {
         evidential: vec![],
         bar: None,
         model_choice: None,
+        reasoned_choice: None,
         proposed_answer: None,
         necessary: vec![],
     }
@@ -583,7 +584,8 @@ async fn a_forced_choice_per_statement_offers_what_the_document_opened_and_keeps
         r0.outcomes[1].choice,
         Some(Choice {
             candidates: vec![("a".into(), 0.9)],
-            none: 0.1
+            none: 0.1,
+            reasoning: None
         })
     );
     let b1 = "Crews fought a fire all night.";
@@ -974,4 +976,36 @@ async fn of_two_fields_that_settle_on_different_records_the_more_precise_decides
         )
         .await;
     assert_eq!(r.outcomes[0].outcome.record(), Some("x"));
+}
+
+#[tokio::test]
+async fn a_reasoned_choice_is_read_after_the_models_own_reasoning() {
+    let mut res = fire_downtown().await;
+    // First the reasoning (generated), then the forced choice read after it.
+    let (infer, seen) = scripted(vec![
+        json!("Both are the downtown fire; the rule holds. A"),
+        json!({"A": 0.8, "0": 0.2}),
+    ]);
+    let b = "The downtown blaze is out.";
+    let r = res
+        .resolve_document(
+            &criterion(&[]),
+            doc("d1", b),
+            &[stmt("z", b, "downtown blaze", 0, &[])],
+            &[similar("x", 0.6)],
+            Answerer::Reason(&infer),
+        )
+        .await;
+    let prompts = seen.lock().unwrap();
+    assert_eq!((r.calls, prompts.len()), (2, 2));
+    assert!(prompts[0].response_schema.is_none() && prompts[1].response_schema.is_some());
+    assert!(
+        prompts[1].user.contains("Your reasoning:") && prompts[1].user.contains("the rule holds")
+    );
+    assert_eq!(r.outcomes[0].outcome.record(), Some("x"));
+    let choice = r.outcomes[0].choice.as_ref().expect("the choice is kept");
+    assert!(choice
+        .reasoning
+        .as_deref()
+        .is_some_and(|t| t.contains("the rule holds")));
 }

@@ -38,6 +38,7 @@ pub const DEFAULT_MAX_CANDIDATES: usize = 12;
 pub enum AnswerBy {
     Model,
     Select,
+    Reason,
     Proposed,
 }
 
@@ -137,10 +138,11 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
         answer: match flags.get("--answer").map(String::as_str) {
             None | Some("model") => AnswerBy::Model,
             Some("select") => AnswerBy::Select,
+            Some("reason") => AnswerBy::Reason,
             Some("proposed") => AnswerBy::Proposed,
             Some(v) => {
                 return Err(format!(
-                    "--answer is `model`, `select` or `proposed`, not `{v}`"
+                    "--answer is `model`, `select`, `reason` or `proposed`, not `{v}`"
                 ))
             }
         },
@@ -347,6 +349,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
     let answerer = match p.answer {
         AnswerBy::Model => Answerer::Model(&infer),
         AnswerBy::Select => Answerer::Select(&infer),
+        AnswerBy::Reason => Answerer::Reason(&infer),
         AnswerBy::Proposed => Answerer::Proposed,
     };
 
@@ -374,6 +377,10 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         match p.answer {
             AnswerBy::Model => format!("model {} at {base}", p.model),
             AnswerBy::Select => format!("model {} at {base}, one forced choice per statement", p.model),
+            AnswerBy::Reason => format!(
+                "model {} at {base}, one forced choice per statement after its own reasoning",
+                p.model
+            ),
             AnswerBy::Proposed => "the proposed answer (no model)".to_string(),
         },
         proposer.describe(),

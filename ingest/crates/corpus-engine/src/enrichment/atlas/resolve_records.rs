@@ -49,6 +49,9 @@ pub struct Criterion {
     /// (`model_choice`). `None`: unmeasured, and the argmax decides (Ring 0),
     /// so it can be measured.
     pub model_choice: Option<f64>,
+    /// The measured precision of the forced choice read after the model's own
+    /// reasoning (`reasoned_choice`). `None`: unmeasured, its argmax decides.
+    pub reasoned_choice: Option<f64>,
     /// The measured precision of the proposed answer (`proposed_answer`).
     /// `None`: it decides nothing in a forced-choice run.
     pub proposed_answer: Option<f64>,
@@ -60,12 +63,14 @@ impl Criterion {
     /// `keys` is the type's effective identity, its parents' included. An
     /// evidential field that is no document stamp is refused, never skipped.
     pub fn of(decl: &OntologyTypeDecl, keys: Vec<String>) -> Result<Self, String> {
-        let (mut evidential, mut model_choice, mut proposed_answer) = (Vec::new(), None, None);
+        let (mut evidential, mut model_choice, mut proposed_answer, mut reasoned_choice) =
+            (Vec::new(), None, None, None);
         for e in &decl.identity_evidential {
             match (DocumentStamp::from_attr(&e.evidence), e.evidence.as_str()) {
                 (Some(stamp), _) => evidential.push((stamp, e.precision())),
                 (None, "model_choice") => model_choice = Some(e.precision()),
                 (None, "proposed_answer") => proposed_answer = Some(e.precision()),
+                (None, "reasoned_choice") => reasoned_choice = Some(e.precision()),
                 (None, other) => {
                     return Err(format!(
                         "type `{}`: evidence `{other}` is no source",
@@ -107,6 +112,7 @@ impl Criterion {
             evidential,
             bar: decl.identity_bar,
             model_choice,
+            reasoned_choice,
             proposed_answer,
             necessary,
         })
@@ -295,6 +301,9 @@ pub struct StatementOutcome {
 pub struct Choice {
     pub candidates: Vec<(String, f64)>,
     pub none: f64,
+    /// The model's own reasoning the choice was read after, when it reasoned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
 }
 
 /// Why a record was offered. Closed: declared structure or generic,
@@ -344,6 +353,9 @@ pub enum Answerer<'a> {
     Proposed,
     /// The model, one forced choice per statement (`select.rs`).
     Select(&'a InferenceFn),
+    /// The model, one forced choice per statement read after its own
+    /// reasoning about it (`select.rs`, `reasoned_choice`).
+    Reason(&'a InferenceFn),
 }
 
 /// One document's resolution: what was shown, what it cost, what was decided.
@@ -506,7 +518,7 @@ impl Resolver {
         let mut choices: Vec<Option<Choice>> = vec![None; n];
         let mut read_of: Vec<BTreeMap<String, String>> = vec![BTreeMap::new(); n];
         let (mut vetoed, mut unread) = (0, 0);
-        let decided: Vec<Plan> = if let (Answerer::Select(infer), false) =
+        let decided: Vec<Plan> = if let (Answerer::Select(infer) | Answerer::Reason(infer), false) =
             (answerer, asked.is_empty())
         {
             // READ each asked statement's necessary attributes first: a
@@ -528,6 +540,7 @@ impl Resolver {
                 &key_edges,
                 &read.values,
                 proposed.as_ref(),
+                matches!(answerer, Answerer::Reason(_)),
                 infer,
             )
             .await;
@@ -555,7 +568,7 @@ impl Resolver {
                 }
                 // A forced choice is asked statement by statement above; no
                 // partition is ever asked for it.
-                Answerer::Select(_) => Err(Refusal::NoAnswer {
+                Answerer::Select(_) | Answerer::Reason(_) => Err(Refusal::NoAnswer {
                     reason: "a forced choice is not a partition".into(),
                 }),
                 Answerer::Model(_) if criterion.same_when.is_none() => Err(Refusal::NoCriterion),
