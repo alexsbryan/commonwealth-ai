@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""ralph_next.py — the tests of the pieces the rewrite carried over from
-ralph.py: the queue grammar, manifests, models, prompts, paths, hosts, the
+"""ralph.py — the tests of the pieces the rewrite carried over from the
+file-protocol loop: the queue grammar, manifests, models, prompts, paths, hosts, the
 probe, the shell scripts, the watchdog and the lane mechanics (`Lanes`).
 The engine (Loop, TRANSITIONS, Ledger, cmd_result, adopt_legacy) is tested
-in scripts/tests/ralph_next.py. In-process, temp git repos, no model calls.
+in scripts/tests/ralph.py. In-process, temp git repos, no model calls.
 
-Ported from scripts/tests/ralph.py. Classes there that are NOT here, on purpose:
+Ported from the file-protocol loop's scripts/tests/ralph.py (before the swap). Classes there that are NOT here, on purpose:
   WaitLimitTests          WAIT_LIMIT_S / resolve_wait_limit are deleted: a session's
                           wait is `ralph-result await <budget>`, bounded by
                           --marker-timeout / AWAIT_MAX_S (engine).
@@ -71,7 +71,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-import ralph_next as ralph  # noqa: E402
+import ralph  # noqa: E402
 
 
 def setUpModule():
@@ -2052,14 +2052,12 @@ class RalphMarkTests(unittest.TestCase):
 
 class RalphCheckTests(unittest.TestCase):
     """`ralph-check.sh <name>` runs what the worker's OWN queue.toml declares.
-    The script asks `scripts/ralph.py check-argv`; the rewrite is installed
-    under that name, as it will be after the rename, so the check-argv the
-    script reaches is the one under test."""
+    The script asks `scripts/ralph.py check-argv`, the loop under test."""
 
     def fixture(self, tmp):
         two_queues(tmp)
         install_script(tmp, "ralph-check.sh")
-        install_script(tmp, "ralph.py", source="ralph_next.py")
+        install_script(tmp, "ralph.py")
         write(tmp, "ralph/next/a/queue.toml",
               '[checks]\nhello = ["sh", "-c", "echo from-a \\"$@\\"", "sh"]\n'
               'red = ["sh", "-c", "echo went-red; exit 7"]\n')

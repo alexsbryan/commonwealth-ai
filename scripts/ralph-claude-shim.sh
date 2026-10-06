@@ -2,7 +2,7 @@
 # ralph worker on the Claude subscription instead of opencode+openrouter.
 #
 # scripts/ralph.py spawns `$RALPH_OPENCODE_BIN run [--model M] [--variant V] <prompt>`
-# and reads back only the exit code, the iter log, and whether a commit
+# and reads back only the session's `ralph-result` and whether a commit
 # landed. It was hardwired to opencode, whose only key on this host was
 # openrouter (2026-09-17: $40 gone in a day and a half, the last three
 # iterations dying on "would exceed your available credits"). This shim keeps
@@ -64,7 +64,7 @@ echo "ralph-claude-shim: model=${model:-default} effort=${effort:-default}" >&2
 # default), said "when it finishes I'll paste the rows", ended its turn 36 s
 # in, and the next session repeated it - a stall that would have halted the
 # loop. This is the harness's property, so it is said here, not in PROMPT.md.
-args+=(--append-system-prompt "HARNESS: you are a one-shot print-mode session. The process exits the moment you end your turn, and every background task you started is killed with it - no notification will ever reach you. Never run a command in the background and never end your turn while a check is running. Run long checks (DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the Bash tool's timeout parameter set to 600000; if a single check cannot finish inside ten minutes, split it or write ${RALPH_CONTROL_DIR:-ralph}/NEEDS_HUMAN.md saying so. Commit before you end your turn - an uncommitted turn is lost.")
+args+=(--append-system-prompt "HARNESS: you are a one-shot print-mode session. The process exits the moment you end your turn, and every background task you started is killed with it - no notification will ever reach you. Never run a command in the background and never end your turn while a check is running. Run long checks (DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the Bash tool's timeout parameter set to 600000; if a single check cannot finish inside ten minutes, split it, or end your turn with: ralph-result await <budget> -- <the check> (the loop runs it and resumes you with its exit code and log). Commit before you end your turn - an uncommitted turn is lost.")
 # The directories .opencode/opencode.json's external_directory already
 # granted: /run (the PROMPT's containerenv premise check), /tmp (the cargo
 # lock), and ralph's own state under ~/.svrnmesh. Anything else outside the

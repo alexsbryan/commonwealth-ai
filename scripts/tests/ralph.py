@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""ralph.py — the state machine's tests, in-process (no model calls).
+"""The loop's machine: its table, its one result verb, and every past
+incident as a scenario row (docs/RALPH_STATE_MACHINE.md).
 
-The FSM is exercised through its seams: session runners, clocks and
-notifiers are injected, so every gate runs in milliseconds and its failing
-input is explicit.
+A Loop is driven tick by tick against real git repos in temp dirs. Sessions
+and background runs are fakes: a session's scenario runs in its worktree when
+the loop spawns it (it commits, and reports through the real `result` verb),
+and the fake then reports the process alive for as many ticks as the scenario
+asked. The process primitives themselves are tested against real processes.
 """
 import contextlib
 import io
-import itertools
 import json
 import os
 import pathlib
 import plistlib
-import shutil
 import signal
 import subprocess
 import sys
@@ -24,25 +25,7 @@ from unittest import mock
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import ralph  # noqa: E402
 
-
-def setUpModule():
-    # A pool test does not wait on this host's free memory; the split itself is
-    # tested against stubbed probes (PoolQueueTests.share).
-    patcher = mock.patch.object(ralph, "cargo_jobs_share", lambda lanes: (2, "test budget"))
-    patcher.start()
-    unittest.addModuleCleanup(patcher.stop)
-    # A pool re-execs when ralph.py changes on disk; an edit landing mid-run must
-    # fail the test that saw it, never replace the test process.
-    def no_exec(*a):
-        raise RuntimeError("a test pool tried to re-exec: ralph.py changed during the run")
-    execv = mock.patch.object(ralph.os, "execv", no_exec)
-    execv.start()
-    unittest.addModuleCleanup(execv.stop)
-    # A waiting file older than the last boot means its run died with it; on a
-    # freshly booted host every test's waiting file would read as dead.
-    boot = mock.patch.object(ralph, "machine_boot_time", lambda: None)
-    boot.start()
-    unittest.addModuleCleanup(boot.stop)
+U, E = ralph.U, ralph.E
 
 
 def write(root, rel, text):
@@ -52,3579 +35,1070 @@ def write(root, rel, text):
     return p
 
 
-class QueueTests(unittest.TestCase):
-    def test_parses_both_orders_and_statuses(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [x] dm-a abc1234 — depends [] — did a\n"
-                  "- [x] deadbee dm-b — depends [dm-a] — legacy hash-first\n"
-                  "- [~] dm-c — depends [dm-b] — active\n"
-                  "- [ ] dm-d — depends [dm-c, dm-a] — pending\n")
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            self.assertEqual([r.id for r in q.rows], ["dm-a", "dm-b", "dm-c", "dm-d"])
-            self.assertEqual(q.by_id()["dm-b"].hash, "deadbee")
-            self.assertEqual(q.done_count(), 2)
-            self.assertEqual(q.current().id, "dm-c")
-            self.assertFalse(q.deps_met(q.by_id()["dm-d"]))
-
-    def test_current_prefers_first_ready_pending(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [ ] dm-b — depends [dm-a]\n- [ ] dm-a — depends []\n")
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            self.assertEqual(q.current().id, "dm-a")
-
-    def test_a_ready_human_row_waits_while_the_rows_past_it_run(self):
-        # phase-b-31: HUMAN-pb-lanes-dials-serve at the head held 40 rows for 9 h.
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [ ] HUMAN-read — depends []\n- [ ] dm-after — depends [HUMAN-read]\n"
-                  "- [ ] dm-free — depends []\n")
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            self.assertEqual(q.current().id, "dm-free")
-            self.assertEqual(q.awaiting_operator(), ["HUMAN-read"])
-
-    def test_a_parked_row_waits_even_when_it_is_the_active_one(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [~] dm-stuck — depends []\n- [ ] dm-next — depends [dm-stuck]\n"
-                  "- [ ] dm-free — depends []\n")
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            self.assertEqual(q.current(frozenset({"dm-stuck"})).id, "dm-free")
-            self.assertEqual(q.awaiting_operator(frozenset({"dm-stuck"})), ["dm-stuck"])
-            self.assertIsNone(ralph.Queue(q.path).current(frozenset({"dm-stuck", "dm-free"})))
-
-    def test_duplicate_id_is_an_error(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [ ] dm-a — depends []\n- [ ] dm-a — depends []\n")
-            with self.assertRaises(ValueError):
-                ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-
-    def test_unknown_dep_is_an_error(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends [dm-ghost]\n")
-            with self.assertRaises(ValueError):
-                ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-
-
-class AuditCountTests(unittest.TestCase):
-    def queue(self, tmp, rows):
-        return ralph.Queue(write(tmp, "ralph/STATE.md", rows))
-
-    def test_counts_done_rows_after_the_last_done_audit_and_skips_human_rows(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n"
-                                "- [x] REVIEW-audit-u-1 abcdef2 — depends [u-1]\n"
-                                "- [x] u-2 abcdef3 — depends []\n"
-                                "- [x] HUMAN-u-look abcdef4 — depends []\n"
-                                "- [x] REVIEW-build-u-3 abcdef5 — depends []\n"
-                                "- [ ] REVIEW-audit-u-2 — depends []\n"     # not run: resets nothing
-                                "- [~] u-4 — depends []\n")
-            self.assertEqual(q.units_since_audit(), 2)
-
-    def test_counts_closes_after_the_last_audit_close_not_rows_below_it(self):
-        # The failing input: u-old closed BEFORE the audit but sits BELOW it, as
-        # minted and parked rows do. Positionally that is 2 units; by time, 1.
-        with tempfile.TemporaryDirectory() as tmp:
-            git_repo(tmp)
-            state = "ralph/STATE.md"
-
-            def close(text, subject):
-                write(tmp, state, text)
-                subprocess.run(["git", "-C", tmp, "add", state], check=True)
-                subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", subject], check=True)
-
-            close("- [ ] u-new — depends []\n- [x] u-old abc0001 — depends []\n",
-                  "ralph: u-old done")
-            close("- [x] REVIEW-audit-u-auto-1 abc0002 — depends []\n"
-                  "- [ ] u-new — depends []\n- [x] u-old abc0001 — depends []\n",
-                  "ralph: REVIEW-audit-u-auto-1 done")
-            close("- [x] REVIEW-audit-u-auto-1 abc0002 — depends []\n"
-                  "- [x] u-new abc0003 — depends []\n- [x] u-old abc0001 — depends []\n",
-                  "ralph: u-new done")
-            q = ralph.Queue(pathlib.Path(tmp) / state)
-            self.assertEqual(q.units_since_audit(), 2)          # the positional reading
-            self.assertEqual(ralph.units_since_audit(ralph.Paths(pathlib.Path(tmp)), q), 1)
-
-    def test_a_queue_never_marked_through_git_keeps_the_positional_count(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            git_repo(tmp)
-            q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n")
-            commit_all(tmp, "seed")
-            self.assertEqual(ralph.units_since_audit(ralph.Paths(pathlib.Path(tmp)), q), 2)
-
-    def test_counts_from_the_top_when_no_audit_has_run(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n"
-                                "- [ ] u-3 — depends []\n")
-            self.assertEqual(q.units_since_audit(), 2)
-
-    def test_the_generated_row_parses_and_lands_above_the_named_row(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            q = self.queue(tmp, "# queue\n- [x] u-1 abcdef1 — depends []\n\n"
-                                "- [ ] u-2 — depends [u-1] — do it\n")
-            line = ralph.audit_row("REVIEW-audit-u-auto-1", "u-1")
-            q.insert_before("u-2", line)
-            self.assertEqual([r.id for r in q.rows], ["u-1", "REVIEW-audit-u-auto-1", "u-2"])
-            row = ralph.Queue(q.path).by_id()["REVIEW-audit-u-auto-1"]      # from the file
-            self.assertEqual((row.status, row.deps, row.hash, row.line),
-                             (ralph.Status.PENDING, ("u-1",), None, line))
-            self.assertTrue(ralph.is_review(row))
-            self.assertIn(ralph.AUDIT_ROW_BODY, line)
-            self.assertRegex(line, r" — read: `docs/ARCH_PRINCIPLES.md` — check: LINT$")
-            self.assertEqual(q.path.read_text().splitlines()[0], "# queue")
-            self.assertEqual(q.current().id, "REVIEW-audit-u-auto-1")
-
-
-MANIFEST = """\
-label = "alpha"
-session_timeout = 7200
-worker_bin = "scripts/ralph-claude-shim.sh"
-settings = "ralph/claude-settings.json"
-
-[models]
-worker = "w/x"
-review = "r/y"
-resolve = "d/z"
-variant = "high"
-
-[checks]
-hello = ["sh", "-c", "echo from-a"]
-"""
-
-
-class QueueManifestTests(unittest.TestCase):
-    def test_loads_every_key_and_defaults_the_paths_from_the_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/next/a/queue.toml", MANIFEST)
-            m = ralph.load_manifest(tmp, "a")
-            self.assertEqual((m.name, m.label), ("a", "alpha"))
-            self.assertEqual(m.state, "ralph/next/a/STATE.md")
-            self.assertEqual(m.prompt, "ralph/next/a/PROMPT.md")
-            self.assertEqual(m.charter, "ralph/next/a/CHARTER.md")
-            self.assertEqual(m.conflicts, "ralph/next/a/conflicts.txt")
-            self.assertEqual(m.heavy, "ralph/next/a/heavy.txt")
-            self.assertEqual(m.control_dir, "ralph/next/a/ctl")
-            self.assertEqual(m.models, {"MODEL": "w/x", "REVIEW_MODEL": "r/y",
-                                        "RESOLVE_MODEL": "d/z", "VARIANT": "high"})
-            self.assertEqual(m.checks, {"hello": ("sh", "-c", "echo from-a")})
-            self.assertEqual(m.session_timeout, 7200)
-            self.assertEqual(m.worker_bin, "scripts/ralph-claude-shim.sh")
-            self.assertEqual(m.settings, "ralph/claude-settings.json")
-
-    def test_an_empty_manifest_is_all_defaults(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/next/b/queue.toml", "")
-            m = ralph.load_manifest(tmp, "b")
-            self.assertEqual(m.label, "b")
-            self.assertEqual((m.models, m.checks, m.session_timeout, m.worker_bin),
-                             ({}, {}, None, ""))
-
-    def test_a_missing_manifest_is_refused_by_path(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(ValueError, "ralph/next/ghost/queue.toml"):
-                ralph.load_manifest(tmp, "ghost")
-
-    def test_schema_errors_name_the_key(self):
-        bad = {"lable = 'x'\n": "lable",
-               "[models]\nworkr = 'x'\n": "workr",
-               "[checks]\nhello = 'echo hi'\n": "hello",
-               "[checks]\nlint = ['true']\n": "lint",
-               "session_timeout = 'long'\n": "session_timeout",
-               "audit_every = 1\n": "`audit_every` must be an integer >= 2",
-               "audit_every = 'six'\n": "`audit_every` must be an integer >= 2",
-               "audit_every = true\n": "`audit_every` must be an integer >= 2"}
-        for text, key in bad.items():
-            with tempfile.TemporaryDirectory() as tmp:
-                write(tmp, "ralph/next/a/queue.toml", text)
-                with self.assertRaisesRegex(ValueError, key):
-                    ralph.load_manifest(tmp, "a")
-
-    def test_audit_every_is_optional_and_loads_as_an_integer(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/next/a/queue.toml", "audit_every = 2\n")
-            write(tmp, "ralph/next/b/queue.toml", "")
-            self.assertEqual(ralph.load_manifest(tmp, "a").audit_every, 2)
-            self.assertIsNone(ralph.load_manifest(tmp, "b").audit_every)
-
-    def test_dispatch_requires_loads_as_a_tuple_and_refuses_a_bad_type(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/next/a/queue.toml", "dispatch_requires = ['trial:', 'finish:']\n")
-            self.assertEqual(ralph.load_manifest(tmp, "a").dispatch_requires,
-                             ("trial:", "finish:"))
-            for bad in ("dispatch_requires = 'trial:'\n", "dispatch_requires = ['']\n"):
-                write(tmp, "ralph/next/b/queue.toml", bad)
-                with self.assertRaisesRegex(ValueError, "dispatch_requires"):
-                    ralph.load_manifest(tmp, "b")
-
-    def test_a_name_is_one_path_segment(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            for name in ("../x", "a/b", ""):
-                with self.assertRaises(ValueError):
-                    ralph.load_manifest(tmp, name)
-
-
-class ModelTests(unittest.TestCase):
-    def test_load_and_review_routing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            p = write(tmp, "ralph/models.env",
-                      "# comment\nMODEL=w/x\nREVIEW_MODEL=r/y\nRESOLVE_MODEL=d/z\nVARIANT=high\nOTHER=z\n")
-            m = ralph.load_models(p)
-            self.assertEqual(m, {"MODEL": "w/x", "REVIEW_MODEL": "r/y",
-                                 "RESOLVE_MODEL": "d/z", "VARIANT": "high"})
-            self.assertEqual(ralph.select_model_args("dm-x", "w", "r", "high"),
-                             ["--model", "w", "--variant", "high"])
-            self.assertEqual(ralph.select_model_args("REVIEW-build-x", "w", "r", "high"),
-                             ["--model", "r", "--variant", "high"])
-
-    def test_roster_values_parse_and_wait_limit_loads(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            p = write(tmp, "ralph/models.env",
-                      "MODEL=a/1, b/2,,\nREVIEW_MODEL=r/1\nWAIT_LIMIT_S=43200\n")
-            m = ralph.load_models(p)
-            self.assertEqual(m, {"MODEL": "a/1, b/2,,", "REVIEW_MODEL": "r/1",
-                                 "WAIT_LIMIT_S": "43200"})
-            self.assertEqual(ralph.parse_roster(m["MODEL"]), ["a/1", "b/2"])
-            self.assertEqual(ralph.parse_roster(""), [])
-            self.assertEqual(ralph.parse_roster(None), [])
-
-    def test_a_models_rewrite_preserves_wait_limit_s(self):
-        # `models` rewrites models.env wholesale; dropping WAIT_LIMIT_S there
-        # would silently revert the wait limit to the default (never silently
-        # substitute).
-        with tempfile.TemporaryDirectory() as tmp:
-            p = write(tmp, "ralph/models.env", "MODEL=w/x\nWAIT_LIMIT_S=86400\n")
-            rc, out, _ = quiet_main(["models", "--workdir", tmp, "--model", "n/y",
-                                     "--no-restart"])
-            self.assertEqual(rc, 0)
-            text = p.read_text()
-            self.assertIn("MODEL=n/y", text)
-            self.assertIn("WAIT_LIMIT_S=86400", text)
-            self.assertIn("WAIT_LIMIT_S=86400", out)
-
-
-class WaitLimitTests(unittest.TestCase):
-    """WAIT_LIMIT_S in models.env configures the detached-wait limit (default
-    raised 7200 -> 86400): full gates legitimately exceed 2h on this box and
-    every such wait was a false "never wrote its marker" halt."""
-
-    def resolved(self, tmp, *extra):
-        args = ralph.build_parser().parse_args(["run", "--workdir", tmp, *extra])
-        return args, ralph.resolve_wait_limit(args, ralph.paths_for(args))
-
-    def test_wait_limit_s_is_read_and_honored(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
-            write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
-            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=120\n")
-            w = write(tmp, "ralph/waiting", "never.done\n")
-            old = time.time() - 3600          # past 120s, well under the old 7200
-            os.utime(w, (old, old))
-            args, limit = self.resolved(tmp)
-            self.assertEqual(limit, 120)
-            paths = ralph.paths_for(args)
-            c = ralph.Campaign(paths, session_run=lambda *a: 0, notify_enabled=False,
-                               sleep=lambda s: None, marker_timeout=limit)
-            result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("never.done", result.reason)
-
-    def test_without_wait_limit_s_the_default_is_a_day_not_two_hours(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
-            write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
-            w = write(tmp, "ralph/waiting", "never.done\n")
-            old = time.time() - 7800          # past the old 7200, under 86400
-            os.utime(w, (old, old))
-
-            def tick(secs):                   # the detached run lands on the first poll
-                write(tmp, "never.done", "")
-
-            def session(*a):
-                write(tmp, "ralph/DONE", "")
-                return 0
-            args, limit = self.resolved(tmp)
-            self.assertEqual(limit, 86400)
-            c = ralph.Campaign(ralph.paths_for(args), session_run=session,
-                               notify_enabled=False, sleep=tick, marker_timeout=limit)
-            self.assertEqual(c.run().outcome, ralph.Outcome.DONE)
-
-    def test_an_explicit_marker_timeout_flag_wins_over_models_env(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=120\n")
-            _, limit = self.resolved(tmp, "--marker-timeout", "60")
-            self.assertEqual(limit, 60)
-
-    def test_a_bad_wait_limit_s_is_refused_by_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=soon\n")
-            with self.assertRaisesRegex(ValueError, "WAIT_LIMIT_S='soon'"):
-                self.resolved(tmp)
-            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=0\n")
-            with self.assertRaisesRegex(ValueError, "WAIT_LIMIT_S=0"):
-                self.resolved(tmp)
-
-
-class ModelPrecedenceTests(unittest.TestCase):
-    def resolved(self, tmp, argv):
-        args = ralph.build_parser().parse_args(argv)
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            paths = ralph.paths_for(args)
-            models = ralph.resolve_models(args, paths)
-        return args, models, buf.getvalue()
-
-    def test_manifest_then_flag_then_models_env(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/next/a/queue.toml",
-                  'session_timeout = 7200\n[models]\nworker = "m/worker"\nvariant = "high"\n')
-            write(tmp, "ralph/models.env", "MODEL=e/worker\nREVIEW_MODEL=e/review\n"
-                                           "RESOLVE_MODEL=e/resolve\nVARIANT=low\n")
-            args, models, said = self.resolved(
-                tmp, ["supervise", "--workdir", tmp, "--queue", "a", "--model", "f/worker",
-                      "--review-model", "f/review", "--session-timeout", "60"])
-            self.assertEqual(models, {"MODEL": "m/worker", "REVIEW_MODEL": "f/review",
-                                      "RESOLVE_MODEL": "e/resolve", "VARIANT": "high"})
-            self.assertEqual(args.session_timeout, 7200)
-            self.assertIn("ignoring --model f/worker", said)
-            self.assertIn("ignoring --session-timeout 60", said)
-
-    def test_a_legacy_line_is_flag_then_models_env(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/models.env", "MODEL=e/worker\nREVIEW_MODEL=e/review\n")
-            args, models, said = self.resolved(
-                tmp, ["run", "--workdir", tmp, "--model", "f/worker", "--session-timeout", "7200"])
-            self.assertEqual(models, {"MODEL": "f/worker", "REVIEW_MODEL": "e/review",
-                                      "RESOLVE_MODEL": "", "VARIANT": ""})
-            self.assertEqual((args.session_timeout, said), (7200, ""))
-
-    def test_models_with_a_queue_rewrites_the_manifest_and_not_the_shared_file(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            manifest = write(tmp, "ralph/next/a/queue.toml",
-                             '# the a queue\nlabel = "alpha"\n\n[models]\n'
-                             'worker = "old/worker"  # was cheap\nvariant = "high"\n\n'
-                             '[checks]\nhello = ["echo", "hi"]\n')
-            write(tmp, "ralph/next/b/queue.toml", 'label = "beta"\n')
-            rc, out, _ = quiet_main(["models", "--workdir", tmp, "--queue", "a",
-                                     "--model", "new/worker", "--review-model", 'r/"q"'])
-            self.assertEqual(rc, 0)
-            self.assertIn("ralph/next/a/queue.toml", out)
-            self.assertFalse((pathlib.Path(tmp) / "ralph/models.env").exists())
-            text = manifest.read_text()
-            self.assertIn("# the a queue\n", text)
-            self.assertIn('[checks]\nhello = ["echo", "hi"]\n', text)
-            self.assertNotIn("old/worker", text)
-            m = ralph.load_manifest(tmp, "a")
-            self.assertEqual(m.models, {"MODEL": "new/worker", "REVIEW_MODEL": 'r/"q"',
-                                        "VARIANT": "high"})
-            self.assertEqual((m.label, m.checks), ("alpha", {"hello": ("echo", "hi")}))
-            quiet_main(["models", "--workdir", tmp, "--queue", "b", "--resolve-model", "d/z"])
-            self.assertEqual(ralph.load_manifest(tmp, "b").models, {"RESOLVE_MODEL": "d/z"})
-            self.assertEqual(ralph.load_manifest(tmp, "b").label, "beta")
-
-
-class ResolverPromptTests(unittest.TestCase):
-    def test_without_charter_the_resolver_defers(self):
-        paths = ralph.Paths(pathlib.Path("/tmp/x"))
-        prompt = ralph.resolver_prompt(paths, 1, 4, "blocked")
-        self.assertIn("leave", prompt)
-        self.assertNotIn("DIRECTOR", prompt)
-
-    def test_with_charter_the_resolver_decides(self):
-        paths = ralph.Paths(pathlib.Path("/tmp/x"))
-        prompt = ralph.resolver_prompt(paths, 1, 4, "blocked", charter="# charter body")
-        self.assertIn("DIRECTOR", prompt)
-        self.assertIn("# charter body", prompt)
-        self.assertIn("DECISIONS.md", prompt)
-
-
-class ReportTests(unittest.TestCase):
-    def test_report_prints_queue_decisions_and_ranges(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [x] dm-a abc1234 — depends [] — done\n- [ ] dm-b — depends []\n")
-            write(tmp, "ralph/DECISIONS.md",
-                  "- 2026-09-16 dm-b: chose X. REVIEW-AFTER: no\n")
-            write(tmp, "ralph/.director-commits",
-                  "1789500000 attempt=1 deadbee..cafe123 — blocker\n")
-            subprocess.run(["git", "init", "-q", tmp], check=True)
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                ralph.main(["report", "--workdir", tmp])
-            out = buf.getvalue()
-            self.assertIn("done 1", out)
-            self.assertIn("REVIEW-AFTER", out)
-            self.assertIn("deadbee..cafe123", out)
-
-
-class PromoteTests(unittest.TestCase):
-    STAGED = "- [ ] h-a — depends [] — do a\n- [ ] h-b — depends [h-a] — do b\n"
-
-    def active_and_staged(self, tmp, markers=("DONE",), beat_age=None):
-        write(tmp, "ralph/STATE.md", "- [x] dm-a abc1234 — depends [] — done\n")
-        write(tmp, "ralph/PROMPT.md", "old prompt\n")
-        write(tmp, "ralph/DECISIONS.md", "- old decision\n")
-        write(tmp, "ralph/lanes/dm-a.done", "")
-        write(tmp, "ralph/models.env", "MODEL=x\n")
-        for m in markers:
-            write(tmp, f"ralph/{m}", "")
-        if beat_age is not None:
-            beat = write(tmp, "ralph/.heartbeat", "1 session\n")
-            then = time.time() - beat_age
-            os.utime(beat, (then, then))
-        write(tmp, "ralph/next/handed/STATE.md", self.STAGED)
-        write(tmp, "ralph/next/handed/PROMPT.md", "new prompt\n")
-
-    def promote(self, tmp, *extra):
-        err = io.StringIO()
-        with mock.patch.object(ralph, "job_running", return_value=False), \
-                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
-            rc = ralph.main(["promote", "handed", "--workdir", tmp, *extra])
-        return rc, err.getvalue()
-
-    def test_dry_run_parses_the_staged_queue_and_moves_nothing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.active_and_staged(tmp)
-            rc, _ = self.promote(tmp, "--dry-run")
-            self.assertEqual(rc, 0)
-            self.assertEqual((pathlib.Path(tmp) / "ralph/PROMPT.md").read_text(), "old prompt\n")
-
-    def test_refuses_while_a_loop_is_live(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.active_and_staged(tmp, markers=("STOP",), beat_age=5)
-            rc, err = self.promote(tmp)
-            self.assertEqual(rc, 2)
-            self.assertIn("still live", err)
-            self.assertTrue((pathlib.Path(tmp) / "ralph/next/handed/STATE.md").exists())
-
-    def test_refuses_a_campaign_that_neither_finished_nor_was_stopped(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.active_and_staged(tmp, markers=())
-            rc, err = self.promote(tmp)
-            self.assertEqual(rc, 2)
-            self.assertIn("neither DONE nor an operator STOP", err)
-
-    def test_promotes_archives_the_old_campaign_and_keeps_host_files(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.active_and_staged(tmp, markers=("DONE",), beat_age=STALE)
-            rc, _ = self.promote(tmp)
-            self.assertEqual(rc, 0)
-            root = pathlib.Path(tmp)
-            self.assertEqual((root / "ralph/STATE.md").read_text(), self.STAGED)
-            self.assertFalse((root / "ralph/DONE").exists())
-            self.assertFalse((root / "ralph/next/handed").exists())
-            self.assertFalse((root / "ralph/lanes").exists())
-            self.assertEqual((root / "ralph/models.env").read_text(), "MODEL=x\n")
-            (archive,) = (root / "ralph/archive").iterdir()
-            self.assertEqual((archive / "DECISIONS.md").read_text(), "- old decision\n")
-            self.assertTrue((archive / "lanes/dm-a.done").exists())
-
-    def test_report_names_a_staged_queue_that_does_not_parse(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.active_and_staged(tmp)
-            write(tmp, "ralph/next/handed/STATE.md",
-                  "- [ ] h-a — depends [nope] — do a\n")
-            subprocess.run(["git", "init", "-q", tmp], check=True)
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                ralph.main(["report", "--workdir", tmp])
-            self.assertIn("DOES NOT PARSE", buf.getvalue())
-
-    def test_report_names_the_next_campaign(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.active_and_staged(tmp)
-            subprocess.run(["git", "init", "-q", tmp], check=True)
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                ralph.main(["report", "--workdir", tmp])
-            self.assertIn("next up: handed (2 rows", buf.getvalue())
-
-
-STALE = ralph.STALL_SECS + 60
-
-
-class CampaignTests(unittest.TestCase):
-    def make(self, tmp, rows, *, session_run, max_stall=3, max_iter=10,
-             marker_timeout=60):
-        write(tmp, "ralph/STATE.md", rows)
-        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
-        paths = ralph.Paths(pathlib.Path(tmp))
-        return ralph.Campaign(paths, session_run=session_run, notify_enabled=False,
-                              sleep=lambda s: None, max_stall=max_stall,
-                              max_iter=max_iter, marker_timeout=marker_timeout)
-
-    def test_no_ready_unit_halts(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            c = self.make(tmp, "- [ ] dm-a — depends [dm-b]\n- [ ] dm-b — depends [dm-a]\n",
-                          session_run=lambda *a: 0)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("no ready unit", result.reason)
-            self.assertTrue((pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").exists())
-
-    def test_a_queue_whose_rows_are_all_done_is_done_not_halted(self):
-        # svrngs U1 and U2 (2026-10-04) each ended in "no ready unit", a
-        # NEEDS_HUMAN and a resolution session whose only act was writing DONE.
-        with tempfile.TemporaryDirectory() as tmp:
-            calls = []
-            c = self.make(tmp, "- [x] dm-a abc1234 — depends []\n- [x] dm-b def5678 — depends [dm-a]\n",
-                          session_run=lambda *a: calls.append(a) or 0)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertEqual(calls, [])
-            self.assertTrue((pathlib.Path(tmp) / "ralph/DONE").exists())
-            self.assertFalse((pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").exists())
-
-    def test_an_empty_queue_halts_rather_than_reads_as_done(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            c = self.make(tmp, "", session_run=lambda *a: 0)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertFalse((pathlib.Path(tmp) / "ralph/DONE").exists())
-            # Queueing orders is the operator's: under the supervisor this stops
-            # at once instead of cooling down as a loop block would.
-            self.assertEqual(ralph.operator_only(pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md"),
-                             "queueing orders")
-
-    def test_the_unit_note_names_the_queue_it_was_launched_on(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            seen = []
-            c = self.make(tmp, "", session_run=lambda args, prompt, log: seen.append(prompt),
-                          max_stall=1)
-            write(tmp, "ralph/next/x/STATE.md", "- [ ] qx-1 — depends []\n")
-            c.paths.state = "ralph/next/x/STATE.md"
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                c.run()
-            self.assertIn("its row in ralph/next/x/STATE.md is", seen[0])
-
-    def test_stall_halts_after_max_stall(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            c = self.make(tmp, "- [ ] dm-a — depends []\n",
-                          session_run=lambda *a: 0, max_stall=2)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("without a commit", result.reason)
-
-    def _quota_session(self, tmp, heads, calls, *, limited_sessions=1):
-        """A session whose first `limited_sessions` runs end on the plan's
-        usage limit with no commit; the next one commits and finishes."""
-        def session(args, prompt, log):
-            calls.append(log)
-            pathlib.Path(log).parent.mkdir(parents=True, exist_ok=True)
-            if len(calls) <= limited_sessions:
-                pathlib.Path(log).write_text("working...\nYou've hit your usage limit · resets 3am\n")
-            else:
-                heads["h"] = "b" * 40
-                write(tmp, "ralph/DONE", "")
-        return session
-
-    def test_a_usage_limit_waits_and_redispatches_the_unit_without_a_stall(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            heads, calls = {"h": "a" * 40}, []
-            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
-                          marker_timeout=24 * 3600,
-                          session_run=self._quota_session(tmp, heads, calls))
-            c.model = "m"
-            probes = iter([(False, "usage limit"), (False, "usage limit"), (True, "")])
-            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
-                    mock.patch.object(ralph, "probe_model", side_effect=lambda *a, **k: next(probes)):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertEqual(len(calls), 2)
-
-    def test_a_quota_shaped_tail_the_probe_answers_is_still_a_stall(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            heads, calls = {"h": "a" * 40}, []
-            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
-                          session_run=self._quota_session(tmp, heads, calls, limited_sessions=9))
-            c.model = "m"
-            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
-                    mock.patch.object(ralph, "probe_model", return_value=(True, "")):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("without a commit", result.reason)
-
-    def test_a_usage_limit_that_outlasts_the_wait_limit_halts_naming_it(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            heads, calls = {"h": "a" * 40}, []
-            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
-                          marker_timeout=2 * ralph.QUOTA_POLL_S,
-                          session_run=self._quota_session(tmp, heads, calls, limited_sessions=9))
-            c.model = "m"
-            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
-                    mock.patch.object(ralph, "probe_model", return_value=(False, "usage limit")):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("usage limit did not clear", result.reason)
-            self.assertEqual(len(calls), 1)
-
-    def test_commit_progresses_to_done(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            heads = {"h": "a" * 40}
-
-            def session(*a):
-                heads["h"] = "b" * 40
-                write(tmp, "ralph/DONE", "")
-                return 0
-            c = self.make(tmp, "- [ ] dm-a — depends []\n", session_run=session,
-                          max_stall=1)
-            with mock.patch.object(ralph, "head_of", side_effect=lambda wd: heads["h"]):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-
-    def test_ready_human_halts(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            c = self.make(tmp, "- [ ] HUMAN-design-review — depends []\n",
-                          session_run=lambda *a: 0)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("HUMAN-design-review", result.reason)
-
-    def test_a_ready_human_row_is_skipped_and_the_next_ready_row_dispatches(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            seen = []
-            c = self.make(tmp, "- [ ] HUMAN-read — depends []\n- [ ] dm-b — depends []\n",
-                          session_run=lambda a, p, l: seen.append(p), max_stall=1)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                c.run()
-            self.assertEqual(len(seen), 1)
-            self.assertIn("Your unit: dm-b", seen[0])
-
-    def test_only_waiting_rows_ready_halts_operator_only_and_names_them(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ran = []
-            c = self.make(tmp, "- [ ] HUMAN-read — depends []\n- [ ] dm-p — depends []\n"
-                               "- [ ] dm-q — depends [dm-p]\n",
-                          session_run=lambda *a: ran.append(a))
-            write(tmp, "ralph/parked/dm-p.md", "# bar missed\n")
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("HUMAN-read, dm-p", result.reason)
-            self.assertEqual(ran, [])
-            self.assertIsNotNone(ralph.operator_only(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")))
-
-    def test_a_row_added_after_the_freeze_waits_and_splits_and_audits_do_not(self):
-        # phase-b-32: rows grew 26 -> 76 while 30 closed; a new row is the operator's.
-        with tempfile.TemporaryDirectory() as tmp:
-            seen = []
-            rows = ("- [ ] pb-new — depends []\n- [ ] pb-a-half — depends []\n"
-                    "- [ ] REVIEW-audit-q-1 — depends []\n")
-            c = self.make(tmp, rows, session_run=lambda a, p, l: seen.append(p), max_stall=1)
-            write(tmp, "ralph/next/q/queue.toml", 'scope_file = "ralph/scope.txt"\n')
-            write(tmp, "ralph/scope.txt", "pb-a  # the frozen set\n")
-            c.paths.manifest = ralph.load_manifest(tmp, "q")
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            self.assertEqual(ralph.out_of_scope(c.paths, q), frozenset({"pb-new"}))
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                c.run()
-            self.assertIn("Your unit: pb-a-half", seen[0])
-
-    def test_the_unit_note_names_the_parked_rows(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            seen = []
-            c = self.make(tmp, "- [ ] dm-p — depends []\n- [ ] dm-b — depends []\n",
-                          session_run=lambda a, p, l: seen.append(p), max_stall=1)
-            write(tmp, "ralph/parked/dm-p.md", "# bar missed\n")
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                c.run()
-            self.assertIn("Your unit: dm-b", seen[0])
-            self.assertIn("do not open them: dm-p", seen[0])
-
-    def with_requires(self, c, tmp, requires):
-        write(tmp, "ralph/next/q/queue.toml", f"dispatch_requires = {requires!r}\n")
-        c.paths.manifest = ralph.load_manifest(tmp, "q")
-        return c
-
-    def test_a_work_row_without_its_census_is_refused_by_name_and_never_runs(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ran = []
-            rows = ("- [ ] pb-a — depends [] — OUTCOME: x\n  - finish: edge a\n"
-                    "- [ ] pb-b — depends [] — OUTCOME: y\n  - trial: COMPILE ok\n")
-            c = self.with_requires(self.make(tmp, rows, session_run=lambda *a: ran.append(a)),
-                                   tmp, ["trial:"])
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("pb-a", result.reason)
-            self.assertIn("'trial:'", result.reason)
-            self.assertEqual(ran, [])
-
-    def test_a_row_carrying_its_markers_dispatches_and_the_next_rows_do_not_lend_theirs(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            seen = []
-            rows = ("- [ ] pb-a — depends [] — OUTCOME: x\n  - trial: COMPILE ok\n"
-                    "- [ ] pb-b — depends [] — OUTCOME: y\n")
-            c = self.with_requires(self.make(tmp, rows, max_stall=1,
-                                             session_run=lambda a, p, l: seen.append(p)),
-                                   tmp, ["trial:"])
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                c.run()
-            self.assertEqual(len(seen), 1)
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            self.assertEqual(q.unmet_requirements(q.by_id()["pb-b"], ("trial:",)), ["trial:"])
-
-    def test_reviews_and_human_rows_are_exempt_from_dispatch_requires(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md", "- [ ] REVIEW-x — depends []\n"
-                                         "- [ ] HUMAN-y — depends []\n")
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            for rid in ("REVIEW-x", "HUMAN-y"):
-                self.assertEqual(q.unmet_requirements(q.by_id()[rid], ("trial:",)), [])
-
-    def test_stop_file_is_operator_stop(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STOP", "")
-            c = self.make(tmp, "- [ ] dm-a — depends []\n", session_run=lambda *a: 0)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.OPERATOR_STOP)
-
-    def test_stale_marker_halts(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            w = write(tmp, "ralph/waiting", "never.done\n")
-            old = time.time() - 7200
-            os.utime(w, (old, old))
-            c = self.make(tmp, "- [ ] dm-a — depends []\n", session_run=lambda *a: 0,
-                          marker_timeout=60)
-            result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("never.done", result.reason)
-
-    def test_present_marker_resumes(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/waiting", "ralph/job.done\n")
-            write(tmp, "ralph/job.done", "")
-
-            def session(*a):
-                write(tmp, "ralph/DONE", "")
-                return 0
-            c = self.make(tmp, "- [ ] dm-a — depends []\n", session_run=session)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                result = c.run()
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertFalse((pathlib.Path(tmp) / "ralph/waiting").exists())
-
-
-class WaitingMarkerTests(unittest.TestCase):
-    """The marker is the first line's, never one the notes below it mention,
-    and never a done marker the loop writes itself (ersilia r12-real-sweep,
-    2026-10-03: a waiting file whose first line was prose and whose notes
-    ended "then ralph/lanes/r12-real-sweep.done" held the lane on the marker
-    only its own resumed session writes, after the field run had landed its
-    real one)."""
-
-    def test_a_marker_named_only_in_the_notes_is_not_waited_on(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            w = write(tmp, "ralph/waiting",
-                      "the field run is in flight, detached\non resume read ralph/job.done\n")
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertIsNone(ralph.waiting_marker(tmp, "ralph/waiting"))
-            self.assertFalse(w.exists())
-
-    def test_the_first_line_names_the_marker_and_the_notes_follow(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/waiting",
-                  "waiting on ralph/field-x.done — health check #3\nthen ralph/other.done\n")
-            _, marker = ralph.waiting_marker(tmp, "ralph/waiting")
-            self.assertEqual(marker, pathlib.Path(tmp) / "ralph/field-x.done")
-
-    def test_a_lane_done_marker_is_refused_by_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            w = write(tmp, "ralph/waiting", "ralph/lanes/dm-a.done\n")
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertIsNone(ralph.waiting_marker(tmp, "ralph/waiting"))
-            self.assertIn("ralph/lanes/dm-a.done", out.getvalue())
-            self.assertFalse(w.exists())
-
-
-class MainTreeWaitTests(unittest.TestCase):
-    def test_a_main_tree_wait_older_than_the_last_boot_resumes(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            w = write(tmp, "ralph/waiting", "ralph/job.done\n")
-            started = time.time() - 1000
-            os.utime(w, (started, started))
-            paths = ralph.Paths(pathlib.Path(tmp))
-            with mock.patch.object(ralph, "machine_boot_time", return_value=started + 500), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                self.assertIsNone(ralph.wait_for_marker(paths, 86400))
-            self.assertFalse(w.exists())
-
-
-class TwoQueueControlTests(unittest.TestCase):
-    """Two loops in one checkout share no control file."""
-
-    def campaign(self, tmp, name, seen):
-        paths = ralph.paths_for(ralph.build_parser().parse_args(
-            ["run", "--workdir", tmp, "--queue", name]))
-        return ralph.Campaign(paths, notify_enabled=False, sleep=lambda s: None, max_stall=1,
-                              session_run=lambda args, prompt, log: seen.append((name, prompt, log)))
-
-    def test_stop_in_a_stops_a_and_not_b_and_a_stale_done_ends_neither(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            write(tmp, "ralph/DONE", "")            # the finished campaign's leftover
-            write(tmp, "ralph/next/a/ctl/STOP", "")
-            seen = []
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                ra = self.campaign(tmp, "a", seen).run()
-                rb = self.campaign(tmp, "b", seen).run()
-            self.assertEqual(ra.outcome, ralph.Outcome.OPERATOR_STOP)
-            self.assertEqual(rb.outcome, ralph.Outcome.HALT)       # b ran its session and stalled
-            self.assertEqual([name for name, _, _ in seen], ["b"])
-            _, prompt, log = seen[0]
-            self.assertIn("ralph/next/b/ctl/NEEDS_HUMAN.md", prompt)
-            self.assertIn("target/ralph/b/", log)
-            root = pathlib.Path(tmp)
-            self.assertIn("without a commit", (root / "ralph/next/b/ctl/NEEDS_HUMAN.md").read_text())
-            self.assertTrue((root / "ralph/next/b/ctl/.heartbeat").exists())
-            self.assertFalse((root / "ralph/NEEDS_HUMAN.md").exists())
-            self.assertFalse((root / "ralph/STOP").exists())
-
-    def test_watch_stop_and_report_read_the_queues_markers(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            write(tmp, "ralph/next/a/ctl/NEEDS_HUMAN.md", "# a is blocked\n")
-            pa, pb = (ralph.paths_for(ralph.build_parser().parse_args(
-                ["watch", "--workdir", tmp, "--queue", q])) for q in ("a", "b"))
-            wa = ralph.Watch(pa, label="a", running=lambda: True, disk_free_mb=lambda: 99999)
-            wb = ralph.Watch(pb, label="b", running=lambda: True, disk_free_mb=lambda: 99999)
-            self.assertTrue(wa.condition()[0].startswith("needs-human:"))
-            self.assertIsNone(wb.condition())
-            with mock.patch.object(ralph, "job_running", return_value=False):
-                rc, _, _ = quiet_main(["stop", "--workdir", tmp, "--queue", "b", "--timeout", "1"])
-            self.assertEqual(rc, 0)
-            self.assertTrue((pathlib.Path(tmp) / "ralph/next/b/ctl/STOP").exists())
-            self.assertFalse((pathlib.Path(tmp) / "ralph/STOP").exists())
-            _, out, _ = quiet_main(["report", "--workdir", tmp, "--queue", "a"])
-            self.assertIn("markers: NEEDS_HUMAN.md", out)
-
-
-SCRIPTS = pathlib.Path(os.environ.get("RALPH_TEST_SCRIPTS")
-                       or pathlib.Path(__file__).resolve().parents[1])
-
-
-def git_repo(tmp):
-    subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
-    subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
-    subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
-
-
-def commit_all(tmp, msg="seed"):
-    subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-    subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", msg], check=True)
-    return subprocess.run(["git", "-C", tmp, "rev-parse", "--short", "HEAD"],
-                          capture_output=True, text=True).stdout.strip()
-
-
-def install_script(tmp, name):
-    dst = pathlib.Path(tmp) / "scripts" / name
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    dst.write_text((SCRIPTS / name).read_text())
-    dst.chmod(0o755)
-    return dst
-
-
-def stub_worker(tmp, body):
-    """A worker binary that spends no tokens: `<bin> run [flags] <prompt>` runs `body`."""
-    stub = write(tmp, "stub-worker.sh", "#!/usr/bin/env bash\n" + body)
-    stub.chmod(0o755)
-    return stub
-
-
-class SessionEnvTests(unittest.TestCase):
-    def run_session(self, tmp, argv):
-        args = ralph.build_parser().parse_args(argv)
-        paths = ralph.paths_for(args)
-        session = ralph.Session(paths, timeout=20, poll=0.2, notify_enabled=False)
-        with contextlib.redirect_stdout(io.StringIO()):
-            rc = session.run([], "the prompt", str(pathlib.Path(tmp) / "target/out.log"))
-        return rc, (pathlib.Path(tmp) / "env.txt").read_text().split("|")
-
-    DUMP = ('printf "%s|%s|%s|%s" "$RALPH_QUEUE" "$RALPH_STATE" "$RALPH_CONTROL_DIR" '
-            '"${RALPH_CLAUDE_SETTINGS:-}" > env.txt\n')
-
-    def test_a_queue_session_is_told_its_queue_state_and_control_dir(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = str(pathlib.Path(tmp).resolve())
-            git_repo(tmp)
-            stub_worker(tmp, self.DUMP)
-            write(tmp, "ralph/next/a/queue.toml",
-                  'worker_bin = "./stub-worker.sh"\nsettings = "ralph/next/a/settings.json"\n')
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": "/nonexistent/worker"}):
-                rc, env = self.run_session(tmp, ["run", "--workdir", tmp, "--queue", "a"])
-            self.assertEqual(rc, 0)
-            self.assertEqual(env, ["a", "ralph/next/a/STATE.md", "ralph/next/a/ctl",
-                                   f"{tmp}/ralph/next/a/settings.json"])
-
-    def test_a_legacy_session_is_told_its_state_too(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            git_repo(tmp)
-            stub = stub_worker(tmp, self.DUMP)
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(stub),
-                                              "RALPH_QUEUE": "leaked-from-a-parent-loop"}):
-                rc, env = self.run_session(
-                    tmp, ["run", "--workdir", tmp, "--state", "ralph/next/ring-room/STATE.md"])
-            self.assertEqual(rc, 0)
-            self.assertEqual(env, ["", "ralph/next/ring-room/STATE.md", "ralph", ""])
-
-
-class RalphMarkTests(unittest.TestCase):
-    ROWS = "- [~] qa-1 — depends [] — do it\n- [ ] qa-2 — depends [qa-1] — next\n"
-
-    def fixture(self, tmp):
-        git_repo(tmp)
-        install_script(tmp, "ralph-mark.sh")
-        write(tmp, "ralph/next/a/STATE.md", self.ROWS)
-        write(tmp, "ralph/next/b/STATE.md", self.ROWS)
-        return commit_all(tmp)
-
-    def mark(self, tmp, *argv, state_env=None):
-        env = {k: v for k, v in os.environ.items() if k != "RALPH_STATE"}
-        if state_env is not None:
-            env["RALPH_STATE"] = state_env
-        return subprocess.run([str(pathlib.Path(tmp) / "scripts/ralph-mark.sh"), *argv],
-                              capture_output=True, text=True, env=env)
-
-    def test_the_explicit_third_argument_still_works_and_wins(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            sha = self.fixture(tmp)
-            r = self.mark(tmp, "qa-1", sha, "ralph/next/a/STATE.md",
-                          state_env="ralph/next/b/STATE.md")
-            self.assertEqual(r.returncode, 0, r.stderr)
-            root = pathlib.Path(tmp)
-            self.assertIn(f"- [x] qa-1 {sha} — depends", (root / "ralph/next/a/STATE.md").read_text())
-            self.assertEqual((root / "ralph/next/b/STATE.md").read_text(), self.ROWS)
-
-    def test_ralph_state_names_the_queue_when_no_argument_does(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            sha = self.fixture(tmp)
-            r = self.mark(tmp, "qa-1", sha, state_env="ralph/next/b/STATE.md")
-            self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertIn(f"- [x] qa-1 {sha}",
-                          (pathlib.Path(tmp) / "ralph/next/b/STATE.md").read_text())
-
-    def test_no_argument_and_no_ralph_state_is_refused(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            sha = self.fixture(tmp)
-            write(tmp, "ralph/next/ring-doc/STATE.md", self.ROWS)   # the old default's path
-            r = self.mark(tmp, "qa-1", sha)
-            self.assertEqual(r.returncode, 2)
-            self.assertIn("RALPH_STATE", r.stderr)
-            self.assertEqual((pathlib.Path(tmp) / "ralph/next/ring-doc/STATE.md").read_text(),
-                             self.ROWS)
-
-
-class RalphCheckTests(unittest.TestCase):
-    """`ralph-check.sh <name>` runs what the worker's OWN queue.toml declares."""
-
-    def fixture(self, tmp):
-        two_queues(tmp)
-        install_script(tmp, "ralph-check.sh")
-        install_script(tmp, "ralph.py")
-        write(tmp, "ralph/next/a/queue.toml",
-              '[checks]\nhello = ["sh", "-c", "echo from-a \\"$@\\"", "sh"]\n'
-              'red = ["sh", "-c", "echo went-red; exit 7"]\n')
-
-    def check(self, tmp, queue, *argv):
-        env = {k: v for k, v in os.environ.items() if k != "RALPH_QUEUE"}
-        if queue is not None:
-            env["RALPH_QUEUE"] = queue
-        return subprocess.run([str(pathlib.Path(tmp) / "scripts/ralph-check.sh"), *argv],
-                              capture_output=True, text=True, env=env)
-
-    def test_each_queue_runs_its_own_declaration(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.fixture(tmp)
-            a = self.check(tmp, "a", "hello", "extra arg")
-            b = self.check(tmp, "b", "hello")
-            self.assertEqual((a.returncode, b.returncode), (0, 0), a.stderr + b.stderr)
-            self.assertIn("exit=0\nfrom-a extra arg\n", a.stdout)
-            self.assertIn("exit=0\nfrom-b\n", b.stdout)
-            root = pathlib.Path(tmp)
-            self.assertEqual((root / "target/ralph/a/hello.log").read_text(), "from-a extra arg\n")
-            self.assertEqual((root / "target/ralph/b/hello.log").read_text(), "from-b\n")
-
-    def test_a_declared_check_exits_with_its_own_code(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.fixture(tmp)
-            r = self.check(tmp, "a", "red")
-            self.assertEqual(r.returncode, 7)
-            self.assertIn("exit=7\nwent-red", r.stdout)
-
-    def test_an_undeclared_name_is_usage_with_or_without_a_queue(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.fixture(tmp)
-            for queue in ("b", None, ""):
-                r = self.check(tmp, queue, "red")
-                self.assertEqual(r.returncode, 2, (queue, r.stdout, r.stderr))
-                self.assertIn("usage:", r.stderr)
-
-    def test_a_pool_lanes_share_reaches_its_checks_without_the_env(self):
-        # `toolbox run` forwards no env, so the share is read from the lane's file.
-        with tempfile.TemporaryDirectory() as tmp:
-            self.fixture(tmp)
-            write(tmp, "ralph/next/a/queue.toml",
-                  '[checks]\njobs = ["sh", "-c", "echo $SOVEREIGN_LINT_JOBS/$SOVEREIGN_TEST_JOBS"]\n')
-            write(tmp, ralph.LANE_JOBS_FILE, "SOVEREIGN_LINT_JOBS=3\nSOVEREIGN_TEST_JOBS=3\n")
-            with mock.patch.dict(os.environ, {}, clear=False):
-                os.environ.pop("SOVEREIGN_LINT_JOBS", None)
-                os.environ.pop("SOVEREIGN_TEST_JOBS", None)
-                r = self.check(tmp, "a", "jobs")
-                self.assertIn("exit=0\n3/3\n", r.stdout)
-                os.environ["SOVEREIGN_LINT_JOBS"] = "1"        # an explicit value wins
-                r = self.check(tmp, "a", "jobs")
-                self.assertIn("exit=0\n1/3\n", r.stdout)
-
-    def test_a_refused_manifest_fails_the_check_by_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.fixture(tmp)
-            write(tmp, "ralph/next/b/queue.toml", "[checks]\nlint = ['true']\n")
-            r = self.check(tmp, "b", "hello")
-            self.assertEqual(r.returncode, 2)
-            self.assertIn("ralph/next/b/queue.toml", r.stderr)
-
-
-# The legacy queues' hand-made PROMPT.md files were factored from the base as
-# of 865cdc92b. five-programs-65 (1cc169511) moved the base on purpose, and
-# those files are their queues' to change, so the factoring proofs render
-# against the base they were factored from. Top level programs (#68, 6c51bba85)
-# rewrote the repo paths inside those files, so the base carries the same
-# renames; nothing else in it moved.
-FACTORED_BASE = "865cdc92b"
-LAYOUT_MOVE_RENAMES = (("sovereign/ARCH_PRINCIPLES.md", "docs/ARCH_PRINCIPLES.md"),
-                       ("sovereign/SYSTEM_OVERVIEW.md", "docs/SYSTEM_OVERVIEW.md"),
-                       ("sovereign/apps/", "cmnwlth/apps/"))
-
-
-def factored_base():
-    base = subprocess.run(["git", "-C", str(REPO), "show",
-                           f"{FACTORED_BASE}:ralph/PROMPT.base.md"],
-                          capture_output=True, text=True, check=True).stdout
-    for old, new in LAYOUT_MOVE_RENAMES:
-        base = base.replace(old, new)
-    return base
-
-
-class PromptRenderTests(unittest.TestCase):
-    BASE = ("not rendered\n<!-- section: intro -->\n# {{queue}}\n"
-            "<!-- section: checks -->\n| LINT |\n<!-- section: rules -->\n- mark {{state}}\n")
-    BUILTINS = {"queue": "a", "state": "ralph/next/a/STATE.md",
-                "control_dir": "ralph/next/a/ctl", "log_dir": "target/ralph/a"}
-
-    def test_ring_room_renders_byte_for_byte(self):
-        # Nothing was lost in the factoring: base + ring-room's addendum, with the
-        # legacy control files, IS the PROMPT.md its launch line still reads.
-        rendered = ralph.render_prompt(
-            factored_base(),
-            (REPO / "ralph/next/ring-room/PROMPT.addendum.md").read_text(),
-            {"queue": "ring-room", "state": "ralph/next/ring-room/STATE.md",
-             "control_dir": "ralph", "log_dir": "target/ralph"})
-        self.assertEqual(rendered.encode(),
-                         (REPO / "ralph/next/ring-room/PROMPT.md").read_bytes())
-
-    def test_the_base_alone_renders_with_no_placeholder_left(self):
-        text = ralph.render_prompt((REPO / "ralph/PROMPT.base.md").read_text(),
-                                   "<!-- section: vars -->\nprefix = qa\n", self.BUILTINS)
-        self.assertNotIn("{{", text)
-        self.assertNotIn("<!-- section", text)
-        self.assertIn("`ralph/next/a/ctl/NEEDS_HUMAN.md`", text)
-        self.assertIn("| `REVIEW-mint-qa-` |", text)
-
-    def test_an_addendum_replaces_appends_places_and_adds_sections(self):
-        addendum = ("<!-- section: vars -->\nprefix = qa\n"
-                    "<!-- section: checks append -->\n| PILOT {{prefix}} |\n"
-                    "<!-- section: rules -->\n- never push\n"
-                    "<!-- section: window after=intro -->\nONE gpu window\n"
-                    "<!-- section: tail -->\nthe end\n")
-        self.assertEqual(ralph.render_prompt(self.BASE, addendum, self.BUILTINS),
-                         "# a\nONE gpu window\n| LINT |\n| PILOT qa |\n- never push\nthe end\n")
-
-    def test_what_cannot_be_rendered_is_refused_by_name(self):
-        for addendum, word in (("<!-- section: rules -->\n{{prefx}}\n", "prefx"),
-                               ("<!-- section: vars -->\nstate = elsewhere\n", "state"),
-                               ("<!-- section: ghost append -->\nx\n", "ghost"),
-                               ("<!-- section: w after=ghost -->\nx\n", "ghost"),
-                               ("<!-- section: rules -->\na\n<!-- section: rules -->\nb\n",
-                                "rules")):
-            with self.assertRaisesRegex(ValueError, word):
-                ralph.render_prompt(self.BASE, addendum, self.BUILTINS)
-
-    def campaign_prompt(self, tmp, name):
-        paths = ralph.paths_for(ralph.build_parser().parse_args(
-            ["run", "--workdir", tmp, "--queue", name]))
-        seen = []
-        c = ralph.Campaign(paths, notify_enabled=False, sleep=lambda s: None, max_stall=2,
-                           session_run=lambda args, prompt, log: seen.append(prompt))
-        buf = io.StringIO()
-        with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                contextlib.redirect_stdout(buf):
-            c.run()
-        return seen, buf.getvalue()
-
-    def test_a_queue_with_an_addendum_runs_on_the_render_and_logs_its_hash(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            write(tmp, "ralph/PROMPT.base.md", self.BASE)
-            write(tmp, "ralph/next/a/PROMPT.addendum.md", "<!-- section: rules -->\n- a only\n")
-            seen, said = self.campaign_prompt(tmp, "a")
-            self.assertTrue(seen[0].endswith("# a\n| LINT |\n- a only\n"), seen[0])
-            import hashlib
-            digest = hashlib.sha256(b"# a\n| LINT |\n- a only\n").hexdigest()[:16]
-            self.assertEqual(said.count(f"sha256={digest}"), 1)     # once, not per iteration
-            self.assertIn("ralph/PROMPT.base.md + ralph/next/a/PROMPT.addendum.md", said)
-            seen_b, said_b = self.campaign_prompt(tmp, "b")
-            self.assertTrue(seen_b[0].endswith("prompt of b\n"))
-            self.assertIn("prompt: ralph/next/b/PROMPT.md sha256=", said_b)
-
-    def test_a_declared_prompt_is_read_as_written_even_beside_an_addendum(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            write(tmp, "ralph/PROMPT.base.md", self.BASE)
-            write(tmp, "ralph/next/a/PROMPT.addendum.md", "<!-- section: rules -->\n- a only\n")
-            write(tmp, "ralph/next/a/queue.toml", 'prompt = "ralph/next/a/PROMPT.md"\n')
-            seen, _ = self.campaign_prompt(tmp, "a")
-            self.assertTrue(seen[0].endswith("prompt of a\n"))
-
-
-class HostTests(unittest.TestCase):
-    """Backend SELECTION and the absent-backend path, with the platform and the
-    `which` lookup injected. The Linux backends are not exercised on a Linux host here."""
-
-    def host(self, platform, present, home):
-        calls = []
-
-        def run(argv, **kw):
-            calls.append(list(argv))
-            return subprocess.CompletedProcess(argv, 0, "", "")
-
-        host = ralph.host_for(platform=platform, run=run, home=pathlib.Path(home),
-                              which=lambda tool: tool if tool in present else None)
-        return host, calls
-
-    def said(self, fn):
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            result = fn()
-        return result, buf.getvalue()
-
-    def test_the_platform_picks_the_backend(self):
-        with tempfile.TemporaryDirectory() as home:
-            for platform, cls in (("darwin", ralph.MacHost), ("linux", ralph.LinuxHost),
-                                  ("win32", ralph.Host)):
-                self.assertIs(type(self.host(platform, (), home)[0]), cls)
-
-    def test_each_backend_notifies_with_its_own_tool(self):
-        with tempfile.TemporaryDirectory() as home:
-            mac, mac_calls = self.host("darwin", ("/usr/bin/osascript",), home)
-            linux, linux_calls = self.host("linux", ("notify-send",), home)
-            self.assertTrue(mac.notify("OPERATOR — halt", "reason"))
-            self.assertTrue(linux.notify("OPERATOR — halt", "reason"))
-            self.assertEqual(mac_calls[0][:2], ["/usr/bin/osascript", "-e"])
-            self.assertEqual(linux_calls, [["notify-send", "ralph: OPERATOR — halt", "reason"]])
-
-    def test_an_absent_notifier_is_reported_with_the_message_it_could_not_show(self):
-        with tempfile.TemporaryDirectory() as home:
-            for platform, tool in (("linux", "notify-send"), ("darwin", "/usr/bin/osascript"),
-                                   ("win32", "no notification backend")):
-                host, calls = self.host(platform, (), home)
-                delivered, said = self.said(lambda: host.notify("OPERATOR — loop down", "b is down"))
-                self.assertFalse(delivered)
-                self.assertEqual(calls, [])
-                self.assertIn(tool, said)
-                self.assertIn("OPERATOR — loop down: b is down", said)
-
-    def test_linux_installs_and_starts_a_systemd_run_job(self):
-        with tempfile.TemporaryDirectory() as home:
-            host, calls = self.host("linux", ("systemd-run", "systemctl"), home)
-            spec = host.install_job("dev.ralph.x-a", ["python3", "ralph.py", "run", "--queue", "a"],
-                                    "/w", "/w/log.txt")
-            self.assertTrue(spec.is_file())
-            host.start_job("dev.ralph.x-a")
-            start = calls[-1]
-            self.assertEqual(start[:4], ["systemd-run", "--user", "--unit", "dev.ralph.x-a"])
-            self.assertIn("--working-directory=/w", start)
-            self.assertEqual(start[-5:], ["python3", "ralph.py", "run", "--queue", "a"])
-            host.install_job("dev.ralphwatch.x-a", ["python3", "ralph.py", "watch"], "/w",
-                             "/w/watch.log", interval=120)
-            host.start_job("dev.ralphwatch.x-a")
-            self.assertIn("--on-unit-active=120", calls[-1])
-
-    def test_mac_keeps_its_job_out_of_launch_agents_and_starts_it_by_path(self):
-        # launchd re-runs every plist in ~/Library/LaunchAgents at each login, so a
-        # job written there outlived its queue: on 2026-10-05 the finished svrngs
-        # e0-u3 loops were still loaded at boot. Like Linux's transient unit, the
-        # Mac job now runs until it exits or the login session ends.
-        with tempfile.TemporaryDirectory() as home:
-            host, calls = self.host("darwin", ("launchctl",), home)
-            plist = host.install_job("dev.ralph.x-a", ["python3", "ralph.py", "run", "--queue", "a"],
-                                     "/w", "/w/log.txt")
-            self.assertEqual(plist, pathlib.Path(home) / ".config" / "ralph" / "jobs" / "dev.ralph.x-a.plist")
-            self.assertFalse((pathlib.Path(home) / "Library" / "LaunchAgents").exists())
-            self.assertEqual(plistlib.loads(plist.read_bytes())["ProgramArguments"],
-                             ["python3", "ralph.py", "run", "--queue", "a"])
-            host.start_job("dev.ralph.x-a")
-            self.assertEqual(calls[-1], ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)])
-
-    def test_mac_moves_the_login_agents_ralph_wrote_out_of_launch_agents(self):
-        # Every plist ralph wrote before that is still a login agent. The first job
-        # call moves each into the jobs dir: a loaded job keeps running, `start`
-        # still finds it, no login runs it again, and nothing else is touched.
-        with tempfile.TemporaryDirectory() as home:
-            agents = pathlib.Path(home) / "Library" / "LaunchAgents"
-            jobs = pathlib.Path(home) / ".config" / "ralph" / "jobs"
-            agents.mkdir(parents=True)
-            jobs.mkdir(parents=True)
-            for name in ("dev.ralph.x-a", "dev.ralphwatch.x-a", "com.svrnmesh.daemon"):
-                (agents / f"{name}.plist").write_text(name)
-            (jobs / "dev.ralph.x-b.plist").write_text("the job")
-            (agents / "dev.ralph.x-b.plist").write_text("a stale copy")
-            host, _ = self.host("darwin", ("launchctl",), home)
-            _, said = self.said(lambda: host.job_running("dev.ralph.x-a"))
-            self.assertEqual([p.name for p in agents.iterdir()], ["com.svrnmesh.daemon.plist"])
-            self.assertEqual((jobs / "dev.ralph.x-a.plist").read_text(), "dev.ralph.x-a")
-            self.assertEqual((jobs / "dev.ralphwatch.x-a.plist").read_text(), "dev.ralphwatch.x-a")
-            self.assertEqual((jobs / "dev.ralph.x-b.plist").read_text(), "the job")
-            self.assertIn("dev.ralphwatch.x-a", said)
-            _, said = self.said(lambda: host.job_running("dev.ralph.x-a"))
-            self.assertEqual(said, "")
-
-    def test_start_finds_a_job_that_was_installed_as_a_login_agent(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            home, workdir = pathlib.Path(tmp) / "home", pathlib.Path(tmp) / "w"
-            workdir.mkdir()
-            (home / "Library" / "LaunchAgents").mkdir(parents=True)
-            (home / "Library" / "LaunchAgents" / "dev.ralph.w-a.plist").write_text("<plist/>")
-            host, calls = self.host("darwin", ("launchctl",), home)
-            with mock.patch.object(ralph, "host", return_value=host):
-                rc, _, err = quiet_main(["start", "--workdir", str(workdir), "--label", "a"])
-            self.assertEqual(rc, 0, err)
-            self.assertEqual(calls[-1], ["launchctl", "bootstrap", f"gui/{os.getuid()}",
-                                         str(home / ".config" / "ralph" / "jobs" / "dev.ralph.w-a.plist")])
-
-    def test_start_leaves_a_running_job_alone(self):
-        # Starting a running job booted it out, then failed to bootstrap it:
-        # the loop and its session died mid-unit (svrngs u5, 2026-10-06T17:31Z).
-        with tempfile.TemporaryDirectory() as tmp:
-            home, workdir = pathlib.Path(tmp) / "home", pathlib.Path(tmp) / "w"
-            workdir.mkdir()
-            jobs = home / ".config" / "ralph" / "jobs"
-            jobs.mkdir(parents=True)
-            (jobs / "dev.ralph.w-a.plist").write_text("<plist/>")
-            host, calls = self.host("darwin", ("launchctl",), home)
-            with mock.patch.object(ralph, "host", return_value=host), \
-                    mock.patch.object(host, "job_running", return_value=True):
-                rc, out, err = quiet_main(["start", "--workdir", str(workdir), "--label", "a"])
-            self.assertEqual(rc, 0, err)
-            self.assertEqual(calls, [])
-            self.assertIn("already running", out + err)
-
-    def test_an_absent_job_backend_refuses_to_start_and_says_it_cannot_see(self):
-        with tempfile.TemporaryDirectory() as home:
-            for platform, tool in (("linux", "systemd-run"), ("darwin", "launchctl"),
-                                   ("win32", "no job backend")):
-                host, calls = self.host(platform, (), home)
-                with self.assertRaisesRegex(ralph.HostError, tool):
-                    host.start_job("dev.ralph.x-a")
-                running, said = self.said(lambda: host.job_running("dev.ralph.x-a"))
-                self.assertFalse(running)
-                self.assertIn("cannot tell whether dev.ralph.x-a is running", said)
-                self.assertEqual(calls, [])
-
-    def test_start_reports_an_absent_backend_as_exit_two(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            host, _ = self.host("linux", (), tmp)
-            with mock.patch.object(ralph, "host", return_value=host):
-                rc, _, err = quiet_main(["start", "--workdir", tmp])
-            self.assertEqual(rc, 2)
-            self.assertIn("start:", err)
-
-
-class ShimTests(unittest.TestCase):
-    def test_a_dropped_variant_is_said_once(self):
-        # The empty prompt makes the shim exit 2 BEFORE it reaches `claude`: no session.
-        # `thinking`/`fast` are opencode variants, not claude effort levels.
-        r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
-                            "--variant", "thinking", "--variant", "fast", ""],
-                           capture_output=True, text=True)
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("empty prompt", r.stderr)
-        self.assertEqual(r.stderr.count("--variant"), 1, r.stderr)
-        self.assertIn("thinking", r.stderr)
-
-    def test_an_effort_level_variant_reaches_claude_as_effort(self):
-        # A stub `claude` on PATH prints its argv, so this sees the call the shim makes.
-        with tempfile.TemporaryDirectory() as tmp:
-            stub = pathlib.Path(tmp) / "claude"
-            stub.write_text('#!/bin/sh\necho "argv: $*" >&2\n')
-            stub.chmod(0o755)
-            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}",
-                   "RALPH_PERMISSION_BRIDGE": "0"}
-            r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
-                                "--variant", "medium", "do the unit"],
-                               capture_output=True, text=True, env=env)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("--effort medium", r.stderr)
-        self.assertIn("effort=medium", r.stderr)
-        self.assertNotIn("dropping --variant", r.stderr)
-
-
-class ReviewRoutingTests(unittest.TestCase):
-    def test_review_is_the_prefix_or_the_row_tag_never_a_substring(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [ ] REVIEW-audit-1 — depends [] — audit\n"
-                  "- [ ] qa-peer-review-form — depends [] — build the review form\n"
-                  "- [ ] qa-hard — depends [] — review = true — needs judgment\n"
-                  "- [ ] qa-prose — depends [] — say review = true in the docs\n")
-            rows = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md").by_id()
-            routed = {i: ralph.select_model_args(r, "w", "r", "")[1] for i, r in rows.items()}
-            self.assertEqual(routed, {"REVIEW-audit-1": "r", "qa-peer-review-form": "w",
-                                      "qa-hard": "r", "qa-prose": "w"})
-            self.assertEqual(ralph.select_model_args("qa-peer-review-form", "w", "r", ""),
-                             ["--model", "w"])
-
-
-class Ei7Stage0MigrationTests(unittest.TestCase):
-    """The first queue on a manifest. Its STATE.md launch block and PROMPT.md are
-    not edited (a running loop reads them); the manifest must agree with both."""
-
-    def paths(self, verb="run"):
-        args = ralph.build_parser().parse_args([verb, "--workdir", str(REPO),
-                                                "--queue", "ei7-stage0"])
-        with contextlib.redirect_stdout(io.StringIO()):
-            return args, ralph.paths_for(args)
-
-    def test_the_manifest_carries_what_the_launch_line_carried_by_flag_and_env(self):
-        args, paths = self.paths("supervise")
-        legacy = ralph.paths_for(ralph.build_parser().parse_args(
-            launch_lines("ralph/next/ei7-stage0/STATE.md")[0]))
-        self.assertEqual((paths.state, paths.charter), (legacy.state, legacy.charter))
-        self.assertEqual((args.label, args.session_timeout), ("ei7-stage0", 7200))
-        self.assertEqual(ralph.resolve_models(args, paths),
-                         {"MODEL": "claude-opus-5", "REVIEW_MODEL": "claude-opus-5",
-                          "RESOLVE_MODEL": "claude-opus-5", "VARIANT": "high"})
-        self.assertEqual(ralph.worker_bin(paths), str(REPO / "scripts/ralph-claude-shim.sh"))
-        self.assertEqual(paths.control_dir, "ralph/next/ei7-stage0/ctl")
-        for check in ("desktop", "pilot", "py", "campaign", "node"):
-            self.assertIn(check, paths.manifest.checks)
-        self.assertEqual(paths.manifest.checks["pilot"],
-                         ("research/ontology-retrieval/pilot/run-pilot.sh",))
-
-    def test_the_rendered_prompt_keeps_every_line_of_the_hand_made_one(self):
-        _, paths = self.paths()
-        self.assertEqual(paths.prompt_addendum, "ralph/next/ei7-stage0/PROMPT.addendum.md")
-        rendered = set(ralph.render_prompt(
-            factored_base(), (REPO / paths.prompt_addendum).read_text(),
-            {"queue": paths.queue, "state": paths.state, "control_dir": "ralph",
-             "log_dir": "target/ralph"}).splitlines())
-        # The two lines the render is MEANT to change: the mark call no longer needs the
-        # third argument (RALPH_STATE), and a sed-made anecdote that never happened to e7.
-        meant = ("ralph-mark.sh <unit-id> <short-hash> ralph/next/ei7-stage0/STATE.md",
-                 "e7-1-scaffold")
-        lost = [l for l in (REPO / "ralph/next/ei7-stage0/PROMPT.md").read_text().splitlines()
-                if l not in rendered and not any(m in l for m in meant)]
-        self.assertEqual(lost, [])
-        live = ralph.prompt_text(paths)[0]
-        self.assertNotIn("{{", live)
-        self.assertIn("`ralph/next/ei7-stage0/ctl/NEEDS_HUMAN.md`", live)
-        self.assertNotIn("`ralph/NEEDS_HUMAN.md`", live)
-
-
-class FastSession(ralph.Session):
-    def __init__(self, *args, **kwargs):
-        kwargs["poll"] = 0.2
-        super().__init__(*args, **kwargs)
-
-
-class TwoQueueDemoTests(unittest.TestCase):
-    """The order's Demo, end to end, with a stub worker (no model session): two
-    `run --queue` loops in one checkout, then the unedited ring-room launch line."""
-
-    WORKER = (
-        'set -eu\n'
-        'if [ "$RALPH_QUEUE" = a ]; then\n'          # a never finishes: it waits to be stopped
-        '    while [ ! -f "$RALPH_CONTROL_DIR/STOP" ]; do sleep 0.1; done; exit 0\n'
-        'fi\n'
-        'unit=$(sed -n "s/^- \\[[ ~]\\] \\([^ ]*\\) .*/\\1/p" "$RALPH_STATE" | head -1)\n'
-        'scripts/ralph-check.sh hello > "check-${RALPH_QUEUE:-legacy}.out" 2>&1 || true\n'
-        'echo work > "$unit.txt"; git add "$unit.txt"; git commit -q -m "$unit: work"\n'
-        'scripts/ralph-mark.sh "$unit" "$(git rev-parse --short HEAD)"\n'   # two arguments
-        'mkdir -p "$RALPH_CONTROL_DIR"; : > "$RALPH_CONTROL_DIR/DONE"\n')
-
-    def test_two_queues_run_beside_each_other_and_the_legacy_line_still_starts(self):
-        import threading
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = str(pathlib.Path(tmp).resolve())
-            git_repo(tmp)
-            two_queues(tmp)
-            for name in ("a", "b"):
-                manifest = pathlib.Path(tmp) / f"ralph/next/{name}/queue.toml"
-                manifest.write_text('worker_bin = "./stub-worker.sh"\n' + manifest.read_text())
-            for script in ("ralph-check.sh", "ralph-mark.sh", "ralph.py"):
-                install_script(tmp, script)
-            stub = stub_worker(tmp, self.WORKER)
-            ring_room = launch_lines("ralph/next/ring-room/STATE.md")[1]
-            write(tmp, "ralph/next/ring-room/STATE.md", "- [ ] rr-1 — depends [] — do it\n")
-            write(tmp, "ralph/next/ring-room/PROMPT.md", "legacy prompt\n")
-            write(tmp, ".gitignore", "target/\ncheck-*.out\nralph/next/*/ctl/\n"
-                                     "ralph/DONE\nralph/.heartbeat\n")
-            commit_all(tmp)
-            root = pathlib.Path(tmp)
-            rcs = {}
-
-            def loop(name):
-                args = ralph.build_parser().parse_args(
-                    ["run", "--workdir", tmp, "--queue", name, "--max-stall", "2"])
-                rcs[name] = ralph.cmd_run(args)
-
-            out = io.StringIO()
-            with mock.patch.object(ralph, "Session", FastSession), contextlib.redirect_stdout(out):
-                threads = {name: threading.Thread(target=loop, args=(name,)) for name in "ab"}
-                for t in threads.values():
-                    t.start()
-                threads["b"].join(timeout=60)
-                self.assertFalse(threads["b"].is_alive(), out.getvalue())
-                self.assertEqual(rcs.get("b"), 0, out.getvalue())
-                self.assertTrue(threads["a"].is_alive())        # b's DONE did not end a
-                (root / "ralph/next/a/ctl/STOP").write_text("")
-                threads["a"].join(timeout=60)
-                self.assertFalse(threads["a"].is_alive(), out.getvalue())
-            self.assertEqual(rcs, {"a": 0, "b": 0})
-            self.assertIn("campaign: operator-stop", out.getvalue())
-            self.assertIn("campaign: done", out.getvalue())
-            self.assertIn("from-b", (root / "check-b.out").read_text())
-            self.assertRegex((root / "ralph/next/b/STATE.md").read_text(), r"- \[x\] qb-1 [0-9a-f]{7}")
-            self.assertIn("- [ ] qa-1", (root / "ralph/next/a/STATE.md").read_text())
-            self.assertFalse((root / "ralph/next/b/ctl/STOP").exists())
-            self.assertFalse((root / "ralph/STOP").exists())
-            self.assertFalse((root / "ralph/DONE").exists())
-
-            # Then the ring-room launch line, exactly as its STATE.md has it (`--workdir .`).
-            cwd = os.getcwd()
-            os.chdir(tmp)
-            try:
-                with mock.patch.object(ralph, "Session", FastSession), \
-                        mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(stub)}), \
-                        contextlib.redirect_stdout(out):
-                    rc = ralph.cmd_run(ralph.build_parser().parse_args(ring_room))
-            finally:
-                os.chdir(cwd)
-            self.assertEqual(rc, 0, out.getvalue())
-            self.assertRegex((root / "ralph/next/ring-room/STATE.md").read_text(),
-                             r"- \[x\] rr-1 [0-9a-f]{7}")
-            self.assertTrue((root / "ralph/DONE").exists())          # legacy control files
-            self.assertTrue((root / "ralph/.heartbeat").exists())
-            self.assertIn("usage:", (root / "check-legacy.out").read_text())   # no queue, no `hello`
-
-
-class AuditCadenceTests(unittest.TestCase):
-    """`audit_every` in queue.toml: the run loop owes an audit row, not the queue's author."""
-
-    ROWS = "".join(f"- [ ] u-{n} — depends [] — do it\n" for n in (1, 2, 3))
-    TWO_DONE = ("- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n"
-                "- [ ] u-3 — depends []\n")
-
-    def run_queue(self, tmp, manifest, rows, *, finish=True, commit_rc=0, files=()):
-        """Runs queue `q` with a session that marks the unit it was handed (or
-        leaves it, `finish=False`). Returns (result, dispatched ids, commit subjects)."""
-        write(tmp, "ralph/next/q/queue.toml", manifest)
-        state = write(tmp, "ralph/next/q/STATE.md", rows)
-        write(tmp, "ralph/next/q/PROMPT.md", "Execute the selected unit.\n")
-        for rel, text in files:
-            write(tmp, rel, text)
-        paths = ralph.paths_for(ralph.build_parser().parse_args(
-            ["run", "--workdir", tmp, "--queue", "q"]))
-        seen, commits, heads = [], [], {"h": 0}
-
-        def session(model_args, prompt, log):
-            unit = prompt.split()[2]                     # "Your unit: <id> — ..."
-            seen.append(unit)
-            if finish:
-                q = ralph.Queue(state)
-                q.set_status(unit, ralph.Status.DONE)
-                heads["h"] += 1
-                if q.all_done():
-                    write(tmp, "ralph/next/q/ctl/DONE", "")
-
-        def commit(p, subject):
-            commits.append((p.state, subject))
-            return subprocess.CompletedProcess([], commit_rc, "", "index.lock exists")
-
-        c = ralph.Campaign(paths, session_run=session, notify_enabled=False,
-                           sleep=lambda s: None, max_stall=2, max_iter=12)
-        with mock.patch.object(ralph, "head_of", side_effect=lambda wd: str(heads["h"])), \
-                mock.patch.object(ralph, "commit_state", side_effect=commit, create=True), \
-                contextlib.redirect_stdout(io.StringIO()):
-            result = c.run()
-        return result, seen, commits
-
-    def test_an_audit_row_is_inserted_and_run_after_two_units_and_not_before(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", self.ROWS)
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertEqual(seen, ["u-1", "u-2", "REVIEW-audit-q-auto-1", "u-3",
-                                    "REVIEW-audit-q-auto-2"])
-            self.assertEqual(commits, [
-                ("ralph/next/q/STATE.md", "ralph: audit due after 2 units — REVIEW-audit-q-auto-1"),
-                ("ralph/next/q/STATE.md", "ralph: closing audit after 1 unit — REVIEW-audit-q-auto-2")])
-            rows = ralph.Queue(pathlib.Path(tmp) / "ralph/next/q/STATE.md").rows
-            self.assertEqual([(r.id, r.deps) for r in rows][2:],
-                             [("REVIEW-audit-q-auto-1", ("u-2",)), ("u-3", ()),
-                              ("REVIEW-audit-q-auto-2", ("u-3",))])
-
-    def test_a_queue_that_ends_on_its_cadence_closes_with_an_audit(self):
-        """svrngs u3, 2026-10-05: audit_due runs only where a unit is dispatched,
-        so four units that landed with no row after them closed unaudited."""
-        with tempfile.TemporaryDirectory() as tmp:
-            rows = "".join(f"- [ ] u-{n} — depends [] — do it\n" for n in (1, 2))
-            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertEqual(seen, ["u-1", "u-2", "REVIEW-audit-q-auto-1"])
-            self.assertEqual(commits, [("ralph/next/q/STATE.md",
-                                        "ralph: closing audit after 2 units — REVIEW-audit-q-auto-1")])
-            rows = ralph.Queue(pathlib.Path(tmp) / "ralph/next/q/STATE.md").rows
-            self.assertEqual((rows[-1].id, rows[-1].deps), ("REVIEW-audit-q-auto-1", ("u-2",)))
-
-    def test_a_queue_whose_last_row_is_an_audit_closes_without_another(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            rows = ("- [ ] u-1 — depends []\n"
-                    "- [ ] REVIEW-audit-q — depends [u-1] — the author's own\n")
-            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertEqual((seen, commits), (["u-1", "REVIEW-audit-q"], []))
-
-    def test_the_id_takes_the_addendums_prefix_var_and_counts_its_own_kind(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            rows = "- [x] REVIEW-audit-zz-auto-1 abcdef0 — depends []\n" + self.TWO_DONE
-            _, seen, _ = self.run_queue(tmp, "audit_every = 2\n", rows, files=(
-                ("ralph/PROMPT.base.md", "<!-- section: main -->\nwork on {{prefix}}\n"),
-                ("ralph/next/q/PROMPT.addendum.md", "<!-- section: vars -->\nprefix = zz\n")))
-            self.assertEqual(seen, ["REVIEW-audit-zz-auto-2", "u-3", "REVIEW-audit-zz-auto-3"])
-
-    def test_a_prefix_var_that_cannot_be_an_id_falls_back_to_the_queue_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            _, seen, _ = self.run_queue(tmp, "audit_every = 2\n", self.TWO_DONE, files=(
-                ("ralph/PROMPT.base.md", "<!-- section: main -->\nwork on {{prefix}}\n"),
-                ("ralph/next/q/PROMPT.addendum.md", "<!-- section: vars -->\nprefix = e7 or rb\n")))
-            self.assertEqual(seen, ["REVIEW-audit-q-auto-1", "u-3", "REVIEW-audit-q-auto-2"])
-
-    def test_a_queue_without_the_key_never_gets_one(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            result, seen, commits = self.run_queue(tmp, "", self.ROWS)
-            self.assertEqual(result.outcome, ralph.Outcome.DONE)
-            self.assertEqual((seen, commits), (["u-1", "u-2", "u-3"], []))
-            self.assertNotIn("REVIEW-audit",
-                             (pathlib.Path(tmp) / "ralph/next/q/STATE.md").read_text())
-
-    def test_a_next_row_that_is_already_an_audit_is_not_given_a_second(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            rows = ("- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n"
-                    "- [ ] REVIEW-audit-q — depends [u-2] — the author's own\n"
-                    "- [ ] u-3 — depends [REVIEW-audit-q]\n")
-            _, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
-            self.assertEqual((seen, commits), (["REVIEW-audit-q", "u-3", "REVIEW-audit-q-auto-1"],
-                                               [("ralph/next/q/STATE.md", "ralph: closing audit after 1 unit — REVIEW-audit-q-auto-1")]))
-
-    def test_an_audit_the_worker_left_open_is_run_again_not_inserted_again(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", self.TWO_DONE,
-                                                   finish=False)
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)           # stalled
-            self.assertEqual(seen, ["REVIEW-audit-q-auto-1"] * 2)
-            self.assertEqual(len(commits), 1)
-
-    def test_a_resumed_row_is_finished_first(self):
-        """`current()` hands back the [~] row until it closes, so a row inserted
-        above one would never be dispatched and would be inserted again each pass."""
-        with tempfile.TemporaryDirectory() as tmp:
-            rows = self.TWO_DONE.replace("[ ] u-3", "[~] u-3") + "- [ ] u-4 — depends []\n"
-            _, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
-            self.assertEqual(seen, ["u-3", "REVIEW-audit-q-auto-1", "u-4", "REVIEW-audit-q-auto-2"])
-            self.assertEqual(len(commits), 2)
-
-    def test_a_refused_commit_halts_with_gits_words(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            result, seen, _ = self.run_queue(tmp, "audit_every = 2\n", self.TWO_DONE,
-                                             commit_rc=1)
-            self.assertEqual((result.outcome, seen), (ralph.Outcome.HALT, []))
-            self.assertIn("index.lock exists", result.reason)
-
-
-class AuditCadenceDemoTests(unittest.TestCase):
-    """The same, through `run --queue` with a stub worker and a real git."""
-
-    WORKER = (
-        'set -eu\n'
-        'unit=$(sed -n "s/^- \\[[ ~]\\] \\([^ ]*\\) .*/\\1/p" "$RALPH_STATE" | head -1)\n'
-        'echo work > "$unit.txt"; git add "$unit.txt"; git commit -q -m "$unit: work" -- "$unit.txt"\n'
-        'scripts/ralph-mark.sh "$unit" "$(git rev-parse --short HEAD)"\n'
-        'grep -q "^- \\[[ ~]\\]" "$RALPH_STATE" || '
-        '{ mkdir -p "$RALPH_CONTROL_DIR"; : > "$RALPH_CONTROL_DIR/DONE"; }\n')
-
-    def test_the_audit_row_is_committed_alone_and_worked_between_the_second_and_third_unit(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = str(pathlib.Path(tmp).resolve())
-            git_repo(tmp)
-            write(tmp, "ralph/next/q/queue.toml",
-                  'worker_bin = "./stub-worker.sh"\naudit_every = 2\n')
-            write(tmp, "ralph/next/q/STATE.md", AuditCadenceTests.ROWS)
-            write(tmp, "ralph/next/q/PROMPT.md", "prompt of q\n")
-            write(tmp, ".gitignore", "target/\nralph/next/*/ctl/\n")
-            for script in ("ralph-mark.sh", "ralph.py"):
-                install_script(tmp, script)
-            stub_worker(tmp, self.WORKER)
-            commit_all(tmp)
-            write(tmp, "stray.txt", "someone else's staged work\n")
-            subprocess.run(["git", "-C", tmp, "add", "stray.txt"], check=True)
-            out = io.StringIO()
-            with mock.patch.object(ralph, "Session", FastSession), contextlib.redirect_stdout(out):
-                rc = ralph.cmd_run(ralph.build_parser().parse_args(
-                    ["run", "--workdir", tmp, "--queue", "q", "--max-stall", "2"]))
-            self.assertEqual(rc, 0, out.getvalue())
-
-            def git(*args):
-                return subprocess.run(["git", "-C", tmp, *args], capture_output=True,
-                                      text=True, check=True).stdout
-            subjects = git("log", "--reverse", "--format=%s").splitlines()[1:]
-            audit = "REVIEW-audit-q-auto-1"
-            self.assertEqual(subjects, [
-                "u-1: work", "ralph: u-1 done", "u-2: work", "ralph: u-2 done",
-                f"ralph: audit due after 2 units — {audit}",
-                f"{audit}: work", f"ralph: {audit} done", "u-3: work", "ralph: u-3 done",
-                "ralph: closing audit after 1 unit — REVIEW-audit-q-auto-2",
-                "REVIEW-audit-q-auto-2: work", "ralph: REVIEW-audit-q-auto-2 done"])
-            for rev in ("HEAD~7", "HEAD~2"):                  # each audit row committed alone
-                self.assertEqual(git("show", "--name-only", "--format=", rev).split(),
-                                 ["ralph/next/q/STATE.md"])
-            self.assertIn("A  stray.txt", git("status", "--porcelain"))      # staged, never swept in
-            self.assertIn(f"unit {audit} — ", out.getvalue())
-
-
-class SupervisorTests(unittest.TestCase):
-    # No cool-downs here: these pin the escalation each exit reaches once the
-    # cool-downs are spent (SupervisorCooldownTests covers the cool-downs). The
-    # clock gives every resolver a real run's length: one that ends at once did
-    # not run (SupervisorResolverDidNotRunTests).
-    def make(self, tmp, *, run_inner, resolver_run, resolve_max=2, cooldowns=(),
-             sleep=lambda s: None):
-        write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
-        paths = ralph.Paths(pathlib.Path(tmp))
-        return ralph.Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
-                                notify_enabled=False, resolve_max=resolve_max,
-                                cooldowns=cooldowns, sleep=sleep,
-                                clock=itertools.count(0, 10 * ralph.NEVER_RAN_SECS).__next__)
-
-    def test_done_returns_zero(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/DONE", "")
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
-            self.assertEqual(s.run(), 0)
-
-    def test_operator_stop_is_silent_and_terminal(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STOP", "")
-            calls = []
-            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
-                          resolver_run=lambda *a: calls.append("resolver"))
-            self.assertEqual(s.run(), 0)
-            self.assertEqual(calls, [])
-
-    def test_human_row_exits_two_without_resolver(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            calls = []
-            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
-                          resolver_run=lambda *a: calls.append("resolver"))
-            write(tmp, "ralph/STATE.md", "- [ ] HUMAN-design-review — depends []\n")
-            self.assertEqual(s.run(), 2)
-            self.assertEqual(calls, [])
-
-    def test_operator_only_package_exits_two_without_resolver(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/NEEDS_HUMAN.md",
-                  "# bar miss\n\noperator-only: a pre-registered bar a row cannot meet\n")
-            calls = []
-            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
-                          resolver_run=lambda *a: calls.append("resolver"))
-            self.assertEqual(s.run(), 2)
-            self.assertEqual(calls, [])
-
-    def test_a_director_that_marks_the_package_operator_only_ends_the_retries(self):
-        # phase-b 2026-09-26: four directors each appended a review, so the
-        # package's hash changed every time and "changed nothing" never fired.
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# bar miss\n")
-            pkg = pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")
-            attempts = []
-
-            def resolver(attempt, reason):
-                attempts.append(attempt)
-                with pkg.open("a") as fh:
-                    fh.write(f"\n## director {attempt}\n"
-                             "operator-only: a pre-registered bar a row cannot meet\n")
-
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=resolver, resolve_max=4)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                self.assertEqual(s.run(), 2)
-            self.assertEqual(attempts, [1])
-
-    def test_a_package_that_only_mentions_the_mark_in_prose_still_resolves(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/NEEDS_HUMAN.md",
-                  "# blocker\nthe charter's operator-only: list does not cover this\n")
-            self.assertIsNone(ralph.operator_only(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")))
-
-    def test_noop_resolution_escalates_immediately(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# blocker\n")
-            attempts = []
-            s = self.make(tmp, run_inner=lambda: None,
-                          resolver_run=lambda attempt, reason: attempts.append(attempt))
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                self.assertEqual(s.run(), 2)
-            self.assertEqual(attempts, [1])
-
-    def test_junk_commits_do_not_reset_the_bound(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# blocker\n")
-            heads = {"h": "a" * 40}
-            attempts = []
-
-            def resolver(attempt, reason):
-                attempts.append(attempt)
-                heads["h"] = f"{attempt:040x}"
-
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=resolver,
-                          resolve_max=2)
-            with mock.patch.object(ralph, "head_of", side_effect=lambda wd: heads["h"]):
-                self.assertEqual(s.run(), 2)
-            self.assertEqual(attempts, [1, 2])
-
-    def test_director_commit_range_is_recorded(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# blocker\n")
-            heads = {"h": "a" * 40}
-
-            def resolver(attempt, reason):
-                heads["h"] = f"{attempt:040x}"
-
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=resolver, resolve_max=1)
-            with mock.patch.object(ralph, "head_of", side_effect=lambda wd: heads["h"]):
-                s.run()
-            log = (pathlib.Path(tmp) / "ralph/.director-commits").read_text()
-            self.assertIn("a" * 40 + ".." + f"{1:040x}", log)
-
-    def test_an_operator_only_package_parks_its_row_and_the_campaign_runs_on(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            calls = []
-            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
-                          resolver_run=lambda *a: calls.append("resolver"))
-            write(tmp, "ralph/STATE.md", "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n"
-                                         "- [ ] dm-c — depends [dm-a]\n")
-            write(tmp, "ralph/NEEDS_HUMAN.md",
-                  "# NEEDS_HUMAN — dm-a: first-token bar missed\n\n"
-                  "operator-only: a pre-registered bar a row cannot meet\n")
-            write(tmp, "ralph/STOP", "halt: dm-a\n")
-
-            def inner():
-                calls.append("inner")
-                write(tmp, "ralph/DONE", "")
-            s.run_inner = inner
-            with mock.patch.object(ralph, "commit_state", return_value=None):
-                self.assertEqual(s.run(), 0)
-            self.assertEqual(calls, ["inner"])
-            parked = pathlib.Path(tmp, "ralph/parked/dm-a.md").read_text()
-            self.assertIn("first-token bar missed", parked)
-            self.assertFalse(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md").exists())
-            self.assertFalse(pathlib.Path(tmp, "ralph/STOP").exists())
-            q = ralph.Queue(pathlib.Path(tmp, "ralph/STATE.md"))
-            self.assertIs(q.status_of("dm-a"), ralph.Status.PENDING)
-            self.assertEqual(q.current(ralph.parked_ids(s.paths)).id, "dm-b")
-
-    def test_a_package_naming_no_row_is_never_parked(self):
-        # A stall or a full disk is the loop's block, not a row's: parking on
-        # it would walk the loop through the whole queue.
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# 3 iterations without a commit\n")
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                self.assertEqual(s.run(), 2)
-            self.assertFalse(pathlib.Path(tmp, "ralph/parked").exists())
-
-    def test_a_resolution_that_changes_nothing_parks_the_row_its_package_names(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
-            write(tmp, "ralph/STATE.md", "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# NEEDS_HUMAN — dm-a: premise false\n")
-            runs = []
-
-            def inner():
-                runs.append(1)
-                if len(runs) > 1:
-                    write(tmp, "ralph/DONE", "")
-            s.run_inner = inner
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                    mock.patch.object(ralph, "commit_state", return_value=None):
-                self.assertEqual(s.run(), 0)
-            self.assertTrue(pathlib.Path(tmp, "ralph/parked/dm-a.md").exists())
-            self.assertEqual(len(runs), 2)
-
-    def test_parking_stops_after_max_parks_with_no_unit_done(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
-            s.max_parks = 1
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n"
-                                         "- [ ] dm-c — depends []\n")
-            n = {"i": 0}
-
-            def inner():
-                n["i"] += 1
-                row = ["dm-a", "dm-b", "dm-c"][n["i"] - 1]
-                write(tmp, "ralph/NEEDS_HUMAN.md",
-                      f"# NEEDS_HUMAN — {row}: blocked\n\noperator-only: a fork\n")
-            s.run_inner = inner
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                    mock.patch.object(ralph, "commit_state", return_value=None):
-                self.assertEqual(s.run(), 2)
-            self.assertEqual(sorted(p.name for p in pathlib.Path(tmp, "ralph/parked").iterdir()),
-                             ["dm-a.md"])
-
-    def test_halt_stop_without_package_dispatches(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STOP", "halt: boom\n")
-            attempts = []
-
-            def resolver(attempt, reason):
-                attempts.append(attempt)
-                (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").unlink(missing_ok=True)
-                write(tmp, "ralph/DONE", "")
-
-            s = self.make(tmp, run_inner=lambda: None, resolver_run=resolver)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
-                self.assertEqual(s.run(), 0)
-            self.assertEqual(attempts, [1])
-
-    def test_a_sigterm_reaches_the_campaign_child_instead_of_a_sigkill(self):
-        # `launchctl kickstart -k` SIGTERMs the supervisor. The pool under it
-        # must get the SIGTERM (its handler takes the lane sessions down), not
-        # subprocess.run's SIGKILL, which orphaned a live lane session that
-        # drove one worktree beside its successor (2026-10-02).
-        pool = ("import os, pathlib, signal, sys, time\n"
-                "d = pathlib.Path(sys.argv[1])\n"
-                "def term(s, f):\n"
-                "    (d / 'pool-term').write_text('SIGTERM')\n"
-                "    sys.exit(0)\n"
-                "signal.signal(signal.SIGTERM, term)\n"
-                "(d / 'pool-ready').write_text(str(os.getpid()))\n"
-                "time.sleep(60)\n")
-        with tempfile.TemporaryDirectory() as tmp:
-            d = pathlib.Path(tmp)
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
-            child = write(tmp, "pool.py", pool)
-            sup = subprocess.Popen(
-                [sys.executable, ralph.__file__, "supervise", "--workdir", tmp, "--label", "t",
-                 "--", sys.executable, str(child), tmp],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            try:
-                deadline = time.time() + 20
-                while not (d / "pool-ready").exists() and time.time() < deadline:
-                    time.sleep(0.05)
-                self.assertTrue((d / "pool-ready").exists(), "the campaign child never started")
-                sup.send_signal(signal.SIGTERM)
-                sup.wait(timeout=20)
-            finally:
-                sup.kill()
-                ready = d / "pool-ready"
-                if ready.exists() and ready.read_text():
-                    with contextlib.suppress(ProcessLookupError):
-                        os.kill(int(ready.read_text()), signal.SIGKILL)
-            term = d / "pool-term"
-            self.assertEqual(term.read_text() if term.exists() else "SIGKILLed", "SIGTERM")
-
-
-class SupervisorCooldownTests(unittest.TestCase):
-    """A stop that names no row — a dead roster, a full disk, an I/O error, a
-    crash — is the loop's, not the operator's. The ersilia supervisor exited on
-    23 of them ("changed nothing — escalating") and sat down for 76.9 of its
-    143 stuck hours, 9.4 of them the operator's (2026-09-17 → 10-04). It cools
-    down and relaunches instead; past the last cool-down with no unit done, the
-    stop stands."""
-
-    def make(self, tmp, *, run_inner, cooldowns=(600, 1200), resolver_run=lambda *a: None):
-        write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-        self.slept = []
-        paths = ralph.Paths(pathlib.Path(tmp))
-        return ralph.Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
-                                notify_enabled=False, resolve_max=2,
-                                cooldowns=cooldowns, sleep=self.slept.append,
-                                clock=itertools.count(0, 10 * ralph.NEVER_RAN_SECS).__next__)
-
-    def test_a_stop_that_names_no_row_cools_down_and_relaunches(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            runs = []
-
-            def inner():
-                runs.append(1)
-                if len(runs) == 1:
-                    write(tmp, "ralph/NEEDS_HUMAN.md", "# no healthy model in the roster\n")
-                    write(tmp, "ralph/STOP", "halt: no healthy model in the roster\n")
-                else:
-                    write(tmp, "ralph/DONE", "")
-            s = self.make(tmp, run_inner=inner)
-            out = io.StringIO()
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                    contextlib.redirect_stdout(out):
-                self.assertEqual(s.run(), 0)
-            self.assertEqual(len(runs), 2)
-            self.assertEqual(sum(self.slept), 600)
-            self.assertIn("cooling down 10 min (1/2)", out.getvalue())
-            halts = list(pathlib.Path(tmp, "target/ralph/halts").glob("*.md"))
-            self.assertEqual(len(halts), 1)
-            self.assertIn("no healthy model", halts[0].read_text())
-            self.assertFalse(pathlib.Path(tmp, "ralph/STOP").exists())
-
-    def test_cool_downs_are_bounded_and_then_the_stop_stands(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            def inner():
-                write(tmp, "ralph/NEEDS_HUMAN.md", "# disk full\n")
-            s = self.make(tmp, run_inner=inner)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(s.run(), 2)
-            self.assertEqual(sum(self.slept), 600 + 1200)
-
-    def test_an_operator_stop_during_a_cool_down_is_honoured(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            def inner():
-                write(tmp, "ralph/NEEDS_HUMAN.md", "# disk full\n")
-            s = self.make(tmp, run_inner=inner)
-
-            def sleep(secs):
-                self.slept.append(secs)
-                write(tmp, "ralph/STOP", "")
-            s.sleep = sleep
-            runs = []
-            s.run_inner = lambda: (runs.append(1), inner())
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(s.run(), 0)
-            self.assertEqual(len(runs), 1)
-
-    def test_a_unit_done_resets_the_cool_downs(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            n = {"i": 0}
-
-            def inner():
-                n["i"] += 1
-                if n["i"] == 3:
-                    write(tmp, "ralph/STATE.md", "- [x] dm-a — depends []\n- [ ] dm-b — depends []\n")
-                if n["i"] < 5:
-                    write(tmp, "ralph/NEEDS_HUMAN.md", "# disk full\n")
-                else:
-                    write(tmp, "ralph/DONE", "")
-            s = self.make(tmp, run_inner=inner)
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(s.run(), 0)     # two cool-downs, then two more after dm-a
-            self.assertEqual(n["i"], 5)
-
-
-class SupervisorUnreadableQueueTests(unittest.TestCase):
-    make = SupervisorCooldownTests.make
-
-    def test_an_unreadable_queue_is_not_a_crash(self):
-        # Queue refused an unknown dependency, _queue() returned None, and
-        # done_count() on it raised: the supervisor died with a traceback at
-        # boot (ersilia, 2026-09-17, ~18h before anyone saw it).
-        with tempfile.TemporaryDirectory() as tmp:
-            s = self.make(tmp, run_inner=lambda: write(tmp, "ralph/DONE", ""))
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends [nope]\n")
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(s.run(), 0)
-
-
-class SurvivalTests(unittest.TestCase):
-    """On a full disk the halt itself raised (ENOSPC writing its package), the
-    guard re-halted and raised again, and the supervisor died with a traceback:
-    the ersilia loop sat 4.9h with no alert (2026-10-03). Any other uncaught
-    error ends the same way, and nothing restarts the job."""
-
-    make = SupervisorCooldownTests.make
-
-    def test_a_halt_on_a_full_disk_still_notifies_and_does_not_raise(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            paths = ralph.Paths(pathlib.Path(tmp))
-            told = []
-            full = OSError(28, "No space left on device")
-            with mock.patch.object(pathlib.Path, "write_text", side_effect=full), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                result = ralph.halt(paths, "unhandled I/O error",
-                                    notifier=lambda title, body, on: told.append(title))
-            self.assertEqual(result.outcome, ralph.Outcome.HALT)
-            self.assertIn("OPERATOR — halt unwritable", told)
-
-    def test_a_log_line_on_a_full_disk_is_dropped_not_raised(self):
-        class Full(io.StringIO):
-            def write(self, _):
-                raise OSError(28, "No space left on device")
-        with contextlib.redirect_stdout(Full()):
-            ralph.say("this line cannot be written")
-
-    def test_an_unexpected_supervisor_error_cools_down_and_retries(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            runs = []
-
-            def inner():
-                runs.append(1)
-                if len(runs) == 1:
-                    raise RuntimeError("the campaign could not be launched")
-                write(tmp, "ralph/DONE", "")
-            s = self.make(tmp, run_inner=inner)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(s.run(), 0)
-            self.assertIn("supervisor error: RuntimeError", out.getvalue())
-            self.assertEqual(sum(self.slept), 600)
-
-    def test_a_supervisor_error_that_persists_still_ends_the_run(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            def inner():
-                raise RuntimeError("the campaign could not be launched")
-            s = self.make(tmp, run_inner=inner)
-            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(RuntimeError):
-                s.run()
-            self.assertEqual(sum(self.slept), 600 + 1200)
-
-
-class SupervisorResolverDidNotRunTests(unittest.TestCase):
-    """12 of the ersilia supervisor's 23 "changed nothing" escalations came from
-    resolvers that lasted two minutes or less, 9 of them 30-32s: they never ran,
-    yet each one counted, and parked or ended the night."""
-
-    make = SupervisorCooldownTests.make
-
-    def test_a_resolver_that_ends_at_once_did_not_run_and_parks_nothing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            runs = []
-
-            def inner():
-                runs.append(1)
-                if len(runs) == 1:
-                    write(tmp, "ralph/STATE.md",
-                          "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n")
-                    write(tmp, "ralph/NEEDS_HUMAN.md", "# NEEDS_HUMAN — dm-a: premise false\n")
-                else:
-                    write(tmp, "ralph/DONE", "")
-            s = self.make(tmp, run_inner=inner)
-            s.clock = itertools.count(0, 30).__next__
-            out = io.StringIO()
-            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
-                    mock.patch.object(ralph, "commit_state", return_value=None), \
-                    contextlib.redirect_stdout(out):
-                self.assertEqual(s.run(), 0)
-            self.assertFalse(pathlib.Path(tmp, "ralph/parked/dm-a.md").exists())
-            self.assertIn("did not run", out.getvalue())
-            self.assertEqual(len(runs), 2)
-
-
-class WatchTests(unittest.TestCase):
-    def make(self, tmp, *, running=True, free=100_000, stall_secs=300):
-        (pathlib.Path(tmp) / "ralph").mkdir(exist_ok=True)
-        notes = []
-        paths = ralph.Paths(pathlib.Path(tmp))
-        w = ralph.Watch(paths, label="t", running=lambda: running,
-                        disk_free_mb=lambda: free, stall_secs=stall_secs,
-                        notifier=lambda title, body, enabled: notes.append((title, body)))
-        return w, notes
-
-    def test_needs_human_done_and_operator_stop(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            w, _ = self.make(tmp)
-            pkg = write(tmp, "ralph/NEEDS_HUMAN.md", "# x\n")
-            self.assertTrue(w.condition()[0].startswith("needs-human"))
-            pkg.unlink()
-            done = write(tmp, "ralph/DONE", "")
-            self.assertIsNone(w.condition())
-            done.unlink()
-            write(tmp, "ralph/STOP", "")
-            self.assertIsNone(w.condition())
-
-    def test_down_stalled_disk(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            w, _ = self.make(tmp, running=False)
-            self.assertEqual(w.condition()[0], "down")
-        with tempfile.TemporaryDirectory() as tmp:
-            w, _ = self.make(tmp)
-            hb = write(tmp, "ralph/.heartbeat", "1 x\n")
-            old = time.time() - 600
-            os.utime(hb, (old, old))
-            self.assertEqual(w.condition()[0], "stalled")
-        with tempfile.TemporaryDirectory() as tmp:
-            w, _ = self.make(tmp, free=100)
-            self.assertEqual(w.condition()[0], "disk-low")
-
-    def test_dedup_and_renag_on_new_content(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            w, notes = self.make(tmp)
-            state = pathlib.Path(tmp) / "watch.state"
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# x\n")
-            w.run(state)
-            w.run(state)
-            self.assertEqual(len(notes), 1)
-            write(tmp, "ralph/NEEDS_HUMAN.md", "# y\n")
-            w.run(state)
-            self.assertEqual(len(notes), 2)
-            (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").unlink()
-            w.run(state)
-            self.assertEqual(state.read_text(), "")
-
-
-def in_tree_lanes(paths):
-    """The pool tests keep lane worktrees inside their temporary directory, so
-    nothing outlives it; production's default sits beside the main tree
-    (`lane_root_for`, LaneRootTests)."""
-    return paths.workdir / ".ralph" / "wt"
-
-
-class LaneRootTests(unittest.TestCase):
-    def test_lanes_live_beside_the_main_tree_not_under_it(self):
-        # Under the main tree cargo merges the main tree's .cargo/config.toml
-        # into every lane's, doubling target.rustflags, and every crates.io
-        # unit's identity changes with it.
-        with tempfile.TemporaryDirectory() as tmp:
-            workdir = pathlib.Path(tmp) / "repo"
-            workdir.mkdir()
-            root = ralph.lane_root_for(workdir)
-            self.assertEqual(root, workdir.resolve().parent / "repo-lanes")
-            self.assertNotIn(workdir.resolve(), root.parents)
-            pool = ralph.Pool(ralph.Paths(workdir), session_for=lambda cwd, env=None: None,
-                              notify_enabled=False)
-            self.assertEqual(pool.lane_root, root)
-
-
-class FakeLane:
-    """A lane session: writes its unit's file, commits, and marks done."""
-
-    def __init__(self, cwd, body=None, shared=False):
-        self.cwd = pathlib.Path(cwd)
-        self.body = body if body is not None else self.cwd.name
-        self.shared = shared
-
-    def run(self, model_args, prompt, log):
-        unit = self.cwd.name
-        name = "shared.txt" if self.shared else f"{unit}.txt"
-        (self.cwd / name).write_text(self.body)
-        (self.cwd / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
-        (self.cwd / "ralph" / "lanes" / f"{unit}.done").write_text("")
-        subprocess.run(["git", "-C", str(self.cwd), "add", "-A"], check=True)
-        subprocess.run(["git", "-C", str(self.cwd), "commit", "-q", "-m", unit], check=True)
-        return 0
-
-
-class WaitingLane:
-    """A lane session whose detached run outlives it (the r9-boundary-sweep
-    shape, struck out twice for it, 2026-09-19): it banks `ralph/waiting`
-    naming `ralph/field-x.done` and ends. Only once the marker has landed
-    does a respawned session finish the unit."""
-
-    runs = 0
-
-    def __init__(self, cwd):
-        self.cwd = pathlib.Path(cwd)
-
-    def run(self, model_args, prompt, log):
-        WaitingLane.runs += 1
-        unit = self.cwd.name
-        if (self.cwd / "ralph" / "field-x.done").exists():
-            (self.cwd / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
-            (self.cwd / "ralph" / "lanes" / f"{unit}.done").write_text("")
-            subprocess.run(["git", "-C", str(self.cwd), "add",
-                            f"ralph/lanes/{unit}.done"], check=True)
+def git(cwd, *args):
+    r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)}: {r.stderr}")
+    return r.stdout.strip()
+
+
+PROMPT = "Do your unit. End with ralph-result as the note above says.\n"
+
+
+def make_repo(tmp, state, prompt=PROMPT, extra=None):
+    wd = pathlib.Path(tmp) / "repo"
+    wd.mkdir()
+    git(wd, "init", "-q", "-b", "main")
+    git(wd, "config", "user.email", "t@example.invalid")
+    git(wd, "config", "user.name", "t")
+    write(wd, ".gitignore", "target/\n")
+    write(wd, "ralph/STATE.md", state)
+    write(wd, "ralph/PROMPT.md", prompt)
+    for rel, text in (extra or {}).items():
+        write(wd, rel, text)
+    git(wd, "add", "-A")
+    git(wd, "commit", "-q", "-m", "init")
+    ralph.ensure_excludes(wd, ralph.RUNTIME_MARKERS)
+    return wd
+
+
+class Clock:
+    def __init__(self):
+        self.t = 1_000_000.0
+
+    def __call__(self):
+        return self.t
+
+    def advance(self, secs):
+        self.t += secs
+
+
+class Session:
+    """What a fake session sees, and the two things it does."""
+
+    def __init__(self, argv, cwd, env):
+        self.argv, self.cwd, self.env = argv, pathlib.Path(cwd), env
+        self.prompt = argv[-1]
+
+    def commit(self, rel="work.txt", text=None, msg="work"):
+        p = self.cwd / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text if text is not None else (p.read_text() if p.exists() else "") + "x\n")
+        git(self.cwd, "add", "--", rel)
+        git(self.cwd, "commit", "-q", "-m", msg)
+
+    def result(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, self.env), contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(err):
+            rc = ralph.main(["result", *args])
+        self.last = (rc, out.getvalue(), err.getvalue())
+        return rc
+
+
+FOREVER = "forever"      # a scenario's lifetime: alive until the loop kills it
+
+
+class Procs:
+    """spawn / alive / kill for the Loop. A session spawn runs the next
+    scenario at once; a run spawn the next run scenario. Each reports alive
+    for the ticks it returned (FOREVER: until killed; nothing: it has ended)."""
+
+    def __init__(self):
+        self.pid = 70000
+        self.life = {}
+        self.sessions, self.runs = [], []
+        self.spawned, self.killed, self.finals = [], [], {}
+
+    def spawn(self, argv, *, cwd, env, log_path, append=False):
+        self.pid += 1
+        pathlib.Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(log_path).write_text("")
+        self.spawned.append((argv, pathlib.Path(cwd), env, pathlib.Path(log_path)))
+        if argv[0] == "/bin/sh":
+            scenario = self.runs.pop(0) if self.runs else (lambda *a: (FOREVER, None))
+            ticks, code = scenario(argv[4:], pathlib.Path(cwd), env)
+            if code is not None:
+                self.finals[self.pid] = (env["RALPH_EXIT"], code)
         else:
-            (self.cwd / "ralph" / "waiting").write_text(
-                f"waiting on ralph/field-x.done — health check #{WaitingLane.runs}\n")
-            subprocess.run(["git", "-C", str(self.cwd), "add", "-A"], check=True)
-        subprocess.run(["git", "-C", str(self.cwd), "commit", "-q", "-m", unit], check=True)
-        return 0
+            scenario = self.sessions.pop(0) if self.sessions else (lambda s: 0)
+            ticks = scenario(Session(argv, cwd, env))
+        self.life[self.pid] = None if ticks == FOREVER else int(ticks or 0)
+        return ralph.Proc(self.pid, "fake")
+
+    def alive(self, proc):
+        n = self.life.get(proc.pid, 0)
+        if n is None:
+            return True
+        if n > 0:
+            self.life[proc.pid] = n - 1
+            return True
+        final = self.finals.pop(proc.pid, None)
+        if final:
+            pathlib.Path(final[0]).write_text(f"{final[1]}\n")
+        return False
+
+    def kill(self, proc):
+        self.killed.append(proc.pid)
+        self.finals.pop(proc.pid, None)
+        self.life[proc.pid] = 0
+
+    def session_argvs(self):
+        return [a for a, *_ in self.spawned if a[0] != "/bin/sh"]
 
 
-class FakeReview:
-    """A main-tree review session: marks its row [x] and commits."""
+class Rig:
+    """A Loop over a temp repo, with every seam faked."""
 
-    def __init__(self, root, unit="REVIEW-a"):
-        self.root = pathlib.Path(root)
-        self.unit = unit
+    def __init__(self, tmp, state, *, lane_mode=False, lanes=1, charter=None, prompt=PROMPT,
+                 models=None, probe=None, disk=None, extra=None, **kw):
+        self.tmp = pathlib.Path(tmp)
+        self.wd = make_repo(tmp, state, prompt, extra)
+        self.procs, self.clock, self.notes = Procs(), Clock(), []
+        self.disk = disk or (lambda: 100)
+        self.probe = probe or (lambda m: (True, ""))
+        self.kw = dict(label="t", lanes=lanes, lane_mode=lane_mode, base_branch="main",
+                       charter=charter, models=models or {"MODEL": "prov/m"},
+                       state_dir=self.tmp / "state", lane_root=self.tmp / "lanes", **kw)
+        self.loop = self.new_loop()
 
-    def run(self, model_args, prompt, log):
-        q = ralph.Queue(self.root / "ralph/STATE.md")
-        q.set_status(self.unit, ralph.Status.DONE)
-        subprocess.run(["git", "-C", str(self.root), "add", "-A"], check=True)
-        subprocess.run(["git", "-C", str(self.root), "commit", "-q", "-m", "review"], check=True)
-        return 0
+    def new_loop(self):
+        return ralph.Loop(
+            ralph.Paths(self.wd), spawn=self.procs.spawn, alive=self.procs.alive,
+            kill=self.procs.kill, clock=self.clock, sleep=lambda s: FOREVER,
+            probe=lambda m: self.probe(m), jobs_share=lambda n: (2, "test budget"),
+            disk_free_gb=lambda: self.disk(), code_digest=lambda: "same",
+            notifier=lambda title, body, enabled: self.notes.append((title, body)),
+            **self.kw)
+
+    def tick(self, n=1):
+        out = None
+        for _ in range(n):
+            out = self.loop.tick()
+            self.clock.advance(30)
+        return out
+
+    def state(self, unit):
+        return self.loop.state(unit)
+
+    def row(self, unit):
+        return ralph.Queue(self.wd / "ralph/STATE.md").by_id()[unit]
+
+    def entry(self, unit):
+        return self.loop.ledger.units.get(unit, {})
+
+    def titles(self):
+        return [t for t, _ in self.notes]
+
+
+def done(s):
+    s.commit()
+    assert s.result("done") == 0, s.last
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# The table.
+
+
+class TableTests(unittest.TestCase):
+    def test_every_pair_is_defined_or_impossible_with_a_reason(self):
+        for state in U:
+            for event in E:
+                defined = (state, event) in ralph.TRANSITIONS
+                impossible = (state, event) in ralph.IMPOSSIBLE
+                self.assertTrue(defined != impossible,
+                                f"({state.value}, {event.value}) must be in exactly one")
+                if impossible:
+                    self.assertTrue(ralph.IMPOSSIBLE[(state, event)].strip())
+
+    def test_every_action_is_a_loop_method(self):
+        for (state, event), (to, action) in ralph.TRANSITIONS.items():
+            self.assertIsInstance(to, U)
+            if action:
+                self.assertTrue(hasattr(ralph.Loop, f"_do_{action}"), action)
+
+    def test_every_waiting_state_has_an_owned_or_operator_exit(self):
+        # No waiting state is left by a file an agent writes, or by a clock alone.
+        for state in U:
+            if state is U.DONE:
+                continue
+            kind, how = ralph.WAITING_EXITS[state]
+            self.assertIn(kind, ("owned", "operator"), state)
+            leaves = {to for (s, e), (to, _) in ralph.TRANSITIONS.items() if s is state and to is not s}
+            self.assertTrue(leaves, f"{state.value} has no transition out")
+
+    def test_every_active_state_is_left_by_an_event_of_its_own_process(self):
+        own = {U.RUNNING: {E.RESULT_DONE, E.NO_RESULT_NONE}, U.DIRECTING: {E.NO_RESULT_NONE},
+               U.AWAITING: {E.RUN_ENDED, E.RUN_OVER_BUDGET}, U.MERGING: {E.MERGE_CLEAN}}
+        for state, events in own.items():
+            for event in events:
+                to, _ = ralph.TRANSITIONS[(state, event)]
+                self.assertIsNot(to, state)
+
+    def test_a_static_path_joins_every_pair_of_static_states(self):
+        static = (U.PENDING, U.READY, U.HELD, U.DONE)
+        for a in static:
+            for b in static:
+                path = ralph.static_path(a, b)
+                state = a
+                for event in path:
+                    state = ralph.TRANSITIONS[(state, event)][0]
+                self.assertIs(state, b)
+
+    def test_the_loop_refuses_a_pair_outside_the_table(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rig = Rig(tmp, "- [ ] a — depends []\n- [ ] b — depends [a]\n")
+            rig.procs.sessions.append(lambda s: FOREVER)
+            rig.tick()
+            self.assertIs(rig.state("b"), U.PENDING)
+            with self.assertRaisesRegex(RuntimeError, "only a session the loop holds"):
+                rig.loop.fire("b", E.RESULT_DONE, result={})
+
+
+# ---------------------------------------------------------------------------
+# The one result verb.
+
+
+class ResultVerbTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.wd = make_repo(self.tmp.name, "- [ ] a — depends []\n")
+        base = pathlib.Path(self.tmp.name) / "base.json"
+        base.write_text(json.dumps({"head": "", "untracked": []}))
+        self.out = pathlib.Path(self.tmp.name) / "result.json"
+        self.s = Session(["x"], self.wd, {"RALPH_RESULT": str(self.out), "RALPH_BASE": str(base),
+                                          "RALPH_WORKSPACE": str(self.wd),
+                                          "RALPH_AWAIT_MAX": "86400"})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def recorded(self):
+        return json.loads(self.out.read_text())
+
+    def test_outside_a_session_it_refuses(self):
+        s = Session(["x"], self.wd, {"RALPH_RESULT": ""})
+        self.assertEqual(s.result("done"), 2)
+        self.assertIn("not inside a ralph session", s.last[2])
+
+    def test_done_refuses_a_dirty_tree_and_names_what_is_dirty(self):
+        write(self.wd, "stray.txt", "x")
+        self.assertEqual(self.s.result("done"), 2)
+        self.assertIn("stray.txt", self.s.last[2])
+        self.assertFalse(self.out.exists())
+        git(self.wd, "add", "stray.txt")
+        git(self.wd, "commit", "-q", "-m", "keep it")
+        self.assertEqual(self.s.result("done"), 0)
+        self.assertEqual(self.recorded()["kind"], "done")
+
+    def test_untracked_files_from_before_the_session_are_not_its_own(self):
+        write(self.wd, "old.log", "x")
+        base = pathlib.Path(self.s.env["RALPH_BASE"])
+        base.write_text(json.dumps({"head": "", "untracked": ["old.log"]}))
+        self.assertEqual(self.s.result("done"), 0, self.s.last)
+
+    def test_one_result_per_session(self):
+        self.assertEqual(self.s.result("continue", "half"), 0)
+        self.assertEqual(self.s.result("done"), 2)
+        self.assertIn("already reported (continue)", self.s.last[2])
+        self.assertEqual(self.recorded()["note"], "half")
+
+    def test_await_validates_budget_and_command(self):
+        self.assertEqual(self.s.result("await", "soon", "--", "true"), 2)
+        self.assertIn("not a duration", self.s.last[2])
+        self.assertEqual(self.s.result("await", "3d", "--", "true"), 2)
+        self.assertIn("exceeds this loop's cap", self.s.last[2])
+        self.assertEqual(self.s.result("await", "1h", "--"), 2)
+        self.assertIn("no command", self.s.last[2])
+        self.assertEqual(self.s.result("await", "1h", "--", "no-such-tool-xyz"), 2)
+        self.assertIn("neither on PATH", self.s.last[2])
+        self.assertEqual(self.s.result("await", "90m", "--", "sh", "-c", "exit 3"), 0)
+        self.assertEqual(self.recorded()["budget_s"], 5400)
+        self.assertEqual(self.recorded()["argv"], ["sh", "-c", "exit 3"])
+
+    def test_needs_human_wants_a_reason_and_reads_its_package(self):
+        self.assertEqual(self.s.result("needs-human"), 2)
+        write(self.wd, "pkg.md", "# options\n")
+        self.assertEqual(self.s.result("needs-human", "--package", "pkg.md", "--operator",
+                                       "pick", "one"), 0)
+        rec = self.recorded()
+        self.assertEqual((rec["why"], rec["operator"], rec["package"]),
+                         ("pick one", True, "# options\n"))
+
+    def test_the_wrapper_runs_the_loops_own_file(self):
+        wrapper = ralph.RALPH_BIN / "ralph-result"
+        env = {**os.environ, **self.s.env, "RALPH_PY": str(pathlib.Path(ralph.__file__))}
+        r = subprocess.run([str(wrapper), "continue", "via", "path"], env=env,
+                           capture_output=True, text=True, cwd=self.wd)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.recorded()["note"], "via path")
+
+
+# ---------------------------------------------------------------------------
+# The process primitives, against real processes.
+
+
+class ProcTests(unittest.TestCase):
+    def test_a_spawned_group_is_alive_until_killed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = ralph.proc_spawn(["sleep", "30"], cwd=tmp, env=dict(os.environ),
+                                    log_path=pathlib.Path(tmp) / "log")
+            self.assertTrue(proc.started)
+            self.assertIs(ralph.proc_alive(proc), True)
+            ralph.proc_kill(proc, grace=2)
+            self.assertIs(ralph.proc_alive(proc), False)
+
+    def test_a_reused_pid_is_not_the_recorded_process(self):
+        # The start time names the process: a pid alone is reused after a reboot.
+        stranger = ralph.Proc(os.getpid(), "Thu Jan  1 00:00:00 1970")
+        self.assertIs(ralph.proc_alive(stranger), False)
+        me = ralph.Proc(os.getpid(), ralph.proc_start(os.getpid()))
+        self.assertIs(ralph.proc_alive(me), True)
+
+    def test_the_await_wrapper_records_any_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exit_file = pathlib.Path(tmp) / "x.exit"
+            proc = ralph.proc_spawn(["/bin/sh", "-c", ralph.AWAIT_SH, "ralph-await", "sh", "-c",
+                                     "echo out; exit 3"], cwd=tmp,
+                                    env={**os.environ, "RALPH_EXIT": str(exit_file)},
+                                    log_path=pathlib.Path(tmp) / "log")
+            deadline = time.time() + 10
+            while ralph.proc_alive(proc) and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertEqual(exit_file.read_text().strip(), "3")
+            self.assertIn("out", (pathlib.Path(tmp) / "log").read_text())
+
+    def test_a_killed_run_leaves_no_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exit_file = pathlib.Path(tmp) / "x.exit"
+            proc = ralph.proc_spawn(["/bin/sh", "-c", ralph.AWAIT_SH, "ralph-await", "sleep", "30"],
+                                    cwd=tmp, env={**os.environ, "RALPH_EXIT": str(exit_file)},
+                                    log_path=pathlib.Path(tmp) / "log")
+            ralph.proc_kill(proc, grace=2)
+            self.assertFalse(exit_file.exists())
+
+    def test_durations(self):
+        self.assertEqual([ralph.parse_duration(t) for t in ("90m", "6h", "2d", "45", "x", "")],
+                         [5400, 21600, 172800, 45, None, None])
+
+
+# ---------------------------------------------------------------------------
+# The serial loop.
+
+
+class SerialTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def rig(self, state="- [ ] a — depends []\n- [ ] b — depends [a]\n", **kw):
+        return Rig(self.tmp.name, state, **kw)
+
+    def test_a_unit_reported_done_is_marked_with_its_commit_and_the_queue_ends_done(self):
+        rig = self.rig()
+        rig.procs.sessions += [done, done]
+        rig.tick()
+        self.assertIs(rig.state("a"), U.RUNNING)
+        self.assertIs(rig.state("b"), U.PENDING)
+        rig.tick()
+        row = rig.row("a")
+        self.assertIs(row.status, ralph.Status.DONE)
+        mark = git(rig.wd, "log", "--format=%H", "--grep=^ralph: a done$")
+        self.assertTrue(git(rig.wd, "rev-parse", f"{mark}^").startswith(row.hash))
+        self.assertIs(rig.state("b"), U.RUNNING)
+        self.assertIs(rig.tick(), ralph.Pool.DONE)
+        self.assertTrue((rig.wd / "ralph/DONE").exists())
+        self.assertIn("DONE — campaign complete", rig.titles())
+
+    def test_the_session_is_told_its_unit_and_the_contract(self):
+        rig = self.rig()
+        rig.procs.sessions.append(done)
+        rig.tick()
+        prompt = rig.procs.session_argvs()[0][-1]
+        self.assertIn("Your unit: a", prompt)
+        self.assertIn("HOW THIS SESSION ENDS", prompt)
+        self.assertTrue(prompt.endswith(PROMPT))
+        env = rig.procs.spawned[0][2]
+        self.assertTrue(env["PATH"].startswith(str(ralph.RALPH_BIN)))
+        self.assertEqual(env["RALPH_UNIT"], "a")
+
+    def test_a_continue_note_reaches_the_next_session(self):
+        rig = self.rig()
+
+        def cont(s):
+            s.commit()
+            s.result("continue", "the", "parser", "is", "half", "done")
+
+        rig.procs.sessions += [cont, done]
+        rig.tick(2)
+        self.assertIn("the parser is half done", rig.procs.session_argvs()[1][-1])
+        self.assertEqual(rig.entry("a").get("strikes"), 0)
+
+    def test_strikes_escalate_to_held_without_a_charter_and_the_rest_runs(self):
+        rig = self.rig("- [ ] a — depends []\n- [ ] c — depends []\n")
+        nothing = lambda s: 0          # noqa: E731 — ends with no result and no commit
+        rig.procs.sessions += [nothing] * 3 + [done]
+        rig.tick(3)                 # an end is seen and the unit re-dispatched in one tick
+        self.assertEqual(rig.entry("a")["strikes"], 2)
+        rig.tick()
+        self.assertEqual(rig.entry("a")["strikes"], 3)
+        self.assertIs(rig.state("a"), U.HELD)
+        self.assertTrue((rig.wd / "ralph/parked/a.md").exists())
+        self.assertIn("struck out", (rig.wd / "ralph/parked/a.md").read_text())
+        self.assertIs(rig.state("c"), U.RUNNING)
+        self.assertIn("OPERATOR — held, loop continues", rig.titles())
+
+    def test_unparking_resets_the_strikes(self):
+        rig = self.rig("- [ ] a — depends []\n")
+        rig.procs.sessions += [lambda s: 0] * 3
+        rig.tick(5)
+        self.assertIs(rig.state("a"), U.HELD)
+        self.assertIs(rig.loop.tick(), ralph.Pool.STUCK)
+        (rig.wd / "ralph/parked/a.md").unlink()
+        rig.procs.sessions.append(done)
+        rig.tick()
+        self.assertEqual(rig.entry("a")["strikes"], 0)
+        self.assertIs(rig.state("a"), U.RUNNING)
+
+    def test_needs_human_holds_the_row_with_its_package(self):
+        rig = self.rig("- [ ] a — depends []\n- [ ] c — depends []\n")
+
+        def ask(s):
+            write(s.cwd, "pkg.md", "A or B: A costs 2h, B costs a test.\n")
+            s.result("needs-human", "--package", "pkg.md", "pick", "A", "or", "B")
+
+        rig.procs.sessions += [ask, done]
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.HELD)
+        package = (rig.wd / "ralph/parked/a.md").read_text()
+        self.assertIn("pick A or B", package)
+        self.assertIn("A costs 2h", package)
+        self.assertIs(rig.state("c"), U.RUNNING)
+
+    def test_with_a_charter_a_worker_question_goes_to_the_director_first(self):
+        rig = self.rig("- [ ] a — depends []\n", charter="decide row order\n",
+                       models={"MODEL": "prov/w", "RESOLVE_MODEL": "prov/r"})
+
+        def ask(s):
+            s.result("needs-human", "which", "option")
+
+        def direct(s):
+            s.commit("row-fix.txt")
+            s.result("continue", "take", "option", "A")
+
+        rig.procs.sessions += [ask, direct, done]
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.DIRECTING)
+        director = rig.procs.session_argvs()[1]
+        self.assertIn("DIRECTOR for unit a", director[-1])
+        self.assertIn("which option", director[-1])
+        self.assertIn("decide row order", director[-1])
+        self.assertEqual(director[director.index("--model") + 1], "prov/r")
+        rig.tick()
+        self.assertIs(rig.state("a"), U.RUNNING)
+        self.assertIn("the director: take option A", rig.procs.session_argvs()[2][-1])
+        rig.tick()
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+
+    def test_a_director_that_leaves_it_to_the_operator_holds_it(self):
+        rig = self.rig("- [ ] a — depends []\n", charter="c\n")
+        rig.procs.sessions += [lambda s: 0] * 3 + [
+            lambda s: s.result("needs-human", "--operator", "the", "charter", "reserves", "it")]
+        rig.tick(5)
+        self.assertIs(rig.state("a"), U.HELD)
+        self.assertIn("the charter reserves it", (rig.wd / "ralph/parked/a.md").read_text())
+        self.assertEqual(rig.entry("a")["directed"], 1)
+
+    def test_a_session_past_its_timeout_is_ended_and_judged_by_its_end(self):
+        rig = self.rig(session_timeout=60)
+
+        def slow(s):
+            s.commit()
+            return FOREVER
+
+        rig.procs.sessions += [slow, done]
+        rig.tick()
+        rig.tick()                  # 30s: still inside the timeout
+        self.assertIs(rig.state("a"), U.RUNNING)
+        rig.tick()                  # 60s: killed; it committed, so it continues
+        self.assertEqual(len(rig.procs.killed), 1)
+        self.assertEqual(rig.entry("a")["continuations"], 1)
+        self.assertIn("auto — session timeout", rig.titles())
+
+    def test_operator_stop_ends_sessions_without_a_strike_and_leaves_runs(self):
+        rig = self.rig("- [ ] a — depends []\n")
+        rig.procs.sessions.append(lambda s: FOREVER)
+        rig.tick()
+        write(rig.wd, "ralph/STOP", "")
+        self.assertIs(rig.tick(), ralph.Pool.STOPPED)
+        self.assertIs(rig.state("a"), U.READY)
+        self.assertEqual(rig.entry("a")["strikes"], 0)
+        self.assertIn("operator stop ended the previous session", rig.entry("a")["notes"][0])
+
+    def test_a_drain_lets_the_session_finish_and_starts_nothing(self):
+        rig = self.rig()
+        rig.procs.sessions += [lambda s: (done(s), 2)[1]]
+        rig.tick()
+        write(rig.wd, "ralph/STOP", "drain\n")
+        self.assertIs(rig.tick(), ralph.Pool.DRAINING)
+        self.assertIs(rig.tick(), ralph.Pool.DRAINING)
+        self.assertIs(rig.tick(), ralph.Pool.STOPPED)
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertEqual(len(rig.procs.session_argvs()), 1)
+        self.assertEqual((rig.wd / "ralph/STOP").read_text(), "")
+
+    def test_a_queue_whose_prompt_is_on_the_file_protocol_blocks_dispatch(self):
+        rig = self.rig(prompt="Write ralph/waiting naming your marker.\n")
+        self.assertIs(rig.tick(), ralph.Pool.BLOCKED)
+        self.assertEqual(rig.procs.spawned, [])
+        self.assertIn("OPERATOR — blocked: prompt", rig.titles())
+        rig.tick(3)
+        self.assertEqual(rig.titles().count("OPERATOR — blocked: prompt"), 1)
+
+    def test_a_human_row_is_held_and_stuck_is_said_once(self):
+        rig = self.rig("- [ ] HUMAN-approve — depends []\n- [ ] a — depends [HUMAN-approve]\n")
+        self.assertIs(rig.tick(), ralph.Pool.STUCK)
+        rig.tick(3)
+        self.assertEqual(rig.titles().count("OPERATOR — stuck"), 1)
+        self.assertIs(rig.state("HUMAN-approve"), U.HELD)
+
+
+# ---------------------------------------------------------------------------
+# The pool.
 
 
 class PoolTests(unittest.TestCase):
-    def fixture(self, tmp, rows):
-        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
-        write(tmp, "ralph/STATE.md", rows)
-        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
-        write(tmp, "seed.txt", "seed")
-        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
-        return pathlib.Path(tmp)
-
-    def make(self, root, session_for, **kwargs):
-        paths = ralph.Paths(root)
-        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
-                          lane_root=in_tree_lanes(paths),
-                          lanes=2, base_branch="main", sleep=lambda s: None, **kwargs)
-
-    def test_pick_wave_excludes_reviews_deps_and_conflicts(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md",
-                  "- [ ] dm-a — depends []\n"
-                  "- [ ] REVIEW-r — depends []\n"
-                  "- [ ] dm-b — depends [dm-a]\n"
-                  "- [~] dm-c — depends []\n"
-                  "- [ ] dm-d — depends []\n")
-            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
-            self.assertEqual(q.pick_wave(2, set()), ["dm-a", "dm-c"])
-            self.assertEqual(q.pick_wave(4, {frozenset(("dm-a", "dm-c"))}),
-                             ["dm-a", "dm-d"])
-
-    def test_a_row_marked_alone_shares_a_wave_with_no_row_added_before_or_after(self):
-        # phase-c's -measure rows paired themselves with every row by hand, and
-        # the seven rows added later were paired with nothing (2026-10-02).
-        with tempfile.TemporaryDirectory() as tmp:
-            state = pathlib.Path(tmp) / "ralph/STATE.md"
-            alone = ralph.conflict_pairs("dm-m *  # a reading: no lane compiles beside it\n")
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-m — depends []\n"
-                                         "- [ ] dm-late — depends []\n")
-            self.assertEqual(ralph.Queue(state).pick_wave(3, alone), ["dm-a", "dm-late"])
-            write(tmp, "ralph/STATE.md", "- [x] dm-a — depends []\n- [ ] dm-m — depends []\n"
-                                         "- [ ] dm-late — depends []\n")
-            self.assertEqual(ralph.Queue(state).pick_wave(3, alone), ["dm-m"])
-
-    def test_a_conflicts_line_of_n_ids_means_every_pair(self):
-        # ring-doc's line names three rows; until 2026-09-19 only the first two conflicted.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = pathlib.Path(tmp)
-            write(tmp, "ralph/conflicts.txt", (REPO / "ralph/next/ring-doc/conflicts.txt").read_text())
-            write(tmp, "ralph/STATE.md", "".join(
-                f"- [ ] {u} — depends []\n"
-                for u in ("rd-1-adapter", "rd-1-awareness", "rd-1-attribution")))
-            pairs = self.make(root, lambda cwd, env=None: None)._conflict_pairs()
-            for a, b in (("rd-1-adapter", "rd-1-awareness"), ("rd-1-adapter", "rd-1-attribution"),
-                         ("rd-1-awareness", "rd-1-attribution")):
-                self.assertIn(frozenset((a, b)), pairs)
-            self.assertEqual(ralph.Queue(root / "ralph/STATE.md").pick_wave(3, pairs),
-                             ["rd-1-adapter"])
-            self.assertEqual(ralph.conflict_pairs("a b  # why\n# c d\n\nsolo\n"),
-                             {frozenset(("a", "b"))})
-
-    def test_wave_merges_marks_and_writes_done(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
-            self.assertEqual(pool.run(), 0)
-            self.assertTrue((root / "ralph/DONE").exists())
-            self.assertTrue((root / "dm-a.txt").exists())
-            self.assertTrue((root / "dm-b.txt").exists())
-            q = ralph.Queue(root / "ralph/STATE.md")
-            self.assertTrue(q.all_done())
-
-    def test_resumed_lane_is_refreshed_onto_the_base(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            seed = subprocess.run(["git", "-C", tmp, "rev-parse", "HEAD"],
-                                  capture_output=True, text=True).stdout.strip()
-            # A harness fix lands on the base AFTER the lane worktree exists.
-            write(tmp, "harness.txt", "fixed")
-            subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-            subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "fix"], check=True)
-            wt = root / ".ralph" / "wt" / "dm-a"
-            subprocess.run(["git", "-C", tmp, "worktree", "add", "-q", "-b",
-                            "ralph/dm-a", str(wt), seed], check=True)
-
-            class HarnessLane(FakeLane):
-                def run(self, model_args, prompt, log):
-                    self.body = (self.cwd / "harness.txt").read_text()
-                    return super().run(model_args, prompt, log)
-
-            pool = self.make(root, lambda cwd, env=None: HarnessLane(cwd))
-            self.assertEqual(pool.run(), 0)
-            self.assertEqual((root / "dm-a.txt").read_text(), "fixed")
-
-    def test_lane_worktree_gets_host_pointer_dirs(self):
-        # A row's `read: O8` names `.sovereign/features/<id>/order.md`, which
-        # is gitignored (`.gitignore:44`), so `git worktree add` never brings
-        # it and the lane cannot execute its row (dm-vocab-compile-fail-test,
-        # 2026-09-17, three waves). The pool provisions the per-host pointers.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            write(tmp, ".gitignore", ".sovereign/features/\n")
-            write(tmp, ".sovereign/features/dm-a/order.md", "the order")
-            subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-            subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "pointers"], check=True)
-
-            class PointerLane(FakeLane):
-                def run(self, model_args, prompt, log):
-                    self.body = (self.cwd / ".sovereign/features/dm-a/order.md").read_text()
-                    return super().run(model_args, prompt, log)
-
-            pool = self.make(root, lambda cwd, env=None: PointerLane(cwd))
-            self.assertEqual(pool.run(), 0)
-            self.assertEqual((root / "dm-a.txt").read_text(), "the order")
-
-    def test_a_merge_conflict_goes_back_to_the_lane_and_the_pool_runs_on(self):
-        # A settle-time conflict halted the whole pool 8 times (2026-09-17 →
-        # 10-04); the base had moved under the lane, which is the lane's to
-        # resolve — its resume merges the base in and its session resolves it.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd, body=cwd.name, shared=True))
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertIn("back to the lane", out.getvalue())
-            state = (root / "ralph/STATE.md").read_text()
-            self.assertIn("- [x] dm-a", state)
-            self.assertIn("- [x] dm-b", state)
-
-    def test_a_lane_that_keeps_conflicting_halts_by_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd, body=cwd.name, shared=True),
-                             max_lane_failures=1)
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(pool.run(), 3)
-            self.assertIn("merge conflict", (root / "ralph/NEEDS_HUMAN.md").read_text())
-
-    def test_a_failed_done_commit_halts_by_name_not_as_the_next_merge_conflict(self):
-        # phase-c-19: the done commit after one merge failed unchecked, the
-        # next lane's merge refused on the dirty index, and the halt read
-        # "merge conflict" for a merge that was clean.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            write(tmp, "hooks/commit-msg",
-                  "#!/bin/sh\ngrep -q '^ralph: dm-a done' \"$1\" && exit 1\nexit 0\n")
-            (root / "hooks/commit-msg").chmod(0o755)
-            subprocess.run(["git", "-C", tmp, "config", "core.hooksPath", "hooks"], check=True)
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
-            self.assertEqual(pool.run(), 3)
-            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
-            self.assertIn("merged dm-a, but its done commit failed", pkg)
-            self.assertNotIn("merge conflict", pkg)
-
-    def test_review_runs_serially_and_completes(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
-            pool = self.make(root, lambda cwd: FakeReview(cwd))
-            self.assertEqual(pool.run(), 0)
-            self.assertTrue((root / "ralph/DONE").exists())
-
-    def test_operator_stop_is_terminal(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            write(tmp, "ralph/STOP", "")
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
-            self.assertEqual(pool.run(), 0)
-
-
-class PoolWaitingTests(unittest.TestCase):
-    """A lane that ends on `ralph/waiting` naming a marker is WAITING, not a
-    failure: no strike, the tick polls the marker and respawns the lane when
-    it lands, and waiting past LANE_MAX_WAIT_SECS escalates with a package
-    naming the unit, the marker and the elapsed time."""
-
-    def fixture(self, tmp, rows):
-        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
-        write(tmp, "ralph/STATE.md", rows)
-        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
-        write(tmp, "seed.txt", "seed")
-        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
-        return pathlib.Path(tmp)
-
-    def make(self, root, session_for, **kwargs):
-        paths = ralph.Paths(root)
-        kwargs.setdefault("sleep", lambda s: None)
-        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
-                          lane_root=in_tree_lanes(paths),
-                          lanes=2, base_branch="main", **kwargs)
-
-    def test_a_waiting_end_does_not_count_as_a_failure(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
-            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd))
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertIsNone(pool.run_wave(["dm-wait"]))
-            self.assertNotIn("dm-wait", pool._lane_failures)
-            self.assertTrue((root / ".ralph/wt/dm-wait/ralph/waiting").exists())
-            self.assertIn("waiting on ralph/field-x.done", out.getvalue())
-            self.assertNotIn("(failure 1/", out.getvalue())
-
-    def test_the_marker_appearing_respawns_the_lane(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
-            ticks = []
-
-            def tick(secs):
-                ticks.append(secs)
-                if len(ticks) == 2:      # the detached run finishes on the 2nd poll
-                    write(root / ".ralph/wt/dm-wait", "ralph/field-x.done", "")
-
-            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd), sleep=tick)
-            WaitingLane.runs = 0
-            self.assertEqual(pool.run(), 0)
-            self.assertTrue((root / "ralph/DONE").exists())
-            self.assertFalse((root / ".ralph/wt/dm-wait/ralph/waiting").exists())
-            self.assertEqual(WaitingLane.runs, 2)
-            self.assertTrue(ralph.Queue(root / "ralph/STATE.md").all_done())
-            # The lane committed its waiting file, and the finishing session
-            # commits by name — the resume must still end the waiting ON THE
-            # LANE BRANCH, or the merge parks the main tree's loop on a marker
-            # that only ever existed in the worktree.
-            self.assertFalse((root / "ralph/waiting").exists())
-
-    def test_a_lane_waiting_past_max_wait_parks_its_row_and_the_pool_runs_on(self):
-        # One overdue detached run halted the whole ersilia pool, and kept
-        # halting it after its row was parked (r9-invoice-batch, 2026-09-30).
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n- [ ] dm-b — depends []\n")
-
-            def tick(secs):
-                w = root / ".ralph/wt/dm-wait/ralph/waiting"
-                if w.exists():
-                    old = time.time() - 49 * 3600   # past the 48h bound
-                    os.utime(w, (old, old))
-
-            pool = self.make(root, lambda cwd, env=None: (
-                WaitingLane(cwd) if pathlib.Path(cwd).name == "dm-wait" else FakeLane(cwd)),
-                sleep=tick, boot_time=lambda: None)
-            WaitingLane.runs = 0
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(pool.run(), 3)
-            parked = (root / "ralph/parked/dm-wait.md").read_text()
-            self.assertIn("field-x.done", parked)
-            self.assertIn("49h", parked)
-            self.assertIn("- [x] dm-b", (root / "ralph/STATE.md").read_text())
-            self.assertIn("operator approval required",
-                          (root / "ralph/NEEDS_HUMAN.md").read_text())
-            self.assertEqual(WaitingLane.runs, 1)
-
-    def test_a_detached_run_older_than_the_last_boot_died_with_it_and_its_lane_resumes(self):
-        # The r9-invoice-batch battery run died when the machine shut down; the
-        # wait clock counted the 5.7 days it was off and the pool waited 22.9h
-        # more for a marker no process would ever write (2026-09-30).
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
-            w = write(root, ".ralph/wt/dm-wait/ralph/waiting", "ralph/field-x.done\n")
-            started = time.time() - 1000
-            os.utime(w, (started, started))
-            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd),
-                             boot_time=lambda: started + 500)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                reason, still = pool.poll_waiting_lanes()
-            self.assertIsNone(reason)
-            self.assertNotIn("dm-wait", still)
-            self.assertFalse(w.exists())
-            self.assertIn("died with the reboot", out.getvalue())
-
-    def test_a_parked_rows_lane_is_not_polled(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
-            w = write(root, ".ralph/wt/dm-wait/ralph/waiting", "ralph/field-x.done\n")
-            old = time.time() - 49 * 3600
-            os.utime(w, (old, old))
-            write(root, "ralph/parked/dm-wait.md", "# parked\n")
-            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd), boot_time=lambda: None)
-            with contextlib.redirect_stdout(io.StringIO()):
-                reason, still = pool.poll_waiting_lanes()
-            self.assertIsNone(reason)
-            self.assertNotIn("dm-wait", still)
-
-    def test_a_lane_waiting_on_its_own_done_marker_is_not_held(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
-            write(root, ".ralph/wt/dm-wait/ralph/waiting",
-                  "unit: dm-wait — the field run is in flight\n"
-                  "on resume: read its log, then ralph/lanes/dm-wait.done\n")
-            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd))
-            with contextlib.redirect_stdout(io.StringIO()):
-                reason, still = pool.poll_waiting_lanes()
-            self.assertIsNone(reason)
-            self.assertNotIn("dm-wait", still)
-
-
-class RosterProbeTests(unittest.TestCase):
-    """MODEL/REVIEW_MODEL are rosters (order ralph-model-roster): at wave
-    dispatch the pool probes each model in order — one minimal chat call
-    through the lane client, 20s — and the first healthy one runs the wave,
-    stamped in the log line. An all-dead roster parks the campaign naming
-    every cause, so a director reads one line, not three transcripts."""
-
-    def fixture(self, tmp, rows):
-        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
-        write(tmp, "ralph/STATE.md", rows)
-        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
-        write(tmp, "seed.txt", "seed")
-        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
-        return pathlib.Path(tmp)
-
-    def make(self, root, session_for, **kwargs):
-        paths = ralph.Paths(root)
-        kwargs.setdefault("sleep", lambda s: None)
-        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
-                          lane_root=in_tree_lanes(paths),
-                          lanes=2, base_branch="main", **kwargs)
-
-    def test_a_dead_first_roster_falls_through_to_the_healthy_model(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            probed = []
-
-            def probe(model):
-                probed.append(model)
-                if model == "prov/alive":
-                    return True, ""
-                return False, "Usage limit reached for 5 hour (resets 05:37Z)"
-
-            seen = []
-
-            class ModelLane(FakeLane):
-                def run(self, model_args, prompt, log):
-                    seen.append(model_args)
-                    return super().run(model_args, prompt, log)
-
-            pool = self.make(root, lambda cwd, env=None: ModelLane(cwd),
-                             model="prov/dead,prov/alive", probe=probe)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertEqual(probed, ["prov/dead", "prov/alive"])
-            self.assertEqual(seen[0][:2], ["--model", "prov/alive"])
-            self.assertIn("pool: probe prov/dead — Usage limit reached", out.getvalue())
-            self.assertIn("pool: wave dm-a · model prov/alive", out.getvalue())
-
-    def test_a_single_model_value_is_probed_too(self):
-        # "Single-model values behave exactly as today (the probe still
-        # runs; it replaces the wave-failure discovery)."
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            probed = []
-
-            def probe(model):
-                probed.append(model)
-                return True, ""
-
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
-                             model="prov/solo", probe=probe)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertEqual(probed, ["prov/solo"])
-            self.assertIn("pool: wave dm-a · model prov/solo", out.getvalue())
-
-    def test_an_all_dead_roster_parks_naming_each_cause(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            causes = {"prov/quota": "Usage limit reached for 5 hour (resets 05:37Z)",
-                      "prov/gone": "Unexpected server error",
-                      "prov/slow": "timeout after 20s"}
-            sessions = []
-            pool = self.make(root, lambda cwd, env=None: sessions.append(cwd),
-                             model=",".join(causes),
-                             probe=lambda m: (False, causes[m]))
-            self.assertEqual(pool.run(), 3)
-            self.assertEqual(sessions, [])          # no lane ever ran
-            self.assertFalse((root / ".ralph" / "wt" / "dm-a").exists())
-            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
-            self.assertIn("no healthy model", pkg)
-            for model, cause in causes.items():
-                self.assertIn(f"{model}: {cause}", pkg)
-            self.assertIn("halt: no healthy model", (root / "ralph/STOP").read_text())
-
-    def test_the_review_roster_probes_and_stamps_the_review_line(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
-            probed = []
-
-            def probe(model):
-                probed.append(model)
-                if model == "prov/rok":
-                    return True, ""
-                return False, "Unexpected server error"
-
-            seen = []
-
-            class RecordingReview(FakeReview):
-                def run(self, model_args, prompt, log):
-                    seen.append(model_args)
-                    return super().run(model_args, prompt, log)
-
-            pool = self.make(root, lambda cwd: RecordingReview(cwd),
-                             model="prov/worker",
-                             review_model="prov/rdead,prov/rok", probe=probe)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertEqual(probed, ["prov/rdead", "prov/rok"])
-            self.assertEqual(seen[0][:2], ["--model", "prov/rok"])
-            self.assertIn("serial review REVIEW-a (main tree) attempt 1 · model prov/rok",
-                          out.getvalue())
-
-
-class ProbeTests(unittest.TestCase):
-    def test_the_probe_hits_the_configured_client_and_keeps_causes(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            paths = ralph.Paths(pathlib.Path(tmp))
-            echo, false = shutil.which("echo"), shutil.which("false")
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": echo}):
-                self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": false}):
-                ok, cause = ralph.probe_model("prov/x", paths)
-                self.assertFalse(ok)
-                self.assertIn("exit 1", cause)
-            slow = pathlib.Path(tmp) / "slow-client.sh"
-            slow.write_text("#!/bin/sh\nsleep 5\n")
-            slow.chmod(0o755)
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(slow)}):
-                self.assertEqual(ralph.probe_model("prov/x", paths, timeout=1),
-                                 (False, "timeout after 1s"))
-
-    def test_the_probe_never_targets_localhost(self):
-        # The seam: probe the provider, never the mesh daemon. An entry whose
-        # provider is declared with a loopback baseURL is refused by name; a
-        # bare id names no provider at all.
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, ".opencode/opencode.json",
-                  '{"provider": {"mesh": {"options": {"baseURL": '
-                  '"http://localhost:9741/v1"}}}}')
-            paths = ralph.Paths(pathlib.Path(tmp))
-            ok, cause = ralph.probe_model("mesh/fast", paths)
-            self.assertFalse(ok)
-            self.assertIn("localhost", cause)
-            ok, cause = ralph.probe_model("bare", paths)
-            self.assertFalse(ok)
-            self.assertIn("no provider", cause)
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": shutil.which("echo")}):
-                self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
-
-    def test_a_declared_worker_bin_probes_a_bare_id_through_itself(self):
-        # The claude shim names models bare; the pool's dispatch probe refused
-        # `claude-opus-5-5` and halted phase-c before its first wave.
-        with tempfile.TemporaryDirectory() as tmp:
-            paths = ralph.Paths(pathlib.Path(tmp),
-                                manifest=mock.Mock(worker_bin=shutil.which("echo")))
-            self.assertEqual(ralph.probe_model("claude-opus-5-5", paths), (True, ""))
-            paths.manifest.worker_bin = shutil.which("false")
-            ok, cause = ralph.probe_model("claude-opus-5-5", paths)
-            self.assertFalse(ok)
-            self.assertIn("exit 1", cause)
-
-
-class HaltTailTests(unittest.TestCase):
-    """A strikeout halt carries the failing lane's last error-shaped
-    transcript line (quota / permission path / provider error / crash tail),
-    so launchd.log alone is diagnostic."""
-
-    def fixture(self, tmp, rows):
-        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
-        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
-        write(tmp, "ralph/STATE.md", rows)
-        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
-        write(tmp, "seed.txt", "seed")
-        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
-        return pathlib.Path(tmp)
-
-    def make(self, root, session_for, **kwargs):
-        paths = ralph.Paths(root)
-        kwargs.setdefault("sleep", lambda s: None)
-        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
-                          lane_root=in_tree_lanes(paths),
-                          lanes=2, base_branch="main", **kwargs)
-
-    def test_a_lane_strikeout_halt_carries_the_last_error_line(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-
-            class DyingLane:
-                def __init__(self, cwd):
-                    self.cwd = pathlib.Path(cwd)
-
-                def run(self, model_args, prompt, log):
-                    p = pathlib.Path(log)
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    p.write_text("working...\n"
-                                 "provider: Usage limit reached for 5 hour\n"
-                                 "Error: Unexpected server error (500)\n")
-                    return 0                # ends without its done marker
-
-            pool = self.make(root, lambda cwd, env=None: DyingLane(cwd),
-                             max_lane_failures=1)
-            self.assertEqual(pool.run(), 3)
-            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
-            self.assertIn("lane dm-a failed 1 waves", pkg)
-            self.assertIn("target/ralph/lane-dm-a.out", pkg)
-            self.assertIn("last error: Error: Unexpected server error (500)", pkg)
-
-    def test_a_lane_that_commits_but_runs_out_of_time_continues_without_a_strike(self):
-        # ersilia r12-edges-demoted (2026-10-04) committed four lanes of work and
-        # was killed at the session cap, and the pool struck it as a failure: a
-        # productive lane walks toward a human at the same pace as a stuck one.
-        # A session that ends without its marker but with new commits continues;
-        # the continuations have their own bound, and after it the strikes count.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            runs = []
-
-            class ProgressLane:
-                def __init__(self, cwd):
-                    self.cwd = pathlib.Path(cwd)
-
-                def run(self, model_args, prompt, log):
-                    runs.append(1)
-                    (self.cwd / f"work-{len(runs)}.txt").write_text("progress")
-                    subprocess.run(["git", "-C", str(self.cwd), "add", "-A"], check=True)
-                    subprocess.run(["git", "-C", str(self.cwd), "commit", "-q", "-m",
-                                    f"dm-a: step {len(runs)}"], check=True)
-                    return 0                # out of time before its done marker
-
-            pool = self.make(root, lambda cwd, env=None: ProgressLane(cwd),
-                             max_lane_failures=1, max_lane_continuations=1)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 3)
-            self.assertIn("1 new commit(s) — continuing, no failure count (1/1)", out.getvalue())
-            self.assertEqual(len(runs), 2)
-            self.assertIn("lane dm-a failed 1 waves", (root / "ralph/NEEDS_HUMAN.md").read_text())
-
-    def test_a_lane_session_that_ends_at_once_having_done_nothing_is_not_struck(self):
-        # 30-90s session deaths — a provider error, a quota, a harness refusal —
-        # struck ersilia lanes out (2026-09-22, three halts); the unit did
-        # nothing wrong. Such an end costs no strike, within its own bound, and
-        # the pool backs off before the next wave.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            runs = []
-
-            class QuickLane:
-                def __init__(self, cwd):
-                    pass
-
-                def run(self, model_args, prompt, log):
-                    runs.append(1)
-                    return 1                # refused at once; nothing committed
-
-            slept = []
-            pool = self.make(root, lambda cwd, env=None: QuickLane(cwd), max_lane_failures=1,
-                             clock=itertools.count(0, 30).__next__, sleep=slept.append)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 3)
-            said = out.getvalue()
-            self.assertEqual(said.count("the session did not run"), ralph.MAX_NEVER_RAN)
-            self.assertEqual(len(runs), ralph.MAX_NEVER_RAN + 1)
-            self.assertIn(ralph.NEVER_RAN_BACKOFF, slept)
-            self.assertIn("lane dm-a failed 1 waves", (root / "ralph/NEEDS_HUMAN.md").read_text())
-
-    def test_a_review_exhaustion_halt_carries_the_last_error_line(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
-
-            class FailingReview:
-                def run(self, model_args, prompt, log):
-                    p = pathlib.Path(log)
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    p.write_text("analyzing...\napi error: 429 quota exhausted\n")
-                    return 0                # never marks its row [x]
-
-            pool = self.make(root, lambda cwd: FailingReview(),
-                             max_review_attempts=1)
-            self.assertEqual(pool.run(), 3)
-            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
-            self.assertIn("review REVIEW-a did not finish after 1 attempts", pkg)
-            self.assertIn("last error: api error: 429 quota exhausted", pkg)
-
-
-class GuardTests(unittest.TestCase):
-    def test_guarded_turns_an_io_error_into_a_package(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
-            paths = ralph.Paths(pathlib.Path(tmp))
-
-            def boom():
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def rig(self, state, **kw):
+        return Rig(self.tmp.name, state, lane_mode=True, lanes=kw.pop("lanes", 2), **kw)
+
+    def test_two_lanes_run_at_once_and_each_lands_on_the_base(self):
+        rig = self.rig("- [ ] a — depends []\n- [ ] b — depends []\n")
+        rig.procs.sessions += [lambda s: (s.commit("a.txt"), s.result("done"))[1],
+                               lambda s: (s.commit("b.txt"), s.result("done"))[1]]
+        rig.tick()
+        self.assertEqual({rig.state("a"), rig.state("b")}, {U.RUNNING})
+        cwds = {c.name for _, c, *_ in rig.procs.spawned}
+        self.assertEqual(cwds, {"a", "b"})
+        self.assertIs(rig.tick(), ralph.Pool.DONE)
+        log = git(rig.wd, "log", "--format=%s")
+        for unit in ("a", "b"):
+            self.assertIn(f"merge {unit}", log)
+            self.assertIn(f"ralph: {unit} done", log)
+            self.assertTrue((rig.wd / f"{unit}.txt").exists())
+            self.assertFalse((rig.tmp / "lanes" / unit).exists())
+
+    def test_conflicting_and_heavy_rows_never_run_together(self):
+        rig = self.rig("- [ ] a — depends []\n- [ ] b — depends []\n- [ ] c — depends []\n"
+                       "- [ ] d — depends []\n",
+                       extra={"ralph/conflicts.txt": "a b\n", "ralph/heavy.txt": "c\nd\n"},
+                       lanes=3)
+        rig.procs.sessions += [lambda s: FOREVER] * 4
+        rig.tick()
+        running = {u for u in "abcd" if rig.state(u) is U.RUNNING}
+        self.assertEqual(running, {"a", "c"})
+
+    def test_a_row_marked_alone_runs_by_itself(self):
+        rig = self.rig("- [ ] a — depends []\n- [ ] b — depends []\n",
+                       extra={"ralph/conflicts.txt": "b *\n"})
+        rig.procs.sessions += [lambda s: (done(s), 1)[1], lambda s: FOREVER]
+        rig.tick()
+        self.assertEqual((rig.state("a"), rig.state("b")), (U.RUNNING, U.READY))
+        rig.tick(3)
+        self.assertIs(rig.state("b"), U.RUNNING)
+
+    def test_a_review_lets_the_lanes_drain_then_runs_alone_in_the_main_tree(self):
+        rig = self.rig("- [ ] a — depends []\n- [ ] b — depends []\n"
+                       "- [ ] REVIEW-1 — depends [a]\n- [ ] c — depends []\n")
+        rig.procs.sessions += [lambda s: (done(s), 1)[1], lambda s: (done(s), 4)[1],
+                               done, done]
+        rig.tick()
+        self.assertEqual({u for u in "abc" if rig.state(u) is U.RUNNING}, {"a", "b"})
+        rig.tick(2)                 # a lands; the review is ready, so c does not take its slot
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertEqual((rig.state("REVIEW-1"), rig.state("b"), rig.state("c")),
+                         (U.READY, U.RUNNING, U.READY))
+        rig.tick(3)                 # b lands; the review runs, alone, in the main tree
+        self.assertIs(rig.state("REVIEW-1"), U.RUNNING)
+        self.assertEqual(rig.procs.spawned[2][1], rig.wd)
+        self.assertIs(rig.state("c"), U.READY)
+
+
+# ---------------------------------------------------------------------------
+# Every past incident, as a row. Each names the commit that fixed it in the
+# file-protocol loop and the test that holds it here; a new incident is a new
+# row, its fix a changed cell or a changed number.
+
+INCIDENTS = [
+    ("c6f375538", "a SIGKILL orphaned a lane session beside its successor",
+     "test_a_signal_ends_the_sessions_and_leaves_the_runs"),
+    ("07bf3ebe1", "an unparseable STATE.md killed the supervisor (~18h down)",
+     "test_an_unparseable_queue_blocks_and_keeps_watching_what_runs"),
+    ("adb515604", "the supervisor died of its own errors and of ENOSPC",
+     "test_an_error_in_a_tick_is_said_once_and_the_loop_stays_up"),
+    ("6bc367088", "a stop naming no row ended the night",
+     "test_nothing_but_done_or_an_operator_stop_ends_the_loop"),
+    ("a0df57d1f", "fixes never reached the running pool",
+     "test_a_committed_change_redeploys_with_sessions_in_flight"),
+    ("24355ab77", "finished jobs re-ran at login",
+     "test_the_job_restarts_on_failure_and_stays_down_when_done"),
+    ("0eec06b5e", "start killed a running job",
+     "test_start_leaves_a_running_job_alone"),
+    ("8e98859b3", "no cp --reflink on macOS",
+     "test_the_lane_target_clone_is_the_platforms_own"),
+    ("0a4289609", "waves started into a full disk",
+     "test_the_disk_floor_blocks_dispatch"),
+    ("db84fe84a", "the floor waited while idle lanes held the space",
+     "test_the_disk_floor_reclaims_idle_lanes_first"),
+    ("d7ab91fc2", "a 40GB floor sat the pool idle with room to run",
+     "test_the_disk_floor_is_the_watchdogs_red_line"),
+    ("a617796fe", "the serial driver halted on an all-done queue",
+     "test_an_all_done_queue_ends_done"),
+    ("b1d992295", "a finished queue closed unaudited",
+     "test_a_closing_audit_runs_before_done"),
+    ("83f56804b", "a productive lane was struck at the session cap",
+     "test_a_session_that_commits_without_a_result_continues"),
+    ("1a6b5cef0", "sessions that died in 30-90s struck lanes out",
+     "test_a_dead_model_blocks_dispatch_instead_of_striking"),
+    ("e899ef1f4", "a run killed by a reboot held its lane for days",
+     "test_a_run_that_vanishes_resumes_its_unit_at_once"),
+    ("f0b70b6c4", "prose on waiting's first line; a lane's own marker as the run's",
+     "test_files_an_agent_writes_are_not_read"),
+    ("16223550c", "a merge conflict halted the pool, 8 times",
+     "test_a_merge_conflict_goes_back_to_the_lane"),
+    ("2026-10-06", "r12-release-preview: the cut exited 1, its success-only marker never came",
+     "test_a_run_that_fails_resumes_its_lane_with_the_code_and_the_log"),
+]
+
+
+class IncidentTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_every_incident_has_its_row(self):
+        names = {name for _, _, name in INCIDENTS}
+        self.assertEqual(len(names), len(INCIDENTS))
+        for name in names:
+            self.assertTrue(hasattr(self, name), name)
+
+    def test_a_signal_ends_the_sessions_and_leaves_the_runs(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n- [ ] b — depends []\n",
+                  lane_mode=True, lanes=2)
+        rig.procs.sessions += [lambda s: FOREVER,
+                               lambda s: (s.result("await", "1h", "--", "true"), 0)[1]]
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        self.assertEqual((rig.state("a"), rig.state("b")), (U.RUNNING, U.AWAITING))
+
+        def term(_secs):
+            raise ralph.Terminated(signal.SIGTERM)
+
+        rig.loop.sleep = term
+        with mock.patch.object(ralph.signal, "signal"):
+            self.assertEqual(rig.loop.run(), 128 + signal.SIGTERM)
+        self.assertIs(rig.state("a"), U.READY)
+        self.assertEqual(rig.entry("a")["strikes"], 0)
+        self.assertIs(rig.state("b"), U.AWAITING)
+        session_pid = rig.entry("a")["session"]["pid"]
+        self.assertIn(session_pid, rig.procs.killed)
+        self.assertNotIn(rig.entry("b")["run"]["pid"], rig.procs.killed)
+
+    def test_an_unparseable_queue_blocks_and_keeps_watching_what_runs(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        rig.procs.sessions.append(lambda s: (done(s), 1)[1])
+        rig.tick()
+        write(rig.wd, "ralph/STATE.md", "- [ ] a — depends [ghost]\n")
+        self.assertIs(rig.tick(), ralph.Pool.BLOCKED)
+        self.assertIs(rig.tick(), ralph.Pool.BLOCKED)
+        self.assertIs(rig.state("a"), U.MERGING)      # its session's end was still observed
+        self.assertIn("OPERATOR — blocked: queue", rig.titles())
+
+    def test_an_error_in_a_tick_is_said_once_and_the_loop_stays_up(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        calls = {"n": 0}
+
+        def flaky(_model):
+            calls["n"] += 1
+            if calls["n"] <= 3:
                 raise OSError(28, "No space left on device")
+            return True, ""
 
-            rc = ralph.guarded(boom, paths, notify_enabled=False)
-            self.assertEqual(rc, 3)
-            self.assertIn("No space left",
-                          (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").read_text())
+        rig.probe = flaky
+        sleeps = []
+
+        def sleep(_secs):
+            sleeps.append(1)
+            if len(sleeps) >= 5:
+                raise ralph.Terminated(signal.SIGTERM)
+
+        rig.loop.sleep = sleep
+        rig.procs.sessions.append(lambda s: FOREVER)
+        with mock.patch.object(ralph.signal, "signal"):
+            rig.loop.run()
+        self.assertEqual(rig.titles().count("OPERATOR — loop error, still running"), 1)
+        self.assertEqual(len(rig.procs.session_argvs()), 1)
+
+    def test_nothing_but_done_or_an_operator_stop_ends_the_loop(self):
+        # A struck-out row, a held row and a blocked precondition leave the loop
+        # up and ticking: only DONE and STOPPED return from run().
+        terminal = {ralph.Pool.DONE, ralph.Pool.STOPPED}
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n- [ ] HUMAN-x — depends []\n")
+        rig.procs.sessions += [lambda s: 0] * 3
+        seen = {rig.tick() for _ in range(8)}
+        self.assertFalse(seen & terminal, seen)
+        self.assertIn(ralph.Pool.STUCK, seen)
+
+    def test_a_committed_change_redeploys_with_sessions_in_flight(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        rig.procs.sessions.append(lambda s: (done(s), 2)[1])
+        rig.tick()
+        execs = []
+        rig.loop.code_digest = lambda: "changed"
+        rig.loop.committed = lambda: True
+        rig.loop.compiles = lambda: None
+        rig.loop.reexec = execs.append
+        rig.tick()
+        self.assertEqual(len(execs), 1)
+        # The next generation reads the same ledger and watches the same session.
+        rig.loop = rig.new_loop()
+        self.assertIs(rig.state("a"), U.RUNNING)
+        rig.tick(2)
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertEqual(len(rig.procs.session_argvs()), 1)
+
+    def test_the_job_restarts_on_failure_and_stays_down_when_done(self):
+        with tempfile.TemporaryDirectory() as home:
+            mac = ralph.MacHost(home=home, which=lambda t: t, run=mock.Mock())
+            plist = mac.install_job("dev.ralph.x-y", ["python3", "ralph.py", "run"], home,
+                                    f"{home}/log", keep_alive=True)
+            data = plistlib.loads(pathlib.Path(plist).read_bytes())
+            self.assertEqual(data["KeepAlive"], {"SuccessfulExit": False})
+            self.assertTrue(str(plist).startswith(f"{home}/.config/ralph/jobs/"))
+
+    def test_start_leaves_a_running_job_alone(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        fake = mock.Mock()
+        fake.job_file.return_value = rig.tmp / "job.plist"
+        (rig.tmp / "job.plist").write_text("")
+        fake.job_running.return_value = True
+        with mock.patch.object(ralph, "host", lambda: fake):
+            rc = ralph.main(["start", "--workdir", str(rig.wd), "--label", "t"])
+        self.assertEqual(rc, 0)
+        fake.start_job.assert_not_called()
+
+    def test_the_lane_target_clone_is_the_platforms_own(self):
+        flag = "-c" if sys.platform == "darwin" else "--reflink=always"
+        self.assertIn(flag, ralph.Lanes.CLONE_TARGET)
+
+    def test_the_disk_floor_blocks_dispatch(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", disk=lambda: 2)
+        self.assertIs(rig.tick(), ralph.Pool.BLOCKED)
+        self.assertEqual(rig.procs.spawned, [])
+        self.assertIn("OPERATOR — blocked: disk", rig.titles())
+
+    def test_the_disk_floor_reclaims_idle_lanes_first(self):
+        free = {"gb": 2}
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n- [ ] b — depends []\n",
+                  lane_mode=True, lanes=1, disk=lambda: free["gb"])
+        idle = rig.tmp / "lanes" / "old" / "target" / "debug"
+        idle.mkdir(parents=True)
+
+        def reclaim(busy, gb):
+            self.assertNotIn("old", busy)
+            free["gb"] = 50
+            return 50
+
+        rig.loop.mech.reclaim_disk = reclaim
+        rig.procs.sessions.append(lambda s: FOREVER)
+        rig.tick()
+        self.assertIs(rig.state("a"), U.RUNNING)
+
+    def test_the_disk_floor_is_the_watchdogs_red_line(self):
+        self.assertEqual(ralph.DISK_FLOOR_GB, 5)
+
+    def test_an_all_done_queue_ends_done(self):
+        rig = Rig(self.tmp.name, "- [x] a abc1234 — depends []\n")
+        self.assertIs(rig.tick(), ralph.Pool.DONE)
+        self.assertEqual(rig.procs.spawned, [])
+
+    def test_a_closing_audit_runs_before_done(self):
+        manifest = ('label = "q"\naudit_every = 2\n')
+        rig = Rig(self.tmp.name, "", extra={
+            "ralph/next/q/queue.toml": manifest,
+            "ralph/next/q/STATE.md": "- [ ] a — depends []\n",
+            "ralph/next/q/PROMPT.md": PROMPT})
+        paths = ralph.paths_for(mock.Mock(workdir=str(rig.wd), queue="q", label=None,
+                                          session_timeout=None, prompt=None, state=None,
+                                          charter=None, conflicts=None))
+        ralph.ensure_excludes(rig.wd, ralph.runtime_markers(paths))
+        rig.loop = ralph.Loop(paths, spawn=rig.procs.spawn, alive=rig.procs.alive,
+                              kill=rig.procs.kill, clock=rig.clock, sleep=lambda s: FOREVER,
+                              probe=lambda m: (True, ""), jobs_share=lambda n: (2, ""),
+                              disk_free_gb=lambda: 100, code_digest=lambda: "same",
+                              notifier=lambda *a: rig.notes.append(a[:2]),
+                              label="q", state_dir=rig.tmp / "state", lane_root=rig.tmp / "lanes")
+        rig.procs.sessions += [done, done]
+        rig.tick(2)
+        queue = ralph.Queue(rig.wd / "ralph/next/q/STATE.md")
+        audits = [r for r in queue.rows if r.id.startswith(ralph.AUDIT_PREFIX)]
+        self.assertEqual(len(audits), 1)
+        self.assertIsNot(rig.tick(), ralph.Pool.DONE)
+        self.assertIs(rig.loop.state(audits[0].id), U.RUNNING)
+        self.assertIs(rig.tick(), ralph.Pool.DONE)
+
+    def test_a_session_that_commits_without_a_result_continues(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", max_continuations=2)
+        rig.procs.sessions += [lambda s: s.commit() or 0] * 3
+        rig.tick(3)
+        self.assertEqual(rig.entry("a")["continuations"], 2)
+        self.assertEqual(rig.entry("a")["strikes"], 0)
+        rig.tick()
+        self.assertEqual(rig.entry("a")["strikes"], 1)      # past the bound, it counts
+
+    def test_a_dead_model_blocks_dispatch_instead_of_striking(self):
+        alive = {"ok": False}
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n",
+                  models={"MODEL": "prov/a,prov/b"},
+                  probe=lambda m: (alive["ok"], "429 usage limit"))
+        self.assertIs(rig.tick(), ralph.Pool.BLOCKED)
+        self.assertEqual(rig.entry("a").get("strikes", 0), 0)
+        self.assertEqual(rig.procs.spawned, [])
+        alive["ok"] = True
+        rig.clock.advance(ralph.PROBE_RETRY_S)
+        rig.procs.sessions.append(lambda s: FOREVER)
+        rig.tick()
+        argv = rig.procs.session_argvs()[0]
+        # One probed model, never the roster as one --model (9 resolver deaths, 2026-10).
+        self.assertEqual(argv[argv.index("--model") + 1], "prov/a")
+
+    def test_permission_rejections_are_named_in_the_strike(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+
+        def rejected(s):
+            pathlib.Path(rig.procs.spawned[-1][3]).write_text("auto-rejecting Read ~/.cargo\n")
+            return 0
+
+        rig.procs.sessions.append(rejected)
+        rig.tick(2)
+        self.assertIn("1 permission auto-rejection", rig.entry("a")["strike_why"][0])
+
+    def test_a_run_that_vanishes_resumes_its_unit_at_once(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        rig.procs.sessions += [lambda s: s.result("await", "6h", "--", "true") and 0]
+        rig.procs.runs.append(lambda argv, cwd, env: (1, None))     # ends with no status
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.AWAITING)
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.RUNNING)
+        self.assertIn("gone without an exit status", rig.procs.session_argvs()[1][-1])
+
+    def test_a_run_over_its_budget_is_ended_and_struck(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        rig.procs.sessions += [lambda s: s.result("await", "60", "--", "true") and 0]
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        rig.tick(2)
+        self.assertEqual(rig.entry("a")["strikes"], 1)
+        self.assertIn("passed its 1m00s budget", rig.entry("a")["strike_why"][0])
+        self.assertEqual(len(rig.procs.killed), 1)
+
+    def test_files_an_agent_writes_are_not_read(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n- [ ] b — depends []\n")
+
+        def file_protocol(s):
+            for rel in ("ralph/waiting", "ralph/NEEDS_HUMAN.md", "ralph/lanes/a.done",
+                        "ralph/DONE"):
+                write(s.cwd, rel, "ralph/lanes/a.done\nprose\n")
+            return 0
+
+        rig.procs.sessions += [file_protocol, lambda s: FOREVER]
+        rig.tick(2)
+        # No result and no commit: one strike, and the unit runs again. The
+        # waiting file, the package, the lane marker and DONE mean nothing.
+        self.assertEqual(rig.entry("a")["strikes"], 1)
+        self.assertIs(rig.state("a"), U.RUNNING)
+        self.assertFalse((rig.wd / "ralph/parked").exists())
+        self.assertIsNot(rig.tick(), ralph.Pool.DONE)
+
+    def test_a_merge_conflict_goes_back_to_the_lane(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", lane_mode=True, lanes=1,
+                  extra={"shared.txt": "base\n"})
+
+        def edit_then_done(s):
+            s.commit("shared.txt", "lane\n")
+            s.result("done")
+
+        def resolve(s):
+            self.assertIn("MERGE IN PROGRESS", s.prompt)
+            write(s.cwd, "shared.txt", "both\n")
+            git(s.cwd, "add", "shared.txt")
+            git(s.cwd, "commit", "-q", "--no-edit")
+            s.result("done")
+
+        rig.procs.sessions += [edit_then_done, resolve]
+        rig.tick()
+        write(rig.wd, "shared.txt", "main moved\n")
+        git(rig.wd, "commit", "-q", "-am", "main moved")
+        rig.tick()
+        self.assertIs(rig.state("a"), U.RUNNING)       # struck, back to its lane at once
+        self.assertEqual(rig.entry("a")["strikes"], 1)
+        self.assertIn("merging ralph/a", rig.procs.session_argvs()[1][-1])
+        rig.tick()
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertEqual(rig.entry("a"), {})           # done: its counters go with it
+        self.assertEqual((rig.wd / "shared.txt").read_text(), "both\n")
+
+    def test_a_run_that_fails_resumes_its_lane_with_the_code_and_the_log(self):
+        rig = Rig(self.tmp.name, "- [ ] r12-release-preview — depends []\n",
+                  lane_mode=True, lanes=1)
+
+        def cut(s):
+            s.commit()
+            return s.result("await", "6h", "--", "sh", "-c", "exit 1")
+
+        def judge(s):
+            self.assertIn("exited 1", s.prompt)
+            self.assertIn(".await.log", s.prompt)
+            s.commit("fix.txt")
+            s.result("done")
+
+        rig.procs.sessions += [cut, judge]
+        rig.procs.runs.append(lambda argv, cwd, env: (1, 1))
+        rig.tick(2)
+        self.assertIs(rig.state("r12-release-preview"), U.AWAITING)
+        argv, cwd, *_ = rig.procs.spawned[-1]
+        self.assertEqual(argv[4:], ["sh", "-c", "exit 1"])
+        self.assertEqual(cwd, rig.tmp / "lanes" / "r12-release-preview")
+        rig.tick()                                       # one tick after the run exits
+        self.assertIs(rig.state("r12-release-preview"), U.RUNNING)
+        rig.tick()
+        self.assertIs(rig.row("r12-release-preview").status, ralph.Status.DONE)
 
 
-REPO = pathlib.Path(os.environ.get("RALPH_TEST_REPO")
-                    or pathlib.Path(__file__).resolve().parents[2])
+# ---------------------------------------------------------------------------
+# End to end: real processes, the real wrapper on the session's PATH.
+
+WORKER = r"""#!/bin/sh
+# A stand-in worker binary: `<bin> run [--model M] [--variant V] <prompt>`.
+for prompt; do :; done
+n=$(ls "$RALPH_WORKSPACE"/turn-* 2>/dev/null | wc -l | tr -d ' ')
+echo "turn $n" > "$RALPH_WORKSPACE/turn-$n"
+git -C "$RALPH_WORKSPACE" add "turn-$n" && git -C "$RALPH_WORKSPACE" commit -q -m "turn $n"
+case "$prompt" in
+  *"exited 1"*) ralph-result done ;;
+  *) ralph-result await 5m -- sh -c 'echo the cut refused: dirty tree; exit 1' ;;
+esac
+"""
 
 
-def launch_lines(state_rel):
-    """The `ralph.py <verb> ...` argvs inside a staged queue's fenced launch block."""
-    import shlex
-    text = (REPO / state_rel).read_text()
-    block = next(b for b in text.split("```")[1::2] if "scripts/ralph.py" in b)
-    tokens = shlex.split(block.replace("\\\n", " "), comments=True)
-    starts = [i for i, t in enumerate(tokens) if t == "scripts/ralph.py"]
-    out = []
-    for n, i in enumerate(starts):
-        end = starts[n + 1] if n + 1 < len(starts) else len(tokens)
-        argv = tokens[i + 1:end]
-        for stopper in ("--", ">>"):
-            if stopper in argv:
-                argv = argv[:argv.index(stopper)]
-        out.append(argv)
-    return out
-
-
-def quiet_main(argv):
-    out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        rc = ralph.main(argv)
-    return rc, out.getvalue(), err.getvalue()
-
-
-def two_queues(tmp):
-    subprocess.run(["git", "init", "-q", tmp], check=True)
-    for name, row in (("a", "qa-1"), ("b", "qb-1")):
-        write(tmp, f"ralph/next/{name}/queue.toml",
-              f'[checks]\nhello = ["sh", "-c", "echo from-{name}"]\n')
-        write(tmp, f"ralph/next/{name}/STATE.md", f"- [ ] {row} — depends [] — do it\n")
-        write(tmp, f"ralph/next/{name}/PROMPT.md", f"prompt of {name}\n")
-    write(tmp, "ralph/STATE.md", "- [ ] legacy-1 — depends [] — the default queue\n")
-
-
-class ExcludeTests(unittest.TestCase):
-    def test_a_linked_worktree_writes_the_common_exclude(self):
-        # The failing input: a linked worktree, whose `.git` is a file. On
-        # 2026-09-30 supervise died there on mkdir(<worktree>/.git/info).
+class EndToEndTests(unittest.TestCase):
+    def test_a_run_that_fails_comes_back_to_a_real_session_with_its_code(self):
         with tempfile.TemporaryDirectory() as tmp:
-            main, side = os.path.join(tmp, "main"), os.path.join(tmp, "side")
-            git_repo(main)
-            write(main, "a.txt", "a\n")
-            commit_all(main)
-            subprocess.run(["git", "-C", main, "worktree", "add", "-q", "--detach", side],
-                           check=True)
-            ralph.ensure_excludes(side, ("ralph/STOP",))
-            ralph.ensure_excludes(main, ("ralph/DONE",))
-            lines = pathlib.Path(main, ".git", "info", "exclude").read_text().splitlines()
-            self.assertIn("ralph/STOP", lines)
-            self.assertIn("ralph/DONE", lines)
-            self.assertTrue(pathlib.Path(side, ".git").is_file())
-
-    def test_outside_a_repository_it_writes_nothing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ralph.ensure_excludes(tmp, ("ralph/STOP",))
-            self.assertFalse(pathlib.Path(tmp, ".git").exists())
-
-
-class PathsForTests(unittest.TestCase):
-    def test_a_queue_by_flag_is_never_swapped_for_the_default(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            for verb in ("run", "supervise", "watch", "stop", "start", "models", "plan",
-                         "report"):
-                args = ralph.build_parser().parse_args([verb, "--workdir", tmp, "--queue", "b"])
-                p = ralph.paths_for(args)
-                self.assertEqual((verb, p.state, p.queue),
-                                 (verb, "ralph/next/b/STATE.md", "b"))
-                self.assertEqual(p.charter, "ralph/next/b/CHARTER.md")
-                if verb != "models":
-                    self.assertEqual(args.label, "b")
-
-    def test_a_queues_control_files_live_under_its_control_dir(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            write(tmp, "ralph/next/b/queue.toml", 'control_dir = "var/b"\n')
-            pa, pb = (ralph.paths_for(ralph.build_parser().parse_args(
-                ["run", "--workdir", tmp, "--queue", q])) for q in ("a", "b"))
-            ctl = "ralph/next/a/ctl"
-            self.assertEqual(
-                (pa.control_dir, pa.done, pa.stop, pa.needs_human, pa.waiting, pa.heartbeat,
-                 pa.director_commits, pa.log_dir),
-                (ctl, f"{ctl}/DONE", f"{ctl}/STOP", f"{ctl}/NEEDS_HUMAN.md", f"{ctl}/waiting",
-                 f"{ctl}/.heartbeat", f"{ctl}/.director-commits", "target/ralph/a"))
-            self.assertEqual((pb.stop, pb.log_dir), ("var/b/STOP", "target/ralph/b"))
-            self.assertEqual(ralph.runtime_markers(pa), (f"{ctl}/",))
-
-    def test_plan_prints_the_named_queues_head(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            rc, out, _ = quiet_main(["plan", "--workdir", tmp, "--queue", "b"])
-            self.assertEqual(rc, 0)
-            self.assertIn("unit qb-1", out)
-            self.assertIn("queue: ralph/next/b/STATE.md", out)
-            self.assertNotIn("legacy-1", out)
-
-    def test_plan_prints_the_units_since_the_last_audit_and_the_cadence(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            rows = ("- [x] qb-0 abcdef1 — depends []\n- [x] REVIEW-audit-b abcdef2 — depends []\n"
-                    "- [x] qb-1 abcdef3 — depends []\n- [x] qb-2 abcdef4 — depends []\n"
-                    "- [ ] qb-3 — depends []\n")
-            write(tmp, "ralph/next/b/STATE.md", rows)
-            write(tmp, "ralph/STATE.md", rows)
-            write(tmp, "ralph/PROMPT.md", "legacy prompt\n")
-            _, out, _ = quiet_main(["plan", "--workdir", tmp, "--queue", "b"])
-            self.assertIn("units since audit: 2  head:", out)
-            write(tmp, "ralph/next/b/queue.toml", "audit_every = 6\n")
-            _, out, _ = quiet_main(["plan", "--workdir", tmp, "--queue", "b"])
-            self.assertIn("units since audit: 2 (audit every 6)  head:", out)
-            _, out, _ = quiet_main(["plan", "--workdir", tmp])          # the legacy line
-            self.assertIn("units since audit: 2  head:", out)
-            self.assertNotIn("n/a", out)
-
-    def test_queue_wins_over_a_legacy_flag_and_says_so(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            args = ralph.build_parser().parse_args(
-                ["run", "--workdir", tmp, "--queue", "a", "--state", "ralph/STATE.md"])
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                p = ralph.paths_for(args)
-            self.assertEqual(p.state, "ralph/next/a/STATE.md")
-            self.assertIn("ignoring --state ralph/STATE.md", buf.getvalue())
-
-    def test_a_missing_manifest_is_exit_two_not_the_default_queue(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            two_queues(tmp)
-            rc, out, err = quiet_main(["plan", "--workdir", tmp, "--queue", "ghost"])
-            self.assertEqual(rc, 2)
-            self.assertIn("ralph/next/ghost/queue.toml", err)
-            self.assertNotIn("legacy-1", out)
-
-    def test_no_subcommand_builds_paths_beside_paths_for(self):
-        src = pathlib.Path(ralph.__file__).read_text()
-        body = src.replace(src[src.index("def paths_for("):src.index("def queue_flags(")], "")
-        self.assertNotRegex(body, r"[^`\w]Paths\(")
-
-    def test_the_staged_launch_lines_resolve_as_they_always_did(self):
-        # The order's kill condition: these lines are not edited, so they must parse
-        # and land on their own queue with the per-checkout control files.
-        for name in ("ring-doc", "ring-room", "ring-room-rr2", "ei7-stage0"):
-            lines = launch_lines(f"ralph/next/{name}/STATE.md")
-            self.assertEqual([argv[0] for argv in lines], ["supervise", "run"])
-            for argv in lines:
-                args = ralph.build_parser().parse_args(argv)
-                p = ralph.paths_for(args)
-                self.assertEqual((p.queue, p.manifest), ("", None))
-                self.assertEqual(p.state, f"ralph/next/{name}/STATE.md")
-                self.assertEqual(p.prompt, f"ralph/next/{name}/PROMPT.md")
-                self.assertEqual(args.label, name)
-                self.assertEqual((p.done, p.stop, p.needs_human, p.heartbeat, p.models),
-                                 ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md",
-                                  "ralph/.heartbeat", "ralph/models.env"))
-            sup = ralph.paths_for(ralph.build_parser().parse_args(lines[0]))
-            self.assertEqual(sup.charter, f"ralph/next/{name}/CHARTER.md")
-
-    def test_the_default_launch_line_is_the_legacy_queue(self):
-        args = ralph.build_parser().parse_args(["run"])
-        p = ralph.paths_for(args)
-        self.assertEqual((p.state, p.prompt, p.charter, args.label, args.session_timeout),
-                         ("ralph/STATE.md", "ralph/PROMPT.md", "ralph/CHARTER.md",
-                          "campaign", 3600))
-
-    def test_run_flags_reach_paths(self):
-        import argparse, tempfile
-        with tempfile.TemporaryDirectory() as d:
-            a = argparse.Namespace(workdir=d, prompt="ralph/next/x/PROMPT.md", state="ralph/next/x/STATE.md")
-            p = ralph.paths_for(a)
-            self.assertEqual(p.state, "ralph/next/x/STATE.md")
-            self.assertEqual(p.prompt, "ralph/next/x/PROMPT.md")
-
-    def test_absent_flags_keep_the_defaults(self):
-        import argparse, tempfile
-        with tempfile.TemporaryDirectory() as d:
-            p = ralph.paths_for(argparse.Namespace(workdir=d))
-            self.assertEqual(p.state, "ralph/STATE.md")
-            self.assertEqual(p.prompt, "ralph/PROMPT.md")
-
-
-class QueueLane(FakeLane):
-    """A lane that records the prompt it was handed."""
-
-    prompts = []
-
-    def run(self, model_args, prompt, log):
-        QueueLane.prompts.append(prompt)
-        return super().run(model_args, prompt, log)
-
-
-class Reexec(Exception):
-    """Raised by a test's stand-in for os.execv: the pool handed itself over."""
-
-
-class PoolReexecTests(unittest.TestCase):
-    """A fix to ralph.py reached the ersilia pool only when a halt happened to
-    relaunch it: four fixes sat undeployed for a day while two lane sessions ran
-    (2026-10-04), because a restart kills every session in flight. Between
-    waves no session runs, so the pool re-execs onto the changed file there,
-    carrying its strike and continuation counters across."""
-
-    fixture = PoolTests.fixture
-    make = PoolTests.make
-
-    def test_a_changed_ralph_py_reexecs_the_pool_between_waves_with_its_counters(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            digests = iter(["old", "new"])
-            argvs = []
-
-            def reexec(argv):
-                argvs.append(argv)
-                raise Reexec()
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
-                             code_digest=lambda: next(digests, "new"), reexec=reexec,
-                             compiles=lambda: None, argv=["python3", "ralph.py", "pool"], committed=lambda: True)
-            pool._lane_failures["dm-b"] = 2
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out), self.assertRaises(Reexec):
-                pool.run()
-            self.assertEqual(argvs, [["python3", "ralph.py", "pool"]])
-            self.assertIn("ralph.py changed (old → new) — re-exec between waves", out.getvalue())
-            self.assertNotIn("lane start", out.getvalue())
-            saved = json.loads((root / "target/ralph/pool-state.json").read_text())
-            self.assertEqual(saved["failures"], {"dm-b": 2})
-
-    def test_a_reexeced_pool_resumes_its_counters(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            write(root, "target/ralph/pool-state.json",
-                  json.dumps({"failures": {"dm-b": 2}, "continuations": {"dm-c": 1}}))
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
-            self.assertEqual(pool._lane_failures, {"dm-b": 2})
-            self.assertEqual(pool._lane_continuations, {"dm-c": 1})
-            self.assertFalse((root / "target/ralph/pool-state.json").exists())
-
-    def test_a_changed_ralph_py_that_does_not_compile_is_refused_once(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            digests = iter(["old"])
-
-            def broken():
-                raise SyntaxError("invalid syntax", ("ralph.py", 12, 1, "def ("))
-
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
-                             code_digest=lambda: next(digests, "broken"),
-                             reexec=lambda argv: self.fail("re-exec'd onto code that does not compile"),
-                             compiles=broken, committed=lambda: True)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            said = out.getvalue()
-            self.assertEqual(said.count("does not compile"), 1)
-            self.assertIn("line 12", said)
-            self.assertIn("pool: DONE", said)
-
-
-class PoolDeploysOnlyCommittedCodeTests(unittest.TestCase):
-    fixture = PoolTests.fixture
-    make = PoolTests.make
-
-    def test_uncommitted_edits_are_not_deployed(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
-            digests = iter(["old"])
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
-                             code_digest=lambda: next(digests, "half-made"),
-                             compiles=lambda: None, committed=lambda: False,
-                             reexec=lambda argv: self.fail("deployed an uncommitted edit"))
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertEqual(out.getvalue().count("holds uncommitted edits"), 1)
-
-
-class PoolQueueTests(unittest.TestCase):
-    """`pool --queue <name>` runs that queue as `run`/`supervise` do: its
-    manifest, rendered prompt, heavy/conflict files and control files
-    (pc-pool-ready (5)-(9))."""
-
-    def fixture(self, tmp, rows, toml=""):
-        git_repo(tmp)
-        write(tmp, "ralph/PROMPT.base.md",
-              "<!-- section: intro -->\n# {{queue}} at {{state}}\n")
-        write(tmp, "ralph/next/q/PROMPT.addendum.md",
-              "<!-- section: intro append -->\nTHE-Q-ADDENDUM\n")
-        write(tmp, "ralph/next/q/queue.toml", toml)
-        write(tmp, "ralph/next/q/STATE.md", rows)
-        write(tmp, "seed.txt", "seed")
-        write(tmp, ".git/info/exclude", "ralph/next/q/ctl/\n.ralph/\ntarget/\n")
-        commit_all(tmp)
-        return pathlib.Path(tmp)
-
-    def make(self, root, session_for, **kwargs):
-        args = ralph.build_parser().parse_args(["pool", "--workdir", str(root), "--queue", "q"])
-        paths = ralph.paths_for(args)
-        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
-                          lane_root=in_tree_lanes(paths), lanes=2,
-                          base_branch="main", sleep=lambda s: None, **kwargs)
-
-    def test_the_pool_runs_the_queue_it_names(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
-            write(tmp, "ralph/next/q/heavy.txt", "q-a\nq-b  # both move a crate\n")
-            QueueLane.prompts = []
-            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
-            self.assertEqual(pool._heavy(), {"q-a", "q-b"})
-            self.assertEqual(pool.run(), 0)
-            self.assertEqual(len(QueueLane.prompts), 2)        # heavy: one per wave
-            for prompt in QueueLane.prompts:
-                self.assertIn("THE-Q-ADDENDUM", prompt)
-                self.assertIn("Do NOT edit ralph/next/q/STATE.md", prompt)
-                self.assertIn("ralph/next/q/ctl/NEEDS_HUMAN.md", prompt)
-            self.assertTrue(ralph.Queue(root / "ralph/next/q/STATE.md").all_done())
-            self.assertTrue((root / "ralph/next/q/ctl/DONE").exists())
-            self.assertFalse((root / "ralph/DONE").exists())
-
-    def test_a_finished_queue_with_units_since_its_audit_closes_with_one(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [x] q-a abcdef1 — depends []\n"
-                                     "- [x] q-b abcdef2 — depends []\n", "audit_every = 2\n")
-            runs = []
-
-            class Review:
-                def __init__(self, cwd, env=None):
-                    self.cwd = pathlib.Path(cwd)
-
-                def run(self, model_args, prompt, log):
-                    unit = prompt.split()[2]                 # "Your unit: <id> — ..."
-                    runs.append(unit)
-                    ralph.Queue(self.cwd / "ralph/next/q/STATE.md").set_status(
-                        unit, ralph.Status.DONE)
-                    subprocess.run(["git", "-C", str(self.cwd), "commit", "-qam", unit],
-                                   check=True)
-                    return 0
-
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(self.make(root, Review).run(), 0)
-            self.assertEqual(runs, ["REVIEW-audit-q-auto-1"])
-            self.assertTrue(ralph.Queue(root / "ralph/next/q/STATE.md").all_done())
-            self.assertTrue((root / "ralph/next/q/ctl/DONE").exists())
-
-    def test_a_lane_package_halts_into_the_queues_control_dir(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-
-            class BlockedLane(FakeLane):
-                def run(self, model_args, prompt, log):
-                    write(self.cwd, "ralph/next/q/ctl/NEEDS_HUMAN.md", "# q-a is blocked\n")
-                    return 0
-
-            pool = self.make(root, lambda cwd, env=None: BlockedLane(cwd))
-            self.assertEqual(pool.run(), 3)
-            self.assertIn("q-a is blocked",
-                          (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
-            self.assertFalse((root / "ralph/NEEDS_HUMAN.md").exists())
-
-    def test_rows_outside_the_scope_and_parked_rows_never_dispatch(self):
-        # (8): the cleanup cut line holds in the pool as in the serial loop.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n"
-                                     "- [ ] q-cut — depends []\n",
-                                toml='scope_file = "ralph/next/q/scope.txt"\n')
-            write(tmp, "ralph/next/q/scope.txt", "q-a\nq-b\n")
-            write(tmp, "ralph/next/q/ctl/parked/q-b.md", "# q-b waits\n")
-            QueueLane.prompts = []
-            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
-            self.assertEqual(pool.run(), 3)
-            self.assertEqual(len(QueueLane.prompts), 1)
-            q = ralph.Queue(root / "ralph/next/q/STATE.md")
-            self.assertEqual([r.id for r in q.rows if r.status is ralph.Status.DONE], ["q-a"])
-            self.assertIn("q-b, q-cut", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
-
-    def test_a_row_refused_at_dispatch_parks_and_the_pool_runs_on(self):
-        # (13): the refusal is the row's, not the pool's.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends [] — census\n  - trial: none\n"
-                                     "- [ ] q-b — depends [] — no census yet\n",
-                                toml='dispatch_requires = ["- trial"]\n')
-            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
-            self.assertEqual(pool.run(), 3)             # q-b waits on the operator
-            q = ralph.Queue(root / "ralph/next/q/STATE.md")
-            self.assertIs(q.status_of("q-a"), ralph.Status.DONE)
-            self.assertIs(q.status_of("q-b"), ralph.Status.PENDING)
-            self.assertIn("'- trial'",
-                          (root / "ralph/next/q/ctl/parked/q-b.md").read_text())
-            self.assertIn("waits on the operator: q-b",
-                          (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
-
-    def test_the_queues_audit_cadence_holds_in_the_pool(self):
-        # (11): audit_every = 2 inserts an audit after the first wave's two
-        # merges, and the review runs before the next wave.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "".join(f"- [ ] q-{u} — depends []\n" for u in "abcd"),
-                                toml="audit_every = 2\n")
-            order = []
-
-            class Review:
-                def __init__(self, cwd):
-                    self.cwd = cwd
-
-                def run(self, model_args, prompt, log):
-                    q = ralph.Queue(root / "ralph/next/q/STATE.md")
-                    unit = q.first_ready_review().id
-                    order.append(unit)
-                    q.set_status(unit, ralph.Status.DONE)
-                    commit_all(str(root), f"ralph: {unit} done")
-                    return 0
-
-            class Lane(QueueLane):
-                def run(self, model_args, prompt, log):
-                    order.append(self.cwd.name)
-                    return super().run(model_args, prompt, log)
-
-            def session_for(cwd, env=None):
-                return Lane(cwd) if pathlib.Path(cwd).parent.name == "wt" else Review(cwd)
-
-            self.assertEqual(self.make(root, session_for).run(), 0)
-            self.assertEqual((set(order[:2]), order[2], set(order[3:5]), order[5:]),
-                             ({"q-a", "q-b"}, "REVIEW-audit-q-auto-1", {"q-c", "q-d"},
-                              ["REVIEW-audit-q-auto-2"]))                # the closing audit
-
-    def decisions_fixture(self, tmp):
-        root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
-        install_script(tmp, "ralph-decisions.py")
-        for part in ("_header.md", "_archive-ledger.md", "_flags.md", "_archive-appendices.md"):
-            write(tmp, f"ralph/decisions/{part}", f"{part}\n")
-        subprocess.run([sys.executable, "scripts/ralph-decisions.py", "--write"], cwd=tmp,
-                       check=True, capture_output=True)
-        commit_all(tmp, "decisions")
-        return root
-
-    class MintingLane(FakeLane):
-        """Each lane records a decision, as PROMPT's pool-lane section says: the
-        entry file only, minted in its own tree."""
-
-        def run(self, model_args, prompt, log):
-            subprocess.run([sys.executable, "scripts/ralph-decisions.py", "new", "q",
-                            "--subject", self.cwd.name, "--who", "worker",
-                            "--date", "2026-10-01"], cwd=self.cwd, check=True,
-                           capture_output=True)
-            return super().run(model_args, prompt, log)
-
-    def test_two_lanes_minting_one_id_both_merge_and_the_ledger_is_current(self):
-        # (3) and (10): both lanes mint q-1 from the same base.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.decisions_fixture(tmp)
-            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd))
-            self.assertEqual(pool.run(), 0)
-            names = sorted(p.name for p in (root / "ralph/decisions").glob("q-*.md"))
-            self.assertEqual(names, ["q-1.md", "q-2.md"])
-            subjects = {(root / "ralph/decisions" / n).read_text().split(" · ")[2] for n in names}
-            self.assertEqual(subjects, {"q-a", "q-b"})
-            check = subprocess.run([sys.executable, "scripts/ralph-decisions.py", "--check"],
-                                   cwd=tmp, capture_output=True, text=True)
-            self.assertEqual(check.returncode, 0, check.stderr)
-            self.assertEqual(subprocess.run(["git", "-C", tmp, "status", "--porcelain",
-                                             "--untracked-files=no"],
-                                            capture_output=True, text=True).stdout, "")
-
-    def test_a_renumbered_lanes_citations_follow_its_entry(self):
-        # Each lane cites the id it minted in a tracked file of its own. After
-        # the merges each file names its own entry, a longer id that shares the
-        # prefix is untouched, and the renumbered entry records the old id its
-        # lane's commit bodies still carry.
-        class CitingLane(self.MintingLane):
-            def run(self, model_args, prompt, log):
-                write(self.cwd, f"notes/{self.cwd.name}.md",
-                      "Decision: ralph/decisions/q-1.md (q-1; not q-10)\n")
-                return super().run(model_args, prompt, log)
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.decisions_fixture(tmp)
-            self.assertEqual(self.make(root, lambda cwd, env=None: CitingLane(cwd)).run(), 0)
-            decisions = root / "ralph/decisions"
-            by_subject = {(decisions / f"{i}.md").read_text().split(" · ")[2]: i
-                          for i in ("q-1", "q-2")}
-            for unit, eid in by_subject.items():
-                self.assertEqual((root / f"notes/{unit}.md").read_text(),
-                                 f"Decision: ralph/decisions/{eid}.md ({eid}; not q-10)\n")
-            self.assertIn("Minted as `q-1` in its lane", (decisions / "q-2.md").read_text())
-            self.assertNotIn("Minted as", (decisions / "q-1.md").read_text())
-            log = subprocess.run(["git", "-C", tmp, "log", "--format=%s"],
-                                 capture_output=True, text=True).stdout
-            self.assertIn("decision ids renumbered at merge (pool): q-1 → q-2", log)
-
-    def test_without_the_renumber_the_second_merge_halts(self):
-        # The failing input the renumber exists for (its PLANT, kept as a test).
-        # One strike: the subject is that the second merge conflicts, not how a
-        # lane resolves it (a conflict goes back to the lane otherwise).
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.decisions_fixture(tmp)
-            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd),
-                             max_lane_failures=1)
-            with mock.patch.object(pool, "_renumber_decisions", return_value=None):
-                self.assertEqual(pool.run(), 3)
-            self.assertIn("merge conflict", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
-
-    def test_a_marker_left_on_the_base_by_an_earlier_round_does_not_finish_a_lane(self):
-        # A reopened row's first-round marker is on the base; a lane that ends
-        # without writing its own is not merged, one that writes it is.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            write(tmp, "ralph/lanes/q-a.done", "first round\n")
-            commit_all(tmp, "q-a: first round's marker")
-
-            class StaleLane:
-                def __init__(self, cwd):
-                    self.cwd = pathlib.Path(cwd)
-
-                def run(self, model_args, prompt, log):
-                    write(self.cwd, "q-a.txt", "half done\n")
-                    commit_all(str(self.cwd), "q-a: half done")
-                    return 0
-
-            # The subject is the stale marker, not the continuation bound: the
-            # half-done commit would otherwise continue the lane, not strike it.
-            pool = self.make(root, lambda cwd, env=None: StaleLane(cwd), max_lane_failures=1,
-                             max_lane_continuations=0)
-            self.assertEqual(pool.run(), 3)
-            self.assertFalse((root / "q-a.txt").exists())
-            self.assertIn("- [ ] q-a", (root / "ralph/next/q/STATE.md").read_text())
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            write(tmp, "ralph/lanes/q-a.done", "first round\n")
-            commit_all(tmp, "q-a: first round's marker")
-            self.assertEqual(self.make(root, lambda cwd, env=None: FakeLane(cwd)).run(), 0)
-            self.assertTrue((root / "q-a.txt").exists())
-
-    def test_a_lanes_evidence_outlives_its_worktree(self):
-        # (12): `git worktree remove --force` takes the lane's target/ with it.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-
-            class CheckingLane(FakeLane):
-                def run(self, model_args, prompt, log):
-                    write(self.cwd, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
-                    return super().run(model_args, prompt, log)
-
-            self.assertEqual(self.make(root, lambda cwd, env=None: CheckingLane(cwd)).run(), 0)
-            self.assertFalse((root / ".ralph/wt/q-a").exists())
-            self.assertEqual((root / "target/ralph/q/q-a/q/lint.log").read_text(),
-                             "exit=0 the lane's lint\n")
-
-    def test_a_new_lane_starts_from_a_clone_of_the_main_target(self):
-        # (1): the lane's target holds the main tree's artifacts, its evidence
-        # dir is not the main tree's, and every tracked file is newer than
-        # every cloned artifact, so cargo rebuilds the workspace crates once.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            write(tmp, "target/debug/deps/libserde.rlib", "warm")
-            write(tmp, "target/ralph/q/lint.log", "the main tree's log")
-            seen = {}
-
-            class TargetLane(FakeLane):
-                def run(self, model_args, prompt, log):
-                    t = self.cwd / "target"
-                    seen["dep"] = (t / "debug/deps/libserde.rlib").read_text()
-                    seen["evidence"] = (t / "ralph/q/lint.log").exists()
-                    seen["fresh"] = ((self.cwd / "seed.txt").stat().st_mtime
-                                     >= (t / "debug/deps/libserde.rlib").stat().st_mtime)
-                    return super().run(model_args, prompt, log)
-
-            pool = self.make(root, lambda cwd, env=None: TargetLane(cwd))
-            # /tmp is no btrfs, so a plain copy; and the main tree finishes a build
-            # between the lane's checkout and its clone (the race the touch closes).
-            pool.CLONE_TARGET = ("sh", "-c", 'sleep 0.05; touch "$0/debug/deps/libserde.rlib"; '
-                                 'cp -a "$0" "$1"')
-            self.assertEqual(pool.run(), 0)
-            self.assertEqual(seen, {"dep": "warm", "evidence": False, "fresh": True})
-
-    def test_a_read_only_dir_in_the_cloned_target_neither_leaks_the_lane_nor_its_evidence(self):
-        # The main tree's target/ralph/phase-b/ship/esc/seed is dr-xr-xr-x; the
-        # clone copies it into the lane, where it stopped the evidence reset
-        # and `git worktree remove --force` alike (2026-10-02).
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            write(tmp, "target/debug/ro/lib.rlib", "warm")
-            write(tmp, "target/ralph/phase-b/ship/esc/seed/config.toml", "seed")
-            for d in ("target/debug/ro", "target/ralph/phase-b/ship/esc/seed"):
-                os.chmod(root / d, 0o555)
-
-            class CheckingLane(FakeLane):
-                def run(self, model_args, prompt, log):
-                    write(self.cwd, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
-                    return super().run(model_args, prompt, log)
-
-            pool = self.make(root, lambda cwd, env=None: CheckingLane(cwd))
-            pool.CLONE_TARGET = ("cp", "-a")
-            self.assertEqual(pool.run(), 0)
-            self.assertFalse((root / ".ralph/wt/q-a").exists())
-            kept = root / "target/ralph/q/q-a"
-            self.assertEqual(sorted(p.relative_to(kept).as_posix() for p in kept.rglob("*")),
-                             ["lane.env", "q", "q/lint.log"])
-
-    def test_a_target_that_cannot_be_cloned_is_named(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            write(tmp, "target/debug/deps/libserde.rlib", "warm")
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
-            pool.CLONE_TARGET = ("false",)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertIn("target NOT cloned", out.getvalue())
-
-    @unittest.skipUnless(sys.platform == "darwin", "the APFS clone; Linux's is btrfs-only")
-    def test_the_default_clone_runs_on_macos(self):
-        # macOS cp has no --reflink: the btrfs default failed "illegal option"
-        # and every ersilia lane built from an empty target (2026-10-02). The
-        # default itself, not a stand-in, clones a target here.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            write(tmp, "target/debug/deps/libserde.rlib", "warm")
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertNotIn("target NOT cloned", out.getvalue())
-            self.assertIn("target cloned from", out.getvalue())
-
-    def share(self, lanes, avail_gb, cores=32):
-        """lib/cargo-jobs.sh's split with the machine's probes stubbed."""
-        r = subprocess.run(
-            ["bash", "-c", 'source "$0"; stub_gb="$2" stub_cores="$3"; '
-             'cargo_jobs_available_gb() { echo "$stub_gb"; }; '
-             'cargo_jobs_cores() { echo "$stub_cores"; }; cargo_jobs_share "$1"; '
-             'echo "$CARGO_JOBS_SHARE"', str(ralph.CARGO_JOBS_LIB), str(lanes), str(avail_gb),
-             str(cores)], capture_output=True, text=True, check=True)
-        return int(r.stdout.split()[-1])
-
-    def test_one_budget_is_split_across_the_lanes_with_a_floor(self):
-        # (2) and (4): 4 GB a job, 2 jobs a lane at least, half the cores at most.
-        self.assertEqual(self.share(3, 41), 3)     # 10 jobs by memory, three lanes
-        self.assertEqual(self.share(3, 100), 5)    # 16 by the cores, three lanes
-        self.assertEqual(self.share(3, 24), 2)     # the floor exactly
-        self.assertEqual(self.share(3, 23), 0)     # under it: no wave
-        self.assertEqual(self.share(1, 8), 2)
-        self.assertEqual(self.share(2, 64, cores=4), 2)   # core-capped, never under the floor
-
-    def test_a_wave_waits_out_the_memory_floor_then_lanes_get_their_share(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
-            readings = iter([(0, "20GB available, under the 16GB floor"), (4, "8 jobs split")])
-            seen = {}
-
-            class JobsLane(FakeLane):
-                def __init__(self, cwd, env):
-                    super().__init__(cwd)
-                    seen[self.cwd.name] = (env.get("SOVEREIGN_TEST_JOBS"),
-                                           (self.cwd / ralph.LANE_JOBS_FILE).read_text())
-
-            pool = self.make(root, lambda cwd, env=None: JobsLane(cwd, env or {}),
-                             jobs_share=lambda lanes: next(readings))
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            self.assertIn("pool: wave q-a, q-b not started — 20GB available", out.getvalue())
-            want = ("4", "SOVEREIGN_LINT_JOBS=4\nSOVEREIGN_TEST_JOBS=4\n")
-            self.assertEqual(seen, {"q-a": want, "q-b": want})
-
-    def test_a_wave_waits_out_the_disk_floor(self):
-        # Waves started into a shrinking disk filled it; the sessions, the model
-        # probes and the supervisor's halt notice then all failed ENOSPC
-        # (2026-10-03). No lane starts until the lane root is over the floor.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            readings = iter([3, 80])
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
-                             disk_free_gb=lambda: next(readings, 80))
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            said = out.getvalue()
-            self.assertIn(f"pool: wave q-a not started — 3GB free on {pool.lane_root}, "
-                          f"under the {ralph.DISK_FLOOR_GB}GB disk floor", said)
-            self.assertLess(said.index("disk floor"), said.index("lane start q-a"))
-
-    def test_a_wave_starts_while_the_disk_has_room(self):
-        # A 40GB floor held the ersilia pool idle at 13GB free, room enough to
-        # run a lane (2026-10-06). The floor is the watchdog's red line, not a
-        # reserve for what a lane might grow to.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            readings = iter([13, 13, 13])  # then 80, so a floor that waits still ends
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
-                             disk_free_gb=lambda: next(readings, 80))
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            said = out.getvalue()
-            self.assertNotIn("not started", said)
-            self.assertIn("lane start q-a", said)
-            self.assertEqual(ralph.Watch(None, label="a").min_free_mb,
-                             ralph.DISK_FLOOR_GB * 1024)
-
-    def test_the_disk_floor_reclaims_idle_lanes_build_output_before_it_waits(self):
-        # A floor with no remedy sat the ersilia pool idle for 66 ticks while
-        # two idle lanes held 15GB of build output (2026-10-04). Under the floor,
-        # the pool frees cargo output from lanes that cannot need it now — never
-        # a lane in the wave, never one holding ralph/waiting (its detached run
-        # may be executing those binaries) — and the rest of target/ stays.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
-            lanes = root / ".ralph" / "wt"
-            write(lanes, "q-idle/target/debug/big", "x")
-            write(lanes, "q-idle/target/release/big", "x")
-            write(lanes, "q-idle/target/ralph/evidence.log", "kept")
-            write(lanes, "q-wait/ralph/waiting", "ralph/never.done\n")
-            write(lanes, "q-wait/target/release/ersilia", "in use")
-            idle_debug = lanes / "q-idle/target/debug"
-            reads = []
-
-            def free():
-                reads.append(1)
-                return 80 if not idle_debug.exists() or len(reads) > 5 else 3
-            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd), disk_free_gb=free)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                self.assertEqual(pool.run(), 0)
-            said = out.getvalue()
-            self.assertFalse(idle_debug.exists())
-            self.assertFalse((lanes / "q-idle/target/release").exists())
-            self.assertTrue((lanes / "q-idle/target/ralph/evidence.log").exists())
-            self.assertTrue((lanes / "q-wait/target/release/ersilia").exists())
-            self.assertIn("reclaimed", said)
-            self.assertNotIn("not started", said)
-
-    def test_the_legacy_pool_keeps_its_defaults(self):
-        args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
-        with contextlib.redirect_stdout(io.StringIO()):
-            paths = ralph.paths_for(args)
-        self.assertEqual((paths.state, paths.prompt, paths.conflicts, paths.heavy, paths.stop),
-                         ("ralph/STATE.md", "ralph/PROMPT.md", "ralph/conflicts.txt",
-                          "ralph/heavy.txt", "ralph/STOP"))
-        self.assertEqual((args.label, args.session_timeout), ("campaign", 3600))
+            wd = make_repo(tmp, "- [ ] cut — depends []\n")
+            worker = write(tmp, "bin/worker", WORKER)
+            worker.chmod(0o755)
+            notes = []
+            loop = ralph.Loop(ralph.Paths(wd), label="e2e", state_dir=pathlib.Path(tmp) / "st",
+                              lane_root=pathlib.Path(tmp) / "lanes", tick_s=0.2,
+                              probe=lambda m: (True, ""), disk_free_gb=lambda: 100,
+                              code_digest=lambda: "same", models={},
+                              notifier=lambda t, b, e: notes.append(t))
+            deadline = time.time() + 60
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(worker)}), \
+                    mock.patch.object(ralph.signal, "signal"):
+                loop.sleep = lambda s: (time.sleep(s), time.time() > deadline
+                                        and (_ for _ in ()).throw(AssertionError("timeout")))
+                self.assertEqual(loop.run(), 0)
+            row = ralph.Queue(wd / "ralph/STATE.md").by_id()["cut"]
+            self.assertIs(row.status, ralph.Status.DONE)
+            log = (wd / "target/ralph/sessions/cut-1.await.log").read_text()
+            self.assertIn("the cut refused: dirty tree", log)
+            self.assertEqual(sorted(p.name for p in wd.glob("turn-*")), ["turn-0", "turn-1"])
+            self.assertIn("DONE — campaign complete", notes)
+
+
+# ---------------------------------------------------------------------------
+# Taking over from the file protocol.
+
+
+class AdoptTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_lane_waiting_on_a_marker_becomes_a_loop_owned_watcher(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n- [ ] b — depends []\n",
+                  lane_mode=True, lanes=2)
+        wt = rig.tmp / "lanes" / "a"
+        git(rig.wd, "worktree", "add", "-q", "-b", "ralph/a", str(wt), "main")
+        write(wt, "ralph/waiting", "ralph/cut6.done\nnotes: the cut writes it on every end\n")
+        git(wt, "add", "-f", "ralph/waiting")
+        git(wt, "commit", "-q", "-m", "waiting")
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.procs.sessions.append(lambda s: FOREVER)
+        rig.loop.boot()
+        self.assertIs(rig.state("a"), U.AWAITING)
+        argv = rig.procs.spawned[0][0]
+        self.assertIn(str(wt / "ralph/cut6.done"), argv)
+        self.assertFalse((wt / "ralph/waiting").exists())
+        self.assertEqual(git(wt, "status", "--porcelain"), "")
+        rig.tick()
+        self.assertIs(rig.state("b"), U.RUNNING)       # the rest of the pool runs
+
+    def test_a_marker_named_only_in_the_notes_or_a_lane_marker_is_not_waited_on(self):
+        rig = Rig(self.tmp.name, "- [~] a — depends []\n")
+        write(rig.wd, "ralph/waiting", "the field run, then ralph/lanes/a.done\n")
+        rig.loop.boot()
+        self.assertIsNot(rig.state("a"), U.AWAITING)
+        self.assertIn("the field run", rig.entry("a")["notes"][0])
+        self.assertFalse((rig.wd / "ralph/waiting").exists())
+
+    def test_a_halt_package_parks_the_row_it_names(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n- [ ] b — depends []\n")
+        write(rig.wd, "ralph/NEEDS_HUMAN.md", "# lane b left this package\n\nwhich option?\n")
+        write(rig.wd, "ralph/STOP", "halt: lane b\n")
+        rig.loop.boot()
+        self.assertIn("which option?", (rig.wd / "ralph/parked/b.md").read_text())
+        self.assertFalse((rig.wd / "ralph/NEEDS_HUMAN.md").exists())
+        self.assertFalse((rig.wd / "ralph/STOP").exists())
+        rig.tick()
+        self.assertIs(rig.state("b"), U.HELD)
+
+    def test_the_pools_counters_carry_over(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        write(rig.wd, "target/ralph/pool-state.json",
+              json.dumps({"failures": {"a": 1}, "merge_failures": {"a": 2},
+                          "continuations": {"a": 4}}))
+        rig.loop.boot()
+        self.assertEqual((rig.entry("a")["strikes"], rig.entry("a")["continuations"]), (2, 4))
+        self.assertFalse((rig.wd / "target/ralph/pool-state.json").exists())
+
+    def test_a_stale_done_marker_is_removed(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        write(rig.wd, "ralph/DONE", "")
+        rig.loop.boot()
+        self.assertFalse((rig.wd / "ralph/DONE").exists())
+
+    def test_adoption_runs_once(self):
+        rig = Rig(self.tmp.name, "- [~] a — depends []\n")
+        rig.loop.boot()
+        write(rig.wd, "ralph/waiting", "ralph/x.done\n")
+        rig.loop = rig.new_loop()
+        rig.loop.boot()
+        self.assertTrue((rig.wd / "ralph/waiting").exists())
 
 
 if __name__ == "__main__":

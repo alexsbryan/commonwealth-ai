@@ -1,30 +1,37 @@
 #!/usr/bin/env python3
-"""ralph.py — the ralph state machine, in one place.
+"""ralph.py — a coding-agent campaign loop, as a closed state machine.
 
-The queue is `ralph/STATE.md`; the file protocol is unchanged from the shell
-drivers this replaces (`ralph/NEEDS_HUMAN.md`, `ralph/STOP`, `ralph/DONE`,
-`ralph/.heartbeat`, `ralph/waiting`, `ralph/models.env`). Every terminal state
-is DONE, an operator stop, or an escalation — the machine cannot resolve to
-quietly stuck.
+The queue is a STATE.md of rows; a unit is one row. The loop dispatches ready
+units to agent sessions, one at a time in the main tree (`run`) or in lanes
+beside it (`pool`), and lands what they finish. The machine is a table
+(TRANSITIONS, with every other pair in IMPOSSIBLE and a reason), and every
+event it consumes comes from something the loop owns: a process it started
+ending, its own git operations, its clock against a budget it recorded, or an
+operator act. A session ends by calling `ralph-result` exactly once (done,
+continue, await <budget> -- <cmd>, needs-human); nothing else an agent writes
+is read as loop state. Why: docs/RALPH_STATE_MACHINE.md.
 
-`--queue <name>` runs `ralph/next/<name>/` from its `queue.toml` instead: its
-own state, prompt, charter, models, checks and control files (`ctl/` beside
-the manifest), so two loops share a checkout. Without it every flag and
-default is the legacy one. `audit_every = N` there makes `run` insert and
-dispatch a `REVIEW-audit-` row once N units have landed without one, and a
-closing one before a queue with units since its last audit reads as DONE.
+`--queue <name>` runs `ralph/next/<name>/` from its `queue.toml`: its own
+state, prompt, charter, models, checks and control files (`ctl/` beside the
+manifest), so two loops share a checkout. Without it every flag and default
+is the legacy one.
 
 Subcommands:
-  run        the serial campaign driver: one unit per session
-  supervise  wrap a campaign command: bounded resolutions, progress by unit
-  watch      the watchdog: needs-human, down, stalled, disk-low
-  stop       write the operator STOP and wait for the loop to go down
-  start      clear the operator STOP and bootstrap the installed job
-  models     show or set ralph/models.env and kickstart the loaded job
+  run        the serial loop: one unit at a time, in the main tree
+  pool       the parallel loop: units in worktree lanes, reviews in the main tree
+  result     how a session ends (on a session's PATH as `ralph-result`)
+  status     what the loop holds, and what waits on the operator
+  stop       an operator stop (--drain: let running sessions finish)
+  start      clear the operator stop and start the installed job
+  unpark     release a row the loop parked for the operator
+  watch      the watchdog: the loop is down, or its heartbeat is stale
+  models     show or set the models a queue runs on
   plan       print the queue's head and the model it routes to
+  report     the queue, the director's decisions and recent commits
   promote    make a staged campaign (ralph/next/<name>/) the active one
-  prompt     print the worker prompt a queue runs on (rendered or as written)
+  prompt     print the worker prompt a queue runs on
   check-argv the argv a queue's [checks] declares (scripts/ralph-check.sh asks)
+  supervise  retired: runs (or installs) the campaign command after --
 """
 from __future__ import annotations
 
@@ -44,7 +51,6 @@ import sys
 import time
 import traceback
 import urllib.parse
-from concurrent.futures import ThreadPoolExecutor
 
 HASH_RE = re.compile(r"^[0-9a-f]{7,40}$")
 ROW_RE = re.compile(
@@ -59,8 +65,6 @@ def say(msg: str) -> None:
         print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}", flush=True)
     except OSError:
         pass
-
-
 class HostError(Exception):
     """The platform cannot do what was asked; the message names what is missing."""
 
@@ -113,10 +117,13 @@ class Host:
             return False
         return self._job_running(name)
 
-    def install_job(self, name, argv, workdir, log_path, interval=None):
+    def install_job(self, name, argv, workdir, log_path, interval=None, keep_alive=False):
+        """`keep_alive`: the host restarts the job on any exit but 0 — the
+        loop exits 0 only when done or stopped, so a crash is the host's to
+        restart and a finished loop stays down."""
         self.require_jobs()
         return self._install_job(name, [str(a) for a in argv], str(workdir), str(log_path),
-                                 interval)
+                                 interval, keep_alive)
 
     def start_job(self, name):
         self.require_jobs()
@@ -178,11 +185,14 @@ class MacHost(Host):
         r = self._run(["launchctl", "print", self._domain(name)], capture_output=True, text=True)
         return "state = running" in r.stdout
 
-    def _install_job(self, name, argv, workdir, log_path, interval):
+    def _install_job(self, name, argv, workdir, log_path, interval, keep_alive=False):
         plist = self.job_file(name)
         args = "\n".join(f"    <string>{a}</string>" for a in argv)
         schedule = (f"  <key>StartInterval</key><integer>{interval}</integer>\n"
                     if interval else "  <key>RunAtLoad</key><true/>\n")
+        if keep_alive:
+            schedule += ("  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>\n"
+                         "  <key>ThrottleInterval</key><integer>60</integer>\n")
         plist.parent.mkdir(parents=True, exist_ok=True)
         plist.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -240,20 +250,21 @@ class LinuxHost(Host):
                              capture_output=True, text=True).returncode == 0
                    for unit in self._units(name))
 
-    def _install_job(self, name, argv, workdir, log_path, interval):
-        import json
+    def _install_job(self, name, argv, workdir, log_path, interval, keep_alive=False):
         spec = self.job_file(name)
         spec.parent.mkdir(parents=True, exist_ok=True)
         spec.write_text(json.dumps({"argv": argv, "workdir": workdir, "log": log_path,
-                                    "interval": interval}, indent=2) + "\n")
+                                    "interval": interval, "keep_alive": keep_alive},
+                                   indent=2) + "\n")
         return spec
 
     def _start_job(self, name):
-        import json
         job = json.loads(self.job_file(name).read_text())
         self._stop_job(name)
-        timer = ([f"--on-active=1", f"--on-unit-active={job['interval']}"]
+        timer = (["--on-active=1", f"--on-unit-active={job['interval']}"]
                  if job["interval"] else [])
+        if job.get("keep_alive"):
+            timer += ["-p", "Restart=on-failure", "-p", "RestartSec=60"]
         r = self._run(["systemd-run", "--user", "--unit", name, "--collect",
                        f"--working-directory={job['workdir']}",
                        f"--setenv=PATH={os.environ.get('PATH', '')}",
@@ -291,8 +302,6 @@ def host():
     if _HOST is None:
         _HOST = host_for()
     return _HOST
-
-
 def notify(title: str, body: str, enabled: bool = True) -> None:
     """Titles carry the tier so a popup says who must act (2026-09-17):
     "OPERATOR — …" a human act is required; "auto — …" the loop is handling it
@@ -329,266 +338,10 @@ def first_line(path) -> str:
         return p.read_text().splitlines()[0]
     except (OSError, IndexError):
         return ""
-
-
-# A package line `operator-only: <the charter clause>` marks a fork the charter
-# reserves for the operator, and the supervisor honours it as it honours a HUMAN-
-# row: no resolution session. Without it, every director appended its review to
-# the package, which changed the package's hash, so "changed nothing" never fired
-# and a latency bar the charter reserves drew four directors (phase-b,
-# 2026-09-26).
-OPERATOR_ONLY_MARK = "operator-only:"
-
-
-def operator_only(path):
-    """The clause an operator-only package names, or None when it names none."""
-    try:
-        lines = pathlib.Path(path).read_text(errors="replace").splitlines()
-    except OSError:
-        return None
-    for line in lines:
-        s = line.strip()
-        if s.lower().startswith(OPERATOR_ONLY_MARK):
-            return s[len(OPERATOR_ONLY_MARK):].strip() or "no clause named"
-    return None
-
-
-def parked_ids(paths):
-    """The rows parked for the operator: one `<row-id>.md` package each under
-    the loop's parked dir. Deleting a package unparks its row."""
-    root = paths.p(paths.parked)
-    if not root.is_dir():
-        return frozenset()
-    return frozenset(f.stem for f in root.glob("*.md"))
-
-
-def out_of_scope(paths, queue):
-    """Open rows outside the queue's frozen scope (queue.toml `scope_file`,
-    phase-b-32, operator 2026-09-27: "We can't keep adding scope"). They wait
-    on the operator as a parked row does; a new row is the operator's act. An
-    audit row and a split of an in-scope row (`<id>-<suffix>`) are in scope:
-    a split re-chunks scope, it does not add it."""
-    rel = paths.manifest.scope_file if paths.manifest else ""
-    if not rel:
-        return frozenset()
-    try:
-        text = paths.p(rel).read_text()
-    except OSError as e:
-        say(f"scope file {rel} unreadable ({e}) — no row is judged out of scope")
-        return frozenset()
-    allowed = {line.split("#")[0].strip() for line in text.splitlines()} - {""}
-    return frozenset(
-        r.id for r in queue.rows
-        if r.status is not Status.DONE and r.id not in allowed
-        and not r.id.startswith(AUDIT_PREFIX)
-        and not any(r.id.startswith(f"{a}-") for a in allowed))
-
-
-def write_parked(paths, row_id, package, reason):
-    """The one spelling of a parked row's package: `<parked>/<row-id>.md`."""
-    dest = paths.p(paths.parked) / f"{row_id}.md"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(package + f"\n<!-- parked {row_id}: {reason}. Answer in the "
-                    f"row, then delete this file to unpark it. -->\n")
-    return dest
-
-
-def held_ids(paths, queue):
-    """Every row that waits on the operator besides HUMAN- rows: parked rows
-    and rows outside the frozen scope. The one set the planners skip."""
-    return parked_ids(paths) | out_of_scope(paths, queue)
-
-
-def blocked_row(queue, title, parked=frozenset()):
-    """The one open row a halt package is about, or None. The title must name
-    exactly one open non-HUMAN row; an operator-only package may instead rest
-    on the one `[~]` row. A halt that names no row (a stall, a full disk, an
-    unready queue) is not a row's block, and parking on it would walk the loop
-    through the whole queue."""
-    open_rows = [r for r in queue.rows if r.status is not Status.DONE
-                 and not r.id.startswith("HUMAN-") and r.id not in parked]
-    named = [r for r in open_rows
-             if re.search(rf"(?<![\w-]){re.escape(r.id)}(?![\w-])", title)]
-    if len(named) == 1:
-        return named[0]
-    return None
-
-
-def waiting_row(queue, parked=frozenset()):
-    """The one `[~]` row, for an operator-only package whose title names none."""
-    active = [r for r in queue.rows if r.status is Status.ACTIVE
-              and not r.id.startswith("HUMAN-") and r.id not in parked]
-    return active[0] if len(active) == 1 else None
-
-
-def halt(paths, reason, *, notifier=notify, notify_enabled=True, operator_clause=None):
-    """The one halt: a package, a reason in STOP, a notification. Shared by
-    the campaign and the pool so neither can invent a quieter stop. An
-    `operator_clause` marks the package operator-only, so no director runs."""
-    pkg = paths.p(paths.needs_human)
-    mark = f"{OPERATOR_ONLY_MARK} {operator_clause}\n\n" if operator_clause else ""
-    # On a full disk the package write raised, the guard re-halted and raised
-    # again, and the supervisor died with no alert (2026-10-03, 4.9h): the halt
-    # writes what it can and always says so.
-    try:
-        pkg.parent.mkdir(parents=True, exist_ok=True)
-        pkg.write_text(f"# {reason}\n\n{mark}resolve by hand, then remove "
-                       f"{paths.stop} {paths.needs_human}\n")
-        written = pkg.stat().st_size > 0
-    except OSError:
-        written = False
-    if not written:
-        say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
-        notifier("OPERATOR — halt unwritable", reason, notify_enabled)
-    try:
-        paths.p(paths.stop).write_text(f"halt: {reason}\n")
-    except OSError as e:
-        say(f"HALT could not write {paths.stop}: {e}")
-    say(f"HALT: {reason}")
-    notifier("auto — halted, director next", reason, notify_enabled)
-    return Result(Outcome.HALT, reason)
-
-
-def guarded(fn, paths, *, notifier=notify, notify_enabled=True):
-    """A driver's I/O error must become a package, not a traceback. The disk
-    ceiling on 2026-09-15 crashed the supervisor mid-resolution (OSError 28)
-    and left the job down with no decision package."""
-    try:
-        return fn()
-    except OSError as e:
-        halt(paths, f"unhandled I/O error: {e}", notifier=notifier,
-             notify_enabled=notify_enabled)
-        return 3
-
-
-# Where a lane session writes its completion marker. The loop writes these;
-# a detached run never does, so no waiting file may name one.
-LANE_DONE_DIR = "ralph/lanes"
-
-
-def waiting_marker(root, waiting_rel):
-    """The waiting file under `root` and the marker its FIRST line names, or
-    None when the file is absent, its first line names no `*.done` marker, or
-    the marker is a lane's own completion marker (ignored and unlinked — the
-    convention wait_for_marker has always enforced). The lines after the first
-    are the session's notes: a marker they mention is never the one waited on
-    (ersilia r12-real-sweep, 2026-10-03, held on "then ralph/lanes/…done" from
-    its notes while its field run's real marker sat on disk). One parse for
-    the main-tree control file and for a lane worktree's `ralph/waiting`."""
-    waiting = pathlib.Path(root) / waiting_rel
-    if not waiting.exists():
-        return None
-    first = waiting.read_text().partition("\n")[0]
-    m = re.search(r"[A-Za-z0-9._/-]+\.done", first)
-    if not m:
-        say(f"{waiting_rel}'s first line names no *.done marker — ignoring it")
-        waiting.unlink()
-        return None
-    if m.group(0).startswith(f"{LANE_DONE_DIR}/"):
-        say(f"{waiting_rel} names {m.group(0)}, a lane completion marker the loop "
-            "writes and no detached run ever will — ignoring it")
-        waiting.unlink()
-        return None
-    return waiting, pathlib.Path(root) / m.group(0)
-
-
-def machine_boot_time():
-    """Unix time this machine last booted, or None when it cannot be read. A
-    detached run whose waiting file is older died with that boot: no process
-    survives one, so its marker will never be written."""
-    try:
-        if sys.platform == "darwin":
-            r = subprocess.run(["sysctl", "-n", "kern.boottime"],
-                               capture_output=True, text=True, timeout=5)
-            m = re.search(r"sec = (\d+)", r.stdout)
-            return int(m.group(1)) if m else None
-        with open("/proc/stat") as fh:
-            for line in fh:
-                if line.startswith("btime "):
-                    return int(line.split()[1])
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None
-    return None
-
-
-def wait_for_marker(paths, marker_timeout):
-    """None to proceed, "wait" to yield this tick, or a reason string to halt."""
-    parsed = waiting_marker(paths.workdir, paths.waiting)
-    if parsed is None:
-        return None
-    waiting, marker = parsed
-    if marker.exists():
-        say(f"{marker} present — resuming")
-        waiting.unlink()
-        return None
-    booted = machine_boot_time()
-    if booted and waiting.stat().st_mtime < booted:
-        say(f"waiting on {marker}, but its run started before this machine booted — "
-            "it died with the reboot; resuming")
-        waiting.unlink()
-        return None
-    age = int(time.time() - waiting.stat().st_mtime)
-    if age >= marker_timeout:
-        return (f"waiting on {marker} for {age}s (limit {marker_timeout}s) "
-                "— the detached run never wrote its marker")
-    say(f"waiting on {marker} (no session this tick, {age}s)")
-    return "wait"
-
-
-def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
-    """The resolver's instruction. With a charter the session is the operator's
-    delegate and decides; without one it defers design forks, as before."""
-    head = (f"SUPERVISOR RESOLUTION (attempt {attempt} of {resolve_max}).\n\n"
-            f"The campaign stopped short of DONE. Reason:\n  {reason}\n\n")
-    if charter:
-        return head + (
-            "You are the DIRECTOR: the operator's delegate under the charter below.\n"
-            f"Read the package (`{paths.needs_human}`), verify its facts, and DECIDE — do not\n"
-            "defer a fork the charter covers. Reproduce every claim you rely on.\n\n"
-            f"1. Read `{paths.needs_human}`, `{paths.state}`, `git status`, and the charter.\n"
-            f"   Campaign logs are under `~/.svrnmesh/ralph/` and `{paths.log_dir}/`.\n"
-            "2. Apply the smallest change that makes the campaign flow: correct the row or\n"
-            "   the code, with its source order corrected together when a premise was false.\n"
-            "3. Record the decision: `scripts/ralph-decisions.py new <campaign>` prints an\n"
-            "   entry file — fill it (date, unit, fork, choice, evidence, what would\n"
-            "   falsify it; tag `REVIEW-AFTER:` when the charter did not clearly cover it),\n"
-            "   run `scripts/ralph-decisions.py --write`, and land both with the change.\n"
-            "   Never append to `ralph/DECISIONS.md` itself: it is generated.\n"
-            f"4. Remove `{paths.needs_human}` so the campaign resumes, and commit.\n"
-            f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
-            "   operator request and you must not remove it.\n"
-            "5. If the fork is one the charter leaves to the operator, say so in the\n"
-            "   package — the options, their costs, and your recommendation — add the line\n"
-            f"   `{OPERATOR_ONLY_MARK} <the charter clause>` so no further resolution session\n"
-            "   is sent, and stop. An honest package beats a guessed decision.\n\n"
-            "=== CHARTER ===\n" + charter)
-    return head + (
-        "You are the resolution session. Diagnose and fix so the campaign flows again:\n"
-        f"1. Read `{paths.needs_human}`, `{paths.state}`, and `git status`. Campaign logs are\n"
-        f"   under `~/.svrnmesh/ralph/` and `{paths.log_dir}/`.\n"
-        "2. Fix the blocker. A false premise may be corrected only from verified code or\n"
-        "   consumer evidence, with the row and its source order corrected together.\n"
-        "3. Do NOT weaken a PASS BAR and do not mark a unit [x] that has not earned it.\n"
-        f"   Never approve or mark a HUMAN- row. If this is a genuine design fork, leave\n"
-        f"   a clear `{paths.needs_human}` for the operator, with the line\n"
-        f"   `{OPERATOR_ONLY_MARK} <why only the operator can decide it>`, and stop.\n"
-        f"4. When fixed: remove `{paths.needs_human}` so the campaign resumes, and commit.\n"
-        f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
-        "   operator request and you must not remove it.\n")
-
-
 class Status(enum.Enum):
     PENDING = " "
     ACTIVE = "~"
     DONE = "x"
-
-
-class Outcome(enum.Enum):
-    DONE = "done"
-    OPERATOR_STOP = "operator-stop"
-    NEEDS_HUMAN = "needs-human"
-    HALT = "halt"
-
 
 @dataclasses.dataclass(frozen=True)
 class Row:
@@ -615,6 +368,27 @@ class Queue:
             for d in r.deps:
                 if d not in by:
                     raise ValueError(f"{self.path}:{r.lineno}: unknown dependency {d!r}")
+        # A cycle among open rows is rows nothing can ever make ready: refused
+        # here, by name, so the loop is never left with nothing ready and
+        # nothing held. A done row blocks nothing (ersilia's REVIEW-16 cycle
+        # closed with all three rows [x]), so only open-to-open edges count.
+        state = {}
+
+        def visit(row_id, trail):
+            if state.get(row_id) == "open":
+                raise ValueError(f"{self.path}: dependency cycle "
+                                 f"{' -> '.join(trail[trail.index(row_id):] + [row_id])}")
+            if state.get(row_id) == "closed":
+                return
+            state[row_id] = "open"
+            for d in by[row_id].deps:
+                if by[d].status is not Status.DONE:
+                    visit(d, trail + [row_id])
+            state[row_id] = "closed"
+
+        for r in self.rows:
+            if r.status is not Status.DONE:
+                visit(r.id, [])
 
     def _parse(self):
         rows = []
@@ -688,22 +462,23 @@ class Queue:
                 and not r.id.startswith("HUMAN-")]
         return human + held
 
-    def status_of(self, row_id):
-        return self.by_id()[row_id].status
-
-    def set_status(self, row_id, status):
-        """Rewrite one row's checkbox, preserving the rest of the line."""
+    def mark_done(self, row_id, sha=""):
+        """`[x]` the row and, when it names no commit yet, name `sha` after
+        its id, as ralph-mark.sh writes it."""
         row = self.by_id()[row_id]
         lines = self.path.read_text().splitlines()
         old = lines[row.lineno - 1]
-        if old[:5] != f"- [{row.status.value}]":
-            raise ValueError(f"{self.path}:{row.lineno}: row moved under set_status")
-        lines[row.lineno - 1] = f"- [{status.value}]" + old[5:]
+        if old != row.line:
+            raise ValueError(f"{self.path}:{row.lineno}: row moved under mark_done")
+        new = "- [x]" + old[5:]
+        if sha and row.hash is None and HASH_RE.fullmatch(sha):
+            new = re.sub(rf"^- \[x\] {re.escape(row_id)}(?= )", f"- [x] {row_id} {sha}", new)
+        lines[row.lineno - 1] = new
         self.path.write_text("\n".join(lines) + "\n")
         self.rows = self._parse()
 
     def insert_before(self, row_id, line):
-        """Add a row above another; the file is rewritten as set_status does it."""
+        """Add a row above another; the file is rewritten as mark_done does it."""
         row = self.by_id()[row_id]
         lines = self.path.read_text().splitlines()
         if lines[row.lineno - 1] != row.line:
@@ -733,49 +508,6 @@ class Queue:
 
     def all_done(self):
         return all(r.status is Status.DONE for r in self.rows)
-
-    def first_ready_review(self, held=frozenset()):
-        for r in self.rows:
-            if (r.status in (Status.PENDING, Status.ACTIVE) and r.id not in held
-                    and r.id.startswith("REVIEW-") and self.deps_met(r)):
-                return r
-        return None
-
-    def pick_wave(self, lanes, conflicts, heavy=frozenset(), waiting=frozenset()):
-        """Ready non-review units, up to `lanes`, no conflicting pair.
-        `[~]` rows are resumable lanes: a killed session leaves one behind.
-        At most ONE heavy row (ralph/heavy.txt, loaded by the Pool) per wave —
-        the big moves run sequentially (2026-09-17, operator direction: derisk
-        first); the other lane takes non-heavy rows. A `waiting` unit's lane
-        sits on `ralph/waiting` for a detached run — the Pool respawns it when
-        the marker lands, not as wave filler."""
-        wave = []
-        for r in self.rows:
-            if len(wave) >= lanes:
-                break
-            if r.status not in (Status.PENDING, Status.ACTIVE):
-                continue
-            if r.id.startswith("REVIEW-"):
-                continue
-            if r.id.startswith("HUMAN-"):
-                continue          # operator-only; the run loop asks for it
-            if r.id in waiting:
-                continue
-            if not self.deps_met(r):
-                continue
-            if r.id in heavy and any(w in heavy for w in wave):
-                continue
-            if any(frozenset((r.id, w)) in conflicts for w in wave):
-                continue
-            # `<id> *` in conflicts.txt: the row runs in a wave of its own. Pairing a
-            # reading with every other row by hand missed the seven rows phase-c
-            # gained after its conflicts file was written (2026-10-02).
-            if wave and (frozenset((r.id, ALONE)) in conflicts
-                         or any(frozenset((w, ALONE)) in conflicts for w in wave)):
-                continue
-            wave.append(r.id)
-        return wave
-
 
 AUDIT_PREFIX = "REVIEW-audit-"
 # The one text of a cadence audit (`audit_every` in queue.toml; Campaign inserts
@@ -889,13 +621,74 @@ def insert_audit(paths, queue, unit):
     refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
     return Queue(queue.path).by_id()[row_id], refused
 
+def parked_ids(paths):
+    """The rows parked for the operator: one `<row-id>.md` package each under
+    the loop's parked dir. Deleting a package unparks its row."""
+    root = paths.p(paths.parked)
+    if not root.is_dir():
+        return frozenset()
+    return frozenset(f.stem for f in root.glob("*.md"))
+
+
+def out_of_scope(paths, queue):
+    """Open rows outside the queue's frozen scope (queue.toml `scope_file`,
+    phase-b-32, operator 2026-09-27: "We can't keep adding scope"). They wait
+    on the operator as a parked row does; a new row is the operator's act. An
+    audit row and a split of an in-scope row (`<id>-<suffix>`) are in scope:
+    a split re-chunks scope, it does not add it."""
+    rel = paths.manifest.scope_file if paths.manifest else ""
+    if not rel:
+        return frozenset()
+    try:
+        text = paths.p(rel).read_text()
+    except OSError as e:
+        say(f"scope file {rel} unreadable ({e}) — no row is judged out of scope")
+        return frozenset()
+    allowed = {line.split("#")[0].strip() for line in text.splitlines()} - {""}
+    return frozenset(
+        r.id for r in queue.rows
+        if r.status is not Status.DONE and r.id not in allowed
+        and not r.id.startswith(AUDIT_PREFIX)
+        and not any(r.id.startswith(f"{a}-") for a in allowed))
+
+
+def write_parked(paths, row_id, package, reason):
+    """The one spelling of a parked row's package: `<parked>/<row-id>.md`."""
+    dest = paths.p(paths.parked) / f"{row_id}.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(package + f"\n<!-- parked {row_id}: {reason}. Answer in the "
+                    f"row, then delete this file to unpark it. -->\n")
+    return dest
+
+
+def held_ids(paths, queue):
+    """Every row that waits on the operator besides HUMAN- rows: parked rows
+    and rows outside the frozen scope. The one set the planners skip."""
+    return parked_ids(paths) | out_of_scope(paths, queue)
+
+
+def blocked_row(queue, title, parked=frozenset()):
+    """The one open row a halt package is about, or None. The title must name
+    exactly one open non-HUMAN row; an operator-only package may instead rest
+    on the one `[~]` row. A halt that names no row (a stall, a full disk, an
+    unready queue) is not a row's block, and parking on it would walk the loop
+    through the whole queue."""
+    open_rows = [r for r in queue.rows if r.status is not Status.DONE
+                 and not r.id.startswith("HUMAN-") and r.id not in parked]
+    named = [r for r in open_rows
+             if re.search(rf"(?<![\w-]){re.escape(r.id)}(?![\w-])", title)]
+    if len(named) == 1:
+        return named[0]
+    return None
+
+
+def waiting_row(queue, parked=frozenset()):
+    """The one `[~]` row, for an operator-only package whose title names none."""
+    active = [r for r in queue.rows if r.status is Status.ACTIVE
+              and not r.id.startswith("HUMAN-") and r.id not in parked]
+    return active[0] if len(active) == 1 else None
 
 MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "RESOLVE_MODEL", "VARIANT")
-WAIT_LIMIT_KEY = "WAIT_LIMIT_S"
-# Raised from 7200 (2h) on order ralph-model-roster: full gates legitimately
-# exceed 2h on this box and every such wait was a false "never wrote its
-# marker" halt.
-DEFAULT_WAIT_LIMIT_S = 24 * 3600
 
 
 def load_models(path):
@@ -911,30 +704,10 @@ def load_models(path):
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        if key.strip() in MODEL_KEYS + (WAIT_LIMIT_KEY,):
+        if key.strip() in MODEL_KEYS:
             out[key.strip()] = value.strip()
     return out
 
-
-def resolve_wait_limit(args, paths):
-    """The one detached-wait decider: an explicit `--marker-timeout`, then
-    WAIT_LIMIT_S in models.env, then DEFAULT_WAIT_LIMIT_S. A bad value is
-    refused by name, never silently defaulted."""
-    given = getattr(args, "marker_timeout", None)
-    if given is not None:
-        if given <= 0:
-            raise ValueError(f"--marker-timeout={given} must be > 0")
-        return given
-    raw = load_models(paths.p(paths.models)).get(WAIT_LIMIT_KEY, "")
-    if not raw:
-        return DEFAULT_WAIT_LIMIT_S
-    try:
-        limit = int(raw)
-    except ValueError:
-        raise ValueError(f"{paths.models}: WAIT_LIMIT_S={raw!r} is not an integer") from None
-    if limit <= 0:
-        raise ValueError(f"{paths.models}: WAIT_LIMIT_S={limit} must be > 0")
-    return limit
 
 
 def parse_roster(value):
@@ -955,27 +728,6 @@ ERROR_SHAPE_RE = re.compile(
 PROBE_TIMEOUT_S = 45
 PROBE_PROMPT = "Reply with the single word OK."
 
-# A plan usage limit, as the worker's CLI reports it at the end of a session.
-# Matched only in the log's tail, then confirmed by a probe (`quota_confirmed`),
-# because a worker's own transcript can discuss rate limits in code.
-QUOTA_SHAPE_RE = re.compile(
-    r"(?i)\b(usage limit|limit reached|hit your (usage )?limit|rate.?limit(ed)?"
-    r"|quota|out of (extra )?usage)\b")
-QUOTA_TAIL_LINES = 30
-QUOTA_POLL_S = 600
-
-
-def quota_tail(log_path, lines=QUOTA_TAIL_LINES):
-    """The last quota-shaped line in the tail of a session log; empty when none
-    matches or the log is unreadable."""
-    try:
-        tail = pathlib.Path(log_path).read_text(errors="replace").splitlines()[-lines:]
-    except OSError:
-        return ""
-    for line in reversed(tail):
-        if QUOTA_SHAPE_RE.search(line):
-            return line.strip()[:200]
-    return ""
 
 
 def error_tail(text, limit=200):
@@ -1362,21 +1114,13 @@ def prompt_text(paths):
         text = render_prompt(paths.p(PROMPT_BASE).read_text(),
                              paths.p(paths.prompt_addendum).read_text(),
                              {"queue": paths.queue, "state": paths.state,
-                              "control_dir": paths.control_dir, "log_dir": paths.log_dir})
+                              "control_dir": paths.control_dir, "log_dir": paths.log_dir,
+                              "result": "ralph-result"})
         return text, f"{PROMPT_BASE} + {paths.prompt_addendum}"
     return paths.p(paths.prompt).read_text(), paths.prompt
-
-
 # A driver heartbeat younger than this means a loop is live. One number for the
 # watchdog's "stalled" and promote's "still running".
 STALL_SECS = 300
-
-# A pool lane may wait on a detached run's marker for this long from the moment
-# its session first banked `ralph/waiting` (the file's mtime) before the pool
-# escalates with a package. The serial flow's bound is `--marker-timeout`
-# (7200s); a lane's detached run is expected to outlive many sessions
-# (r9-boundary-sweep's full-density sweep ran ~23h), so its bound is its own.
-LANE_MAX_WAIT_SECS = 48 * 3600
 
 
 def job_name(paths, label):
@@ -1385,71 +1129,6 @@ def job_name(paths, label):
 
 def job_running(paths, label):
     return host().job_running(job_name(paths, label))
-
-
-def sessions_under(workdir):
-    """PIDs of `opencode run` processes whose cwd is under `workdir` — the
-    strays a bootout can leave when the code predates the SIGTERM handler."""
-    pids = []
-    r = subprocess.run(["pgrep", "-f", "opencode run"], capture_output=True, text=True)
-    for pid in r.stdout.split():
-        c = subprocess.run(["lsof", "-a", "-d", "cwd", "-p", pid, "-Fn"],
-                           capture_output=True, text=True)
-        for line in c.stdout.splitlines():
-            if line.startswith("n") and line[1:].startswith(str(workdir)):
-                pids.append(int(pid))
-                break
-    return pids
-
-
-# The Popen of every running session, so a SIGTERM (launchd bootout, Ctrl-C)
-# can take the sessions down with the process — they run in their own process
-# groups (start_new_session) and otherwise survive a bootout as orphans
-# (2026-09-16).
-_ACTIVE_SESSIONS = set()
-
-# The supervisor's campaign child (the pool), which owns sessions of its own: a
-# SIGTERM is forwarded to it and awaited, so ITS handler takes ITS sessions
-# down. The supervisor ran it under subprocess.run, whose except clause
-# SIGKILLed the pool when this handler raised — the pool's handler never ran,
-# and a live lane session drove one worktree beside its successor for ~90 min
-# after a `launchctl kickstart -k` (2026-10-02).
-_FORWARD_TERM = set()
-_FORWARD_GRACE_S = 10
-
-
-def _forward_and_reap(proc, signum, grace=_FORWARD_GRACE_S):
-    """Send `signum` to a child and wait up to `grace` seconds for it to exit.
-    os.waitpid, not Popen.wait: the handler can interrupt the main thread
-    inside Popen.wait, which holds that Popen's waitpid lock."""
-    try:
-        os.kill(proc.pid, signum)
-    except ProcessLookupError:
-        return
-    deadline = time.time() + grace
-    while time.time() < deadline:
-        try:
-            pid, _ = os.waitpid(proc.pid, os.WNOHANG)
-        except ChildProcessError:
-            return
-        if pid:
-            return
-        time.sleep(0.1)
-
-
-def _install_signal_handlers():
-    def _term(signum, _frame):
-        for proc in list(_FORWARD_TERM):
-            _forward_and_reap(proc, signal.SIGTERM)
-        for proc in list(_ACTIVE_SESSIONS):
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                pass
-        raise SystemExit(128 + signum)
-
-    signal.signal(signal.SIGTERM, _term)
-    signal.signal(signal.SIGINT, _term)
 
 
 def session_env(paths):
@@ -1474,585 +1153,6 @@ def worker_bin(paths):
         return str(paths.p(declared)) if "/" in declared else declared
     return os.environ.get("RALPH_OPENCODE_BIN", "opencode")
 
-
-class Session:
-    """One opencode session in its own process group, with a wall-clock
-    timeout, a STOP check, a heartbeat, and permission-reject detection."""
-
-    def __init__(self, paths, *, timeout=3600, opencode=None, poll=30,
-                 notifier=notify, notify_enabled=True, cwd=None, env=None):
-        self.paths = paths
-        self.timeout = timeout
-        self.opencode = opencode or worker_bin(paths)
-        self.poll = poll
-        self.notifier = notifier
-        self.notify_enabled = notify_enabled
-        self.cwd = pathlib.Path(cwd) if cwd else paths.workdir
-        self.env = env or {}
-
-    def heartbeat(self, context):
-        try:
-            self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
-            self.paths.p(self.paths.heartbeat).write_text(f"{int(time.time())} {context}\n")
-        except OSError:
-            pass
-
-    def run(self, model_args, prompt_text, log_path):
-        workdir = str(self.cwd)
-        status = subprocess.run(["git", "-C", workdir, "status", "--porcelain"],
-                                capture_output=True, text=True).stdout
-        note = ""
-        if status:
-            note = ("NOTE: the tree holds uncommitted work from a prior session:\n"
-                    + status
-                    + "Inspect it and continue from it; do not discard work already done. "
-                      "Commit it as you go.\n\n")
-        log = pathlib.Path(log_path)
-        log.parent.mkdir(parents=True, exist_ok=True)
-        with open(log, "w") as fh:
-            proc = subprocess.Popen(
-                [self.opencode, "run", *model_args, note + prompt_text],
-                cwd=workdir, env={**os.environ, **session_env(self.paths), **self.env},
-                stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
-        _ACTIVE_SESSIONS.add(proc)
-        waited = 0
-        while proc.poll() is None and waited < self.timeout:
-            time.sleep(min(self.poll, max(1, self.timeout - waited)))
-            waited += self.poll
-            self.heartbeat(f"session {self.paths.workdir.name} {waited}s")
-            if self.paths.p(self.paths.stop).exists():
-                say("STOP requested — killing the session group")
-                self._kill(proc)
-                break
-        if proc.poll() is None:
-            say(f"session exceeded {self.timeout}s — killing its group")
-            self.notifier("auto — session timeout", f"killed at {self.timeout}s", self.notify_enabled)
-            self._kill(proc)
-        rc = proc.wait()
-        self.heartbeat(f"session-end {self.paths.workdir.name}")
-        try:
-            rejects = log.read_text(errors="replace").count("auto-rejecting")
-        except OSError:
-            rejects = 0
-        if rejects:
-            # Name the engine's own permission file: the claude shim reads the
-            # manifest's `settings`; opencode reads opencode.json.
-            manifest = self.paths.manifest
-            perms = manifest.settings if manifest and manifest.settings else "opencode.json"
-            say(f"WARNING: {rejects} permission auto-rejections — extend {perms}")
-            self.notifier("auto — permission rejects", f"{rejects} auto-rejections", self.notify_enabled)
-        _ACTIVE_SESSIONS.discard(proc)
-        return rc
-
-    @staticmethod
-    def _kill(proc):
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        time.sleep(5)
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-
-
-@dataclasses.dataclass
-class Result:
-    outcome: Outcome
-    reason: str = ""
-
-
-class Campaign:
-    """The serial driver. Returns a Result; never exits the process."""
-
-    def __init__(self, paths, *, session_run, notifier=notify, notify_enabled=True,
-                 sleep=time.sleep, max_stall=3, max_iter=200,
-                 marker_timeout=DEFAULT_WAIT_LIMIT_S,
-                 wait_poll=120, model="", review_model="", variant=""):
-        self.paths = paths
-        self.session_run = session_run
-        self.notifier = notifier
-        self.notify_enabled = notify_enabled
-        self.sleep = sleep
-        self.max_stall = max_stall
-        self.max_iter = max_iter
-        self.marker_timeout = marker_timeout
-        self.wait_poll = wait_poll
-        self.model = model
-        self.review_model = review_model
-        self.variant = variant
-        self._announced = set()
-
-    def halt(self, reason, operator_clause=None):
-        return halt(self.paths, reason, notifier=self.notifier,
-                    notify_enabled=self.notify_enabled, operator_clause=operator_clause)
-
-    def _owes_closing_audit(self):
-        """A DONE a worker wrote stands unless the queue owes its closing
-        audit; a queue file that does not parse leaves it standing, as before."""
-        if not (self.paths.manifest and self.paths.manifest.audit_every):
-            return False
-        try:
-            return closing_audit_due(self.paths, Queue(self.paths.p(self.paths.state)))
-        except (OSError, ValueError) as e:
-            say(f"closing audit not judged — {self.paths.state} does not parse: {e}")
-            return False
-
-    def _announce_waiting(self, waiting):
-        """Say once per campaign that a row waits on the operator while the
-        loop runs past it — a skipped row is a decision, and it is traced."""
-        for row_id in waiting:
-            if row_id in self._announced:
-                continue
-            self._announced.add(row_id)
-            say(f"{row_id} waits on the operator — running the rows that do not depend on it")
-            self.notifier("OPERATOR — waiting, loop continues", row_id, self.notify_enabled)
-
-    def run(self):
-        stall = 0
-        iteration = 0
-        while iteration < self.max_iter:
-            iteration += 1
-            self._beat(f"iteration {iteration}")
-            if self.paths.p(self.paths.stop).exists():
-                return Result(Outcome.OPERATOR_STOP, "stop file present")
-            if self.paths.p(self.paths.done).exists():
-                if not self._owes_closing_audit():
-                    return Result(Outcome.DONE, "done file present")
-                self.paths.p(self.paths.done).unlink()
-                say(f"{self.paths.done} withdrawn — the queue owes a closing audit")
-            if self.paths.p(self.paths.needs_human).exists() \
-                    and self.paths.p(self.paths.needs_human).stat().st_size:
-                return Result(Outcome.NEEDS_HUMAN,
-                              first_line(self.paths.p(self.paths.needs_human)))
-            marker = wait_for_marker(self.paths, self.marker_timeout)
-            if marker is not None and marker != "wait":
-                return self.halt(marker)
-            if marker == "wait":
-                self.sleep(self.wait_poll)
-                iteration -= 1
-                continue
-            # Re-read every iteration: the worker mutates the queue as it goes.
-            queue = Queue(self.paths.p(self.paths.state))
-            parked = held_ids(self.paths, queue)
-            unit = queue.current(parked)
-            waiting = queue.awaiting_operator(parked)
-            if unit is None and closing_audit_due(self.paths, queue):
-                unit, refused = insert_audit(self.paths, queue, None)
-                if refused:
-                    return self.halt(f"audit row {unit.id} is in {self.paths.state} "
-                                     f"but git refused the commit: {refused}")
-            if unit is None:
-                # The queue's own state says it is finished, so the loop says so
-                # rather than halting for a session to write DONE. An empty queue
-                # is a wrong path, not a finished one, and still halts.
-                if queue.rows and queue.all_done():
-                    self.paths.p(self.paths.done).write_text("")
-                    say(f"DONE — every row in {self.paths.state} is [x]")
-                    return Result(Outcome.DONE, "every row is [x]")
-                if waiting:
-                    return self.halt("operator approval required — every ready row waits "
-                                     f"on the operator: {', '.join(waiting)}",
-                                     operator_clause="HUMAN- rows and parked rows")
-                if not queue.rows:
-                    # Nothing queued is the operator's to fix (queueing orders),
-                    # so it stops at once rather than cooling down as a loop
-                    # block would under the supervisor.
-                    return self.halt(f"{self.paths.state} has no rows — nothing is queued",
-                                     operator_clause="queueing orders")
-                return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
-            self._announce_waiting(waiting)
-            refusal = dispatch_refusal(self.paths, queue, unit)
-            if refusal is not None:
-                return self.halt(refusal)
-            if audit_due(self.paths, queue, unit):
-                unit, refused = insert_audit(self.paths, queue, unit)
-                if refused:
-                    return self.halt(f"audit row {unit.id} is in {self.paths.state} "
-                                     f"but git refused the commit: {refused}")
-            model_args = select_model_args(unit, self.model, self.review_model, self.variant)
-            say(f"unit {unit.id} — {' '.join(model_args) or 'configured default'}")
-            before = head_of(self.paths.workdir)
-            note = (f"Your unit: {unit.id} — its row in {self.paths.state} is the [~] row, "
-                    "or the first ready [ ] row. Open only that row; do not scan the "
-                    "queue for another.\n\n")
-            if self.paths.queue:
-                # Another loop may own ralph/STOP and ralph/NEEDS_HUMAN.md in this checkout.
-                note += (f"This queue's control files are {self.paths.needs_human}, "
-                         f"{self.paths.done} and {self.paths.waiting} — never the files of "
-                         "those names directly under ralph/, which belong to another loop.\n\n")
-            if parked:
-                note += (f"Parked rows wait on the operator; do not open them: "
-                         f"{', '.join(sorted(parked))}.\n\n")
-            self.session_run(model_args, note + self._prompt_text(), self._log_path(iteration))
-            after = head_of(self.paths.workdir)
-            if after != before:
-                stall = 0
-            else:
-                # A session the plan's usage limit ended never ran; it is not a
-                # stalled row (principle 5: never-ran is not failed). Wait for
-                # the reset and re-dispatch the same unit, counting nothing.
-                cause = quota_tail(self._log_path(iteration))
-                if cause and self._quota_confirmed(cause):
-                    stopped = self._wait_out_quota(cause)
-                    if stopped is not None:
-                        return stopped
-                    iteration -= 1
-                    continue
-                stall += 1
-                say(f"no commit this iteration (stall {stall}/{self.max_stall})")
-                if stall >= self.max_stall:
-                    return self.halt(f"{self.max_stall} iterations without a commit")
-        return self.halt(f"MAX_ITER={self.max_iter} reached")
-
-    def _beat(self, context):
-        try:
-            self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
-            self.paths.p(self.paths.heartbeat).write_text(f"{int(time.time())} {context}\n")
-        except OSError:
-            pass
-
-    def _prompt_text(self):
-        """Re-read every iteration, as before; the hash is logged when it changes,
-        so the log says which prompt each unit ran on."""
-        text, source = prompt_text(self.paths)
-        digest = hashlib.sha256(text.encode()).hexdigest()[:16]
-        if digest != getattr(self, "_prompt_digest", None):
-            self._prompt_digest = digest
-            say(f"prompt: {source} sha256={digest}")
-        return text
-
-    def _log_path(self, iteration):
-        return str(self.paths.p(self.paths.log_dir) / f"iter-{iteration}.out")
-
-    def _probe(self):
-        """(answered, cause) from one minimal call on the worker model; with
-        no model configured there is nothing to probe, and the tail stands."""
-        if not self.model:
-            return False, "no worker model to probe"
-        return probe_model(self.model, self.paths)
-
-    def _quota_confirmed(self, cause):
-        """The log tail looked like a usage limit. A probe that answers means
-        it was not one (the transcript only mentioned limits), so the stall
-        counts as usual."""
-        answered, why = self._probe()
-        if answered:
-            say(f"quota-shaped tail, but the probe answered — counting a stall: {cause}")
-            return False
-        say(f"usage limit confirmed by probe ({why or 'no answer'}): {cause}")
-        return True
-
-    def _wait_out_quota(self, cause):
-        """Poll until the probe answers, then return None so the same unit is
-        re-dispatched. A STOP ends the wait; a limit that outlasts the loop's
-        wait limit halts with the cause named."""
-        say(f"usage limit — waiting for the reset, no stall counted: {cause}")
-        self.notifier("auto — usage limit, waiting", cause, self.notify_enabled)
-        waited = 0
-        while waited < self.marker_timeout:
-            if self.paths.p(self.paths.stop).exists():
-                return Result(Outcome.OPERATOR_STOP, "stop file present during a usage-limit wait")
-            self.sleep(QUOTA_POLL_S)
-            waited += QUOTA_POLL_S
-            self._beat(f"usage-limit wait {waited}s")
-            answered, _ = self._probe()
-            if answered:
-                say(f"usage limit cleared after {waited}s — re-dispatching the unit")
-                return None
-        return self.halt(f"usage limit did not clear within {self.marker_timeout}s: {cause}")
-
-
-# terminal_stop's answer when it parked a row: not a stop, the campaign re-runs.
-PARKED = "parked"
-
-
-# A stop that names no row is the loop's (a dead roster, a full disk, an I/O
-# error, a crash), not the operator's: the supervisor waits these out and
-# relaunches, and only past the last one with no unit done does the stop stand.
-SUPERVISOR_COOLDOWNS = (600, 1200, 2400, 4800, 7200, 7200)
-
-
-class Supervisor:
-    """Runs a campaign command; a stop short of DONE is either terminal, an
-    operator escalation, a parked row, or a bounded resolution. Progress is a
-    unit completed."""
-
-    def __init__(self, paths, *, run_inner, resolver_run, notifier=notify,
-                 notify_enabled=True, resolve_max=4, state_path=None, max_parks=3,
-                 cooldowns=SUPERVISOR_COOLDOWNS, sleep=time.sleep, clock=time.monotonic):
-        self.paths = paths
-        self.run_inner = run_inner
-        self.resolver_run = resolver_run
-        self.notifier = notifier
-        self.notify_enabled = notify_enabled
-        self.resolve_max = resolve_max
-        # Parks in a row with no unit completed between them: past this, the
-        # block is the loop's, not a row's, and the stop stands.
-        self.max_parks = max_parks
-        self.parks_without_progress = 0
-        self.cooldowns = tuple(cooldowns)
-        self.cooldowns_without_progress = 0
-        self.sleep = sleep
-        self.clock = clock
-
-    def _queue(self):
-        # A worker may be mid-write; the frequent checks tolerate that, the
-        # campaign's own read does not.
-        try:
-            return Queue(self.paths.p(self.paths.state))
-        except (OSError, ValueError):
-            return None
-
-    def _record_director_range(self, before, after, attempt, reason):
-        """Name the director's commits so the morning review can revert one:
-        `git revert <sha>` works because a decision is its own commit."""
-        log = self.paths.p(self.paths.director_commits)
-        try:
-            log.parent.mkdir(parents=True, exist_ok=True)
-            with log.open("a") as fh:
-                fh.write(f"{int(time.time())} attempt={attempt} {before}..{after} — {reason}\n")
-        except OSError:
-            pass
-
-    def park(self, reason, *, operator=False):
-        """Move the package to parked/<row>.md, return the row to `[ ]`, and let
-        the campaign run every row that does not depend on it (phase-b-31). The
-        row is the one the package's title names, or for an operator-only
-        package the one `[~]` row. None when no row can be named, or when
-        `max_parks` rows parked with no unit completed: the stop stands then."""
-        pkg = self.paths.p(self.paths.needs_human)
-        queue = self._queue()
-        if queue is None or not (pkg.exists() and pkg.stat().st_size):
-            return None
-        parked = parked_ids(self.paths)
-        row = blocked_row(queue, first_line(pkg), parked)
-        if row is None and operator:
-            row = waiting_row(queue, parked)
-        if row is None:
-            say(f"supervisor: the package names no single open row — not parking ({reason})")
-            return None
-        if self.parks_without_progress >= self.max_parks:
-            say(f"supervisor: {self.parks_without_progress} rows parked with no unit done "
-                f"— not parking {row.id}; the stop stands")
-            return None
-        dest = write_parked(self.paths, row.id, pkg.read_text(), reason)
-        pkg.unlink()
-        stop = self.paths.p(self.paths.stop)
-        if stop.exists() and stop.stat().st_size:
-            stop.unlink()
-        if row.status is Status.ACTIVE:
-            queue.set_status(row.id, Status.PENDING)
-            refused = commit_state(self.paths, f"ralph: {row.id} parked for the operator")
-            if refused is not None and getattr(refused, "returncode", 0):
-                say(f"supervisor: the park of {row.id} is in {self.paths.state} but git "
-                    f"refused the commit: {error_tail(refused.stderr or refused.stdout)}")
-        self.parks_without_progress += 1
-        say(f"supervisor: parked {row.id} ({reason}) — the loop runs the rows that do not "
-            "depend on it")
-        self.notifier("OPERATOR — row parked, loop continues",
-                      f"{row.id}: {first_line(dest)}", self.notify_enabled)
-        return row.id
-
-    def cool_down(self, reason):
-        """For a stop no row can be parked on: archive its package, wait out the
-        next backoff, and let the loop relaunch the campaign — the ersilia
-        supervisor exited on 23 such stops and sat down for 76.9 of its 143
-        stuck hours, 9.4 of them the operator's (2026-09-17 → 10-04). False when
-        the backoffs are spent with no unit done: the stop stands then. An empty
-        STOP written during the wait ends it at once."""
-        n = self.cooldowns_without_progress
-        if n >= len(self.cooldowns):
-            return False
-        self.cooldowns_without_progress = n + 1
-        wait = self.cooldowns[n]
-        pkg = self.paths.p(self.paths.needs_human)
-        kept = "no package"
-        if pkg.exists() and pkg.stat().st_size:
-            halts = self.paths.workdir / "target" / "ralph" / "halts"
-            try:
-                halts.mkdir(parents=True, exist_ok=True)
-                dest = halts / f"{int(time.time())}-{n + 1}.md"
-                dest.write_text(pkg.read_text())
-                kept = f"package kept at {dest}"
-            except OSError as e:
-                kept = f"package not kept ({e})"
-            pkg.unlink(missing_ok=True)
-        stop = self.paths.p(self.paths.stop)
-        if stop.exists() and stop.stat().st_size:
-            stop.unlink()
-        say(f"supervisor: {reason} — no row to park; cooling down {wait // 60} min "
-            f"({n + 1}/{len(self.cooldowns)}) and relaunching; {kept}")
-        self.notifier("auto — cooling down", f"{reason} ({n + 1}/{len(self.cooldowns)})",
-                      self.notify_enabled)
-        left = wait
-        while left > 0:
-            if stop.exists() and not stop.stat().st_size:
-                return True
-            try:
-                self.paths.p(self.paths.heartbeat).write_text(
-                    f"{int(time.time())} supervisor cooling down {left}s\n")
-            except OSError:
-                pass
-            step = min(60, left)
-            self.sleep(step)
-            left -= step
-        return True
-
-    def terminal_stop(self):
-        if self.paths.p(self.paths.done).exists():
-            say("supervisor: campaign DONE")
-            self.notifier("DONE — campaign complete", "every row is [x]", self.notify_enabled)
-            return 0
-        stop = self.paths.p(self.paths.stop)
-        pkg = self.paths.p(self.paths.needs_human)
-        # An EMPTY STOP is the operator's and wins over any package beside it:
-        # requiring the absence of a package made a stop unhonored, which kept
-        # the supervisor dispatching resolutions (2026-09-16).
-        if stop.exists() and not stop.stat().st_size:
-            say("supervisor: operator STOP — leaving it stopped")
-            self.notifier("stopped — operator stop preserved", self.paths.stop, self.notify_enabled)
-            return 0
-        if stop.exists() and stop.stat().st_size and not (pkg.exists() and pkg.stat().st_size):
-            pkg.write_text(f"{stop.read_text()}\nresolve by hand, then remove "
-                           f"{self.paths.stop} {self.paths.needs_human}\n")
-            say(f"supervisor: halt package was missing — wrote one from {self.paths.stop}")
-        queue = self._queue()
-        parked = held_ids(self.paths, queue) if queue else frozenset()
-        waiting = queue.awaiting_operator(parked) if queue else []
-        if queue is not None and waiting and queue.current(parked) is None:
-            say(f"supervisor: operator approval required — every ready row waits on the "
-                f"operator: {', '.join(waiting)} (no resolution session)")
-            self.notifier("OPERATOR — approval required",
-                          f"nothing else is ready: {', '.join(waiting)}", self.notify_enabled)
-            return 2
-        clause = operator_only(pkg) if pkg.exists() and pkg.stat().st_size else None
-        if clause is not None:
-            if self.park(f"operator-only: {clause}", operator=True) is not None:
-                return PARKED
-            say(f"supervisor: operator-only halt — {clause} (no resolution session)")
-            self.notifier("OPERATOR — decision required", f"{first_line(pkg)} ({clause})",
-                          self.notify_enabled)
-            return 2
-        return None
-
-    def _done_count(self):
-        """Rows done, or None while STATE.md does not parse — the campaign halts
-        on that by name; the supervisor must not die of it (a done_count() on
-        None killed it at boot, ersilia 2026-09-17)."""
-        queue = self._queue()
-        return queue.done_count() if queue is not None else None
-
-    def run(self):
-        """The supervision loop, with a net under it: an error nothing above
-        caught used to kill the supervisor with a traceback, and nothing
-        restarts the job (launchd has no KeepAlive). It cools down and
-        supervises again instead; past the last cool-down it is raised."""
-        while True:
-            try:
-                return self._run()
-            except Exception as e:  # noqa: BLE001 — the net is for what nothing caught
-                say(f"supervisor error: {type(e).__name__}: {e}")
-                for line in traceback.format_exc().rstrip().splitlines()[-6:]:
-                    say(f"  {line}")
-                try:
-                    cooled = self.cool_down(f"supervisor error: {type(e).__name__}: {e}")
-                except OSError:
-                    cooled = False
-                if not cooled:
-                    raise
-
-    def _run(self):
-        last_done = self._done_count() or 0
-        attempt = 0
-        while True:
-            stop = self.terminal_stop()
-            if stop == PARKED:
-                attempt = 0
-                continue
-            if stop is not None:
-                return stop
-            self.run_inner()
-            stop = self.terminal_stop()
-            if stop == PARKED:
-                attempt = 0
-                continue
-            if stop is not None:
-                return stop
-            done_now = self._done_count()
-            if done_now is None:
-                say(f"supervisor: {self.paths.state} does not parse — no progress counted")
-            elif done_now > last_done:
-                attempt = 0
-                last_done = done_now
-                self.parks_without_progress = 0
-                self.cooldowns_without_progress = 0
-            pkg = self.paths.p(self.paths.needs_human)
-            reason = first_line(pkg) if pkg.exists() and pkg.stat().st_size else "campaign exited"
-            say(f"supervisor: campaign stopped — {reason}")
-            attempt += 1
-            if attempt > self.resolve_max:
-                if self.park(f"{self.resolve_max} resolutions did not clear it") is not None:
-                    attempt = 0
-                    continue
-                if self.cool_down(f"{self.resolve_max} resolutions did not clear it"):
-                    attempt = 0
-                    continue
-                say(f"supervisor: {self.resolve_max} resolution attempts did not clear it "
-                    "— leaving it to the operator")
-                self.notifier("OPERATOR — unresolved after "
-                              f"{self.resolve_max} resolutions", reason,
-                              self.notify_enabled)
-                return 2
-            pkg_before = file_hash(pkg)
-            head_before = head_of(self.paths.workdir)
-            stop_file = self.paths.p(self.paths.stop)
-            if pkg.exists() and pkg.stat().st_size:
-                stop_file.unlink(missing_ok=True)
-            say(f"supervisor: dispatching resolution session {attempt} — {reason}")
-            self.notifier("auto — resolving", f"attempt {attempt}: {reason}", self.notify_enabled)
-            started = self.clock()
-            self.resolver_run(attempt, reason)
-            secs = self.clock() - started
-            head_after = head_of(self.paths.workdir)
-            if head_after and head_after != head_before:
-                self._record_director_range(head_before, head_after, attempt, reason)
-            if stop_file.exists():
-                say("supervisor: operator STOP during resolution — leaving it stopped")
-                self.notifier("STOP", "resolution interrupted; operator stop preserved",
-                              self.notify_enabled)
-                return 0
-            if pkg.exists() and pkg.stat().st_size:
-                if file_hash(pkg) == pkg_before and head_of(self.paths.workdir) == head_before:
-                    if secs < NEVER_RAN_SECS:
-                        # It never ran: parking on it would charge the row for a
-                        # provider's failure, so the attempt does not count.
-                        say(f"supervisor: resolution {attempt} ended in {int(secs)}s having "
-                            "changed nothing — it did not run; not counted, no park")
-                        attempt -= 1
-                        if self.cool_down(f"the resolver did not run ({int(secs)}s)"):
-                            continue
-                        say("supervisor: the resolver keeps failing to run — leaving it to "
-                            "the operator")
-                        self.notifier("OPERATOR — the resolver does not run", reason,
-                                      self.notify_enabled)
-                        return 2
-                    if self.park(f"resolution {attempt} changed nothing") is not None:
-                        attempt = 0
-                        continue
-                    if self.cool_down(f"resolution {attempt} changed nothing"):
-                        attempt = 0
-                        continue
-                    say(f"supervisor: resolution {attempt} changed nothing — escalating")
-                    self.notifier("OPERATOR — resolution achieved nothing", reason,
-                                  self.notify_enabled)
-                    return 2
-                say(f"supervisor: resolution {attempt} left NEEDS_HUMAN — retrying")
-            else:
-                say(f"supervisor: resolution {attempt} cleared the halt — resuming the campaign")
-
-
 # A conflicts.txt line `<id> *` pairs the row with every other: it runs alone.
 ALONE = "*"
 
@@ -2061,7 +1161,7 @@ def conflict_pairs(text):
     """A line of N ids means all N-choose-2 pairs; `#` starts a comment. Reading
     only the first two dropped the third id of ring-doc's line without a word.
     `*` among the ids is ALONE: each other id on the line runs in a wave of its
-    own (`pick_wave`)."""
+    own (`Loop._pick`)."""
     pairs = set()
     for line in text.splitlines():
         ids = line.split("#")[0].split()
@@ -2085,15 +1185,6 @@ DISK_FLOOR_GB = 5
 # of time mid-work, not into a wall: it continues without a strike, at most this
 # many times in a row before the strikes count again (12h at a 2h session cap).
 MAX_LANE_CONTINUATIONS = 6
-# A session that ends this fast having changed nothing did not run — a provider
-# error, a quota, a harness refusal — and its end is not the unit's failure:
-# 30-90s deaths struck ersilia lanes out, and 12 of 23 "changed nothing"
-# resolutions lasted two minutes or less (2026-09-17 → 10-04). Lanes get
-# MAX_NEVER_RAN such ends in a row before the strikes count, and a wave of them
-# backs the pool off before the next.
-NEVER_RAN_SECS = 120
-MAX_NEVER_RAN = 3
-NEVER_RAN_BACKOFF = 300
 # This file, as the pool re-execs onto it between waves (Pool._maybe_reexec).
 SELF = pathlib.Path(__file__).resolve()
 # Where a lane reads its share: a file, because `toolbox run` forwards no env.
@@ -2161,52 +1252,588 @@ def lane_root_for(workdir):
     workdir = pathlib.Path(workdir).resolve()
     return workdir.parent / f"{workdir.name}-lanes"
 
+# ---------------------------------------------------------------------------
+# The machine (docs/RALPH_STATE_MACHINE.md), as data. A unit is one row of the
+# queue. Its states and the events it consumes are closed sets, and every
+# event comes from something the loop owns: a process it started ending, its
+# own git operations, its clock, or an operator act (STOP, a parked file
+# deleted, an edit of the queue). Nothing an agent writes is read as loop
+# state; the one thing a session writes for the loop is its result
+# (`ralph-result`, validated when it is called).
 
-class Pool:
-    """The parallel driver: waves of ready units in git worktrees, serial
-    merges, a conflict halts (never auto-resolved). REVIEW rows run serially
-    in the main tree. Progress is the same file protocol as the serial flow."""
 
-    def __init__(self, paths, *, session_for, notifier=notify, notify_enabled=True,
-                 lanes=2, base_branch="",
-                 marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
-                 model="", review_model="", variant="", max_review_attempts=3,
-                 max_lane_failures=3, probe=None, jobs_share=None, lane_root=None,
-                 disk_floor_gb=DISK_FLOOR_GB, disk_free_gb=None,
-                 max_lane_continuations=MAX_LANE_CONTINUATIONS,
-                 code_digest=None, compiles=None, reexec=None, argv=None,
-                 boot_time=None, committed=None, clock=time.monotonic):
+class U(enum.Enum):
+    """A unit's state."""
+    PENDING = "pending"        # a dependency is not done
+    READY = "ready"
+    RUNNING = "running"        # a worker session the loop holds
+    DIRECTING = "directing"    # a director session the loop holds (a charter covers the unit)
+    AWAITING = "awaiting"      # a background run the loop holds, with its budget
+    MERGING = "merging"        # finished; the loop is landing it on the base
+    HELD = "held"              # the operator's: parked, a HUMAN- row, or outside the frozen scope
+    DONE = "done"
+
+
+# The states that hold something the loop started. They live in the ledger;
+# the other four are read from the queue and the parked dir each tick.
+ACTIVE = frozenset({U.RUNNING, U.DIRECTING, U.AWAITING, U.MERGING})
+SESSION = frozenset({U.RUNNING, U.DIRECTING})
+
+
+class E(enum.Enum):
+    """An event a unit consumes."""
+    # the queue and the parked dir, re-read for a unit that holds no process
+    DEPS_DONE = "deps-done"
+    DEPS_UNMET = "deps-unmet"            # a dependency was reopened
+    HOLD = "hold"                        # parked, made a HUMAN- row, or scoped out
+    UNHOLD = "unhold"                    # the operator deleted the park, or rescoped
+    ROW_CLOSED = "row-closed"            # the row reads [x]: an operator edit
+    ROW_REOPENED = "row-reopened"
+    # dispatch, and what it can refuse
+    DISPATCH = "dispatch"
+    DISPATCH_DIRECTOR = "dispatch-director"
+    DISPATCH_REFUSED = "dispatch-refused"   # the row lacks a dispatch_requires marker
+    SPAWN_FAILED = "spawn-failed"           # the loop could not start the session or its worktree
+    STRIKE_LIMIT = "strike-limit"           # strikes reached the bound and no director is left
+    # a session's end: its one result, or none
+    RESULT_DONE = "result-done"
+    RESULT_CONTINUE = "result-continue"
+    RESULT_AWAIT = "result-await"
+    AWAIT_FAILED = "await-failed"           # the loop could not start the run the result named
+    RESULT_NEEDS_HUMAN = "result-needs-human"
+    RESULT_NEEDS_DIRECTOR = "result-needs-director"
+    NO_RESULT_COMMITS = "no-result-commits"
+    NO_RESULT_NONE = "no-result-none"
+    # a background run's end
+    RUN_ENDED = "run-ended"                 # any end: success, failure, crash, OOM kill, reboot
+    RUN_OVER_BUDGET = "run-over-budget"
+    # the loop's own git operations
+    MERGE_CLEAN = "merge-clean"
+    MERGE_CONFLICT = "merge-conflict"
+    MERGE_UNCOMMITTED = "merge-uncommitted"  # merged, but the loop's own done commit failed
+    # the operator
+    OPERATOR_STOP = "operator-stop"
+
+
+# The events derived from the queue. They are generated only for a unit that
+# holds no process: an active unit's session or run decides, and the queue is
+# read for it again when it leaves.
+STATIC_EVENTS = frozenset({E.DEPS_DONE, E.DEPS_UNMET, E.HOLD, E.UNHOLD, E.ROW_CLOSED,
+                           E.ROW_REOPENED})
+
+# (state, event) -> (next state, action). An action is a `Loop._do_<name>`
+# method; None changes the state only.
+TRANSITIONS = {
+    (U.PENDING, E.DEPS_DONE): (U.READY, None),
+    (U.PENDING, E.HOLD): (U.HELD, None),
+    (U.PENDING, E.ROW_CLOSED): (U.DONE, None),
+    (U.PENDING, E.OPERATOR_STOP): (U.PENDING, None),
+
+    (U.READY, E.DEPS_UNMET): (U.PENDING, None),
+    (U.READY, E.HOLD): (U.HELD, None),
+    (U.READY, E.ROW_CLOSED): (U.DONE, None),
+    (U.READY, E.DISPATCH): (U.RUNNING, "start_session"),
+    (U.READY, E.DISPATCH_DIRECTOR): (U.DIRECTING, "start_session"),
+    (U.READY, E.DISPATCH_REFUSED): (U.HELD, "park_refused"),
+    (U.READY, E.SPAWN_FAILED): (U.READY, "strike"),
+    (U.READY, E.STRIKE_LIMIT): (U.HELD, "park_struck"),
+    (U.READY, E.OPERATOR_STOP): (U.READY, None),
+
+    (U.RUNNING, E.RESULT_DONE): (U.MERGING, "accept_done"),
+    (U.RUNNING, E.RESULT_CONTINUE): (U.READY, "continue_"),
+    (U.RUNNING, E.RESULT_AWAIT): (U.AWAITING, "start_await"),
+    (U.RUNNING, E.AWAIT_FAILED): (U.READY, "strike"),
+    (U.RUNNING, E.RESULT_NEEDS_HUMAN): (U.HELD, "park_asked"),
+    (U.RUNNING, E.RESULT_NEEDS_DIRECTOR): (U.READY, "escalate"),
+    (U.RUNNING, E.NO_RESULT_COMMITS): (U.READY, "continue_"),
+    (U.RUNNING, E.NO_RESULT_NONE): (U.READY, "strike"),
+    (U.RUNNING, E.OPERATOR_STOP): (U.READY, "interrupted"),
+
+    (U.DIRECTING, E.RESULT_DONE): (U.MERGING, "accept_done"),
+    (U.DIRECTING, E.RESULT_CONTINUE): (U.READY, "director_cleared"),
+    (U.DIRECTING, E.RESULT_AWAIT): (U.AWAITING, "start_await"),
+    (U.DIRECTING, E.AWAIT_FAILED): (U.HELD, "park_director"),
+    (U.DIRECTING, E.RESULT_NEEDS_HUMAN): (U.HELD, "park_asked"),
+    (U.DIRECTING, E.NO_RESULT_COMMITS): (U.HELD, "park_director"),
+    (U.DIRECTING, E.NO_RESULT_NONE): (U.HELD, "park_director"),
+    (U.DIRECTING, E.OPERATOR_STOP): (U.READY, "interrupted"),
+
+    (U.AWAITING, E.RUN_ENDED): (U.READY, "run_ended"),
+    (U.AWAITING, E.RUN_OVER_BUDGET): (U.READY, "run_over_budget"),
+    # The run is the unit's, not the session's: a stop leaves it running and
+    # the next start watches it again (its pid, start time and exit file are
+    # in the ledger).
+    (U.AWAITING, E.OPERATOR_STOP): (U.AWAITING, None),
+
+    (U.MERGING, E.MERGE_CLEAN): (U.DONE, None),
+    (U.MERGING, E.MERGE_CONFLICT): (U.READY, "strike"),
+    (U.MERGING, E.MERGE_UNCOMMITTED): (U.HELD, "park_unmarked"),
+    # A merge runs inside one tick; a stop lets it finish.
+    (U.MERGING, E.OPERATOR_STOP): (U.MERGING, None),
+
+    (U.HELD, E.UNHOLD): (U.READY, "unhold"),
+    (U.HELD, E.ROW_CLOSED): (U.DONE, None),
+    (U.HELD, E.OPERATOR_STOP): (U.HELD, None),
+
+    (U.DONE, E.ROW_REOPENED): (U.READY, None),
+    (U.DONE, E.OPERATOR_STOP): (U.DONE, None),
+}
+
+# Every pair the table leaves out, with the reason it cannot occur. The
+# totality test holds the two together: each (state, event) is in exactly one.
+_NO_SESSION = "only a session the loop holds reports a result or ends without one"
+_NO_RUN = "only an awaiting unit holds a background run"
+_NO_MERGE = "only a merging unit is merged"
+_NOT_READY = "the loop dispatches, refuses and escalates only ready units"
+_ACTIVE_STATIC = ("the queue is re-read for a unit only when it holds no process; "
+                  "its session or run decides, and the row is read again when it leaves")
+
+
+def _impossible():
+    out = {}
+    result_events = {E.RESULT_DONE, E.RESULT_CONTINUE, E.RESULT_AWAIT, E.AWAIT_FAILED,
+                     E.RESULT_NEEDS_HUMAN, E.RESULT_NEEDS_DIRECTOR, E.NO_RESULT_COMMITS,
+                     E.NO_RESULT_NONE}
+    dispatch_events = {E.DISPATCH, E.DISPATCH_DIRECTOR, E.DISPATCH_REFUSED, E.SPAWN_FAILED,
+                       E.STRIKE_LIMIT}
+    for state in U:
+        for event in E:
+            if (state, event) in TRANSITIONS:
+                continue
+            if event in result_events:
+                out[(state, event)] = _NO_SESSION
+            elif event in (E.RUN_ENDED, E.RUN_OVER_BUDGET):
+                out[(state, event)] = _NO_RUN
+            elif event in (E.MERGE_CLEAN, E.MERGE_CONFLICT, E.MERGE_UNCOMMITTED):
+                out[(state, event)] = _NO_MERGE
+            elif event in dispatch_events:
+                out[(state, event)] = _NOT_READY
+            elif state in ACTIVE:
+                out[(state, event)] = _ACTIVE_STATIC
+    out[(U.DIRECTING, E.RESULT_NEEDS_DIRECTOR)] = (
+        "a director's needs-human goes to the operator: classify() never escalates a "
+        "director to itself")
+    out[(U.PENDING, E.DEPS_UNMET)] = "a pending unit's dependencies are already unmet"
+    out[(U.READY, E.DEPS_DONE)] = "a ready unit's dependencies are already done"
+    for state in (U.PENDING, U.READY):
+        out[(state, E.UNHOLD)] = "only a held unit is released"
+        out[(state, E.ROW_REOPENED)] = "only a done row is reopened"
+    out[(U.HELD, E.HOLD)] = "a held unit is already held"
+    for event in (E.DEPS_DONE, E.DEPS_UNMET):
+        out[(U.HELD, event)] = ("held takes precedence over dependencies; they are read "
+                                "again when the unit is released")
+    out[(U.HELD, E.ROW_REOPENED)] = "only a done row is reopened"
+    for event in (E.DEPS_DONE, E.DEPS_UNMET, E.HOLD, E.UNHOLD, E.ROW_CLOSED):
+        out[(U.DONE, event)] = ("a done row is read only for being reopened; the rest "
+                                "follows from READY")
+    return out
+
+
+IMPOSSIBLE = _impossible()
+
+# How each state that waits is left, and what kind of signal that is. "owned":
+# the loop produces it (a process it started ending, its clock against a budget
+# it recorded, its own git). "operator": an operator act. No waiting state is
+# left by a file an agent writes, and none by a clock alone.
+WAITING_EXITS = {
+    U.PENDING: ("owned", "a dependency's own transition to DONE"),
+    U.READY: ("owned", "dispatch, once the one precondition guard passes"),
+    U.RUNNING: ("owned", "the session's process ends; the loop kills it at its timeout"),
+    U.DIRECTING: ("owned", "the session's process ends; the loop kills it at its timeout"),
+    U.AWAITING: ("owned", "the run's process ends, or its budget passes and the loop kills it"),
+    U.MERGING: ("owned", "the loop's merge, run when the main tree is free; the main tree's "
+                         "holder is itself a RUNNING, DIRECTING or AWAITING unit"),
+    U.HELD: ("operator", "unpark (delete the parked file), rescope, or mark the row [x]"),
+}
+
+
+def static_path(frm, to):
+    """The STATIC_EVENTS that walk a unit holding no process from one state
+    to another, shortest first; the table decides which steps exist."""
+    if frm == to:
+        return []
+    frontier, seen = [(frm, [])], {frm}
+    while frontier:
+        state, path = frontier.pop(0)
+        for event in E:
+            if event not in STATIC_EVENTS or (state, event) not in TRANSITIONS:
+                continue
+            nxt = TRANSITIONS[(state, event)][0]
+            if nxt == to:
+                return path + [event]
+            if nxt not in seen:
+                seen.add(nxt)
+                frontier.append((nxt, path + [event]))
+    raise ValueError(f"no static path {frm.value} -> {to.value}")
+
+
+class Pool(enum.Enum):
+    """The loop's own state, read from its units each tick."""
+    RUNNING = "running"        # a session runs, or a merge is landing
+    IDLE = "idle"              # nothing is ready; background runs are bounded by their budgets
+    BLOCKED = "blocked"        # a unit is ready and a precondition fails
+    STUCK = "stuck"            # nothing ready, running or awaiting; units are held
+    DRAINING = "draining"      # a drain stop: running sessions finish, nothing new starts
+    DONE = "done"
+    STOPPED = "stopped"
+# ---------------------------------------------------------------------------
+# Processes the loop starts. A session or a background run is recorded by its
+# pid AND its start time, so a pid reused after a reboot is not mistaken for
+# the run; both run in their own process group, so the loop can end them with
+# everything they started; and both survive the loop's own exit or re-exec,
+# because the ledger lets the next generation watch them again.
+
+
+@dataclasses.dataclass(frozen=True)
+class Proc:
+    pid: int
+    started: str               # `ps -o lstart=`; "" when ps could not say
+
+
+def _ps(pids):
+    """{pid: (lstart, stat)} for the pids that exist, or None when ps itself
+    failed: a failed look is not evidence that a process is gone."""
+    if not pids:
+        return {}
+    try:
+        r = subprocess.run(["ps", "-o", "pid=,stat=,lstart=", "-p", ",".join(map(str, pids))],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode not in (0, 1):     # 1: none of the pids exists
+        return None
+    out = {}
+    for line in r.stdout.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit():
+            out[int(parts[0])] = (" ".join(parts[2].split()), parts[1])
+    return out
+
+
+def proc_start(pid):
+    found = _ps([pid]) or {}
+    return found.get(pid, ("", ""))[0]
+
+
+# The children this process started, so it reaps them itself; after a re-exec
+# or a restart the pids are watched through ps instead.
+_CHILDREN = {}
+
+
+def proc_alive(proc):
+    """True while the process runs, False once it has ended (or its pid now
+    names another process), None when that cannot be told this tick."""
+    child = _CHILDREN.get(proc.pid)
+    if child is not None:
+        if child.poll() is None:
+            return True
+        _CHILDREN.pop(proc.pid, None)
+        return False
+    try:
+        pid, _ = os.waitpid(proc.pid, os.WNOHANG)       # a child from before a re-exec
+        if pid:
+            return False
+    except ChildProcessError:
+        pass
+    except OSError:
+        return None
+    found = _ps([proc.pid])
+    if found is None:
+        return None
+    if proc.pid not in found:
+        return False
+    lstart, stat = found[proc.pid]
+    if stat.startswith("Z"):
+        return False
+    return not proc.started or lstart == proc.started
+
+
+def proc_kill(proc, grace=5):
+    """End the process group: SIGTERM, then SIGKILL after `grace` seconds. A
+    process that is no longer the one recorded is left alone."""
+    if proc_alive(proc) is not True:
+        return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(proc.pid, sig)
+        except (ProcessLookupError, PermissionError):
+            return
+        deadline = time.time() + grace
+        while time.time() < deadline:
+            if proc_alive(proc) is not True:
+                return
+            time.sleep(0.2)
+
+
+def proc_spawn(argv, *, cwd, env, log_path, append=False):
+    """Start `argv` in a process group of its own, its output to `log_path`.
+    Raises OSError when it cannot start."""
+    log = pathlib.Path(log_path)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a" if append else "w") as fh:
+        child = subprocess.Popen(argv, cwd=str(cwd), env=env, stdout=fh,
+                                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                 start_new_session=True)
+    _CHILDREN[child.pid] = child
+    return Proc(child.pid, proc_start(child.pid))
+
+
+# A background run's wrapper: the command runs in the foreground of a shell
+# the loop started, and the shell records the exit status where only the loop
+# reads it. A run that leaves no status ended without one (a reboot, a kill).
+AWAIT_SH = ('"$@"; rc=$?; printf "%s\\n" "$rc" > "$RALPH_EXIT.tmp" '
+            '&& mv "$RALPH_EXIT.tmp" "$RALPH_EXIT"; exit "$rc"')
+
+DURATION_RE = re.compile(r"^(\d+)([smhd]?)$")
+DURATION_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def parse_duration(text):
+    m = DURATION_RE.match((text or "").strip())
+    return int(m[1]) * DURATION_UNITS[m[2]] if m else None
+
+
+def fmt_secs(secs):
+    secs = int(secs)
+    if secs >= 3600:
+        return f"{secs // 3600}h{(secs % 3600) // 60:02d}m"
+    if secs >= 60:
+        return f"{secs // 60}m{secs % 60:02d}s"
+    return f"{secs}s"
+
+
+# ---------------------------------------------------------------------------
+# The ledger: the loop's own state, in one file only the loop writes, outside
+# every worktree. The queue holds what the operator owns (rows, dependencies,
+# [x]); the ledger holds what the loop started and its counters.
+
+
+class Ledger:
+    def __init__(self, path):
+        self.path = pathlib.Path(path)
+        self.units = {}
+        self.notified = {}
+        self.fresh = not self.path.exists()
+        if not self.fresh:
+            data = json.loads(self.path.read_text())
+            self.units = data.get("units", {})
+            self.notified = data.get("notified", {})
+
+    def unit(self, unit_id):
+        return self.units.setdefault(unit_id, {"strikes": 0, "continuations": 0,
+                                               "directed": 0, "sessions": 0, "notes": []})
+
+    def state(self, unit_id):
+        raw = self.units.get(unit_id, {}).get("state")
+        return U(raw) if raw else None
+
+    def save(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"units": self.units, "notified": self.notified},
+                                  indent=1, sort_keys=True) + "\n")
+        tmp.replace(self.path)
+        self.fresh = False
+
+
+# ---------------------------------------------------------------------------
+# The session's one verb. Every session the loop starts is told how it ends
+# (CONTRACT), with `ralph-result` on its PATH (scripts/ralph-bin/) and the file
+# its result goes to in RALPH_RESULT. The command validates what it is given,
+# so a session sees a refusal while it can still act on it.
+
+RESULT_KINDS = ("done", "continue", "await", "needs-human")
+AWAIT_MAX_S = 7 * 86400
+RALPH_BIN = pathlib.Path(__file__).resolve().parent / "ralph-bin"
+
+CONTRACT = """\
+HOW THIS SESSION ENDS. End with exactly one `ralph-result` call; the loop reads nothing else
+you write (no marker, waiting or package file), and a session that ends without one is
+counted by its commits alone.
+  ralph-result done                       the unit is finished and committed (a dirty tree is refused)
+  ralph-result continue [note]            progress is committed and more remains; the note goes
+                                          to the next session
+  ralph-result await <budget> -- <cmd>    a long run (a field run, a battery, a release cut): the
+                                          loop starts <cmd> in this worktree, logs it, and resumes
+                                          this unit with its exit code and log when it ends, or
+                                          kills it after <budget> (90m, 6h, 2d)
+  ralph-result needs-human [--package FILE] <why>
+                                          a decision the row and the design do not make; FILE holds
+                                          the evidence (commands, their actual output, file:line)
+Run <cmd> in the foreground of that call: never start a process yourself with nohup or `&`,
+since it dies with this session or outlives it unseen.
+"""
+CONTRACT_OPERATOR = """\
+  ralph-result needs-human --operator ... a fork the charter leaves to the operator: no director
+                                          is sent
+"""
+
+
+def _git_out(cwd, *args):
+    r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def tree_changes(cwd, base_untracked=()):
+    """What `done` refuses: tracked changes, and untracked files the session
+    added (files untracked before it started are not its own)."""
+    out = _git_out(cwd, "status", "--porcelain", "--untracked-files=all")
+    if out is None:
+        return ["git status failed"]
+    before = set(base_untracked)
+    dirty = []
+    for line in out.splitlines():
+        if line.startswith("?? ") and line[3:] in before:
+            continue
+        dirty.append(line)
+    return dirty
+
+
+def untracked_files(cwd):
+    out = _git_out(cwd, "status", "--porcelain", "--untracked-files=all") or ""
+    return [line[3:] for line in out.splitlines() if line.startswith("?? ")]
+
+
+def result_refusal(kind, args, env, cwd):
+    """None when the result stands, else what to fix."""
+    if kind == "done":
+        base = {}
+        try:
+            base = json.loads(pathlib.Path(env.get("RALPH_BASE", "")).read_text())
+        except (OSError, ValueError):
+            pass
+        dirty = tree_changes(cwd, base.get("untracked", ()))
+        if dirty:
+            return ("the tree is not clean — commit your work (or remove what is not yours "
+                    "to keep), then report done:\n  " + "\n  ".join(dirty[:20]))
+    elif kind == "await":
+        budget = parse_duration(args.budget)
+        cap = int(env.get("RALPH_AWAIT_MAX") or AWAIT_MAX_S)
+        if not budget:
+            return f"budget {args.budget!r} is not a duration (90m, 6h, 2d, or seconds)"
+        if budget > cap:
+            return f"budget {fmt_secs(budget)} exceeds this loop's cap of {fmt_secs(cap)}"
+        argv = list(args.argv or [])
+        if argv and argv[0] == "--":
+            argv = argv[1:]
+        if not argv:
+            return "no command: ralph-result await <budget> -- <command> [args...]"
+        exe = argv[0]
+        if not (shutil.which(exe) or (pathlib.Path(cwd) / exe).exists()
+                or pathlib.Path(exe).is_absolute() and pathlib.Path(exe).exists()):
+            return f"{exe!r} is neither on PATH nor a file in {cwd}"
+    elif kind == "needs-human":
+        if not " ".join(args.why or []).strip():
+            return "say why: ralph-result needs-human [--package FILE] <why>"
+        if args.package and not (pathlib.Path(cwd) / args.package).is_file():
+            return f"--package {args.package}: no such file"
+    return None
+
+
+def cmd_result(args):
+    env = os.environ
+    target = env.get("RALPH_RESULT", "")
+    if not target:
+        print("ralph-result: not inside a ralph session (RALPH_RESULT is unset)", file=sys.stderr)
+        return 2
+    path = pathlib.Path(target)
+    if path.exists():
+        print(f"ralph-result: this session already reported "
+              f"({json.loads(path.read_text()).get('kind')}); one result per session",
+              file=sys.stderr)
+        return 2
+    cwd = pathlib.Path(env.get("RALPH_WORKSPACE") or os.getcwd())
+    refusal = result_refusal(args.kind, args, env, cwd)
+    if refusal:
+        print(f"ralph-result {args.kind}: refused — {refusal}", file=sys.stderr)
+        return 2
+    rec = {"kind": args.kind, "at": int(time.time()),
+           "head": (_git_out(cwd, "rev-parse", "HEAD") or "").strip()}
+    if args.kind == "continue":
+        rec["note"] = " ".join(args.note or []).strip()
+    elif args.kind == "await":
+        argv = list(args.argv)
+        rec.update(budget_s=parse_duration(args.budget), argv=argv[1:] if argv[0] == "--" else argv)
+    elif args.kind == "needs-human":
+        rec.update(why=" ".join(args.why).strip(), operator=bool(args.operator),
+                   package=(cwd / args.package).read_text(errors="replace")
+                   if args.package else "")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(rec, indent=1) + "\n")
+    tmp.replace(path)
+    print(f"ralph-result: {args.kind} recorded — end your turn now")
+    return 0
+# ---------------------------------------------------------------------------
+# The loop.
+
+TICK_S = 30
+DEFAULT_SESSION_TIMEOUT = 3600
+MAX_STRIKES = 3
+DIRECTOR_MAX = 2                # director sessions per unit, reset when it is done or unparked
+PROBE_OK_TTL_S = 600            # a model that answered is not probed again for this long
+PROBE_RETRY_S = 300             # nor one that did not
+# The one precondition guard: how long each may fail before the operator is
+# told. Disk and the queue cannot heal without someone, so they say so at once.
+PRECONDITION_NOTIFY_AFTER = {"queue": 0, "prompt": 0, "disk": 0, "memory": 1800, "model": 1800}
+REBLOCK_LOG_S = 600
+LANE_DONE_DIR = "ralph/lanes"   # the file protocol's lane marker; read only by adopt_legacy
+
+
+class SpawnError(Exception):
+    """The loop could not start a session or prepare its worktree."""
+
+
+class Terminated(Exception):
+    def __init__(self, signum):
+        super().__init__(signum)
+        self.signum = signum
+
+
+class Loop:
+    """The one driver. Serial (`run`) is one lane whose workspace is the main
+    tree; parallel (`pool`) runs units in worktrees beside it and reviews in
+    the main tree, alone. Each tick observes what the loop started, applies
+    the queue's edits, lands finished units, and dispatches; every change of a
+    unit's state goes through `fire`, which refuses a pair the table does not
+    define."""
+
+    def __init__(self, paths, *, label, lanes=1, lane_mode=False, base_branch="",
+                 session_timeout=DEFAULT_SESSION_TIMEOUT, max_strikes=MAX_STRIKES,
+                 max_continuations=MAX_LANE_CONTINUATIONS, director_max=DIRECTOR_MAX,
+                 await_max_s=AWAIT_MAX_S, models=None, charter=None, notify_enabled=True,
+                 notifier=notify, state_dir=None, lane_root=None, spawn=proc_spawn,
+                 alive=proc_alive, kill=proc_kill, clock=time.time, sleep=time.sleep,
+                 tick_s=TICK_S, probe=None, jobs_share=None, disk_free_gb=None,
+                 disk_floor_gb=DISK_FLOOR_GB, code_digest=None, compiles=None, committed=None,
+                 reexec=None, argv=None):
         self.paths = paths
-        self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
-        self.session_for = session_for
+        self.label = label
+        self.lanes = lanes
+        self.lane_mode = lane_mode
+        self.session_timeout = session_timeout
+        self.max_strikes = max_strikes
+        self.max_continuations = max_continuations
+        self.director_max = director_max
+        self.await_max_s = await_max_s
+        self.models = {k: "" for k in MODEL_KEYS} | dict(models or {})
+        self.charter = charter
         self.notifier = notifier
         self.notify_enabled = notify_enabled
-        self.lanes = lanes
-        self.base_branch = base_branch
-        self.marker_timeout = marker_timeout
-        self.wait_poll = wait_poll
-        self.sleep = sleep
-        self.model = model
-        self.review_model = review_model
-        self.variant = variant
-        self.max_review_attempts = max_review_attempts
-        self.max_lane_failures = max_lane_failures
-        self.max_lane_continuations = max_lane_continuations
+        self.state_dir = pathlib.Path(state_dir) if state_dir else state_dir_for(paths, label)
+        self.ledger = Ledger(self.state_dir / "loop.json")
+        self.spawn, self.alive, self.kill = spawn, alive, kill
+        self.clock, self.sleep, self.tick_s = clock, sleep, tick_s
         self.probe = probe or (lambda model: probe_model(model, paths))
-        self._lane_failures = {}
-        self._lane_continuations = {}
-        self._session_base = {}
-        self._session_secs = {}
-        self._never_ran = {}
-        self._merge_failures = {}
-        self.clock = clock
-        self._held = frozenset()
         self.jobs_share = jobs_share or cargo_jobs_share
-        self._jobs = None
-        self.disk_floor_gb = disk_floor_gb
+        root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
+        self.disk_root = root if lane_mode else paths.workdir
         self.disk_free_gb = disk_free_gb or (
-            lambda: shutil.disk_usage(self.lane_root).free // 2**30)
-        self.boot_time = boot_time or machine_boot_time
+            lambda: shutil.disk_usage(self.disk_root if self.disk_root.exists()
+                                      else paths.workdir).free // 2**30)
+        self.disk_floor_gb = disk_floor_gb
+        self.mech = Lanes(paths, lane_root=root, base_branch=base_branch,
+                          disk_free_gb=lambda: self.disk_free_gb(), disk_floor_gb=disk_floor_gb)
         self.code_digest = code_digest or (lambda: hashlib.sha256(SELF.read_bytes()).hexdigest())
         self.compiles = compiles or (lambda: compile(SELF.read_text(), str(SELF), "exec"))
         # The launch line runs the working tree's file, so a half-made edit that
@@ -2216,38 +1843,148 @@ class Pool:
             capture_output=True).returncode == 0)
         self.reexec = reexec or (lambda argv: os.execv(argv[0], argv))
         self.argv = argv or [sys.executable, str(SELF), *sys.argv[1:]]
+        self.static = {}
         self._loaded = self.code_digest()
-        self._refused = None
-        self._uncommitted = None
-        self._resume_state()
+        self._refused = self._uncommitted = None
+        self._probes = {}
+        self._jobs = None
+        self._blocked = None          # (precondition, why, since, last logged)
+        self._prompt = None           # (text, source) read once per tick
+        self._errors = set()
 
-    def _git(self, *args, cwd=None):
-        return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
-                              capture_output=True, text=True)
+    # -- the table ----------------------------------------------------------
 
-    # The counters a re-exec carries across: everything else the pool knows
-    # lives on disk (STATE.md, worktrees, markers, parked/).
-    def _state_file(self):
-        return self.paths.workdir / "target" / "ralph" / "pool-state.json"
+    def state(self, unit):
+        return self.ledger.state(unit) or self.static.get(unit)
 
-    def _resume_state(self):
-        state = self._state_file()
-        if not state.exists():
-            return
+    def fire(self, unit, event, **ctx):
+        frm = self.state(unit)
+        if (frm, event) not in TRANSITIONS:
+            reason = IMPOSSIBLE.get((frm, event), "not in the table")
+            raise RuntimeError(f"unit {unit}: {event.value} in {frm.value if frm else None} "
+                               f"— {reason}")
+        to, action = TRANSITIONS[(frm, event)]
+        entry = self.ledger.unit(unit)
+        detail = getattr(self, f"_do_{action}")(unit, entry, **ctx) if action else None
+        if to in ACTIVE:
+            entry["state"] = to.value
+            self.static.pop(unit, None)
+        else:
+            entry.pop("state", None)
+            self.static[unit] = to
+        say(f"unit {unit}: {frm.value} --{event.value}--> {to.value}"
+            + (f" · {detail}" if detail else ""))
+        self.ledger.save()
+
+    def units_in(self, *states):
+        return [u for u in self.ledger.units if self.ledger.state(u) in states]
+
+    # -- the process --------------------------------------------------------
+
+    def run(self):
+        def term(signum, _frame):
+            raise Terminated(signum)
+        signal.signal(signal.SIGTERM, term)
+        signal.signal(signal.SIGINT, term)
         try:
-            saved = json.loads(state.read_text())
-            self._lane_failures = dict(saved.get("failures", {}))
-            self._lane_continuations = dict(saved.get("continuations", {}))
-            self._merge_failures = dict(saved.get("merge_failures", {}))
+            self.boot()
+            while True:
+                try:
+                    pool = self.tick()
+                except Terminated:
+                    raise
+                except Exception as e:  # noqa: BLE001 — the tick's net; the loop stays up
+                    self._tick_error(e)
+                    pool = None
+                if pool in (Pool.DONE, Pool.STOPPED):
+                    return 0
+                self.sleep(self.tick_s)
+        except Terminated as t:
+            say(f"loop: signal {t.signum} — ending the sessions it holds; background runs "
+                "keep running and the next start watches them")
+            self._end_sessions()
+            return 128 + t.signum
+
+    def boot(self):
+        if self.lane_mode:
+            self.mech.lane_root.mkdir(parents=True, exist_ok=True)
+        self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
+        if self.ledger.fresh:
+            for line in adopt_legacy(self, dry=False):
+                say(f"adopt: {line}")
+        self.ledger.save()
+        say(f"loop: {'pool' if self.lane_mode else 'serial'} lanes={self.lanes} "
+            f"queue={self.paths.queue or self.paths.state} ledger={self.ledger.path}"
+            + (f" lane_root={self.mech.lane_root}" if self.lane_mode else ""))
+
+    def tick(self):
+        self._maybe_reexec()
+        self._prompt = None
+        queue, unreadable = self._read_queue()
+        self._observe_sessions()
+        self._observe_runs()
+        if queue is None:
+            return self._beat(self._block("queue", unreadable))
+        self._reconcile(queue)
+        if self.units_in(U.MERGING):
+            self._merge()
+            queue, unreadable = self._read_queue()
+            if queue is None:
+                return self._beat(self._block("queue", unreadable))
+            self._reconcile(queue)          # what the merges closed readies its dependents
+        mode = self._stop_mode()
+        if mode == "now":
+            return self._beat(self._stop_now())
+        if mode == "drain":
+            return self._beat(self._drain())
+        if self._finish(queue):
+            return self._beat(Pool.DONE)
+        blocked = self._dispatch(queue)
+        if blocked:
+            return self._beat(self._block(*blocked))
+        self._unblock()
+        return self._beat(self._pool_state(queue))
+
+    def _read_queue(self):
+        try:
+            return Queue(self.paths.p(self.paths.state)), ""
         except (OSError, ValueError) as e:
-            say(f"pool: {state} unreadable ({e}) — counters start fresh")
-        state.unlink(missing_ok=True)
+            return None, f"{self.paths.state} does not parse: {e}"
+
+    def _beat(self, pool):
+        sessions = len(self.units_in(*SESSION))
+        awaiting = len(self.units_in(U.AWAITING))
+        try:
+            self.paths.p(self.paths.heartbeat).write_text(
+                f"{int(time.time())} {pool.value} sessions={sessions} awaiting={awaiting}\n")
+        except OSError:
+            pass
+        return pool
+
+    def _notify_once(self, key, title, body):
+        if self.ledger.notified.get(key):
+            return
+        self.ledger.notified[key] = int(self.clock())
+        self.ledger.save()
+        self.notifier(title, body, self.notify_enabled)
+
+    def _tick_error(self, e):
+        sig = f"{type(e).__name__}: {e}"
+        say(f"loop: tick error — {sig}")
+        for line in traceback.format_exc().rstrip().splitlines()[-6:]:
+            say(f"  {line}")
+        try:
+            self.paths.p(self.paths.heartbeat).write_text(f"{int(time.time())} error {sig[:200]}\n")
+        except OSError:
+            pass
+        if sig not in self._errors:
+            self._errors.add(sig)
+            self.notifier("OPERATOR — loop error, still running", sig[:200], self.notify_enabled)
 
     def _maybe_reexec(self):
-        """Between waves, when no session runs: hand the process to ralph.py as
-        it is on disk if it changed and compiles. A fix reached the ersilia pool
-        only when a halt happened to relaunch it, because a restart kills every
-        session in flight — four sat undeployed for a day (2026-10-04)."""
+        """Deploy committed fixes: hand the process to the file on disk when it
+        changed, is committed and compiles. Sessions and runs carry across in
+        the ledger, so this needs no quiet moment."""
         try:
             now = self.code_digest()
         except OSError:
@@ -2257,324 +1994,804 @@ class Pool:
         if not self.committed():
             if now != self._uncommitted:
                 self._uncommitted = now
-                say("pool: ralph.py changed but holds uncommitted edits — the pool deploys "
-                    "only committed code and stays on the loaded code")
+                say(f"loop: {SELF.name} changed but holds uncommitted edits — staying on the "
+                    "loaded code")
             return
         try:
             self.compiles()
         except SyntaxError as e:
             self._refused = now
-            say(f"pool: ralph.py changed but does not compile ({e.msg}, line {e.lineno}) "
-                "— staying on the loaded code")
+            say(f"loop: {SELF.name} changed but does not compile ({e.msg}, line {e.lineno}) — "
+                "staying on the loaded code")
             return
-        state = self._state_file()
-        state.parent.mkdir(parents=True, exist_ok=True)
-        state.write_text(json.dumps({"failures": self._lane_failures,
-                                     "continuations": self._lane_continuations,
-                                     "merge_failures": self._merge_failures}))
-        say(f"pool: ralph.py changed ({self._loaded[:12]} → {now[:12]}) — re-exec between "
-            "waves, no session running")
+        self.ledger.save()
+        say(f"loop: {SELF.name} changed ({self._loaded[:12]} → {now[:12]}) — re-exec; "
+            f"{len(self.units_in(*SESSION))} session(s) and {len(self.units_in(U.AWAITING))} "
+            "run(s) carry across")
         sys.stdout.flush()
         sys.stderr.flush()
         self.reexec(self.argv)
 
-    def _queue(self):
+    # -- observe what the loop started --------------------------------------
+
+    def _observe_sessions(self):
+        now = self.clock()
+        for unit in self.units_in(*SESSION):
+            entry = self.ledger.units[unit]
+            s = entry["session"]
+            proc = Proc(s["pid"], s["started"])
+            alive = self.alive(proc)
+            if alive is None:
+                continue
+            if alive and now >= s["deadline"]:
+                say(f"unit {unit}: session {s['n']} passed its {fmt_secs(self.session_timeout)} "
+                    "timeout — ending its process group")
+                self.notifier("auto — session timeout", f"{unit}: killed at "
+                              f"{fmt_secs(self.session_timeout)}", self.notify_enabled)
+                self.kill(proc)
+                alive = self.alive(proc)
+            if alive is False:
+                self._session_ended(unit, entry)
+
+    def _session_ended(self, unit, entry):
+        s = entry["session"]
         try:
-            return Queue(self.paths.p(self.paths.state))
+            rejects = pathlib.Path(s["log"]).read_text(errors="replace").count("auto-rejecting")
+        except OSError:
+            rejects = 0
+        if rejects:
+            # The client ends a session on a refused tool call (opencode, 10 of the
+            # 29 sub-2-minute ersilia ends, 2026-09-17 → 10-04): a configuration
+            # fault that repeats, so the strike it costs names it.
+            manifest = self.paths.manifest
+            perms = manifest.settings if manifest and manifest.settings else "opencode.json"
+            s["rejects"] = f"{rejects} permission auto-rejection(s) in its log — extend {perms}"
+            say(f"unit {unit}: {s['rejects']}")
+            self.notifier("auto — permission rejects", f"{unit}: {rejects} auto-rejections",
+                          self.notify_enabled)
+        event, ctx = self.classify(unit, entry)
+        if event is E.RESULT_AWAIT:
+            try:
+                ctx["run"] = self._start_run(unit, entry, ctx["result"])
+            except (OSError, SpawnError) as e:
+                event, ctx = E.AWAIT_FAILED, {"why": f"the loop could not start "
+                                                     f"{ctx['result']['argv']}: {e}"}
+        self.fire(unit, event, **ctx)
+
+    def classify(self, unit, entry):
+        """A session's end as one event: its result, else whether it left
+        commits. Nothing else about the session is read."""
+        s = entry["session"]
+        try:
+            res = json.loads(pathlib.Path(s["result"]).read_text())
+        except (OSError, ValueError):
+            res = None
+        if res and res.get("kind") in RESULT_KINDS:
+            kind = res["kind"]
+            if kind == "done":
+                return E.RESULT_DONE, {"result": res}
+            if kind == "continue":
+                return E.RESULT_CONTINUE, {"result": res}
+            if kind == "await":
+                return E.RESULT_AWAIT, {"result": res}
+            if (s["role"] == "worker" and not res.get("operator")
+                    and self._director_left(entry)):
+                return E.RESULT_NEEDS_DIRECTOR, {"result": res}
+            return E.RESULT_NEEDS_HUMAN, {"result": res}
+        made = self._commits_since(s["workspace"], s["base"])
+        return (E.NO_RESULT_COMMITS if made else E.NO_RESULT_NONE), {"commits": made}
+
+    def _commits_since(self, workspace, base):
+        if not base:
+            return 0
+        out = _git_out(workspace, "rev-list", "--count", f"{base}..HEAD")
+        return int(out.strip()) if out and out.strip().isdigit() else 0
+
+    def _observe_runs(self):
+        now = self.clock()
+        for unit in self.units_in(U.AWAITING):
+            entry = self.ledger.units[unit]
+            r = entry["run"]
+            proc = Proc(r["pid"], r["started"])
+            code = self._exit_code(r)
+            if code is None:
+                alive = self.alive(proc)
+                if alive is None:
+                    continue
+                if alive and now < r["deadline"]:
+                    continue
+                if alive:
+                    say(f"unit {unit}: background run passed its {fmt_secs(r['budget_s'])} "
+                        "budget — ending its process group")
+                    self.kill(proc)
+                    self.fire(unit, E.RUN_OVER_BUDGET)
+                    continue
+                code = self._exit_code(r)       # it may have written its status as it ended
+            else:
+                self.alive(proc)                # reap it
+            self.fire(unit, E.RUN_ENDED, code=code)
+
+    @staticmethod
+    def _exit_code(r):
+        try:
+            return int(pathlib.Path(r["exit_file"]).read_text().strip())
         except (OSError, ValueError):
             return None
 
-    def _conflict_pairs(self):
+    # -- the queue's edits --------------------------------------------------
+
+    def _held(self, queue):
+        return held_ids(self.paths, queue) | {r.id for r in queue.rows
+                                              if r.id.startswith("HUMAN-")}
+
+    def _target(self, row, queue, held):
+        if row.status is Status.DONE:
+            return U.DONE
+        if row.id in held:
+            return U.HELD
+        return U.READY if queue.deps_met(row) else U.PENDING
+
+    def _reconcile(self, queue):
+        rows = queue.by_id()
+        for unit in list(self.ledger.units):
+            if unit not in rows and self.ledger.state(unit) not in ACTIVE:
+                say(f"unit {unit}: no longer a row in {self.paths.state} — forgotten")
+                self.ledger.units.pop(unit)
+                self.static.pop(unit, None)
+                self.ledger.save()
+        held = self._held(queue)
+        for row in queue.rows:
+            if self.ledger.state(row.id) in ACTIVE:
+                continue
+            target = self._target(row, queue, held)
+            if row.id not in self.static:
+                parked = self.ledger.units.get(row.id, {}).get("parked")
+                self.static[row.id] = U.HELD if parked else target
+            for event in static_path(self.static[row.id], target):
+                self.fire(row.id, event)
+            if target is U.DONE and row.id in self.ledger.units:
+                self.ledger.units.pop(row.id)
+                self.ledger.save()
+
+    # -- landing finished units ---------------------------------------------
+
+    def _main_busy(self):
+        """A main-tree unit holds the tree while its session or run lives:
+        nothing else commits into it until that owned process ends."""
+        return any(self.ledger.units[u].get("main")
+                   for u in self.units_in(U.RUNNING, U.DIRECTING, U.AWAITING))
+
+    def _merge(self):
+        for unit in self.units_in(U.MERGING):
+            if self._main_busy():
+                return
+            entry = self.ledger.units[unit]
+            if entry.get("main"):
+                ok, why = self._mark_done(unit, entry.get("done_head", ""), stage_only=False)
+                self.fire(unit, E.MERGE_CLEAN if ok else E.MERGE_UNCOMMITTED, why=why)
+                continue
+            self._land_lane(unit, entry)
+
+    def _land_lane(self, unit, entry):
+        wt, branch = self.mech.lane_root / unit, f"ralph/{unit}"
+        git = self.mech.git
+        if git("merge-base", "--is-ancestor", branch, "HEAD").returncode != 0:
+            refused = self.mech.renumber_decisions(unit, wt, branch)
+            if refused is not None:
+                self.fire(unit, E.MERGE_CONFLICT, why=refused)
+                return
+            say(f"unit {unit}: merging {branch}")
+            r = git("merge", "--no-ff", "-m", f"merge {unit}", branch)
+            if r.returncode != 0:
+                git("merge", "--abort")
+                self.fire(unit, E.MERGE_CONFLICT,
+                          why=f"merging {branch}: {error_tail(r.stderr or r.stdout) or 'refused'}"
+                              f" — the lane merges {self.mech.base_branch} in and resolves it")
+                return
+        tip = (git("rev-parse", "--short", branch).stdout or "").strip()
+        rendered = self.mech.regenerate_decisions(unit)
+        ok, why = self._mark_done(unit, tip, stage_only=True)
+        if not ok:
+            self.fire(unit, E.MERGE_UNCOMMITTED, why=why)
+            return
+        if rendered is not None:
+            say(f"unit {unit}: {rendered}")
+            self._notify_once(f"decisions:{unit}", "OPERATOR — decisions render failed", rendered)
+        if self.mech.keep_evidence(unit, wt):
+            self.mech.remove_lane(unit, wt)
+            git("branch", "-D", branch)
+        else:
+            say(f"unit {unit}: worktree {wt} kept for its evidence")
+        self.fire(unit, E.MERGE_CLEAN, why=f"merged {branch} at {tip}")
+
+    def _mark_done(self, unit, sha, *, stage_only):
+        """Mark the row [x] with its commit and commit the queue: the subject
+        `ralph: <id> done` is what units_since_audit counts. (ok, why)."""
+        try:
+            queue = Queue(self.paths.p(self.paths.state))
+            row = queue.by_id().get(unit)
+            if row is None:
+                return False, f"{unit} is no longer a row in {self.paths.state}"
+            if row.status is not Status.DONE:
+                queue.mark_done(unit, sha)
+        except (OSError, ValueError) as e:
+            return False, f"the [x] mark failed: {e}"
+        git = self.mech.git
+        subject = f"ralph: {unit} done"
+        if stage_only:
+            git("add", "--", self.paths.state)
+            if git("diff", "--cached", "--quiet").returncode == 0:
+                return True, "already marked"
+            r = git("commit", "-q", "-m", subject)
+        else:
+            if git("diff", "--quiet", "HEAD", "--", self.paths.state).returncode == 0:
+                return True, "already marked"
+            r = commit_state(self.paths, subject)
+        if r.returncode != 0:
+            return False, ("the done commit failed — the index holds the mark; commit it, "
+                           "then mark the row [x] or unpark it: "
+                           + (error_tail(r.stderr or r.stdout) or f"exit {r.returncode}"))
+        return True, f"marked [x] {sha}".rstrip()
+
+    # -- stop, finish -------------------------------------------------------
+
+    def _stop_mode(self):
+        stop = self.paths.p(self.paths.stop)
+        if not stop.exists():
+            return None
+        try:
+            text = stop.read_text().strip()
+        except OSError:
+            return "now"
+        return "drain" if text == "drain" else "now"
+
+    def _end_sessions(self):
+        for unit in self.units_in(*SESSION):
+            entry = self.ledger.units[unit]
+            s = entry["session"]
+            self.kill(Proc(s["pid"], s["started"]))
+            event, ctx = self.classify(unit, entry)
+            if event in (E.NO_RESULT_COMMITS, E.NO_RESULT_NONE, E.RESULT_AWAIT):
+                event, ctx = E.OPERATOR_STOP, {}
+            self.fire(unit, event, **ctx)
+        for unit in self.units_in(U.AWAITING):
+            self.fire(unit, E.OPERATOR_STOP)
+
+    def _stop_now(self):
+        self._end_sessions()
+        say(f"loop: operator stop — {self.paths.stop}")
+        self.notifier("stopped — operator stop", self.paths.stop, self.notify_enabled)
+        return Pool.STOPPED
+
+    def _drain(self):
+        if self.units_in(*SESSION) or self.units_in(U.MERGING):
+            if not self.ledger.notified.get("draining"):
+                self.ledger.notified["draining"] = int(self.clock())
+                say(f"loop: draining — {len(self.units_in(*SESSION))} session(s) finish, "
+                    "nothing new starts")
+            return Pool.DRAINING
+        self.ledger.notified.pop("draining", None)
+        for unit in self.units_in(U.AWAITING):
+            self.fire(unit, E.OPERATOR_STOP)
+        # Drained: the stop stands as an operator stop.
+        self.paths.p(self.paths.stop).write_text("")
+        say("loop: drained — stopped")
+        self.notifier("stopped — drained", self.paths.stop, self.notify_enabled)
+        return Pool.STOPPED
+
+    def _finish(self, queue):
+        if not queue.rows or not queue.all_done() or self.units_in(*ACTIVE):
+            return False
+        if closing_audit_due(self.paths, queue):
+            unit, refused = insert_audit(self.paths, queue, None)
+            if refused:
+                say(f"loop: audit row {unit.id} is in {self.paths.state} but git refused the "
+                    f"commit: {refused}")
+            return False
+        self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
+        self.paths.p(self.paths.done).write_text("")
+        say(f"loop: DONE — every row in {self.paths.state} is [x]")
+        self._notify_once("done", "DONE — campaign complete", "every row is [x]")
+        return True
+
+    # -- dispatch -----------------------------------------------------------
+
+    def _director_left(self, entry):
+        return bool(self.charter) and entry.get("directed", 0) < self.director_max
+
+    def _escalated(self, entry):
+        return entry.get("strikes", 0) >= self.max_strikes or entry.get("escalate")
+
+    def _ready(self, queue):
+        rows = [r for r in queue.rows if self.static.get(r.id) is U.READY]
+        # a [~] row is resumable: a session that was killed left one behind
+        return ([r for r in rows if r.status is Status.ACTIVE]
+                + [r for r in rows if r.status is not Status.ACTIVE])
+
+    def is_main(self, row_id):
+        return not self.lane_mode or row_id.startswith("REVIEW-")
+
+    def _dispatch(self, queue):
+        for row in self._ready(queue):
+            entry = self.ledger.units.get(row.id)
+            if entry and self._escalated(entry) and not self._director_left(entry):
+                self.fire(row.id, E.STRIKE_LIMIT)
+        picks = self._pick(self._ready(queue))
+        if not picks:
+            return None
+        blocked = self._preconditions(picks)
+        if blocked:
+            return blocked
+        if audit_due(self.paths, queue, picks[0]) and not self._main_busy():
+            insert_audit(self.paths, queue, picks[0])
+            return None                     # the next tick dispatches the audit row
+        for row in picks:
+            refusal = dispatch_refusal(self.paths, queue, row)
+            if refusal is not None:
+                self.fire(row.id, E.DISPATCH_REFUSED, why=refusal)
+                continue
+            entry = self.ledger.unit(row.id)
+            role = "director" if self._escalated(entry) else "worker"
+            model, why = self._model_for(row, role)
+            if model is None:
+                return "model", why
+            try:
+                session = self._start_session(row, role, model)
+            except (OSError, SpawnError) as e:
+                self.fire(row.id, E.SPAWN_FAILED, why=f"{type(e).__name__}: {e}")
+                continue
+            self.fire(row.id, E.DISPATCH_DIRECTOR if role == "director" else E.DISPATCH,
+                      session=session)
+        return None
+
+    def _conflicts(self):
         p = self.paths.p(self.paths.conflicts)
         return conflict_pairs(p.read_text()) if p.exists() else set()
 
     def _heavy(self):
-        """The heavy rows (the queue's heavy.txt): at most one per wave."""
         p = self.paths.p(self.paths.heavy)
         if not p.exists():
             return set()
-        out = set()
-        for line in p.read_text().splitlines():
-            line = line.split("#")[0].strip()
-            if line:
-                out.add(line)
-        return out
+        return {line.split("#")[0].strip() for line in p.read_text().splitlines()} - {""}
 
-    def _halt(self, reason):
-        halt(self.paths, reason, notifier=self.notifier, notify_enabled=self.notify_enabled)
-        return 3
-
-    def _dispatch_model(self, roster_value):
-        """The roster probe at dispatch (order ralph-model-roster): one
-        minimal chat call per model through the lane client, in declared
-        order; the first healthy model runs the wave/review. Returns (chosen
-        or None, park-reason or None). An empty roster is today's behaviour —
-        no probe, no stamp."""
-        roster = parse_roster(roster_value)
-        if not roster:
-            return None, None
-        causes = {}
-        for model in roster:
-            ok, cause = self.probe(model)
-            if ok:
-                say(f"pool: probe {model} — ok")
-                return model, None
-            causes[model] = cause
-            say(f"pool: probe {model} — {cause}")
-        return None, ("no healthy model in the roster — "
-                      + "; ".join(f"{m}: {c}" for m, c in causes.items()))
+    def _pick(self, ready):
+        """What may start now. A main-tree unit runs alone: in the pool a ready
+        review lets the lanes drain, then runs with nothing beside it. Lanes
+        take the free slots, never two conflicting rows or two heavy ones at
+        once, and a row marked `<id> *` in conflicts.txt runs by itself."""
+        sessions = self.units_in(*SESSION)
+        if not ready or len(sessions) >= self.lanes:
+            return []
+        main = [r for r in ready if self.is_main(r.id)]
+        if main:
+            if sessions or self.units_in(U.MERGING) or self._main_busy():
+                return []
+            return main[:1]
+        conflicts, heavy = self._conflicts(), self._heavy()
+        if any(frozenset((u, ALONE)) in conflicts for u in sessions):
+            return []
+        active = self.units_in(*ACTIVE)
+        picked = []
+        for row in ready:
+            if len(sessions) + len(picked) >= self.lanes:
+                break
+            taken = active + [p.id for p in picked]
+            if any(frozenset((row.id, other)) in conflicts for other in taken):
+                continue
+            if row.id in heavy and any(u in heavy for u in sessions + [p.id for p in picked]):
+                continue
+            alone = frozenset((row.id, ALONE)) in conflicts
+            if alone and (sessions or picked):
+                continue
+            picked.append(row)
+            if alone:
+                break
+        return picked
 
     def _prompt_text(self):
-        """The rendered base + addendum for a queue, the file for a legacy run."""
-        return prompt_text(self.paths)[0]
+        if self._prompt is None:
+            self._prompt = prompt_text(self.paths)
+        return self._prompt
 
-    def _lane_note(self):
-        """Where a session's own queue lives: another loop may own ralph/STOP and
-        ralph/NEEDS_HUMAN.md in this checkout (the serial loop says the same)."""
-        if not self.paths.queue:
-            return ""
-        return (f"This queue's state is {self.paths.state}; its control files are "
-                f"{self.paths.needs_human}, {self.paths.done} and {self.paths.waiting} "
-                "— never the files of those names directly under ralph/, which belong "
-                "to another loop.\n\n")
-
-    def poll_waiting_lanes(self):
-        """Each tick, every lane worktree whose `ralph/waiting` names a marker:
-        resume the lane whose marker has landed or whose run died with a
-        reboot, hold the rest out of the waves, and park the row of a lane
-        waiting past LANE_MAX_WAIT_SECS while the pool runs on. A parked row's
-        lane is not polled: it waits on the operator, not on its marker. One
-        overdue run used to halt the whole pool, and kept halting it after its
-        row was parked (r9-invoice-batch, 2026-09-30, 22.9h). Returns (halt
-        reason or None, the units still waiting). The filesystem is the state —
-        a restart or a previous pool generation loses nothing."""
-        still = set()
-        wt_root = self.lane_root
-        if not wt_root.exists():
-            return None, still
-        held = parked_ids(self.paths)
-        booted = self.boot_time()
-        for wt in sorted(wt_root.iterdir()):
-            if wt.name in held:
-                continue
-            parsed = waiting_marker(wt, self.paths.waiting)
-            if parsed is None:
-                continue
-            unit, waiting, marker = wt.name, parsed[0], parsed[1]
-            named = marker.relative_to(wt)
-            if marker.exists():
-                say(f"pool: lane {unit} waiting on {named} — marker present, resuming")
-                self._end_waiting(unit, wt, waiting, "marker landed")
-                continue
-            started = waiting.stat().st_mtime
-            if booted and started < booted:
-                say(f"pool: lane {unit}'s detached run ({named}) started before this machine "
-                    f"booted — it died with the reboot; resuming the lane")
-                self._end_waiting(unit, wt, waiting, "the detached run died with the reboot")
-                continue
-            age = int(time.time() - started)
-            if age >= LANE_MAX_WAIT_SECS:
-                reason = (f"lane {unit} waited {age // 3600}h on {named} "
-                          f"(limit {LANE_MAX_WAIT_SECS // 3600}h) — the detached run "
-                          "never wrote its marker")
-                notes = waiting.read_text()
-                write_parked(self.paths, unit,
-                             f"# {reason}\n\nThe lane's worktree is {wt}. Its waiting file "
-                             f"read:\n\n```\n{notes.rstrip()}\n```\n\nCheck the run. "
-                             "Unparking the row resumes the lane, whose session finds the "
-                             "run's state for itself.\n",
-                             "the detached run is overdue")
-                self._end_waiting(unit, wt, waiting, "parked — the detached run is overdue")
-                say(f"pool: {reason} — parked {unit}; the pool runs on")
-                self.notifier("OPERATOR — row parked, loop continues", f"{unit}: {reason}",
-                              self.notify_enabled)
-                continue
-            say(f"pool: lane {unit} waiting on {named} ({age}s)")
-            still.add(unit)
-        return None, still
-
-    def _end_waiting(self, unit, wt, waiting, why):
-        """End a lane's waiting ON ITS BRANCH, not just on disk: a committed
-        waiting file that survives to the merge parks the main tree's loop on a
-        marker that only ever existed in this worktree. The commit is a no-op
-        when nothing is staged."""
-        waiting.unlink(missing_ok=True)
-        self._git("add", "-A", "--", self.paths.waiting, cwd=wt)
-        self._git("commit", "-q", "-m", f"{unit}: waiting ended — {why}", cwd=wt)
-
-    def run(self):
-        # `ralph/lanes/` not `ralph/done/`: on a case-insensitive filesystem
-        # (macOS) the lane-marker directory and `ralph/DONE` are one path, and
-        # the completion marker could never be written.
-        (self.paths.workdir / LANE_DONE_DIR).mkdir(parents=True, exist_ok=True)
-        self.lane_root.mkdir(parents=True, exist_ok=True)
-        self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
-        say(f"pool: lanes={self.lanes} base={self.base_branch}"
-            + (f" queue={self.paths.queue}" if self.paths.queue else "")
-            + f" lane_root={self.lane_root}")
-        while True:
-            if self.paths.p(self.paths.stop).exists():
-                say("pool: STOP")
-                return 0
-            self._maybe_reexec()
-            queue = self._queue()
-            if queue is None:
-                self.sleep(60)
-                continue
-            if closing_audit_due(self.paths, queue):
-                # The next pass runs it serially as a review.
-                audit, refused = insert_audit(self.paths, queue, None)
-                if refused:
-                    return self._halt(f"audit row {audit.id} is in {self.paths.state} "
-                                      f"but git refused the commit: {refused}")
-                continue
-            if queue.all_done():
-                self.paths.p(self.paths.done).write_text("")
-                say("pool: DONE — all units [x]")
-                self.notifier("DONE — pool complete", "every row is [x]", self.notify_enabled)
-                return 0
-            marker = wait_for_marker(self.paths, self.marker_timeout)
-            if marker is not None and marker != "wait":
-                return self._halt(marker)
-            if marker == "wait":
-                self.sleep(self.wait_poll)
-                continue
-            reason, waiting = self.poll_waiting_lanes()
-            if reason is not None:
-                return self._halt(reason)
-            # Parked rows and rows outside the frozen scope wait on the operator
-            # here as in the serial loop: the cleanup cut line holds in the pool.
-            held = held_ids(self.paths, queue)
-            if held != self._held:
-                say(f"pool: held for the operator: {', '.join(sorted(held)) or 'none'}")
-                self._held = held
-            review = queue.first_ready_review(held)
-            if review is not None:
-                # A review with no REVIEW_MODEL of its own runs on the worker
-                # model (select_model_args routing) — probe that roster.
-                review_model, park = self._dispatch_model(self.review_model or self.model)
-                if park is not None:
-                    return self._halt(park)
-                result = self.run_review(review, review_model)
-                if result is not None:
-                    return result
-                continue
-            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(),
-                                   waiting | held)
-            by = queue.by_id()
-            if wave and audit_due(self.paths, queue, by[wave[0]]):
-                # The queue's audit_every holds in the pool: the row goes in above
-                # the wave, and the next pass runs it serially as a review.
-                audit, refused = insert_audit(self.paths, queue, by[wave[0]])
-                if refused:
-                    return self._halt(f"audit row {audit.id} is in {self.paths.state} "
-                                      f"but git refused the commit: {refused}")
-                continue
-            refused = [(u, r) for u, r in ((u, dispatch_refusal(self.paths, queue, by[u]))
-                                           for u in wave) if r is not None]
-            if refused:
-                # A refused row waits on its census; the rows beside it do not.
-                for unit, refusal in refused:
-                    dest = write_parked(self.paths, unit, f"# {unit} refused at dispatch\n\n"
-                                        f"{refusal}\n", "refused at dispatch")
-                    say(f"pool: parked {unit} — {refusal}")
-                    self.notifier("OPERATOR — row parked, pool continues",
-                                  f"{unit}: {first_line(dest)}", self.notify_enabled)
-                continue
-            if not wave and not waiting and queue.awaiting_operator(held):
-                return self._halt("operator approval required — every ready row waits on the "
-                                  f"operator: {', '.join(queue.awaiting_operator(held))}")
-            if not wave:
-                say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
-                self.sleep(60)
-                continue
-            jobs, why = self.jobs_share(len(wave))
+    def _preconditions(self, picks):
+        """The one guard, before every dispatch: a queue whose prompt is on
+        the result contract, disk, memory for the cargo budget, and (per
+        unit, in _dispatch) a healthy model."""
+        try:
+            text, source = self._prompt_text()
+        except (OSError, ValueError) as e:
+            return "prompt", f"the worker prompt cannot be read: {e}"
+        if "ralph-result" not in text:
+            return "prompt", (f"{source} never names ralph-result — the queue is still on the "
+                              "file protocol (waiting, NEEDS_HUMAN.md, *.done); move its end "
+                              "instructions to ralph-result")
+        free = self.disk_free_gb()
+        if free < self.disk_floor_gb and self.lane_mode:
+            busy = set(self.units_in(*ACTIVE)) | {r.id for r in picks}
+            free = self.mech.reclaim_disk(busy, free)
+        if free < self.disk_floor_gb:
+            return "disk", (f"{free}GB free on {self.disk_root}, under the {self.disk_floor_gb}GB "
+                            "floor")
+        if self.lane_mode:
+            jobs, why = self.jobs_share(self.lanes)
             if jobs is None:
-                return self._halt(f"the cargo budget could not be read ({CARGO_JOBS_LIB}): {why}")
+                return "memory", f"the cargo budget could not be read ({CARGO_JOBS_LIB}): {why}"
             if jobs == 0:
-                # Lanes started into this would each size their builds from the
-                # same free memory: the shape of the 2026-10-01 OOM.
-                say(f"pool: wave {', '.join(wave)} not started — {why}")
-                self.sleep(60)
-                continue
-            free_gb = self.disk_free_gb()
-            if free_gb < self.disk_floor_gb:
-                free_gb = self._reclaim_disk(wave, free_gb)
-            if free_gb < self.disk_floor_gb:
-                say(f"pool: wave {', '.join(wave)} not started — {free_gb}GB free on "
-                    f"{self.lane_root}, under the {self.disk_floor_gb}GB disk floor")
-                self.sleep(60)
-                continue
-            say(f"pool: {jobs} cargo jobs per lane — {why}")
+                return "memory", why
             self._jobs = jobs
-            model, park = self._dispatch_model(self.model)
-            if park is not None:
-                return self._halt(park)
-            result = self.run_wave(wave, model)
-            if result is not None:
-                return result
+        return None
 
-    def run_review(self, review, model=None):
-        session = self.session_for(self.paths.workdir)
-        effective = model if model is not None else self.review_model
-        model_args = select_model_args(review.id, self.model, effective, self.variant)
-        log = str(self.paths.workdir / "target" / "ralph" / f"review-{review.id}.out")
-        # The session must be told which row it owns: without the note it
-        # follows PROMPT §1 and picks the first ready row, which for domains is
-        # a minted dm- row above the review — the 2026-09-16 halt
-        # (REVIEW-mint-mesh-rest, 3 attempts, worked other rows and never
-        # marked itself [x]).
-        note = (f"Your unit: {review.id} — the pool selected it as the ready review "
-                f"row. Open only that row in {self.paths.state}; do not scan the queue "
-                "for another.\n\n") + self._lane_note()
-        for attempt in range(1, self.max_review_attempts + 1):
-            if self.paths.p(self.paths.stop).exists():
-                say("pool: operator STOP — leaving the review")
-                return 0
-            say(f"pool: serial review {review.id} (main tree) attempt {attempt}"
-                + (f" · model {effective}" if effective else ""))
-            note = (f"Your unit: {review.id} — the pool selected it as the ready review "
-                    f"row. Open only that row in {self.paths.state}; do not scan the queue "
-                    "for another.\n\n") + self._lane_note()
-            if attempt > 1:
-                # A retried review re-derived its whole analysis every attempt
-                # until 2026-09-17 (REVIEW-audit-daemon-1, four hours): the
-                # delta was in the tree, the session started from scratch. On a
-                # retry, say so.
-                note += (f"This is attempt {attempt}: the prior attempt(s) left their work "
-                         "uncommitted in the tree (the note above lists it). Finish it — "
-                         "run the row's checks, fix only what is red, commit the delta BY "
-                         "NAME, record what you have, mark [x]. Do not re-derive the "
-                         "analysis.\n\n")
-            session.run(model_args, note + self._prompt_text(), log)
-            if self.paths.p(self.paths.stop).exists():
-                say("pool: operator STOP — leaving the review")
-                return 0
-            queue = self._queue()
-            if queue is not None and queue.status_of(review.id) is Status.DONE:
-                return None
-            # A worker that stops per PROMPT §6 leaves its package for the
-            # director; without this check the pool re-runs the row to the
-            # attempt limit (2026-09-16, REVIEW-build-mesh-api-decouple). The
-            # package is NOT rewritten — it is the worker's evidence.
-            pkg = self.paths.p(self.paths.needs_human)
-            if pkg.exists() and pkg.stat().st_size:
-                say(f"pool: review {review.id} left NEEDS_HUMAN.md — stopping for the director")
-                self.notifier("auto — halt package, director next", first_line(pkg), self.notify_enabled)
-                return 3
-            marker = wait_for_marker(self.paths, self.marker_timeout)
-            if marker == "wait":
-                return None          # handed off to a detached run; resume the loop
-            if marker is not None:
-                return self._halt(marker)
-            say(f"pool: review {review.id} did not mark [x] (attempt {attempt}) — resuming")
-        return self._halt(f"review {review.id} did not finish after "
-                          f"{self.max_review_attempts} attempts"
-                          + halt_tail_suffix(
-                              self.paths.workdir / "target" / "ralph"
-                              / f"review-{review.id}.out"))
+    def _model_for(self, row, role):
+        """(model, None) for the first healthy model of the unit's roster, ("",
+        None) when none is configured (the client's default), or (None, why)."""
+        m = self.models
+        if role == "director":
+            roster = m["RESOLVE_MODEL"] or m["REVIEW_MODEL"] or m["MODEL"]
+        elif is_review(row):
+            roster = m["REVIEW_MODEL"] or m["MODEL"]
+        else:
+            roster = m["MODEL"]
+        names = parse_roster(roster)
+        if not names:
+            return "", None
+        causes = {}
+        now = self.clock()
+        for name in names:
+            ok, cause, at = self._probes.get(name, (None, "", 0))
+            if ok is None or now - at >= (PROBE_OK_TTL_S if ok else PROBE_RETRY_S):
+                ok, cause = self.probe(name)
+                self._probes[name] = (ok, cause, now)
+                say(f"probe {name} — {'ok' if ok else cause}")
+            if ok:
+                return name, None
+            causes[name] = cause
+        return None, "no healthy model in the roster — " + "; ".join(
+            f"{k}: {v}" for k, v in causes.items())
 
-    def _provision_host_pointers(self, wt):
+    def _block(self, name, why):
+        now = self.clock()
+        if self._blocked is None or self._blocked[0] != name:
+            self._blocked = [name, why, now, now]
+            say(f"loop: blocked ({name}) — {why}")
+        elif now - self._blocked[3] >= REBLOCK_LOG_S:
+            self._blocked[3] = now
+            say(f"loop: still blocked ({name}, {fmt_secs(now - self._blocked[2])}) — {why}")
+        if now - self._blocked[2] >= PRECONDITION_NOTIFY_AFTER.get(name, 0):
+            self._notify_once(f"blocked:{name}", f"OPERATOR — blocked: {name}", why)
+        return Pool.BLOCKED
+
+    def _unblock(self):
+        if self._blocked is not None:
+            say(f"loop: {self._blocked[0]} holds again — dispatching")
+            self.ledger.notified.pop(f"blocked:{self._blocked[0]}", None)
+            self._blocked = None
+
+    def _pool_state(self, queue):
+        if self.units_in(*SESSION) or self.units_in(U.MERGING):
+            pool = Pool.RUNNING
+        elif self.units_in(U.AWAITING):
+            pool = Pool.IDLE
+        elif self._ready(queue):
+            pool = Pool.RUNNING           # dispatch was refused or failed this tick; next tick retries
+        else:
+            held = sorted(r.id for r in queue.rows if self.static.get(r.id) is U.HELD)
+            body = (f"held: {', '.join(held)}" if held else
+                    f"no rows in {self.paths.state}" if not queue.rows else
+                    "nothing ready and nothing held — check the dependencies")
+            key = "stuck:" + ",".join(held)
+            if not self.ledger.notified.get(key):
+                say(f"loop: stuck — {body}")
+                for old in [k for k in self.ledger.notified if k.startswith("stuck:")]:
+                    self.ledger.notified.pop(old)
+            self._notify_once(key, "OPERATOR — stuck", body)
+            return Pool.STUCK
+        for old in [k for k in self.ledger.notified if k.startswith("stuck:")]:
+            self.ledger.notified.pop(old)
+        return pool
+
+    # -- sessions and runs --------------------------------------------------
+
+    def _start_session(self, row, role, model):
+        entry = self.ledger.unit(row.id)
+        n = entry.get("sessions", 0) + 1
+        main = self.is_main(row.id)
+        notes, env = [], {}
+        if main:
+            cwd = self.paths.workdir
+        else:
+            cwd, notes, env = self.mech.prepare(row.id, self._jobs)
+        base = (_git_out(cwd, "rev-parse", "HEAD") or "").strip()
+        sessions = self.state_dir / "sessions"
+        sessions.mkdir(parents=True, exist_ok=True)
+        result, base_file = sessions / f"{row.id}-{n}.json", sessions / f"{row.id}-{n}.base.json"
+        result.unlink(missing_ok=True)
+        base_file.write_text(json.dumps({"head": base, "untracked": untracked_files(cwd)}))
+        log = self.paths.p(self.paths.log_dir) / "sessions" / f"{row.id}-{n}.out"
+        prompt = (self._director_prompt(row, entry, cwd, main) if role == "director"
+                  else self._worker_prompt(row, entry, cwd, main, notes))
+        model_args = (["--model", model] if model else []) + (
+            ["--variant", self.models["VARIANT"]] if self.models["VARIANT"] else [])
+        env.update({"RALPH_RESULT": str(result), "RALPH_BASE": str(base_file),
+                    "RALPH_UNIT": row.id, "RALPH_WORKSPACE": str(cwd), "RALPH_PY": str(SELF),
+                    "RALPH_AWAIT_MAX": str(self.await_max_s)})
+        full_env = {**os.environ, **session_env(self.paths), **env,
+                    "PATH": f"{RALPH_BIN}{os.pathsep}{os.environ.get('PATH', '')}"}
+        proc = self.spawn([worker_bin(self.paths), "run", *model_args, prompt],
+                          cwd=cwd, env=full_env, log_path=log)
+        entry["sessions"] = n
+        entry["notes"] = []
+        now = self.clock()
+        return {"role": role, "pid": proc.pid, "started": proc.started, "n": n,
+                "begun": now, "deadline": now + self.session_timeout, "base": base,
+                "workspace": str(cwd), "main": main, "result": str(result),
+                "log": str(log), "model": model,
+                "env": {k: v for k, v in env.items() if not k.startswith("RALPH_")}}
+
+    def _worker_prompt(self, row, entry, cwd, main, lane_notes):
+        status = _git_out(cwd, "status", "--porcelain") or ""
+        text = ""
+        if status:
+            text += ("NOTE: the tree holds uncommitted work from a prior session:\n" + status
+                     + "Inspect it and continue from it; do not discard work already done. "
+                       "Commit it as you go.\n\n")
+        text += (f"Your unit: {row.id} — its row in {self.paths.state}. Open only that row; do "
+                 "not scan the queue for another.\n\n")
+        if not main:
+            text += (f"POOL LANE: you are working unit {row.id} in an isolated git worktree on "
+                     f"branch ralph/{row.id}. Commit your work here; when you report done the "
+                     "loop merges the branch and marks the row. Do not edit "
+                     f"{self.paths.state} except to correct your own row's premises.\n\n")
+        elif self.lane_mode:
+            text += "You run in the main tree, alone: no lane runs beside you.\n\n"
+        text += "".join(n + "\n\n" for n in lane_notes)
+        parked = sorted(parked_ids(self.paths))
+        if parked:
+            text += f"Parked rows wait on the operator; do not open them: {', '.join(parked)}.\n\n"
+        for note in entry.get("notes", []):
+            text += f"FROM THE LOOP: {note}\n\n"
+        text += CONTRACT + (CONTRACT_OPERATOR if self.charter else "") + "\n"
+        return text + self._prompt_text()[0]
+
+    def _director_prompt(self, row, entry, cwd, main):
+        why = []
+        if entry.get("asked"):
+            why.append(f"Its worker asked for a decision:\n{entry['asked']}")
+        if entry.get("strikes", 0) >= self.max_strikes:
+            why.append(f"It struck out ({entry['strikes']} strikes): "
+                       + "; ".join(entry.get("strike_why", [])[-self.max_strikes:]))
+        logs = sorted((self.paths.p(self.paths.log_dir) / "sessions").glob(f"{row.id}-*.out"),
+                      key=lambda p: p.stat().st_mtime)[-3:]
+        decisions = ""
+        if self.paths.p(DECISIONS_SCRIPT).exists():
+            decisions = (f": `{DECISIONS_SCRIPT} new <campaign>` prints an entry file — fill it "
+                         "(date, unit, fork, choice, evidence, what would falsify it; tag "
+                         "`REVIEW-AFTER:` when the charter did not clearly cover it), run "
+                         f"`{DECISIONS_SCRIPT} --write`, and land both with the change")
+        where = "the main tree" if main else f"the lane worktree {cwd}, branch ralph/{row.id}"
+        return (f"DIRECTOR for unit {row.id} (attempt {entry.get('directed', 0) + 1} of "
+                f"{self.director_max}).\n\n" + "\n\n".join(why) + "\n\n"
+                "You are the operator's delegate under the charter below: verify the evidence "
+                "and DECIDE — do not defer a fork the charter covers. Reproduce every claim you "
+                f"rely on. You work in {where}.\n\n"
+                f"1. Read the row in {self.paths.state}, `git log` and `git status` here, and "
+                "the last session logs:\n" + "".join(f"   {p}\n" for p in logs) +
+                "2. Apply the smallest change that lets the unit flow: correct the row (and its "
+                "source order, when a premise was false) or the code.\n"
+                f"3. Record the decision in its own commit{decisions}.\n"
+                "4. End with `ralph-result continue <what a worker does now>` when a worker can "
+                "finish the unit, `ralph-result done` if you finished it, or `ralph-result "
+                "needs-human --operator --package FILE <why>` when the charter leaves the fork "
+                "to the operator — FILE gives the options, their costs and your "
+                "recommendation.\n"
+                "Never weaken a PASS BAR, never mark or approve a HUMAN- row, never push.\n\n"
+                + CONTRACT + CONTRACT_OPERATOR + "\n=== CHARTER ===\n" + (self.charter or ""))
+
+    def _start_run(self, unit, entry, res):
+        s = entry["session"]
+        stem = f"{unit}-{s['n']}"
+        exit_file = self.state_dir / "sessions" / f"{stem}.exit"
+        exit_file.unlink(missing_ok=True)
+        log = self.paths.p(self.paths.log_dir) / "sessions" / f"{stem}.await.log"
+        env = {**os.environ, **session_env(self.paths), **s.get("env", {}),
+               "RALPH_EXIT": str(exit_file)}
+        proc = self.spawn(["/bin/sh", "-c", AWAIT_SH, "ralph-await", *res["argv"]],
+                          cwd=s["workspace"], env=env, log_path=log)
+        now = self.clock()
+        return {"pid": proc.pid, "started": proc.started, "begun": now,
+                "budget_s": res["budget_s"], "deadline": now + res["budget_s"],
+                "argv": res["argv"], "log": str(log), "exit_file": str(exit_file)}
+
+    # -- actions ------------------------------------------------------------
+
+    def _note(self, entry, text):
+        entry.setdefault("notes", []).append(text)
+
+    def _do_start_session(self, unit, entry, session):
+        entry["session"] = session
+        entry["main"] = session["main"]
+        if session["role"] == "director":
+            entry["directed"] = entry.get("directed", 0) + 1
+        return (f"{session['role']} session {session['n']} · pid {session['pid']}"
+                + (f" · model {session['model']}" if session["model"] else ""))
+
+    def _do_strike(self, unit, entry, why="", **_):
+        if not why:
+            s = entry.get("session", {})
+            why = (f"session {s.get('n')} ended with no result and no commit "
+                   f"(log {s.get('log')})"
+                   + (f"; {s['rejects']}" if s.get("rejects") else ""))
+        entry["strikes"] = entry.get("strikes", 0) + 1
+        entry.setdefault("strike_why", []).append(why)
+        self._note(entry, f"strike {entry['strikes']} of {self.max_strikes}: {why}")
+        return f"strike {entry['strikes']}/{self.max_strikes} — {why}"
+
+    def _do_accept_done(self, unit, entry, result):
+        entry.update(strikes=0, continuations=0, escalate=False, asked="", strike_why=[],
+                     done_head=(result.get("head") or "")[:9])
+        return "reported done"
+
+    def _do_continue_(self, unit, entry, result=None, commits=0):
+        k = entry.get("continuations", 0) + 1
+        entry["continuations"] = k
+        note = (result or {}).get("note", "")
+        if note:
+            self._note(entry, f"the previous session's note: {note}")
+        how = "reported continue" if result else f"{commits} commit(s), no result"
+        if k > self.max_continuations:
+            return self._do_strike(unit, entry, why=f"{how} — {k} continuations in a row "
+                                                    f"(bound {self.max_continuations})")
+        return f"{how} — continuation {k}/{self.max_continuations}"
+
+    def _do_start_await(self, unit, entry, result, run):
+        entry["run"] = run
+        return (f"run {run['argv']} · pid {run['pid']} · budget {fmt_secs(run['budget_s'])} · "
+                f"log {run['log']}")
+
+    def _package(self, unit, entry, head, body=""):
+        s = entry.get("session", {})
+        lines = [f"# {unit}: {head}", ""]
+        if body:
+            lines += [body.rstrip(), ""]
+        if entry.get("strike_why"):
+            lines += ["Strikes:", *[f"- {w}" for w in entry["strike_why"]], ""]
+        if s.get("log"):
+            tail = halt_tail_suffix(s["log"])
+            lines += [f"Last session log: {s['log']}{tail}", ""]
+        if not entry.get("main", True) and self.lane_mode:
+            lines += [f"Lane worktree: {self.mech.lane_root / unit} (branch ralph/{unit})", ""]
+        return "\n".join(lines)
+
+    def _park(self, unit, entry, head, body=""):
+        dest = write_parked(self.paths, unit, self._package(unit, entry, head, body), head)
+        entry["parked"] = True
+        self._notify_once(f"held:{unit}:{int(self.clock())}", "OPERATOR — held, loop continues",
+                          f"{unit}: {head}")
+        return f"parked at {dest.relative_to(self.paths.workdir)}"
+
+    def _do_park_asked(self, unit, entry, result):
+        who = "the director" if entry.get("session", {}).get("role") == "director" else "its session"
+        return self._park(unit, entry, f"{who} needs the operator — {result['why']}",
+                          result.get("package", ""))
+
+    def _do_escalate(self, unit, entry, result):
+        entry["escalate"] = True
+        entry["asked"] = result["why"] + ("\n\n" + result["package"] if result.get("package") else "")
+        return "the worker asked; a director goes next"
+
+    def _do_park_struck(self, unit, entry):
+        head = (f"struck out ({entry.get('strikes', 0)} strikes)" if not entry.get("escalate")
+                else "its worker asked and no director is left")
+        return self._park(unit, entry, head, entry.get("asked", ""))
+
+    def _do_park_director(self, unit, entry, why="", **_):
+        return self._park(unit, entry, why or "the director ended without a result")
+
+    def _do_park_refused(self, unit, entry, why):
+        return self._park(unit, entry, "refused at dispatch", why)
+
+    def _do_park_unmarked(self, unit, entry, why):
+        return self._park(unit, entry, "landed, but not marked done", why)
+
+    def _do_interrupted(self, unit, entry):
+        self._note(entry, "an operator stop ended the previous session; whatever it left "
+                          "uncommitted is still in the tree")
+        return "session ended by the operator — no strike"
+
+    def _do_director_cleared(self, unit, entry, result):
+        entry.update(strikes=0, continuations=0, escalate=False, asked="", strike_why=[])
+        if result.get("note"):
+            self._note(entry, f"the director: {result['note']}")
+        return "the director cleared it — a worker goes next"
+
+    def _do_run_ended(self, unit, entry, code):
+        r = entry["run"]
+        how = (f"exited {code}" if code is not None else
+               "is gone without an exit status (a reboot, or something killed it)")
+        self._note(entry, f"your background run {r['argv']} {how} after "
+                          f"{fmt_secs(self.clock() - r['begun'])}; its log is {r['log']}. Read it "
+                          "and carry on from what it shows.")
+        return f"run {how}"
+
+    def _do_run_over_budget(self, unit, entry):
+        r = entry["run"]
+        why = (f"background run {r['argv']} passed its {fmt_secs(r['budget_s'])} budget and the "
+               f"loop ended it; its log is {r['log']}")
+        return self._do_strike(unit, entry, why=why)
+
+    def _do_unhold(self, unit, entry):
+        if not entry.pop("parked", None):
+            return None
+        entry.update(strikes=0, continuations=0, directed=0, escalate=False, asked="",
+                     strike_why=[])
+        return "unparked by the operator — counters reset"
+class Lanes:
+    """The git and disk work of a lane: its worktree beside the main tree, its
+    cloned target, the base merged into it, and, once it is done, the merge
+    back, the decision renumbering, its evidence and its removal. No state:
+    the loop's ledger holds that."""
+
+    def __init__(self, paths, *, lane_root, base_branch, disk_free_gb, disk_floor_gb):
+        self.paths = paths
+        self.lane_root = pathlib.Path(lane_root)
+        self.base_branch = base_branch
+        self.disk_free_gb = disk_free_gb
+        self.disk_floor_gb = disk_floor_gb
+
+    def git(self, *args, cwd=None):
+        return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
+                              capture_output=True, text=True)
+
+    def prepare(self, unit, jobs):
+        """The lane's worktree, made or brought up to the base: (path, notes
+        for the session, env). Raises SpawnError when git cannot make it."""
+        wt, branch = self.lane_root / unit, f"ralph/{unit}"
+        notes = []
+        if not wt.exists():
+            self.lane_root.mkdir(parents=True, exist_ok=True)
+            exists = self.git("rev-parse", "-q", "--verify", f"refs/heads/{branch}").returncode == 0
+            args = ([str(wt), branch] if exists
+                    else ["-b", branch, str(wt), self.base_branch])
+            r = self.git("worktree", "add", "-q", *args)
+            if r.returncode != 0:
+                raise SpawnError(f"git worktree add for {unit}: "
+                                 f"{error_tail(r.stderr) or r.stderr.strip()[-200:]}")
+            say(f"lane {unit}: worktree {wt} on {branch}")
+            self.provision_target(unit, wt)
+        else:
+            # A lane is kept across sessions, so a fix that lands on the base
+            # never reaches it unless it is brought in (dm-daemon-api-edge burned
+            # three waves on a stale opencode.json, 2026-09-17). A lane with no
+            # commits of its own fast-forwards; one with work merges the base in
+            # HERE, where its session can resolve a conflict, rather than at the
+            # loop's merge (2026-09-18).
+            own = self.git("rev-list", "--count", f"{self.base_branch}..HEAD", cwd=wt)
+            if own.returncode == 0 and own.stdout.strip() == "0":
+                ff = self.git("merge", "--ff-only", self.base_branch, cwd=wt)
+                say(f"lane {unit}: " + ("refreshed onto " + self.base_branch if ff.returncode == 0
+                                        else f"not refreshed: {ff.stderr.strip()}"))
+            elif own.returncode == 0:
+                m = self.git("merge", "--no-edit", self.base_branch, cwd=wt)
+                say(f"lane {unit}: " + (f"merged {self.base_branch} in" if m.returncode == 0
+                                        else f"conflicts with {self.base_branch} — the session "
+                                             "resolves it"))
+        self.provision_host_pointers(wt)
+        if self.git("rev-parse", "-q", "--verify", "MERGE_HEAD", cwd=wt).returncode == 0:
+            notes.append("Your worktree has a MERGE IN PROGRESS: the loop merged the base branch "
+                         "in and it conflicted. Resolve every conflict, `git add` the files, "
+                         "`git commit --no-edit`, then do your unit.")
+        # One cargo lock per lane: a lane builds in its own worktree and target,
+        # so the shared lock would only serialize lanes against each other
+        # (2026-09-16 speed order).
+        env = {"SVRN_CARGO_LOCK_DIR": f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}"}
+        if jobs:
+            share = {var: str(jobs) for var in LANE_JOBS_VARS}
+            env.update(share)
+            jobs_file = wt / LANE_JOBS_FILE
+            jobs_file.parent.mkdir(parents=True, exist_ok=True)
+            jobs_file.write_text("".join(f"{k}={v}\n" for k, v in share.items()))
+        return wt, notes, env
+
+    def provision_host_pointers(self, wt):
         """Copy the per-host pointer dirs into a lane worktree.
 
         A row's `read: O8` names `.sovereign/features/<id>/order.md`, which is
@@ -2593,7 +2810,7 @@ class Pool:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(src, dst, symlinks=True)
         except OSError as e:
-            say(f"pool: could not provision {dst} from {src}: {e}")
+            say(f"lane: could not provision {dst} from {src}: {e}")
 
     # A reflink clone shares the main tree's blocks until a lane rebuilds them
     # (btrfs; 7s for 136G, measured 2026-09-01). Never one target shared across
@@ -2606,18 +2823,18 @@ class Pool:
     # unlike the rest of target/ (the lane's evidence, battery and field scratch).
     RECLAIMABLE = ("debug", "release")
 
-    def _reclaim_disk(self, wave, free_gb):
+    def reclaim_disk(self, busy, free_gb):
         """Under the disk floor, free cargo output from lanes that cannot need
         it now, least recently built first, until the lane root is back over
-        the floor; return the free GB after. A lane in the wave about to start,
-        or holding ralph/waiting (its detached run may be executing those
-        binaries), is never touched. The floor alone sat the ersilia pool idle
+        the floor; return the free GB after. A lane whose unit is active or
+        about to start (its session or its background run may be executing
+        those binaries) is never touched. The floor alone sat the ersilia pool idle
         for 66 ticks while two idle lanes held 15GB of it (2026-10-04)."""
         if not self.lane_root.is_dir():
             return free_gb
         idle = []
         for wt in self.lane_root.iterdir():
-            if not wt.is_dir() or wt.name in wave or (wt / self.paths.waiting).exists():
+            if not wt.is_dir() or wt.name in busy:
                 continue
             dirs = [wt / "target" / d for d in self.RECLAIMABLE if (wt / "target" / d).is_dir()]
             if dirs:
@@ -2628,13 +2845,13 @@ class Pool:
             for d in dirs:
                 err = remove_tree(d)
                 if err is not None:
-                    say(f"pool: lane {unit} target/{d.name} not reclaimed: {err}")
+                    say(f"lane {unit} target/{d.name} not reclaimed: {err}")
             before, free_gb = free_gb, self.disk_free_gb()
-            say(f"pool: reclaimed {free_gb - before}GB of build output from idle lane {unit} "
+            say(f"lane: reclaimed {free_gb - before}GB of build output from idle lane {unit} "
                 f"({', '.join(f'target/{d.name}' for d in dirs)}) — it rebuilds when it next runs")
         return free_gb
 
-    def _provision_target(self, unit, wt):
+    def provision_target(self, unit, wt):
         """A new lane's target/ is a clone of the main tree's, and every tracked
         file in the lane is touched after it, so the workspace crates rebuild
         once (~3-4 min) and external deps stay warm. Where the clone cannot be
@@ -2647,17 +2864,17 @@ class Pool:
         if r.returncode != 0:
             err = remove_tree(dst)
             if err is not None:
-                say(f"pool: lane {unit} partial target clone not removed: {err}")
-            say(f"pool: lane {unit} target NOT cloned "
+                say(f"lane {unit} partial target clone not removed: {err}")
+            say(f"lane {unit} target NOT cloned "
                 f"({error_tail(r.stderr) or r.stderr.strip()[-200:]}) — the lane "
                 "builds from an empty target")
             return
         # The lane's evidence directory starts empty: _keep_evidence copies it back.
         err = remove_tree(dst / "ralph")
         if err is not None:
-            say(f"pool: lane {unit} cloned evidence not cleared ({err}) — "
+            say(f"lane {unit} cloned evidence not cleared ({err}) — "
                 "_keep_evidence will copy the main tree's back with the lane's")
-        files = self._git("ls-files", "-z", cwd=wt).stdout.split("\0")
+        files = self.git("ls-files", "-z", cwd=wt).stdout.split("\0")
         touched = 0
         for rel in filter(None, files):
             try:
@@ -2665,94 +2882,10 @@ class Pool:
                 touched += 1
             except OSError:
                 pass          # a tracked path the checkout does not hold (a submodule)
-        say(f"pool: lane {unit} target cloned from {src}; {touched} tracked files touched "
+        say(f"lane {unit} target cloned from {src}; {touched} tracked files touched "
             "— the workspace crates rebuild once, external deps stay warm")
 
-    def run_lane(self, unit, model=None):
-        wt = self.lane_root / unit
-        branch = f"ralph/{unit}"
-        if not wt.exists():
-            r = self._git("worktree", "add", "-q", "-b", branch, str(wt), self.base_branch)
-            if r.returncode != 0:
-                say(f"pool: worktree add failed for {unit}: {r.stderr.strip()}")
-                return
-            say(f"pool: lane start {unit} (worktree {wt})")
-            self._provision_target(unit, wt)
-        else:
-            say(f"pool: lane {unit} resuming in its existing worktree")
-            # A lane worktree is created once from the base branch and kept
-            # across waves, so a harness fix that lands on the base never
-            # reaches it. dm-daemon-api-edge burned its three waves on the
-            # stale `.opencode/opencode.json` that `bdb0f24e0` fixed on the
-            # base minutes after the lane exhausted (2026-09-17). Fast-forward
-            # a lane that has no commits of its own onto the base; a lane with
-            # work is left alone (--ff-only refuses to rewrite it).
-            own = self._git("rev-list", "--count", f"{self.base_branch}..HEAD", cwd=wt)
-            if own.returncode == 0:
-                if own.stdout.strip() == "0":
-                    ff = self._git("merge", "--ff-only", self.base_branch, cwd=wt)
-                    if ff.returncode == 0:
-                        say(f"pool: lane {unit} refreshed onto {self.base_branch}")
-                    else:
-                        say(f"pool: lane {unit} not refreshed: {ff.stderr.strip()}")
-                else:
-                    # A lane with its own commits was skipped entirely, so it ran
-                    # on a stale base and the conflict landed at the POOL's merge
-                    # as an escalation (2026-09-18: dm-rename-leaf-words,
-                    # dm-next-edit-move). Merge the base in HERE, where the
-                    # session can resolve it.
-                    m = self._git("merge", "--no-edit", self.base_branch, cwd=wt)
-                    if m.returncode == 0:
-                        say(f"pool: lane {unit} merged {self.base_branch} in")
-                    else:
-                        say(f"pool: lane {unit} conflicts with {self.base_branch} — "
-                            "the session resolves it")
-        self._provision_host_pointers(wt)
-        note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
-                f"Commit your work here. When the unit passes its OWN tests, write "
-                f"{LANE_DONE_DIR}/{unit}.done and commit it — the pool merges your branch then.\n"
-                f"If a detached run outlives your session, the FIRST line of "
-                f"{self.paths.waiting} names the marker that run writes (never "
-                f"{LANE_DONE_DIR}/{unit}.done); the lines after it are notes.\n"
-                f"Do NOT edit {self.paths.state} except to correct your own row's premises "
-                "(PROMPT §6); the pool marks the unit done after the merge.\n\n"
-                + self._lane_note())
-        if self._git("rev-parse", "-q", "--verify", "MERGE_HEAD", cwd=wt).returncode == 0:
-            note = ("Your worktree has a MERGE IN PROGRESS: the pool merged the base "
-                    "branch in and it conflicted. Resolve every conflict, `git add` the "
-                    "files, `git commit --no-edit`, then do your unit.\n\n") + note
-        model_args = select_model_args(unit, model if model is not None else self.model,
-                                       self.review_model, self.variant)
-        # One lock per lane: a lane builds in its own worktree/target, so the
-        # shared /tmp lock would only serialize lanes against each other and
-        # against other campaigns (2026-09-16 speed order).
-        lock_dir = f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}"
-        env = {"SVRN_CARGO_LOCK_DIR": lock_dir}
-        if self._jobs:
-            share = {var: str(self._jobs) for var in LANE_JOBS_VARS}
-            env.update(share)
-            jobs_file = wt / LANE_JOBS_FILE
-            jobs_file.parent.mkdir(parents=True, exist_ok=True)
-            jobs_file.write_text("".join(f"{k}={v}\n" for k, v in share.items()))
-        head = self._git("rev-parse", "HEAD", cwd=wt)
-        if head.returncode == 0:
-            self._session_base[unit] = head.stdout.strip()
-        session = self.session_for(wt, env=env)
-        started = self.clock()
-        session.run(model_args, note + self._prompt_text(),
-                    str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
-        self._session_secs[unit] = self.clock() - started
-
-    def _session_commits(self, unit, wt):
-        """How many commits the lane's last session added to its branch (0 when
-        its starting head was not recorded)."""
-        base = self._session_base.pop(unit, None)
-        if base is None:
-            return 0
-        r = self._git("rev-list", "--count", f"{base}..HEAD", cwd=wt)
-        return int(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip().isdigit() else 0
-
-    def _renumber_decisions(self, unit, wt, branch):
+    def renumber_decisions(self, unit, wt, branch):
         """Lanes in one wave each mint `<campaign>-<max+1>` from the same tree,
         so the second merge is an add/add conflict. Before merging, give every
         decision the lane added whose path the main tree already holds the next
@@ -2761,7 +2894,7 @@ class Pool:
         entries = self.paths.p(DECISIONS_DIR)
         if not entries.is_dir():
             return None
-        added = self._git("diff", "--name-only", "--diff-filter=A", f"HEAD...{branch}",
+        added = self.git("diff", "--name-only", "--diff-filter=A", f"HEAD...{branch}",
                           "--", DECISIONS_DIR)
         clashes = [rel for rel in added.stdout.split() if self.paths.p(rel).exists()]
         renamed = {}
@@ -2773,20 +2906,20 @@ class Pool:
                 return (f"lane {unit}: could not renumber {rel}: "
                         f"{error_tail(r.stderr) or r.stderr.strip()[-200:]}")
             renamed[pathlib.Path(rel).stem] = pathlib.Path(r.stdout.strip()).stem
-            say(f"pool: lane {unit} decision {rel} is taken on the base — renumbered "
+            say(f"lane {unit} decision {rel} is taken on the base — renumbered "
                 f"{pathlib.Path(r.stdout.strip()).name}")
         if clashes:
-            self._recite_decisions(unit, wt, branch, renamed)
-            self._git("add", "-A", "--", DECISIONS_DIR, cwd=wt)
+            self.recite_decisions(unit, wt, branch, renamed)
+            self.git("add", "-A", "--", DECISIONS_DIR, cwd=wt)
             mapping = ", ".join(f"{o} → {n}" for o, n in renamed.items())
-            c = self._git("commit", "-q", "-m",
+            c = self.git("commit", "-q", "-m",
                           f"{unit}: decision ids renumbered at merge (pool): {mapping}", cwd=wt)
             if c.returncode != 0:
                 return (f"lane {unit}: the renumber commit failed: "
                         f"{error_tail(c.stderr) or c.stderr.strip()[-200:]}")
         return None
 
-    def _recite_decisions(self, unit, wt, branch, renamed):
+    def recite_decisions(self, unit, wt, branch, renamed):
         """The lane's own files still cite the ids it minted, which on the base
         name other entries (2026-10-02: pc-removed-env-warn's .done cited
         phase-c-2, the seat's filing, after its entry became phase-c-4).
@@ -2794,7 +2927,7 @@ class Pool:
         stage them; the renumbered entry, which records the old id on purpose,
         is not among them (its old path is gone, its new one is untracked)."""
         pattern = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, renamed)) + r")(?!\d)")
-        changed = self._git("diff", "--name-only", "--diff-filter=AM", f"HEAD...{branch}")
+        changed = self.git("diff", "--name-only", "--diff-filter=AM", f"HEAD...{branch}")
         rewritten = []
         for rel in changed.stdout.split():
             path = wt / rel
@@ -2809,11 +2942,11 @@ class Pool:
                 path.write_text(new)
                 rewritten.append(rel)
         if rewritten:
-            self._git("add", "--", *rewritten, cwd=wt)
-        say(f"pool: lane {unit} citations of {', '.join(renamed)} rewritten in "
+            self.git("add", "--", *rewritten, cwd=wt)
+        say(f"lane {unit} citations of {', '.join(renamed)} rewritten in "
             f"{len(rewritten)} file(s){': ' + ', '.join(rewritten) if rewritten else ''}")
 
-    def _regenerate_decisions(self, unit):
+    def regenerate_decisions(self, unit):
         """Lanes write ralph/decisions/<id>.md only; the rendered ledger is
         regenerated here, once per merge, and lands in the mark commit. Returns
         a halt reason or None."""
@@ -2824,42 +2957,26 @@ class Pool:
         if r.returncode != 0:
             return (f"merged {unit}, but {DECISIONS_SCRIPT} --write failed: "
                     f"{error_tail(r.stderr) or (r.stderr or r.stdout).strip()[-200:]}")
-        say(f"pool: {r.stdout.strip()}")
-        self._git("add", "--", DECISIONS_RENDERED)
+        say(f"lane: {r.stdout.strip()}")
+        self.git("add", "--", DECISIONS_RENDERED)
         return None
 
-    def _lane_marked_done(self, unit, wt, branch):
-        """The lane's own commits added or changed ralph/lanes/<unit>.done. A
-        marker that exists only because the base already holds it, from an
-        earlier round of a reopened row, is not this lane's: on 2026-10-02 the
-        reopened pc-knowledge-gym-noresults started from a base carrying
-        7fb5bfd10's marker, and the pool would have merged the lane whenever
-        its session ended, readings taken or not."""
-        rel = f"{LANE_DONE_DIR}/{unit}.done"
-        if not (wt / rel).exists():
-            return False
-        own = self._git("diff", "--name-only", f"HEAD...{branch}", "--", rel)
-        if rel in own.stdout.split():
-            return True
-        say(f"pool: lane {unit}'s {rel} is the base's, from an earlier round — not this lane's")
-        return False
-
-    def _remove_lane(self, unit, wt):
+    def remove_lane(self, unit, wt):
         """A merged lane's worktree goes, its target included; whatever `git
         worktree remove` leaves is removed here and said, never left silent."""
-        r = self._git("worktree", "remove", "--force", str(wt))
+        r = self.git("worktree", "remove", "--force", str(wt))
         if not wt.exists():
             return
         err = remove_tree(wt)
-        self._git("worktree", "prune")
+        self.git("worktree", "prune")
         why = error_tail(r.stderr) or r.stderr.strip()[-200:] or f"exit {r.returncode}"
         if err is None:
-            say(f"pool: lane {unit} worktree remove left {wt} ({why}) — removed it")
+            say(f"lane {unit} worktree remove left {wt} ({why}) — removed it")
         else:
-            say(f"pool: lane {unit} worktree {wt} NOT removed ({why}; then {err}) — "
+            say(f"lane {unit} worktree {wt} NOT removed ({why}; then {err}) — "
                 "its target holds disk until it is")
 
-    def _keep_evidence(self, unit, wt):
+    def keep_evidence(self, unit, wt):
         """A lane's raw evidence (its target/ralph/: check logs, readings) is
         copied to <log_dir>/<unit>/ in the main tree before the worktree, its
         target included, is removed. False when the copy failed: the caller
@@ -2871,234 +2988,175 @@ class Pool:
         try:
             shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
         except (OSError, shutil.Error) as e:
-            say(f"pool: lane {unit} evidence copy to {dest} failed: {e}")
+            say(f"lane {unit} evidence copy to {dest} failed: {e}")
             return False
-        say(f"pool: lane {unit} evidence kept at {dest}")
+        say(f"lane {unit} evidence kept at {dest}")
         return True
+# ---------------------------------------------------------------------------
+# The file protocol, read once. A loop that starts with no ledger may be
+# taking over from the file-protocol loop this one replaced: its control
+# files and lane markers are read here, once, turned into ledger entries,
+# parks and notes for the next session, and removed. After that no file an
+# agent writes is read again.
 
-    def run_wave(self, wave, model=None):
-        # The chosen model is stamped on the wave line: one glance at
-        # launchd.log says which provider served the wave (order
-        # ralph-model-roster).
-        say(f"pool: wave {', '.join(wave)}" + (f" · model {model}" if model else ""))
-        with ThreadPoolExecutor(max_workers=len(wave)) as ex:
-            list(ex.map(lambda unit: self.run_lane(unit, model), wave))
-        never_ran = []
-        if self.paths.p(self.paths.stop).exists():
-            say("pool: operator STOP — leaving the lanes unmerged (their worktrees resume)")
-            return 0
-        for unit in wave:
-            wt = self.lane_root / unit
-            branch = f"ralph/{unit}"
-            if not wt.exists():
-                continue
-            lane_pkg = wt / self.paths.needs_human
-            if lane_pkg.exists() and lane_pkg.stat().st_size:
-                # A lane writes its package in ITS worktree — the main-tree
-                # check never saw it, so the wave re-ran the row to the failure
-                # limit with the package sitting right there (2026-09-17,
-                # dm-daemon-api-edge). Surface it where the operator and the
-                # director look, then stop.
-                main_pkg = self.paths.p(self.paths.needs_human)
-                main_pkg.write_text(f"# lane {unit} left this package "
-                                    f"({lane_pkg})\n\n" + lane_pkg.read_text())
-                say(f"pool: lane {unit} left NEEDS_HUMAN.md — stopping for the director")
-                self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
-                return 3
-            if not self._lane_marked_done(unit, wt, branch):
-                parsed = waiting_marker(wt, self.paths.waiting)
-                if parsed is not None:
-                    # A waiting end is the lane's own protocol for a detached
-                    # run outliving the session (r9-boundary-sweep, struck out
-                    # twice for it and halted ring 9, 2026-09-19): the tick
-                    # polls the named marker and respawns the lane when it
-                    # lands — the failure counter never sees this end.
-                    say(f"pool: lane {unit} waiting on {parsed[1].relative_to(wt)} "
-                        "— no failure count")
-                    continue
-                # A session that committed work and ran out of time is mid-unit,
-                # not stuck: ersilia r12-edges-demoted committed four lanes of
-                # work, was killed at the session cap and struck (2026-10-04).
-                # It continues without a strike, within its own bound.
-                made = self._session_commits(unit, wt)
-                k = self._lane_continuations.get(unit, 0) + 1 if made else 0
-                self._lane_continuations[unit] = k
-                if made and k <= self.max_lane_continuations:
-                    say(f"pool: lane {unit} ended without {LANE_DONE_DIR}/{unit}.done after "
-                        f"{made} new commit(s) — continuing, no failure count "
-                        f"({k}/{self.max_lane_continuations})")
-                    continue
-                secs = self._session_secs.pop(unit, None)
-                quick = not made and secs is not None and secs < NEVER_RAN_SECS
-                r = self._never_ran.get(unit, 0) + 1 if quick else 0
-                self._never_ran[unit] = r
-                if quick and r <= MAX_NEVER_RAN:
-                    never_ran.append(unit)
-                    say(f"pool: lane {unit} ended in {int(secs)}s with nothing committed — "
-                        "the session did not run (a provider, quota or harness failure); "
-                        f"no failure count ({r}/{MAX_NEVER_RAN})")
-                    continue
-                # A lane that keeps ending without its marker would otherwise be
-                # re-run forever (2026-09-17: ~50 sessions over 2.5h on
-                # dm-daemon-api-edge). Bound it and hand the row to the director.
-                n = self._lane_failures.get(unit, 0) + 1
-                self._lane_failures[unit] = n
-                say(f"pool: lane {unit} ended without {LANE_DONE_DIR}/{unit}.done "
-                    f"(failure {n}/{self.max_lane_failures}) — branch {branch} kept")
-                if n >= self.max_lane_failures:
-                    return self._halt(f"lane {unit} failed {n} waves — see "
-                                      f"target/ralph/lane-{unit}.out and branch {branch}"
-                                      + halt_tail_suffix(
-                                          self.paths.workdir / "target" / "ralph"
-                                          / f"lane-{unit}.out"))
-                continue
-            self._lane_failures.pop(unit, None)
-            self._lane_continuations.pop(unit, None)
-            self._session_base.pop(unit, None)
-            self._session_secs.pop(unit, None)
-            self._never_ran.pop(unit, None)
-            refused = self._renumber_decisions(unit, wt, branch)
-            if refused is not None:
-                return self._halt(refused)
-            say(f"pool: lane {unit} finished — merging {branch}")
-            r = self._git("merge", "--no-ff", "-m", f"merge {unit}", branch)
-            if r.returncode != 0:
-                self._git("merge", "--abort")
-                # The base moved under the lane: its resume merges the base in and
-                # its session resolves the conflict, so the lane gets it back as a
-                # strike rather than the pool halting (8 settle-time halts,
-                # 2026-09-17 → 10-04). Its own counter: the lane's end counters
-                # were cleared when it finished.
-                n = self._merge_failures.get(unit, 0) + 1
-                self._merge_failures[unit] = n
-                why = error_tail(r.stderr or r.stdout) or "the merge was refused"
-                say(f"pool: merging {branch} failed ({why}) — back to the lane to merge "
-                    f"{self.base_branch} in and resolve (failure {n}/{self.max_lane_failures})")
-                if n >= self.max_lane_failures:
-                    return self._halt(f"merge conflict merging {branch}, {n} time(s) — resolve "
-                                      "in the main tree, then resume")
-                continue
-            self._merge_failures.pop(unit, None)
-            refused = self._regenerate_decisions(unit)
-            queue = self._queue()
-            if queue is not None:
-                queue.set_status(unit, Status.DONE)
-                self._git("add", self.paths.state)
-            # The subject ralph-mark.sh writes: units_since_audit counts it.
-            # Checked: an unchecked failure here left the index dirty, and the
-            # wave's next merge refused on it and halted as a "merge conflict"
-            # (pc-rails-journal-linear after pc-partial-decline-verdict,
-            # 2026-10-02, phase-c-19).
-            r = self._git("commit", "-q", "-m", f"ralph: {unit} done" if queue is not None
-                          else f"ralph: {DECISIONS_RENDERED} after merging {unit}")
-            if r.returncode != 0:
-                return self._halt(f"merged {unit}, but its done commit failed — the "
-                                  "index holds it; commit it, then resume: "
-                                  + ((r.stderr or r.stdout).strip().splitlines() or [""])[0])
-            if refused is not None:
-                return self._halt(refused)
-            if not self._keep_evidence(unit, wt):
-                say(f"pool: lane {unit} merged and marked [x] — worktree {wt} kept for its "
-                    "evidence")
-                continue
-            self._remove_lane(unit, wt)
-            self._git("branch", "-D", branch)
-            say(f"pool: lane {unit} merged and marked [x]")
-        if never_ran:
-            say(f"pool: {len(never_ran)} session(s) did not run — backing off "
-                f"{NEVER_RAN_BACKOFF // 60} min before the next wave")
-            self.sleep(NEVER_RAN_BACKOFF)
-        elif self._lane_failures:
-            self.sleep(60)          # backoff between failed waves, never a hot loop
+LEGACY_WAITING_NOTE = (
+    "before this loop took over, a session left `{rel}` for a background run it started "
+    "itself:\n{text}\n{how} The loop watches only runs it starts: from now on, end with "
+    "`ralph-result await` instead.")
+# A legacy wait whose first line names a marker becomes a loop-owned wait: a
+# watcher the loop starts, which ends when the marker appears, bounded so a
+# run that died without writing it costs this long, not the old 48h.
+LEGACY_WAIT_BUDGET_S = 12 * 3600
+LEGACY_WAIT_SH = 'until [ -e "$1" ]; do sleep 30; done'
+
+
+def legacy_marker(waiting):
+    """The marker a file-protocol waiting file's FIRST line names, or None."""
+    first = waiting.read_text(errors="replace").partition("\n")[0]
+    m = re.search(r"[A-Za-z0-9._/-]+\.done", first)
+    if not m or m.group(0).startswith(f"{LANE_DONE_DIR}/"):
         return None
+    return m.group(0)
 
 
-class Watch:
-    """The watchdog conditions, in order of precedence."""
+def adopt_wait(loop, unit, root, waiting, main, dry, lines):
+    """One legacy wait: a watcher on its marker when its first line names one,
+    else a note for the unit's next session."""
+    text = waiting.read_text(errors="replace").strip()
+    rel = loop.paths.waiting
+    marker = legacy_marker(waiting)
+    entry = loop.ledger.unit(unit)
+    if marker is None:
+        lines.append(f"{unit}: {rel} names no marker — a note for its next session")
+        if not dry:
+            loop._note(entry, LEGACY_WAITING_NOTE.format(
+                rel=rel, text=text, how="Check whether that run is still going (ps, its "
+                "log, its output files) and carry on from what you find."))
+        return
+    lines.append(f"{unit}: waits on {marker} — a loop-owned watcher, budget "
+                 f"{fmt_secs(LEGACY_WAIT_BUDGET_S)}")
+    if dry:
+        return
+    stem = f"{unit}-adopted"
+    exit_file = loop.state_dir / "sessions" / f"{stem}.exit"
+    exit_file.parent.mkdir(parents=True, exist_ok=True)
+    exit_file.unlink(missing_ok=True)
+    log = loop.paths.p(loop.paths.log_dir) / "sessions" / f"{stem}.await.log"
+    argv = ["/bin/sh", "-c", LEGACY_WAIT_SH, "ralph-legacy-wait", str(root / marker)]
+    proc = loop.spawn(["/bin/sh", "-c", AWAIT_SH, "ralph-await", *argv], cwd=root,
+                      env={**os.environ, "RALPH_EXIT": str(exit_file)}, log_path=log)
+    now = loop.clock()
+    loop._note(entry, LEGACY_WAITING_NOTE.format(
+        rel=rel, text=text, how=f"The loop waited for {marker} to appear; if it did not, the "
+        "run may have died without writing it — check its log before relaunching."))
+    entry.update(state=U.AWAITING.value, main=main, run={
+        "pid": proc.pid, "started": proc.started, "begun": now,
+        "budget_s": LEGACY_WAIT_BUDGET_S, "deadline": now + LEGACY_WAIT_BUDGET_S,
+        "argv": argv, "log": str(log), "exit_file": str(exit_file)})
 
-    def __init__(self, paths, *, label, running=None, disk_free_mb=None,
-                 stall_secs=STALL_SECS, min_free_mb=DISK_FLOOR_GB * 1024, notifier=notify,
-                 dry=False):
-        self.paths = paths
-        self.label = label
-        self.running = running or self._running
-        self.disk_free_mb = disk_free_mb or self._disk_free_mb
-        self.stall_secs = stall_secs
-        self.min_free_mb = min_free_mb
-        self.notifier = notifier
-        self.dry = dry
 
-    def _running(self):
-        return job_running(self.paths, self.label)
+def adopt_legacy(loop, dry=False):
+    """What the file protocol left, as lines saying what was done with each;
+    with `dry`, what would be. Called by Loop.boot on a fresh ledger."""
+    paths, ledger, lines = loop.paths, loop.ledger, []
+    try:
+        queue = Queue(paths.p(paths.state))
+    except (OSError, ValueError) as e:
+        return [f"{paths.state} does not parse ({e}) — nothing adopted; the loop blocks on it"]
+    rows = queue.by_id()
+    held = held_ids(paths, queue)
 
-    def _disk_free_mb(self):
-        r = subprocess.run(["df", "-m", "/System/Volumes/Data"],
-                           capture_output=True, text=True)
-        lines = r.stdout.splitlines()
-        if len(lines) < 2:
-            return None
+    def unlink(path):
+        if not dry:
+            pathlib.Path(path).unlink(missing_ok=True)
+
+    def park(unit, package, why):
+        lines.append(f"{unit}: parked — {why}")
+        if not dry:
+            write_parked(paths, unit, package, why)
+            ledger.unit(unit)["parked"] = True
+
+    counters = paths.workdir / "target" / "ralph" / "pool-state.json"
+    if counters.exists():
         try:
-            return int(lines[1].split()[3])
-        except (IndexError, ValueError):
-            return None
+            saved = json.loads(counters.read_text())
+        except (OSError, ValueError):
+            saved = {}
+        for unit, n in saved.get("failures", {}).items():
+            n = max(n, saved.get("merge_failures", {}).get(unit, 0))
+            if unit in rows and n:
+                lines.append(f"{unit}: {n} strike(s) carried from the pool's counters")
+                if not dry:
+                    ledger.unit(unit)["strikes"] = n
+        for unit, k in saved.get("continuations", {}).items():
+            if unit in rows and k and not dry:
+                ledger.unit(unit)["continuations"] = k
+        unlink(counters)
 
-    def condition(self):
-        pkg = self.paths.p(self.paths.needs_human)
-        if pkg.exists() and pkg.stat().st_size:
-            return ("needs-human:" + file_hash(pkg)[:16], first_line(pkg))
-        if self.paths.p(self.paths.done).exists():
-            return None
-        stop = self.paths.p(self.paths.stop)
-        if stop.exists() and not stop.stat().st_size:
-            return None
-        if not self.running():
-            return ("down", f"{self.paths.workdir.name}-{self.label} is not running and has "
-                            "no DONE/operator-STOP")
-        beat = self.paths.p(self.paths.heartbeat)
-        if beat.exists():
-            age = int(time.time() - beat.stat().st_mtime)
-            if age > self.stall_secs:
-                return ("stalled", f"{self.paths.workdir.name}-{self.label}: "
-                                   f"no driver heartbeat for {age}s")
-        free = self.disk_free_mb()
-        if free is not None and free < self.min_free_mb:
-            return ("disk-low", f"{self.paths.workdir.name}-{self.label}: {free}MB free")
-        return None
+    active = waiting_row(queue, held)
+    waiting = paths.p(paths.waiting)
+    if waiting.exists():
+        if active is not None:
+            adopt_wait(loop, active.id, paths.workdir, waiting, True, dry, lines)
+        else:
+            lines.append(f"{paths.waiting} names no [~] row — dropped: {first_line(waiting)[:120]}")
+        unlink(waiting)
 
-    def run(self, state_file, nag_secs=1800):
-        condition = self.condition()
-        last_cond, last_ts = "", 0
-        sf = pathlib.Path(state_file)
-        if sf.exists():
-            parts = sf.read_text().split()
-            if len(parts) >= 2:
-                last_cond, last_ts = parts[0], int(parts[1])
-        now = int(time.time())
-        if condition is None:
-            sf.write_text("")
-            return None
-        cond, body = condition
-        if cond != last_cond or now - last_ts >= nag_secs:
-            base = cond.split(":")[0]
-            if base == "needs-human" and not self.running():
-                title = "OPERATOR — halt package, loop down"
-            else:
-                title = {"needs-human": "auto — halt package (loop running)",
-                         "down": "OPERATOR — loop down",
-                         "stalled": "auto — no heartbeat",
-                         "disk-low": "OPERATOR — disk low"}[base]
-            if self.dry:
-                print(f"notify: {title}: {body}")
-            else:
-                self.notifier(title, body, True)
-            sf.write_text(f"{cond} {now}\n")
-        return cond
+    pkg = paths.p(paths.needs_human)
+    if pkg.exists() and pkg.stat().st_size:
+        text = pkg.read_text(errors="replace")
+        row = blocked_row(queue, first_line(pkg), held) or active
+        if row is not None:
+            park(row.id, text, "the file protocol's halt package")
+        else:
+            dest = paths.workdir / "target" / "ralph" / "halts" / f"{int(time.time())}-adopted.md"
+            lines.append(f"{paths.needs_human} names no row — archived at {dest}: "
+                         f"{first_line(pkg)[:120]}")
+            if not dry:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(text)
+        unlink(pkg)
+    stop = paths.p(paths.stop)
+    if stop.exists() and stop.stat().st_size and stop.read_text().strip() != "drain":
+        lines.append(f"{paths.stop} held a halt reason — removed: {first_line(stop)[:120]}")
+        unlink(stop)
+    if paths.p(paths.done).exists() and not (queue.rows and queue.all_done()):
+        lines.append(f"{paths.done} removed — rows remain open")
+        unlink(paths.p(paths.done))
 
-
-def install_job(name, program_args, workdir, log_path, interval=None):
+    root = loop.mech.lane_root
+    if loop.lane_mode and root.is_dir():
+        for wt in sorted(d for d in root.iterdir() if d.is_dir()):
+            unit = wt.name
+            if unit not in rows or rows[unit].status is Status.DONE:
+                continue
+            lane_pkg = wt / paths.needs_human
+            if lane_pkg.exists() and lane_pkg.stat().st_size:
+                park(unit, lane_pkg.read_text(errors="replace"), "its lane's halt package")
+                unlink(lane_pkg)
+                continue
+            marker = f"{LANE_DONE_DIR}/{unit}.done"
+            own = loop.mech.git("diff", "--name-only", f"HEAD...ralph/{unit}", "--", marker)
+            if (wt / marker).exists() and marker in own.stdout.split():
+                lines.append(f"{unit}: its lane wrote {marker} — it merges next")
+                if not dry:
+                    tip = (loop.mech.git("rev-parse", "--short", f"ralph/{unit}").stdout or "").strip()
+                    ledger.unit(unit).update(state=U.MERGING.value, main=False, done_head=tip)
+                continue
+            lane_waiting = wt / paths.waiting
+            if lane_waiting.exists():
+                adopt_wait(loop, unit, wt, lane_waiting, False, dry, lines)
+                if not dry:
+                    lane_waiting.unlink()
+                    loop.mech.git("add", "-A", "--", paths.waiting, cwd=wt)
+                    loop.mech.git("commit", "-q", "-m",
+                                  f"{unit}: waiting ended — the loop now owns background runs",
+                                  cwd=wt)
+    return lines or ["nothing of the file protocol left to adopt"]
+def install_job(name, program_args, workdir, log_path, interval=None, keep_alive=False):
     """Exit-2 text instead of a traceback when the host has no job backend."""
     try:
-        return host().install_job(name, program_args, workdir, log_path, interval)
+        return host().install_job(name, program_args, workdir, log_path, interval, keep_alive)
     except HostError as e:
         print(f"install: {e}", file=sys.stderr)
         return None
@@ -3127,50 +3185,18 @@ def state_dir_for(paths, label):
     return d
 
 
-RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md",
+RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md", "ralph/parked/",
                    "ralph/.heartbeat", "ralph/waiting", "ralph/models.env",
                    "ralph/log.txt", "ralph/.director-commits")
 
 
 def runtime_markers(paths):
-    """What must not dirty the tree: a queue's whole control dir, else the legacy set."""
-    return (f"{paths.control_dir}/",) if paths.queue else RUNTIME_MARKERS
-
-
-def cmd_plan(args):
-    paths = paths_for(args)
-    queue = Queue(paths.p(paths.state))
-    models = resolve_models(args, paths)
-    parked = held_ids(paths, queue)
-    unit = queue.current(parked)
-    print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
-    every = paths.manifest.audit_every if paths.manifest else None
-    print(f"units since audit: {units_since_audit(paths, queue)}"
-          f"{f' (audit every {every})' if every else ''}  head: {head_of(paths.workdir)[:9]}")
-    print(f"done: {queue.done_count()}/{len(queue.rows)}")
-    waiting = queue.awaiting_operator(parked)
-    if waiting:
-        print(f"waiting on the operator (the loop runs past them): {', '.join(waiting)}")
-    beyond = sorted(out_of_scope(paths, queue))
-    if beyond:
-        print(f"outside the frozen scope ({paths.manifest.scope_file}): {', '.join(beyond)}")
-    if unit is None:
-        print("no ready unit")
-        return 0
-    routed = select_model_args(unit, models["MODEL"], models["REVIEW_MODEL"],
-                               models["VARIANT"])
-    print(f"unit {unit.id} — {' '.join(routed) or 'configured default'}")
-    refusal = dispatch_refusal(paths, queue, unit)
-    if refusal is not None:
-        print(f"refused at dispatch: {refusal}")
-    requires = paths.manifest.dispatch_requires if paths.manifest else ()
-    if requires:
-        unmet = [r.id for r in queue.rows if r.status is not Status.DONE
-                 and queue.unmet_requirements(r, requires)]
-        print(f"open rows lacking {', '.join(requires)}: {len(unmet)}"
-              + (f" ({', '.join(unmet)})" if unmet else ""))
-    return 0
-
+    """What must not dirty the tree: a queue's whole control dir, else the
+    legacy set, and the loop's own logs either way. A session log created in
+    the main tree after the dispatch snapshot would otherwise read as the
+    session's untracked file, and `done` would be refused."""
+    own = (f"{paths.control_dir}/",) if paths.queue else RUNTIME_MARKERS
+    return own + (f"{paths.log_dir}/",)
 
 # A staged campaign is a directory nothing in the loop reads until `promote`.
 STAGED_DIR = "ralph/next"
@@ -3276,8 +3302,7 @@ def cmd_models(args):
             f"MODEL={current.get('MODEL', '')}\n"
             f"REVIEW_MODEL={current.get('REVIEW_MODEL', '')}\n"
             f"RESOLVE_MODEL={current.get('RESOLVE_MODEL', '')}\n"
-            f"VARIANT={current.get('VARIANT', '')}\n"
-            + (f"WAIT_LIMIT_S={current[WAIT_LIMIT_KEY]}\n" if current.get(WAIT_LIMIT_KEY) else ""))
+            f"VARIANT={current.get('VARIANT', '')}\n")
         if not args.no_restart and args.label:
             job = job_name(paths, args.label)
             try:
@@ -3294,42 +3319,7 @@ def cmd_models(args):
     print(f"  REVIEW_MODEL={current.get('REVIEW_MODEL') or '<unset>'}")
     print(f"  RESOLVE_MODEL={current.get('RESOLVE_MODEL') or '<unset>'}")
     print(f"  VARIANT={current.get('VARIANT') or '<unset>'}")
-    print(f"  WAIT_LIMIT_S={current.get(WAIT_LIMIT_KEY) or f'<default {DEFAULT_WAIT_LIMIT_S}>'}")
     return 0
-
-
-def cmd_pool(args):
-    paths = paths_for(args)
-    models = resolve_models(args, paths)
-    base = args.base_branch or subprocess.run(
-        ["git", "-C", str(paths.workdir), "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True, text=True).stdout.strip()
-
-    def session_for(cwd, env=None):
-        return Session(paths, timeout=args.session_timeout,
-                       notify_enabled=args.notify, cwd=cwd, env=env)
-
-    pool = Pool(paths, session_for=session_for, notify_enabled=args.notify,
-                lanes=args.lanes, base_branch=base,
-                marker_timeout=resolve_wait_limit(args, paths),
-                model=models["MODEL"], review_model=models["REVIEW_MODEL"],
-                variant=models["VARIANT"])
-    if args.install_launchd:
-        ensure_excludes(paths.workdir, RUNTIME_MARKERS + (".ralph/",))
-        inner = [sys.executable, str(pathlib.Path(__file__).resolve()), "pool",
-                 "--workdir", str(paths.workdir), "--label", args.label,
-                 *queue_flags(paths), "--lanes", str(args.lanes)]
-        if not paths.queue:
-            inner += ["--conflicts", paths.conflicts]
-        if args.notify:
-            inner.append("--notify")
-        plist = install_job(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
-                                paths.workdir,
-                                str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}" if plist else "nothing installed")
-        return 0 if plist else 2
-    return guarded(pool.run, paths, notify_enabled=args.notify)
-
 
 def cmd_report(args):
     paths = paths_for(args)
@@ -3379,24 +3369,6 @@ def cmd_report(args):
     return 0
 
 
-def cmd_watch(args):
-    paths = paths_for(args)
-    state_dir = state_dir_for(paths, args.label)
-    watch = Watch(paths, label=args.label, dry=os.environ.get("RALPH_WATCH_DRY") == "1")
-    if args.install_launchd:
-        plist = install_job(
-            f"dev.ralphwatch.{paths.workdir.name}-{args.label}",
-            [sys.executable, str(pathlib.Path(__file__).resolve()),
-             "watch", "--workdir", str(paths.workdir), "--label", args.label,
-             *(["--queue", paths.queue] if paths.queue else [])],
-            paths.workdir, state_dir / "watch.log", interval=120)
-        print(f"wrote {plist}" if plist else "nothing installed")
-        return 0 if plist else 2
-    watch.run(state_dir / "watch.state")
-    return 0
-
-
-DEFAULT_SESSION_TIMEOUT = 3600
 LEGACY_PATH_FLAGS = ("prompt", "state", "charter", "conflicts")
 
 
@@ -3454,83 +3426,6 @@ def queue_flags(paths):
     return ["--prompt", paths.prompt, "--state", paths.state]
 
 
-def cmd_run(args):
-    paths = paths_for(args)
-    models = resolve_models(args, paths)
-    session = Session(paths, timeout=args.session_timeout,
-                      notify_enabled=args.notify)
-    campaign = Campaign(
-        paths,
-        session_run=lambda model_args, prompt, log: session.run(model_args, prompt, log),
-        notify_enabled=args.notify,
-        max_stall=args.max_stall, max_iter=args.max_iter,
-        marker_timeout=resolve_wait_limit(args, paths),
-        model=models["MODEL"], review_model=models["REVIEW_MODEL"], variant=models["VARIANT"])
-    if args.install_launchd:
-        ensure_excludes(paths.workdir, runtime_markers(paths))
-        plist = install_job(
-            f"dev.ralph.{paths.workdir.name}-{args.label}",
-            [sys.executable, str(pathlib.Path(__file__).resolve()), "run",
-             "--workdir", str(paths.workdir), "--label", args.label,
-             *queue_flags(paths)],
-            paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}" if plist else "nothing installed")
-        return 0 if plist else 2
-    result = guarded(campaign.run, paths, notify_enabled=args.notify)
-    if isinstance(result, int):
-        return result
-    print(f"campaign: {result.outcome.value} — {result.reason}")
-    return {Outcome.DONE: 0, Outcome.OPERATOR_STOP: 0, Outcome.NEEDS_HUMAN: 2,
-            Outcome.HALT: 3}[result.outcome]
-
-
-def cmd_supervise(args):
-    paths = paths_for(args)
-    models = resolve_models(args, paths)
-    session = Session(paths, timeout=args.session_timeout, notify_enabled=args.notify)
-    campaign = list(args.campaign)
-    if campaign and campaign[0] == "--":
-        campaign = campaign[1:]
-    if not campaign:
-        print("ralph supervise: the campaign command is required after --", file=sys.stderr)
-        return 2
-    charter_path = paths.p(paths.charter)
-    charter = charter_path.read_text() if charter_path.exists() else None
-    if charter:
-        say(f"supervisor: director charter loaded from {charter_path}")
-    ensure_excludes(paths.workdir, runtime_markers(paths))
-
-    def run_inner():
-        proc = subprocess.Popen(campaign, cwd=str(paths.workdir))
-        _FORWARD_TERM.add(proc)
-        try:
-            proc.wait()
-        finally:
-            _FORWARD_TERM.discard(proc)
-
-    def resolver_run(attempt, reason):
-        resolve_model = models["RESOLVE_MODEL"] or models["REVIEW_MODEL"]
-        resolve_variant = args.resolve_variant or models["VARIANT"]
-        model_args = select_model_args("resolver", resolve_model, "", resolve_variant)
-        prompt = resolver_prompt(paths, attempt, args.resolve_max, reason, charter)
-        session.run(model_args, prompt,
-                    str(paths.p(paths.log_dir) / f"supervise-{attempt}.out"))
-
-    supervisor = Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
-                            notify_enabled=args.notify, resolve_max=args.resolve_max)
-    if args.install_launchd:
-        ensure_excludes(paths.workdir, runtime_markers(paths))
-        plist = install_job(
-            f"dev.ralph.{paths.workdir.name}-{args.label}",
-            [sys.executable, str(pathlib.Path(__file__).resolve()), "supervise",
-             "--workdir", str(paths.workdir), "--label", args.label,
-             "--session-timeout", str(args.session_timeout),
-             *(["--queue", paths.queue] if paths.queue else [])] + campaign,
-            paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}" if plist else "nothing installed")
-        return 0 if plist else 2
-    return guarded(supervisor.run, paths, notify_enabled=args.notify)
-
 
 def cmd_prompt(args):
     """What a worker of this queue is given, exactly."""
@@ -3549,34 +3444,195 @@ def cmd_check_argv(args):
     print("\n".join(argv))
     return 0
 
+class Watch:
+    """The watchdog's one job: notice the loop is down, or its heartbeat is
+    stale, which is the one thing the loop cannot report about itself. The
+    loop writes its heartbeat every tick in every state, so stale means dead.
+    Everything else (held units, a blocked precondition, done) the loop says."""
+
+    def __init__(self, paths, *, label, running=None, stall_secs=STALL_SECS, notifier=notify,
+                 dry=False):
+        self.paths = paths
+        self.label = label
+        self.running = running or (lambda: job_running(paths, label))
+        self.stall_secs = stall_secs
+        self.notifier = notifier
+        self.dry = dry
+
+    def condition(self):
+        if self.paths.p(self.paths.done).exists():
+            return None
+        stop = self.paths.p(self.paths.stop)
+        if stop.exists() and not stop.read_text().strip():
+            return None
+        name = f"{self.paths.workdir.name}-{self.label}"
+        if not self.running():
+            return ("down", f"{name} is not running and has no DONE or operator STOP")
+        beat = self.paths.p(self.paths.heartbeat)
+        if beat.exists():
+            age = int(time.time() - beat.stat().st_mtime)
+            if age > self.stall_secs:
+                return ("stalled", f"{name}: no heartbeat for {age}s — the loop is hung")
+        return None
+
+    def run(self, state_file, nag_secs=1800):
+        condition = self.condition()
+        sf = pathlib.Path(state_file)
+        last_cond, last_ts = "", 0
+        if sf.exists():
+            parts = sf.read_text().split()
+            if len(parts) >= 2:
+                last_cond, last_ts = parts[0], int(parts[1])
+        if condition is None:
+            sf.write_text("")
+            return None
+        cond, body = condition
+        now = int(time.time())
+        if cond != last_cond or now - last_ts >= nag_secs:
+            title = {"down": "OPERATOR — loop down", "stalled": "OPERATOR — loop hung"}[cond]
+            if self.dry:
+                print(f"notify: {title}: {body}")
+            else:
+                self.notifier(title, body, True)
+            sf.write_text(f"{cond} {now}\n")
+        return cond
+
+
+def ledger_for(paths, label):
+    return state_dir_for(paths, label) / "loop.json"
+
+
+def current_branch(workdir):
+    return subprocess.run(["git", "-C", str(workdir), "rev-parse", "--abbrev-ref", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+
+
+def loop_for(args, *, lane_mode):
+    paths = paths_for(args)
+    models = resolve_models(args, paths)
+    charter_path = paths.p(paths.charter)
+    charter = charter_path.read_text() if charter_path.exists() else None
+    strikes = args.max_lane_failures if lane_mode else args.max_stall
+    if getattr(args, "max_iter", None):
+        say(f"--max-iter {args.max_iter} is ignored: the loop is bounded per unit by its "
+            "strikes, not by a session count")
+    return paths, Loop(paths, label=args.label, lanes=args.lanes if lane_mode else 1,
+                       lane_mode=lane_mode,
+                       base_branch=(getattr(args, "base_branch", "") or
+                                    current_branch(paths.workdir)),
+                       session_timeout=args.session_timeout, max_strikes=strikes,
+                       await_max_s=args.marker_timeout or AWAIT_MAX_S, models=models,
+                       charter=charter, notify_enabled=not args.no_notify)
+
+
+def install_loop_job(args, paths, verb):
+    """The loop as a host job the host restarts on any exit but 0 (done or
+    stopped): launchd KeepAlive, systemd Restart=on-failure."""
+    ensure_excludes(paths.workdir, runtime_markers(paths))
+    argv = [sys.executable, str(SELF), verb, "--workdir", str(paths.workdir),
+            "--label", args.label, *queue_flags(paths),
+            "--session-timeout", str(args.session_timeout)]
+    if verb == "pool":
+        argv += ["--lanes", str(args.lanes)]
+        if not paths.queue:
+            argv += ["--conflicts", paths.conflicts]
+    else:
+        argv += ["--max-stall", str(args.max_stall)]
+    job = install_job(job_name(paths, args.label), argv, paths.workdir,
+                      str(state_dir_for(paths, args.label) / "launchd.log"), keep_alive=True)
+    print(f"wrote {job}" if job else "nothing installed")
+    return 0 if job else 2
+
+
+def cmd_run(args):
+    paths, loop = loop_for(args, lane_mode=False)
+    if args.install_launchd:
+        return install_loop_job(args, paths, "run")
+    ensure_excludes(paths.workdir, runtime_markers(paths))
+    return loop.run()
+
+
+def cmd_pool(args):
+    paths, loop = loop_for(args, lane_mode=True)
+    if args.install_launchd:
+        return install_loop_job(args, paths, "pool")
+    ensure_excludes(paths.workdir, runtime_markers(paths) + (".ralph/",))
+    return loop.run()
+
+
+def cmd_supervise(args):
+    """The supervisor is gone: the host restarts the loop and the loop holds
+    its own escalations. A supervise line (an installed job, a launch line in
+    a queue's comments) runs, or installs, the campaign command it wraps."""
+    campaign = list(args.campaign)
+    if campaign and campaign[0] == "--":
+        campaign = campaign[1:]
+    if not campaign:
+        print("ralph supervise: the campaign command is required after --", file=sys.stderr)
+        return 2
+    say("supervise: the supervisor is retired (docs/RALPH_STATE_MACHINE.md) — running the "
+        "campaign command directly")
+    if args.install_launchd:
+        paths = paths_for(args)
+        job = install_job(job_name(paths, args.label), campaign, paths.workdir,
+                          str(state_dir_for(paths, args.label) / "launchd.log"), keep_alive=True)
+        print(f"wrote {job}" if job else "nothing installed")
+        return 0 if job else 2
+    sys.stdout.flush()
+    os.execvp(campaign[0], campaign)
+
+
+def cmd_watch(args):
+    paths = paths_for(args)
+    state_dir = state_dir_for(paths, args.label)
+    if args.install_launchd:
+        job = install_job(
+            f"dev.ralphwatch.{paths.workdir.name}-{args.label}",
+            [sys.executable, str(SELF), "watch", "--workdir", str(paths.workdir),
+             "--label", args.label, *(["--queue", paths.queue] if paths.queue else [])],
+            paths.workdir, state_dir / "watch.log", interval=120)
+        print(f"wrote {job}" if job else "nothing installed")
+        return 0 if job else 2
+    Watch(paths, label=args.label, dry=os.environ.get("RALPH_WATCH_DRY") == "1").run(
+        state_dir / "watch.state")
+    return 0
+
 
 def cmd_stop(args):
+    """An operator stop. Plain: running sessions end now (their worktrees
+    resume later). --drain: running sessions finish, nothing new starts. Either
+    way a background run keeps running and the next start watches it again."""
     paths = paths_for(args)
     stop = paths.p(paths.stop)
     stop.parent.mkdir(parents=True, exist_ok=True)
-    stop.write_text("")
-    say(f"stop: wrote {paths.stop} — waiting up to {args.timeout}s for the loop to exit")
+    stop.write_text("drain\n" if args.drain else "")
+    say(f"stop: wrote {paths.stop}{' (drain)' if args.drain else ''} — waiting up to "
+        f"{args.timeout}s for the loop to exit")
     deadline = time.time() + args.timeout
     while time.time() < deadline:
         if not job_running(paths, args.label):
-            say("stop: the loop is down — stop complete")
+            say("stop: the loop is down")
             return 0
         time.sleep(3)
     if not args.hard:
-        say("stop: still running — re-run with --hard to boot the job out "
-            "(its SIGTERM handler takes the sessions with it)")
+        say("stop: still running" + (" (draining: its sessions are finishing)" if args.drain
+                                     else "") + " — --hard boots the job out")
         return 1
     try:
         host().stop_job(job_name(paths, args.label))
     except HostError as e:
         say(f"stop: {e}")
-    strays = sessions_under(paths.workdir)
-    for pid in strays:
-        try:
-            os.killpg(os.getpgid(pid), signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
-    say(f"stop: booted out; {len(strays)} stray session(s) taken down")
+    path = ledger_for(paths, args.label)
+    killed = 0
+    if path.exists():
+        for unit, entry in Ledger(path).units.items():
+            for key in ("session", "run"):
+                rec = entry.get(key)
+                if rec and entry.get("state") in (U.RUNNING.value, U.DIRECTING.value,
+                                                  U.AWAITING.value):
+                    proc_kill(Proc(rec["pid"], rec["started"]))
+                    killed += 1
+    say(f"stop: booted out; {killed} session(s) and run(s) taken down")
     return 0
 
 
@@ -3588,21 +3644,13 @@ def cmd_start(args):
         job_file = host().job_file(job)
         if not job_file.exists():
             print(f"start: no job installed at {job_file} — install it first:\n"
-                  f"  python3 scripts/ralph.py supervise --workdir {paths.workdir} "
-                  f"--label {args.label} --install-launchd -- <campaign command>",
-                  file=sys.stderr)
+                  f"  python3 {SELF} run|pool --workdir {paths.workdir} --label {args.label} "
+                  f"{' '.join(queue_flags(paths))} --install-launchd", file=sys.stderr)
             return 2
         stop = paths.p(paths.stop)
         if stop.exists():
-            if stop.stat().st_size:
-                print(f"start: {paths.stop} holds a halt reason — resolve it "
-                      f"(read {paths.needs_human}) and remove the file first",
-                      file=sys.stderr)
-                return 2
             stop.unlink()
             say("start: cleared the operator STOP")
-        # Starting reloads the job, killing a running loop mid-session; a
-        # running job is left alone.
         if host().job_running(job):
             say(f"start: {job} is already running — left alone")
             return 0
@@ -3611,6 +3659,96 @@ def cmd_start(args):
         print(f"start: {e}", file=sys.stderr)
         return 2
     say(f"start: {job} started")
+    return 0
+
+
+def cmd_unpark(args):
+    paths = paths_for(args)
+    pkg = paths.p(paths.parked) / f"{args.row}.md"
+    if not pkg.exists():
+        print(f"unpark: {args.row} is not parked ({pkg} does not exist)", file=sys.stderr)
+        return 2
+    pkg.unlink()
+    say(f"unpark: {args.row} released — the loop resets its strikes and dispatches it")
+    return 0
+
+
+def cmd_status(args):
+    """The loop's state: what it holds, what waits on the operator, and its
+    heartbeat. With no ledger yet, what a start would adopt."""
+    paths = paths_for(args)
+    queue = Queue(paths.p(paths.state))
+    beat = paths.p(paths.heartbeat)
+    if beat.exists():
+        age = int(time.time() - beat.stat().st_mtime)
+        print(f"heartbeat {age}s ago: {beat.read_text().strip()}")
+    else:
+        print("no heartbeat")
+    done = queue.done_count()
+    print(f"queue {paths.state}: {done}/{len(queue.rows)} done")
+    path = ledger_for(paths, args.label)
+    if not path.exists():
+        loop = Loop(paths, label=args.label, lane_mode=args.pool, lanes=2 if args.pool else 1,
+                    state_dir=path.parent)
+        print(f"no ledger at {path} — a start would adopt:")
+        for line in adopt_legacy(loop, dry=True):
+            print(f"  {line}")
+        return 0
+    ledger = Ledger(path)
+    now = time.time()
+    for unit, entry in ledger.units.items():
+        state = entry.get("state")
+        counters = ", ".join(f"{k} {entry[k]}" for k in ("strikes", "continuations", "directed")
+                             if entry.get(k))
+        if state in (U.RUNNING.value, U.DIRECTING.value):
+            s = entry["session"]
+            print(f"  {unit}: {state} — {s['role']} session {s['n']}, pid {s['pid']}, "
+                  f"{fmt_secs(now - s['begun'])} in, log {s['log']}"
+                  + (f" ({counters})" if counters else ""))
+        elif state == U.AWAITING.value:
+            r = entry["run"]
+            print(f"  {unit}: awaiting {r['argv']} — pid {r['pid']}, "
+                  f"{fmt_secs(now - r['begun'])} of {fmt_secs(r['budget_s'])}, log {r['log']}")
+        elif state:
+            print(f"  {unit}: {state}")
+        elif counters or entry.get("parked"):
+            print(f"  {unit}: {'parked, ' if entry.get('parked') else ''}{counters}")
+    for unit in sorted(parked_ids(paths)):
+        print(f"  parked {unit}: {first_line(paths.p(paths.parked) / f'{unit}.md')[:120]}")
+    return 0
+
+
+def cmd_plan(args):
+    paths = paths_for(args)
+    queue = Queue(paths.p(paths.state))
+    models = resolve_models(args, paths)
+    held = held_ids(paths, queue)
+    unit = queue.current(held)
+    print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
+    every = paths.manifest.audit_every if paths.manifest else None
+    print(f"units since audit: {units_since_audit(paths, queue)}"
+          f"{f' (audit every {every})' if every else ''}  head: {head_of(paths.workdir)[:9]}")
+    print(f"done: {queue.done_count()}/{len(queue.rows)}")
+    waiting = queue.awaiting_operator(held)
+    if waiting:
+        print(f"waiting on the operator (the loop runs past them): {', '.join(waiting)}")
+    beyond = sorted(out_of_scope(paths, queue))
+    if beyond:
+        print(f"outside the frozen scope ({paths.manifest.scope_file}): {', '.join(beyond)}")
+    if unit is None:
+        print("no ready unit")
+        return 0
+    routed = select_model_args(unit, models["MODEL"], models["REVIEW_MODEL"], models["VARIANT"])
+    print(f"unit {unit.id} — {' '.join(routed) or 'configured default'}")
+    refusal = dispatch_refusal(paths, queue, unit)
+    if refusal is not None:
+        print(f"refused at dispatch: {refusal}")
+    requires = paths.manifest.dispatch_requires if paths.manifest else ()
+    if requires:
+        unmet = [r.id for r in queue.rows if r.status is not Status.DONE
+                 and queue.unmet_requirements(r, requires)]
+        print(f"open rows lacking {', '.join(requires)}: {len(unmet)}"
+              + (f" ({', '.join(unmet)})" if unmet else ""))
     return 0
 
 
@@ -3626,56 +3764,74 @@ def build_parser():
         # None = not given: paths_for fills in the manifest's label, else "campaign".
         p.add_argument("--label", default=label_default)
 
-    def common(p, notify_default=False, queue=True):
-        if queue:
-            queue_flag(p)
-        else:
-            p.add_argument("--workdir", default=".")
-            p.add_argument("--label", default="campaign")
-        p.add_argument("--session-timeout", type=int, default=None if queue else 3600,
-                       help="default: 3600")
+    def common(p):
+        queue_flag(p)
+        p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+        p.add_argument("--state", default=None, help="default: ralph/STATE.md")
+        p.add_argument("--session-timeout", type=int, default=None, help="default: 3600")
         p.add_argument("--marker-timeout", type=int, default=None,
-                       help="default: WAIT_LIMIT_S from ralph/models.env, else 86400")
-        p.add_argument("--notify", action="store_true", default=notify_default)
+                       help="the longest budget a session may give `ralph-result await` "
+                            f"(default {AWAIT_MAX_S}s)")
+        p.add_argument("--notify", action="store_true",
+                       help="accepted for old launch lines; the loop notifies unless --no-notify")
+        p.add_argument("--no-notify", action="store_true")
         p.add_argument("--model", default="")
         p.add_argument("--review-model", default="")
+        p.add_argument("--resolve-model", default="")
         p.add_argument("--variant", default="")
+        p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                       action="store_true", help="launchd on macOS, systemd-run --user on Linux")
 
-    p = sub.add_parser("run")
+    p = sub.add_parser("run", help="the serial loop: one unit at a time, in the main tree")
     common(p)
-    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
-    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
-    p.add_argument("--max-stall", type=int, default=3)
-    p.add_argument("--max-iter", type=int, default=200)
-    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
-                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
+    p.add_argument("--max-stall", type=int, default=MAX_STRIKES,
+                   help="strikes before a unit escalates")
+    p.add_argument("--max-iter", type=int, default=None, help="ignored (old launch lines)")
     p.set_defaults(fn=cmd_run)
 
-    p = sub.add_parser("supervise")
-    common(p, notify_default=True)
-    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
-    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
-    p.add_argument("--resolve-model", default="")
-    p.add_argument("--resolve-variant", default="")
-    p.add_argument("--resolve-max", type=int, default=4)
-    p.add_argument("--charter", default="", help="default: ralph/CHARTER.md when present")
+    p = sub.add_parser("pool", help="the parallel loop: lanes in worktrees, reviews in the "
+                                    "main tree")
+    common(p)
+    p.add_argument("--lanes", type=int, default=2)
+    p.add_argument("--max-lane-failures", type=int, default=MAX_STRIKES,
+                   help="strikes before a unit escalates")
+    p.add_argument("--conflicts", default=None, help="default: ralph/conflicts.txt")
+    p.add_argument("--base-branch", default="")
+    p.set_defaults(fn=cmd_pool)
+
+    p = sub.add_parser("supervise", help="retired: runs (or installs) the command after --")
+    queue_flag(p)
+    for flag in ("--prompt", "--state", "--charter", "--resolve-model", "--resolve-variant",
+                 "--model", "--review-model", "--variant"):
+        p.add_argument(flag, default=None)
+    p.add_argument("--session-timeout", type=int, default=None)
+    p.add_argument("--marker-timeout", type=int, default=None)
+    p.add_argument("--resolve-max", type=int, default=None)
+    p.add_argument("--notify", action="store_true")
     p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
-                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
+                   action="store_true")
     p.add_argument("campaign", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_supervise)
 
-    p = sub.add_parser("pool")
-    # --queue loads the manifest as run/supervise do; another repo drives this
-    # verb on the legacy flags, which keep their defaults (paths_for).
-    common(p)
-    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
-    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
-    p.add_argument("--lanes", type=int, default=2)
-    p.add_argument("--conflicts", default=None, help="default: ralph/conflicts.txt")
-    p.add_argument("--base-branch", default="")
-    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
-                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
-    p.set_defaults(fn=cmd_pool)
+    p = sub.add_parser("result", help="how a session ends (run as `ralph-result`)")
+    kinds = p.add_subparsers(dest="kind", required=True)
+    kinds.add_parser("done")
+    k = kinds.add_parser("continue")
+    k.add_argument("note", nargs="*")
+    k = kinds.add_parser("await")
+    k.add_argument("budget")
+    k.add_argument("argv", nargs=argparse.REMAINDER)
+    k = kinds.add_parser("needs-human")
+    k.add_argument("--operator", action="store_true",
+                   help="a fork the charter leaves to the operator: no director is sent")
+    k.add_argument("--package", default="", help="a file holding the evidence")
+    k.add_argument("why", nargs="*")
+    p.set_defaults(fn=cmd_result)
+
+    p = sub.add_parser("status")
+    queue_flag(p)
+    p.add_argument("--pool", action="store_true", help="preview a pool's adoption")
+    p.set_defaults(fn=cmd_status)
 
     p = sub.add_parser("watch")
     queue_flag(p)
@@ -3685,15 +3841,22 @@ def build_parser():
 
     p = sub.add_parser("stop")
     queue_flag(p)
+    p.add_argument("--drain", action="store_true",
+                   help="let running sessions finish; start nothing new")
     p.add_argument("--timeout", type=int, default=180,
                    help="seconds to wait for the loop to go down before suggesting --hard")
     p.add_argument("--hard", action="store_true",
-                   help="boot the job out and take stray sessions down")
+                   help="boot the job out and end its sessions and runs")
     p.set_defaults(fn=cmd_stop)
 
     p = sub.add_parser("start")
     queue_flag(p)
     p.set_defaults(fn=cmd_start)
+
+    p = sub.add_parser("unpark")
+    queue_flag(p)
+    p.add_argument("row")
+    p.set_defaults(fn=cmd_unpark)
 
     p = sub.add_parser("models")
     queue_flag(p, label_default="")
@@ -3710,7 +3873,11 @@ def build_parser():
     p.set_defaults(fn=cmd_report)
 
     p = sub.add_parser("plan")
-    common(p)
+    queue_flag(p)
+    p.add_argument("--model", default="")
+    p.add_argument("--review-model", default="")
+    p.add_argument("--resolve-model", default="")
+    p.add_argument("--variant", default="")
     p.set_defaults(fn=cmd_plan)
 
     p = sub.add_parser("prompt")
@@ -3736,7 +3903,6 @@ def build_parser():
 
 
 def main(argv=None):
-    _install_signal_handlers()
     args = build_parser().parse_args(argv)
     try:
         return args.fn(args)

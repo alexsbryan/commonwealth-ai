@@ -1,7 +1,21 @@
 # Make the ralph loop a closed state machine
 
-Status: proposal, 2026-10-06, not ratified. It describes `scripts/ralph.py` as
-of b9a2c07f0.
+Status: adopted 2026-10-06. The analysis below describes `scripts/ralph.py` as
+of b9a2c07f0; the machine it proposes is `scripts/ralph.py` since the swap.
+It landed as one swap rather than the five steps under "How to get there": the
+operator chose a rewrite beside the live loops and one switchover, so the
+running pools took one change instead of five, each deployed into them by the
+re-exec. The open questions were settled as proposed: a run past its budget is
+killed and struck; serial `run` is the machine with one lane in the main tree;
+the director stays, as the escalation step for a queue with a charter. Step 3's
+check (would a probe at dispatch have blocked the sessions 1a6b5cef0 cited?)
+was run against opencode's own session store: it would have blocked 10 of the
+29, all quota. Ten more were permission refusals, which still strike and now
+name the count and the settings file. Nine were a resolver given the whole
+roster as one `--model`, which cannot recur: every session gets one probed
+model. The rewrite is not smaller, as "What this removes" expected: 3,015 code
+lines against 2,826. About 170 of them, the legacy adoption and the
+`supervise` shim, go once every loop has a ledger.
 
 `scripts/ralph.py` runs a coding-agent campaign. It picks a ready row from a
 queue, hands it to an agent session, and repeats until every row is done or a
