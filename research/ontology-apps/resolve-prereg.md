@@ -249,3 +249,15 @@ declared, then run gated beside the proposed answer (5 of 7 expected .714).
 **Bar.** Ward tune's CoNLL, B3, CEAF-e and LEA each above its floor's (.436 / .654 / .504 / .250), beyond 0
 (the runs are deterministic). Read beside it, no bar: reasoning tokens per statement, the live precision of the
 reasoned choice against the probe's .54. Met: ward's read fold, once.
+
+**Ring 1c verdict (2026-10-06): refused.** Ward tune, `--answer reason` with the term veto, the reasoned argmax
+deciding: CoNLL .544, MUC .449, B3 .612, CEAF-e .572, LEA .329 against the floor's .436 / .151 / .654 / .504 /
+.250; 258 calls, 442k tokens. B3 falls below the floor: recall bought with precision, a trade a CRM cannot take
+(one deal's stage would overwrite another's). The reasoned links are right live 16 of 50 by the verdict's rule
+(the record's opener in the statement's deal), 22 of 50 counting a record that already held the deal; all 28
+wrong ones join another deal of the same counterparty. Declared at 16 of 50 (expected .327), the choice is
+below the bar and never asked, so gated ward equals its floor. Against the probe's .54: the probe scored
+reasoned answers against Ring 0's records, nearly all singletons; live, the choice builds its own records
+(40 for 42 deals, 13 of them mixing deals) and later statements join the mix; and the term read came back
+unknown on 38 statements, so the veto seldom bit. Third reading of one lesson (1a's gold-measured field, this
+probe): a precision measured on another record structure does not transfer; only the live rule's counts do.
