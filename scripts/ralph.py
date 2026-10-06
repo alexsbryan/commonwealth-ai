@@ -1664,9 +1664,11 @@ AWAIT_MAX_S = 7 * 86400
 RALPH_BIN = pathlib.Path(__file__).resolve().parent / "ralph-bin"
 
 CONTRACT = """\
-HOW THIS SESSION ENDS. End with exactly one `ralph-result` call; the loop reads nothing else
-you write (no marker, waiting or package file), and a session that ends without one is
-counted by its commits alone.
+HOW THIS SESSION ENDS. Your last action is one `ralph-result` command, run in the shell like
+any other command (your Bash tool), never written into your reply: nothing reads your reply's
+text, so a command written there is not run. Once it prints "recorded", end your turn. The
+loop reads nothing else you write (no marker, waiting or package file), and a session that
+runs no ralph-result is counted by its commits alone.
   ralph-result done                       the unit is finished and committed (a dirty tree is refused)
   ralph-result continue [note]            progress is committed and more remains; the note goes
                                           to the next session
