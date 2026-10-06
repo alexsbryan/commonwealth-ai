@@ -807,10 +807,15 @@ def probe_model(model, paths, timeout=PROBE_TIMEOUT_S):
         return False, f"timeout after {timeout}s"
     except OSError as e:
         return False, f"{client}: {e}"
-    tail = error_tail((r.stdout or "") + (r.stderr or ""))
-    if r.returncode == 0 and not tail:
+    # Judged by the answer: an error-shaped word elsewhere in the output is not
+    # the model's (the claude shim's header printed `mcp[sovereign=failed]`
+    # while the model answered, and zoracite blocked on it, 2026-10-06). The
+    # error tail only explains a probe that got no answer.
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode == 0 and any(line.strip().strip(".*`") == "OK" for line in out.splitlines()):
         return True, ""
-    return False, tail or f"exit {r.returncode}"
+    return False, error_tail(out) or (f"exit {r.returncode}" if r.returncode
+                                      else "no OK in the answer")
 
 
 REVIEW_TAG_RE = re.compile(r"(?:^|—)\s*review\s*=\s*true\s*(?=—|$)")

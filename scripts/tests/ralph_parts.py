@@ -1483,8 +1483,11 @@ class ProbeTests(unittest.TestCase):
     def test_the_probe_hits_the_configured_client_and_keeps_causes(self):
         with tempfile.TemporaryDirectory() as tmp:
             paths = ralph.Paths(pathlib.Path(tmp))
-            echo, false = shutil.which("echo"), shutil.which("false")
-            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": echo}):
+            false = shutil.which("false")
+            ok_client = pathlib.Path(tmp) / "ok-client.sh"
+            ok_client.write_text("#!/bin/sh\necho OK\n")
+            ok_client.chmod(0o755)
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(ok_client)}):
                 self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
             with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": false}):
                 ok, cause = ralph.probe_model("prov/x", paths)
@@ -1496,6 +1499,33 @@ class ProbeTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(slow)}):
                 self.assertEqual(ralph.probe_model("prov/x", paths, timeout=1),
                                  (False, "timeout after 1s"))
+
+    def test_the_probe_is_judged_by_the_answer_not_by_words_around_it(self):
+        # 2026-10-06 23:12Z: claude-opus-5-5 answered OK through the claude shim,
+        # but the shim's header read `mcp[sovereign=failed, ...]` (the daemon was
+        # slow), and the probe failed any output holding an error-shaped word:
+        # zoracite blocked on a healthy model. Healthy is exit 0 and an `OK` line.
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = ralph.Paths(pathlib.Path(tmp))
+
+            def client(body):
+                f = pathlib.Path(tmp) / "client.sh"
+                f.write_text("#!/bin/sh\n" + body)
+                f.chmod(0o755)
+                return {"RALPH_OPENCODE_BIN": str(f)}
+
+            answered = client("echo '=== session s mcp[sovereign=failed, ralph=connected]'\n"
+                              "echo OK\necho '=== result: success'\n")
+            with mock.patch.dict(os.environ, answered):
+                self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
+            silent = client("echo '=== result: success'\n")
+            with mock.patch.dict(os.environ, silent):
+                self.assertEqual(ralph.probe_model("prov/x", paths),
+                                 (False, "no OK in the answer"))
+            quota = client("echo 'Error: 429 usage limit reached'\nexit 1\n")
+            with mock.patch.dict(os.environ, quota):
+                self.assertEqual(ralph.probe_model("prov/x", paths),
+                                 (False, "Error: 429 usage limit reached"))
 
     def test_the_probe_never_targets_localhost(self):
         # The seam: probe the provider, never the mesh daemon. An entry whose
