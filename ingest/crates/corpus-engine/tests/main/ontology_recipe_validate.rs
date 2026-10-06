@@ -576,7 +576,8 @@ document = {{ thread = "thread" }}
 "#
         )
     };
-    let ok = r#"{ evidence = "document_thread", precision = 0.83, measured_on = "uv tune, 257/311" }"#;
+    let ok =
+        r#"{ evidence = "document_thread", precision = 0.83, measured_on = "uv tune, 257/311" }"#;
     let v = validate(&typ(ok, "identity_bar = 0.5"));
     assert!(v.errors.is_empty(), "{:?}", v.errors);
     assert!(
