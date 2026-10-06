@@ -341,16 +341,26 @@ impl OntologyV1 {
 }
 
 /// A source of identity evidence and what its links were measured to be worth
-/// on the live rule: `{ evidence = "document_thread", precision = 0.83,
+/// on the live rule: `{ evidence = "document_thread", right = 190, of = 210,
 /// measured_on = "…" }`. The source is a `change.document` stamp,
 /// `model_choice` (the forced choice's most probable candidate) or
-/// `proposed_answer` (threads, wording and similarity alone); `measured_on`
-/// names the labelled fold and the count behind `precision`.
+/// `proposed_answer` (threads, wording and similarity alone); `right` of `of`
+/// links were right where `measured_on` says.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EvidentialFieldDecl {
     pub evidence: String,
-    pub precision: f64,
+    pub right: u32,
+    pub of: u32,
     pub measured_on: String,
+}
+
+impl EvidentialFieldDecl {
+    /// The expected precision given the counts: the posterior mean under a
+    /// uniform prior, (right + 1) / (of + 2). Not right / of, which overstates
+    /// few links (15 of 16 is .938, but .889 expected; 190 of 210 is .901).
+    pub fn precision(&self) -> f64 {
+        (self.right as f64 + 1.0) / (self.of as f64 + 2.0)
+    }
 }
 
 /// One declared type (`[[enrichment.ontology.types]]`). `name` and `kind`

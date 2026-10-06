@@ -90,7 +90,7 @@ def verdict_block(run, gold, reps=500, seed=7):
         pairs, probs = [], []
         for o in d["outcomes"]:
             dec = o["outcome"].get("decided")
-            chose = dec["record"] if dec and dec["decision"] in ("cited", "selected", "field") else None
+            chose = dec["record"] if dec and dec["decision"] in ("cited", "selected", "field", "proposed") else None
             p_of = dict(map(tuple, o["choice"]["candidates"])) if o.get("choice") else {}
             if p_of:
                 is_same = lambda c: gold.get(c) is not None and gold.get(c) == gold.get(o["statement"])  # noqa: E731

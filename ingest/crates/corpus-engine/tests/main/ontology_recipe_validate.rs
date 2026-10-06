@@ -576,14 +576,13 @@ document = {{ thread = "thread" }}
 "#
         )
     };
-    let ok =
-        r#"{ evidence = "document_thread", precision = 0.83, measured_on = "uv tune, 257/311" }"#;
+    let ok = r#"{ evidence = "document_thread", right = 190, of = 210, measured_on = "uv tune, 257/311" }"#;
     let v = validate(&typ(ok, "identity_bar = 0.5"));
     assert!(v.errors.is_empty(), "{:?}", v.errors);
     assert!(
-        v.notes
-            .iter()
-            .any(|n| n.starts_with("identity evidence: case ← document_thread (precision 0.83")),
+        v.notes.iter().any(|n| n.starts_with(
+            "identity evidence: case ← document_thread (190 of 210, expected precision 0.901"
+        )),
         "{:?}",
         v.notes
     );
@@ -591,34 +590,34 @@ document = {{ thread = "thread" }}
     first_error_containing(&typ(ok, "identity_bar = 0"), "is not in (0, 1]");
     first_error_containing(
         &typ(
-            r#"{ evidence = "author", precision = 0.9, measured_on = "x" }"#,
+            r#"{ evidence = "author", right = 9, of = 10, measured_on = "x" }"#,
             "identity_bar = 0.5",
         ),
         "which is no source",
     );
     first_error_containing(
         &typ(
-            r#"{ evidence = "document_date", precision = 0.9, measured_on = "x" }"#,
+            r#"{ evidence = "document_date", right = 9, of = 10, measured_on = "x" }"#,
             "identity_bar = 0.5",
         ),
         "change.document.date",
     );
     first_error_containing(
         &typ(
-            r#"{ evidence = "document_thread", precision = 1.3, measured_on = "x" }"#,
+            r#"{ evidence = "document_thread", right = 13, of = 10, measured_on = "x" }"#,
             "identity_bar = 0.5",
         ),
-        "not in [0, 1]",
+        "no more right than measured",
     );
     first_error_containing(
         &typ(
-            r#"{ evidence = "document_thread", precision = 0.9, measured_on = " " }"#,
+            r#"{ evidence = "document_thread", right = 9, of = 10, measured_on = " " }"#,
             "identity_bar = 0.5",
         ),
         "says nothing in `measured_on`",
     );
     let v = validate(&typ(
-        r#"{ evidence = "model_choice", precision = 0.4, measured_on = "x" }, { evidence = "proposed_answer", precision = 0.8, measured_on = "y" }"#,
+        r#"{ evidence = "model_choice", right = 4, of = 10, measured_on = "x" }, { evidence = "proposed_answer", right = 8, of = 10, measured_on = "y" }"#,
         "identity_bar = 0.5",
     ));
     assert!(v.errors.is_empty(), "{:?}", v.errors);

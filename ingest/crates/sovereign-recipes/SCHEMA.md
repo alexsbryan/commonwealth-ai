@@ -792,12 +792,13 @@ Allowed values:
 
 ## `EvidentialFieldDecl`
 
-A source of identity evidence and what its links were measured to be worth on the live rule: `{ evidence = "document_thread", precision = 0.83, measured_on = "…" }`. The source is a `change.document` stamp, `model_choice` (the forced choice's most probable candidate) or `proposed_answer` (threads, wording and similarity alone); `measured_on` names the labelled fold and the count behind `precision`.
+A source of identity evidence and what its links were measured to be worth on the live rule: `{ evidence = "document_thread", right = 190, of = 210, measured_on = "…" }`. The source is a `change.document` stamp, `model_choice` (the forced choice's most probable candidate) or `proposed_answer` (threads, wording and similarity alone); `right` of `of` links were right where `measured_on` says.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `evidence` | `String` | **yes** | — |  |
-| `precision` | `f64` | **yes** | — |  |
+| `right` | `u32` | **yes** | — |  |
+| `of` | `u32` | **yes** | — |  |
 | `measured_on` | `String` | **yes** | — |  |
 
 ## `OntologyTypeDecl`

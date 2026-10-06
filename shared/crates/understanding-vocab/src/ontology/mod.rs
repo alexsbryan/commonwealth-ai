@@ -409,6 +409,20 @@ impl AtlasOntologyFile {
 mod tests {
     use super::*;
 
+    #[test]
+    fn evidence_is_weighed_on_its_expected_precision_not_its_point_estimate() {
+        let e = |right, of| decl::EvidentialFieldDecl {
+            evidence: "x".into(),
+            right,
+            of,
+            measured_on: "m".into(),
+        };
+        // 15 of 16 reads .938 and 190 of 210 .905; few links expect less.
+        assert!(e(15, 16).precision() < e(190, 210).precision());
+        assert!((e(15, 16).precision() - 16.0 / 18.0).abs() < 1e-12);
+        assert!(e(4, 5).precision() > 0.5 && e(10, 21).precision() < 0.5);
+    }
+
     /// `DocumentStamp::key` is the hand-spelled twin of the serde field names
     /// on `DocumentFieldsDecl`; read the struct back through serde so the two
     /// cannot drift.

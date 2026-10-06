@@ -193,3 +193,39 @@ evidence source too (`proposed_answer`), at the live precision of the floor run,
 decides; none, the statement opens. With the floor's rule inside the decider, "at or above the floor" is
 nearly met by construction; the read that matters is GVC's: what the model's choice, kind-vetoed, adds over
 the floor where the proposed answer names nothing.
+
+**Ring 1b with the gate, verdict (2026-10-06).** GVC's measuring run (kind READ and veto, the argmax deciding):
+the model's links right 310 of 542 (.572; Ring 0 .353, the counterfactual .616), 10,761 candidate offers
+vetoed, 15 reads unknown, CoNLL .570. Declared at .572 and gated:
+
+| system | CoNLL | MUC | B3 | CEAF-e | LEA | LR+ / LR- | calls/doc | tokens |
+|---|---|---|---|---|---|---|---|---|
+| GVC floor | .572 | .647 | .616 | .452 | .404 | 2.95 / -0.21 | 0 | 0 |
+| GVC gated | .599 | .682 | .624 | .492 | .440 | 2.71 / -0.26 | 24.9 | 1.63M |
+| uv floor | .801 | .905 | .845 | .652 | .781 | 2.68 / -2.26 | 0 | 0 |
+| uv gated | .799 | .902 | .842 | .652 | .778 | 2.66 / -2.22 | 0 | 0 |
+| ward floor | .436 | .151 | .654 | .504 | .250 | 3.50 / -0.09 | 0 | 0 |
+| ward gated | .436 | .151 | .654 | .504 | .250 | 3.50 / -0.09 | 0 | 0 |
+
+Met on GVC, beyond the order band on every measure (+.027, +.008, +.040, +.036): the first model arm above a
+floor. Met on ward, equal (the model below the bar is never asked). Missed on uv by one decision of 384: a
+merge event in thread 1619 and closing 1624 in the same second, where the date field (15 of 16) outranked the
+thread (190 of 210) on point precision. Ward's deal kind read the same way is no lever (the veto keeps 13 of
+Ring 0's 19 links and 5 of their 6 right; 14 of 42 gold deals read as more than one kind).
+
+## Ring 2a: precision from counts (registered 2026-10-06, before its data)
+
+A source declares its measured counts (`right`, `of`), and code weighs and gates it on the expected precision
+given them, the posterior mean under a uniform prior, (right + 1) / (of + 2), not on the point estimate, which
+overstates few links. Prediction: uv's one decision returns to the thread (date 16/18 = .889, thread 191/212 =
+.901), so uv equals its floor; every other gate and order is unchanged (GVC model 311/544 = .572 against
+proposed 178/288 = .618; ward proposed 5/7 = .714, model 7/21 = .333; uv model 11/23 = .478), so GVC and ward
+equal their 1b runs by construction and are not rerun. **Bar:** uv's four measures at or above its floor's.
+
+**Ring 2a verdict (2026-10-06): met.** uv under expected precision equals its floor on every measure (.801,
+.905, .845, .652, .781; the one decision returns to the thread); ward equals its floor; GVC's gates and orders
+are unchanged by construction, so its gated run stands (.599 against .572). Every system is now at or above
+its floor, GVC beyond the band on all four measures; the model adds over the floor on GVC only, and on uv and
+ward is below the bar and never asked. Where it can add next: uv's 73 records against 83 cases (the floor's
+own ceiling; the model's cross-thread choices are .478), ward's misses (counterparty only in participants,
+rung 7) and its in-message deal splits (reasoning first found 16 of 32 against the argmax's 6).

@@ -923,3 +923,55 @@ async fn of_the_choice_and_the_proposed_answer_the_more_precise_decides() {
         );
     }
 }
+
+#[tokio::test]
+async fn of_two_fields_that_settle_on_different_records_the_more_precise_decides() {
+    let mut res = Resolver::default();
+    let stamps = |t: &str, d: &str| -> &'static [(DocumentStamp, String)] {
+        Vec::leak(vec![
+            (DocumentStamp::Thread, t.to_string()),
+            (DocumentStamp::Date, d.to_string()),
+        ])
+    };
+    for (id, t, d) in [("x", "7", "2024-01-01"), ("y", "9", "2024-02-02")] {
+        let body = "Opened.";
+        res.resolve_document(
+            &criterion(&[]),
+            Document {
+                id,
+                title: None,
+                body,
+                stamps: stamps(t, d),
+            },
+            &[stmt(id, body, "Opened", 0, &[])],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    }
+    // Thread 7 is held by x, the date by y: the thread is the more precise.
+    let c = Criterion {
+        evidential: vec![
+            (DocumentStamp::Date, 16.0 / 18.0),
+            (DocumentStamp::Thread, 191.0 / 212.0),
+        ],
+        bar: Some(0.5),
+        ..criterion(&[])
+    };
+    let b = "merged";
+    let r = res
+        .resolve_document(
+            &c,
+            Document {
+                id: "z",
+                title: None,
+                body: b,
+                stamps: stamps("7", "2024-02-02"),
+            },
+            &[stmt("q", b, b, 0, &[])],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    assert_eq!(r.outcomes[0].outcome.record(), Some("x"));
+}

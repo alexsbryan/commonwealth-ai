@@ -154,7 +154,7 @@ fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &
 }
 
 /// `identity_evidential`: each source a stamp `change.document` declares,
-/// `model_choice` or `proposed_answer`, each precision a probability measured
+/// `model_choice` or `proposed_answer`, each with its counts measured
 /// somewhere named, and a bar beside them in (0, 1]. `identity_necessary`:
 /// each a declared attribute with `values`, the closed set READ chooses from.
 fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
@@ -186,10 +186,11 @@ fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
                     t.name, e.evidence
                 )),
             }
-            if !(0.0..=1.0).contains(&e.precision) {
+            if e.of == 0 || e.right > e.of {
                 errors.push(format!(
-                    "ontology type `{}`: evidence `{}` has precision {}, not in [0, 1].",
-                    t.name, e.evidence, e.precision
+                    "ontology type `{}`: evidence `{}` declares {} right of {}; it needs at least \
+                     one measured link and no more right than measured.",
+                    t.name, e.evidence, e.right, e.of
                 ));
             }
             if e.measured_on.trim().is_empty() {
@@ -722,14 +723,18 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
             .identity_evidential
             .iter()
             .map(|e| {
-                let acts = if e.precision >= bar {
+                let acts = if e.precision() >= bar {
                     "links"
                 } else {
                     "below the bar"
                 };
                 format!(
-                    "{} (precision {:.2}, {}; {acts})",
-                    e.evidence, e.precision, e.measured_on
+                    "{} ({} of {}, expected precision {:.3}, {}; {acts})",
+                    e.evidence,
+                    e.right,
+                    e.of,
+                    e.precision(),
+                    e.measured_on
                 )
             })
             .collect();

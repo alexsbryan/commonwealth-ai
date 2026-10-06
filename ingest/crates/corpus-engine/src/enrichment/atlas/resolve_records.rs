@@ -63,9 +63,9 @@ impl Criterion {
         let (mut evidential, mut model_choice, mut proposed_answer) = (Vec::new(), None, None);
         for e in &decl.identity_evidential {
             match (DocumentStamp::from_attr(&e.evidence), e.evidence.as_str()) {
-                (Some(stamp), _) => evidential.push((stamp, e.precision)),
-                (None, "model_choice") => model_choice = Some(e.precision),
-                (None, "proposed_answer") => proposed_answer = Some(e.precision),
+                (Some(stamp), _) => evidential.push((stamp, e.precision())),
+                (None, "model_choice") => model_choice = Some(e.precision()),
+                (None, "proposed_answer") => proposed_answer = Some(e.precision()),
                 (None, other) => {
                     return Err(format!(
                         "type `{}`: evidence `{other}` is no source",
