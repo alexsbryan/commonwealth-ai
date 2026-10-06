@@ -74,3 +74,28 @@ ward +1.74 [1.12, 2.29] / -0.33; uv +1.42 [1.23, 1.64] / -0.30; GVC +1.83 [1.49,
 choice is the model's evidence form for Rings 1 and 2. Otherwise refused with its data. Not controlled: the
 argmax shapes which records exist, so the candidate sets differ from v5's. Read beside it, no bar: Brier and ECE
 of p(candidate), the clustering table against floor and v5, calls and wall seconds per document.
+
+**Ring 0 verdict (2026-10-06): refused.** LR+ / LR- in nats [90% CI] against v5; the forced choice's own
+read beside it (`score_resolve.py`: AUC of p(candidate) over pairs; per statement, detect AUC of 1 - p(none)
+and the share of statements shown a same candidate whose most probable candidate is one):
+
+| system | LR+ v5 / select | LR- v5 / select | AUC p | detect AUC | top right | CoNLL floor / v5 / select | tokens v5 / select |
+|---|---|---|---|---|---|---|---|
+| ward tune | 1.74 / 1.77 [0.48, 3.31] | -0.33 / -0.05 [-0.13, -0.01] | .771 | .647 | .688 | .436 / .551 / .450 | 117k / 140k |
+| uv tune | 1.42 / 0.97 [0.76, 1.21] | -0.30 / -0.15 [-0.19, -0.11] | .656 | .750 | .751 | .801 / .615 / .536 | 578k / 448k |
+| GVC dev | 1.83 / 2.31 [1.88, 2.81] | -0.19 / -0.14 [-0.24, -0.08] | .781 | .579 | .628 | .572 / .477 / .524 | 293k / 2.61M |
+
+LR- misses on all three, LR+ on uv. Read, no bar. The distribution carries what the argmax drops: ward's
+p(none) dominates (mean p .021 against a same rate of .102; "none" on 85 of 90), and on uv each wrong "none"
+opens a duplicate record that later statements' mass splits across (137 of 382 were shown two or more same
+candidates). A Platt map of log(p_top / p_none), fitted on either tune fold or both, leaves link precision
+where the argmax had it (ward about .35, uv about .62), so the read, not the decision rule, is the limit.
+Its errors, read on all three, are one method gap: a candidate is shown as the words of the statement that
+opened it, and the model matches words or incidents instead of applying the criterion's fields. uv:
+"labeled bug" and "closed as not planned", bodies with no title, join another case's identical words at p
+near 1, the thread that decides them never shown. ward: a statement naming no product, point or term ("Here's
+a chart that may help you explain our proposal") gets p(none) = 1.00 beside the one open deal with its
+counterparty, and two deals in one message, deal numbers differing, are joined. GVC: 242 of 337 false links
+are inside one article, "death" and "gunshot" joined to the shooting the criterion says they are apart from.
+That is Ring 1: READ the declared fields (from declared metadata by code, from text by pointing), compare per
+field, show fields rather than mentions; the distribution is one input to the decider, not the decision.

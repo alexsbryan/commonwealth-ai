@@ -81,8 +81,10 @@ def verdict_block(run, gold, reps=500, seed=7):
     candidates (a candidate is the same particular when gold puts its opening statement in the statement's chain),
     the verdict says "same" for the candidate it decided on. LR+ = P(says same | same) / P(says same | different),
     LR- likewise for not choosing; in nats, with a 90% bootstrap over documents. Where a forced choice left its
-    distribution, Brier and expected calibration error (10 bins) of p(candidate) over the same pairs."""
-    docs = []
+    distribution, Brier and expected calibration error (10 bins) of p(candidate) over the same pairs, and per
+    statement: detection AUC (1 - p(none) between statements shown a same candidate and those not) and how often
+    the most probable candidate is a same one when one was shown (ranking, apart from where "none" falls)."""
+    docs, stmts = [], []
     for line in (run / "decisions.jsonl").read_text().splitlines():
         d = json.loads(line)
         pairs, probs = [], []
@@ -90,6 +92,9 @@ def verdict_block(run, gold, reps=500, seed=7):
             dec = o["outcome"].get("decided")
             chose = dec["record"] if dec and dec["decision"] in ("cited", "selected") else None
             p_of = dict(map(tuple, o["choice"]["candidates"])) if o.get("choice") else {}
+            if p_of:
+                is_same = lambda c: gold.get(c) is not None and gold.get(c) == gold.get(o["statement"])  # noqa: E731
+                stmts.append((1 - o["choice"]["none"], any(map(is_same, p_of)), is_same(max(p_of, key=p_of.get))))
             for c in d["candidates"]:
                 same = gold.get(c) is not None and gold.get(c) == gold.get(o["statement"])
                 pairs.append((c == chose, same))
@@ -126,7 +131,9 @@ def verdict_block(run, gold, reps=500, seed=7):
             bins[min(int(p * 10), 9)].append((p, same))
         ece = sum(len(b) / len(probs) * abs(sum(p for p, _ in b) / len(b) - sum(s for _, s in b) / len(b)) for b in bins if b)
         out.update({"brier": round(sum((p - same) ** 2 for p, same in probs) / len(probs), 4), "ece": round(ece, 4),
-                    "mean_p": round(sum(p for p, _ in probs) / len(probs), 3), "auc": auc(probs)})
+                    "mean_p": round(sum(p for p, _ in probs) / len(probs), 3), "auc": auc(probs),
+                    "detect_auc": auc([(p, has) for p, has, _ in stmts]),
+                    "top_right_given_same": round(sum(r for _, has, r in stmts if has) / max(sum(h for _, h, _ in stmts), 1), 3)})
     return out
 
 
