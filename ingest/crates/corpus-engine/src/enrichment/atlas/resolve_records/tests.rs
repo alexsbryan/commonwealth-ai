@@ -2,7 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
+use super::answer::strip_markers;
 use super::*;
+use crate::enrichment::pipeline::types::ChatPrompt;
 
 fn criterion(keys: &[&str]) -> Criterion {
     Criterion {
