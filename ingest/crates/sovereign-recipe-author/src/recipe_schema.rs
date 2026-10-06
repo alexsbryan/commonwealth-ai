@@ -580,7 +580,23 @@ fn ontology_type_schema(descriptor: &Value) -> Value {
                         ),
                         "additionalProperties": { "type": "string" }
                     },
-                    "exclude":    str_array.clone()
+                    "exclude":    str_array.clone(),
+                    "refs": {
+                        "type": "object",
+                        "description": format!(
+                            "a declared `ref` attribute → the sourced type it links to and the reader whose value is that type's identity value: {}",
+                            readers.join(" | ")
+                        ),
+                        "additionalProperties": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["of", "reader"],
+                            "properties": {
+                                "of":     { "type": "string" },
+                                "reader": { "type": "string" }
+                            }
+                        }
+                    }
                 }
             },
             "label":             { "type": "string" },
