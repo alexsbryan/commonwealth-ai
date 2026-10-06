@@ -3596,6 +3596,11 @@ def cmd_start(args):
                 return 2
             stop.unlink()
             say("start: cleared the operator STOP")
+        # Starting reloads the job, killing a running loop mid-session; a
+        # running job is left alone.
+        if host().job_running(job):
+            say(f"start: {job} is already running — left alone")
+            return 0
         host().start_job(job)
     except HostError as e:
         print(f"start: {e}", file=sys.stderr)

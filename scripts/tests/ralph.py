@@ -1309,6 +1309,23 @@ class HostTests(unittest.TestCase):
             self.assertEqual(calls[-1], ["launchctl", "bootstrap", f"gui/{os.getuid()}",
                                          str(home / ".config" / "ralph" / "jobs" / "dev.ralph.w-a.plist")])
 
+    def test_start_leaves_a_running_job_alone(self):
+        # Starting a running job booted it out, then failed to bootstrap it:
+        # the loop and its session died mid-unit (svrngs u5, 2026-10-06T17:31Z).
+        with tempfile.TemporaryDirectory() as tmp:
+            home, workdir = pathlib.Path(tmp) / "home", pathlib.Path(tmp) / "w"
+            workdir.mkdir()
+            jobs = home / ".config" / "ralph" / "jobs"
+            jobs.mkdir(parents=True)
+            (jobs / "dev.ralph.w-a.plist").write_text("<plist/>")
+            host, calls = self.host("darwin", ("launchctl",), home)
+            with mock.patch.object(ralph, "host", return_value=host), \
+                    mock.patch.object(host, "job_running", return_value=True):
+                rc, out, err = quiet_main(["start", "--workdir", str(workdir), "--label", "a"])
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(calls, [])
+            self.assertIn("already running", out + err)
+
     def test_an_absent_job_backend_refuses_to_start_and_says_it_cannot_see(self):
         with tempfile.TemporaryDirectory() as home:
             for platform, tool in (("linux", "systemd-run"), ("darwin", "launchctl"),
