@@ -495,7 +495,9 @@ mod tests {
                 },
                 AttrDecl {
                     name: "party_derived".into(),
-                    family: AttrFamily::Ref { of: "company".into() },
+                    family: AttrFamily::Ref {
+                        of: "company".into(),
+                    },
                     description: String::new(),
                     derived: Some("party_of_message".into()),
                 },

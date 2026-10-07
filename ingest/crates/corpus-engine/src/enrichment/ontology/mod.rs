@@ -58,12 +58,12 @@ pub use crate::recipe_ontology::language;
 pub use crate::recipe_ontology::language::{OntologyLanguage, OntologyLanguageRegistry};
 
 // The parsed policy data and the author-facing declaration types — the leaf.
-pub use understanding_vocab::ontology::derived;
 pub use understanding_vocab::ontology::decl::{
     AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Deontic, DeriveDecl, DocumentFieldsDecl,
     FieldReader, Force, MetadataSourceDecl, OntologyTypeDecl, OntologyV1, OntologyVocabulary,
     SourceDecl, SourceRef, SupersessionClock, TableSourceDecl, TensionDecl, TypeKind, VoicesDecl,
 };
+pub use understanding_vocab::ontology::derived;
 pub use understanding_vocab::ontology::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, DocumentStamp, IdentityPolicy,
     NavigationPolicy, OntologyPolicies, ProsePolicy, QuestionKind, SeedPolicy, ShapePolicy,
