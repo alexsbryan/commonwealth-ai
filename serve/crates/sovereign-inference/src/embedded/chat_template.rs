@@ -12,7 +12,92 @@
 
 use serde_json::Value as Json;
 use sovereign_contracts::error::Error;
+use sovereign_contracts::types::{CompletionRequest, PromptShape, ToolSchema};
 use sovereign_contracts::Result;
+
+use crate::llama::cpp::model::LlamaModel;
+
+/// The prompt for a `PromptShape::Conversation` request: the model's own
+/// template over the whole message list and `request.tools`, with no
+/// daemon-side tool block, think suppression or assistant prefix — what
+/// llama-server builds for the same OpenAI request. Thinking follows
+/// `request.enable_thinking`, and when the client said nothing, the
+/// template (llama-server's `--reasoning auto`).
+pub(crate) fn render_conversation(
+    model: &LlamaModel,
+    model_id: &str,
+    request: &CompletionRequest,
+    messages: &[Json],
+) -> Result<String> {
+    let template = crate::llama::chat_template(model).ok_or_else(|| {
+        Error::Inference(format!(
+            "{model_id}: a conversation needs the model's chat template and the GGUF has none"
+        ))
+    })?;
+    let tools: Vec<Json> = request.tools.iter().flatten().map(tool_json).collect();
+    let enable_thinking = request
+        .enable_thinking
+        .unwrap_or_else(|| supports_thinking(&template));
+    let prompt = render(
+        &template,
+        &ChatTemplateInput {
+            messages,
+            tools: Some(&tools),
+            enable_thinking,
+            add_generation_prompt: true,
+        },
+    )?;
+    tracing::debug!(
+        model = %model_id,
+        messages = messages.len(),
+        tools = tools.len(),
+        enable_thinking,
+        thinking_from_client = request.enable_thinking.is_some(),
+        prompt_chars = prompt.len(),
+        "format_prompt: conversation rendered by the model's template"
+    );
+    Ok(prompt)
+}
+
+/// Whether this request's tools ride the daemon's own Hermes envelope
+/// (`<tool_call>{"name":..,"arguments":..}</tool_call>`, written into the
+/// system prompt by `format_prompt_inner`) — the in-repo tool loops. Every
+/// piece of envelope machinery keys on this: the `</tool_call>` marker
+/// stop, the balanced-JSON `ToolStopTracker`, the T=0 content role inside
+/// JSON strings, and MTP's exclusion. A `PromptShape::Conversation` with
+/// tools is NOT one: its template writes the model's own tool format, the
+/// reply runs to the model's end-of-turn as llama-server lets it (several
+/// calls in one turn included), and it may speculate.
+pub(crate) fn hermes_tool_envelope(request: &CompletionRequest) -> bool {
+    request.tools.as_ref().is_some_and(|t| !t.is_empty())
+        && !matches!(request.prompt_shape, Some(PromptShape::Conversation { .. }))
+}
+
+/// Whether the decode loop force-closes a long `<think>` block at
+/// `think_budget` (default `THINK_BUDGET`). Not for a conversation:
+/// llama-server sets no reasoning budget by default, and the client's
+/// thinking runs as long as the model takes.
+pub(crate) fn think_budget_applies(request: &CompletionRequest) -> bool {
+    !matches!(request.prompt_shape, Some(PromptShape::Conversation { .. }))
+}
+
+/// Whether the template has a thinking phase to switch on: llama.cpp's
+/// rule for the Qwen3-Coder/Qwen3.5 tool format, a `<think>` tag anywhere
+/// in its source (common/chat.cpp `common_chat_params_init_qwen3_coder`).
+pub(crate) fn supports_thinking(template: &str) -> bool {
+    template.contains("<think>")
+}
+
+fn tool_json(t: &ToolSchema) -> Json {
+    serde_json::json!({
+        "type": "function",
+        "function": {
+            "name": t.name,
+            "description": t.description.clone().unwrap_or_default(),
+            "parameters": t.parameters,
+        },
+    })
+}
 
 /// What a template render reads.
 pub(crate) struct ChatTemplateInput<'a> {

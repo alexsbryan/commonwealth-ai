@@ -323,6 +323,12 @@ pub(crate) fn format_prompt(
     if matches!(request.prompt_shape, Some(PromptShape::Raw)) {
         return Ok(request.prompt.clone());
     }
+    // A whole conversation (the OpenAI chat path): the model's template
+    // renders it, as llama-server does, and nothing below applies — no
+    // daemon tool block, think suppression or assistant prefix.
+    if let Some(PromptShape::Conversation { messages }) = &request.prompt_shape {
+        return super::chat_template::render_conversation(model, model_id, request, messages);
+    }
     // Compute the rendered prompt via the inner tier dispatch, then
     // append `request.assistant_prefix` if present. The prefix lands
     // *after* the chat template's generation-position marker

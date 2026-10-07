@@ -334,6 +334,16 @@ impl SovereignInferenceAdapter {
     /// whether a smaller, faster slot would already satisfy the
     /// request's capability requirements.
     fn build_completion_request(&self, request: &ChatCompletionRequest) -> CompletionRequest {
+        // An external client's conversation goes to the model's own
+        // template whole (llama-server parity); in-repo callers keep the
+        // flattened Hermes path below. One decider: `conversation`.
+        let hermes_reason = conversation::hermes_path_reason(request);
+        tracing::debug!(
+            conversation = hermes_reason.is_none(),
+            hermes_reason = hermes_reason.unwrap_or(""),
+            messages = request.messages.len(),
+            "inference_adapter: prompt path chosen"
+        );
         let (prompt, system) = Self::flatten(request);
         // Build a skeleton request with the OICP envelope attached
         // BEFORE choosing a slot — the slot picker reads the
@@ -471,7 +481,10 @@ impl SovereignInferenceAdapter {
             alternation_env = alternation_grammar_enabled(),
             "inference_adapter: pre-envelope-check"
         );
-        if req.structured_output.is_none() && request.assistant_prefix.is_none() {
+        if req.structured_output.is_none()
+            && request.assistant_prefix.is_none()
+            && hermes_reason.is_some()
+        {
             // R1 (assistant_prefix) and envelope-schema don't compose:
             // the prefill places the model mid-JSON while the grammar
             // mask starts fresh on the first generated token expecting
@@ -542,6 +555,9 @@ impl SovereignInferenceAdapter {
         // through to the embedded provider's default" — which is
         // `enable_thinking: false` in `apply_chat_template_oaicompat`.
         req.enable_thinking = extract_enable_thinking(request.chat_template_kwargs.as_ref());
+        if hermes_reason.is_none() {
+            conversation::into_conversation(&mut req, request);
+        }
         let (speed, slot_picker) = if req.tools.is_some() {
             (sovereign_contracts::types::Speed::Slow, "tools_bias_slow")
         } else {
@@ -1199,7 +1215,16 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             }
             _ => resp.text.clone(),
         };
-        let (parsed_calls, parse_errors) = if tools_present {
+        // A conversation's reply is parsed as llama-server parses it:
+        // reasoning apart, calls in the model's own format.
+        let conversation_turn = matches!(
+            req.prompt_shape,
+            Some(sovereign_contracts::types::PromptShape::Conversation { .. })
+        )
+        .then(|| conversation::parse_reply(&resp.text, &req));
+        let (parsed_calls, parse_errors) = if let Some(turn) = &conversation_turn {
+            (turn.tool_calls.clone(), turn.unparsed.clone())
+        } else if tools_present {
             if grammar_constrained {
                 let direct = parse_tool_envelope_direct(&text_for_parsing);
                 if !direct.is_empty() {
@@ -1270,7 +1295,9 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         // markup out of the returned content so downstream clients
         // don't re-render it. The structured `tool_calls` field is
         // the authoritative signal.
-        let clean_content = if tool_calls_out.is_some() {
+        let clean_content = if let Some(turn) = conversation_turn {
+            turn.content
+        } else if tool_calls_out.is_some() {
             strip_tool_call_blocks(&resp.text)
         } else {
             resp.text
@@ -1589,6 +1616,9 @@ impl InferenceProvider for SovereignInferenceAdapter {
         self.provider.lender_manifest().await
     }
 }
+
+#[path = "inference_adapter/conversation.rs"]
+mod conversation;
 
 #[cfg(test)]
 #[path = "inference_adapter/guard_tests.rs"]

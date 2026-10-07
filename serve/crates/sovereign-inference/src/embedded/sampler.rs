@@ -435,6 +435,23 @@ pub(crate) fn build_sampler(
     //
     // The model's token-level structure (which role it's currently
     // in) drives the auto-pick, not any call-site heuristic.
+    // A conversation (the OpenAI chat path) samples as llama-server
+    // samples the same request: llama.cpp's defaults, the GGUF's own
+    // recommendations, then the client's values — no daemon profile, DRY
+    // or repetition penalty. An explicit `sampling_mode` still wins.
+    if matches!(request.prompt_shape, Some(PromptShape::Conversation { .. }))
+        && request.sampling_mode.is_none()
+    {
+        let server = super::server_sampling::ServerSampling::for_model(model, request);
+        return Ok(ConstrainedSampler {
+            inner_explore: server.chain(model, rand_seed()),
+            inner_content: server.chain(model, rand_seed()),
+            llg_constraint,
+            url_constraint,
+            evidence_id_constraint,
+            non_latin_denylist,
+        });
+    }
     let no_tools_mode = match request.enable_thinking {
         Some(false) => SamplingMode::Instruct,
         _ => SamplingMode::Think,

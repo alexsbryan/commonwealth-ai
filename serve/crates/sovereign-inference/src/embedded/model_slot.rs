@@ -2853,7 +2853,9 @@ impl ModelSlot {
         // generated per turn for ~80-byte envelopes — every token
         // past the close `}` was wasted on a grammar mask cycling
         // through whitespace / preferred-but-masked tokens.
-        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        // Tools that ride the daemon's Hermes envelope; a conversation's
+        // tools are the template's own format and run to end-of-turn.
+        let tools_present = super::chat_template::hermes_tool_envelope(request);
         // Shape-B (balanced JSON envelope) stop — state machine and
         // BOTH gates (grammar-locked, think-suspend) live in
         // `gates::ToolStopTracker`; see its doc for the LaTeX
@@ -3262,6 +3264,7 @@ impl ModelSlot {
             if in_think
                 && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
                 && !think_budget_fired
+                && super::chat_template::think_budget_applies(request)
             {
                 think_budget_fired = true;
                 let force = "\n</think>\n\n";
@@ -5299,7 +5302,9 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         // See generate_sync: stop on `</tool_call>` (marker) or
         // balanced JSON envelope when tools were requested. The
         // shape-B state machine + gates live in `gates::ToolStopTracker`.
-        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        // Tools that ride the daemon's Hermes envelope; a conversation's
+        // tools are the template's own format and run to end-of-turn.
+        let tools_present = super::chat_template::hermes_tool_envelope(request);
         let mut tool_stop =
             ToolStopTracker::new(tools_present, request.structured_output.is_some());
 
@@ -5427,6 +5432,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
             if in_think
                 && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
                 && !think_budget_fired
+                && super::chat_template::think_budget_applies(request)
             {
                 think_budget_fired = true;
                 let force = "\n</think>\n\n";

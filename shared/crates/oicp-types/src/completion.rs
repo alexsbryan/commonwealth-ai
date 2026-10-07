@@ -281,7 +281,9 @@ pub struct CompletionRequest {
     /// `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>` markers
     /// (built by `sovereign_contracts::fim::build_fim_prompt`, re-exported as
     /// `sovereign_inference::fim::build_fim_prompt`).
-    /// See `svrn/docs/INLINE_COMPLETION.md` §3.1.
+    /// See `svrn/docs/INLINE_COMPLETION.md` §3.1. `Conversation`
+    /// replaces `prompt` with a whole message list — the OpenAI chat
+    /// path's multi-turn agent conversations.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_shape: Option<PromptShape>,
 
@@ -361,8 +363,9 @@ impl std::fmt::Display for TurnAdmission {
 
 /// How the request's `prompt` reaches the tokenizer. Default is
 /// `Templated` (chat-template wrapping); `Raw` feeds the string
-/// verbatim — see `CompletionRequest::prompt_shape`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// verbatim; `Conversation` renders a whole message list instead — see
+/// `CompletionRequest::prompt_shape`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PromptShape {
     /// Wrap `prompt` in the model's chat template (historical default).
@@ -371,6 +374,17 @@ pub enum PromptShape {
     /// template, no BOS injection. Used by the FIM inline-completion
     /// path (INLINE_COMPLETION.md §3.1, decision D4).
     Raw,
+    /// Render this conversation through the model's own chat template,
+    /// with `CompletionRequest::tools`, as llama-server renders an OpenAI
+    /// chat request: roles, tool calls and tool results reach the model
+    /// in its template's own form, and the template writes the tool
+    /// instructions. `prompt` is not rendered; it still carries a
+    /// flattened text of the same conversation for token estimators and
+    /// for peers that predate this variant.
+    Conversation {
+        /// OpenAI chat-completions messages, as the client sent them.
+        messages: Vec<serde_json::Value>,
+    },
 }
 
 /// Sampler-profile selector. Mirrored in the inference layer's

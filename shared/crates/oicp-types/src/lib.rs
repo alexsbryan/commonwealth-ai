@@ -26,6 +26,7 @@
 
 pub mod capabilities;
 pub mod capability;
+pub mod chat_turn;
 pub mod completion;
 pub mod error;
 pub mod forced_choice;
