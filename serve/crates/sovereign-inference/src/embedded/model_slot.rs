@@ -794,6 +794,11 @@ pub(crate) use sovereign_time::unix_millis as now_millis;
 /// (~60-160s observed worst-case under heavy grammar) finishes
 /// with margin, short enough that a runaway mask-state is killed
 /// before it pins the daemon for ~30 min and starves the mesh.
+/// (Measured 2026-10-07, replay of the agent-coding A0 corpus against
+/// the conversation path with thinking on: legitimate turns DO run
+/// past 300s — 18/76 were killed at ~3600-4950 generated tokens —
+/// so thinking-on serving needs the env raised; the OpenAI-agent-coding
+/// arms run with SOVEREIGN_INFERENCE_TIMEOUT_SECS=1200.)
 /// Parse `SOVEREIGN_TENSOR_BUFT_OVERRIDE` into llama.cpp `-ot` overrides.
 ///
 /// Syntax is llama.cpp's own: `<regex>=<buffer-type>[,<regex>=<buffer-type>...]`.
