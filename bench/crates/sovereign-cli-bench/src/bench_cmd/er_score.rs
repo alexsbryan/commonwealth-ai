@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn bench er-score <predicted.json> <gold.json>` — score one clustering
 //! against another with `sovereign_eval::entity_resolution_score` (B³,
-//! pairwise, CEAF-e, LEA) and print the report as JSON. Each file is a JSON
+//! pairwise, CEAF-e, LEA, and coverage-aware recovery) and print the report as JSON. Each file is a JSON
 //! object mapping a mention id to its cluster id. One scorer for the atlas
 //! benches and the research composers alike, so no script keeps its own copy.
 
@@ -13,15 +13,15 @@ use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench er-score",
-    summary: "Score a clustering against a gold clustering (B³, pairwise, CEAF-e, LEA) and print the report as JSON.",
+    summary: "Score conditional clustering and coverage-aware recovery against gold; print JSON.",
     sections: &[
         HelpSection::Usage("svrn bench er-score <predicted.json> <gold.json>"),
         HelpSection::Examples(&[(
             "svrn bench er-score composed.json gold.json",
-            "Each file maps mention id -> cluster id; only mentions both hold are scored, the rest are listed.",
+            "Each file maps mention id -> cluster id; standard metrics score shared mentions; recovery includes missing and extra placements.",
         )]),
         HelpSection::Notes(
-            "Exit 2 on a usage error, 4 when a file cannot be read as a clustering (nothing was judged).",
+            "recovery_b_cubed is a nonstandard extension, not part of CoNLL F1. Scope predictions to the evaluation universe, including known no-case placements. Exit 2 on a usage error, 4 when a file cannot be read as a clustering (nothing was judged).",
         ),
     ],
 };

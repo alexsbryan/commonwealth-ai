@@ -27,15 +27,23 @@
 //! atom id, raw email-address). The cluster id is also `String` —
 //! arbitrary, opaque, used only for equality.
 //!
-//! Inputs are *aligned* — only mentions that appear in BOTH
+//! The standard metrics use *aligned* inputs — only mentions that appear in BOTH
 //! `predicted` and `gold` are scored. Mentions in one but not the
 //! other are flagged in [`B3Outcome::unmatched_predicted`] /
 //! [`B3Outcome::unmatched_gold`] so the operator can see the
 //! coverage gap without it silently zeroing the recall.
+//! [`recovery_b_cubed`] is a separate, nonstandard recovery measure: missing
+//! gold members earn zero recall and extra predictions earn zero precision.
+//! Its cluster sizes use the full input sets. Scope predictions to the
+//! evaluation universe first; known no-case placements belong in that set.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+
+#[path = "entity_resolution_recovery.rs"]
+mod recovery;
+pub use recovery::recovery_b_cubed;
 
 /// Clustering as a flat partition keyed by mention id.
 pub type Clustering = BTreeMap<String, String>;
@@ -443,6 +451,9 @@ pub fn muc(predicted: &Clustering, gold: &Clustering) -> EntityOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityResolutionReport {
     pub b_cubed: B3Outcome,
+    /// Coverage-aware extension; absent in historical reports, not part of CoNLL F1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_b_cubed: Option<B3Outcome>,
     pub pairwise: PairwiseOutcome,
     #[serde(default)]
     pub ceaf_e: EntityOutcome,
@@ -459,6 +470,7 @@ pub struct EntityResolutionReport {
 pub fn score(predicted: &Clustering, gold: &Clustering) -> EntityResolutionReport {
     EntityResolutionReport {
         b_cubed: b_cubed(predicted, gold),
+        recovery_b_cubed: Some(recovery_b_cubed(predicted, gold)),
         pairwise: pairwise(predicted, gold),
         ceaf_e: ceaf_e(predicted, gold),
         lea: lea(predicted, gold),
@@ -474,6 +486,10 @@ impl EntityResolutionReport {
         self
     }
 }
+
+#[cfg(test)]
+#[path = "entity_resolution_recovery_tests.rs"]
+mod recovery_tests;
 
 #[cfg(test)]
 mod tests {
