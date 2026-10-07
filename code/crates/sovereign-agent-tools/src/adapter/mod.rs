@@ -16,6 +16,7 @@
 //! agent loop. The adapter's job is normalization only.
 
 pub mod native;
+pub mod opencode;
 pub mod pi;
 
 use serde_json::Value;

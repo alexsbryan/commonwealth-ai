@@ -10,7 +10,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::runner::AgentRunner;
-use crate::runners::{BareMetalRunner, MockAgentRunner, NativeRunner, PiRunner, SearchRunner};
+use crate::runners::{
+    BareMetalRunner, MockAgentRunner, NativeRunner, OpencodeRunner, PiRunner, SearchRunner,
+};
 
 type RunnerFactory = Box<dyn Fn() -> Arc<dyn AgentRunner> + Send + Sync>;
 
@@ -34,6 +36,7 @@ impl AgentRunnerRegistry {
     pub(crate) fn builtin() -> Self {
         let mut r = Self::empty();
         r.register("pi", || Arc::new(PiRunner::new()));
+        r.register("opencode", || Arc::new(OpencodeRunner::new()));
         r.register("native", || Arc::new(NativeRunner::new()));
         // PR-1 baseline preserved for the role-layer A/B/C comparison.
         // Same daemon, same canonical primitives, no role transitions

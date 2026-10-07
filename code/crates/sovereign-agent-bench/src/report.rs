@@ -9,6 +9,15 @@ use crate::scoring::{ProblemScore, ProblemTrialDetail, RegressionDelta};
 pub struct BenchReport {
     pub agent: String,
     pub model: String,
+    /// The endpoint the agent was pointed at, for runners that take one
+    /// (pi, opencode). `None` for runners with their URL built in, and in
+    /// reports written before the field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_base_url: Option<String>,
+    /// `--no-judge`: judge-scored dims are `NotJudged`, and `grand_total`
+    /// counts only what the witness scored.
+    #[serde(default)]
+    pub no_judge: bool,
     pub judge_model: String,
     pub judge_trials: u8,
     /// Number of independent agent runs per problem this report
@@ -43,8 +52,16 @@ impl BenchReport {
     pub(crate) fn text_rollup(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!(
-            "Agent-bench report — agent={} model={} judge={} judge_trials={} run_trials={}\n",
-            self.agent, self.model, self.judge_model, self.judge_trials, self.run_trials
+            "Agent-bench report — agent={} model={} endpoint={} judge={} run_trials={}\n",
+            self.agent,
+            self.model,
+            self.agent_base_url.as_deref().unwrap_or("(built in)"),
+            if self.no_judge {
+                "NOT RUN (dims b/c not judged; totals are witness-only)".to_string()
+            } else {
+                format!("{} x{}", self.judge_model, self.judge_trials)
+            },
+            self.run_trials
         ));
         out.push_str(&format!(
             "Started {} → Finished {}\n",
@@ -182,6 +199,8 @@ mod tests {
         let r = BenchReport {
             agent: "pi".into(),
             model: "commonwealth/coder".into(),
+            agent_base_url: None,
+            no_judge: false,
             judge_model: "commonwealth/coder".into(),
             judge_trials: 3,
             run_trials: 1,
@@ -213,6 +232,8 @@ mod tests {
         let r = BenchReport {
             agent: "pi".into(),
             model: "commonwealth/primary".into(),
+            agent_base_url: None,
+            no_judge: false,
             judge_model: "commonwealth/primary".into(),
             judge_trials: 1,
             run_trials: 3,

@@ -23,12 +23,13 @@ use crate::judge_multi::{aggregate, MultiTrialOutcome};
 use crate::problem::{load_problem, Problem, ProblemLoadError, ScoringMode};
 use crate::report::BenchReport;
 use crate::runner::{context_for, AgentRunArtifact, AgentRunner, ExitReason, TokenCounts};
+use crate::runners::jsonl_agent::AgentEndpoint;
 use crate::runners::pi::PI_TOOL_ALLOWLIST;
 use crate::runners::AgentRunnerRegistry;
 use crate::sandbox::Sandbox;
 use crate::scoring::{
-    compute_regression, dim_from_auto, dim_from_hybrid, dim_from_judge, DimensionScore,
-    ProblemScore, ProblemTrialDetail, WitnessSummary,
+    compute_regression, dim_from_auto, dim_from_hybrid, dim_from_judge, dim_not_judged,
+    DimensionScore, ProblemScore, ProblemTrialDetail, WitnessSummary,
 };
 use crate::witness::run_auto_witness;
 
@@ -42,6 +43,11 @@ pub enum RunError {
     Problem(#[from] ProblemLoadError),
     #[error("agent runner `{0}` not registered (available: {1})")]
     UnknownAgent(String, String),
+    #[error(
+        "--agent-base-url names an endpoint, but agent runner `{0}` has its URL built in \
+         and would not use it (runners that take one: pi, opencode)"
+    )]
+    EndpointUnsupported(String),
     #[error("agent run: {0}")]
     AgentRun(#[from] crate::runner::AgentRunError),
     #[error("witness: {0}")]
@@ -66,7 +72,7 @@ pub(crate) async fn run_command(argv: &[String]) -> Result<(), RunError> {
     let runner = registry.get(&args.agent).ok_or_else(|| {
         RunError::UnknownAgent(args.agent.clone(), registry.agent_ids().join(", "))
     })?;
-    let runner = patch_runner_pi_binary(runner, &args);
+    let (runner, agent_endpoint) = configure_runner(runner, &args)?;
 
     let problems = discover_problems(&args.bench_root, args.problems.as_deref())?;
     if problems.is_empty() {
@@ -197,6 +203,8 @@ pub(crate) async fn run_command(argv: &[String]) -> Result<(), RunError> {
     let report = BenchReport {
         agent: args.agent.clone(),
         model: args.model.clone(),
+        agent_base_url: agent_endpoint.as_ref().map(|e| e.base_url.clone()),
+        no_judge: args.no_judge,
         judge_model,
         judge_trials: args.judge_trials,
         run_trials: trials_n,
@@ -233,21 +241,45 @@ pub(crate) async fn run_command(argv: &[String]) -> Result<(), RunError> {
     Ok(())
 }
 
-/// Apply the optional `--pi-binary` flag to a freshly-resolved
-/// runner. We can't mutate the trait object's underlying state via
-/// the trait, so when the user pinned a specific pi binary we
-/// replace the runner with a fresh `PiRunner` configured with it.
-/// Other runners are returned unchanged.
-fn patch_runner_pi_binary(runner: Arc<dyn AgentRunner>, args: &RunArgs) -> Arc<dyn AgentRunner> {
-    if runner.id() != "pi" {
-        return runner;
+/// Point a freshly-resolved runner at the run's endpoint (and pin the pi
+/// binary when asked). We can't mutate the trait object's underlying state
+/// via the trait, so a runner that takes an endpoint is rebuilt with it.
+/// Returns the endpoint the agent will use, for the report. A runner with
+/// its URL built in is returned unchanged, and refuses `--agent-base-url`
+/// rather than silently ignoring it.
+fn configure_runner(
+    runner: Arc<dyn AgentRunner>,
+    args: &RunArgs,
+) -> Result<(Arc<dyn AgentRunner>, Option<AgentEndpoint>), RunError> {
+    let endpoint = AgentEndpoint {
+        base_url: args
+            .agent_base_url
+            .clone()
+            .unwrap_or_else(|| args.judge_base_url.clone()),
+        context_window: args.agent_context_window,
+        ..AgentEndpoint::local_daemon()
+    };
+    match runner.id() {
+        "pi" => {
+            let mut pi = crate::runners::pi::PiRunner::new().with_endpoint(endpoint.clone());
+            if let Some(b) = args.pi_binary.clone() {
+                pi = pi.with_binary(b);
+            }
+            Ok((Arc::new(pi), Some(endpoint)))
+        }
+        "opencode" => {
+            let mut oc =
+                crate::runners::opencode::OpencodeRunner::new().with_endpoint(endpoint.clone());
+            if let Some(b) = args.opencode_binary.clone() {
+                oc = oc.with_binary(b);
+            }
+            Ok((Arc::new(oc), Some(endpoint)))
+        }
+        other if args.agent_base_url.is_some() => {
+            Err(RunError::EndpointUnsupported(other.to_string()))
+        }
+        _ => Ok((runner, None)),
     }
-    let mut pi = crate::runners::pi::PiRunner::new();
-    if let Some(b) = args.pi_binary.clone() {
-        pi = pi.with_binary(b);
-    }
-    pi = pi.with_provider_url(args.judge_base_url.clone());
-    Arc::new(pi)
 }
 
 /// Run a single problem end-to-end against the supplied runner and
@@ -408,7 +440,7 @@ pub async fn run_one_problem(
         .judge_model
         .clone()
         .unwrap_or_else(|| args.model.clone());
-    if needs_slot_swap(&args.model, &judge_model) {
+    if !args.no_judge && needs_slot_swap(&args.model, &judge_model) {
         info!(
             problem = %problem.meta.id,
             agent_model = %args.model,
@@ -450,6 +482,7 @@ pub async fn run_one_problem(
         &problem.scoring.dim_a.name,
         judge,
         args.judge_trials,
+        args.no_judge,
         sink,
     )
     .await?;
@@ -462,6 +495,7 @@ pub async fn run_one_problem(
         &problem.scoring.dim_b.name,
         judge,
         args.judge_trials,
+        args.no_judge,
         sink,
     )
     .await?;
@@ -474,6 +508,7 @@ pub async fn run_one_problem(
         &problem.scoring.dim_c.name,
         judge,
         args.judge_trials,
+        args.no_judge,
         sink,
     )
     .await?;
@@ -506,9 +541,16 @@ async fn score_dim(
     dim_name: &str,
     judge: &dyn JudgeClient,
     judge_trials: u8,
+    no_judge: bool,
     sink: Option<&ArtifactSink>,
 ) -> Result<DimensionScore, RunError> {
     match mode {
+        // `--no-judge`: the rubric is not asked. Recorded as such, with the
+        // auto floor where the mode has one — never as a judged 0.
+        ScoringMode::JudgeRubric { .. } if no_judge => Ok(dim_not_judged(None)),
+        ScoringMode::HybridAutoFloor { .. } if no_judge => Ok(dim_not_judged(Some(
+            witness.map(|w| w.bucketed_score).unwrap_or(0),
+        ))),
         ScoringMode::AutoTestPassFraction => {
             let (frac, bucketed, verify_ok) = match witness {
                 Some(w) => (w.parsed.pass_fraction(), w.bucketed_score, w.verify_exit_ok),

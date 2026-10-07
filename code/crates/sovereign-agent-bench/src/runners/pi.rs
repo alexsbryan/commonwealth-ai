@@ -19,8 +19,15 @@
 //! Budget enforcement: cumulative `usage.output_tokens` past
 //! `token_budget` → SIGTERM. Wall-clock cap fires independently.
 //!
-//! Env scrub: only `PATH`, `HOME`, `PI_PROVIDER_URL`, `LANG`.
-//! No model credentials reach the child.
+//! Env scrub: only `PATH` (the pi binary's directory first), `HOME`,
+//! `PI_CODING_AGENT_DIR`, `LANG`. No model credentials reach the child.
+//!
+//! Endpoint: pi reads its providers from `<agent dir>/models.json` and
+//! nothing else — it has no URL env var (pi 0.78.0 never reads the
+//! `PI_PROVIDER_URL` this runner used to set, so every run reached whatever
+//! `~/.pi/agent/models.json` named). Each run writes its own agent dir with
+//! one `commonwealth` provider at the run's [`AgentEndpoint`], so the URL a
+//! report names is the one pi used, and `~/.pi` is never read or touched.
 
 use std::time::Instant;
 
@@ -31,7 +38,9 @@ use tokio::process::Command;
 use crate::runner::{
     AgentRunArtifact, AgentRunContext, AgentRunError, AgentRunner, ToolCallRecord,
 };
-use crate::runners::jsonl_agent::{self, AgentTurn, JsonlDialect, ToolRole, TurnTool};
+use crate::runners::jsonl_agent::{
+    self, AgentEndpoint, AgentTurn, JsonlDialect, ToolRole, TurnTool,
+};
 use crate::sandbox::Sandbox;
 
 /// Allowlisted pi tools. Structural invariant per ARCH §7.2 — not
@@ -50,21 +59,17 @@ use crate::sandbox::Sandbox;
 /// expose it on the pi runner.
 pub(crate) const PI_TOOL_ALLOWLIST: &[&str] = &["read", "write", "bash", "find", "grep", "ls"];
 
-/// Default daemon endpoint. The setup script writes a matching provider
-/// in `~/.pi/agent/models.json`.
-pub(crate) const DEFAULT_PI_PROVIDER_URL: &str = "http://localhost:9741/v1";
-
 pub struct PiRunner {
     /// Path to the `pi` binary. `None` means search PATH.
     binary: Option<String>,
-    provider_url: String,
+    endpoint: AgentEndpoint,
 }
 
 impl PiRunner {
     pub(crate) fn new() -> Self {
         Self {
             binary: None,
-            provider_url: DEFAULT_PI_PROVIDER_URL.to_string(),
+            endpoint: AgentEndpoint::local_daemon(),
         }
     }
 
@@ -73,8 +78,8 @@ impl PiRunner {
         self
     }
 
-    pub(crate) fn with_provider_url(mut self, url: impl Into<String>) -> Self {
-        self.provider_url = url.into();
+    pub(crate) fn with_endpoint(mut self, endpoint: AgentEndpoint) -> Self {
+        self.endpoint = endpoint;
         self
     }
 
@@ -102,7 +107,22 @@ impl AgentRunner for PiRunner {
     async fn run(&self, ctx: AgentRunContext) -> Result<AgentRunArtifact, AgentRunError> {
         let start = Instant::now();
 
-        let env = Sandbox::scrubbed_env(&[("PI_PROVIDER_URL", self.provider_url.as_str())]);
+        // The run's own agent dir. Held until pi exits.
+        let agent_dir = tempfile::tempdir()
+            .map_err(|e| AgentRunError::Internal(format!("pi agent dir: {e}")))?;
+        std::fs::write(
+            agent_dir.path().join("models.json"),
+            pi_models_json(&self.endpoint, &ctx.model_handle),
+        )
+        .map_err(|e| AgentRunError::Internal(format!("pi models.json: {e}")))?;
+        let agent_dir_str = agent_dir.path().display().to_string();
+        let mut env = Sandbox::scrubbed_env(&[("PI_CODING_AGENT_DIR", agent_dir_str.as_str())]);
+        if let Some(path) = jsonl_agent::path_with_binary_dir(
+            &self.binary_path(),
+            env.get("PATH").map(String::as_str),
+        ) {
+            env.insert("PATH".to_string(), path);
+        }
         let tools_arg = ctx.tool_allowlist.join(",");
 
         // Prefix the prompt with the actual workdir state. Without
@@ -119,6 +139,7 @@ impl AgentRunner for PiRunner {
         tracing::info!(
             problem = %ctx.problem_id,
             model = %ctx.model_handle,
+            endpoint = %self.endpoint.base_url,
             budget = ctx.token_budget,
             wall_cap = ctx.wall_seconds_cap,
             "agent_bench: pi.run starting"
@@ -149,6 +170,7 @@ impl AgentRunner for PiRunner {
             verify_cmd: ctx.verify_cmd.clone(),
         };
         let run = jsonl_agent::supervise("pi", cmd, &ctx, Box::new(dialect)).await?;
+        drop(agent_dir);
 
         let wall_ms = start.elapsed().as_millis() as u64;
         tracing::info!(
@@ -312,6 +334,32 @@ fn harvest_assistant_blocks(
         }
     }
     (tools, text)
+}
+
+/// pi's provider config for one run: a single `commonwealth` provider (the
+/// name the command line selects) serving `model` at `endpoint`. The shape
+/// is the one `scripts/setup-pi-provider.sh` writes.
+fn pi_models_json(endpoint: &AgentEndpoint, model: &str) -> String {
+    serde_json::json!({
+        "providers": {
+            "commonwealth": {
+                "baseUrl": endpoint.base_url,
+                "api": "openai-completions",
+                "apiKey": "dummy",
+                "compat": {
+                    "supportsDeveloperRole": false,
+                    "supportsReasoningEffort": false,
+                },
+                "models": [{
+                    "id": model,
+                    "name": model,
+                    "contextWindow": endpoint.context_window,
+                    "maxTokens": endpoint.max_output_tokens,
+                }],
+            }
+        }
+    })
+    .to_string()
 }
 
 /// pi's events read as turns: every `message_end` is one (a user echo is an
@@ -492,6 +540,21 @@ mod tests {
         // without updating PI_TOOL_ALLOWLIST, this fails.
         let canonical = sovereign_agent_tools::adapter::pi::Adapter::pi_tool_allowlist();
         assert_eq!(PI_TOOL_ALLOWLIST, canonical);
+    }
+
+    #[test]
+    fn models_json_names_the_run_endpoint_and_model() {
+        let ep = AgentEndpoint {
+            base_url: "http://127.0.0.1:18180/v1".into(),
+            context_window: 65_536,
+            max_output_tokens: 16_384,
+        };
+        let v: Value =
+            serde_json::from_str(&pi_models_json(&ep, "Qwen3.8-27B-UD-Q6_K_XL")).unwrap();
+        let p = &v["providers"]["commonwealth"];
+        assert_eq!(p["baseUrl"], "http://127.0.0.1:18180/v1");
+        assert_eq!(p["models"][0]["id"], "Qwen3.8-27B-UD-Q6_K_XL");
+        assert_eq!(p["models"][0]["contextWindow"], 65_536);
     }
 
     #[test]

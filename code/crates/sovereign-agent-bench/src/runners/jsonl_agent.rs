@@ -41,6 +41,43 @@ pub(crate) const NO_PROGRESS_TOOL_CALLS_THRESHOLD: u32 = 8;
 /// recompute the workdir hash. Cheaper than per-call polling.
 const NO_PROGRESS_CHECK_EVERY: u32 = 1;
 
+/// The OpenAI-compatible server a subprocess agent is pointed at, and the
+/// limits it is told the model has. Each runner writes it into the agent's
+/// own provider config per run, so the endpoint a report names is the one
+/// the agent actually talked to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AgentEndpoint {
+    pub base_url: String,
+    pub context_window: u32,
+    pub max_output_tokens: u32,
+}
+
+impl AgentEndpoint {
+    /// The local daemon with the limits `scripts/setup-pi-provider.sh`
+    /// writes for it.
+    pub(crate) fn local_daemon() -> Self {
+        Self {
+            base_url: "http://localhost:9741/v1".to_string(),
+            context_window: 32_768,
+            max_output_tokens: 16_384,
+        }
+    }
+}
+
+/// `PATH` with the agent binary's own directory first, when the binary is
+/// named by path. pi and opencode are node/bun programs: a pi installed
+/// under one nvm node must run on that node, not on whichever node the
+/// harness's `PATH` reaches first.
+pub(crate) fn path_with_binary_dir(binary: &str, path: Option<&str>) -> Option<String> {
+    let dir = std::path::Path::new(binary)
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())?;
+    Some(match path {
+        Some(p) if !p.is_empty() => format!("{}:{p}", dir.display()),
+        _ => dir.display().to_string(),
+    })
+}
+
 /// What a tool call means to the detectors. Agents name their tools
 /// differently (pi `write`, opencode `write` and `edit`); the dialect maps
 /// each name onto the role the supervisor keys on.
@@ -587,6 +624,20 @@ pub(crate) fn cap_tail(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn binary_dir_goes_first_on_path() {
+        assert_eq!(
+            path_with_binary_dir("/n/v23/bin/pi", Some("/usr/bin:/bin")).as_deref(),
+            Some("/n/v23/bin:/usr/bin:/bin")
+        );
+        assert_eq!(
+            path_with_binary_dir("/n/v23/bin/pi", None).as_deref(),
+            Some("/n/v23/bin")
+        );
+        // A bare name is found on PATH as before: nothing to prepend.
+        assert_eq!(path_with_binary_dir("pi", Some("/usr/bin")), None);
+    }
 
     #[test]
     fn cap_tail_short_string_passes_through() {

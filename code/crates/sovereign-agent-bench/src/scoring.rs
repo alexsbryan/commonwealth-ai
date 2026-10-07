@@ -41,6 +41,10 @@ pub(crate) enum ScoreSource {
         /// `None` when the judge met or exceeded the floor.
         judge_dissent: Option<u8>,
     },
+    /// `--no-judge`: the rubric was not asked. `raw` is the auto floor when
+    /// the dim's mode has one (`HybridAutoFloor`), else 0 — so a total over
+    /// a not-judged dim is not comparable with a judged run's total.
+    NotJudged { auto_floor: Option<u8> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,6 +248,17 @@ pub(crate) fn dim_from_auto(
 }
 
 /// Build a `DimensionScore` for a pure judge dimension.
+/// A dim the judge was not asked about (`--no-judge`).
+pub(crate) fn dim_not_judged(auto_floor: Option<u8>) -> DimensionScore {
+    DimensionScore {
+        raw: auto_floor.unwrap_or(0),
+        source: ScoreSource::NotJudged { auto_floor },
+        anchor_majority: None,
+        anchor_per_trial: vec![],
+        majority_reached: None,
+    }
+}
+
 pub(crate) fn dim_from_judge(judge: &MultiTrialOutcome) -> DimensionScore {
     DimensionScore {
         raw: judge.majority_anchor,
@@ -341,6 +356,25 @@ mod tests {
             })
             .collect::<Vec<_>>();
         crate::judge_multi::aggregate(trials, anchors.len() as u8)
+    }
+
+    #[test]
+    fn not_judged_keeps_the_floor_and_says_so() {
+        let hybrid = dim_not_judged(Some(3));
+        assert_eq!(hybrid.raw, 3);
+        assert!(matches!(
+            hybrid.source,
+            ScoreSource::NotJudged {
+                auto_floor: Some(3)
+            }
+        ));
+        let rubric = dim_not_judged(None);
+        assert_eq!(rubric.raw, 0);
+        assert!(matches!(
+            rubric.source,
+            ScoreSource::NotJudged { auto_floor: None }
+        ));
+        assert_eq!(rubric.anchor_majority, None);
     }
 
     #[test]

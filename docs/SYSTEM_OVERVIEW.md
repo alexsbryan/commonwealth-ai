@@ -256,7 +256,7 @@ code/crates/
 ├── corpus-engine-archaeology      # Git archaeology + rough-edges + atom-provenance
 ├── corpus-engine-notes            # NoteStore + project_docs index
 ├── corpus-engine-watchers         # Lint/test/project-index watchers + result stores
-├── sovereign-agent-bench          # Eleven-problem agent-coding battery
+├── sovereign-agent-bench          # Fifteen-problem agent-coding battery; pi and opencode runners take any OpenAI-compatible endpoint (`--agent-base-url`)
 ├── sovereign-agent-tools          # Canonical agent-tool primitives (cross-runner contract)
 ├── sovereign-cli-dev              # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
 ├── sovereign-code                 # Code intelligence served over MCP — the `svrn code` program, lifted out of sovereign-tools

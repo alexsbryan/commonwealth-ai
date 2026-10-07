@@ -94,7 +94,7 @@ impl Sandbox {
     /// `node`, `python`); model credentials are intentionally dropped
     /// so the agent can only talk to the local daemon.
     ///
-    /// `extra` carries runner-specific keys (e.g. `PI_PROVIDER_URL`)
+    /// `extra` carries runner-specific keys (e.g. `PI_CODING_AGENT_DIR`)
     /// that the harness needs to inject explicitly.
     pub(crate) fn scrubbed_env(extra: &[(&str, &str)]) -> HashMap<String, String> {
         let mut out = HashMap::new();
