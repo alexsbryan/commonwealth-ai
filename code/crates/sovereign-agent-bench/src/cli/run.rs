@@ -275,6 +275,15 @@ fn configure_runner(
             }
             Ok((Arc::new(oc), Some(endpoint)))
         }
+        // The TDD machine is a plain chat-completions client; only an
+        // explicit --agent-base-url re-points it, so a run without one
+        // keeps SearchRunner's own default rather than following the judge.
+        "search" if args.agent_base_url.is_some() => {
+            info!(endpoint = %endpoint.base_url, "agent_bench: search runner pointed at agent endpoint");
+            let search =
+                crate::runners::search::SearchRunner::with_provider_url(endpoint.base_url.clone());
+            Ok((Arc::new(search), Some(endpoint)))
+        }
         other if args.agent_base_url.is_some() => {
             Err(RunError::EndpointUnsupported(other.to_string()))
         }
@@ -788,5 +797,26 @@ mod tests {
         assert!(!ids_match("3.2-lights-out", "3"));
         assert!(!ids_match("3.20-foo", "3.2"));
         assert!(ids_match("3.2-lights-out", "3.2-lights-out"));
+    }
+
+    #[test]
+    fn search_runner_takes_the_agent_endpoint() {
+        let argv: Vec<String> = [
+            "--agent",
+            "search",
+            "--agent-base-url",
+            "http://127.0.0.1:18191/v1",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let args = RunArgs::parse(&argv).expect("args parse");
+        let runner = AgentRunnerRegistry::builtin()
+            .get("search")
+            .expect("search is registered");
+        // Refused with EndpointUnsupported before this arm existed. That
+        // requests then reach the URL is proven outside the subject, by the
+        // tap's record of a search run (target/agent-coding-arms/smoke-search-A0).
+        configure_runner(runner, &args).expect("search accepts an agent endpoint");
     }
 }

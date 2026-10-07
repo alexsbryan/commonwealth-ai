@@ -5,6 +5,10 @@
 #
 #   A  llama-server built from the llama.cpp commit the daemon vendors
 #      (target/llama-server-vanilla, unpatched), no daemon in the path
+#   A0 A with `--reasoning off`: the same kernels without the thinking
+#      channel. The TDD machine's search runner needs it — at thinking-on
+#      defaults one turn of this model ran 10-11k reasoning tokens, past
+#      its 4000-token candidate cap before any content.
 #   B  the stock daemon as shipped, release-built, on its client port
 #   C  B with SOVEREIGN_FRONTDOOR_RESHAPE=0 (turn_fidelity::reshape_enabled):
 #      the request nudges off, the serving layer otherwise identical
@@ -16,7 +20,7 @@
 # sampler defaults and chat rendering are left at each server's own default,
 # because those are what the A/B measures.
 #
-#   serve-arm.sh <A|B|C> <port> [ctx]
+#   serve-arm.sh <A|A0|B|C> <port> [ctx]
 #
 # Stop an arm by its pid file: kill "$(cat target/agent-coding-arms/<arm>-<port>/pid)".
 # Killing the `toolbox run` that started it does not reach the server.
@@ -33,11 +37,13 @@ mkdir -p "$out"
 [ -f "$gguf" ] || { echo "serve-arm: no GGUF at $gguf" >&2; exit 2; }
 
 case $arm in
-  A)
+  A|A0)
     bin=$repo/target/llama-server-vanilla/build/bin/llama-server
     [ -x "$bin" ] || { echo "serve-arm: no $bin (bench/lanes/agent-coding/arms/build-llama-server.sh)" >&2; exit 2; }
+    reasoning=auto
+    [ "$arm" = A0 ] && reasoning=off
     "$bin" -m "$gguf" -c "$ctx" -ngl 99 --parallel 1 \
-      --spec-type draft-mtp --spec-draft-n-max 3 \
+      --spec-type draft-mtp --spec-draft-n-max 3 --reasoning "$reasoning" \
       --host 127.0.0.1 --port "$port" > "$out/server.log" 2>&1 &
     ;;
   B|C)
@@ -57,7 +63,7 @@ case $arm in
       SOVEREIGN_SERVE_PORT=$((port + 2)) RUST_LOG=${RUST_LOG:-info} \
       exec ./sovereign-stock run --config "$root/config.toml") > "$out/server.log" 2>&1 &
     ;;
-  *) echo "serve-arm: arm is A, B or C, not $arm" >&2; exit 2 ;;
+  *) echo "serve-arm: arm is A, A0, B or C, not $arm" >&2; exit 2 ;;
 esac
 pid=$!
 echo $pid > "$out/pid"
