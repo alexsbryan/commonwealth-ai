@@ -25,15 +25,17 @@
 //! linking the engine that extracted to it (enrichment-as-plugin Step 3).
 
 pub mod decl;
+pub mod derived;
 pub mod navigation;
+pub mod source;
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 use decl::{
-    OntologyTypeDecl, OntologyVocabulary, PatternDecl, SupersessionClock, TensionDecl, TypeKind,
-    VoicesDecl,
+    DocumentFieldsDecl, OntologyTypeDecl, OntologyVocabulary, PatternDecl, SupersessionClock,
+    TensionDecl, TypeKind, VoicesDecl,
 };
 pub use navigation::{
     NavigationPolicy, QuestionKind, SeedPolicy, SummarySource, WalkPolicy, DEFAULT_BUDGET,
@@ -139,6 +141,78 @@ pub struct ChangePolicy {
     /// Claim type → `"document_date"` or the time attribute it supersedes on.
     #[serde(default)]
     pub supersedes: BTreeMap<String, String>,
+    /// The per-document metadata fields stamped onto every claim. `None`
+    /// stamps nothing; absent on the wire then, so older `ontology.json`
+    /// files read and write unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<DocumentFieldsDecl>,
+}
+
+/// The claim attribute the document-date clock reads. Stamped from the
+/// field `change.document.date` names; read by the supersession fold and
+/// the tension `clock` field.
+pub const DOCUMENT_DATE_ATTR: &str = "document_date";
+/// The claim attribute carrying the thread of the claim's own document.
+pub const DOCUMENT_THREAD_ATTR: &str = "document_thread";
+/// The claim attribute carrying the identifier of the claim's own document.
+pub const DOCUMENT_ID_ATTR: &str = "document_id";
+/// The entity attribute a metadata `source` writes on each atom it projects:
+/// how many documents carry its identity value.
+pub const DOCUMENT_COUNT_ATTR: &str = "document_count";
+
+/// One stamp `change.document` can declare. Closed: the declaration's three
+/// keys, each mapped to the reserved claim attribute it writes — the one
+/// table the validator and the resolver both read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum DocumentStamp {
+    Date,
+    Thread,
+    Id,
+}
+
+impl DocumentStamp {
+    pub const ALL: [DocumentStamp; 3] = [Self::Date, Self::Thread, Self::Id];
+
+    /// The claim attribute this stamp writes.
+    pub const fn attr(self) -> &'static str {
+        match self {
+            Self::Date => DOCUMENT_DATE_ATTR,
+            Self::Thread => DOCUMENT_THREAD_ATTR,
+            Self::Id => DOCUMENT_ID_ATTR,
+        }
+    }
+
+    /// The stamp writing claim attribute `attr`, if one does.
+    pub fn from_attr(attr: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.attr() == attr)
+    }
+
+    /// The `change.document` key that declares it.
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Date => "date",
+            Self::Thread => "thread",
+            Self::Id => "id",
+        }
+    }
+}
+
+impl DocumentFieldsDecl {
+    /// The metadata field the author named for `stamp`, if any.
+    pub fn field(&self, stamp: DocumentStamp) -> Option<&str> {
+        match stamp {
+            DocumentStamp::Date => self.date.as_deref(),
+            DocumentStamp::Thread => self.thread.as_deref(),
+            DocumentStamp::Id => self.id.as_deref(),
+        }
+    }
+
+    /// Every declared `(stamp, field)` pair, in [`DocumentStamp::ALL`] order.
+    pub fn declared(&self) -> impl Iterator<Item = (DocumentStamp, &str)> {
+        DocumentStamp::ALL
+            .into_iter()
+            .filter_map(|s| self.field(s).map(|f| (s, f)))
+    }
 }
 
 /// Axis 5 — what the system infers.
@@ -156,6 +230,9 @@ pub struct DerivationPolicy {
     /// Reconstruct arguments. Default `false` (today).
     #[serde(default)]
     pub arguments: bool,
+    /// Derived attributes: the declared paths, sets and folds (`derived`).
+    #[serde(default)]
+    pub derived: derived::DerivedPolicy,
 }
 
 impl Default for DerivationPolicy {
@@ -165,6 +242,7 @@ impl Default for DerivationPolicy {
             patterns: Vec::new(),
             configurations: true,
             arguments: false,
+            derived: derived::DerivedPolicy::default(),
         }
     }
 }
@@ -329,5 +407,51 @@ impl AtlasOntologyFile {
     /// by a built-in genre? The custom pipeline reports `custom_atlas`.
     pub fn is_author_declared(&self) -> bool {
         self.pipeline_id == "custom_atlas"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evidence_is_weighed_on_its_expected_precision_not_its_point_estimate() {
+        let e = |right, of| decl::EvidentialFieldDecl {
+            evidence: "x".into(),
+            right,
+            of,
+            measured_on: "m".into(),
+        };
+        // 15 of 16 reads .938 and 190 of 210 .905; few links expect less.
+        assert!(e(15, 16).precision() < e(190, 210).precision());
+        assert!((e(15, 16).precision() - 16.0 / 18.0).abs() < 1e-12);
+        assert!(e(4, 5).precision() > 0.5 && e(10, 21).precision() < 0.5);
+    }
+
+    /// `DocumentStamp::key` is the hand-spelled twin of the serde field names
+    /// on `DocumentFieldsDecl`; read the struct back through serde so the two
+    /// cannot drift.
+    #[test]
+    fn document_stamp_keys_are_the_declaration_keys() {
+        let all = DocumentFieldsDecl {
+            date: Some("a".into()),
+            thread: Some("b".into()),
+            id: Some("c".into()),
+        };
+        let json = serde_json::to_value(&all).unwrap();
+        let mut wire: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        wire.sort_unstable();
+        let mut keys: Vec<&str> = DocumentStamp::ALL.map(DocumentStamp::key).to_vec();
+        keys.sort_unstable();
+        assert_eq!(wire, keys);
+        for s in DocumentStamp::ALL {
+            assert!(s.attr().starts_with("document_"), "{}", s.attr());
+            assert_eq!(all.field(s).is_some(), true);
+        }
     }
 }

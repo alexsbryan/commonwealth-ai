@@ -1,0 +1,5 @@
+#!/bin/sh
+# How a ralph session ends: `ralph-result done|continue|await|needs-human ...`.
+# The loop puts this directory on every session's PATH and names its own file
+# in RALPH_PY, so the result is judged by the code that runs the loop.
+exec python3 "${RALPH_PY:-$(dirname "$0")/../ralph.py}" result "$@"

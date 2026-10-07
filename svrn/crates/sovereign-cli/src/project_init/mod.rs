@@ -720,8 +720,12 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
             // the old name rather than leaving a file that looks live.
             let config_path = opencode_dir.join("opencode.json");
             let legacy_path = opencode_dir.join("config.json");
-            let generated =
-                generate_opencode_config(port, commonwealth_url.as_deref(), &commonwealth_models);
+            let generated = generate_opencode_config(
+                port,
+                &corpus_id,
+                commonwealth_url.as_deref(),
+                &commonwealth_models,
+            );
             let merge_base = std::fs::read_to_string(&config_path)
                 .or_else(|_| std::fs::read_to_string(&legacy_path))
                 .ok();

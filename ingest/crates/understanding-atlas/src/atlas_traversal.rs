@@ -7,7 +7,7 @@
 //! classified into a traversal plan, the resolved atlas is walked, and a
 //! brief is assembled.
 //!
-//! The pure children (`brief`, `classifier`, `engine`, `spans`) live here;
+//! The pure children (`brief`, `classifier`, `engine`, `spans`, `typed`) live here;
 //! `question_kind` (host — it embeds) stays in the engine's shell and is
 //! re-exported at its historical path.
 
@@ -15,6 +15,10 @@ pub mod brief;
 pub mod classifier;
 pub mod engine;
 pub mod spans;
+pub mod typed;
+mod typed_check;
+mod typed_match;
+pub mod typed_prompt;
 
 // The declared-ontology fixture the classifier and traversal tests use in
 // place of `corpus-engine`'s `recipe_templates::numismatics_policies` (a

@@ -66,17 +66,20 @@ impl FindCalleesTool {
     }
 
     /// The executable half of `callees`.
-    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'symbol'".to_string()))?;
 
         let graph = self.graph.load_full().await;
-        let (callees, caution) = graph.find_callees(symbol).await.map_err(|e| Error::Tool {
-            tool_id: "callees".to_string(),
-            message: e.to_string(),
-        })?;
+        let (callees, caution) = graph
+            .find_callees(symbol, ctx.corpus_scope.as_deref())
+            .await
+            .map_err(|e| Error::Tool {
+                tool_id: "callees".to_string(),
+                message: e.to_string(),
+            })?;
 
         if callees.is_empty() {
             return Ok(StepOutput::Text(format!(

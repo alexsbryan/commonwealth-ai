@@ -1,0 +1,13 @@
+arm bare run 1 -> /Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/runs-ft-k1dev/read1/bare/run-1
+  host http://localhost:9741  synth Qwen3.6-35B-A3B-UD-MTP-IQ4_NL  judge Qwopus3.5-4B-v3-MTP-Q8_0
+svrnmesh: bridged 3 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+warning: sovereign-cli-bench binary is 6h older than the binary exec'ing it — if you changed its code, rebuild: cargo build -p sovereign-cli-bench  (silence: SOVEREIGN_NO_STALE_WARN=1)
+loaded bank `ontology-proof-ans-v1-k1-dev` — 18 questions, target corpus `ft-ans-dev-b`
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `ft-ans-dev-b`
+wrote run JSON to /Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/runs-ft-k1dev/read1/bare/run-1/eval.json
+  verdict: recorded (the comparison judges it)
+exit 0

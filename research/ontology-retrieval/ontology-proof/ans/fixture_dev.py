@@ -19,7 +19,7 @@ THE ARMS: `recipe-dev-a.toml` and `recipe-dev-b.toml` are written beside the
 fixture, DERIVED from `recipe.toml` — id, name and path swapped, nothing else
 — so the study's ontology has one copy. Arm B adds exactly ARM_B_RELATION.
 """
-import argparse, json, pathlib, re, sys
+import argparse, json, pathlib, re, sys, tomllib
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -57,13 +57,36 @@ def dev(igch):
     return igch % 2 == 0
 
 
+def dev_bank():
+    """bank.attested.toml's DEV K1 rows, pointed at arm B's corpus -> bank-k1-dev.toml.
+
+    The rows are copied, never re-worded; only `[bank]` changes. K0 stays out: its
+    lookups name passages the dev fixture does not carry, and the Stage-1 gate's
+    lookup behaviour is not what O-T1 reads."""
+    src = tomllib.loads((HERE / "bank.attested.toml").read_text(encoding="utf8"))
+    rows = [q for q in src["questions"] if q["category"].startswith("k1")
+            and dev(int(re.search(r"igch0*(\d+)", q["id"]).group(1)))]
+    q = json.dumps
+    out = ["# DERIVED by fixture_dev.py --bank from bank.attested.toml: the dev (even IGCH) K1 rows,",
+           "# over arm B's corpus. Edit the source bank, not this file.", "[bank]",
+           f"name = {q(src['bank']['name'] + '-k1-dev')}", 'corpus = "ft-ans-dev-b"',
+           f"description = {q('Dev half of K1 (even IGCH) for O-T1 through the chat path; rows verbatim from bank.attested.toml.')}"]
+    for r in rows:
+        out += ["", "[[questions]]"] + [f"{k} = {q(v)}" for k, v in r.items()]
+    (HERE / "bank-k1-dev.toml").write_text("\n".join(out) + "\n", encoding="utf8")
+    print(f"dev K1 rows {len(rows)} -> {HERE / 'bank-k1-dev.toml'}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", type=pathlib.Path, default=HERE / "text-dev/ans-dev.md")
     ap.add_argument("--entries-only", action="store_true",
                     help="keep a paragraph only under a heading whose LAST segment names the hoard "
                          "(the hoard's own entry), not the long sections an anchor opens")
+    ap.add_argument("--bank", action="store_true", help="write bank-k1-dev.toml only, and stop")
     a = ap.parse_args()
+    if a.bank:
+        return dev_bank()
     paras = make_bank.paragraphs()
     hoards = {h["igch"]: h for h in json.loads((HERE / "truth/hoards.json").read_text())["hoards"]}
     rows = [json.loads(p.read_text()) for p in sorted((HERE / "gold").glob("list-igch*.json"))]

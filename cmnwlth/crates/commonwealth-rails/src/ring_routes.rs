@@ -5,10 +5,10 @@
 //! `routes_internal::{ring_sync, ring_live, ring_checkpoint}` answer today, so
 //! the flip turns nothing off.
 //!
-//! They sit on the internal listener beside gossip and join, under the
-//! standing `/internal/ring` prefix the endpoint registers for MEMBERS
-//! ([`crate::origins::stand_own`]): a dialer the roster does not name never
-//! reaches them. What a member may then read is each ring's own question —
+//! They sit on the internal listener beside gossip and join. The endpoint
+//! registers the sync and live paths for MEMBERS, and nothing for the
+//! checkpoint, a local operator's export ([`crate::origins::stand_own`]): a
+//! dialer the roster does not name never reaches them. What a member may then read is each ring's own question —
 //! the sync route asks the ring's roster about the verified key the acceptor
 //! stamped (`X-Mesh-Pubkey`), through [`crate::ring_sync::roster_names`], the
 //! one test the sender also applies. A caller with no stamp reached this
@@ -205,10 +205,25 @@ pub async fn ring_live(State(state): State<RingInbound>, body: axum::body::Bytes
 /// ([`commonwealth_rail::ring_checkpoint::checkpoint_document`]). A namespace
 /// this node does not hold is REFUSED before anything is opened: the rail
 /// creates a journal on first touch.
+///
+/// **A local operator's act, never a peer's** (sovereign-cli-base
+/// `rail_checkpoint`; a peer syncs by digest). The endpoint registers no path
+/// to it (`crate::origins::stand_own`); a request the acceptor stamped is
+/// refused here too, whoever the stamp names, so one registration slip does
+/// not hand a member every ring's whole record.
 pub async fn ring_checkpoint(
     State(state): State<RingInbound>,
     Path(namespace): Path<String>,
+    headers: HeaderMap,
 ) -> Response {
+    if let Some(stamped) = headers.get(PUBKEY_HEADER) {
+        tracing::warn!(target: "rails", namespace = %namespace,
+            asker = ?stamped, "ring checkpoint: refused a peer's ask — a checkpoint is a local operator's export");
+        return err(
+            StatusCode::FORBIDDEN,
+            "a checkpoint is a local operator's export of this node's record; a peer syncs by digest",
+        );
+    }
     let held = match state.rail.namespaces() {
         Ok(names) => names,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),

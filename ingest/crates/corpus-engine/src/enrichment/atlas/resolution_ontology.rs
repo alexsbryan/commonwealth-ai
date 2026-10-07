@@ -480,8 +480,6 @@ pub fn derive_section_context_refs(
 pub fn snap_ref_attributes(
     policy: &ResolutionPolicy<'_>,
     entities: &[Entity],
-    name_index: &HashMap<String, AtomId>,
-    token_index: &HashMap<String, Vec<AtomId>>,
 ) -> (
     BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
     Vec<PhaseFailure>,
@@ -491,6 +489,18 @@ pub fn snap_ref_attributes(
     if policy.ref_attributes.is_empty() {
         return (updates, failures);
     }
+    // A ref resolves among the atoms its target type accepts, generic-typed ones
+    // included: a name another declared type also carries (a deal named after its
+    // customer) is no candidate, so which of two same-named atoms the name index
+    // saw last decides nothing.
+    type Scope = (
+        Vec<Entity>,
+        HashMap<String, AtomId>,
+        HashMap<String, Vec<AtomId>>,
+    );
+    let mut scopes: HashMap<&str, Scope> = HashMap::new();
+    // Built only when a scoped lookup fails, to name the type a refused name does belong to.
+    let mut unscoped: Option<(HashMap<String, AtomId>, HashMap<String, Vec<AtomId>>)> = None;
     for entity in entities {
         let mut changed = false;
         let mut attributes = entity.attributes.clone();
@@ -502,43 +512,26 @@ pub fn snap_ref_attributes(
             if name.is_empty() {
                 continue;
             }
+            let (candidates, name_index, token_index) = scopes.entry(*of).or_insert_with(|| {
+                let c: Vec<Entity> = entities
+                    .iter()
+                    .filter(|e| {
+                        let t = e.entity_type.as_str_repr();
+                        !policy.index.contains(t) || policy.accepts(of, t)
+                    })
+                    .cloned()
+                    .collect();
+                let names = super::resolution::build_name_index(&c);
+                let tokens = super::resolution::build_token_index(&c);
+                (c, names, tokens)
+            });
             match super::resolution::resolve_entity_id_with_salience(
                 &name,
-                entities,
+                candidates,
                 name_index,
                 token_index,
             ) {
                 Some(target) => {
-                    // Refuse a target of ANOTHER declared type (a `mint` ref
-                    // landing on a hoard). A generic-typed target still snaps
-                    // — that is the case the module comment protects.
-                    let target_type = entities
-                        .iter()
-                        .find(|e| e.id == target)
-                        .map(|e| e.entity_type.as_str_repr());
-                    if let Some(actual) =
-                        target_type.filter(|t| policy.index.contains(t) && !policy.accepts(of, t))
-                    {
-                        debug!(
-                            entity = %entity.canonical_name,
-                            attribute = %attr,
-                            value = %name,
-                            actual,
-                            "atlas/resolution 3b: ref resolved to another declared type; keeping the name"
-                        );
-                        failures.push(PhaseFailure {
-                            phase: PHASE,
-                            subject: format!("atom:{}", entity.id.as_str()),
-                            kind: PhaseFailureKind::UnresolvedAttributeRef,
-                            reason: format!(
-                                "`{}`.{attr} = `{name}` (declared ref to `{of}`) resolved to a \
-                                 `{actual}`, another declared type; the attribute keeps the name",
-                                entity.canonical_name
-                            ),
-                            raw_response_head: None,
-                        });
-                        continue;
-                    }
                     debug!(
                         entity = %entity.canonical_name,
                         attribute = %attr,
@@ -552,19 +545,36 @@ pub fn snap_ref_attributes(
                     changed = true;
                 }
                 None => {
+                    let (names, tokens) = unscoped.get_or_insert_with(|| {
+                        (
+                            super::resolution::build_name_index(entities),
+                            super::resolution::build_token_index(entities),
+                        )
+                    });
+                    let elsewhere = super::resolution::resolve_entity_id_with_salience(
+                        &name, entities, names, tokens,
+                    )
+                    .and_then(|id| entities.iter().find(|e| e.id == id))
+                    .map(|e| e.entity_type.as_str_repr())
+                    .filter(|t| policy.index.contains(t) && !policy.accepts(of, t));
                     debug!(
                         entity = %entity.canonical_name,
                         attribute = %attr,
                         value = %name,
-                        "atlas/resolution 3b: ref attribute did not resolve; keeping the name"
+                        elsewhere,
+                        "atlas/resolution 3b: ref attribute did not resolve to its target type; keeping the name"
                     );
+                    let why = match elsewhere {
+                        Some(t) => format!("names only a `{t}`, another declared type"),
+                        None => format!("did not resolve to an atom `{of}` accepts"),
+                    };
                     failures.push(PhaseFailure {
                         phase: PHASE,
                         subject: format!("atom:{}", entity.id.as_str()),
                         kind: PhaseFailureKind::UnresolvedAttributeRef,
                         reason: format!(
-                            "`{}`.{attr} = `{name}` (declared ref to `{of}`) did not resolve \
-                             to an Entity atom; the attribute keeps the name",
+                            "`{}`.{attr} = `{name}` (declared ref to `{of}`) {why}; the attribute \
+                             keeps the name",
                             entity.canonical_name
                         ),
                         raw_response_head: None,
@@ -726,8 +736,7 @@ mod tests {
         let (mentions, failures) =
             role_mentions(&policy, &[], &entities, &HashMap::new(), &HashMap::new());
         assert!(mentions.is_empty() && failures.is_empty());
-        let (updates, ref_failures) =
-            snap_ref_attributes(&policy, &entities, &HashMap::new(), &HashMap::new());
+        let (updates, ref_failures) = snap_ref_attributes(&policy, &entities);
         assert!(updates.is_empty() && ref_failures.is_empty());
         assert_eq!(
             ResolutionPolicy::default().is_active(),
@@ -847,6 +856,7 @@ mod tests {
                     name: "mint".into(),
                     family: AttrFamily::Ref { of: "mint".into() },
                     description: String::new(),
+                    derived: None,
                 }],
                 ..Default::default()
             },
@@ -860,22 +870,58 @@ mod tests {
         );
         let mint = atom("entity-0002", "Eoforwic", EntityType::Other("mint".into()));
         let entities = vec![coin, mint];
-        let name_index: HashMap<String, AtomId> = entities
-            .iter()
-            .map(|e| {
-                (
-                    super::super::resolution::fold(&e.canonical_name),
-                    e.id.clone(),
-                )
-            })
-            .collect();
 
-        let (updates, failures) =
-            snap_ref_attributes(&policy, &entities, &name_index, &HashMap::new());
+        let (updates, failures) = snap_ref_attributes(&policy, &entities);
         assert!(updates.is_empty(), "nothing snapped, so nothing to apply");
         assert_eq!(failures.len(), 1);
         assert_eq!(failures[0].kind, PhaseFailureKind::UnresolvedAttributeRef);
         assert!(failures[0].reason.contains("Nowhere-at-all"));
+    }
+
+    /// A deal named after its customer: `Mesa` the company and `Mesa` the deal.
+    /// The name index lets the later atom win a name, so an untyped lookup
+    /// lands on whichever came last; a ref declared `of = "company"` must
+    /// snap to the company in either order.
+    #[test]
+    fn a_ref_snaps_to_its_target_type_when_another_type_shares_the_name() {
+        let p = policies(vec![
+            entity_decl("company", None),
+            OntologyTypeDecl {
+                name: "deal".into(),
+                kind: TypeKind::Entity,
+                attributes: vec![AttrDecl {
+                    name: "counterparty".into(),
+                    family: AttrFamily::Ref {
+                        of: "company".into(),
+                    },
+                    description: String::new(),
+                    derived: None,
+                }],
+                ..Default::default()
+            },
+        ]);
+        let policy = ResolutionPolicy::new(&p);
+        let company = atom("entity-0001", "Mesa", EntityType::Other("company".into()));
+        let named_deal = atom("entity-0002", "Mesa", EntityType::Other("deal".into()));
+        let mut deal = atom("entity-0003", "Deal One", EntityType::Other("deal".into()));
+        deal.attributes.insert(
+            "counterparty".into(),
+            serde_json::Value::String("Mesa".into()),
+        );
+        for entities in [
+            vec![company.clone(), named_deal.clone(), deal.clone()],
+            vec![named_deal.clone(), company.clone(), deal.clone()],
+        ] {
+            let (updates, failures) = snap_ref_attributes(&policy, &entities);
+            assert_eq!(
+                updates
+                    .get("entity-0003")
+                    .and_then(|a| a.get("counterparty"))
+                    .and_then(|v| v.as_str()),
+                Some("entity-0001"),
+                "{failures:?}"
+            );
+        }
     }
 
     /// The section-context derivation, on the shapes that produced it: a
@@ -894,6 +940,7 @@ mod tests {
                     name: "hoard".into(),
                     family: AttrFamily::Ref { of: "hoard".into() },
                     description: String::new(),
+                    derived: None,
                 }],
                 ..Default::default()
             },

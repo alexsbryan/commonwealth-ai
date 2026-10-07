@@ -101,9 +101,22 @@ async fn spawn(router: Router) -> String {
 }
 
 async fn rpc(base: &str, id: u64, method: &str, params: Value) -> Value {
-    reqwest::Client::new()
-        .post(format!("{base}/mcp"))
-        .json(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+    rpc_as(base, &[], id, method, params).await
+}
+
+/// [`rpc`] from a connection that sends `headers`.
+async fn rpc_as(
+    base: &str,
+    headers: &[(&str, &str)],
+    id: u64,
+    method: &str,
+    params: Value,
+) -> Value {
+    let mut req = reqwest::Client::new().post(format!("{base}/mcp"));
+    for (k, v) in headers {
+        req = req.header(*k, *v);
+    }
+    req.json(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
         .send()
         .await
         .expect("post /mcp")
@@ -198,22 +211,32 @@ async fn svrn_alone_points_a_code_tool_at_the_code_server() {
     );
 }
 
-/// A stand-in for code's mounted host: one tool, `symbols`.
+/// A stand-in for code's mounted host: one tool, `symbols`, which answers
+/// with the corpus scope it was called under; it holds corpus `a` alone.
 struct CodeStandIn;
 
 impl McpMountedTools for CodeStandIn {
-    fn list(&self) -> Value {
+    fn list(&self, _ctx: &McpRequestContext) -> Value {
         json!([{ "name": "symbols", "description": "code's", "inputSchema": {} }])
+    }
+
+    fn admit(&self, ctx: &McpRequestContext) -> Result<(), String> {
+        match ctx.corpus.as_deref() {
+            None | Some("a") => Ok(()),
+            Some(other) => Err(format!("`{other}` is not an indexed code corpus: a")),
+        }
     }
 
     fn call<'a>(
         &'a self,
         name: &'a str,
         _args: &'a Value,
-        _ctx: &'a McpRequestContext,
+        ctx: &'a McpRequestContext,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<ToolOutcome>> + Send + 'a>> {
         Box::pin(async move {
-            (name == "symbols").then(|| ToolOutcome::answer("answered by code".to_string(), None))
+            (name == "symbols").then(|| {
+                ToolOutcome::answer(format!("answered by code for {:?}", ctx.corpus), None)
+            })
         })
     }
 }
@@ -248,9 +271,140 @@ async fn a_composed_code_program_answers_its_tools_on_the_same_mcp_once() {
     )
     .await;
     assert_eq!(
-        call["result"]["content"][0]["text"], "answered by code",
+        call["result"]["content"][0]["text"], "answered by code for None",
         "{call}"
     );
     let unknown = rpc(&base, 3, "tools/call", json!({ "name": "nope" })).await;
     assert_eq!(unknown["error"]["code"], -32601, "{unknown}");
+}
+
+/// The code-intel-repo-scope order, step 1: the `x-svrn-corpus` header
+/// reaches code's host on the one `/mcp`. A corpus code holds is passed
+/// through; no header is every corpus, as before; a corpus code does not hold
+/// is -32602 naming the ones it does, for svrn's own tools too, before any
+/// tool runs. FAILING INPUT: a mount that drops the header answers the scoped
+/// call `for None`.
+#[tokio::test]
+async fn the_corpus_header_reaches_code_and_an_unknown_corpus_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = Arc::new(svrn_registry(dir.path()).await);
+    let notes = Arc::new(SqliteStateStore::open(&dir.path().join("sovereign.db")).unwrap());
+    let base = spawn(mcp_router(
+        registry,
+        notes,
+        "scoped".into(),
+        Some(Arc::new(CodeStandIn)),
+        McpNotifier::new(),
+    ))
+    .await;
+    let symbols = json!({ "name": "symbols", "arguments": { "name": "Foo" } });
+
+    let scoped = rpc_as(
+        &base,
+        &[("x-svrn-corpus", "a")],
+        1,
+        "tools/call",
+        symbols.clone(),
+    )
+    .await;
+    assert_eq!(
+        scoped["result"]["content"][0]["text"], "answered by code for Some(\"a\")",
+        "{scoped}"
+    );
+
+    let unscoped = rpc(&base, 2, "tools/call", symbols.clone()).await;
+    assert_eq!(
+        unscoped["result"]["content"][0]["text"], "answered by code for None",
+        "{unscoped}"
+    );
+
+    for (id, name) in [(3, "symbols"), (4, "wikipedia_fetch")] {
+        let refused = rpc_as(
+            &base,
+            &[("x-svrn-corpus", "nope")],
+            id,
+            "tools/call",
+            json!({ "name": name, "arguments": {} }),
+        )
+        .await;
+        assert_eq!(refused["error"]["code"], -32602, "{name}: {refused}");
+        let message = refused["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains("`nope`") && message.contains(": a"),
+            "{name}: the refusal does not name the indexed corpora: {refused}"
+        );
+    }
+}
+
+/// The order's step 4: a read-only connection (`x-svrn-effects: read`)
+/// lists no tool whose MANIFEST effect is not `Read`, judged against the
+/// registry's own descriptors rather than a hand list, and a call of
+/// `corpus_store` is refused naming its effect. FAILING INPUT: the list
+/// filtered but the call not, so `corpus_store` runs; the last assertion
+/// catches it.
+#[tokio::test]
+async fn a_read_only_connection_neither_lists_nor_calls_a_write_tool() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = Arc::new(svrn_registry(dir.path()).await);
+    let effects: std::collections::HashMap<String, sovereign_contracts::Effect> = registry
+        .descriptors()
+        .into_iter()
+        .map(|d| (d.id, d.effect))
+        .collect();
+    let notes = Arc::new(SqliteStateStore::open(&dir.path().join("sovereign.db")).unwrap());
+    let base = spawn(mcp_router(
+        registry,
+        notes,
+        "read-only".into(),
+        None,
+        McpNotifier::new(),
+    ))
+    .await;
+    let read_only = [("x-svrn-effects", "read")];
+
+    let full = names(&rpc(&base, 1, "tools/list", json!({})).await);
+    let listed = names(&rpc_as(&base, &read_only, 2, "tools/list", json!({})).await);
+    assert!(
+        full.iter().any(|n| n == "corpus_store"),
+        "the full list must hold corpus_store for this test to mean anything: {full:?}"
+    );
+    assert!(!listed.is_empty(), "a read-only list keeps the read tools");
+    for name in &listed {
+        assert_eq!(
+            effects.get(name),
+            Some(&sovereign_contracts::Effect::Read),
+            "a read-only connection lists `{name}`, whose manifest effect is not Read"
+        );
+    }
+    let hidden: Vec<&String> = full.iter().filter(|n| !listed.contains(n)).collect();
+    assert!(
+        hidden.iter().any(|n| *n == "corpus_store"),
+        "corpus_store is still listed: {listed:?}"
+    );
+
+    // Arguments that validate, so only the effect gate stands between the
+    // call and a write.
+    let embedding = vec![0.0f32; corpus_index::types::DEFAULT_EMBED_DIM];
+    let call = rpc_as(
+        &base,
+        &read_only,
+        3,
+        "tools/call",
+        json!({ "name": "corpus_store",
+                "arguments": { "corpus": "x", "chunks": json!(["hello"]).to_string(),
+                               "embeddings": json!([embedding]).to_string() } }),
+    )
+    .await;
+    assert_eq!(call["result"]["isError"], true, "corpus_store ran: {call}");
+    assert!(
+        !dir.path().join("indexes").join("x").exists(),
+        "corpus_store wrote corpus `x` on a read-only connection: {call}"
+    );
+    let text = call["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        text.contains("Write") && text.contains("x-svrn-effects"),
+        "the refusal does not name the effect: {call}"
+    );
 }

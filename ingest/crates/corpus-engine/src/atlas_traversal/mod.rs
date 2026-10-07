@@ -38,7 +38,7 @@
 // — the ground walk's row selection classifies through it); re-exported at
 // the historical path.
 pub use corpus_engine_atlas_reader::question_kind;
-pub use understanding_atlas::atlas_traversal::{brief, classifier, engine, spans};
+pub use understanding_atlas::atlas_traversal::{brief, classifier, engine, spans, typed};
 
 pub use brief::{assemble_brief, depth_frame_records, Brief};
 pub use classifier::{classify_query, classify_query_with, QueryPlan, QueryTarget};

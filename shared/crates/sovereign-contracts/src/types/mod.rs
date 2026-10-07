@@ -121,8 +121,10 @@ pub use grounding_journal::{
 mod routing;
 pub use routing::{
     compute_trust_level, AuthorityClaim, Effort, Intent, IntentRow, Operation, Permission,
-    ToolAccess, ToolContext, TrustLevel,
+    ToolAccess, TrustLevel,
 };
+mod tool_context;
+pub use tool_context::ToolContext;
 
 // ─── Tool Vocabulary ───────────────────────────────────────────
 
@@ -132,7 +134,8 @@ pub use routing::{
 // a layer-1 crate, turned out to be reaching UP into sovereign for the very
 // vocabulary it renders into every request (noun-convergence rung 2c, family
 // A). Sovereign's tool POLICY did NOT move: `Permission`, `AuthorityClaim` and
-// `ToolContext` are re-exported above, from `crate::types::routing`.
+// `ToolContext` are re-exported above, from `crate::types::routing` and
+// `crate::types::tool_context`.
 pub use crate::oicp::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};
 mod conversation;
 pub use conversation::{

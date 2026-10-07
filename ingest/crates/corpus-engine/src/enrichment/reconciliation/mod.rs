@@ -69,6 +69,7 @@ mod tests {
             SignalKind::LlmBatch => "llm_batch",
             SignalKind::ColumnHeader => "column_aware",
             SignalKind::EmailHeader => "email_rfc5322",
+            SignalKind::DocumentField => "document_fields",
             SignalKind::AttachmentDescription => "described_asset",
             SignalKind::OperatorAction => "operator",
             SignalKind::Other(_) => "other",

@@ -23,7 +23,9 @@
 /// Split `args` into `(positional, flag_pairs)`. Boolean flags (listed
 /// below) stand alone; value-taking flags consume the following token
 /// OR parse as `--key=value` in a single token.
-pub(super) const BOOLEAN_FLAGS: &[&str] = &["help"];
+/// `all-corpora` is `tools call`'s own: answer about every code corpus
+/// rather than the one built from the cwd's repo.
+pub(super) const BOOLEAN_FLAGS: &[&str] = &["help", "all-corpora"];
 
 pub(super) fn split_args(args: &[String]) -> (Vec<String>, Vec<(String, String)>) {
     let mut positional = Vec::new();

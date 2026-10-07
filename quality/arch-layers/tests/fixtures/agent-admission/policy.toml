@@ -1,0 +1,20 @@
+schema_version = 3
+backstage = ["spike-checker"]
+
+[[layer]]
+name = "fixture"
+crates = ["*"]
+
+[[package]]
+name = "svrn"
+doc = "README.md"
+crates = ["ask-app", "ask-format"]
+
+[[package]]
+name = "serve"
+doc = "README.md"
+crates = ["model-host"]
+
+[[package_leaf]]
+name = "wire"
+allow = []

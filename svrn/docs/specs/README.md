@@ -21,6 +21,10 @@ Current in-flight:
   declaration v1: ten users, five axes (shape, assertion, identity,
   change, derivation) as the interface the pipeline reads, a version as
   the parser that fills them. Kinds fixed, types declared.
+- [`ONTOLOGY_METHOD.md`](ONTOLOGY_METHOD.md) — how the ontology and
+  extraction layer is built: first principles before the measure, the
+  two-example generality test, the pieces agreed so far, and how an
+  example's own gaps are told apart from the method's.
 - [`ONTOLOGY_MIGRATION.md`](ONTOLOGY_MIGRATION.md) — the plan that
   wires v1 from recipe to inspector in eight phases, each with a gate;
   version-gated, SEP / Wikipedia / Enron never re-extracted.

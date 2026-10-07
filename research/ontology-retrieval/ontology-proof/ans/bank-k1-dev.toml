@@ -1,0 +1,132 @@
+# DERIVED by fixture_dev.py --bank from bank.attested.toml: the dev (even IGCH) K1 rows,
+# over arm B's corpus. Edit the source bank, not this file.
+[bank]
+name = "ontology-proof-ans-v1-k1-dev"
+corpus = "ft-ans-dev-b"
+description = "Dev half of K1 (even IGCH) for O-T1 through the chat path; rows verbatim from bank.attested.toml."
+
+[[questions]]
+id = "list-igch0076-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Kyparissia hoard, buried about 327 B.C.?"
+expected_facts = ["Amphipolis", "Histiaea", "Larissa", "Sicyon", "Tarsus", "Thebes"]
+notes = "mint; IGCH 76; local 4/7; cover 1; SINGLE_PASSAGE (report apart); gold/list-igch0076-mints.json"
+
+[[questions]]
+id = "list-igch0176-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Olympia hoard, found 1922?"
+expected_facts = ["Athens", "Babylon", "Byblus", "Chalcis", "Lampsacus", "Pella", "Sicyon", "Susa"]
+notes = "mint; IGCH 176; local 4/8; cover 3; gold/list-igch0176-mints.json"
+
+[[questions]]
+id = "list-igch0242-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Arcadia hoard, found 1929?"
+expected_facts = ["Argos", "Chalcis", "Megalopolis", "Rhodes", "Sicyon"]
+notes = "mint; IGCH 242; local 4/5; cover 2; gold/list-igch0242-mints.json"
+
+[[questions]]
+id = "list-igch0260-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Greece hoard, found 1936, buried about 146 B.C.?"
+expected_facts = ["Argos", "Chalcis", "Lacedaemon", "Megalopolis", "Messene", "Sicyon"]
+notes = "mint; IGCH 260; local 4/7; cover 2; gold/list-igch0260-mints.json"
+
+[[questions]]
+id = "list-igch0270-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Olympia hoard, found 1939?"
+expected_facts = ["Aenianes", "Chalcis", "Histiaea", "Lamia", "Megalopolis", "Rhodes", "Sicyon"]
+notes = "mint; IGCH 270; local 6/8; cover 2; gold/list-igch0270-mints.json"
+
+[[questions]]
+id = "list-igch0410-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Paeonia hoard, found 1968?"
+expected_facts = ["Abydus", "Amphipolis", "Babylon", "Lampsacus", "Miletus", "Sardis", "Sicyon", "Side", "Sidon"]
+notes = "mint; IGCH 410; local 8/11; cover 5; gold/list-igch0410-mints.json"
+
+[[questions]]
+id = "list-igch0774-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the G\u00eeldau hoard, found 1960, buried about 320 B.C.?"
+expected_facts = ["Amphipolis", "Lampsacus", "Miletus", "Salamis", "Tarsus"]
+notes = "mint; IGCH 774; local 4/5; cover 1; SINGLE_PASSAGE (report apart); gold/list-igch0774-mints.json"
+
+[[questions]]
+id = "list-igch0866-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Anadol hoard, found 1895?"
+expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Byzantium", "Carrhae", "Colophon", "Cyrene", "Damascus", "Ecbatana", "Ephesus", "Istrus", "Lampsacus", "Miletus", "Mytilene", "Perinthus", "Sardis", "Side", "Sidon", "Sinope", "Susa", "Tarsus", "Teos", "Tyre"]
+notes = "mint; IGCH 866; local 5/37; cover 3; gold/list-igch0866-mints.json"
+
+[[questions]]
+id = "list-igch0958-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Marasesti hoard, found 1909?"
+expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byzantium", "Lampsacus", "Miletus", "Sidon"]
+notes = "mint; IGCH 958; local 5/14; cover 3; gold/list-igch0958-mints.json"
+
+[[questions]]
+id = "list-igch1436-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Asia Minor hoard, found 1966, buried about 323 B.C.?"
+expected_facts = ["Amphipolis", "Aradus", "Athens", "Babylon", "Byblus", "Citium", "Damascus", "Myriandrus", "Paphos", "Pella", "Salamis", "Tarsus"]
+notes = "mint; IGCH 1436; local 5/12; cover 2; gold/list-igch1436-mints.json"
+
+[[questions]]
+id = "list-igch1438-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Asia Minor hoard, found 1964, buried about 320 B.C.?"
+expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Lampsacus", "Myriandrus", "Salamis", "Sidon", "Tarsus"]
+notes = "mint; IGCH 1438; local 7/13; cover 3; gold/list-igch1438-mints.json"
+
+[[questions]]
+id = "list-igch1444-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Asia Minor hoard, found 1961, buried about 300 B.C.?"
+expected_facts = ["Abydus", "Cius", "Colophon", "Teos"]
+notes = "mint; IGCH 1444; local 4/5; cover 1; SINGLE_PASSAGE (report apart); gold/list-igch1444-mints.json"
+
+[[questions]]
+id = "list-igch1472-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Larnaca hoard, found 1870, buried about 300 B.C.?"
+expected_facts = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Colophon", "Lampsacus", "Miletus", "Salamis", "Sardis", "Sidon", "Susa", "Tarsus", "Teos", "Tyre"]
+notes = "mint; IGCH 1472; local 6/20; cover 5; gold/list-igch1472-mints.json"
+
+[[questions]]
+id = "list-igch1516-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Aleppo hoard, found 1893, buried about 305 B.C.?"
+expected_facts = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Citium", "Colophon", "Damascus", "Lampsacus", "Miletus", "Myriandrus", "Paphos", "Pella", "Salamis", "Sardis", "Sicyon", "Side", "Sidon", "Tarsus"]
+notes = "mint; IGCH 1516; local 9/25; cover 4; gold/list-igch1516-mints.json"
+
+[[questions]]
+id = "list-igch1664-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Demanhur hoard, found 1905, buried about 318 B.C.?"
+expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Carne", "Citium", "Damascus", "Lampsacus", "Marium", "Miletus", "Myriandrus", "Paphos", "Pella", "Salamis", "Sardis", "Sicyon", "Side", "Sidon", "Tarsus"]
+notes = "mint; IGCH 1664; local 22/23; cover 4; gold/list-igch1664-mints.json"
+
+[[questions]]
+id = "list-igch1668-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Egypt hoard, found 1912, buried about 310 B.C.?"
+expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Lampsacus", "Side", "Sidon"]
+notes = "mint; IGCH 1668; local 4/11; cover 3; gold/list-igch1668-mints.json"
+
+[[questions]]
+id = "list-igch1670-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Kuft hoard?"
+expected_facts = ["Alexandria", "Amphipolis", "Aradus", "Babylon", "Byblus", "Damascus", "Lampsacus", "Miletus", "Myriandrus", "Pella", "Sardis", "Side", "Sidon", "Susa", "Tarsus"]
+notes = "mint; IGCH 1670; local 5/16; cover 3; gold/list-igch1670-mints.json"
+
+[[questions]]
+id = "list-igch1678-mints"
+category = "k1_list_them_all"
+question = "Which mints are represented among the coins of the Phacous hoard, found 1956, buried about 283 B.C.?"
+expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Lampsacus", "Marathus", "Miletus", "Myriandrus", "Pella", "Salamis", "Sardis", "Side", "Sidon", "Susa", "Tarsus"]
+notes = "mint; IGCH 1678; local 6/20; cover 3; gold/list-igch1678-mints.json"

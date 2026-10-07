@@ -1,10 +1,15 @@
 # The ring app library — a design from first principles
 
 > **DRAFT — not in force (2026-09-20; amended 2026-10-02: §20 held, lent,
-> carried; §21 two gates).** A design record for the library a
+> carried; §21 two gates; §22 the town — register, shops, deeds).** A design record for the library a
 > ring app is written against. It supersedes nothing. What a ring is *for*
 > lives in `docs/internal/rings/reference/RING_APPLICATIONS.md` (per-host, untracked); the
 > primitive inventory lives in `quality/campaigns/ring-apps.toml`.
+>
+> **To build from, read `docs/RING_SPEC.md`** (2026-10-02): the normative
+> spec — model, invariants, contracts with their state at HEAD, units, bars and
+> defects. This document stays the record of why; where the two differ, the
+> spec wins.
 
 Two parts. Part 1 is the library. Part 2 is what composes it — the runtime,
 the door, reach and joining — and is the only part that does I/O.
@@ -433,6 +438,8 @@ wanted.
   adapts to the 64 KiB and 4096-byte caps instead of meeting a refusal.
 - **Served modules.** Library and runtime ship as ES modules beside the shim
   from real `.js` files; `RING_SHIM` stops being a string in a `.rs` file.
+  (Done by 2026-10-02: `RING_SHIM` is `include_str!("ring_shim.js")`,
+  `sovereign-contracts/src/guest_pages/shim.rs:41`.)
 - **The test entry.** `node --test`, the five laws, `diffFold` against
   `svrn ring log <ns> --json`.
 
@@ -636,6 +643,12 @@ Operator decision: whether to run one.
 `quality/campaigns/ring-apps-shelf.md` holds the dependency verdicts per
 primitive. These are the ones it has no row for.
 
+svrngs' `docs/DESIGN.md` (the svrngs repository, 2026-10-03) supersedes the register verdicts below:
+removal has one decider, the group's keeper; cuts are not `through_seq` ranges;
+p2panda-auth was probed and not adopted (its default resolver contradicts three
+of its bars); and the keeper is the one serializer the Datomic row says to
+refuse, kept to removals, the one act that does not commute.
+
 | Source | Verdict | What is taken |
 |---|---|---|
 | webxdc (spec and catalog read 2026-09-20) | **avoid** as the native contract; **spike** as an import path | It has no order, no void, no completeness, no signed authorship: native apps written to `sendUpdate` would discard what the rail guarantees. Taken regardless: the two MUSTs in §13, limits as values, a zip as the bundle. Spike bar: a shim under 200 lines, zero changes to `window.ring` or the rail, at least 4 of 5 chosen collaborative apps converge on two nodes. The catalog is 217 entries, a handful collaborative, none with licence metadata. Off the critical path. |
@@ -657,6 +670,11 @@ primitive. These are the ones it has no row for.
 | SSB group exclusion | **cite the failure** | "Removing a peer is impossible under the assumptions we operate with"; the spec calls its own scheme an "illusion of group member removal", because membership there is possession of a shared symmetric secret. The rule: if you want revocation, authority must never be a shared secret. Our per-actor keys already satisfy it. |
 | Tahoe-LAFS | **cite the limit, in our own docs** | Their revocation section: deep-copy-and-re-delegate is "the strongest form of revocation that can be accomplished", and anyone still inside can proxy for the excluded party. A void can withdraw standing; it cannot withdraw knowledge. Say so rather than implying otherwise. |
 | `git replace` / `git notes` | **cite the failure** | A genuine void-without-erase primitive — original addressable, override is itself data, escape hatch to the raw truth — whose flaw is fatal here: `refs/replace/` is excluded from pack transfer, so the void does not replicate. A void outside the replicated set is not a void. Our `Correct` being a journal act is right for a reason git demonstrates the hard way. Note also that git's own argument for revert-over-rewrite is coordination cost, never auditability; that argument is ours to make. |
+| Nostr as the substrate (NIP-01) | **reject** | A Nostr event is signed JSON pushed to relays the author does not run, ordered by the author's clock: a replaceable event keeps the latest `created_at`, and relays may discard older versions. A group's record needs the opposite on both counts — held whole by its members' devices (svrngs DESIGN J1, J7) and ordered without trusting anyone's clock (C1). One global secp256k1 key per person is the linkability svrngs' per-group keys exist to avoid. Taken: signed JSON, keys rather than accounts, and NIPs as a model for a narrow core with optional edges. |
+| NIP-29 relay-based groups | **cite as the same choice, made on a server** | A group lives on one relay, which owns its membership, moderation log and messages, and the group does not follow a member to another relay. That is svrngs' single decider for removal, placed on a server no one in the group runs. Ours sits on a member's device, and leaving is a copy away (J7). |
+| NIP-90 data vending machines | **cite the shape** | Job requests (kinds 5000-5999) and results (6000-6999) as events, providers competing, paid over Lightning. `group.ask` has the same request and result on the work plane, run only by computers the register admits, with the answer kept in the group's record. |
+| Marmot / White Noise (MLS over Nostr) | **cite; not needed while no third party stores the record** | MLS group encryption over Nostr relays, audited by Least Authority in 2026. It exists because relays hold the messages. The total order on commits that MLS needs (the row above) comes from relays there and from the keeper here. |
+| Nostr as a chat | **adopt as an adapter** | Where a group already talks on Nostr, Nostr is its chat, like Discord: Buzz is the planned adapter (RING_ENTRY), and its members arrive already holding a key. |
 | Datomic's transactor | **cite as why coordinator-free is sound here** | Halloway, on the record: "if we removed the code that manages HA, you could have N transactors. Semantics would be fine but perf would be terrible", and the storage CAS "is still the gatekeeper". The transactor exists for cross-entity invariants on the write path — uniqueness checks, transaction functions, CAS. A ring has none, which is why we need none. The day an app wants one, it wants a serializer, and §11 question 1 already says to refuse it. |
 | ERA (PaPoC '26) + CALM / Jacob & Hartenstein | **read — this is the impossibility** | ERA §3.2: genuine mutual removal and retaliatory backdating "are structurally identical. No peer can distinguish these cases from the DAG alone… external information is required." Safety P3: no user may influence a conflict they manufactured; add-wins and remove-wins both violate it. CALM gives the spine — revocation is what makes an authorized fold non-monotone, hence not order-invariant. The escape every shipped system takes is to stop asking "was the remover authorized at that moment": remove-wins set arithmetic commutes because it never asks. |
 
@@ -667,7 +685,10 @@ primitive. These are the ones it has no row for.
 **A new step 0, and it is a prerequisite rather than an enhancement.** An act
 commits to nothing but itself: `ring_op_message` signs
 `(namespace, ts_unix, actor, seq, body_json)` and there is no `prev` and no
-heads (`rail-core/src/sig.rs:72-87`). Two consequences compound. Equivocation —
+heads (`rail-core/src/sig.rs:72-87`). (Partly overtaken by 2026-10-02: the
+signed body now carries the author's view digest, per-actor chain heads,
+`admit.rs:661-687`; nothing reads it beyond verification yet — `RING_SPEC.md`
+U3.) Two consequences compound. Equivocation —
 one actor signing two different acts at one `seq` and showing each to half the
 ring — produces identical per-actor counters on both sides and is caught only
 where some node happens to hold both; nothing forces that. And Jacob &
@@ -713,8 +734,8 @@ discover it.
 7. Reads gated by roster, then encryption.
 
 The library extraction from `ring-doc` (Part 1 section 10) runs beside 1 to 3;
-it touches no file they touch. §20 and §21 carry their own order and reorder
-nothing above; both lean on steps 0, 2 and 3.
+it touches no file they touch. §20 to §22 carry their own order and reorder
+nothing above; all lean on steps 0, 2 and 3.
 
 ## 20. Held, lent, carried
 
@@ -731,7 +752,9 @@ kind something is.
 | Lent | something a member's node offers to a ring | a media library, an app, a model or a pooled one, a corpus built from their own shelf, batch compute | the lender's node | goes with them |
 | Carried | a pure artefact addressed by hash | app bundles, recipes, profiles, public corpus snapshots, seeds, distilled articles | wherever it was installed | everyone who has it keeps it |
 
-Part 1 is the library for held things. This section is the other two.
+Part 1 is the library for held things. This section is the other two. §22
+restates all three as a town and adds the case this section lacks: a lent
+shop protected without becoming held.
 
 **A server is a member's machine.** Core sentence 2 holds as written. A homelab
 box or a rented VPS holding a member's key is one of that member's machines — a
@@ -748,7 +771,7 @@ secrets store, each service, and which rings each is lent to. It never declares
 membership; that is an `Admit` a person writes. Publication follows the unit's
 life: wrapping a unit's command in `svrn run --as <name> --port <p> --` holds a
 claim that is renewed while the child lives and retaken after a daemon restart
-(`sovereign-cli-llm/src/run_cmd.rs:216-229`). A stopped unit stops being lent
+(`sovereign-cli-mesh/src/run_cmd.rs:222-236`). A stopped unit stops being lent
 within its TTL, and the durable tier `docs/PUBLISH_AN_APP.md` warns only
 accumulates is not needed.
 
@@ -763,13 +786,14 @@ lent to?** Today seven things answer it separately:
   (`sovereign-daemon/src/routes_internal/knowledge.rs`; no hit for `sharing`,
   2026-10-02);
 - `allowed_peers` on peer-assisted ingest;
-- the `inference` namespace's roster, derived from mesh membership
-  (`sovereign-mesh/src/ring_roster.rs:82`);
+- the rail's default roster: every ring nobody narrowed admits everyone in the
+  mesh, the `inference` namespace included
+  (`commonwealth-rails/src/rail.rs:120`);
 - the work plane's hand-written `roster.json` (`cmnwlth/deploy/mesh/WORK_PLANE.md`,
   "One namespace").
 
 `OriginKind`'s separate trust classes are right — lending the chore app is not
-lending the film library (`shared/crates/oicp-types/src/origin.rs:26`) — so the change is not
+lending the film library (`shared/crates/oicp-types/src/origin.rs:29`) — so the change is not
 one list. Each lend names the rings it goes to, and the membership function
 `admit` already calls says who is in them (ARCH principle 8). That depends on
 §15: a server lending to a house, a band and a friend group needs every ring
@@ -781,7 +805,7 @@ live at once and `member_check` widened to any roster the node holds.
 2. *Injected.* The lending node attaches the service's own credential to
    forwarded requests, so no member ever holds it (`svrn mesh media declare`,
    `commonwealth-transport/src/iroh_identity_forward.rs`). Built, as one shared
-   read-only viewer (`sovereign-cli-llm/src/mesh_media/viewer.rs`). Many
+   read-only viewer (`sovereign-cli-mesh/src/mesh_media/viewer.rs`). Many
    self-hosted apps accept a trusted proxy header as the user; mapping
    `X-Mesh-Member` onto it gives per-person identity with no provisioner. From
    memory — verify per app.
@@ -886,9 +910,9 @@ gates here (ARCH principle 10).
 
 **No surface returns a value about a member.** Stance 7, owed as a gate since
 the strategy was drafted. Its first subject is built: `LedgerEventKind`
-(`commonwealth-core/src/contributions.rs:61`) records inference served,
+(`oicp-types/src/contributions.rs:38`) records inference served,
 knowledge queries served, bytes moved and work units completed, and `aggregate`
-(`:250`) sums them per node — per person, on a mesh where a node is a person.
+(`commonwealth-core/src/contributions.rs:55`) sums them per node — per person, on a mesh where a node is a person.
 Between strangers pooling compute that is bookkeeping and may stay for routing.
 Inside a ring it renders nowhere. The gate: a planted surface returning a
 per-member series fails the build.
@@ -898,7 +922,7 @@ introduction, congratulation — say so in their one declaration (§4), and an a
 of a gesture kind carries a person's confirmation in its provenance. An act a
 model proposed and no person confirmed is refused, not flagged, beside
 `GovernanceIssue::UnattendedAct`
-(`ingest/crates/corpus-engine/src/enrichment/governance_view.rs:611`). Watched failing first
+(`shared/crates/corpus-engine-atlas-reader/src/governance_view.rs:611`). Watched failing first
 with a planted auto-confirmed vouch. Guest grade passes, because the bridge
 signs what a person tapped (`RING_ENTRY.md`, decision 2). `Admit` is not an app
 kind and is not covered here: §9's one rule already makes it a member's act,
@@ -911,3 +935,164 @@ the library ships no reducer that sums thanks per person. And the maker is
 shown wherever an app runs, which costs nothing once bundles are signed by
 their author's key (`LEGO_KIT.md` step 3; today a bundle carries a hash, not an
 author, §14).
+
+## 22. The town — register, shops, deeds
+
+*Naming and the manifest are superseded by `RING_SPEC.md` §3.3–§4: the shop's
+runner is its **host**, `Keeper` is `ring-apps` rung `ra-7`'s copy-holding role
+(which an insurer is), and there is one `[app]` manifest for pages and shops.
+The text below keeps its original words.*
+
+Added 2026-10-02, from two operator directions: a ring is what is offered on
+it — a digital town, open when its members are and closed when they are not —
+and members must be able to protect the shops they do not want to lose. This
+is the frame §20 and Part 1 sit inside. §20's *held* are the town's civic
+books, its *lent* are the shops, and insurance is the case §20 lacked. Whoever
+writes a shop and whoever uses one specifies all of it without knowing the
+rail.
+
+**The model.** A ring is a town: a register of who is in, and the shops its
+members open for each other — a film library, a tool-lending list, a Minecraft
+server, the house model, a corpus. Each shop has a keeper and runs on the
+keeper's machine. The town is open while keepers are awake and closed when
+nobody is (Part 2, "Always there": "this is the design"). Members arrive from
+the chat they already use (`RING_ENTRY.md`) and walk into any shop with their
+identity.
+
+**Two kinds of state, and every shop declares one.**
+
+- `writer = "ring"` — a *civic book*. State is a fold on the ring's log
+  (Part 1). Every member who syncs holds it, any member's node can serve it, and
+  writes from anyone converge. The register, the treasury
+  (`docs/HOUSE_EXPENSES.md`) and the deeds below are civic books. Insurance is
+  automatic.
+- `writer = "keeper"` — a *shop*. State lives on the keeper's disk and has one
+  writer at a time. Any server that reads `X-Mesh-Member` is one
+  (`docs/PUBLISH_AN_APP.md`). It leaves with its keeper unless it is insured.
+
+The rule for choosing: anything that must keep taking writes while its keeper
+sleeps is a civic book. Everything else may be a shop.
+
+**The register is built at the rail.** `Admit` and `Remove` are rail acts
+(`commonwealth-rail-core/src/lib.rs:346`, `:364`), and a ring nobody narrowed
+admits everyone in the mesh (`commonwealth-rails/src/rail.rs:120`). Not built:
+the register belonging to a ring rather than the mesh, the bridge that feeds
+it from a chat (`RING_ENTRY.md`), and reach decided by it (§20).
+
+**Four parties, each declaring what it owns** (ARCH principle 12).
+
+| Party | Declares | Where it lives |
+|---|---|---|
+| Author | what the shop is: its code by hash, its writer, its state, how to copy and restore that state, whether it can be served read-only | the shop manifest, carried with the code |
+| Keeper | that they keep it and whether it may be insured; handing it over; releasing it | deed acts on the ring's log |
+| Member | insuring a shop or withdrawing; taking a shop in first refusal, or passing | deed acts |
+| Ring | how long a shop may be unreachable before anyone may open first refusal, and how long each insurer's turn lasts | a civic setting, written as an act |
+
+**The shop manifest** is the author's: a TOML file beside the code, the shape
+recipes already use (`LEGO_KIT.md`, "Assemblies are TOML manifests").
+
+```toml
+[shop]
+name   = "tools"
+code   = "git+<url>#<rev>"      # or an image digest, a flake ref, a bundle hash
+run    = ["python", "app.py"]   # handed PORT, as `svrn run` does
+writer = "keeper"               # or "ring"
+
+[shop.state]                    # writer = "keeper" only
+path      = "data/"
+snapshot  = ["sqlite3", "data/tools.db", ".backup $OUT/tools.db"]   # optional
+restore   = ["cp", "$IN/tools.db", "data/tools.db"]                   # optional
+read_only = "methods"           # or "none": cannot be served read-only
+```
+
+`code` is what makes a shop insurable: the insurer runs exactly what the keeper
+ran. A pinned git rev is the precedent the work plane already uses
+(`process:v1`, `cmnwlth/deploy/mesh/WORK_PLANE.md`). Without `snapshot`, the
+state is copied only at a handover, when the shop is stopped; a copy of a
+running database is torn, so continuous insurance needs the command.
+`read_only = "methods"` lets an insurer's door serve `GET` and `HEAD` and
+refuse every other method, with no change to the app. A shop that writes on a
+`GET` says `"none"`, and is closed rather than read-only while its keeper
+sleeps.
+
+**The deeds** are a civic book, folded with Part 1's library and judged by its
+five laws.
+
+| Act | By | Effect |
+|---|---|---|
+| `Open{shop, manifest, insurable}` | keeper | opens or updates a shop under the keeper's key; the latest per keeper wins, as the work plane's `Offer` does |
+| `Insure{shop}`, `Withdraw{shop}` | member | opts in or out, valid only while the shop is insurable; the rail's order of `Insure` acts is the order of first refusal |
+| `Handover{shop, to, snapshot}` | keeper | names an insurer as the next keeper, with the hash of the final copy |
+| `Release{shop}` | keeper | gives the shop up without naming anyone; opens first refusal |
+| `Refusal{shop}` | any member | opens first refusal on a shop unreachable longer than the ring's period; any later act by the keeper on that shop closes it |
+| `Take{shop, snapshot}`, `Pass{shop}` | insurer | accepts the shop in its turn, or passes it on early |
+
+A keeper's `Remove` from the register opens first refusal on every shop they
+keep. Turns are computed in the fold from the `op.ts_unix` of the act that
+opened first refusal — insurer *i*'s turn starts after *i* windows unless those
+before passed — so no clock but the rail's is read (§2). Whether a shop is
+awake is not in the fold. Liveness comes from the keeper's claim, the TTL that
+`svrn run` holds, never from the log, which carries no heartbeats
+(`LAZY_INFERENCE_ON_THE_RAIL.md`, gotchas 1 and 2).
+
+**What the town does.**
+
+- *Keeper awake.* The keeper serves and takes writes; copies ship to insurers
+  on change, addressed by hash.
+- *Keeper asleep.* An insurer's node serves the last copy read-only, labelled
+  with its age — "Dave's tool library, from Mia's copy, as of 9:14" — and
+  refuses writes, naming the keeper.
+- *Handover.* The keeper stops the shop, takes the final copy and writes
+  `Handover` with its hash; the new keeper restores and opens. No writes are
+  lost.
+- *Release, removal or refusal.* Insurers are offered the shop in `Insure`
+  order, one window each. The first `Take` naming the latest copy's hash
+  becomes keeper. With no taker the shop goes dormant: every insurer keeps the
+  last copy, and the town lists the shop as closed. It is never silently
+  deleted.
+- *A keeper returns after a `Take`.* Their node folds the deeds before serving,
+  finds it no longer keeps the shop, refuses writes, and offers to insure the
+  new keeper.
+
+**One writer.** A node accepts writes for a shop only while the deeds name its
+key as keeper. The right does not lapse on a timer: the work plane's lease
+(`oicp-types/src/work/mod.rs:42`) is not reused, because renewing it would put
+heartbeats on the log. It changes only by `Handover`, `Release`, `Remove` or
+`Take`. The residual case is a keeper cut off from the ring yet still serving
+someone on its own network while a `Take` happens elsewhere. Writes in that
+window land on a copy the town has left; they are reported when the node
+rejoins, never merged.
+
+**What can be lost, said plainly.** An insured shop whose keeper's disk dies
+without a handover loses the writes since its last copy. A civic book loses
+nothing any member synced. A media library's files insure by the same
+mechanism, and their size is shown before anyone opts in.
+
+**The clerk's part, and the gift's.** When a keeper's leaving is in view — a
+`Release`, a `Remove` proposed, "moving out" said in the chat — the clerk lists
+their uninsured shops to the house and asks who will keep them. Noticing is the
+chore; `Insure` and `Take` are a person's tap. The shop shows "insured by Mia":
+recognised, never tallied (§21).
+
+**Bars, set before any of it is built.**
+
+- *Keeper off.* An insured shop answers a `GET` from the insurer, labelled with
+  the copy's age, and refuses a `POST` naming the keeper. Watched failing with
+  insurance off, and again with `read_only` ignored.
+- *Handover.* Zero writes lost across a handover under a steady write load.
+- *One writer.* No node the deeds do not name accepts a write. Watched failing
+  with the check disabled.
+- *First refusal.* A keeper is removed; insurers are offered the shop in
+  `Insure` order; with no taker, the last copy survives on every insurer.
+- *Generality.* Three shops — a one-file Flask app on sqlite, a fold app, and a
+  stock self-hosted server with a declared state directory — insured by
+  manifest alone, with no change to any of them.
+
+**Order.** (1) The manifest, read by the runner `svrn run` is today. (2) The
+deeds fold, the library's first customer beyond expenses. (3) Copy shipping
+and the insurer's read-only door. (4) Handover. (5) First refusal. (6) The
+clerk's notice. Reach decided by the ring's register (§20, order 2) comes first
+for any of it to work across rings.
+
+**Names.** Shop, Deed, Keeper and Insure are defined nowhere in the workspace
+(`sovereign code converge noun`, 2026-10-02). They are free; mint each once.

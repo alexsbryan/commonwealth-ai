@@ -16,6 +16,7 @@ use serde::Serialize;
 use sovereign_cli_shared::dirs::sovereign_root;
 
 mod checks_commonwealth;
+mod checks_corpora;
 mod checks_freshness;
 mod checks_omo;
 mod checks_sovereign;
@@ -155,6 +156,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(fresh::check_watcher_freshness().await);
     results.push(sov::check_code_indexed().await);
     results.push(fresh::check_code_tools_see_corpora().await);
+    results.push(checks_corpora::check_code_corpus_sources());
     results.push(sov::check_project_indexed());
     results.push(sov::check_notes_db());
     results.push(sov::check_test_runner(sovereign_dir));

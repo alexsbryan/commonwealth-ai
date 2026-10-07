@@ -62,26 +62,55 @@ const NONLEAF_TARGET_FANOUT: usize = 5;
 /// nodes) and we don't summarize over it.
 const ROOT_BRANCHING_CEILING: usize = 4;
 
-/// Concurrency for the summary calls. On a mesh the load balancer
-/// spreads these across peers; on a solo node this is how many
-/// summaries ride one continuous-batched decode together.
-///
-/// **8 because that is the batching lane's width.** The FastShort slot
-/// is built with `n_seq_max=8` (`ModelSlot::from_existing_model`), so a
-/// 9th concurrent call cannot join the batch — it waits for a seq slot
-/// to retire. Raising this past 8 buys nothing and costs held memory
-/// and queue depth; it was briefly 12 during the 2026-07-24 tuning arc
-/// before that bound was checked. Lowering it below 8 leaves the lane
-/// half-empty, which is what the original 6 did: the bench's per-call
-/// log showed 15 leaf summaries dispatching in three visible waves as
-/// slots freed, a 53.6s leaf level made of calls whose own median
-/// latency was 7.7s.
-///
-/// If the batching lane is unavailable — `SOVEREIGN_FAST_SHORT_DISABLE`,
-/// a vetoed arch (see `fast_short_gate`), or any host that serves these
-/// on a single-sequence slot — the calls simply queue and this constant
-/// stops mattering. It is a ceiling, never an assumption of parallelism.
+/// A tree's shape: chunks per leaf on average, and the level size at which
+/// recursion stops. Tuned empirically (feature-fidelity R-T1); the paper's
+/// tree builds to one root over ~6.7 children per node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TreeShape {
+    /// Average chunks per leaf cluster.
+    pub leaf_target: usize,
+    /// Stop recursing once a level holds at most this many nodes; 1 builds to
+    /// a single root.
+    pub root_ceiling: usize,
+}
+
+impl TreeShape {
+    /// 20-chunk leaves; a top layer of 1-4 nodes left unsummarized.
+    pub const DEFAULT: Self = Self {
+        leaf_target: LEAF_TARGET_CLUSTER_SIZE,
+        root_ceiling: ROOT_BRANCHING_CEILING,
+    };
+}
+
+/// Concurrency for extractive clusters: embed calls only, no LLM.
 const SUMMARIZE_BUFFER: usize = 8;
+
+/// Concurrency for abstractive clusters: one at a time.
+///
+/// The summary and its verify probe go out as ExtractDurable / Judge with
+/// full member text, which this host serves on a single-permit slot with a
+/// 30 s park bound. At 8 wide the pilot parked 7 calls and all 7 were shed
+/// together (daemon log 2026-10-02 22:21:19, 22:22:19, 22:23:19). Pilot
+/// tree, one run each: 8 wide 7/14 abstractive, every floor a verifier
+/// shed, 855 s; 1 wide 13/14, no sheds, 1,646 s. The width costs wall
+/// clock (the calls span more than one slot) and buys the summaries.
+/// Host-shaped: a mesh that spreads these across peers would want it wider.
+const ABSTRACTIVE_SUMMARIZE_BUFFER: usize = 1;
+
+/// The width for a build in `mode`.
+fn summarize_width(mode: SummaryMode) -> usize {
+    match mode {
+        SummaryMode::Abstractive => ABSTRACTIVE_SUMMARIZE_BUFFER,
+        SummaryMode::Extractive => SUMMARIZE_BUFFER,
+    }
+}
+
+/// How long one summary call may keep coming back after sheds before its
+/// cluster takes the extractive floor. A cost guard, not a quality knob: a
+/// shed says "busy", and a batch build with no other holder waits. Ten
+/// minutes is about nine summary-plus-verify pairs of other traffic at the
+/// lane's highest observed average turn (33.9 s).
+const SHED_WAIT_CAP: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// Hard cap on how many member previews are shown to the leaf
 /// summarizer.
@@ -115,7 +144,24 @@ const SUMMARIZE_BUFFER: usize = 8;
 /// contributes a long tail of near-duplicate fragments that wash the
 /// summary out rather than sharpen it. Members are ranked by cosine to
 /// the centroid, so what survives is the cluster's core, not a prefix.
+///
+/// Since 2026-10-02 the WRITER no longer reads these previews — it reads
+/// `member_full_texts`, as the verifier does (see `build_abstractive_request`);
+/// descriptors now only order dispatch.
 const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
+
+/// Characters of member text the summary writer reads, whole members in
+/// order. Sized for the primary model's 32k-token context at ~4 chars per
+/// token with room for the instructions and the output; the pilot tree's
+/// largest leaf cluster is 72.5k chars.
+const SUMMARY_INPUT_CHAR_BUDGET: usize = 90_000;
+
+/// The writer's `max_tokens`: a runaway guard, never a length target. The
+/// writer writes its natural length (the paper's ~0.28 compression is
+/// descriptive, operator 2026-10-02). A cap of 0.28 x input cut the pilot's
+/// root at 384 tokens (`finish_reason=Length`, 2026-10-03), mid-JSON, and lost
+/// the node to the extractive floor: upper levels read little and write a lot.
+const SUMMARY_MAX_OUTPUT_TOKENS: u32 = 2048;
 
 /// Version stamp for the summarization prompt + grammar (T1 P1.3).
 /// BUMP THIS whenever the summary prompt text, the lark grammar, or
@@ -125,7 +171,22 @@ const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
 /// as `prompt_version`, which is what `enrich raptor --refresh-stale`
 /// compares to find outdated trees. Date-suffixed so two bumps in one
 /// initiative stay distinguishable.
-pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-07-31.1";
+/// 2026-10-03.1: a summary is embedded under its document's title header
+/// (`corpus_index::chunkers::title_headed`), so every tree before it carries
+/// bare summary vectors.
+/// 2026-10-03.2: members are read in story order, each headed with its place
+/// in the work (`writer_members`).
+pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-10-03.2";
+
+/// The slot class every abstractive summary call is sent under — SLOT_POLICY
+/// §3 ExtractDurable (EnrichBulk 2026-07-24 to 2026-10-02 for throughput).
+/// Full member text cannot fit the FastShort lane's 6,000-char gate, and the
+/// paper's summaries are the primary model's (feature-fidelity R0.2).
+/// `enrich raptor --refresh-stale` probes the model this class routes to
+/// RIGHT NOW to judge a tree's `summarizer_model` stamp; when the writer moved
+/// to ExtractDurable and the probe stayed on EnrichBulk, the probe named the
+/// 4B fast model and every primary-written tree read stale (2026-10-03).
+pub const SUMMARY_WORKLOAD: Workload = Workload::ExtractDurable;
 
 /// How a node's summary text is produced (T1 P1.1).
 ///
@@ -148,7 +209,8 @@ pub enum SummaryMode {
 /// change to sentence splitting, ranking, or the length target.
 /// Stamped as `prompt_version` on extractive nodes and folded into
 /// the checkpoint `input_hash` by extractive-mode callers.
-pub const EXTRACTIVE_ALGO_VERSION: &str = "rex-2026-07-31.1";
+/// 2026-10-03.1: embedded under the document's title header, as abstractive.
+pub const EXTRACTIVE_ALGO_VERSION: &str = "rex-2026-10-03.1";
 
 /// `summarizer_model` stamp for extractive nodes: no model wrote
 /// prose, so the stamp names the mechanism instead of a model stem.
@@ -214,6 +276,7 @@ pub async fn build_raptor_atlas_with_mode(
         correction_hint,
         mode,
         None,
+        TreeShape::DEFAULT,
     )
     .await
 }
@@ -236,6 +299,7 @@ pub async fn build_raptor_atlas_with_verify(
     correction_hint: Option<&str>,
     mode: SummaryMode,
     verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
+    shape: TreeShape,
 ) -> Result<Vec<RaptorNode>> {
     build_raptor_atlas_impl(
         inference,
@@ -245,7 +309,7 @@ pub async fn build_raptor_atlas_with_verify(
         checkpoint,
         progress,
         correction_hint,
-        LEAF_TARGET_CLUSTER_SIZE,
+        shape,
         mode,
         verify,
     )
@@ -276,7 +340,10 @@ pub async fn build_raptor_atlas_with_leaf_target(
         None,
         None,
         None,
-        leaf_target.max(2),
+        TreeShape {
+            leaf_target: leaf_target.max(2),
+            root_ceiling: ROOT_BRANCHING_CEILING,
+        },
         mode,
         None,
     )
@@ -331,7 +398,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
         checkpoint,
         progress,
         correction_hint,
-        LEAF_TARGET_CLUSTER_SIZE,
+        TreeShape::DEFAULT,
         SummaryMode::Abstractive,
         None,
     )
@@ -349,7 +416,7 @@ async fn build_raptor_atlas_impl(
     // Note-level correction hint, re-applied at every RAPTOR tree level
     // (rides on each `ClusterSummarizationInput`).
     correction_hint: Option<&str>,
-    leaf_target: usize,
+    shape: TreeShape,
     mode: SummaryMode,
     verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
 ) -> Result<Vec<RaptorNode>> {
@@ -360,9 +427,30 @@ async fn build_raptor_atlas_impl(
             embeddings.len()
         )));
     }
+    // The title the chunks share — ingest's header for this document. Chunks
+    // of several documents (the vault theme pass) share none, and get none.
+    let doc_title: Option<String> = match chunks.first().and_then(|c| c.title.clone()) {
+        Some(t)
+            if chunks
+                .iter()
+                .all(|c| c.title.as_deref() == Some(t.as_str())) =>
+        {
+            Some(t)
+        }
+        _ => None,
+    };
+    tracing::debug!(doc_title = ?doc_title, "raptor_atlas: summary embed header");
     if chunks.is_empty() {
         return Ok(Vec::new());
     }
+    // A passage's place in the work: its rank among the document's chunk ids
+    // (ingest order is reading order). Only one titled document is a work;
+    // chunks of several (the vault theme pass) get no position headers.
+    let places = doc_title.as_ref().map(|_| WorkPlaces::new(chunks));
+    tracing::debug!(
+        passages = places.as_ref().map(|p| p.passages),
+        "raptor_atlas: writer members carry their place in the work"
+    );
 
     // ── Checkpoint decide ────────────────────────────────────
     //
@@ -373,12 +461,22 @@ async fn build_raptor_atlas_impl(
     if let Some(handle) = checkpoint {
         match handle.decide() {
             CheckpointDecision::Resume(ref manifest) if manifest.completed_at.is_some() => {
-                let cached = handle.load_all_nodes()?;
+                let built_to = manifest.root_ceiling.unwrap_or(ROOT_BRANCHING_CEILING);
+                if built_to == shape.root_ceiling {
+                    let cached = handle.load_all_nodes()?;
+                    tracing::info!(
+                        cached_nodes = cached.len(),
+                        "raptor_atlas: completed checkpoint found; skipping LLM build"
+                    );
+                    return Ok(cached);
+                }
                 tracing::info!(
-                    cached_nodes = cached.len(),
-                    "raptor_atlas: completed checkpoint found; skipping LLM build"
+                    built_to,
+                    root_ceiling = shape.root_ceiling,
+                    "raptor_atlas: completed checkpoint built to another root rule; \
+                     reusing level 0, rebuilding the levels above it"
                 );
-                return Ok(cached);
+                handle.reopen_above_leaves()?;
             }
             CheckpointDecision::StaleAndReset => {
                 tracing::info!(
@@ -422,7 +520,7 @@ async fn build_raptor_atlas_impl(
                 )
             }
             None => {
-                let k = target_k(chunks.len(), leaf_target);
+                let k = target_k(chunks.len(), shape.leaf_target);
                 let assignments = kmeans_cluster(embeddings, k, /* max_iters = */ 40);
                 if let Some(handle) = checkpoint {
                     let record = LevelClustering {
@@ -518,6 +616,12 @@ async fn build_raptor_atlas_impl(
                     .iter()
                     .filter_map(|&i| chunks.get(i).map(|c| c.content.clone()))
                     .collect(),
+                member_places: places.as_ref().map(|p| {
+                    inp.member_indices
+                        .iter()
+                        .filter_map(|&i| chunks.get(i).map(|c| p.span(&[c.chunk_id])))
+                        .collect()
+                }),
                 direct_member_chunk_ids: inp
                     .member_indices
                     .iter()
@@ -533,6 +637,7 @@ async fn build_raptor_atlas_impl(
                 centroid_embedding: inp.centroid,
                 cluster_coherence: inp.coherence,
                 correction_hint: correction_hint.map(|s| s.to_string()),
+                doc_title: doc_title.clone(),
             },
         ));
     }
@@ -626,7 +731,7 @@ async fn build_raptor_atlas_impl(
     // ── Levels 1..N — recurse on summaries ───────────────────
     let mut current_level: u8 = 1;
     let mut current_layer: Vec<RaptorNode> = leaf_nodes;
-    while current_layer.len() > ROOT_BRANCHING_CEILING {
+    while current_layer.len() > shape.root_ceiling.max(1) {
         let layer_embeddings: Vec<Vec<f32>> = current_layer
             .iter()
             .map(|n| n.summary_embedding.clone())
@@ -706,6 +811,12 @@ async fn build_raptor_atlas_impl(
                     .iter()
                     .map(|&i| current_layer[i].summary.clone())
                     .collect(),
+                member_places: places.as_ref().map(|p| {
+                    member_indices
+                        .iter()
+                        .map(|&i| p.span(&current_layer[i].evidence_chunk_ids))
+                        .collect()
+                }),
                 direct_member_chunk_ids: Vec::new(),
                 evidence_chunk_ids,
                 children_node_ids: children_ids,
@@ -713,6 +824,7 @@ async fn build_raptor_atlas_impl(
                 centroid_embedding: centroid,
                 cluster_coherence: coherence,
                 correction_hint: correction_hint.map(|s| s.to_string()),
+                doc_title: doc_title.clone(),
             });
         }
 
@@ -768,7 +880,7 @@ async fn build_raptor_atlas_impl(
                 );
             }
         }
-        if let Err(e) = handle.mark_complete() {
+        if let Err(e) = handle.mark_complete(shape.root_ceiling) {
             tracing::warn!(
                 error = %e,
                 "raptor_atlas: mark_complete failed; next restart will re-summarize tree layers"
@@ -780,6 +892,8 @@ async fn build_raptor_atlas_impl(
         nodes = all_nodes.len(),
         leaves = all_nodes.iter().filter(|n| n.level == 0).count(),
         max_level = all_nodes.iter().map(|n| n.level).max().unwrap_or(0),
+        leaf_target = shape.leaf_target,
+        root_ceiling = shape.root_ceiling,
         "raptor_atlas: build complete"
     );
 
@@ -815,7 +929,7 @@ async fn summarize_clusters_buffered_with_checkpoint(
                 (cluster_idx, node)
             }
         })
-        .buffered(SUMMARIZE_BUFFER);
+        .buffered(summarize_width(mode));
 
     let mut out: Vec<(usize, RaptorNode)> = Vec::new();
     let mut completed = already_cached;
@@ -869,6 +983,9 @@ fn target_k(n: usize, avg_cluster_size: usize) -> usize {
 pub struct ChunkInput {
     pub chunk_id: u32,
     pub content: String,
+    /// The document title ingest headed this chunk with, if any. A tree whose
+    /// chunks share one title embeds every summary under that same header.
+    pub title: Option<String>,
 }
 
 impl ChunkInput {
@@ -900,6 +1017,9 @@ struct ClusterSummarizationInput {
     /// extractive mode those are themselves source sentences, so
     /// every level's summary stays verbatim source text.
     member_full_texts: Vec<String>,
+    /// Where each member sits in the work, aligned with `member_full_texts`.
+    /// `None` when the build is not over one document.
+    member_places: Option<Vec<MemberPlace>>,
     direct_member_chunk_ids: Vec<u32>,
     evidence_chunk_ids: Vec<u32>,
     children_node_ids: Vec<String>,
@@ -911,10 +1031,104 @@ struct ClusterSummarizationInput {
     /// active correction; injected into the summarization prompt so
     /// regeneration is guided, not a blind re-roll.
     correction_hint: Option<String>,
+    /// The title the tree's chunks share; the summary is embedded under it.
+    doc_title: Option<String>,
+}
+
+/// Each passage's 1-based rank among its document's chunk ids.
+struct WorkPlaces {
+    rank: std::collections::HashMap<u32, usize>,
+    passages: usize,
+}
+
+impl WorkPlaces {
+    fn new(chunks: &[ChunkInput]) -> Self {
+        let mut ids: Vec<u32> = chunks.iter().map(|c| c.chunk_id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let passages = ids.len();
+        let rank = ids
+            .into_iter()
+            .enumerate()
+            .map(|(i, id)| (id, i + 1))
+            .collect();
+        Self { rank, passages }
+    }
+
+    /// The span a member covers: one passage for a leaf, its subtree's
+    /// evidence for a child summary.
+    fn span(&self, chunk_ids: &[u32]) -> MemberPlace {
+        let (first, last, count) = chunk_ids
+            .iter()
+            .filter_map(|id| self.rank.get(id).copied())
+            .fold((usize::MAX, 0, 0), |(f, l, n), r| {
+                (f.min(r), l.max(r), n + 1)
+            });
+        MemberPlace {
+            first,
+            last,
+            count,
+            of: self.passages,
+        }
+    }
+}
+
+/// A writer member's place in the work: passages `first..=last`, `count` of
+/// the work's `of`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MemberPlace {
+    first: usize,
+    last: usize,
+    count: usize,
+    of: usize,
+}
+
+impl MemberPlace {
+    fn header(&self) -> String {
+        if self.count == 1 {
+            format!("passage {} of {}", self.first, self.of)
+        } else {
+            format!(
+                "passages {}-{}, {} of the work's {}",
+                self.first, self.last, self.count, self.of
+            )
+        }
+    }
+}
+
+/// The members as the writer and the verifier both read them. With places:
+/// in story order, each headed with where it sits in the work. A cluster
+/// draws passages from across a novel, and unlabelled they read as one scene
+/// (the pilot's Amsterdam household and its Arendal one came out as "Garvloit
+/// and his wife Marie Forstberg"). A child summary's header also says how much
+/// of the work it covers — the weight its parent should give it, where the
+/// pilot's root gave a two-passage digression half its length.
+fn writer_members(input: &ClusterSummarizationInput) -> Vec<String> {
+    let Some(places) = input.member_places.as_ref() else {
+        return input.member_full_texts.clone();
+    };
+    if places.len() != input.member_full_texts.len() {
+        tracing::warn!(
+            level = input.level,
+            places = places.len(),
+            members = input.member_full_texts.len(),
+            "raptor_atlas: member places misaligned with member texts; writing without them"
+        );
+        return input.member_full_texts.clone();
+    }
+    let mut order: Vec<usize> = (0..places.len()).collect();
+    order.sort_by_key(|&i| (places[i].first, places[i].last));
+    order
+        .into_iter()
+        .map(|i| match places[i].count {
+            0 => input.member_full_texts[i].clone(),
+            _ => format!("({}) {}", places[i].header(), input.member_full_texts[i]),
+        })
+        .collect()
 }
 
 /// Dispatch summarization for many clusters in parallel via
-/// `buffered(SUMMARIZE_BUFFER)`. Each inflight call goes through
+/// `buffered(summarize_width(mode))`. Each inflight call goes through
 /// `inference.complete(Speed::Slow)` which routes to the mesh load
 /// balancer — buffering at the dispatch layer is what lets the
 /// balancer actually fan across peers instead of serializing on
@@ -935,7 +1149,7 @@ async fn summarize_clusters_buffered(
             let vf = verify.clone();
             async move { summarize_one_cluster(&inf, input, dt, mode, vf).await }
         })
-        .buffered(SUMMARIZE_BUFFER)
+        .buffered(summarize_width(mode))
         .collect()
         .await;
     summarized.into_iter().flatten().collect()
@@ -968,13 +1182,28 @@ fn build_abstractive_request(
     doc_type: &DocumentTypeTag,
     faithful_retry: bool,
 ) -> CompletionRequest {
-    let body = input
-        .member_descriptors
-        .iter()
-        .enumerate()
-        .map(|(i, d)| format!("[{i}] {d}"))
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    // The writer reads what the verifier reads. Writing from 280-char
+    // previews while the verifier judged full member text made them disagree
+    // by construction — at most 3.6k chars written against 17.8-72.5k judged
+    // on the pilot tree, where 13 of 14 nodes fell to the extractive floor.
+    let mut used = 0usize;
+    let mut parts: Vec<String> = Vec::new();
+    for (i, text) in writer_members(input).iter().enumerate() {
+        if !parts.is_empty() && used + text.len() > SUMMARY_INPUT_CHAR_BUDGET {
+            tracing::warn!(
+                level = input.level,
+                kept = parts.len(),
+                members = input.member_full_texts.len(),
+                budget = SUMMARY_INPUT_CHAR_BUDGET,
+                "raptor_atlas: cluster text over the summary budget; writing from the first members only"
+            );
+            break;
+        }
+        used += text.len();
+        parts.push(format!("[{i}] {text}"));
+    }
+    let body = parts.join("\n\n");
+    let output_budget = SUMMARY_MAX_OUTPUT_TOKENS;
 
     let doc_cue = match doc_type {
         DocumentTypeTag::Narrative => {
@@ -1023,15 +1252,24 @@ fn build_abstractive_request(
         ""
     };
 
+    let place_block = if input.member_places.is_some() {
+        "The passages are given in the order they occur, each headed with its place in the \
+         work. Passages far apart are separate scenes: keep each event with the people its own \
+         passage names, and weigh each passage by how much of the work it covers.\n\n"
+    } else {
+        ""
+    };
+
     let prompt = format!(
         "You are summarizing a group of related passages from a {doc_type} document.\n\
-         Produce a {cue}. The summary is a paraphrase — do NOT include any quotation marks \
+         Write a summary of the passages, including as many key details as possible: a {cue}. \
+         The summary is a paraphrase — do NOT include any quotation marks \
          or verbatim quotations; we hold the source separately. Also list the primary entities \
          (characters, organizations, places, key concepts) by their canonical names as they \
          appear in the passages.\n\n\
          Respond with a single JSON object only:\n\
-         {{\"summary\": \"<2-4 sentences, no quote marks>\", \"primary_entities\": [\"Name1\", \"Name2\"]}}\n\n\
-         {faithful_block}{correction_block}Passages:\n{body}\n\nJSON:",
+         {{\"summary\": \"<the summary, no quote marks>\", \"primary_entities\": [\"Name1\", \"Name2\"]}}\n\n\
+         {faithful_block}{correction_block}{place_block}Passages:\n{body}\n\nJSON:",
         doc_type = doc_type.label(),
         cue = doc_cue,
     );
@@ -1051,13 +1289,9 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
 "#
     .to_string();
 
-    // SLOT_POLICY §3 EnrichBulk (was ExtractDurable until 2026-07-24,
-    // turbocharge arc): high-volume grammar-constrained summarization —
-    // Fast-class routing lets `summarize_clusters_buffered`'s fan-out
-    // ride the FastShort batching lane instead of serializing on the
-    // pinned chat slot. Durability is protected by the grammar (shape
-    // cannot drift) and the 500-token budget fits the bundle's 512 cap.
-    let mut req = Workload::EnrichBulk.request(prompt).with_output_budget(500);
+    let mut req = SUMMARY_WORKLOAD
+        .request(prompt)
+        .with_output_budget(output_budget);
     req.temperature = Some(0.2);
     // Grammar constraint preserved verbatim (see the lark_grammar above):
     // enforces the JSON shape AND forbids the `\"` byte inside the summary
@@ -1067,6 +1301,50 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
     // neutrality (bundle is None); P5 confirms.
     req.think_budget = Some(0);
     req
+}
+
+/// One summary call that comes back after every shed until [`SHED_WAIT_CAP`].
+///
+/// A shed says "busy", and the build has no other holder to route to, so it
+/// comes back. Taking the extractive floor instead would persist a lower-
+/// fidelity node for a reason unrelated to the summary. Every other error
+/// returns at once, untouched.
+async fn complete_after_sheds(
+    inference: &Arc<dyn InferenceProvider>,
+    req: &CompletionRequest,
+    level: u8,
+) -> Result<CompletionResponse> {
+    let started = tokio::time::Instant::now();
+    let mut sheds = 0u32;
+    loop {
+        match inference.complete(req).await {
+            Err(sovereign_core::error::Error::QueueShed {
+                retry_after_secs, ..
+            }) if started.elapsed() < SHED_WAIT_CAP => {
+                sheds += 1;
+                tracing::info!(
+                    level,
+                    sheds,
+                    retry_after_secs,
+                    waited_s = started.elapsed().as_secs(),
+                    "raptor_atlas: summary call shed by the host; coming back"
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(retry_after_secs)).await;
+            }
+            other => {
+                if sheds > 0 {
+                    tracing::info!(
+                        level,
+                        sheds,
+                        served = other.is_ok(),
+                        waited_s = started.elapsed().as_secs(),
+                        "raptor_atlas: summary call done coming back after sheds"
+                    );
+                }
+                return other;
+            }
+        }
+    }
 }
 
 async fn summarize_one_cluster_abstractive(
@@ -1080,13 +1358,15 @@ async fn summarize_one_cluster_abstractive(
     // summary used to vanish from the atlas entirely — silently
     // shrinking retrieval coverage. A verbatim extractive summary is
     // strictly better than no node. The embed-failure path below
-    // still drops: extraction needs the same embedder.
+    // still drops: extraction needs the same embedder. A shed reaches
+    // the floor only past SHED_WAIT_CAP, and says so (`shed = true`).
     let req = build_abstractive_request(&input, &doc_type, false);
-    let resp = match inference.complete(&req).await {
+    let resp = match complete_after_sheds(inference, &req, input.level).await {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(
                 level = input.level,
+                shed = matches!(e, sovereign_core::error::Error::QueueShed { .. }),
                 error = %e,
                 "raptor_atlas: summary LLM call failed; falling back to extractive"
             );
@@ -1097,8 +1377,17 @@ async fn summarize_one_cluster_abstractive(
     let mut parsed = match parse_cluster_summary(&resp.text) {
         Some(p) => p,
         None => {
+            let chars: Vec<char> = resp.text.chars().collect();
+            let head: String = chars.iter().take(160).collect();
+            let tail: String = chars[chars.len().saturating_sub(160)..].iter().collect();
             tracing::warn!(
                 level = input.level,
+                max_tokens = req.max_tokens,
+                finish_reason = ?resp.finish_reason,
+                completion_tokens = ?resp.completion_tokens,
+                reply_chars = chars.len(),
+                reply_head = %head,
+                reply_tail = %tail,
                 "raptor_atlas: summary parse failed; falling back to extractive"
             );
             return extract_one_cluster(inference, input).await;
@@ -1121,13 +1410,12 @@ async fn summarize_one_cluster_abstractive(
         // Stable per-cluster key → deterministic sampling across
         // re-runs and checkpoint resumes.
         let cluster_key = format!("{}:{:?}", input.level, input.evidence_chunk_ids);
+        // The judge reads what the writer read, place headers included: a
+        // summary that says "later" is checked against text that says so.
+        let members = writer_members(&input);
         if ctx.policy.selects(&cluster_key) {
             VerifyStats::bump(&ctx.stats.verified);
-            match ctx
-                .verifier
-                .verify(&parsed.summary, &input.member_full_texts)
-                .await
-            {
+            match ctx.verifier.verify(&parsed.summary, &members).await {
                 Some(v) if v.passed() => VerifyStats::bump(&ctx.stats.passed_first),
                 Some(first) => {
                     VerifyStats::bump(&ctx.stats.retried);
@@ -1135,19 +1423,23 @@ async fn summarize_one_cluster_abstractive(
                         level = input.level,
                         claims = first.claims_total,
                         unsupported = first.claims_unsupported,
+                        whole = ?first.whole_summary_violation,
+                        vetoed = ?first.name_violations,
                         "raptor_atlas: summary failed verification; retrying with faithful prompt"
                     );
+                    tracing::debug!(
+                        level = input.level,
+                        rejected = %parsed.summary,
+                        "raptor_atlas: the summary the verifier rejected"
+                    );
                     let retry_req = build_abstractive_request(&input, &doc_type, true);
-                    let retry_parsed = match inference.complete(&retry_req).await {
-                        Ok(r) => parse_cluster_summary(&r.text).map(|p| (p, r.model_id)),
-                        Err(_) => None,
-                    };
+                    let retry_parsed =
+                        match complete_after_sheds(inference, &retry_req, input.level).await {
+                            Ok(r) => parse_cluster_summary(&r.text).map(|p| (p, r.model_id)),
+                            Err(_) => None,
+                        };
                     match retry_parsed {
-                        Some((p2, m2)) => match ctx
-                            .verifier
-                            .verify(&p2.summary, &input.member_full_texts)
-                            .await
-                        {
+                        Some((p2, m2)) => match ctx.verifier.verify(&p2.summary, &members).await {
                             Some(v2) if v2.passed() => {
                                 VerifyStats::bump(&ctx.stats.passed_retry);
                                 parsed = p2;
@@ -1159,7 +1451,14 @@ async fn summarize_one_cluster_abstractive(
                                     level = input.level,
                                     claims = v2.claims_total,
                                     unsupported = v2.claims_unsupported,
+                                    whole = ?v2.whole_summary_violation,
+                                    vetoed = ?v2.name_violations,
                                     "raptor_atlas: retry still unsupported; persisting extractive floor instead"
+                                );
+                                tracing::debug!(
+                                    level = input.level,
+                                    rejected = %p2.summary,
+                                    "raptor_atlas: the retry the verifier rejected"
                                 );
                                 return extract_one_cluster(inference, input).await;
                             }
@@ -1195,7 +1494,8 @@ async fn summarize_one_cluster_abstractive(
     }
 
     // Embed the summary so query-time matching can hit this node.
-    let summary_embedding = match inference.embed(&parsed.summary).await {
+    let headed = corpus_index::chunkers::title_headed(input.doc_title.as_deref(), &parsed.summary);
+    let summary_embedding = match inference.embed(&headed).await {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!(
@@ -1343,7 +1643,8 @@ async fn extract_one_cluster(
         .collect::<Vec<_>>()
         .join(" ");
 
-    let summary_embedding = match inference.embed(&summary).await {
+    let headed = corpus_index::chunkers::title_headed(input.doc_title.as_deref(), &summary);
+    let summary_embedding = match inference.embed(&headed).await {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!(
@@ -1616,534 +1917,8 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     dot / (na.sqrt() * nb.sqrt())
 }
 
-// ─── Tests ────────────────────────────────────────────────────
-
+// The unit tests live in a sibling file: keeping them here put this file past
+// its arch-gate slack (ARCH §3.1). `#[path]`, so the names are unchanged.
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn ortho_clusters(cluster_count: usize, per_cluster: usize) -> Vec<Vec<f32>> {
-        // Each cluster shares a near-orthogonal one-hot signature.
-        let mut out = Vec::new();
-        for c in 0..cluster_count {
-            for k in 0..per_cluster {
-                let mut v = vec![0.05; 8];
-                v[c % 8] = 1.0;
-                v[(c + k + 1) % 8] += 0.02;
-                out.push(v);
-            }
-        }
-        out
-    }
-
-    use async_trait::async_trait;
-    use std::pin::Pin;
-
-    #[test]
-    fn split_sentences_keeps_terminators_and_order() {
-        let text =
-            "First sentence here. Second one follows! Third asks a question? trailing fragment";
-        let got = split_sentences(text);
-        assert_eq!(
-            got,
-            vec![
-                "First sentence here.",
-                "Second one follows!",
-                "Third asks a question?",
-                "trailing fragment"
-            ]
-        );
-    }
-
-    #[test]
-    fn extractive_selection_stops_at_target_and_restores_source_order() {
-        // Three sentences; centroid points at [1,0]. Rank order is
-        // 0 (1.0), 2 (0.9), 1 (0.0). Target forces two picks — the
-        // result must be source order {0, 2}, not rank order.
-        let lens = vec![50usize, 50, 50];
-        let embs = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.9, 0.1]];
-        let centroid = vec![1.0, 0.0];
-        let selected = select_extractive_sentences(&lens, &embs, &centroid, 100);
-        assert_eq!(selected, vec![0, 2]);
-        // A target below one sentence still takes the top-ranked one.
-        let selected = select_extractive_sentences(&lens, &embs, &centroid, 10);
-        assert_eq!(selected, vec![0]);
-    }
-
-    /// Deterministic 2-dim embedding shared by the summarize-path
-    /// mocks: sentences mentioning "anchor" align with the test
-    /// centroid [1,0]; everything else is orthogonal.
-    fn direction_embed(text: &str) -> Vec<f32> {
-        if text.contains("anchor") {
-            vec![1.0, 0.0]
-        } else {
-            vec![0.0, 1.0]
-        }
-    }
-
-    fn mock_caps() -> ProviderCapabilities {
-        ProviderCapabilities {
-            max_context_tokens: 8192,
-            supports_structured_output: false,
-            relative_speed: Speed::Fast,
-            relative_reasoning: Depth::Shallow,
-        }
-    }
-
-    /// LLM path errors (the daemon-down case); embeds work.
-    struct FailingLlmEmbedOk;
-
-    #[async_trait]
-    impl InferenceProvider for FailingLlmEmbedOk {
-        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
-            Err(sovereign_core::error::Error::Storage("llm down".into()))
-        }
-        async fn complete_stream(
-            &self,
-            _: &CompletionRequest,
-        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
-            unreachable!("summarize path does not stream")
-        }
-        async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-            Ok(direction_embed(text))
-        }
-        fn capabilities(&self) -> ProviderCapabilities {
-            mock_caps()
-        }
-    }
-
-    /// Any LLM call is a test failure; embeds work. Proves the
-    /// extractive mode is LLM-free.
-    struct PanicLlmEmbedOk;
-
-    #[async_trait]
-    impl InferenceProvider for PanicLlmEmbedOk {
-        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
-            panic!("extractive mode must not call the LLM")
-        }
-        async fn complete_stream(
-            &self,
-            _: &CompletionRequest,
-        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
-            panic!("extractive mode must not stream")
-        }
-        async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-            Ok(direction_embed(text))
-        }
-        fn capabilities(&self) -> ProviderCapabilities {
-            mock_caps()
-        }
-    }
-
-    /// LLM returns a valid summary JSON; embeds work. For exercising
-    /// the P1.2 verification gate around a "successful" abstractive
-    /// generation.
-    struct OkLlmEmbedOk;
-
-    #[async_trait]
-    impl InferenceProvider for OkLlmEmbedOk {
-        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
-            Ok(CompletionResponse {
-                text: r#"{"summary": "The cluster centers on the anchor sentence theme.", "primary_entities": ["Anchor"]}"#.to_string(),
-                tokens_used: 10,
-                prompt_tokens: 5,
-                model_id: "mock-abstractive-llm".into(),
-                latency_ms: 1,
-                oicp_meta: None,
-                finish_reason: None,
-                completion_tokens: None,
-            })
-        }
-        async fn complete_stream(
-            &self,
-            _: &CompletionRequest,
-        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
-            unreachable!("summarize path does not stream")
-        }
-        async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-            Ok(direction_embed(text))
-        }
-        fn capabilities(&self) -> ProviderCapabilities {
-            mock_caps()
-        }
-    }
-
-    /// Scripted verifier: pops verdicts front-to-back; panics when
-    /// called more often than scripted.
-    struct ScriptedVerifier {
-        verdicts: std::sync::Mutex<Vec<Option<crate::summary_verify::SummaryVerdict>>>,
-        calls: std::sync::atomic::AtomicUsize,
-    }
-
-    #[async_trait]
-    impl crate::summary_verify::SummaryVerifier for ScriptedVerifier {
-        async fn verify(
-            &self,
-            _summary: &str,
-            _member_texts: &[String],
-        ) -> Option<crate::summary_verify::SummaryVerdict> {
-            self.calls
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            self.verdicts
-                .lock()
-                .unwrap()
-                .pop()
-                .expect("verifier called more often than scripted")
-        }
-    }
-
-    fn verify_ctx(
-        verdicts: Vec<Option<crate::summary_verify::SummaryVerdict>>,
-    ) -> (
-        Arc<crate::summary_verify::VerifyCtx>,
-        Arc<crate::summary_verify::VerifyStats>,
-    ) {
-        // Scripted pops from the back — reverse so the vec reads in
-        // call order at the test site.
-        let mut v = verdicts;
-        v.reverse();
-        let stats = Arc::new(crate::summary_verify::VerifyStats::default());
-        let ctx = Arc::new(crate::summary_verify::VerifyCtx {
-            verifier: Arc::new(ScriptedVerifier {
-                verdicts: std::sync::Mutex::new(v),
-                calls: std::sync::atomic::AtomicUsize::new(0),
-            }),
-            policy: crate::summary_verify::VerifyPolicy::On,
-            stats: Arc::clone(&stats),
-        });
-        (ctx, stats)
-    }
-
-    fn fail_verdict() -> Option<crate::summary_verify::SummaryVerdict> {
-        Some(crate::summary_verify::SummaryVerdict {
-            claims_total: 3,
-            claims_unsupported: 2,
-            whole_summary_violation: Some(0.9),
-            name_violations: Vec::new(),
-        })
-    }
-
-    fn pass_verdict() -> Option<crate::summary_verify::SummaryVerdict> {
-        Some(crate::summary_verify::SummaryVerdict {
-            claims_total: 3,
-            claims_unsupported: 0,
-            whole_summary_violation: Some(0.1),
-            name_violations: Vec::new(),
-        })
-    }
-
-    #[tokio::test]
-    async fn verify_gate_passes_verified_abstractive_through() {
-        let inference: Arc<dyn InferenceProvider> = Arc::new(OkLlmEmbedOk);
-        let (ctx, stats) = verify_ctx(vec![pass_verdict()]);
-        let node = summarize_one_cluster(
-            &inference,
-            extractive_test_input(),
-            DocumentTypeTag::Narrative,
-            SummaryMode::Abstractive,
-            Some(ctx),
-        )
-        .await
-        .expect("verified abstractive summary must persist");
-        assert_eq!(node.summarizer_model, "mock-abstractive-llm");
-        assert_eq!(node.prompt_version, RAPTOR_PROMPT_VERSION);
-        assert_eq!(
-            stats
-                .passed_first
-                .load(std::sync::atomic::Ordering::Relaxed),
-            1
-        );
-    }
-
-    #[tokio::test]
-    async fn verify_gate_retries_then_falls_back_to_extractive() {
-        let inference: Arc<dyn InferenceProvider> = Arc::new(OkLlmEmbedOk);
-        // First verdict fails → faithful retry generates again → second
-        // verdict fails → extractive floor.
-        let (ctx, stats) = verify_ctx(vec![fail_verdict(), fail_verdict()]);
-        let node = summarize_one_cluster(
-            &inference,
-            extractive_test_input(),
-            DocumentTypeTag::Narrative,
-            SummaryMode::Abstractive,
-            Some(ctx),
-        )
-        .await
-        .expect("failed verification must fall back to extractive, not drop the node");
-        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
-        assert_eq!(node.prompt_version, EXTRACTIVE_ALGO_VERSION);
-        assert_eq!(stats.retried.load(std::sync::atomic::Ordering::Relaxed), 1);
-        assert_eq!(
-            stats.fell_back.load(std::sync::atomic::Ordering::Relaxed),
-            1
-        );
-    }
-
-    #[tokio::test]
-    async fn verify_gate_verifier_failure_is_not_a_pass() {
-        let inference: Arc<dyn InferenceProvider> = Arc::new(OkLlmEmbedOk);
-        // Verifier unreachable (None) on the first attempt → extractive
-        // floor immediately, no unverified abstractive persists.
-        let (ctx, stats) = verify_ctx(vec![None]);
-        let node = summarize_one_cluster(
-            &inference,
-            extractive_test_input(),
-            DocumentTypeTag::Narrative,
-            SummaryMode::Abstractive,
-            Some(ctx),
-        )
-        .await
-        .expect("verifier failure must fall back to extractive");
-        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
-        assert_eq!(
-            stats
-                .verifier_failed
-                .load(std::sync::atomic::Ordering::Relaxed),
-            1
-        );
-    }
-
-    fn extractive_test_input() -> ClusterSummarizationInput {
-        let anchor = "The anchor sentence describes the central theme of this cluster in detail."
-            .to_string();
-        let aside = "An unrelated aside wanders far away from the cluster topic entirely today."
-            .to_string();
-        ClusterSummarizationInput {
-            level: 0,
-            member_descriptors: vec![anchor.clone(), aside.clone()],
-            member_full_texts: vec![anchor, aside],
-            direct_member_chunk_ids: vec![1, 2],
-            evidence_chunk_ids: vec![1, 2],
-            children_node_ids: Vec::new(),
-            quote_spans: Vec::new(),
-            centroid_embedding: vec![1.0, 0.0],
-            cluster_coherence: 0.9,
-            correction_hint: None,
-        }
-    }
-
-    #[tokio::test]
-    async fn abstractive_llm_failure_falls_back_to_extractive() {
-        let inference: Arc<dyn InferenceProvider> = Arc::new(FailingLlmEmbedOk);
-        let node = summarize_one_cluster(
-            &inference,
-            extractive_test_input(),
-            DocumentTypeTag::Narrative,
-            SummaryMode::Abstractive,
-            None,
-        )
-        .await
-        .expect("LLM failure must fall back to an extractive node, not thin the tree");
-        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
-        assert_eq!(node.prompt_version, EXTRACTIVE_ALGO_VERSION);
-        assert!(
-            node.summary.contains("anchor sentence"),
-            "summary should carry the centroid-aligned source sentence verbatim, got: {}",
-            node.summary
-        );
-    }
-
-    #[tokio::test]
-    async fn extractive_mode_is_llm_free_and_stamps_provenance() {
-        let inference: Arc<dyn InferenceProvider> = Arc::new(PanicLlmEmbedOk);
-        let node = summarize_one_cluster(
-            &inference,
-            extractive_test_input(),
-            DocumentTypeTag::Narrative,
-            SummaryMode::Extractive,
-            None,
-        )
-        .await
-        .expect("extractive mode should produce a node");
-        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
-        assert_eq!(node.prompt_version, EXTRACTIVE_ALGO_VERSION);
-        assert!(node.primary_entities.is_empty());
-        assert_eq!(node.direct_member_chunk_ids, vec![1, 2]);
-    }
-
-    #[test]
-    fn kmeans_recovers_orthogonal_clusters() {
-        let embs = ortho_clusters(3, 5); // 15 vectors, 3 true clusters
-        let assignments = kmeans_cluster(&embs, 3, 50);
-        assert_eq!(assignments.len(), 15);
-        // Every input from the same true cluster must end up in the
-        // same predicted cluster.
-        let true_cluster = |i: usize| i / 5;
-        for true_c in 0..3 {
-            let preds: std::collections::HashSet<usize> = (0..15)
-                .filter(|&i| true_cluster(i) == true_c)
-                .map(|i| assignments[i])
-                .collect();
-            assert_eq!(
-                preds.len(),
-                1,
-                "true cluster {true_c} should map to one predicted cluster, got {preds:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn kmeans_handles_k_geq_n() {
-        // k >= n: degenerate, every input is its own cluster.
-        let embs = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
-        let assignments = kmeans_cluster(&embs, 5, 10);
-        assert_eq!(assignments, vec![0, 1]);
-    }
-
-    #[test]
-    fn target_k_picks_sensible_counts() {
-        assert_eq!(target_k(1006, 20), 50);
-        assert_eq!(target_k(200, 20), 10);
-        assert_eq!(target_k(15, 20), 2); // tiny doc → minimum
-        assert_eq!(target_k(0, 20), 0);
-    }
-
-    #[test]
-    fn mean_vector_averages_elementwise() {
-        let a = vec![1.0, 2.0, 3.0];
-        let b = vec![3.0, 2.0, 1.0];
-        let m = mean_vector(&[&a, &b]);
-        assert_eq!(m, vec![2.0, 2.0, 2.0]);
-    }
-
-    /// A cluster larger than the prompt cap keeps only its most-central
-    /// members in the prompt — and keeps them in document order.
-    #[test]
-    fn descriptors_for_prompt_caps_by_centrality_and_reorders_chronologically() {
-        // 40 chunks. Even indices sit on the centroid; odd indices are
-        // orthogonal to it. 20 evens > the cap, so centrality alone
-        // decides and no odd member can slip in to fill a spare slot.
-        let chunks: Vec<ChunkInput> = (0..40)
-            .map(|i| ChunkInput {
-                chunk_id: i as u32,
-                content: format!("chunk {i} body text"),
-            })
-            .collect();
-        let embeddings: Vec<Vec<f32>> = (0..40)
-            .map(|i| {
-                if i % 2 == 0 {
-                    vec![1.0, 0.0]
-                } else {
-                    vec![0.0, 1.0]
-                }
-            })
-            .collect();
-        let members: Vec<usize> = (0..40).collect();
-        let centroid = vec![1.0, 0.0];
-
-        let out = descriptors_for_prompt(&members, &centroid, &chunks, &embeddings);
-        assert_eq!(out.len(), MAX_MEMBERS_IN_SUMMARY_PROMPT);
-        // Only central (even) chunks survive…
-        for d in &out {
-            let n: usize = d
-                .split_whitespace()
-                .nth(1)
-                .and_then(|s| s.parse().ok())
-                .expect("preview starts `chunk <n>`");
-            assert_eq!(n % 2, 0, "kept an off-centroid member: {d}");
-        }
-        // …and they read in document order, not similarity order.
-        let order: Vec<usize> = out
-            .iter()
-            .map(|d| d.split_whitespace().nth(1).unwrap().parse().unwrap())
-            .collect();
-        let mut sorted = order.clone();
-        sorted.sort_unstable();
-        assert_eq!(order, sorted, "previews must stay chronological");
-    }
-
-    /// Small clusters are untouched — the cap is a ceiling, not a quota.
-    #[test]
-    fn descriptors_for_prompt_leaves_small_clusters_whole() {
-        let chunks: Vec<ChunkInput> = (0..4)
-            .map(|i| ChunkInput {
-                chunk_id: i as u32,
-                content: format!("chunk {i} body text"),
-            })
-            .collect();
-        let embeddings: Vec<Vec<f32>> = (0..4).map(|_| vec![1.0, 0.0]).collect();
-        let members: Vec<usize> = (0..4).collect();
-        let out = descriptors_for_prompt(&members, &[1.0, 0.0], &chunks, &embeddings);
-        assert_eq!(out.len(), 4);
-    }
-
-    #[test]
-    fn extract_quote_spans_pulls_longest_sentence_per_chunk() {
-        let chunks = [
-            ChunkInput {
-                chunk_id: 1,
-                content: "Short. This is the load-bearing sentence with quite a few words. Tiny."
-                    .to_string(),
-            },
-            ChunkInput {
-                chunk_id: 2,
-                content: "Another chunk where this longer sentence is the one to anchor on. End."
-                    .to_string(),
-            },
-        ];
-        let embs = [vec![1.0, 0.0], vec![0.0, 1.0]];
-        let refs: Vec<&Vec<f32>> = embs.iter().collect();
-        let chunk_refs: Vec<&ChunkInput> = chunks.iter().collect();
-        let centroid = vec![0.5, 0.5];
-        let spans = extract_quote_spans_for_cluster(&chunk_refs, &refs, &centroid, 5);
-        assert_eq!(spans.len(), 2);
-        assert!(spans[0].text.contains("load-bearing"));
-        assert!(spans[1].text.contains("longer sentence"));
-        // chunk_id preserved.
-        assert_eq!(spans[0].chunk_id, 1);
-        assert_eq!(spans[1].chunk_id, 2);
-    }
-
-    #[test]
-    fn extract_quote_spans_dedupes_by_prefix() {
-        let chunks = [
-            ChunkInput {
-                chunk_id: 1,
-                content:
-                    "The professor walked through London streets alone and unsuspected by men."
-                        .to_string(),
-            },
-            ChunkInput {
-                chunk_id: 2,
-                content:
-                    "The professor walked through London streets alone and unsuspected by men."
-                        .to_string(),
-            },
-        ];
-        let embs = [vec![1.0, 0.0], vec![1.0, 0.0]];
-        let refs: Vec<&Vec<f32>> = embs.iter().collect();
-        let chunk_refs: Vec<&ChunkInput> = chunks.iter().collect();
-        let centroid = vec![1.0, 0.0];
-        let spans = extract_quote_spans_for_cluster(&chunk_refs, &refs, &centroid, 5);
-        assert_eq!(
-            spans.len(),
-            1,
-            "identical spans across chunks should dedupe"
-        );
-    }
-
-    #[test]
-    fn parse_cluster_summary_extracts_json_from_preamble() {
-        let resp = r#"Here you go: {"summary": "Winnie kills Verloc in the parlour after learning of Stevie's death.", "primary_entities": ["Winnie", "Verloc", "Stevie"]} done."#;
-        let parsed = parse_cluster_summary(resp).expect("should parse");
-        assert!(parsed.summary.contains("Winnie kills Verloc"));
-        assert_eq!(parsed.primary_entities, vec!["Winnie", "Verloc", "Stevie"]);
-    }
-
-    #[test]
-    fn parse_cluster_summary_returns_none_on_garbage() {
-        assert!(parse_cluster_summary("no JSON here, just prose").is_none());
-        assert!(parse_cluster_summary("{ malformed").is_none());
-    }
-
-    #[test]
-    fn mean_cosine_to_centroid_is_in_zero_one() {
-        let a = vec![1.0, 0.0];
-        let b = vec![0.0, 1.0];
-        let c = vec![1.0, 1.0];
-        let refs: Vec<&Vec<f32>> = vec![&a, &b];
-        let m = mean_cosine_to_centroid(&refs, &c);
-        // a→c and b→c each have cosine ~0.707; mean clamped to [0,1].
-        assert!(m > 0.6 && m < 0.8, "expected ~0.707, got {m}");
-    }
-}
+#[path = "raptor_atlas/tests.rs"]
+mod tests;

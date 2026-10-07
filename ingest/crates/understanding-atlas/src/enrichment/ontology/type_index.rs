@@ -80,6 +80,17 @@ impl<'a> TypeIndex<'a> {
         name == ancestor || self.ancestors(name).contains(&ancestor)
     }
 
+    /// What Phase 1 is asked to fill: the effective attributes less those a
+    /// declared path or fold derives (`AttrDecl::derived`). The one accessor
+    /// for the extraction prompt, its schema and its parser, so a derived
+    /// attribute is never asked of the model.
+    pub fn extracted_attributes(&self, name: &str) -> Vec<&'a AttrDecl> {
+        self.effective_attributes(name)
+            .into_iter()
+            .filter(|a| a.derived.is_none())
+            .collect()
+    }
+
     /// The type's own attributes followed by every inherited one, nearest
     /// ancestor first. A child that re-declares a parent's attribute name
     /// shadows it — one entry per name, the child's.
@@ -282,6 +293,7 @@ mod tests {
             name: name.to_string(),
             family: AttrFamily::Text { values: Vec::new() },
             description: String::new(),
+            derived: None,
         }
     }
 

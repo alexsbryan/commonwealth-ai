@@ -789,6 +789,20 @@ Allowed values:
 | `derive` | `DeriveDecl` | no | type default | Opt-in derivation passes (interpretive configurations, arguments). |
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph patterns to detect over declared relation/event types. Same shapes as `[[enrichment.patterns]]` (`PatternDecl`). |
 | `navigation` | `NavigationPolicy` | no | type default | `[enrichment.ontology.navigation]` — how a reader walks the atlas per question kind (`NavigationPolicy`). Omit it, or any row, to take the spec's pre-registered defaults; the policy struct IS the TOML shape. |
+| `paths` | `Vec<super::derived::PathDecl>` | no | type default | `[[enrichment.ontology.paths]]`, `sets`, `folds`: what fills a derived attribute (`derived.rs`). |
+| `sets` | `Vec<super::derived::SetDecl>` | no | type default |  |
+| `folds` | `Vec<super::derived::FoldDecl>` | no | type default |  |
+
+## `EvidentialFieldDecl`
+
+A source of identity evidence and what its links were measured to be worth on the live rule: `{ evidence = "document_thread", right = 190, of = 210, measured_on = "…" }`. The source is a `change.document` stamp, `model_choice` (the forced choice's most probable candidate), `reasoned_choice` (the same, read after the model's own reasoning) or `proposed_answer` (threads, wording and similarity alone); `right` of `of` links were right where `measured_on` says.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `evidence` | `String` | **yes** | — |  |
+| `right` | `u32` | **yes** | — |  |
+| `of` | `u32` | **yes** | — |  |
+| `measured_on` | `String` | **yes** | — |  |
 
 ## `OntologyTypeDecl`
 
@@ -806,10 +820,14 @@ One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are requi
 | `to` | `Option<String>` | no | type default | Relations only: the declared type at the target end. |
 | `participants` | `BTreeMap<String, String>` | no | type default | Events only: role name → declared type of the participant. |
 | `of` | `Option<String>` | no | type default | States only: the declared type the state is of. |
-| `source` | `Option<SourceDecl>` | no | type default | A file + column mapping to ingest this type structurally (no model call), for corpora that already hold it as a table. |
+| `source` | `Option<SourceDecl>` | no | type default | Where instances come from without a model call: a table file (`TableSourceDecl`), or the documents' own metadata fields, one atom per identity value (`MetadataSourceDecl`). |
 | `label` | `Option<String>` | no | type default | What the UI calls instances of this type. Defaults to `name`. On the first claim type that sets it, this also becomes the position term. |
 | `identity` | `Vec<String>` | no | type default | External identifiers that make two mentions one thing (`rxnorm_id`). An external key merges strictly. |
 | `identity_fallback` | `Vec<String>` | no | type default | Descriptive keys used when no external identifier is present (`["name", "employer"]`). A descriptive key is judged, not trusted. |
+| `identity_criterion` | `Option<String>` | no | type default | When two mentions are one particular, in the author's words. RESOLVE gives it to the model beside the candidates whenever no `identity` key settles the question (ONTOLOGY_METHOD.md §The core). |
+| `identity_evidential` | `Vec<EvidentialFieldDecl>` | no | type default | Fields whose agreement is evidence that two mentions are one particular, each with the precision measured for it (ONTOLOGY_METHOD.md §Identity). RESOLVE links on one only where that precision clears `identity_bar`. |
+| `identity_bar` | `Option<f64>` | no | type default | The precision a link decided by evidence alone must have. |
+| `identity_necessary` | `Vec<String>` | no | type default | Attributes whose values must agree: two mentions whose values differ, both read, are different particulars. Each a declared attribute with `values`, READ per statement as one forced choice over them. |
 | `force` | `Option<Force>` | no | type default | Claims only, REQUIRED there: what a source does with the claim. |
 | `deontic` | `Vec<Deontic>` | no | type default | Claims with `force = "directive"` only: the deontic modes the type can carry. `forbid X` is stored as `require not-X`. |
 | `subject` | `Option<String>` | no | type default | Claims only: the declared entity, event or state type the claim is about (the is-about relation). |
@@ -838,6 +856,7 @@ One typed attribute on a declared type. `name` and `type` are required; the rema
 | `name` | `String` | **yes** | — | The attribute key the extractor fills (`weight`, `dose`, `valid`). |
 | `(inline: AttrFamily)` | `AttrFamily` | **yes** | — | The value family, selected with `type = "…"`, plus its family keys. |
 | `description` | `String` | no | type default | What the attribute holds, for the extraction prompt. |
+| `derived` | `Option<String>` | no | type default | The declared path or fold that fills it, instead of the extractor (`derived.rs`). |
 
 ## `AttrFamily` (select with `type = "…"`)
 
@@ -916,17 +935,6 @@ Allowed values:
 - `in_work` — True inside the work (what Alyosha believes).
 - `about_work` — Said about the work (what a critic argues).
 
-## `SourceDecl`
-
-A structural source for a declared type: a file already holding it as a table, ingested without a model call. `from`/`to` name the endpoint columns of a relation; `attributes` maps attribute name → column.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `file` | `String` | **yes** | — | Path of the table (CSV or JSONL), relative to the corpus source. |
-| `from` | `Option<String>` | no | type default | Relations: the column holding the `from` endpoint's identity. |
-| `to` | `Option<String>` | no | type default | Relations: the column holding the `to` endpoint's identity. |
-| `attributes` | `BTreeMap<String, String>` | no | type default | Declared attribute name → column name. |
-
 ## `VoicesDecl`
 
 `[enrichment.ontology.voices]` — who speaks, and who is not subject matter. Enforced in the Phase-1 parser, not only asked of the model.
@@ -945,6 +953,17 @@ A structural source for a declared type: a file already holding it as a table, i
 |---|---|---|---|---|
 | `clock` | `Option<SupersessionClock>` | no | type default | The clock supersession folds on. Omit to derive `document_date`. |
 | `supersedes` | `BTreeMap<String, String>` | no | type default | Claim type → the clock it supersedes on: `"document_date"` or a time-family attribute of that type (`{ rule = "valid" }`). A later instance retires the earlier one for the same subject. |
+| `document` | `Option<DocumentFieldsDecl>` | no | type default | The metadata fields each document carries that place a claim in time and in its thread (`{ date = "date", thread = "thread_id", id = "message_id" }` for mail). Every claim is stamped from the ONE document its evidence lands in. Omit when documents carry no metadata. |
+
+## `DocumentFieldsDecl`
+
+`change.document` — which of a document's own metadata fields to stamp on every claim it carries. The names are the corpus's, whatever its extractor wrote; nothing else is read. A field a document lacks, or a date that is neither RFC 2822 nor ISO 8601, stamps nothing and is counted.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `date` | `Option<String>` | no | type default | The field holding the document's date, RFC 2822 or ISO 8601. Stamped as `document_date` in ISO 8601 — the clock supersession folds on. |
+| `thread` | `Option<String>` | no | type default | The field naming the thread the document belongs to. Stamped as `document_thread`. |
+| `id` | `Option<String>` | no | type default | The field holding the document's own identifier. Stamped as `document_id`. |
 
 ## `TensionDecl`
 
@@ -965,6 +984,48 @@ A structural source for a declared type: a file already holding it as a table, i
 |---|---|---|---|---|
 | `configurations` | `Option<bool>` | no | type default | Run the interpretive-configuration rollups (Phase 8). Default true. |
 | `arguments` | `Option<bool>` | no | type default | Reconstruct arguments. Default false. |
+
+## `TableSourceDecl`
+
+`source = { file = … }`: a file already holding the type as a table, ingested without a model call. `from`/`to` name the endpoint columns of a relation; `attributes` maps attribute name → column. Declared only: no stage reads a table source yet.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `file` | `String` | **yes** | — | Path of the table (CSV or JSONL), relative to the corpus source. |
+| `from` | `Option<String>` | no | type default | Relations: the column holding the `from` endpoint's identity. |
+| `to` | `Option<String>` | no | type default | Relations: the column holding the `to` endpoint's identity. |
+| `attributes` | `BTreeMap<String, String>` | no | type default | Declared attribute name → column name. |
+
+## `MetadataSourceDecl`
+
+`source = { metadata = [...], attributes = {...} }`: one entity atom per distinct value of the type's `identity` attribute seen in the named fields of any document, no model call. A model-extracted atom of the type carrying the same identity value merges into it (strict merge). Mail: `metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `metadata` | `Vec<String>` | **yes** | — | The document metadata fields read, by the corpus's own names. |
+| `attributes` | `BTreeMap<String, FieldReader>` | no | type default | Declared attribute name → the reader that fills it from each field. The type's `identity` attributes must be among them. |
+| `exclude` | `Vec<String>` | no | type default | Identity values never projected beyond the mailbox providers a `domain` reading already skips (a regional ISP the bundled list lacks), compared after the identity fold. |
+| `refs` | `BTreeMap<String, SourceRef>` | no | type default | Declared `ref` attribute → the sourced type it links to, and the reader whose value on the same mailbox is that type's identity value. Contact → Account: `employer = { of = "company", reader = "domain" }`. A value the target type excludes or never projects links nothing; a role, never an identity key (`ONTOLOGY_METHOD.md`). |
+
+## `SourceRef`
+
+One `refs` entry of a metadata source: the target type and the reader.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `of` | `String` | **yes** | — | A declared entity type with a metadata source and one identity key. |
+| `reader` | `FieldReader` | **yes** | — | The reader whose value is the target's identity value. |
+
+## `FieldReader`
+
+What a metadata source reads out of one field's value. Closed: the only fixed vocabulary a source has.
+
+Allowed values:
+
+- `address` — Every address in an address list (`Ann <ann@x.org>, bob@y.com`), lowercased.
+- `domain` — Each address's domain, lowercased.
+- `display_name` — The name paired with each address; nothing for a bare address.
+- `value` — The field's whole value: a string or number, or each one of a list.
 
 ## `QuestionKind`
 
@@ -1157,7 +1218,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
@@ -1235,6 +1296,64 @@ rest name declared attributes. Omit the key for the default, `["subject",
 tensions ACROSS subjects: a conflict between two characters is two claims with
 different subjects, and the default rules out exactly those pairs.
 
+`change.document` names the metadata fields each document carries — the
+names are your extractor's, nothing is assumed. Every claim is stamped from
+the ONE document its evidence anchor lands in: `date` becomes
+`document_date` (RFC 2822 or ISO 8601, written as ISO 8601 — the clock
+supersession folds on), `thread` becomes `document_thread`, `id` becomes
+`document_id`. A section can hold several documents (a mail thread), so a
+claim whose anchor is in none of them, or in several, is left unstamped and
+counted in `resolution_failures.json`, as is a field a document lacks or a
+date that does not parse. An unknown key inside `document` refuses at load.
+
+```toml
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id" }
+```
+
+An entity type's `source` can name the documents' own metadata fields instead
+of a table (`MetadataSourceDecl`): one atom per distinct value of the type's
+`identity` attribute seen in those fields, no model call. Each source
+attribute names a declared attribute and the reader that fills it —
+`address` (every address of an address list), `domain` (each address's
+domain), `display_name` (the name paired with each address) or `value` (the
+field's whole value, or each one of a list); the field names are your
+extractor's. The atom counts the documents it was seen in (`document_count`).
+A model-extracted atom of the type carrying the same identity value merges
+into it (strict merge). The atom is named by its display name when one was
+read, else by the most salient model atom merged into it, else by its
+identity value, which stays an alias. An identity value read by `domain`
+at a mailbox provider is never projected, since an address there names no
+organization: the bundled list
+(`ingest/crates/sovereign-recipes/_assets/mailbox_providers.txt`,
+free-email-domains at a pinned commit) or a subdomain of a listed domain
+(`email.msn.com`), counted apart as `providers`. A listed parent covers its
+subdomains, so `espn.go.com` is read as `go.com`'s. `exclude` lists further
+identity values never projected, a regional ISP the list lacks. A field a
+document lacks is counted; one that holds no
+address or a value no reader reads is recorded in `resolution_failures.json`.
+`file` and `metadata` are one or the other, and an unknown key or reader
+refuses at load. `refs` links a declared `ref` attribute to another sourced
+type: the reader's value on the same mailbox is that type's identity value
+(Contact -> Account below). A value the target excludes or never projects
+links nothing; the resolve output counts linked and unlinked per attribute.
+
+```toml
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["pdq.net"] }
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "email", type = "text" }, { name = "employer", type = "ref", of = "company" }]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address" }, refs = { employer = { of = "company", reader = "domain" } } }
+```
+
 `max_entities_per_section` raises how many entities Phase 1 may introduce in
 one section (5–60; omit it to take the shipped cap of 15). Raise it for a
 corpus whose sections enumerate — a data table, a list of recipients — where
@@ -1269,11 +1388,16 @@ already emits (`person`, `concept`, `institution`, `work`, `place`,
 `change.supersedes` name claim types and `tension.same` names `subject`,
 `clock` or a declared attribute; that a `state` type names `of` and declares no
 attributes; that `deontic` appears only on directive claims; that no
-claim type takes a reserved kind name; and that the caps hold (12 types per
-kind, 8 attributes per type, 12 values per closed set). It then prints what
-was derived — the clock, the tension selector, the identity default for each
-entity type, and the question shapes the corpus will answer — so an inference
-you disagree with can be overridden in the recipe.
+claim type takes a reserved kind name; that `change.document` names at least
+one field and no declared attribute takes a stamp's name; that a metadata
+`source` is on an entity type, names its fields, fills only declared
+attributes and reads every identity key; and that the caps
+hold (12 types per kind, 8 attributes per type, 12 values per closed set). It
+then prints what was derived — the clock, the tension selector, the identity
+default for each entity type, the question shapes the corpus will answer,
+which document fields each sourced type is read from, and which document
+field becomes which claim stamp — so an inference you disagree
+with can be overridden in the recipe.
 
 The worked declarations for ten kinds of user are in
 `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md` §1; `svrn recipe new --ontology

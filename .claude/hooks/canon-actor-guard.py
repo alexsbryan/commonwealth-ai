@@ -33,10 +33,10 @@ from __future__ import annotations
 
 import json
 import os
-import re
-import shlex
 import sys
 from pathlib import PurePath
+
+from bash_lex import ASSIGN_RX, SHELLS, WRAPPERS, WRITE_REDIRECTS, simple_commands
 
 READ_VERBS = {"list", "why", "log", "open", "who", "pool", "overdue", "voice",
               "check", "tensions", "share", "mcp", "help", "replay", "witness"}
@@ -51,12 +51,6 @@ READERS = {"cat", "head", "tail", "wc", "grep", "rg", "jq", "less", "more", "ls"
 GIT_READS = {"log", "diff", "show", "blame", "status", "add", "commit", "ls-files",
              "grep"}
 GIT_OPTS_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree"}
-WRITE_REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
-REDIRECTS = WRITE_REDIRECTS | {"<", "<<", "<<<", ">&", "<&", "<>"}
-WRAPPERS = {"command", "exec", "time", "nohup", "builtin"}
-SHELLS = {"bash", "sh", "zsh", "dash"}
-ASSIGN_RX = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
-HEREDOC_RX = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 
 OPERATOR_ROLE = ("approving, objecting, governing, reconfiguring and reviewing "
                  "drafts are the operator's acts. Hand the operator the exact "
@@ -70,41 +64,6 @@ def envelope() -> dict:
         return json.loads(raw) if raw else json.load(sys.stdin)
     except (json.JSONDecodeError, OSError):
         return {}
-
-
-def strip_heredocs(cmd: str) -> str:
-    """Drop heredoc bodies: their lines are data, and a commit message that
-    mentions `canon approve` must not read as an invocation."""
-    out, until = [], []
-    for line in cmd.replace("\\\n", " ").split("\n"):
-        if until:
-            if line.strip() == until[0]:
-                until.pop(0)
-            continue
-        out.append(line)
-        until = [m.group(2) for m in HEREDOC_RX.finditer(line)]
-    return "\n".join(out)
-
-
-def simple_commands(cmd: str) -> list[list[str]]:
-    """Token lists, one per simple command; an unquoted newline separates two.
-    Redirect tokens stay inside their command. Raises ValueError on bad quoting."""
-    lex = shlex.shlex(strip_heredocs(cmd), posix=True, punctuation_chars=";&|()<>\n")
-    lex.whitespace = " \t\r"
-    lex.whitespace_split = True
-    lex.commenters = ""
-    segs, cur = [], []
-    for tok in lex:
-        is_punct = tok and all(c in ";&|()<>\n" for c in tok)
-        if is_punct and ("\n" in tok or tok not in REDIRECTS):
-            if cur:
-                segs.append(cur)
-            cur = []
-        else:
-            cur.append(tok)
-    if cur:
-        segs.append(cur)
-    return segs
 
 
 def classify(args: list[str]) -> tuple[str, str]:

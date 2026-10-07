@@ -125,6 +125,29 @@ fn extract_cache_has_atlas_payloads(cache_path: &std::path::Path) -> bool {
 /// unreadable, unparseable, or carrying an atom kind outside the closed
 /// set — is untrusted, the same verdict the `Value` walk gave a missing
 /// or malformed `atoms` key.
+/// The map the atlas was resolved under is not the declaration the config
+/// holds (a recipe edited since: a source, a ref, an identity key). Resolve is
+/// model-free; skipping it presented the old declaration's atlas as this
+/// one's. A config that cannot be read is named and leaves the cache alone.
+fn resolve_map_is_stale(atlas_dir: &std::path::Path, corpus: &str) -> bool {
+    match crate::pipeline_map::resolved_under_another_map(atlas_dir, corpus) {
+        Ok(stale) => {
+            tracing::debug!(
+                corpus,
+                ?stale,
+                "enrich build: map resolve ran under vs the config's declaration"
+            );
+            stale == Some(true)
+        }
+        Err(e) => {
+            eprintln!(
+                "  warning: could not read the config to check the map resolve ran under: {e}"
+            );
+            false
+        }
+    }
+}
+
 fn resolve_cache_is_structural_placeholder(atlas_dir: &std::path::Path) -> bool {
     match understanding_vocab::read::read_atlas_atoms(atlas_dir) {
         // Resolved atoms are the file's `atoms`; an empty array is the
@@ -251,6 +274,10 @@ pub(super) async fn run_step(
                     )
                 {
                     Some("an empty post-install structural placeholder (no resolved atoms)")
+                } else if matches!(step, Step::Resolve)
+                    && resolve_map_is_stale(&paths::index_root(corpus).join(ATLAS_DIRNAME), corpus)
+                {
+                    Some("resolved under another declaration than the recipe now holds")
                 } else if matches!(step, Step::Backfill)
                     && !ann_table_is_fresh(&paths::index_root(corpus).join(ATLAS_DIRNAME))
                 {

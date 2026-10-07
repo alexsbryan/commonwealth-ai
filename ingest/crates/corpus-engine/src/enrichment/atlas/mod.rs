@@ -48,8 +48,13 @@ pub mod migrate_ids;
 pub mod ontology_coverage;
 pub mod registry;
 pub mod resolution;
+pub mod resolution_derived;
+pub mod resolution_documents;
 pub mod resolution_identity;
 pub mod resolution_ontology;
+pub mod resolution_records;
+pub mod resolution_sources;
+pub mod resolve_records;
 pub use corpus_engine_atlas_reader::resolve;
 pub mod schema_validation;
 pub mod seed_population;
@@ -91,7 +96,14 @@ pub use resolution::{
     resolve_step_3b_with, ResolutionOutput, Step3bOutput, Trajectory, TrajectoryState,
     TrajectoryTransition,
 };
+pub use resolution_documents::{
+    read_stamp, stamp_claim_documents, DocumentStampReport, SectionDocuments,
+};
 pub use resolution_ontology::ResolutionPolicy;
+pub use resolution_sources::{
+    next_entity_index, project_source_atoms, Participants, SourceFoldReport, SourceProjection,
+    SourceReport,
+};
 pub use resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, ResolvedChunk};
 pub use schema_validation::{
     build_report as build_schema_validation_report, compare_across_corpora, count_open_questions,

@@ -89,6 +89,8 @@ struct RaptorArgs {
     /// LLM prose with per-cluster extractive fallback on failure) or
     /// `extractive` (LLM-free verbatim sentence selection).
     summary_mode: sovereign_tools::raptor_atlas::SummaryMode,
+    /// Per-document tree shape: `--leaf-target N`, `--to-root`.
+    tree_shape: sovereign_tools::raptor_atlas::TreeShape,
     /// T1 P1.2 verification policy override for abstractive builds
     /// (`on` | `off` | `sample:<p>`). `None` = SP3-adaptive default.
     verify_summaries: Option<sovereign_tools::summary_verify::VerifyPolicy>,
@@ -285,6 +287,10 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     println!("  doc-type:   {}", parsed.doc_type.label());
     println!("  summaries:  {:?}", parsed.summary_mode);
     println!(
+        "  tree:       leaf target {}, stop at <= {} node(s)",
+        parsed.tree_shape.leaf_target, parsed.tree_shape.root_ceiling
+    );
+    println!(
         "  furniture:  {}",
         if parsed.strip_furniture {
             "stripping SEP page-template chunks"
@@ -396,7 +402,8 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     let mut provider = FolderTieredProvider::new(store, inference, Arc::clone(&atlas))
         .with_index_dir_resolver(resolver)
         .with_doc_type(parsed.doc_type.clone())
-        .with_summary_mode(parsed.summary_mode);
+        .with_summary_mode(parsed.summary_mode)
+        .with_tree_shape(parsed.tree_shape);
     if let Some(policy) = verify_policy {
         provider = provider.with_verify_policy(policy);
     }
@@ -423,10 +430,9 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // CURRENT build config: the prompt version const and the model
     // that would serve a summary call RIGHT NOW. The build stamps each
     // node with `resp.model_id` — the routing decision actually made
-    // per call (SLOT_POLICY routes the Workload::EnrichBulk summary
-    // fan-out to the fast lane, not the pinned chat slot). So the
-    // expected value must come from the same probe: one tiny EnrichBulk
-    // completion through the same provider. Resolving the chat-model
+    // per call, under `raptor_atlas::SUMMARY_WORKLOAD`. So the expected
+    // value must come from the same probe: one tiny completion under
+    // that same workload, through the same provider. Resolving the chat-model
     // alias via /v1/models instead compares attribution against
     // aspiration — observed live 2026-07-31: the alias table said the
     // 35B, EnrichBulk served the resident 4B, and every run reported
@@ -448,7 +454,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 sovereign_tools::raptor_atlas::EXTRACTIVE_SUMMARIZER.to_string(),
             )),
             sovereign_tools::raptor_atlas::SummaryMode::Abstractive => {
-                let mut probe = sovereign_contracts::slot_policy::Workload::EnrichBulk
+                let mut probe = sovereign_tools::raptor_atlas::SUMMARY_WORKLOAD
                     .request("Reply with the single word: ok".to_string())
                     .with_output_budget(8);
                 probe.think_budget = Some(0);
@@ -861,6 +867,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
     let mut chat_model = "primary".to_string();
     let mut embed_model = "embed".to_string();
     let mut summary_mode = sovereign_tools::raptor_atlas::SummaryMode::Abstractive;
+    let mut tree_shape = sovereign_tools::raptor_atlas::TreeShape::DEFAULT;
 
     let mut i = 0;
     while i < args.len() {
@@ -912,6 +919,16 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
                         .map_err(|e| format!("--verify-summaries: {e}"))?,
                 );
             }
+            "--leaf-target" => {
+                i += 1;
+                let v = args.get(i).ok_or("--leaf-target needs a value")?;
+                tree_shape.leaf_target = v
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|n| *n >= 2)
+                    .ok_or_else(|| format!("--leaf-target: '{v}' is not an integer >= 2"))?;
+            }
+            "--to-root" => tree_shape.root_ceiling = 1,
             "--summary-mode" => {
                 i += 1;
                 let v = args.get(i).ok_or("--summary-mode needs a value")?;
@@ -955,6 +972,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
         chat_model,
         embed_model,
         summary_mode,
+        tree_shape,
     })
 }
 
@@ -1029,6 +1047,8 @@ fn print_usage() {
     eprintln!("  --dry-run           Print the dispatch plan and exit (no inference, no writes).");
     eprintln!("  --force             Rebuild every document, even ones already built (default: resume/skip them).");
     eprintln!("  --refresh-stale     Rebuild only documents whose stored trees carry an outdated prompt_version or summarizer_model stamp (pre-stamping trees count as stale).");
+    eprintln!("  --leaf-target N     Average chunks per leaf cluster (default: 20).");
+    eprintln!("  --to-root           Recurse to a single root (default: stop at a top layer of <= 4 nodes).");
     eprintln!("  --summary-mode <m>  abstractive (default: LLM prose, extractive fallback on failure) | extractive (LLM-free verbatim sentence selection, T1 P1.1)");
     eprintln!("  --verify-summaries <p>  Abstractive verification gate (T1 P1.2): on | off | sample:<p>. Default adapts to corpus scale: on up to ~1.5k estimated nodes, sample:0.12 above (SP3).");
     eprintln!("  --titles-file <path>  Restrict the build to a curated article set (one slug/title per line).");

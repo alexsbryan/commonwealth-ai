@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn code dry-report [--corpus-id <id>] [--scope <prefix>] [--min-lines N]
+//! `svrn code dry-report [--corpus-id <id>] [--scope <path>] [--min-lines N]
 //!  [--threshold F]` — semantic-duplication report over the code embeddings.
 //!
 //! Thin CLI wrapper over `sovereign_code::dry_report`. Resolves the
@@ -57,7 +57,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             }
             "-h" | "--help" => {
                 println!(
-                    "svrn code dry-report [--corpus-id <id>] [--scope <path-prefix>] \
+                    "svrn code dry-report [--corpus-id <id>] [--scope <path>] \
                      [--min-lines N] [--threshold F]"
                 );
                 println!();
@@ -66,7 +66,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 println!("hash) and near clones (cosine ≥ threshold). Advisory — a human");
                 println!("decides what to factor out.");
                 println!();
-                println!("  --scope <prefix>   restrict to a file-path prefix (e.g. a crate dir)");
+                println!("  --scope <path>     restrict to a dir or file (whole path components)");
                 println!("  --min-lines N      ignore symbols shorter than N lines (default 8)");
                 println!("  --threshold F      near-clone cosine cutoff, 0..1 (default 0.95)");
                 return 0;

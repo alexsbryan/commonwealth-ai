@@ -22,7 +22,10 @@ oplog = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
+# `preserve_order`: `typed_prompt`'s schema goes to the sampler's grammar,
+# which generates properties in schema order (`target_type` first, as the
+# query-layer probe measured); the same reason corpus-engine declares it.
+serde_json = { workspace = true, features = ["preserve_order"] }
 tracing = { workspace = true }
 # `enrichment::atlas::fold`'s NFD diacritic strip (moved from corpus-engine's
 # `resolution.rs` by dm-understanding-pure-1). Same version as corpus-engine.

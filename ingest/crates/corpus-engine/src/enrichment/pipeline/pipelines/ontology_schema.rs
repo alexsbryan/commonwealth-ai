@@ -4,7 +4,7 @@
 //! types in the author's words lives next door in `ontology_prompt.rs`.
 //!
 //! Both are generated from the SAME [`OntologyPolicies`], through the same
-//! [`TypeIndex::effective_attributes`] the parser validates against — so what
+//! [`TypeIndex::extracted_attributes`] the parser validates against — so what
 //! the grammar offers, what the prompt describes and what the reader accepts
 //! cannot drift apart (§10.6). There is no second copy of the section schema
 //! here: [`phase1_schema_for`] parses the shipped
@@ -419,7 +419,7 @@ fn attach_attributes(
 ) {
     let mut props = serde_json::Map::new();
     for t in types.iter().copied() {
-        for a in index.effective_attributes(&t.name) {
+        for a in index.extracted_attributes(&t.name) {
             props
                 .entry(a.name.clone())
                 .or_insert_with(|| attribute_schema(a));
@@ -476,6 +476,37 @@ mod tests {
             .iter()
             .map(|x| x.as_str().unwrap_or_default().to_string())
             .collect()
+    }
+
+    /// A derived attribute is filled by its path or fold after Phase 1, so
+    /// the extractor is never asked for it; its declared siblings still are.
+    #[test]
+    fn a_derived_attribute_is_left_out_of_the_extraction_schema() {
+        let mut policies = OntologyPolicies::default();
+        policies.shape.types.push(OntologyTypeDecl {
+            name: "stage_update".into(),
+            kind: TypeKind::Claim,
+            attributes: vec![
+                AttrDecl {
+                    name: "stage_named".into(),
+                    family: AttrFamily::Text { values: Vec::new() },
+                    description: String::new(),
+                    derived: None,
+                },
+                AttrDecl {
+                    name: "party_derived".into(),
+                    family: AttrFamily::Ref {
+                        of: "company".into(),
+                    },
+                    description: String::new(),
+                    derived: Some("party_of_message".into()),
+                },
+            ],
+            ..Default::default()
+        });
+        let schema = phase1_schema_for(&policies).to_string();
+        assert!(schema.contains("stage_named"), "{schema}");
+        assert!(!schema.contains("party_derived"), "{schema}");
     }
 
     /// `of` is the whole routing rule, and getting it wrong is silent: a

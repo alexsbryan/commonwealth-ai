@@ -172,6 +172,9 @@ const V1_KEYS: &[&str] = &[
     "derive",
     "patterns",
     "navigation",
+    "paths",
+    "sets",
+    "folds",
 ];
 
 impl OntologyLanguage for V1 {

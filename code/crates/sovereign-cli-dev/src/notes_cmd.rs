@@ -1829,8 +1829,11 @@ fn reflection_anchor(n: &Note) -> Option<String> {
 /// `rebuild` — the generic-substring over-matching that flooded the candidate
 /// set with commits that merely touched the term in passing. Non-word anchors
 /// (containing `::`, `<`, …) fall back to the literal-substring pickaxe (`-S`),
-/// where a `\b`-wrapped regex would be both unsafe and ill-defined. Anchors
+/// where a bounded regex would be both unsafe and ill-defined. Anchors
 /// under 3 chars pickaxe against nearly every diff, so they yield no signal.
+/// The boundary is POSIX ERE, not `\b` (a GNU extension): macOS git uses the
+/// system regex, where `-G\bruntime\b` matched nothing, so every word anchor
+/// came back empty there. A word anchor is alnum/`_` only, so needs no escaping.
 fn git_churn_since(repo: &std::path::Path, anchor: &str, since_rfc3339: &str) -> Vec<String> {
     let anchor = anchor.trim();
     if anchor.len() < 3 {
@@ -1838,7 +1841,7 @@ fn git_churn_since(repo: &std::path::Path, anchor: &str, since_rfc3339: &str) ->
     }
     let is_word = anchor.chars().all(|c| c.is_alphanumeric() || c == '_');
     let needle = if is_word {
-        format!("-G\\b{anchor}\\b")
+        format!("-G(^|[^[:alnum:]_]){anchor}([^[:alnum:]_]|$)")
     } else {
         format!("-S{anchor}")
     };
@@ -1861,7 +1864,13 @@ fn git_churn_since(repo: &std::path::Path, anchor: &str, since_rfc3339: &str) ->
             .filter(|l| !l.is_empty())
             .map(str::to_string)
             .collect(),
-        _ => Vec::new(),
+        // Refused (not a repo, a bad pattern) or did not run: still no
+        // fix-signal to the caller, but not "no churn" — say which.
+        other => {
+            let why = other.map(|o| String::from_utf8_lossy(&o.stderr).trim().to_string());
+            tracing::debug!(target: "cli_dev.notes", anchor, ?why, "git_churn_since: no answer");
+            Vec::new()
+        }
     }
 }
 

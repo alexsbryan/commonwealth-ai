@@ -175,7 +175,8 @@
   "ontology": {
     "attribute": [
       "name",
-      "description"
+      "description",
+      "derived"
     ],
     "attribute_families": [
       {
@@ -220,7 +221,8 @@
     ],
     "change": [
       "clock",
-      "supersedes"
+      "supersedes",
+      "document"
     ],
     "claim_scope": [
       "in_work",
@@ -258,7 +260,16 @@
       "file",
       "from",
       "to",
-      "attributes"
+      "attributes",
+      "metadata",
+      "exclude",
+      "refs"
+    ],
+    "source_reader": [
+      "address",
+      "domain",
+      "display_name",
+      "value"
     ],
     "tension": [
       "label",
@@ -281,6 +292,10 @@
       "label",
       "identity",
       "identity_fallback",
+      "identity_criterion",
+      "identity_evidential",
+      "identity_bar",
+      "identity_necessary",
       "force",
       "deontic",
       "subject",
@@ -299,7 +314,10 @@
       "tension",
       "derive",
       "patterns",
-      "navigation"
+      "navigation",
+      "paths",
+      "sets",
+      "folds"
     ],
     "versions": [
       0,

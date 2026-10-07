@@ -36,6 +36,7 @@ pub(crate) mod chaos_monkey;
 mod desktop_bridge;
 mod discover;
 mod enron;
+mod er_score;
 mod faithfulness;
 mod flywheel;
 mod gate;
@@ -94,6 +95,10 @@ const HELP: Help = Help {
             (
                 "enron",
                 "Phase 5 measurement loop for the architecture-over-Enron substrate.",
+            ),
+            (
+                "er-score",
+                "Score a clustering against a gold clustering (B³, pairwise, CEAF-e, LEA); prints the report as JSON.",
             ),
             (
                 "mechanism-fidelity",
@@ -194,6 +199,8 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "chaos-monkey" => chaos_monkey::cmd_chaos_monkey(&args[1..]).await,
         "routing-replay" => routing_replay::cmd_routing_replay(&args[1..]).await,
         "enron" => enron::cmd_enron(&args[1..]).await,
+        // `er-score` is synchronous — two files in, one report out.
+        "er-score" => er_score::cmd_er_score(&args[1..]),
         "flywheel" => flywheel::cmd_flywheel(&args[1..]).await,
         "governance" => governance::cmd_governance(&args[1..]).await,
         "proxy" => proxy_bench::cmd_proxy_bench(&args[1..]).await,

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Unit tests for the Phase 1 parse-failure classifier and response-head
-//! truncation, moved out of runner.rs for its arch-gate ceiling. They need
-//! none of the runner fixtures in `runner::tests`.
+//! Runner tests over pure text helpers (failure classification, response
+//! heads, query clamping), split from `tests/runner.rs` (ARCH §3.2).
 
 use super::*;
 
@@ -97,4 +96,15 @@ fn truncate_response_head_caps_post_think_content() {
 fn truncate_response_head_passes_short_response_through_unchanged() {
     let raw = "not valid json";
     assert_eq!(truncate_response_head(raw).unwrap(), "not valid json");
+}
+
+#[test]
+fn phase1_query_text_clamps_to_budget() {
+    let body = "x".repeat(5000);
+    let ch = chapter("ch", "Title", &body);
+    let q = phase1_query_text(&ch);
+    // Title (5) + "\n\n" (2) + 800 chars of body = 807. Allow some
+    // slack for char vs byte counting.
+    assert!(q.chars().count() <= 810);
+    assert!(q.starts_with("Title"));
 }

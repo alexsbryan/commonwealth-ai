@@ -394,21 +394,32 @@ fn assemble_configuration_list(result: &TraversalResult) -> Brief {
     }
 }
 
-/// The `enumerate` / `aggregate` brief: the headline the engine computed,
-/// then one line per atom carrying its DECLARED attributes.
+/// The `enumerate` / `aggregate` brief: the engine's headline, then the cited
+/// table — one line per answer atom with its attributes and the chunk ids
+/// that put it in the answer — then the count line and any notes.
 ///
 /// The attributes are the point. "Which coins are in this catalogue, and what
 /// metal is each" is answered by the list plus `metal=silver` — a bare list of
-/// names answers only half the question. Attributes render in the map's own
-/// (sorted) key order so the brief is deterministic.
+/// names answers only half the question. Attributes render sorted by key so
+/// the brief is deterministic, and an attribute the
+/// query named that the atom lacks renders `(unset)`: shown absent, never
+/// left out. A result serialised before the table existed has none, and
+/// renders its atoms uncited.
 fn assemble_declared_listing(result: &TraversalResult) -> Brief {
     fn attrs(map: &serde_json::Map<String, serde_json::Value>) -> String {
         if map.is_empty() {
             return String::new();
         }
-        let rendered = map
-            .iter()
+        // Sorted here, not by the map: serde_json's `preserve_order` is
+        // switched on by feature unification in some builds and not others,
+        // so the map's own order is a property of the build, not the atom.
+        let mut keys: Vec<(&String, &serde_json::Value)> = map.iter().collect();
+        keys.sort_by(|a, b| a.0.cmp(b.0));
+        let rendered = keys
+            .into_iter()
             .map(|(k, v)| match v {
+                serde_json::Value::Null => format!("{k}=(unset)"),
+                serde_json::Value::String(s) if s.trim().is_empty() => format!("{k}=(unset)"),
                 serde_json::Value::String(s) => format!("{k}={s}"),
                 other => format!("{k}={other}"),
             })
@@ -416,18 +427,65 @@ fn assemble_declared_listing(result: &TraversalResult) -> Brief {
             .join("; ");
         format!(" — {rendered}")
     }
+    let depth_of = |id: &str| {
+        result
+            .entities
+            .iter()
+            .find(|e| e.id.as_str() == id)
+            .map(|e| e.enrichment_depth)
+            .or_else(|| {
+                result
+                    .claims
+                    .iter()
+                    .find(|c| c.id.as_str() == id)
+                    .map(|c| c.enrichment_depth)
+            })
+    };
 
     let mut body = String::new();
-    for e in &result.entities {
+    let Some(table) = &result.table else {
+        for e in &result.entities {
+            body.push_str(&format!(
+                "- {} {}{}\n",
+                depth_tag(e.enrichment_depth),
+                e.canonical_name,
+                attrs(&e.attributes)
+            ));
+        }
+        for c in &result.claims {
+            body.push_str(&format!("- {}{}\n", c.content, attrs(&c.attributes)));
+        }
+        return Brief {
+            headline: result.headline.clone(),
+            body,
+        };
+    };
+    for row in &table.rows {
+        let tag = depth_of(&row.atom_id)
+            .map(|d| format!("{} ", depth_tag(d)))
+            .unwrap_or_default();
+        let cites = if row.evidence.is_empty() {
+            "uncited".to_string()
+        } else {
+            row.evidence.join(", ")
+        };
         body.push_str(&format!(
-            "- {} {}{}\n",
-            depth_tag(e.enrichment_depth),
-            e.canonical_name,
-            attrs(&e.attributes)
+            "- {tag}{}{} [{cites}]\n",
+            row.name,
+            attrs(&row.attributes)
         ));
     }
-    for c in &result.claims {
-        body.push_str(&format!("- {}{}\n", c.content, attrs(&c.attributes)));
+    if table.rows.len() == table.matched {
+        body.push_str(&format!("\ncount: {}\n", table.matched));
+    } else {
+        body.push_str(&format!(
+            "\ncount: {} of {} that match\n",
+            table.rows.len(),
+            table.matched
+        ));
+    }
+    for note in &table.notes {
+        body.push_str(&format!("note: {note}\n"));
     }
     Brief {
         headline: result.headline.clone(),

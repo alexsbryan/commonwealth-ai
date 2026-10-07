@@ -1,0 +1,390 @@
+{
+ "totals_sep": {
+  "sep_atlases": 1772,
+  "atoms.Entity": 88921,
+  "atoms.Event": 6770,
+  "atoms.State": 24012,
+  "atoms.Relation": 19832,
+  "atoms.Claim": 59183,
+  "atoms.Question": 33979,
+  "atoms.Configuration": 4820,
+  "atoms.ArgumentReconstruction": 13609,
+  "edges.Transition": 6343,
+  "edges.Tension": 4767,
+  "edges.Involves": 103428,
+  "with_tension_edges": 1442,
+  "with_argument_reconstruction": 1301,
+  "with_position_atoms": 0,
+  "pipeline_from_config": 4,
+  "candidates_nonempty": 1302,
+  "candidates_all_resolve": 2,
+  "candidates_none_resolve": 1300,
+  "edges.Configures": 38
+ },
+ "atlases": [
+  {
+   "corpus": "brothers-karamazov-book-1",
+   "sep": false,
+   "pipeline": "literary_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 17,
+    "Event": 12,
+    "State": 19,
+    "Relation": 12,
+    "Claim": 13,
+    "Question": 9,
+    "Configuration": 3
+   },
+   "edge_counts": {
+    "Transition": 5,
+    "Tension": 4,
+    "Involves": 68
+   },
+   "ontology": false,
+   "tension_candidates": 5,
+   "tension_candidates_resolvable": 5
+  },
+  {
+   "corpus": "cite-m2-library",
+   "sep": false,
+   "pipeline": "custom_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 8,
+    "Event": 3,
+    "State": 1,
+    "Relation": 2,
+    "Claim": 13,
+    "Question": 6
+   },
+   "edge_counts": {
+    "Tension": 4,
+    "Involves": 7
+   },
+   "ontology": true,
+   "tension_candidates": 0,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "climb-ostrom",
+   "sep": false,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 9,
+    "Event": 2,
+    "State": 5,
+    "Relation": 3,
+    "Claim": 6,
+    "Question": 3,
+    "Configuration": 2
+   },
+   "edge_counts": {
+    "Transition": 1,
+    "Tension": 2,
+    "Involves": 17,
+    "Configures": 11
+   },
+   "ontology": true,
+   "tension_candidates": 9,
+   "tension_candidates_resolvable": 9
+  },
+  {
+   "corpus": "maple-house",
+   "sep": false,
+   "pipeline": "custom_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 35,
+    "Event": 7,
+    "State": 7,
+    "Relation": 12,
+    "Claim": 67,
+    "Question": 44,
+    "Configuration": 3
+   },
+   "edge_counts": {
+    "Transition": 3,
+    "Tension": 28,
+    "Involves": 84
+   },
+   "ontology": false,
+   "tension_candidates": 452,
+   "tension_candidates_resolvable": 452
+  },
+  {
+   "corpus": "obsidian-vault",
+   "sep": false,
+   "pipeline": "obsidian_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 434,
+    "Event": 73,
+    "State": 120,
+    "Relation": 52,
+    "Claim": 446,
+    "Question": 76,
+    "ArgumentReconstruction": 5,
+    "Position": 77,
+    "Opposition": 66
+   },
+   "edge_counts": {
+    "Transition": 3,
+    "Involves": 310,
+    "OpposesIn": 3
+   },
+   "ontology": false,
+   "tension_candidates": 97,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "proxy-cik0000012927",
+   "sep": false,
+   "pipeline": "custom_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 75,
+    "Event": 21,
+    "State": 44,
+    "Relation": 18,
+    "Claim": 54,
+    "Question": 48,
+    "Configuration": 3
+   },
+   "edge_counts": {
+    "Transition": 8,
+    "Tension": 4,
+    "Involves": 154
+   },
+   "ontology": false,
+   "tension_candidates": 116,
+   "tension_candidates_resolvable": 116
+  },
+  {
+   "corpus": "proxy-cik0000034088",
+   "sep": false,
+   "pipeline": "custom_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 125,
+    "Event": 43,
+    "State": 57,
+    "Relation": 46,
+    "Claim": 148,
+    "Question": 107,
+    "Configuration": 3
+   },
+   "edge_counts": {
+    "Transition": 17,
+    "Tension": 31,
+    "Involves": 265
+   },
+   "ontology": false,
+   "tension_candidates": 638,
+   "tension_candidates_resolvable": 638
+  },
+  {
+   "corpus": "sep-abner-burgos",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 32,
+    "Event": 4,
+    "State": 9,
+    "Relation": 5,
+    "Claim": 16,
+    "Question": 7,
+    "Configuration": 3
+   },
+   "edge_counts": {
+    "Transition": 2,
+    "Tension": 2,
+    "Involves": 37,
+    "Configures": 20
+   },
+   "ontology": true,
+   "tension_candidates": 30,
+   "tension_candidates_resolvable": 30
+  },
+  {
+   "corpus": "sep-african-sage",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 17,
+    "Relation": 4,
+    "Claim": 10,
+    "Question": 6,
+    "Configuration": 3,
+    "ArgumentReconstruction": 3
+   },
+   "edge_counts": {
+    "Tension": 1,
+    "Involves": 16
+   },
+   "ontology": false,
+   "tension_candidates": 28,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "sep-compatibilism",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "inferred: enrich sep-ingest (sep_ingest.rs:203); no config.json",
+   "atom_counts": {
+    "Entity": 40,
+    "Event": 3,
+    "State": 15,
+    "Relation": 14,
+    "Claim": 35,
+    "Question": 21,
+    "Configuration": 3,
+    "ArgumentReconstruction": 11
+   },
+   "edge_counts": {
+    "Transition": 5,
+    "Tension": 9,
+    "Involves": 71
+   },
+   "ontology": false,
+   "tension_candidates": 50,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "sep-freewill",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "inferred: enrich sep-ingest (sep_ingest.rs:203); no config.json",
+   "atom_counts": {
+    "Entity": 214,
+    "Event": 2,
+    "State": 15,
+    "Relation": 17,
+    "Claim": 55,
+    "Question": 25,
+    "ArgumentReconstruction": 10
+   },
+   "edge_counts": {
+    "Transition": 1,
+    "Involves": 80
+   },
+   "ontology": false,
+   "tension_candidates": 282,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "sep-incompatibilism-theories",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "inferred: enrich sep-ingest (sep_ingest.rs:203); no config.json",
+   "atom_counts": {
+    "Entity": 39,
+    "Event": 8,
+    "State": 19,
+    "Relation": 16,
+    "Claim": 39,
+    "Question": 22,
+    "Configuration": 3,
+    "ArgumentReconstruction": 15
+   },
+   "edge_counts": {
+    "Transition": 4,
+    "Tension": 6,
+    "Involves": 77
+   },
+   "ontology": false,
+   "tension_candidates": 72,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "sep-kant-transcendental-idealism",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "inferred: enrich sep-ingest (sep_ingest.rs:203); no config.json",
+   "atom_counts": {
+    "Entity": 51,
+    "Event": 4,
+    "State": 29,
+    "Relation": 18,
+    "Claim": 93,
+    "Question": 37,
+    "Configuration": 3,
+    "ArgumentReconstruction": 21
+   },
+   "edge_counts": {
+    "Transition": 13,
+    "Tension": 3,
+    "Involves": 133
+   },
+   "ontology": false,
+   "tension_candidates": 731,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "sep-kant",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 65,
+    "Event": 3,
+    "State": 16,
+    "Relation": 13,
+    "Claim": 49,
+    "Question": 19,
+    "Configuration": 3,
+    "ArgumentReconstruction": 13
+   },
+   "edge_counts": {
+    "Transition": 3,
+    "Involves": 89
+   },
+   "ontology": false,
+   "tension_candidates": 626,
+   "tension_candidates_resolvable": 0
+  },
+  {
+   "corpus": "sep-span",
+   "sep": true,
+   "pipeline": "philosophy_atlas",
+   "pipeline_source": "config.json",
+   "atom_counts": {
+    "Entity": 110,
+    "Event": 16,
+    "State": 25,
+    "Relation": 24,
+    "Claim": 78,
+    "Question": 29,
+    "Configuration": 3
+   },
+   "edge_counts": {
+    "Transition": 10,
+    "Tension": 7,
+    "Involves": 174,
+    "Configures": 18
+   },
+   "ontology": true,
+   "tension_candidates": 638,
+   "tension_candidates_resolvable": 638
+  },
+  {
+   "corpus": "watched-fixture-495a8a964229",
+   "sep": false,
+   "pipeline": null,
+   "pipeline_source": "no config.json",
+   "atom_counts": {
+    "Entity": 8,
+    "Claim": 4,
+    "Position": 4,
+    "Opposition": 4
+   },
+   "edge_counts": {},
+   "ontology": false,
+   "tension_candidates": null,
+   "tension_candidates_resolvable": null
+  }
+ ]
+}

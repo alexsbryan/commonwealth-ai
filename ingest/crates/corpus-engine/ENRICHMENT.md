@@ -375,7 +375,9 @@ slot and one union `attributes` object per kind, claims require `claim_kind`
 instead of `discourse_act`, and `argument_reconstructions` is dropped unless
 `derive.arguments`. The same module renders the `## Declared types` prompt
 block from the same `TypeIndex::effective_attributes` the reader validates
-against, so the grammar, the prompt and the parser cannot disagree.
+against, and a relation's ends from the same `TypeIndex::endpoints`
+resolution enforces (`check_relation_endpoints`), so the grammar, the prompt
+and the parser cannot disagree.
 `pipelines/parse_policy.rs` + `pipelines/ontology_parse.rs` enforce it: a
 declared type survives as `EntityType::Other("<name>")`, attributes are kept
 only when declared on that type (inherited through `specializes`) and only in
@@ -391,6 +393,30 @@ resolution, `atlas/ontology.json` records the policies the atlas was built
 under and `_summary.json` (schema 3) carries an `OntologySummary`. Design and
 phase plan: `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md`,
 `ONTOLOGY_MIGRATION.md`; field reference: `ingest/crates/sovereign-recipes/SCHEMA.md`.
+
+A relation declared with both ends (`TypeIndex::endpoints`, the accessor
+`check_relation_endpoints` enforces) also gets a focused Phase-1 pass,
+`pipelines/relation_focus.rs`, default on with no knob: the declaration is the
+author saying the relation matters. After a section parses, the runner makes
+one call per declared relation per distinct entity the section introduced
+whose type is the `from` type or `specializes` it. The prompt is built from the
+declaration alone (template `configurable_atlas_prompts/relation_focus_system.md`;
+the user message is that entity's name over Phase 1's own user body), carries
+Phase 1's phase id, temperature and thinking budget so the client routes and
+samples it identically, and its strict schema is `{items: [{name, anchor}]}`
+capped at 40. Each item becomes a relation sketch `[from entity, item]` of the
+declared type with the quote as anchor, appended BEFORE the post-process chain
+and deduplicated on type plus folded participants, so it is anchor-snapped,
+checkpointed and cached with the section, and re-applying the pass appends
+nothing. Calls = Σ over sections of Σ over such relations of the distinct
+`from` entities; a corpus declaring none makes zero calls and its extraction
+does not move. A failed call is warned and the joint relations stand.
+`--dry-run` shows no focused prompt (it needs the parsed entities) and the
+focused calls are not section-cached. Why: on ft-ans-dev-b the joint prompt
+reached 5 of 10 attested `holds_coins_of` mints on `sec_00008`, varying at
+T 0.1; the focused call reached 10/10 on every run (harness and rows:
+`research/ontology-retrieval/ontology-proof/ans/relation_focus.py`,
+`relation_focus_rows.json`, `relation_ab_rows.json`).
 
 ---
 

@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub use super::source::{FieldReader, MetadataSourceDecl, SourceDecl, SourceRef, TableSourceDecl};
 use super::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
     OntologyPolicies, ProsePolicy, ShapePolicy,
@@ -266,6 +267,14 @@ pub struct OntologyV1 {
     /// spec's pre-registered defaults; the policy struct IS the TOML shape.
     #[serde(default)]
     pub navigation: NavigationPolicy,
+    /// `[[enrichment.ontology.paths]]`, `sets`, `folds`: what fills a
+    /// derived attribute (`derived.rs`).
+    #[serde(default)]
+    pub paths: Vec<super::derived::PathDecl>,
+    #[serde(default)]
+    pub sets: Vec<super::derived::SetDecl>,
+    #[serde(default)]
+    pub folds: Vec<super::derived::FoldDecl>,
 }
 
 impl OntologyV1 {
@@ -316,6 +325,7 @@ impl OntologyV1 {
             change: ChangePolicy {
                 clock: self.change.clock.unwrap_or_default(),
                 supersedes: self.change.supersedes,
+                document: self.change.document,
             },
             derivation: DerivationPolicy {
                 tension: self.tension,
@@ -328,6 +338,11 @@ impl OntologyV1 {
                 // `true`, which is invariant I1.
                 configurations: self.derive.configurations.unwrap_or(!declares_types),
                 arguments: self.derive.arguments.unwrap_or(false),
+                derived: super::derived::DerivedPolicy {
+                    paths: self.paths,
+                    sets: self.sets,
+                    folds: self.folds,
+                },
             },
             prose: ProsePolicy {
                 guidance: self.guidance,
@@ -335,6 +350,30 @@ impl OntologyV1 {
             },
             navigation: self.navigation,
         }
+    }
+}
+
+/// A source of identity evidence and what its links were measured to be worth
+/// on the live rule: `{ evidence = "document_thread", right = 190, of = 210,
+/// measured_on = "…" }`. The source is a `change.document` stamp,
+/// `model_choice` (the forced choice's most probable candidate),
+/// `reasoned_choice` (the same, read after the model's own reasoning) or
+/// `proposed_answer` (threads, wording and similarity alone); `right` of `of`
+/// links were right where `measured_on` says.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvidentialFieldDecl {
+    pub evidence: String,
+    pub right: u32,
+    pub of: u32,
+    pub measured_on: String,
+}
+
+impl EvidentialFieldDecl {
+    /// The expected precision given the counts: the posterior mean under a
+    /// uniform prior, (right + 1) / (of + 2). Not right / of, which overstates
+    /// few links (15 of 16 is .938, but .889 expected; 190 of 210 is .901).
+    pub fn precision(&self) -> f64 {
+        (self.right as f64 + 1.0) / (self.of as f64 + 2.0)
     }
 }
 
@@ -377,8 +416,9 @@ pub struct OntologyTypeDecl {
     /// States only: the declared type the state is of.
     #[serde(default)]
     pub of: Option<String>,
-    /// A file + column mapping to ingest this type structurally (no model
-    /// call), for corpora that already hold it as a table.
+    /// Where instances come from without a model call: a table file
+    /// (`TableSourceDecl`), or the documents' own metadata fields, one atom
+    /// per identity value (`MetadataSourceDecl`).
     #[serde(default)]
     pub source: Option<SourceDecl>,
     /// What the UI calls instances of this type. Defaults to `name`. On the
@@ -393,6 +433,24 @@ pub struct OntologyTypeDecl {
     /// (`["name", "employer"]`). A descriptive key is judged, not trusted.
     #[serde(default)]
     pub identity_fallback: Vec<String>,
+    /// When two mentions are one particular, in the author's words. RESOLVE
+    /// gives it to the model beside the candidates whenever no `identity` key
+    /// settles the question (ONTOLOGY_METHOD.md §The core).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_criterion: Option<String>,
+    /// Fields whose agreement is evidence that two mentions are one particular,
+    /// each with the precision measured for it (ONTOLOGY_METHOD.md §Identity).
+    /// RESOLVE links on one only where that precision clears `identity_bar`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identity_evidential: Vec<EvidentialFieldDecl>,
+    /// The precision a link decided by evidence alone must have.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_bar: Option<f64>,
+    /// Attributes whose values must agree: two mentions whose values differ,
+    /// both read, are different particulars. Each a declared attribute with
+    /// `values`, READ per statement as one forced choice over them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identity_necessary: Vec<String>,
     /// Claims only, REQUIRED there: what a source does with the claim.
     #[serde(default)]
     pub force: Option<Force>,
@@ -449,6 +507,10 @@ pub struct AttrDecl {
     /// What the attribute holds, for the extraction prompt.
     #[serde(default)]
     pub description: String,
+    /// The declared path or fold that fills it, instead of the extractor
+    /// (`derived.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived: Option<String>,
 }
 
 /// The four value families an attribute can take.
@@ -547,24 +609,6 @@ pub enum ClaimScopeDecl {
     AboutWork,
 }
 
-/// A structural source for a declared type: a file already holding it as a
-/// table, ingested without a model call. `from`/`to` name the endpoint
-/// columns of a relation; `attributes` maps attribute name → column.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct SourceDecl {
-    /// Path of the table (CSV or JSONL), relative to the corpus source.
-    pub file: String,
-    /// Relations: the column holding the `from` endpoint's identity.
-    #[serde(default)]
-    pub from: Option<String>,
-    /// Relations: the column holding the `to` endpoint's identity.
-    #[serde(default)]
-    pub to: Option<String>,
-    /// Declared attribute name → column name.
-    #[serde(default)]
-    pub attributes: BTreeMap<String, String>,
-}
-
 /// `[enrichment.ontology.voices]` — who speaks, and who is not subject
 /// matter. Enforced in the Phase-1 parser, not only asked of the model.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -593,6 +637,33 @@ pub struct ChangeDecl {
     /// instance retires the earlier one for the same subject.
     #[serde(default)]
     pub supersedes: BTreeMap<String, String>,
+    /// The metadata fields each document carries that place a claim in time
+    /// and in its thread (`{ date = "date", thread = "thread_id", id =
+    /// "message_id" }` for mail). Every claim is stamped from the ONE
+    /// document its evidence lands in. Omit when documents carry no metadata.
+    #[serde(default)]
+    pub document: Option<DocumentFieldsDecl>,
+}
+
+/// `change.document` — which of a document's own metadata fields to stamp
+/// on every claim it carries. The names are the corpus's, whatever its
+/// extractor wrote; nothing else is read. A field a document lacks, or a date
+/// that is neither RFC 2822 nor ISO 8601, stamps nothing and is counted.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentFieldsDecl {
+    /// The field holding the document's date, RFC 2822 or ISO 8601. Stamped
+    /// as `document_date` in ISO 8601 — the clock supersession folds on.
+    #[serde(default)]
+    pub date: Option<String>,
+    /// The field naming the thread the document belongs to. Stamped as
+    /// `document_thread`.
+    #[serde(default)]
+    pub thread: Option<String>,
+    /// The field holding the document's own identifier. Stamped as
+    /// `document_id`.
+    #[serde(default)]
+    pub id: Option<String>,
 }
 
 /// `[enrichment.ontology.tension]` — which claims can conflict, and what makes
@@ -675,6 +746,7 @@ fn text_attrs(keys: &[String]) -> Vec<AttrDecl> {
             name: k.clone(),
             family: AttrFamily::Text { values: Vec::new() },
             description: String::new(),
+            derived: None,
         })
         .collect()
 }

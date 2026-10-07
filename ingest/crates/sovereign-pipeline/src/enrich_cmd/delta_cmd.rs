@@ -323,7 +323,7 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (embed, _chat) = client.into_closures();
+    let (embed, chat) = client.into_closures();
 
     // ── Step 4 (cont.): resolve into a STAGING dir ─────────────
     let staging_root = std::env::temp_dir().join(format!("sov-delta-{}-{suffix}", cfg.corpus_id));
@@ -339,8 +339,15 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
         "  · resolving subset into staging {} ...",
         staging_atlas_dir.display()
     );
-    if let Err(e) =
-        resolve_into_dir(&cfg, &sections, &embed, &staging_atlas_dir, parsed.phase).await
+    if let Err(e) = resolve_into_dir(
+        &cfg,
+        &sections,
+        &embed,
+        &chat,
+        &staging_atlas_dir,
+        parsed.phase,
+    )
+    .await
     {
         eprintln!("error: resolving subset into staging atlas: {e}");
         cleanup_staging(&staging_root, parsed.keep_staging);

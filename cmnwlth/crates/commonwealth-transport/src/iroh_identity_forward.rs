@@ -19,9 +19,12 @@
 //! by its `Content-Length` untouched, and the next head is read after it, so
 //! keep-alive connections carry the identity on every request. Responses are
 //! never parsed: the origin→client direction is a byte copy, which is why a
-//! `Range` response stays byte-exact. A chunked request body is the one shape
-//! this does not frame (media clients do not send them); the rest of that
-//! connection passes through unrewritten, and the branch says so at info.
+//! `Range` response stays byte-exact. A head whose body this cannot delimit
+//! exactly as any origin would — `Transfer-Encoding` of any kind, two
+//! `Content-Length`s, or one that is not a single decimal number — ends the
+//! connection there, at warn ([`body_framing`]): the bytes behind it would
+//! otherwise reach the origin as requests no rewrite touched, carrying
+//! whatever identity the client typed. Media clients send none of these.
 use std::net::SocketAddr;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
@@ -216,45 +219,63 @@ pub fn split_app_name(head: &[u8]) -> Option<(String, Vec<u8>)> {
     Some((String::from_utf8_lossy(name).into_owned(), out))
 }
 
-/// How the bytes after a request head are framed.
+/// How the bytes after a request head are framed, or why this forward will
+/// not frame them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BodyFraming {
     /// No body follows; the next head starts immediately.
     None,
     /// Exactly this many body bytes follow.
     Length(u64),
-    /// `Transfer-Encoding: chunked` — not framed here.
-    Chunked,
+    /// This forward cannot say where the body ends exactly as every origin
+    /// would, so the connection carries no further request. The reason is
+    /// for the log.
+    Refused(&'static str),
 }
 
-/// Read a request head's framing. `Transfer-Encoding: chunked` wins over a
-/// `Content-Length`, as RFC 9112 §6.3 says it must.
+/// Read a request head's framing — strictly, because the forward and the
+/// origin must agree on where every request starts.
+///
+/// Where they disagree, bytes the forward copied as a body are parsed by the
+/// origin as a request whose head no rewrite touched, so a member could name
+/// another member's key, or none. A chunked body was copied through that way
+/// until 2026-10-04. So anything but one plain `Content-Length` is refused:
+/// `Transfer-Encoding` of any kind (this forward decodes none; RFC 9112 §6.3
+/// lets a server reject any it does not), a second `Content-Length` (origins
+/// differ on duplicates), and a value that is not one decimal number (`5, 5`
+/// is a body to hyper and no body to a stricter reader). Header names are
+/// compared as [`rewrite_head`] compares them, so the two cannot read one
+/// line two ways.
 pub fn body_framing(head: &[u8]) -> BodyFraming {
-    let mut length = BodyFraming::None;
+    let mut length = None;
     for line in head.split(|&b| b == b'\n').skip(1) {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         let Some(colon) = line.iter().position(|&b| b == b':') else {
             continue;
         };
-        let name = String::from_utf8_lossy(&line[..colon])
-            .trim()
-            .to_ascii_lowercase();
-        let value = String::from_utf8_lossy(&line[colon + 1..])
-            .trim()
-            .to_string();
+        let name = compare_name(&String::from_utf8_lossy(&line[..colon]));
+        let raw = String::from_utf8_lossy(&line[colon + 1..]);
+        let value = raw.trim_matches(|c| c == ' ' || c == '\t');
         match name.as_str() {
-            "transfer-encoding" if value.to_ascii_lowercase().contains("chunked") => {
-                return BodyFraming::Chunked;
+            "transfer-encoding" => {
+                return BodyFraming::Refused("a Transfer-Encoding request body is not framed here")
+            }
+            "content-length" if length.is_some() => {
+                return BodyFraming::Refused("a request with more than one Content-Length")
             }
             "content-length" => {
-                if let Ok(n) = value.parse::<u64>() {
-                    length = BodyFraming::Length(n);
+                if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+                    return BodyFraming::Refused("a Content-Length that is not one decimal number");
+                }
+                match value.parse::<u64>() {
+                    Ok(n) => length = Some(n),
+                    Err(_) => return BodyFraming::Refused("a Content-Length past 2^64"),
                 }
             }
             _ => {}
         }
     }
-    length
+    length.map_or(BodyFraming::None, BodyFraming::Length)
 }
 
 /// A header value the wire can carry: visible ASCII only. A member name is
@@ -367,6 +388,59 @@ pub(crate) async fn read_head<R: AsyncBufReadExt + Unpin>(
     }
 }
 
+/// Forward ONE request already read into `head`: rewrite it with `headers`,
+/// write it, then copy its body by its framing. `Break` when this connection
+/// must carry no further request.
+///
+/// The one step both pumps run per request ([`pump_with_identity`] and
+/// `iroh_routed_forward::pump_routed`), so how a request is framed and
+/// rewritten has one implementation (ARCH principle 8).
+pub(crate) async fn forward_request<R, W>(
+    head: &[u8],
+    reader: &mut R,
+    writer: &mut W,
+    headers: &[(String, String)],
+) -> std::ops::ControlFlow<()>
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    use std::ops::ControlFlow::{Break, Continue};
+    let framing = body_framing(head);
+    if let BodyFraming::Refused(why) = framing {
+        tracing::warn!(
+            target: "transport",
+            why,
+            "iroh acceptor: refused a request whose body this forward cannot frame — \
+             nothing more on this connection reaches the origin"
+        );
+        return Break(());
+    }
+    let (out, stripped) = rewrite_head(head, headers);
+    if stripped > 0 {
+        tracing::info!(
+            target: "transport",
+            stripped,
+            "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
+        );
+    }
+    if writer.write_all(&out).await.is_err() {
+        return Break(());
+    }
+    match framing {
+        BodyFraming::None => Continue(()),
+        BodyFraming::Length(n) => {
+            let mut body = reader.take(n);
+            if tokio::io::copy(&mut body, writer).await.is_err() {
+                return Break(());
+            }
+            Continue(())
+        }
+        // Answered above, before the head was written.
+        BodyFraming::Refused(_) => Break(()),
+    }
+}
+
 /// Pump one accepted bi-stream to `tcp`, rewriting every request head on the
 /// way in and copying the responses on the way out untouched.
 pub async fn pump_with_identity(
@@ -396,34 +470,11 @@ pub async fn pump_with_identity(
                     break;
                 }
             }
-            let framing = body_framing(&buf);
-            let (head, stripped) = rewrite_head(&buf, &headers);
-            if stripped > 0 {
-                tracing::info!(
-                    target: "transport",
-                    stripped,
-                    "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
-                );
-            }
-            if tcp_w.write_all(&head).await.is_err() {
+            if forward_request(&buf, &mut reader, &mut tcp_w, &headers)
+                .await
+                .is_break()
+            {
                 break;
-            }
-            match framing {
-                BodyFraming::None => {}
-                BodyFraming::Length(n) => {
-                    let mut body = (&mut reader).take(n);
-                    if tokio::io::copy(&mut body, &mut tcp_w).await.is_err() {
-                        break;
-                    }
-                }
-                BodyFraming::Chunked => {
-                    tracing::info!(
-                        target: "transport",
-                        "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
-                    );
-                    let _ = tokio::io::copy(&mut reader, &mut tcp_w).await;
-                    break;
-                }
             }
         }
         let _ = tcp_w.shutdown().await;
@@ -494,252 +545,5 @@ pub async fn pump_by_name(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn head_of(target: &str) -> Vec<u8> {
-        format!("GET {target} HTTP/1.1\r\nHost: x\r\nAccept: */*\r\n\r\n").into_bytes()
-    }
-
-    fn split(target: &str) -> Option<(String, String)> {
-        split_app_name(&head_of(target)).map(|(n, h)| (n, String::from_utf8(h).unwrap()))
-    }
-
-    #[test]
-    fn the_first_path_segment_names_the_app_and_leaves_the_rest_intact() {
-        let (name, head) = split("/chores/tasks?due=today").unwrap();
-        assert_eq!(name, "chores");
-        assert!(
-            head.starts_with("GET /tasks?due=today HTTP/1.1\r\n"),
-            "{head}"
-        );
-        // Everything after the request line is copied byte for byte.
-        assert!(head.ends_with("Host: x\r\nAccept: */*\r\n\r\n"), "{head}");
-    }
-
-    /// A bare app root must reach the origin as `/`, not as an empty target —
-    /// an empty request target is not a valid HTTP/1.1 request line, and the
-    /// origin would answer 400 to what a person typed as a working URL.
-    #[test]
-    fn an_app_root_becomes_a_slash() {
-        assert_eq!(split("/chores").unwrap().1.split(' ').nth(1), Some("/"));
-        assert_eq!(split("/chores/").unwrap().1.split(' ').nth(1), Some("/"));
-        assert_eq!(
-            split("/chores?x=1").unwrap().1.split(' ').nth(1),
-            Some("/?x=1")
-        );
-    }
-
-    /// The failing inputs the character rule exists for. A name that could
-    /// express traversal, an encoded slash, or a stray byte never becomes a
-    /// lookup key at all — refused before the map is consulted (ARCH §10).
-    #[test]
-    fn a_name_that_could_express_traversal_is_refused_not_sanitized() {
-        assert!(split("/../secrets").is_none());
-        assert!(split("/..%2fsecrets").is_none());
-        assert!(split("/cho res/x").is_none());
-        assert!(split("/chores\u{7f}/x").is_none());
-    }
-
-    /// No name to bind: a bare root, an absolute-form target (which a bridge
-    /// client does not send), and a request line that is not three parts.
-    #[test]
-    fn a_head_with_no_usable_name_is_none() {
-        assert!(split("/").is_none());
-        assert!(split("http://elsewhere/chores/x").is_none());
-        assert!(split_app_name(b"GET\r\n\r\n").is_none());
-        assert!(split_app_name(b"").is_none());
-    }
-
-    /// The split runs BEFORE `rewrite_head`, so a client that names an app
-    /// and also forges an identity gets both handled: the app resolves, and
-    /// the forged header is still stripped.
-    #[test]
-    fn naming_an_app_does_not_let_a_forged_identity_through() {
-        let raw = b"GET /chores/x HTTP/1.1\r\nX-Mesh-Member: Mallory\r\n\r\n";
-        let (name, head) = split_app_name(raw).unwrap();
-        assert_eq!(name, "chores");
-        let (out, stripped) = rewrite_head(&head, &identity());
-        assert_eq!(stripped, 1);
-        let text = String::from_utf8(out).unwrap();
-        assert!(!text.contains("Mallory"), "{text}");
-        assert!(text.contains("X-Mesh-Member: LittleMac"), "{text}");
-    }
-
-    fn identity() -> Vec<(String, String)> {
-        vec![
-            ("X-Mesh-Member".into(), "LittleMac".into()),
-            ("X-Mesh-Node".into(), "node-0b0b".into()),
-        ]
-    }
-
-    fn header_values<'a>(head: &'a str, name: &str) -> Vec<&'a str> {
-        head.lines()
-            .filter_map(|l| l.split_once(':'))
-            .filter(|(n, _)| n.trim().eq_ignore_ascii_case(name))
-            .map(|(_, v)| v.trim())
-            .collect()
-    }
-
-    /// THE failing input: a client that types the identity header itself.
-    /// Exactly one `X-Mesh-Member` reaches the origin, and it is the
-    /// acceptor's, whatever the client sent and however it cased the name.
-    #[test]
-    fn a_forged_identity_header_is_replaced_by_the_verified_one() {
-        let head = b"GET /whoami HTTP/1.1\r\nHost: x\r\nx-mesh-member: forged\r\nX-MESH-NODE: node-forged\r\nX-Mesh-Anything: nope\r\n\r\n";
-        let (out, stripped) = rewrite_head(head, &identity());
-        let out = String::from_utf8(out).unwrap();
-        assert_eq!(stripped, 3);
-        assert_eq!(header_values(&out, "x-mesh-member"), vec!["LittleMac"]);
-        assert_eq!(header_values(&out, "x-mesh-node"), vec!["node-0b0b"]);
-        assert!(header_values(&out, "x-mesh-anything").is_empty());
-        assert!(out.ends_with("\r\n\r\n"));
-    }
-
-    /// The request line and every other header pass byte for byte — `Range`
-    /// is a seek and the splice must not touch it.
-    #[test]
-    fn the_request_line_and_other_headers_pass_byte_exact() {
-        let head = b"GET /library/title.bin HTTP/1.1\r\nHost: 127.0.0.1:1\r\nRange: bytes=10-19\r\nAccept: */*\r\n\r\n";
-        let (out, stripped) = rewrite_head(head, &identity());
-        assert_eq!(stripped, 0);
-        let out = String::from_utf8(out).unwrap();
-        assert!(out.starts_with("GET /library/title.bin HTTP/1.1\r\nHost: 127.0.0.1:1\r\nRange: bytes=10-19\r\nAccept: */*\r\n"));
-        assert_eq!(header_values(&out, "x-mesh-member"), vec!["LittleMac"]);
-    }
-
-    /// A member name cannot end a line: control characters are dropped from
-    /// the value, so a name like `"Mac\r\nX-Admin: yes"` injects nothing.
-    #[test]
-    fn a_header_value_cannot_smuggle_a_second_header() {
-        let hostile = vec![(
-            "X-Mesh-Member".to_string(),
-            "Mac\r\nX-Admin: yes".to_string(),
-        )];
-        let (out, _) = rewrite_head(b"GET / HTTP/1.1\r\n\r\n", &hostile);
-        let out = String::from_utf8(out).unwrap();
-        assert_eq!(
-            header_values(&out, "x-mesh-member"),
-            vec!["MacX-Admin: yes"]
-        );
-        assert!(header_values(&out, "x-admin").is_empty());
-    }
-
-    /// The failing input hm-1 exists for. A publisher declares its own
-    /// credential for its own origin; a viewer sends the same header name
-    /// with a value of its choosing. Append-only would put the viewer's copy
-    /// first and let the origin pick — so the declared one must DISPLACE it,
-    /// not merely follow it.
-    #[test]
-    fn a_declared_header_displaces_the_clients_copy_of_that_name() {
-        let declared = vec![("X-Emby-Token".to_string(), "the-holders-key".to_string())];
-        let (out, stripped) = rewrite_head(
-            b"GET /Items HTTP/1.1\r\nHost: h\r\nX-Emby-Token: the-viewers-key\r\n\r\n",
-            &declared,
-        );
-        let out = String::from_utf8(out).unwrap();
-        assert_eq!(
-            header_values(&out, "x-emby-token"),
-            vec!["the-holders-key"],
-            "exactly one token on the wire, and it is the holder's"
-        );
-        assert_eq!(stripped, 1, "the client's attempt is counted, not silent");
-        assert!(out.contains("Host: h"), "unrelated headers still pass");
-    }
-
-    /// Case and padding are the obvious ways around a naive comparison, and
-    /// `wire_value` erases a third: a name carrying bytes the wire drops.
-    #[test]
-    fn the_displacement_survives_case_padding_and_unwriteable_bytes() {
-        let declared = vec![("Authorization".to_string(), "holder".to_string())];
-        let (out, stripped) = rewrite_head(
-            "GET / HTTP/1.1\r\nAUTHORIZATION: viewer-upper\r\n  authorization  : viewer-pad\r\nAuthoriz\u{7f}ation: viewer-ctl\r\n\r\n".as_bytes(),
-            &declared,
-        );
-        let out = String::from_utf8(out).unwrap();
-        assert_eq!(header_values(&out, "authorization"), vec!["holder"]);
-        assert_eq!(stripped, 3, "all three client spellings are displaced");
-    }
-
-    /// A credential is not always one word. Jellyfin 12 authenticates only
-    /// `Authorization: MediaBrowser Token="<key>"` -- probed 2026-09-12
-    /// against a live 12.0.0, where `X-Emby-Token`, `X-MediaBrowser-Token` and
-    /// `?api_key=` each returned 401 on `/Items` and this returned 200 -- so
-    /// the inner space and the quotes are load-bearing bytes, not formatting.
-    /// `wire_value` keeps `' '..='~'` and trims only the ends, which is what
-    /// makes that true; a filter on `is_ascii_graphic` would silently drop the
-    /// space and hand the origin a credential it refuses.
-    #[test]
-    fn a_multi_word_declared_credential_reaches_the_origin_verbatim() {
-        let credential = r#"MediaBrowser Token="a-key-1234""#;
-        let declared = vec![("Authorization".to_string(), credential.to_string())];
-        let (out, stripped) = rewrite_head(
-            b"GET /Items HTTP/1.1\r\nHost: h\r\nAuthorization: MediaBrowser Token=\"the-viewers\"\r\n\r\n",
-            &declared,
-        );
-        let out = String::from_utf8(out).unwrap();
-        assert_eq!(
-            header_values(&out, "authorization"),
-            vec![credential],
-            "the space and both quotes survive, and the viewer's copy does not"
-        );
-        assert_eq!(stripped, 1);
-    }
-
-    /// The strip must not become a general-purpose header eater: a name the
-    /// publisher did NOT declare is the client's business and passes through.
-    #[test]
-    fn an_undeclared_client_header_is_untouched() {
-        let declared = vec![("X-Emby-Token".to_string(), "k".to_string())];
-        let (out, stripped) = rewrite_head(
-            b"GET / HTTP/1.1\r\nRange: bytes=0-9\r\nCookie: c\r\n\r\n",
-            &declared,
-        );
-        let out = String::from_utf8(out).unwrap();
-        assert_eq!(header_values(&out, "range"), vec!["bytes=0-9"]);
-        assert_eq!(header_values(&out, "cookie"), vec!["c"]);
-        assert_eq!(stripped, 0);
-    }
-
-    #[test]
-    fn body_framing_reads_content_length_and_chunked_wins() {
-        assert_eq!(
-            body_framing(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n"),
-            BodyFraming::None
-        );
-        assert_eq!(
-            body_framing(b"POST / HTTP/1.1\r\nContent-Length: 12\r\n\r\n"),
-            BodyFraming::Length(12)
-        );
-        assert_eq!(
-            body_framing(
-                b"POST / HTTP/1.1\r\nContent-Length: 12\r\nTransfer-Encoding: chunked\r\n\r\n"
-            ),
-            BodyFraming::Chunked
-        );
-    }
-
-    /// Keep-alive: two requests on one connection, a body between them, and
-    /// the identity lands on BOTH heads while the body is copied untouched.
-    #[tokio::test]
-    async fn every_request_on_a_kept_alive_connection_carries_the_identity() {
-        let input = b"POST /a HTTP/1.1\r\nContent-Length: 5\r\nX-Mesh-Member: forged\r\n\r\nhelloGET /b HTTP/1.1\r\n\r\n".to_vec();
-        let mut reader = tokio::io::BufReader::new(std::io::Cursor::new(input));
-        let mut out = Vec::new();
-        let headers = identity();
-        let mut buf = Vec::new();
-        while read_head(&mut reader, &mut buf).await.unwrap() {
-            let framing = body_framing(&buf);
-            let (head, _) = rewrite_head(&buf, &headers);
-            out.extend_from_slice(&head);
-            if let BodyFraming::Length(n) = framing {
-                let mut body = (&mut reader).take(n);
-                tokio::io::copy(&mut body, &mut out).await.unwrap();
-            }
-        }
-        let out = String::from_utf8(out).unwrap();
-        assert_eq!(out.matches("X-Mesh-Member: LittleMac").count(), 2);
-        assert!(out.contains("\r\n\r\nhelloGET /b HTTP/1.1\r\n"), "{out}");
-        assert!(!out.contains("forged"));
-    }
-}
+#[path = "tests/iroh_identity_forward.rs"]
+mod tests;

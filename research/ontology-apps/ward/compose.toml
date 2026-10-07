@@ -1,0 +1,89 @@
+# ONTOLOGY_PRIMITIVES.md §8 facets for the crm-ward-acts arm, in their proposed syntax. Read only
+# by compose.py: Rust's SourceDecl requires `file` and drops unknown per-type keys, so these live
+# beside recipe-acts.toml until the facets land in the declaration language.
+
+# Axis 1: typed atoms from the document's own fields, no model.
+[[source]]
+type = "person"
+metadata = ["from", "to", "cc"]          # address lists
+attributes = { email = "address", name = "display_name" }
+
+[[source]]
+type = "company"
+metadata = ["from", "to", "cc"]
+attributes = { domain = "domain" }
+exclude_domains = ["aol.com", "hotmail.com", "yahoo.com", "msn.com", "earthlink.net", "worldnet.att.net",
+                   "juno.com", "compuserve.com", "pdq.net"]
+own = "enron.com"                        # the mailbox owner's organisation: a company, never a counterparty
+
+# Axis 2: identity adjudicated over the whole candidate set — every name and domain a company was seen
+# under, grouped by one model pass (acronyms, legal suffixes, divisions, the owner's affiliates).
+[[identity]]
+type = "company"
+names_from = ["deal_act.counterparty", "deal_mention.counterparty", "deal_mention.via"]   # raw counterparty strings join the candidate names
+description = "any organization that can be a party to a deal: a business, utility, municipality, agency or cooperative"
+hierarchy = "fold"                       # a division or affiliate is its parent for every downstream use
+
+# Axis 4: the document clock.
+[clock]
+metadata = "date"
+
+# Axis 5: a composed type.
+[[compose]]
+type = "deal"
+of = ["deal_mention"]
+block = ["counterparty"]
+# A correspondent is its mail's counterparty, unless some member names it as an agent (via): a member's
+# own pick named Pasadena's suppliers and BHP's bidders (23 tune mentions, gold says the correspondent),
+# while Summit writes for six clients. Tune 2026-10-04 vs member-first: bar .641 -> .667, wrong_party 1 -> 0.
+block_from = ["agent", "document", "member"]
+# link: attributes whose agreement is EVIDENCE of one deal (discriminating). A low-cardinality attribute
+# (commodity) is a necessary condition only, so it sits in distinct, never here.
+link = ["deal_ref", "delivery_point", "period_start"]
+# distinct: what two mentions of one deal can never disagree on. Measured per refused link against gold
+# (2026-10-04): period never wrong; commodity wrong 10 / right 5 (a deal around a generation asset buys gas
+# and sells power: a deal's commodities are a set), kind wrong 2 / right 0 (a per-mention error, not a type).
+distinct = { period = "overlap" }
+kind_from = "kind"                       # a cluster's kind is its members' majority; route reads it
+anchor = "deal_ref"
+thread = "subject"                       # a shared document thread is linking evidence
+# A mitigation, not a structural rule: a tuned constant. A bare member links to its nearest member in its
+# block within this many days (tune 2026-10-04: 5 of 5 such links right within 7 days, mixed beyond 17).
+bare_window_days = 7
+adjudicate = false                       # true: a block's timeline is partitioned by the model, held to the type by code (tune 0.59 vs rules 0.744, 2026-10-04: kinds misroute)
+kinds = { transaction = "a specific sale, purchase, supply arrangement or trade", master_agreement = "an enabling contract (ISDA, GISB, EEI or another master agreement) with no specific trade of its own" }
+route = { master_agreement = "agreement" }   # a master agreement is its own composed type, never a deal
+
+# Axis 4: a state type of the composed type, one state per member, ordered by the clock.
+[[derive]]
+type = "deal_stage"
+of = "deal"
+from = "deal_mention.stage"
+map = { lead = "lead", proposal = "proposal", negotiating = "negotiating", won = "won", lost = "lost" }
+
+# Axis 4, first order: a mention's stage is a fold over the events its message shows (stage.py), never a
+# state the model picks. Each event is a yes/no the model answers per mention; the stage is the furthest
+# event in `order`. Wording mirrors GOLD_SPEC's stage definitions (existing contracts read as won, its v1 note).
+[events.deal_mention]
+attribute = "stage"
+protocol = "demo"
+say = { asked = "the counterparty asked for a price or an offer, sent a request for proposal, or said it wants to buy, sell or hedge", offered = "a price, bid, indication, offer, proposal or term sheet was given or sent, by either side", terms = "contract drafts, credit or deal terms were sent back and forth, commented on or changed", agreed = "the deal was accepted, confirmed, executed or awarded to the owner's company, or is an existing contract already in place", declined = "the deal was declined, awarded to someone else, or withdrawn" }
+
+# FOLD's protocol, from a registry (principle 9): the moves in order, the state each produces, the moves that
+# end an instance (a terminal state sticks) and the moves that open one (a terminal instance refuses them:
+# asking again starts a new instance). Read by stage.py (the event fold) and ledger.py (GROUP as a fold).
+# DEMO's transaction pattern; a support case or a message-built ticket would name it too.
+[protocol.demo]
+order = ["asked", "offered", "terms", "agreed", "declined"]
+state = { asked = "lead", offered = "proposal", terms = "negotiating", agreed = "won", declined = "lost" }
+terminal = ["agreed", "declined"]
+initiating = ["asked", "offered"]
+
+# Refinements of declared attribute types that the Rust declaration language cannot carry yet; focus.py
+# builds its output schema from them so a wrong value cannot be written (a citation is a sentence index,
+# a ref is a registry member that is not the owner, a period is a pair of months, a commodity a closed set).
+[shape.deal_mention]
+period = { kind = "month_range" }
+commodity = { kind = "values", values = ["natural_gas", "power", "pipeline_capacity", "financial", "services", "other"] }
+counterparty = { kind = "registry", exclude_owner = true }
+via = { kind = "registry", exclude_owner = true }

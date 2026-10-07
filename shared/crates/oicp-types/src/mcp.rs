@@ -79,6 +79,34 @@ impl McpMethod {
     }
 }
 
+/// The HTTP header a connection names its repo's code corpus with
+/// (`x-svrn-corpus: svrngs`): the code tools answer about that corpus alone.
+/// Absent, they answer about every corpus.
+pub const MCP_CORPUS_HEADER: &str = "x-svrn-corpus";
+
+/// The HTTP header that caps what a connection may reach by effect. Its one
+/// value is [`MCP_EFFECTS_READ`]; any other is refused, never widened.
+pub const MCP_EFFECTS_HEADER: &str = "x-svrn-effects";
+
+/// [`MCP_EFFECTS_HEADER`]'s one value: the connection lists and calls only
+/// tools whose effect is [`crate::Effect::Read`].
+pub const MCP_EFFECTS_READ: &str = "read";
+
+/// What one request carries besides its JSON-RPC body: the transport's view
+/// of who asked. Stdio has none of it, so there it is the default: every
+/// corpus, every effect.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct McpRequestContext {
+    /// The `X-Agent-Session` header the agent sent, if it sent one.
+    pub agent_session: Option<String>,
+    /// [`MCP_CORPUS_HEADER`]: the one corpus this connection's code
+    /// questions are about. `None` is every corpus.
+    pub corpus: Option<String>,
+    /// [`MCP_EFFECTS_HEADER`] was [`MCP_EFFECTS_READ`]: no tool whose effect
+    /// is not `Read` is listed or called.
+    pub read_only: bool,
+}
+
 /// What the call log is told about a call that executed a tool. It never goes
 /// on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

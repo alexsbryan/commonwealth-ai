@@ -8,15 +8,16 @@
 //! second rule is a second ROUTER, never a second pump (ARCH principle 8).
 //! The pump owns what every rule shares: the first head binds the stream,
 //! every head is rewritten with the verified identity, bodies are framed by
-//! `Content-Length`, responses are a byte copy, and a later head that routes
-//! somewhere else closes the stream — see `pump_by_name` for why the binding
-//! is per stream.
+//! one plain `Content-Length` and a head framed any other way ends the stream
+//! (`iroh_identity_forward::body_framing`), responses are a byte copy, and a
+//! later head that routes somewhere else closes the stream — see
+//! `pump_by_name` for why the binding is per stream.
 
 use std::net::SocketAddr;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 
-use crate::iroh_identity_forward::{body_framing, read_head, rewrite_head, BodyFraming};
+use crate::iroh_identity_forward::{body_framing, forward_request, read_head, BodyFraming};
 
 /// Where a stream's request goes: the key it bound under (an app name, a
 /// prefix), the local origin, the head to send (a rule may rewrite the
@@ -64,6 +65,22 @@ pub async fn pump_routed(
             );
             return;
         }
+    }
+    // `forward_request` refuses this too, but only after an origin is
+    // connected, and then the dialer sees a silent close; refused here, it
+    // reads why.
+    if let BodyFraming::Refused(why) = body_framing(&buf) {
+        tracing::warn!(
+            target: "transport",
+            why,
+            "{what}: refused a first request whose body this forward cannot frame"
+        );
+        say(
+            refuse(&mut send, 400, &format!("refused: {why}"), None).await,
+            what,
+            "<framing>",
+        );
+        return;
     }
     let routed = match route(&buf) {
         Ok(r) => r,
@@ -136,34 +153,11 @@ pub async fn pump_routed(
     let up = async {
         let mut head = first_head;
         loop {
-            let framing = body_framing(&head);
-            let (out, stripped) = rewrite_head(&head, &all);
-            if stripped > 0 {
-                tracing::info!(
-                    target: "transport",
-                    stripped,
-                    "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
-                );
-            }
-            if tcp_w.write_all(&out).await.is_err() {
+            if forward_request(&head, &mut reader, &mut tcp_w, &all)
+                .await
+                .is_break()
+            {
                 break;
-            }
-            match framing {
-                BodyFraming::None => {}
-                BodyFraming::Length(n) => {
-                    let mut body = (&mut reader).take(n);
-                    if tokio::io::copy(&mut body, &mut tcp_w).await.is_err() {
-                        break;
-                    }
-                }
-                BodyFraming::Chunked => {
-                    tracing::info!(
-                        target: "transport",
-                        "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
-                    );
-                    let _ = tokio::io::copy(&mut reader, &mut tcp_w).await;
-                    break;
-                }
             }
             match read_head(&mut reader, &mut buf).await {
                 Ok(true) => {}

@@ -53,6 +53,8 @@ pub mod error;
 pub mod lsp_tier;
 /// The one merged-graph loader over `<indexes>/*/scip_graph.db`.
 pub mod merged_graph;
+/// Does a repo-relative path lie under a scope, on whole components?
+pub mod path_scope;
 /// Duplicated concept ROLE over the graph — the third feed, seeing what
 /// neither a name census nor a behaviour report can. See the module docs.
 pub mod roles;

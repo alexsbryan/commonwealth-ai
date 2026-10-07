@@ -483,3 +483,311 @@ subject = "topic""#,
     assert!(!r.notes.is_empty());
     assert_eq!(r.source_reachable, None);
 }
+
+// ── change.document ──────────────────────────────────────────────────────────
+
+const DOCUMENT_FIELDS: &str = r#"version = 1
+[[enrichment.ontology.types]]
+name = "deal_act"
+kind = "claim"
+force = "commissive"
+[enrichment.ontology.change]
+document = { date = "sent", thread = "conversation", id = "msg" }"#;
+
+/// What `svrn recipe validate` prints under "Derived from your
+/// declarations:" is `ValidationResult::notes`, line for line.
+#[test]
+fn validate_prints_which_document_field_becomes_which_stamp() {
+    let recipe = Recipe::from_toml(&recipe_with_ontology(DOCUMENT_FIELDS)).unwrap();
+    let r = validate_recipe_offline(&recipe);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    let line = r
+        .notes
+        .iter()
+        .find(|n| n.starts_with("document fields: "))
+        .unwrap_or_else(|| panic!("no document line in {:?}", r.notes));
+    assert_eq!(
+        line,
+        "document fields: document_date ← `sent` (RFC 2822 or ISO 8601, written as ISO 8601), \
+         document_thread ← `conversation`, document_id ← `msg` — stamped on each claim from \
+         the one document its evidence lands in; a claim in none or several is left \
+         unstamped and counted"
+    );
+    // Printed with no declared types too: the stamps apply to every claim.
+    let bare = validate(
+        r#"version = 1
+[enrichment.ontology.change]
+document = { date = "sent" }"#,
+    );
+    assert!(
+        bare.notes
+            .iter()
+            .any(|n| n.starts_with("document fields: document_date ← `sent`")),
+        "{:?}",
+        bare.notes
+    );
+}
+
+#[test]
+fn validate_refuses_an_empty_or_colliding_change_document() {
+    let e = first_error_containing(
+        r#"version = 1
+[enrichment.ontology.change]
+document = {}"#,
+        "names no field",
+    );
+    assert!(e.contains("date, thread, id"), "{e}");
+    first_error_containing(
+        r#"version = 1
+[enrichment.ontology.change]
+document = { thread = " " }"#,
+        "change.document.thread is blank",
+    );
+    let e = first_error_containing(
+        r#"version = 1
+[[enrichment.ontology.types]]
+name = "deal_act"
+kind = "claim"
+force = "commissive"
+attributes = [{ name = "document_date", type = "time" }]
+[enrichment.ontology.change]
+document = { date = "sent" }"#,
+        "Rename the attribute",
+    );
+    assert!(
+        e.contains("`deal_act` declares attribute `document_date`"),
+        "{e}"
+    );
+}
+
+#[test]
+fn validate_evidential_fields_are_declared_stamps_measured_somewhere_beside_a_bar() {
+    let typ = |evidential: &str, bar: &str| {
+        format!(
+            r#"version = 1
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+identity_criterion = "the same problem"
+identity_evidential = [{evidential}]
+{bar}
+[enrichment.ontology.change]
+document = {{ thread = "thread" }}
+"#
+        )
+    };
+    let ok = r#"{ evidence = "document_thread", right = 190, of = 210, measured_on = "uv tune, 257/311" }"#;
+    let v = validate(&typ(ok, "identity_bar = 0.5"));
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+    assert!(
+        v.notes.iter().any(|n| n.starts_with(
+            "identity evidence: case ← document_thread (190 of 210, expected precision 0.901"
+        )),
+        "{:?}",
+        v.notes
+    );
+    // A criterion makes RESOLVE the decider, not the canonical name.
+    assert!(
+        v.notes
+            .iter()
+            .any(|n| n.starts_with("identity: case → RESOLVE under its identity_criterion")),
+        "{:?}",
+        v.notes
+    );
+    first_error_containing(&typ(ok, ""), "no `identity_bar`");
+    first_error_containing(&typ(ok, "identity_bar = 0"), "is not in (0, 1]");
+    first_error_containing(
+        &typ(
+            r#"{ evidence = "author", right = 9, of = 10, measured_on = "x" }"#,
+            "identity_bar = 0.5",
+        ),
+        "which is no source",
+    );
+    first_error_containing(
+        &typ(
+            r#"{ evidence = "document_date", right = 9, of = 10, measured_on = "x" }"#,
+            "identity_bar = 0.5",
+        ),
+        "change.document.date",
+    );
+    first_error_containing(
+        &typ(
+            r#"{ evidence = "document_thread", right = 13, of = 10, measured_on = "x" }"#,
+            "identity_bar = 0.5",
+        ),
+        "no more right than measured",
+    );
+    first_error_containing(
+        &typ(
+            r#"{ evidence = "document_thread", right = 9, of = 10, measured_on = " " }"#,
+            "identity_bar = 0.5",
+        ),
+        "says nothing in `measured_on`",
+    );
+    let v = validate(&typ(
+        r#"{ evidence = "model_choice", right = 4, of = 10, measured_on = "x" }, { evidence = "proposed_answer", right = 8, of = 10, measured_on = "y" }"#,
+        "identity_bar = 0.5",
+    ));
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+    first_error_containing(
+        &typ(ok, "identity_bar = 0.5\nidentity_necessary = [\"kind\"]"),
+        "necessary attribute `kind`, which is not one of its attributes with `values`",
+    );
+    let with_kind = typ(ok, "identity_bar = 0.5\nidentity_necessary = [\"kind\"]\nattributes = [{ name = \"kind\", type = \"text\", values = [\"firing\", \"death\"] }]");
+    let v = validate(&with_kind);
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+}
+
+// ── derived attributes: paths, sets, folds ──────────────────────────────────
+
+fn derived_decl(stage_party: &str, deal_counterparty: &str, extra: &str) -> String {
+    format!(
+        r#"version = 1
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{{ name = "email", type = "text" }}, {{ name = "employer", type = "ref", of = "company" }}, {{ name = "nickname", type = "text" }}]
+identity = ["email"]
+source = {{ metadata = ["from", "to"], attributes = {{ email = "address" }}, refs = {{ employer = {{ of = "company", reader = "domain" }} }} }}
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+attributes = [{{ name = "domain", type = "text" }}]
+identity = ["domain"]
+source = {{ metadata = ["from", "to"], attributes = {{ domain = "domain" }} }}
+[[enrichment.ontology.types]]
+name = "deal"
+kind = "entity"
+identity_criterion = "the same transaction"
+identity_evidential = [{{ evidence = "proposed_answer", right = 4, of = 5, measured_on = "x" }}]
+identity_bar = 0.5
+attributes = [{{ name = "counterparty", type = "ref", of = "company", derived = "{deal_counterparty}" }}]
+[[enrichment.ontology.types]]
+name = "stage_update"
+kind = "claim"
+force = "assertive"
+subject = "deal"
+attributes = [{{ name = "party", type = "ref", of = "company", derived = "{stage_party}" }}]
+[[enrichment.ontology.sets]]
+id = "ours"
+type = "company"
+where = {{ domain = {{ suffix = "enron.com" }} }}
+[[enrichment.ontology.paths]]
+id = "outside"
+path = "document / (from | to) / employer [!ours]"
+[[enrichment.ontology.folds]]
+id = "party_of_message"
+by = "first"
+from = ["outside"]
+[[enrichment.ontology.folds]]
+id = "party_of_deal"
+by = "most"
+from = ["^subject / party"]
+{extra}"#
+    )
+}
+
+#[test]
+fn validate_derived_attributes_print_in_words_with_their_side_of_resolve() {
+    let v = validate(&derived_decl("party_of_message", "party_of_deal", ""));
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+    assert!(
+        v.warnings.is_empty(),
+        "the new keys are known: {:?}",
+        v.warnings
+    );
+    let notes = v.notes.join("\n");
+    assert!(
+        notes.contains(
+            "derived: stage_update.party ← fold `party_of_message` by `first`, before RESOLVE: `outside` (its document → `from` or `to` → `employer` not in `ours`)"
+        ),
+        "{notes}"
+    );
+    assert!(
+        notes.contains("derived: deal.counterparty ← fold `party_of_deal` by `most`, after RESOLVE: the claims about it → `party`"),
+        "{notes}"
+    );
+}
+
+#[test]
+fn validate_derived_refuses_what_cannot_be_walked() {
+    let bad = |party: &str, counterparty: &str, extra: &str, says: &str| {
+        let v = validate(&derived_decl(party, counterparty, extra));
+        assert!(
+            v.errors.iter().any(|e| e.contains(says)),
+            "{says:?} not in {:?}",
+            v.errors
+        );
+    };
+    bad(
+        "nowhere",
+        "party_of_deal",
+        "",
+        "derived from `nowhere`, which is no declared path or fold",
+    );
+    bad(
+        "ours",
+        "party_of_deal",
+        "",
+        "derived from `ours`, which is no declared path or fold",
+    );
+    let extra = |id: &str, path: &str| {
+        format!("[[enrichment.ontology.paths]]\nid = \"{id}\"\npath = \"{path}\"\n")
+    };
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("p", "document / from | to"),
+        "inside parentheses",
+    );
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("p", "document / bcc"),
+        "`bcc` is no step keyword",
+    );
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("p", "document / from / nickname"),
+        "`nickname` is no `ref` attribute",
+    );
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("p", "^document / from"),
+        "`^document` walks nowhere",
+    );
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("p", "document / from [theirs]"),
+        "`[theirs]`, which is no declared set",
+    );
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("outside", "document / from"),
+        "`outside` is declared twice",
+    );
+    // read before RESOLVE what only RESOLVE's records carry, or a claim's decided subject
+    bad(
+        "p",
+        "outside",
+        &extra("p", "subject / counterparty"),
+        "derived before RESOLVE but reads `counterparty`",
+    );
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("p", "subject"),
+        "steps to a claim's `subject`",
+    );
+    // the deal reads the claim's party and the claim the deal's counterparty
+    bad(
+        "p",
+        "party_of_deal",
+        &extra("p", "^party / counterparty"),
+        "cycle",
+    );
+}

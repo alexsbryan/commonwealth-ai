@@ -120,7 +120,7 @@ impl BlastRadiusTool {
     }
 
     /// The executable half of `blast`.
-    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -138,9 +138,11 @@ impl BlastRadiusTool {
             .map(|v| v as usize)
             .unwrap_or(100);
 
+        let scope = ctx.corpus_scope.as_deref();
+        tracing::debug!(symbol, max_depth, corpus_scope = ?scope, "blast: traversal");
         let graph = self.graph.load_full().await;
         let result = graph
-            .blast_radius(symbol, max_depth, max_symbols)
+            .blast_radius(symbol, max_depth, max_symbols, scope)
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "blast".to_string(),
@@ -256,7 +258,8 @@ fn group_by_module(entries: &[&BlastEntry]) -> serde_json::Value {
         by_module.entry(module).or_default().push(json!({
             "symbol": entry.symbol_name,
             "file": entry.file_path,
-            "line": entry.line
+            "line": entry.line,
+            "corpus": entry.corpus_id
         }));
     }
 

@@ -40,8 +40,10 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine_scip::capability_map::{is_function, pkg_and_desc};
 use corpus_engine_scip::converge::SourceScope;
+use corpus_engine_scip::path_scope;
 use corpus_engine_scip::ScipGraph;
 use corpus_index::index::CorpusIndex;
+use kernel_types::judgement::Judgement;
 use sovereign_contracts::error::{Error, Result};
 
 /// Skip symbols shorter than this — trivial getters/one-liners are "duplicated"
@@ -69,8 +71,8 @@ pub struct DryInputs<'a> {
     pub min_lines: usize,
     /// Cosine threshold for the near-clone tier.
     pub near_threshold: f32,
-    /// Optional `file_path` prefix filter (e.g. a crate dir) — restricts the
-    /// report to one subtree.
+    /// Optional path (e.g. a crate dir) — restricts the report to one subtree,
+    /// matched on whole path components ([`path_scope::under`]).
     pub scope: Option<&'a str>,
 }
 
@@ -79,6 +81,7 @@ pub struct SymbolRef {
     pub symbol: String,
     pub kind: String,
     pub file: String,
+    /// 1-based, as people and `file:line` readers count (`line1`).
     pub line_start: u32,
     pub line_end: u32,
     pub lines: usize,
@@ -111,6 +114,11 @@ pub struct DryReport {
     pub min_lines: usize,
     pub near_threshold: f32,
     pub scope: Option<String>,
+    /// What `scope` resolved to: distinct chunk-index files it took in, and
+    /// the paths that share it only as a string prefix (`crates/svrngs-core`
+    /// for `crates/svrngs`) and were left out (I3). Empty without a scope.
+    pub scope_files: usize,
+    pub scope_excluded: Vec<String>,
     /// Which files counted as first-party production code. Carried into the
     /// output for the same reason `Census::scope` is: a count that travels
     /// without its method is unquotable (`ARCH_PRINCIPLES` §18.4).
@@ -127,6 +135,10 @@ pub struct DryReport {
     pub near_clusters: Vec<NearCluster>,
     /// Rough lower bound on removable lines: for each group, (copies − 1) × lines.
     pub estimated_redundant_lines: usize,
+    /// Each tier's verdict, four-valued (ARCH §18.2): a tier with nothing it
+    /// could judge is `could-not-judge`, so its empty list never reads clean.
+    pub exact_tier: Judgement,
+    pub near_tier: Judgement,
 }
 
 /// Internal working record: a distinct source location + its normalized vector.
@@ -165,6 +177,8 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
 
     let mut total_symbols = 0usize;
     let mut skipped_no_embedding = 0usize;
+    let mut scope_files: HashSet<String> = HashSet::new();
+    let mut scope_excluded: std::collections::BTreeSet<String> = Default::default();
     // Dedup key: one distinct source location. Oversize symbols are split into
     // several chunks sharing a (file, line_start, line_end); keep the widest.
     let mut by_loc: HashMap<(String, u32, u32), Candidate> = HashMap::new();
@@ -199,33 +213,43 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         }
         total_symbols += 1;
 
-        if let Some(prefix) = inputs.scope {
-            if !file.starts_with(prefix) {
+        if let Some(scope) = inputs.scope {
+            if !path_scope::under(scope, file) {
+                let sibling = prefix_sibling(scope, file);
+                if sibling.is_some_and(|s| scope_excluded.insert(s.to_string())) {
+                    tracing::debug!(scope, ?sibling, "dry_report: scope skips prefix sibling");
+                }
                 continue;
             }
+            scope_files.insert(file.to_string());
         }
         if lines < inputs.min_lines {
             continue;
         }
-        if embedding.is_empty() {
+        // Empty or zero — zeros are what an `--fts-only` index stores (I2).
+        let Some(unit) = normalize(&embedding) else {
+            if skipped_no_embedding == 0 {
+                tracing::debug!(%file, %symbol, dim = embedding.len(),
+                    "dry_report: row has no usable vector; near tier skips it");
+            }
             skipped_no_embedding += 1;
             continue;
-        }
+        };
 
         let cand = Candidate {
             r: SymbolRef {
                 symbol: symbol.to_string(),
                 kind: kind.to_string(),
                 file: file.to_string(),
-                line_start,
-                line_end,
+                line_start: line1(line_start),
+                line_end: line1(line_end),
                 lines,
                 is_public: v
                     .get("is_public")
                     .and_then(|x| x.as_bool())
                     .unwrap_or(false),
             },
-            embedding: normalize(&embedding),
+            embedding: unit,
         };
         // Keep the widest chunk per source location (split-chunk collapse).
         by_loc
@@ -256,7 +280,8 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
     // must drop those (the embedding index tags them as functions too).
     let db_path = inputs.index_path.join("scip_graph.db");
     let source_root = corpus_source_root(inputs.index_path);
-    let (exact_clones, alias_syms) = exact_clones_from_source(
+    let mut exact_unreadable: Option<String> = None;
+    let (exact_clones, alias_syms, scip_in_scope) = exact_clones_from_source(
         &db_path,
         inputs.corpus_id,
         &source_root,
@@ -266,7 +291,8 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
     .await
     .unwrap_or_else(|e| {
         eprintln!("dry_report: exact-clone tier unavailable ({e}); near clones only");
-        (Vec::new(), HashSet::new())
+        exact_unreadable = Some(e.to_string());
+        (Vec::new(), HashSet::new(), 0)
     });
     eprintln!(
         "dry_report: exact tier found {} clone group(s) from source (SCIP, un-deduped)",
@@ -451,11 +477,22 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         )
         .sum();
 
+    let exact_tier = verdict::exact_tier(exact_unreadable, scip_in_scope, exact_clones.len());
+    let near_tier = verdict::near_tier(
+        considered,
+        skipped_no_embedding,
+        inputs.min_lines,
+        threshold,
+        near_clusters.len(),
+    );
+
     Ok(DryReport {
         corpus_id: inputs.corpus_id.to_string(),
         min_lines: inputs.min_lines,
         near_threshold: inputs.near_threshold,
         scope: inputs.scope.map(String::from),
+        scope_files: scope_files.len(),
+        scope_excluded: scope_excluded.into_iter().collect(),
         source_scope,
         total_symbols,
         considered,
@@ -463,6 +500,8 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         exact_clones,
         near_clusters,
         estimated_redundant_lines,
+        exact_tier,
+        near_tier,
     })
 }
 
@@ -480,6 +519,15 @@ fn corpus_source_root(index_path: &Path) -> PathBuf {
         }
     }
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// For a `file` that [`path_scope::under`] refused: the path a raw prefix match
+/// would have taken in (`crates/svrngs-core` for `crates/svrngs`), so the
+/// report can name it. `None` when the file does not share the prefix at all.
+fn prefix_sibling<'f>(scope: &str, file: &'f str) -> Option<&'f str> {
+    let rest = file.strip_prefix(scope.trim_end_matches('/'))?;
+    let end = file.len() - rest.len() + rest.find('/').unwrap_or(rest.len());
+    Some(&file[..end])
 }
 
 /// Normalize a symbol body for exact-clone comparison: trim each line, drop
@@ -519,7 +567,10 @@ fn is_use_alias(body: &[String]) -> bool {
 /// bodies read from source and grouped by normalized-body hash. See the module
 /// docs for why this reads source rather than the content-hash-deduped index.
 ///
-/// Returns `(clone groups, alias identities)`. The second value is the set of
+/// Returns `(clone groups, alias identities, symbols in scope)`. The third
+/// counts the scope's SCIP function symbols before the span floor: 0 means
+/// this tier had nothing there to judge — a language whose SCIP export
+/// failed has no rows — not that it found no clones (I4). The second is the set of
 /// `(file, symbol_name)` for every symbol that turned out to be a `use … as`
 /// re-export alias rather than a real function (see [`is_use_alias`]). The near
 /// tier needs it: the embedding index tags these aliases as functions too, so
@@ -534,7 +585,7 @@ async fn exact_clones_from_source(
     source_root: &Path,
     scope: Option<&str>,
     source_scope: &SourceScope,
-) -> Result<(Vec<ExactClone>, HashSet<(String, String)>)> {
+) -> Result<(Vec<ExactClone>, HashSet<(String, String)>, usize)> {
     let graph = ScipGraph::open(db_path, corpus_id).map_err(|e| err("scip_open", e.to_string()))?;
     let syms = graph
         .iter_all_symbols()
@@ -543,26 +594,29 @@ async fn exact_clones_from_source(
 
     // Function symbols, grouped by file so each file is read exactly once.
     let mut by_file: BTreeMap<String, Vec<(String, i32, i32)>> = BTreeMap::new();
+    let mut in_scope = 0usize;
     for rec in syms {
         let is_fn = pkg_and_desc(&rec.qualified_name)
             .map(|(_, d)| is_function(d))
             .unwrap_or(false)
             || rec.kind == "function"
             || rec.kind == "method";
-        if !is_fn || rec.line_start <= 0 {
-            continue;
-        }
-        let span = (rec.line_end - rec.line_start + 1).max(0) as usize;
-        if span < EXACT_MIN_LINES {
+        // 0 is a file's first line, not "no line" (SCIP lines are 0-based; I1).
+        if !is_fn || rec.line_start < 0 {
             continue;
         }
         if !source_scope.admits(&rec.file_path) {
             continue;
         }
-        if let Some(prefix) = scope {
-            if !rec.file_path.starts_with(prefix) {
+        if let Some(scope) = scope {
+            if !path_scope::under(scope, &rec.file_path) {
                 continue;
             }
+        }
+        in_scope += 1;
+        let span = (rec.line_end - rec.line_start + 1).max(0) as usize;
+        if span < EXACT_MIN_LINES {
+            continue;
         }
         by_file
             .entry(rec.file_path)
@@ -586,8 +640,12 @@ async fn exact_clones_from_source(
             if !seen_loc.insert((file.clone(), start, end)) {
                 continue; // same source location recorded twice
             }
-            let s = (start.max(1) - 1) as usize;
-            let e = (end.max(1) as usize).min(flines.len());
+            // SCIP lines are 0-based, `end` inclusive (scip_export.rs stores
+            // `occ.range[0]` raw; `symbol_lookup::read_symbol_body` agrees). Read
+            // as 1-based until 2026-10-04 (I1), each body began one line ABOVE its
+            // fn and lost its `}`, so a different doc comment above hid a clone.
+            let s = start as usize;
+            let e = (end as usize + 1).min(flines.len());
             if s >= e {
                 continue;
             }
@@ -608,8 +666,8 @@ async fn exact_clones_from_source(
                 symbol: name,
                 kind: "function".to_string(),
                 file: file.clone(),
-                line_start: start as u32,
-                line_end: end as u32,
+                line_start: line1(start as u32),
+                line_end: line1(end as u32),
                 lines: (end - start + 1).max(0) as usize,
                 is_public: false, // not carried by the SCIP record
             });
@@ -635,15 +693,22 @@ async fn exact_clones_from_source(
             .cmp(&a.members.len())
             .then(b.lines.cmp(&a.lines))
     });
-    Ok((out, alias_syms))
+    Ok((out, alias_syms, in_scope))
 }
 
-fn normalize(v: &[f32]) -> Vec<f32> {
+/// A store's 0-based line (SCIP and the chunk index both count from 0) as the
+/// 1-based line a report, fieldglass and refactor's `Site.line` show.
+fn line1(zero_based: u32) -> u32 {
+    zero_based + 1
+}
+
+/// Unit-length copy of `v`, or `None` when it has no direction (norm ≤ ε,
+/// empty included). Cosine against one is undefined, and an `--fts-only`
+/// index stores exactly these (zeros, svrn-ingest `index.rs`); normalised to
+/// zero instead, they scored 0 against everything and read as clean (I2).
+fn normalize(v: &[f32]) -> Option<Vec<f32>> {
     let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm <= f32::EPSILON {
-        return v.to_vec();
-    }
-    v.iter().map(|x| x / norm).collect()
+    (norm > f32::EPSILON).then(|| v.iter().map(|x| x / norm).collect())
 }
 
 #[inline]
@@ -708,7 +773,19 @@ pub fn render_dry_report(r: &DryReport) -> String {
     let mut out = String::new();
     out.push_str(&format!("# DRY report — `{}`\n\n", r.corpus_id));
     if let Some(scope) = &r.scope {
-        out.push_str(&format!("Scope: `{scope}`\n\n"));
+        out.push_str(&format!(
+            "Scope: `{scope}` — {} file(s) under `{}/`, matched on whole path components",
+            r.scope_files,
+            scope.trim_end_matches('/')
+        ));
+        if !r.scope_excluded.is_empty() {
+            let left_out: Vec<String> = r.scope_excluded.iter().map(|s| format!("`{s}`")).collect();
+            out.push_str(&format!(
+                "; not {}, which share it only as a string prefix",
+                left_out.join(", ")
+            ));
+        }
+        out.push_str(".\n\n");
     }
     out.push_str(&format!(
         "{} function/method symbols · {} distinct locations considered \
@@ -728,12 +805,26 @@ pub fn render_dry_report(r: &DryReport) -> String {
             .join(", ")
     ));
     out.push_str(&format!(
-        "**{}** exact-clone groups · **{}** near-clone clusters · \
-         ~**{}** redundant lines (lower bound).\n\n",
-        r.exact_clones.len(),
-        r.near_clusters.len(),
+        "{} · {} · ~**{}** redundant lines (lower bound).\n\n",
+        verdict::tier_count(&r.exact_tier, r.exact_clones.len(), "exact-clone groups"),
+        verdict::tier_count(&r.near_tier, r.near_clusters.len(), "near-clone clusters"),
         r.estimated_redundant_lines
     ));
+    let unjudged: Vec<&Judgement> = [&r.exact_tier, &r.near_tier]
+        .into_iter()
+        .filter(|t| !verdict::judged(t))
+        .collect();
+    for t in &unjudged {
+        out.push_str(&format!(
+            "- {} **{}**: {}\n",
+            t.subject(),
+            t.verdict(),
+            t.reason()
+        ));
+    }
+    if !unjudged.is_empty() {
+        out.push('\n');
+    }
 
     if !r.exact_clones.is_empty() {
         out.push_str("## Exact clones (identical bodies, modulo formatting)\n\n");
@@ -776,118 +867,17 @@ pub fn render_dry_report(r: &DryReport) -> String {
     }
 
     if r.exact_clones.is_empty() && r.near_clusters.is_empty() {
-        out.push_str("_No duplication found above the configured thresholds._\n");
+        out.push_str(if unjudged.is_empty() {
+            "_No duplication found above the configured thresholds._\n"
+        } else {
+            "_Not a clean result: a tier that could not judge is not a pass._\n"
+        });
     }
 
     out
 }
 
+mod verdict;
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn body(lines: &[&str]) -> Vec<String> {
-        normalize_body(lines)
-    }
-
-    /// The scope this report now applies, asserted on the exact paths that
-    /// made its headline unquotable. Before 2026-08-20 `dry_report` had no
-    /// source scope at all, so its 3,151 exact groups / ~96k redundant lines
-    /// counted one vendored llama.cpp helper SEVEN times across `target/`
-    /// build-hash directories. These are the failing inputs (§18.1).
-    #[test]
-    fn build_artifacts_and_vendored_code_are_out_of_scope() {
-        let s = SourceScope::default();
-        for excluded in [
-            "target/debug/build/llama-cpp-sys-4-9f1/out/llama.cpp/convert.py",
-            "vendor/llama-cpp-sys-4/llama.cpp/tools/server/tests/unit/test_chat.py",
-            "research/deep-research/drb/vendor/pkg/mod.rs",
-            ".claude/worktrees/agent-a99/sovereign/crates/sovereign-tools/src/code/dry_report.rs",
-            "ingest/crates/corpus-engine/tests/extractor_smoke.rs",
-            "svrn/crates/sovereign-core/benches/embed.rs",
-        ] {
-            assert!(!s.admits(excluded), "should be out of scope: {excluded}");
-        }
-        // …and first-party production code is still in. `deep_research` is the
-        // one that regressed once already: `research` as a SUBSTRING swallowed
-        // it, which is why the exclusions match whole path segments.
-        for included in [
-            "svrn/crates/sovereign-tools/src/code/dry_report.rs",
-            "svrn/crates/sovereign-core/src/deep_research/icd.rs",
-            "ingest/crates/corpus-engine/src/extractors/mod.rs",
-        ] {
-            assert!(s.admits(included), "should be in scope: {included}");
-        }
-    }
-
-    #[test]
-    fn use_aliases_are_rejected() {
-        // All forms of re-export alias rust-analyzer tags with a `fn().` descriptor.
-        assert!(is_use_alias(&body(&[
-            "use commonwealth_core::clock::unix_now_secs as now_secs;"
-        ])));
-        assert!(is_use_alias(&body(&[
-            "pub use sovereign_time::unix_now as unix_now;"
-        ])));
-        assert!(is_use_alias(&body(&["pub(crate) use foo::bar as bar;"])));
-        assert!(is_use_alias(&body(&["pub(super) use foo::bar as bar;"])));
-    }
-
-    #[test]
-    fn real_function_bodies_are_kept() {
-        // A genuine body never opens with `use` — signatures and attributes do.
-        assert!(!is_use_alias(&body(&[
-            "fn now_secs() -> u64 {",
-            "    SystemTime::now()",
-            "}"
-        ])));
-        assert!(!is_use_alias(&body(&[
-            "pub fn ctx() -> Ctx {",
-            "    Ctx::default()",
-            "}"
-        ])));
-        assert!(!is_use_alias(&body(&[
-            "#[tokio::test]",
-            "async fn run() {",
-            "    let x = use_it();", // `use` mid-body must not trip the guard
-            "}"
-        ])));
-        assert!(!is_use_alias(&[])); // empty body: not an alias
-    }
-
-    #[test]
-    fn union_find_components_are_transitive_and_isolated() {
-        // 0-1-2 merged through pairwise unions; 3-4 separate; 5 singleton.
-        let mut uf = UnionFind::new(6);
-        uf.union(0, 1);
-        uf.union(1, 2);
-        uf.union(3, 4);
-        assert_eq!(
-            uf.find(0),
-            uf.find(2),
-            "transitivity through the middle node"
-        );
-        assert_eq!(uf.find(3), uf.find(4));
-        assert_ne!(uf.find(0), uf.find(3), "disjoint pairs stay disjoint");
-        assert_ne!(uf.find(5), uf.find(0));
-        assert_eq!(uf.find(5), 5, "untouched element is its own root");
-        // Re-unioning an existing component is a no-op, not a corruption.
-        uf.union(2, 0);
-        assert_eq!(uf.find(0), uf.find(2));
-        assert_ne!(uf.find(0), uf.find(3));
-    }
-
-    #[test]
-    fn cosine_helpers_normalize_and_dot() {
-        let n = normalize(&[3.0, 4.0]);
-        assert!(
-            (dot(&n, &n) - 1.0).abs() < 1e-6,
-            "unit vector dots to 1 with itself"
-        );
-        let z = normalize(&[0.0, 0.0]);
-        assert!(
-            dot(&z, &z).abs() < 1e-6,
-            "zero vector normalizes to zero, not NaN"
-        );
-    }
-}
+mod tests;

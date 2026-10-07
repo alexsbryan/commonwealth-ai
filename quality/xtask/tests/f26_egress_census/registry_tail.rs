@@ -421,7 +421,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("cmnwlth/crates/commonwealth-rails/src/ledger/tests.rs", Class::TestOnly, 1),
     // The ring doors' and the ring round's test modules, which the flip
     // (1c120f23d) brought into cw-rails: the same loopback-router shape.
-    ("cmnwlth/crates/commonwealth-rails/src/ring_routes/tests.rs", Class::TestOnly, 2),
+    ("cmnwlth/crates/commonwealth-rails/src/ring_routes/tests.rs", Class::TestOnly, 3),
     ("cmnwlth/crates/commonwealth-rails/src/ring_sync/tests.rs", Class::TestOnly, 11),
     ("cmnwlth/crates/commonwealth-rails/src/ring_sync/tests/round_tests.rs", Class::TestOnly, 1),
 

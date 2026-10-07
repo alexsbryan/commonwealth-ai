@@ -7,8 +7,9 @@ settings file neither allows nor denies. Hard rules in
 ralph/claude-settings.json `deny` never reach here; the allowlist never
 reaches here; only the gray zone does.
 
-On a call it writes ralph/PERMISSION_REQUEST.md, sends a desktop
-notification, and waits for ralph/PERMISSION_ANSWER whose first word is:
+On a call it writes PERMISSION_REQUEST.md in the loop's control dir, sends
+a desktop notification, and waits for PERMISSION_ANSWER beside it, whose
+first word is:
 
     allow           run it this once
     always          run it, and append an exact-match rule to the settings
@@ -17,7 +18,13 @@ notification, and waits for ralph/PERMISSION_ANSWER whose first word is:
 
 No answer within RALPH_PERMISSION_WAIT_SECS (default 600) is a deny that says
 so — a worker is never wedged past that bound, and a timeout costs wall
-clock, not tokens. Every decision is one line in ralph/log-permissions.txt.
+clock, not tokens. Every decision is one line in log-permissions.txt there.
+
+The control dir is the loop's own, from ralph.py's session_env: RALPH_WORKDIR
+(the loop's checkout) joined with RALPH_CONTROL_DIR (`ralph`, or a queue's
+`ralph/next/<name>/ctl`). It was this checkout's ralph/ until 2026-10-06, so
+a loop in another repo crashed the bridge (its settings path is not under
+this checkout) and every out-of-repo loop shared one answer file.
 
 Wire format: JSON-RPC over stdin/stdout, one message per line (MCP stdio).
 The tool returns a text block holding the permission result JSON:
@@ -30,17 +37,26 @@ import subprocess
 import sys
 import time
 
-HERE = pathlib.Path(__file__).resolve().parent.parent
-RALPH = HERE / "ralph"
-REQUEST = RALPH / "PERMISSION_REQUEST.md"
-ANSWER = RALPH / "PERMISSION_ANSWER"
+HERE = pathlib.Path(__file__).resolve().parent.parent      # the toolchain's checkout
+WORKDIR = pathlib.Path(os.environ.get("RALPH_WORKDIR") or os.getcwd())
+RALPH = WORKDIR / (os.environ.get("RALPH_CONTROL_DIR") or "ralph")
+# A pool lane runs in its own worktree; its files carry the worktree's name,
+# so two lanes waiting at once cannot take each other's answer.
+_session = pathlib.Path(os.environ.get("RALPH_SESSION_CWD") or WORKDIR)
+_tag = "" if _session.resolve() == WORKDIR.resolve() else f"-{_session.name}"
+REQUEST = RALPH / f"PERMISSION_REQUEST{_tag}.md"
+ANSWER = RALPH / f"PERMISSION_ANSWER{_tag}"
 LOG = RALPH / "log-permissions.txt"
-SETTINGS = pathlib.Path(os.environ.get("RALPH_CLAUDE_SETTINGS", HERE / "ralph" / "claude-settings.json"))
+# Empty means the default, as in the shim: session_env sets it empty for a
+# loop whose manifest names no settings, and Path("") would be the cwd.
+SETTINGS = pathlib.Path(os.environ.get("RALPH_CLAUDE_SETTINGS") or HERE / "ralph" / "claude-settings.json")
+LOOP = f"{WORKDIR.name}/{os.environ.get('RALPH_QUEUE') or 'ralph'}{_tag}"
 WAIT_SECS = int(os.environ.get("RALPH_PERMISSION_WAIT_SECS", "600"))
 POLL_SECS = 2
 
 
 def log(line):
+    RALPH.mkdir(parents=True, exist_ok=True)
     with open(LOG, "a") as fh:
         fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {line}\n")
 
@@ -81,21 +97,22 @@ def add_always_rule(tool_name, tool_input):
 
 def ask_operator(tool_name, tool_input):
     what = describe(tool_name, tool_input)
+    RALPH.mkdir(parents=True, exist_ok=True)
     try:
         ANSWER.unlink()
     except FileNotFoundError:
         pass
     REQUEST.write_text(
-        f"# ralph worker asks permission\n\n"
+        f"# ralph worker asks permission ({LOOP})\n\n"
         f"tool: {tool_name}\nat: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n"
         f"waits until: {time.strftime('%H:%M:%SZ', time.gmtime(time.time() + WAIT_SECS))} (then denied)\n\n"
         f"```\n{what}\n```\n\n"
         f"Answer with one of (first word is read):\n"
-        f"  echo allow  > {ANSWER.relative_to(HERE)}\n"
-        f"  echo always > {ANSWER.relative_to(HERE)}   # also appends an exact rule to {SETTINGS.relative_to(HERE)}\n"
-        f"  echo 'deny <reason>' > {ANSWER.relative_to(HERE)}\n"
+        f"  echo allow  > {ANSWER}\n"
+        f"  echo always > {ANSWER}   # also appends an exact rule to {SETTINGS}\n"
+        f"  echo 'deny <reason>' > {ANSWER}\n"
     )
-    notify("permission?", (what[:120] + ("..." if len(what) > 120 else "")))
+    notify(f"permission? {LOOP}", (what[:120] + ("..." if len(what) > 120 else "")))
     log(f"ask {tool_name}: {what[:300]!r}")
     deadline = time.time() + WAIT_SECS
     while time.time() < deadline:
@@ -176,7 +193,15 @@ def main():
             reply(msg_id, {"tools": [TOOL]})
         elif method == "tools/call":
             args = params.get("arguments") or {}
-            result = ask_operator(args.get("tool_name", "?"), args.get("input", {}))
+            try:
+                result = ask_operator(args.get("tool_name", "?"), args.get("input", {}))
+            except Exception as e:  # a dead server reads to the worker as "Connection closed"
+                # stderr, not log(): the control dir may be what failed. claude
+                # keeps an MCP server's stderr in its own log.
+                sys.stderr.write(f"ralph-permission-bridge: {LOOP}: {type(e).__name__}: {e}\n")
+                result = {"behavior": "deny",
+                          "message": f"The permission bridge failed ({type(e).__name__}: {e}); "
+                                     f"treat as denied and say so in your report."}
             reply(msg_id, {"content": [{"type": "text", "text": json.dumps(result)}]})
         elif method == "ping":
             reply(msg_id, {})

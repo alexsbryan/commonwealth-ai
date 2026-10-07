@@ -419,29 +419,71 @@ pub fn edge_weight(edge_type: EdgeType) -> f32 {
 /// in [`atlas_navigate`] to avoid false positives like "form" inside
 /// "informed". Both args MUST already be lowercase.
 pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
-    if needle.is_empty() || needle.len() > haystack.len() {
-        return false;
-    }
+    count_whole_word(haystack, needle) > 0
+}
+
+/// How many times `needle` appears in `haystack` as a whole word (see
+/// [`contains_whole_word`]). Both args MUST already be lowercase. A miss
+/// resumes one CHARACTER on, not one byte, so a match that starts on a
+/// multi-byte character cannot slice inside it.
+pub fn count_whole_word(haystack: &str, needle: &str) -> usize {
+    let Some(first) = needle.chars().next() else {
+        return 0;
+    };
+    let mut n = 0;
     let mut start = 0;
     while let Some(off) = haystack[start..].find(needle) {
         let abs = start + off;
         let end = abs + needle.len();
-        let left_ok = abs == 0
-            || !haystack[..abs]
-                .chars()
-                .last()
-                .is_some_and(|c| c.is_alphanumeric());
-        let right_ok = end == haystack.len()
-            || !haystack[end..]
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_alphanumeric());
+        let left_ok = !haystack[..abs]
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_alphanumeric());
+        let right_ok = !haystack[end..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric());
         if left_ok && right_ok {
-            return true;
+            n += 1;
         }
-        start = abs + 1;
+        start = abs + first.len_utf8();
     }
-    false
+    n
+}
+
+/// How many times `text_lower` names the entity called `name`: whole-word
+/// matches of the full name, else of its last word. ONE rule for "this text
+/// names this entity" — the walk seeds on a question by it, and
+/// `summary-atoms` links a Summary to the entities its text names.
+///
+/// Names under 4 characters never match. The last-word fallback lets a
+/// compound text reach an atom it names in part, and is withdrawn when the
+/// last word is short, is the whole name, or IS one of the atlas's own
+/// declared type names (`declared_types`). That GENERIC-HEAD GUARD
+/// (2026-09-22): "which mints are represented among the coins of the Corinth
+/// hoard" contains "hoard", and every `X hoard` atom seeded off that one word
+/// (153 seeds, 405 nodes, 164 requests that fetched the Siphnos/Demanhur
+/// tables while the named hoard's own sections were crowded out).
+pub fn name_mentions(text_lower: &str, name: &str, declared_types: &[&str]) -> usize {
+    let name = name.trim();
+    if name.len() < 4 {
+        return 0;
+    }
+    let name_lower = name.to_lowercase();
+    let full = count_whole_word(text_lower, &name_lower);
+    if full > 0 {
+        return full;
+    }
+    match name_lower.split_whitespace().last() {
+        Some(last)
+            if last.len() >= 4
+                && last != name_lower
+                && !declared_types.iter().any(|t| t.eq_ignore_ascii_case(last)) =>
+        {
+            count_whole_word(text_lower, last)
+        }
+        _ => 0,
+    }
 }
 
 /// Pull the verbatim excerpt off an atom — `defining_quote` from a
@@ -637,4 +679,37 @@ pub async fn atlas_navigate_ann(
     )
     .await
     .requests
+}
+
+#[cfg(test)]
+mod name_mention_tests {
+    use super::{count_whole_word, name_mentions};
+
+    /// The rule both the walk and `summary-atoms` decide by. Failing inputs,
+    /// one per clause: a substring hit ("form" in "informed"), a second
+    /// occurrence not counted, the last-word fallback missing, the generic-head
+    /// guard missing (a declared type name as the last word), a short name
+    /// matching, and a multi-byte miss that slices inside a character.
+    #[test]
+    fn name_mentions_counts_whole_words_by_the_walk_rule() {
+        assert_eq!(count_whole_word("informed form, form.", "form"), 2);
+        assert_eq!(
+            name_mentions(
+                "salve kristiansen and kristiansen",
+                "Salve Kristiansen",
+                &[]
+            ),
+            1
+        );
+        assert_eq!(
+            name_mentions("then kristiansen left", "Salve Kristiansen", &[]),
+            1
+        );
+        assert_eq!(
+            name_mentions("the corinth hoard", "Siphnos Hoard", &["Hoard"]),
+            0
+        );
+        assert_eq!(name_mentions("old jacob", "Jo", &[]), 0);
+        assert_eq!(count_whole_word("ølund og øya", "øya"), 1);
+    }
 }

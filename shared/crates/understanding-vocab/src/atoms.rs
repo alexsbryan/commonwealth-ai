@@ -410,6 +410,10 @@ pub enum SignalKind {
     /// Atom produced from a parsed RFC-5322 / MIME email header
     /// (`From:`, `To:`, `Cc:`).
     EmailHeader,
+    /// Atom projected from a document's own metadata fields under a
+    /// declared `source = { metadata = … }` (any corpus: mail headers, an
+    /// issue's author), not from its text.
+    DocumentField,
     /// Atom produced from a described-asset attachment (an attachment
     /// resolved to a Person/Organization via signature block, calendar
     /// ATTENDEE, etc.).

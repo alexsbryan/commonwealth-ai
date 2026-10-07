@@ -364,6 +364,7 @@ async fn resolved_recipient_names(identity: &[&str]) -> Vec<String> {
         &head_noun_sections(),
         &fake_embed(),
         &ResolutionPolicy::new(&p),
+        Vec::new(),
     )
     .await
     .unwrap();

@@ -30,6 +30,86 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Typed list answer over a declared ontology — rides `SOVEREIGN_ATOM_ENUM`, off (`fi-ontology-list`, 2026-10-03)
+
+**What changed.** A list question over a declared ontology gets a typed query
+written by the primary, executed in code and injected as a cited table
+(`atom_enum_typed.rs`, 7bc206fd1), behind the Stage-1 gate of the default-off
+`SOVEREIGN_ATOM_ENUM`.
+
+**Measurements (ft-ans-dev-b, 18 dev K1 rows, 112 text-attested members, one
+run each).** Through chat (e1a43bcd2): bare 0.205, full 0.241, and 0/18 typed
+tables non-empty: the producer names the hoard by `name contains` plus a year
+or findspot its atoms cannot meet. Re-extracted with the focused relation pass
+(`holds_coins_of` links 56 -> 71, mint entities 15 -> 11), `k1_bound.py`: a
+producer that named the hoard perfectly gets the records ceiling
+(`records_recall.row`), a table at 0.286 pooled, and with full's answer
+0.339 — +0.134 over bare, short of the bar's +0.15 before the wide baseline,
+a band, or a synthesizer that drops anything. Read 1's queries relaxed to
+name only reach 0.393 with 60 strays (voided by the bar's goodhart); name +
+findspot 0.312, +0.107, 29 strays. 80 of 112 members are beyond the records
+(stages: no hoard 2 rows, no link 3, members missing 13; Demanhur links 4 of
+22). Records coverage binds; no producer fix carries the bar here.
+
+**What these numbers do not show (operator, 2026-10-03: the leg is closed,
+not refuted).** They measure our pipeline, not ontologies, for four reasons:
+(1) the gold is the domain's own populated ontology — CoinHoards/IGCH NUDS
+records labelled through Nomisma, 3,759 cached in `ans/raw/coinhoards` — used
+only as held-out truth, while a local model rebuilt it from monograph prose
+under a six-type schema we wrote; (2) the read path asks the model to
+describe the hoard as filters instead of linking the mention to an
+identifier first (value or entity linking), so identity, the thing an
+ontology is for, was never given a step; (3) the bar asks the typed path
+alone to beat retrieval by 0.15 on a 29-section fixture that top-k mostly
+covers, where an ontology has nothing to add over reading; (4) single runs
+under a three-iteration cap with a ledger exit turn a bad setup into a fast
+negative. Nothing here is evidence against declared ontologies.
+
+**Flip condition.** The typed surface is proven where it is used: records
+read directly, scored on a records gold, in `svrn-docs/ontology-apps` (CRM
+from a mailbox). A chat-turn arm is re-measured only on a fixture whose typed
+records come from structured sources where they exist, with a linking step
+before the query, on questions whose answers exceed any top-k. Until then
+the chat arm (`atom_enum_typed.rs`) stays off; if the CRM work never routes
+a chat turn through it, it is deleted.
+Settled by: the ontology-apps CRM proof.
+
+**Review-by 2026-10-31.**
+
+### `SOVEREIGN_SUMMARY_PLACEMENT` — collapsed-tree pool, shipped at `head` (feature-fidelity R0.1, 2026-10-02)
+
+**What changed.** `append_atlas_summaries` reads one switch. `head` (default,
+unchanged) reserves every late summary ahead of every leaf; `collapsed` seats
+each at its cosine rank among the leaves, leaf order untouched
+(`atlas_grounding/placement.rs`).
+
+**Measurements (pilot essay bank, 12 questions; facts-in-pool on this bank
+counts three names, not substance).** On the tree as first built, collapsed
+seated no summary (0/120 vs head 96/120): summaries were embedded bare while
+every leaf carries ingest's title header, and the best summary ranked
+27th-124th of 258 nodes against the question vector. Rebuilt with summaries
+under the same header and a root (426c0970d, 19de4aa5a), the clean offline
+ranking puts a summary 1st-9th on every question, non-leaf share 20.8% at
+top-10 (paper 23-57%). In the pipeline collapsed still seats 5/120, because
+entity-boost leaves carry cosine to the entity string, not the question
+(note 1bf9d2da); head seats the root in its 8 on most questions.
+Provisional T1 (one run, `--synth`, judged pairwise in both orders by
+`book_judge.py` on the local primary, which is also the synthesizer, and
+uncalibrated): head 2 wins, 3 losses, 6 ties, 1 could-not-judge (p = 1.0);
+mean accuracy 3.09 head vs 3.50 collapsed. Head drew 58 judge-listed errors
+to 41, and the gap is binding (who did what, 24 vs 7), not time (22 vs 20):
+summaries compress several people into one paragraph and the synthesizer
+swaps them. The pilot's entity layer carries the same errors (e.g. Garvloit
+described as Elizabeth's mother), so it cannot yet supply the binding.
+
+**Flip condition.** Collapsed wins the R-T1 pairwise on the pilot and
+eagle-cliff essay banks (`book_judge.py`, both orders) with the non-leaf pool
+share inside the paper's 23-57%, and the 174-question lookup guard stays
+inside the bare band. Lose either and the switch is deleted, not kept.
+Settled by: campaign `feature-fidelity` R-T1 (`quality/campaigns/feature-fidelity.toml`).
+
+**Review-by 2026-10-31.**
+
 ### `SOVEREIGN_COVERAGE_FIRST` — tell the model what it has, and card the gap on an answered turn (2026-09-22)
 
 **What it does.** `runtime::coverage_first` reads the demand set that
@@ -2241,6 +2321,12 @@ already exists and is deterministic (~9 min per arm):
 | `SOVEREIGN_ATOM_ENUM` | entity-typed atom enumeration for enumeration-class questions | an A/B on a bank with enumeration questions ("which X were involved") — the Enron counterparty case its doc comment cites |
 | `SOVEREIGN_ATOM_ENUM_RELATIONS` | relation atoms in the same path | same bank, as a second arm on top of `ATOM_ENUM=1` |
 
+2026-10-03: a declared-ontology arm rides the `SOVEREIGN_ATOM_ENUM` gate (a
+typed query written by the model, executed in code, injected as a cited
+table — `atom_enum_typed.rs`). Its measurement is feature-fidelity's
+`fi-ontology-list` (O-T1 on ft-ans-dev-b's dev K1 rows, then O-T2), which is
+also the first enumeration-bank read this flag has had.
+
 Four more rows (`SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `_META_BRIDGE`,
 `_QUERY_DECOMP`, `_TITLE_EXPAND`) left this table 2026-09-21 when their
 retrieval steps were cut (ac032e5bc); no measurement is owed on code that is gone.
@@ -2261,6 +2347,37 @@ it is an experiment (then it should not be default-on). Resolve it with the
   unmeasured flags is a labyrinth; six measured ones is a feature set.
 
 ## REJECTED — measured no; do not re-litigate without new evidence
+
+### GLiNER with declared types as the atlas entity pass — not built (`fi-gliner-declared-labels`, 2026-10-03)
+- **Bar:** feature-fidelity `fi-gliner-declared-labels` — ingest wall time
+  at most 0.5x the LLM entity pass's, at member recall no lower than the
+  LLM arm's minus its band. **Closed on a structural bound, not a G-T2
+  run**, named as such: the bound is the best case the run could show.
+- **The bound.** Atlas entities are not a separate LLM call; they are one
+  facet of the joint Phase-1 call per section, so a GLiNER entity pass
+  can only remove that facet's output. On ft-ans-dev-b's cached Phase 1
+  (29 sections, `~/.svrnmesh/enrichment/ft-ans-dev-b/runs/_phase1_checkpoint.jsonl`),
+  `entities_introduced` is 37% of the section extraction's output
+  characters; claims 32%, relations 14%. Prefill, thinking, the focused
+  relation calls and GLiNER's own time only shrink the saving, so the
+  ratio cannot fall below 0.63 with GLiNER owning every entity.
+- **Neither arm reaches the bar.** Full replacement fails the recall half:
+  declared attributes, the hoard's `igch` identity key and coin refs ride
+  on the LLM's entity sketches (`pipeline/atlas.rs` `EntitySketch.attributes`),
+  GLiNER cannot fill them, and without the identity key the K2 probe lost
+  14 rows. The hybrid that keeps hoard and coin on the LLM hands GLiNER
+  19% of the output: ratio no better than 0.81. Label recall was not yet
+  solved either (the declared name `mint` tags 8/72 gold mints at 0.6).
+- **What is NOT rejected:** GLiNER on the wire and at ingest
+  (`chunk_entities`), its G-T0 reproduction (seam faithful, 51.15 vs 50.7
+  F1), and the two wire defects G-T0 found — `/v1/ner` carries no labels,
+  offsets are bytes where the contract says chars — which stand as
+  defects in their own right.
+- **Re-open only if:** the extraction stops being one joint call per
+  section (entities in their own pass, where GLiNER replaces a whole
+  call), or a corpus whose declared types carry no attributes or
+  identity keys makes full replacement legal — and then on a measured
+  G-T2, both halves.
 
 ### Native grounding, H1 admission **as a gate** — rejected as calibrated, and the gate is deleted
 > **Read the scope of this row carefully.** What is rejected here is

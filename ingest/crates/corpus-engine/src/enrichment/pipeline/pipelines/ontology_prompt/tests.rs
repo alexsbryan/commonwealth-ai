@@ -177,6 +177,7 @@ fn a_ref_attribute_earns_the_example_and_names_its_context() {
                 name: "findspot".into(),
                 family: AttrFamily::Text { values: vec![] },
                 description: String::new(),
+                derived: None,
             }],
             specializes: None,
             role_of: None,
@@ -231,6 +232,7 @@ fn the_identity_keys_are_singled_out() {
         name: "catalogue_ref".into(),
         family: AttrFamily::Text { values: vec![] },
         description: String::new(),
+        derived: None,
     });
     coin.identity = vec!["catalogue_ref".into()];
 
@@ -273,6 +275,41 @@ fn the_block_says_what_a_declared_claim_is_about() {
     assert!(
         !render_declared_types(&p).contains("## What a claim is about"),
         "nothing is said about a link the recipe never declared"
+    );
+}
+
+/// A relation's declared ends are enforced at resolution, so the prompt says
+/// them. Unsaid, the feature-fidelity dev build read `holds_coins_of` as "who
+/// holds the coins": all six relations one section emitted named a collector
+/// or a museum and were dropped as `endpoint_type_mismatch`.
+///
+/// Falsifier: drop the relation arm from `render_declared_types` and the
+/// block names `struck_at` with no end types.
+#[test]
+fn the_block_names_a_declared_relations_ends_in_order() {
+    let mut p = numismatics();
+    p.shape.types.push(OntologyTypeDecl {
+        name: "struck_at".into(),
+        kind: TypeKind::Relation,
+        description: "The coin was struck at this mint.".into(),
+        from: Some("coin".into()),
+        to: Some("mint".into()),
+        ..Default::default()
+    });
+    p.shape.types.push(OntologyTypeDecl {
+        name: "die_link".into(),
+        kind: TypeKind::Relation,
+        from: Some("coin".into()),
+        ..Default::default()
+    });
+    let block = render_declared_types(&p);
+    assert!(
+        block.contains("from a coin to a mint (participants in that order)"),
+        "both ends, in the order resolution reads them: {block}"
+    );
+    assert!(
+        block.contains("from a coin (participants in that order)"),
+        "an open end is left unsaid, not invented: {block}"
     );
 }
 
@@ -426,6 +463,7 @@ fn the_shipped_fixture_fits_the_prompt_budget() {
         name: "catalogue_ref".into(),
         family: AttrFamily::Text { values: vec![] },
         description: String::new(),
+        derived: None,
     });
     coin.identity = vec!["catalogue_ref".into()];
     let probe_size = measure("numismatics (wessex-hoard probe)", &probe);

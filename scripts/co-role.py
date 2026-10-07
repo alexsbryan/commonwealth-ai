@@ -203,6 +203,22 @@ def consume_r1(out: dict, _inp: str) -> tuple[bool, str]:
     show the operator an order that does not exist.
     """
     today = dt.date.today().isoformat()
+    # The Extension section is written from R1's optional `extension` field
+    # (the model gets the revision only when the seat puts it in the input).
+    # Absent -> the template default, which `co-order.sh check` reads as an
+    # unclaimed record and nudges on. A PRESENT record is verified strictly.
+    ext = ""
+    e = out.get("extension")
+    if isinstance(e, dict):
+        ev = "\n".join(f"- {x}" for x in e.get("evidence", []))
+        ext = ("\n## Extension\n"
+               f"revision: {e['revision']}\n"
+               f"home: {e['home']}\n"
+               f"pattern: {e['pattern']}\n"
+               f"delta: {e['delta']}\n"
+               f"growth: {e['growth']}\n"
+               f"evidence:\n{ev}\n"
+               f"unresolved: {e['unresolved']}\n")
     order = ("---\nschema: work-order/v1\nid: co-role-draft\n"
              f"status: open\ndrafted: {today}\n"
              "lane: (none)\nengine: (none)\nbudget: (none)\n---\n\n"
@@ -212,7 +228,8 @@ def consume_r1(out: dict, _inp: str) -> tuple[bool, str]:
              f"Not worth continuing if: {out['not_worth_continuing_if']}\n\n"
              "## Lane\n(none)\n\n"
              "## Scope\n" + "\n".join(f"- {s}" for s in out["scope"]) + "\n\n"
-             "## Engine\n(none)\n\n## Budget\n(none)\n\n## Seams\n(none)\n")
+             "## Engine\n(none)\n\n## Budget\n(none)\n\n## Seams\n(none)\n"
+             + ext)
     with tempfile.TemporaryDirectory(prefix="co-role-r1-") as tmp:
         oid = "co-role-draft"
         d = Path(tmp) / oid

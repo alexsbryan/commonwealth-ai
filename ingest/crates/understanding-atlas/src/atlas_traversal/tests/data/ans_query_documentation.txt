@@ -1,0 +1,67 @@
+KNOWLEDGE BASE SCHEMA
+
+This corpus is numismatic scholarship on the coinage of Alexander the Great and the
+Hellenistic kingdoms: hoard reports, mint studies and dating arguments. A hoard is a
+group of coins buried together and found together; the books name a hoard by where and
+when it was found (the Demanhur hoard, Asia Minor 1964, Armenak) and the later books add
+an IGCH number. A hoard report lists the coins the hoard held, mint by mint. Each coin or
+group of coins is a thing in its own right: the ruler in whose name it was struck, the
+mint that struck it, its denomination (stater, tetradrachm, drachm), metal, weight, when
+it was struck, and the hoard it came from when the text says so. A mint is a city where
+coins were struck. A ruler is the king or dynast named on the coin. Attributions are
+claims a scholar makes about a coin's mint or date, graded by the kind of evidence
+offered; a later book may dispute an earlier attribution, and the dispute is worth
+surfacing.
+
+Entity types and their attributes:
+- hoard: A group of coins buried and found together, named by findspot and year of discovery: the Demanhur hoard, Asia Minor 1964.
+    findspot (text): the place where the hoard was found (a place name, region or country)
+    found (time): when the hoard was discovered (a year)
+    buried (time range): when the hoard was buried (a year, or a span of years)
+    igch (text): the hoard's IGCH catalogue number, digits only: 1441 for "IGCH 1441"
+- coin: A coin type or group of coins: ruler, mint, denomination, metal, and the hoard it came from.
+    denomination (text): the coin's denomination (stater, tetradrachm, drachm ...)
+    metal (text, one of ['gold', 'silver', 'billon', 'copper']): the coin's metal
+    weight (quantity, unit g): the coin's weight
+    struck (time range): when the coin was struck (a year, or a span of years)
+- ruler:
+- mint: A city where coins were struck: Amphipolis, Babylon, Lampsacus.
+
+Relations (each usable from either end; `other_type` names the far end):
+- from a hoard: relation `coin.hoard`, other_type `coin` — that coin's hoard is this hoard
+- from a hoard: relation `holds_coins_of`, other_type `mint` — this hoard holds_coins_of that mint
+- from a coin: relation `coin.ruler`, other_type `ruler` — this coin's ruler is that ruler
+- from a coin: relation `coin.mint`, other_type `mint` — this coin's mint is that mint
+- from a coin: relation `coin.hoard`, other_type `hoard` — this coin's hoard is that hoard
+- from a ruler: relation `coin.ruler`, other_type `coin` — that coin's ruler is this ruler
+- from a mint: relation `coin.mint`, other_type `coin` — that coin's mint is this mint
+- from a mint: relation `holds_coins_of`, other_type `hoard` — that hoard holds_coins_of this mint
+  `holds_coins_of` means: The hoard contains coins struck at this mint. A hoard report lists its coins mint by mint; every mint named for a hoard is one of these, even when no single coin is described.
+
+QUERY GRAMMAR (answer with exactly one JSON object):
+- target_type: the kind of thing the question asks for.
+- filters: conditions on the target's OWN attributes, or on `name` (the entity's own name).
+  op `eq` = equals, `contains` = the attribute's text mentions the value, `lt` / `gt` =
+  earlier/smaller or later/larger than the value. negate=true keeps the targets that do NOT
+  meet the condition. Times are years as signed numbers: years B.C. are negative
+  (318 B.C. = -318), A.D. positive.
+- relations: the target must (negate=false) or must not (negate=true) be linked by `relation`
+  to an entity of `other_type` named `other_name` (null = to any such entity) that also meets
+  `where` (null = no further condition). `where` holds that linked entity's own filters and
+  its own relations to named entities, so a relation can reach entities that are described
+  rather than named.
+- aggregate: none = list every target that matches; count = how many targets match;
+  argmax / argmin = the matching target with the largest / smallest `aggregate_over`, which is
+  one of the target's time or quantity attributes, or a related type (= how many distinct
+  linked entities of that type the target has, counting only those that meet the `where` of
+  the query's relation to that type).
+
+EXAMPLES (a different knowledge base: books, authors, libraries):
+Q: Which books printed before 1600 are held by the Bodleian?
+A: {"target_type": "book", "filters": [{"attribute": "printed", "op": "lt", "value": 1600, "negate": false}], "relations": [{"relation": "held_by", "other_type": "library", "other_name": "Bodleian", "negate": false, "where": null}], "aggregate": "none", "aggregate_over": null}
+Q: Which author has written the most books?
+A: {"target_type": "author", "filters": [], "relations": [], "aggregate": "argmax", "aggregate_over": "book"}
+Q: Which authors wrote a book printed before 1500?
+A: {"target_type": "author", "filters": [], "relations": [{"relation": "wrote", "other_type": "book", "other_name": null, "negate": false, "where": {"filters": [{"attribute": "printed", "op": "lt", "value": 1500, "negate": false}], "relations": []}}], "aggregate": "none", "aggregate_over": null}
+Q: Which libraries hold a book written by Austen?
+A: {"target_type": "library", "filters": [], "relations": [{"relation": "held_by", "other_type": "book", "other_name": null, "negate": false, "where": {"filters": [], "relations": [{"relation": "wrote", "other_type": "author", "other_name": "Austen", "negate": false}]}}], "aggregate": "none", "aggregate_over": null}

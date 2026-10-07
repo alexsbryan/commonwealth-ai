@@ -1,0 +1,57 @@
+# ONTOLOGY_PRIMITIVES.md §8 facets for uv-support, in the same syntax as research/ontology-apps/ward/compose.toml.
+# The second example (svrn/docs/specs/ONTOLOGY_METHOD.md): the code that composes deals must compose cases from
+# this file alone. A key marked GAP is one the prototype cannot read yet; each names what in the code is still
+# shaped like mail.
+
+# Axis 1: typed atoms from the document's own fields, no model.
+[[source]]
+type = "person"
+metadata = ["author"]
+attributes = { login = "value" }
+
+# GAP owner side: mail names it as a company domain (own = "enron.com"); here it is a participant field.
+# The owner side is a predicate over participant fields, not a company.
+[own]
+metadata = "author_association"
+values = ["MEMBER", "OWNER", "COLLABORATOR"]
+
+# Axis 4: the document clock and thread. GAP thread: compose.py derives mail's thread from the subject
+# (thread_key); here it is a field. Both are declared document fields (Rust's change.document already is).
+[clock]
+metadata = "created_at"
+thread = "thread"
+
+# Acts from fields: a timeline event is a structured act the source system performed (closed, reopened,
+# labeled, marked_as_duplicate), read with no model. GAP: every act today comes from a model read.
+[acts_from_fields]
+metadata = "event_type"
+move = { closed = "resolve", reopened = "reopen", marked_as_duplicate = "duplicate" }
+
+# Axis 5: the composed type.
+[[compose]]
+type = "case"
+of = ["case_mention"]
+block = ["area"]
+block_from = ["member", "thread"]          # an issue's area label; its comments and events inherit the thread's
+link = ["case_ref", "summary"]
+anchor = "case_ref"                        # "duplicate of #N", "same as #N": the issue a document says it is
+thread = "thread"
+method = "ledger"
+status = "status"                          # a spin-off comment is new inside a given thread
+
+[events.case_mention]
+attribute = "state"
+protocol = "ticket"
+say = { reported = "a user describes a problem or asks for something", confirmed = "a maintainer reproduces it or accepts it as valid", in_progress = "a fix or design is being worked on, or a pull request is open", resolved = "it is fixed, implemented, answered or released", declined = "it is closed as won't fix, not planned, works as intended or invalid" }
+
+# GAP protocol: a ticket reopens. DEMO's terminal states stick (ledger.py Protocol.step); here a reopen leaves a
+# terminal state, so the registry needs declared transitions, not only `terminal`.
+[protocol.ticket]
+order = ["reported", "confirmed", "in_progress", "resolved", "declined"]
+state = { reported = "reported", confirmed = "confirmed", in_progress = "in_progress", resolved = "resolved", declined = "declined" }
+terminal = ["resolved", "declined"]
+initiating = ["reported"]
+reopen = { from = ["resolved", "declined"], to = "reported" }
+
+[shape.case_mention]
+kind = { kind = "values", values = ["bug", "feature_request", "question"] }

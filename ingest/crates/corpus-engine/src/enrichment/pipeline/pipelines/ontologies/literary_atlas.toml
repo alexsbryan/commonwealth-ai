@@ -67,7 +67,10 @@ seed = { kinds = ["Claim", "ArgumentReconstruction"] }
 walk = ["Tension", "Involves"]
 hops = 1
 budget = 12
-summary_sources = []
+# The RAPTOR tree's nodes nearest the question, at every level: the paper's
+# collapsed-tree retrieval. Without it summaries reached only `thematic`
+# questions (pilot 2026-10-02: 1 of 12).
+summary_sources = ["raptor"]
 exemplars = [
   "where does the work contradict itself",
   "which claims are in tension",
@@ -80,10 +83,14 @@ exemplars = [
 # step 6): the transition reaches the next STATE, the cause reaches the EVENT
 # that produced it. Walking transitions alone answered "what states did they
 # pass through" and never "what made them".
+# `Involves` reaches the summaries that name the seeded entities (summary-atoms
+# links each Summary to the entities its text names), so `atoms` comes first:
+# the summaries the graph reached, then the cosine-nearest to fill the quota.
 seed = { kinds = ["Entity", "State"] }
-walk = ["Transition", "Causes"]
+walk = ["Transition", "Causes", "Involves"]
 hops = 2
 budget = 12
+summary_sources = ["atoms", "raptor"]
 exemplars = [
   "how does this character change",
   "how does it develop over the course of the book",

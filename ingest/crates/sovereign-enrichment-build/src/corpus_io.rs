@@ -13,6 +13,7 @@ use std::sync::Arc;
 use corpus_engine::chunkers::sectioned::{
     ChapterRegexDetector, SectionDetector, SectionedChunker, TocAnchoredDetector,
 };
+use corpus_engine::enrichment::atlas::SectionDocuments;
 use corpus_engine::enrichment::pipeline::{
     is_placeholder_literal, ChapterInput, ChapterManifest, ChapterManifestWrite, ChunkRecord,
     CorpusContext,
@@ -204,6 +205,60 @@ fn read_corpus_chunks(
     })
 }
 
+/// Every chunk id the manifest's chapters list, sorted and deduplicated —
+/// the one bound every manifest-driven LanceDB read uses.
+fn manifest_chunk_ids(manifest: &ChapterManifest) -> Vec<u64> {
+    let mut ids: Vec<u64> = manifest
+        .chapters
+        .iter()
+        .flat_map(|c| c.chunk_ids.iter().copied())
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+/// The source documents each section holds, for `change.document` stamping
+/// (`corpus_engine::enrichment::atlas::resolution_documents`). The same
+/// manifest and the same LanceDB rows Phase-1 hydration reads — no second
+/// loader. A file-backed enrichment has one source file and no per-document
+/// metadata, so it yields none, and every claim is then recorded unstamped
+/// rather than dated from something else.
+pub fn section_documents(cfg: &EnrichConfig) -> Result<SectionDocuments> {
+    let Some(src) = corpus_source_id(cfg) else {
+        tracing::warn!(
+            corpus = %cfg.corpus_id,
+            "atlas resolve: change.document is declared but the enrichment is file-backed; \
+             no per-document metadata to stamp from"
+        );
+        return Ok(SectionDocuments::default());
+    };
+    let path = paths::chapters_manifest_path(&cfg.corpus_id);
+    let Some(manifest) = ChapterManifest::load(&path)? else {
+        tracing::warn!(
+            path = %path.display(),
+            "atlas resolve: no chapter manifest; no section documents to stamp from"
+        );
+        return Ok(SectionDocuments::default());
+    };
+    let rows = fetch_enrichment_chunks(&src, &manifest_chunk_ids(&manifest))?;
+    let docs = SectionDocuments::from_chunk_rows(
+        manifest
+            .chapters
+            .iter()
+            .map(|c| (c.id.as_str(), c.chunk_ids.as_slice())),
+        &rows,
+    );
+    tracing::info!(
+        corpus = %cfg.corpus_id,
+        sections = manifest.chapters.len(),
+        chunks = rows.len(),
+        documents = docs.document_count(),
+        "atlas resolve: section documents loaded"
+    );
+    Ok(docs)
+}
+
 fn rebuild_corpus_state_from_corpus(
     cfg: &EnrichConfig,
     source_corpus_id: &str,
@@ -219,21 +274,10 @@ fn rebuild_corpus_state_from_corpus(
         ))
     })?;
 
-    // Collect every chunk_id referenced by the manifest. The fetch is
-    // bounded by the manifest's chunk_ids, NOT the entire source corpus
-    // (see `chunks_by_ids`); subset runs still materialise every chapter
-    // — the selection filter runs downstream.
-    let needed_ids: Vec<u64> = {
-        let mut s: Vec<u64> = manifest
-            .chapters
-            .iter()
-            .flat_map(|c| c.chunk_ids.iter().copied())
-            .collect();
-        s.sort_unstable();
-        s.dedup();
-        s
-    };
-    let chunks = fetch_enrichment_chunks(source_corpus_id, &needed_ids)?;
+    // The fetch is bounded by the manifest's chunk_ids, NOT the entire
+    // source corpus (see `chunks_by_ids`); subset runs still materialise
+    // every chapter — the selection filter runs downstream.
+    let chunks = fetch_enrichment_chunks(source_corpus_id, &manifest_chunk_ids(&manifest))?;
 
     // Build a chunk_id → content map for fast lookup.
     let chunk_text: std::collections::HashMap<u64, String> =
@@ -287,18 +331,8 @@ pub fn build_corpus(cfg: &EnrichConfig) -> Result<(CorpusContext, ChapterManifes
         // severed the atom→chunk link (an atom said chunk 1; corpus row
         // 1 was an unrelated email). One ChunkRecord per real chunk,
         // real id preserved; `section_id == chapter_id`.
-        let needed_ids: Vec<u64> = {
-            let mut s: Vec<u64> = manifest
-                .chapters
-                .iter()
-                .flat_map(|c| c.chunk_ids.iter().copied())
-                .collect();
-            s.sort_unstable();
-            s.dedup();
-            s
-        };
         let content_by_id: std::collections::HashMap<u64, String> =
-            fetch_enrichment_chunks(&src, &needed_ids)?
+            fetch_enrichment_chunks(&src, &manifest_chunk_ids(&manifest))?
                 .into_iter()
                 .map(|r| (r.id, r.content))
                 .collect();

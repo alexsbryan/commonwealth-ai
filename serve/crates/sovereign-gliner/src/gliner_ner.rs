@@ -324,8 +324,43 @@ impl GlinerExtractor {
         if processed.trim().is_empty() {
             return Ok(Vec::new());
         }
-        let texts = vec![processed.as_str()];
-        let input = TextInput::from_str(&texts, labels)
+        let mut out = self.infer_windowed(&[processed], labels, threshold)?;
+        Ok(out
+            .pop()
+            .expect("infer_windowed returns one result per text"))
+    }
+
+    /// One inference call over every window of every text, mentions mapped
+    /// back to their text with offsets in that text's coordinates and
+    /// deduped per text. Windows come from [`word_windows`], so no text is
+    /// cut at the model's input limit.
+    fn infer_windowed(
+        &self,
+        texts: &[String],
+        labels: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Vec<EntityMention>>> {
+        let mut flat: Vec<&str> = Vec::new();
+        let mut owner: Vec<(usize, usize)> = Vec::new();
+        for (i, text) in texts.iter().enumerate() {
+            let windows = word_windows(text, WINDOW_WORDS, WINDOW_OVERLAP_WORDS);
+            if windows.len() > 1 {
+                tracing::debug!(
+                    words = text.split_whitespace().count(),
+                    windows = windows.len(),
+                    "gliner: text longer than one window; split, not truncated"
+                );
+            }
+            for (byte_start, window) in windows {
+                flat.push(window);
+                owner.push((i, byte_start));
+            }
+        }
+        let mut out: Vec<Vec<EntityMention>> = vec![Vec::new(); texts.len()];
+        if flat.is_empty() {
+            return Ok(out);
+        }
+        let input = TextInput::from_str(&flat, labels)
             .map_err(|e| Error::Storage(format!("TextInput::from_str: {e}")))?;
         let guard = self
             .model
@@ -335,24 +370,29 @@ impl GlinerExtractor {
             .inference(input)
             .map_err(|e| Error::Storage(format!("GLiNER::inference: {e}")))?;
         drop(guard);
-        let mut mentions: Vec<EntityMention> = Vec::new();
-        for spans in output.spans {
+        // gline-rs's `output.spans` follows the input order; its offsets are
+        // byte offsets into the window (regex match positions).
+        for (w, spans) in output.spans.iter().enumerate() {
+            let (text_idx, shift) = owner[w];
             for span in spans {
                 let prob = span.probability();
                 if prob < threshold {
                     continue;
                 }
-                let (char_start, char_end) = span.offsets();
-                mentions.push(EntityMention {
+                let (start, end) = span.offsets();
+                out[text_idx].push(EntityMention {
                     text: normalize_mention_text(span.text()),
                     label: span.class().to_string(),
-                    char_start,
-                    char_end,
+                    char_start: start + shift,
+                    char_end: end + shift,
                     score: prob,
                 });
             }
         }
-        Ok(crate::labeled::dedupe_strongest(mentions))
+        Ok(out
+            .into_iter()
+            .map(crate::labeled::dedupe_strongest)
+            .collect())
     }
 
     /// Extract entities from many chunks at once, returning one
@@ -364,42 +404,8 @@ impl GlinerExtractor {
             return Ok(Vec::new());
         }
         let processed: Vec<String> = raw_chunks.iter().map(|s| self.preprocess(s)).collect();
-        let processed_refs: Vec<&str> = processed.iter().map(|s| s.as_str()).collect();
         let labels_ref: Vec<&str> = self.labels.iter().map(|s| s.as_str()).collect();
-        let input = TextInput::from_str(&processed_refs, &labels_ref)
-            .map_err(|e| Error::Storage(format!("TextInput::from_str: {e}")))?;
-        let guard = self
-            .model
-            .lock()
-            .map_err(|_| Error::Storage("gliner mutex poisoned".into()))?;
-        let output = guard
-            .inference(input)
-            .map_err(|e| Error::Storage(format!("GLiNER::inference: {e}")))?;
-        drop(guard);
-        let mut out: Vec<Vec<EntityMention>> = vec![Vec::new(); raw_chunks.len()];
-        // gline-rs's `output.spans` is `Vec<Vec<Span>>` with the same
-        // ordering as the input texts. `span.sequence()` indexes back
-        // into the input vector — defensive use just in case the
-        // outer vec order ever drifts.
-        for (i, spans) in output.spans.iter().enumerate() {
-            let mut chunk_mentions: Vec<EntityMention> = Vec::new();
-            for span in spans {
-                let prob = span.probability();
-                if prob < self.threshold {
-                    continue;
-                }
-                let (char_start, char_end) = span.offsets();
-                chunk_mentions.push(EntityMention {
-                    text: normalize_mention_text(span.text()),
-                    label: span.class().to_string(),
-                    char_start,
-                    char_end,
-                    score: prob,
-                });
-            }
-            out[i] = crate::labeled::dedupe_strongest(chunk_mentions);
-        }
-        Ok(out)
+        self.infer_windowed(&processed, &labels_ref, self.threshold)
     }
 }
 
@@ -437,6 +443,47 @@ impl crate::labeled::LabeledEntityExtractor for GlinerExtractor {
     fn generation(&self) -> GlinerGeneration {
         model_spec(&self.model_id).generation
     }
+}
+
+/// Whitespace words per GLiNER window. gliner_small-v2.1 reads 384 words and
+/// gline-rs's default `Parameters` counts regex tokens (punctuation included)
+/// to 512, dropping the rest silently (`gline-rs src/text/splitter.rs`); two
+/// ANS chunks of 682 and 734 words fit the 2,048-byte chunk bound and lost
+/// their tails. 300 words leaves room for punctuation tokens.
+const WINDOW_WORDS: usize = 300;
+/// Words shared by consecutive windows, so a mention on a boundary is whole in
+/// one of them; the per-text dedupe merges the repeats.
+const WINDOW_OVERLAP_WORDS: usize = 30;
+
+/// Split `text` into `(byte_start, window)` slices of at most `max_words`
+/// whitespace words, consecutive windows sharing `overlap` words. A text that
+/// fits is one window at offset 0.
+fn word_windows(text: &str, max_words: usize, overlap: usize) -> Vec<(usize, &str)> {
+    let mut starts: Vec<usize> = Vec::new();
+    let mut prev_ws = true;
+    for (i, c) in text.char_indices() {
+        if !c.is_whitespace() && prev_ws {
+            starts.push(i);
+        }
+        prev_ws = c.is_whitespace();
+    }
+    if starts.len() <= max_words {
+        return vec![(0, text)];
+    }
+    let step = max_words - overlap.min(max_words - 1);
+    let mut out = Vec::new();
+    let mut first = 0usize;
+    loop {
+        let last = first + max_words;
+        let begin = starts[first];
+        let end = starts.get(last).copied().unwrap_or(text.len());
+        out.push((begin, text[begin..end].trim_end()));
+        if last >= starts.len() {
+            break;
+        }
+        first += step;
+    }
+    out
 }
 
 /// Collapse internal whitespace + trim. GliNER's span text
@@ -550,6 +597,46 @@ pub async fn download_model(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_text_is_windowed_not_truncated() {
+        let text = (0..734)
+            .map(|i| format!("w{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let windows = word_windows(&text, WINDOW_WORDS, WINDOW_OVERLAP_WORDS);
+        assert!(windows.len() >= 3, "{} windows", windows.len());
+        for (start, w) in &windows {
+            assert!(w.split_whitespace().count() <= WINDOW_WORDS);
+            assert_eq!(&text[*start..*start + w.len()], *w, "the offset maps back");
+        }
+        let seen: std::collections::HashSet<&str> = windows
+            .iter()
+            .flat_map(|(_, w)| w.split_whitespace())
+            .collect();
+        assert_eq!(seen.len(), 734, "every word is in some window");
+        assert_eq!(
+            word_windows("a short text", WINDOW_WORDS, WINDOW_OVERLAP_WORDS),
+            vec![(0, "a short text")]
+        );
+    }
+
+    /// Needs the installed gliner_small-v2.1. Mints named past word 600 are
+    /// found; gline-rs's default parameters cut the text at 512 tokens.
+    #[test]
+    #[ignore = "loads the gliner_small-v2.1 model from the local data root"]
+    fn mentions_past_the_model_window_are_found() {
+        let x = GlinerExtractor::new("gliner_small-v2.1", &["mint"], 0.3).expect("model installed");
+        // ~640 words of coin-handling prose, then the only mints. The filler is
+        // calibrated on the reference `gliner`: it keeps Abydus at 0.75 at 210
+        // words, where farming prose suppresses it to nothing.
+        let text = format!(
+            "{}Staters of Lampsacus and Abydus were found in the hoard.",
+            "Several coins were cleaned and weighed before they were catalogued. ".repeat(64)
+        );
+        let found = x.extract(&text).unwrap();
+        assert!(found.iter().any(|m| m.text == "Abydus"), "{found:?}");
+    }
 
     // `preprocess` is a thin wrapper over `strip_role_markers`, which
     // is a pure function of (text, regex) with no model state. Test it

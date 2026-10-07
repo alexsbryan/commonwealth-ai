@@ -58,6 +58,8 @@ mod investigation_pipeline_e2e;
 mod newsworthy_integration;
 #[path = "main/on_demand_guard.rs"]
 mod on_demand_guard;
+#[path = "main/ontology_document_stamps_e2e.rs"]
+mod ontology_document_stamps_e2e;
 #[path = "main/ontology_identity_e2e.rs"]
 mod ontology_identity_e2e;
 #[path = "main/ontology_prompt_snapshots.rs"]
@@ -70,6 +72,8 @@ mod ontology_recipe_validate;
 mod ontology_resolution_e2e;
 #[path = "main/ontology_retrieval_e2e.rs"]
 mod ontology_retrieval_e2e;
+#[path = "main/ontology_source_fields_e2e.rs"]
+mod ontology_source_fields_e2e;
 #[path = "main/parquet_ingest_e2e.rs"]
 mod parquet_ingest_e2e;
 #[path = "main/partition_merge_port_parity.rs"]
@@ -96,6 +100,8 @@ mod reindex_stamps_freshness;
 mod sharding_round_trip_e2e;
 #[path = "main/snapshot_restore_e2e.rs"]
 mod snapshot_restore_e2e;
+#[path = "main/typed_answer_graph.rs"]
+mod typed_answer_graph;
 // Not a test file: the two source-tree deciders the gates below share.
 #[path = "main/chunk_ner_bounded_seam.rs"]
 mod chunk_ner_bounded_seam;

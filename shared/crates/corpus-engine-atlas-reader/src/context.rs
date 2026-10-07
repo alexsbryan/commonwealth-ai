@@ -36,15 +36,17 @@ use corpus_index::types::ScoredChunk;
 // `sovereign_core::atlas_context` — keeps resolving unchanged.
 #[path = "context/graph.rs"]
 mod graph;
+#[path = "context/typed.rs"]
+pub mod typed;
 #[path = "context/views.rs"]
 mod views;
 pub use graph::{
     open_and_attach_ann_seed_table, open_ann_seed_table, AtlasGraph, NavigationAttachment,
 };
 pub use views::{
-    atlas_navigate_ann, atom_verbatim_excerpt, contains_whole_word, edge_weight,
-    render_call_chain_brief, AtomView, CallChainNode, CallChainResult, CallDirection, ChunkRequest,
-    EdgeView, EvidenceRef,
+    atlas_navigate_ann, atom_verbatim_excerpt, contains_whole_word, count_whole_word, edge_weight,
+    name_mentions, render_call_chain_brief, AtomView, CallChainNode, CallChainResult,
+    CallDirection, ChunkRequest, EdgeView, EvidenceRef,
 };
 
 /// One pre-embedded atlas atom available to retrieval as a virtual

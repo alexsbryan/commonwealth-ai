@@ -169,6 +169,64 @@ async fn projecting_twice_writes_the_atoms_once() {
     assert!(stub.atoms().is_empty());
 }
 
+/// A rebuilt tree replaces the one it rebuilt.
+///
+/// Every rebuild mints new node ids, and the projection only appended: after
+/// one `enrich raptor --force` on the pilot the atlas held 14 Summary atoms
+/// of the old tree beside 14 of the new, and the walk reached both.
+#[tokio::test]
+async fn a_rebuilt_tree_retires_the_summaries_it_replaced() {
+    let root = tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("sep")).unwrap();
+    empty_atlas(&root.path().join("sep").join("atlas"));
+    empty_atlas(&root.path().join("sep-abduction").join("atlas"));
+    let tree = |first: usize| -> Vec<RaptorSummaryRow> {
+        (first..first + 3)
+            .map(|i| RaptorSummaryRow {
+                node_id: format!("node-{i}"),
+                conv_uuid: "https://plato.stanford.edu/entries/abduction/".into(),
+                level: 0,
+                summary: format!("rollup {i}"),
+                embedding: emb(i),
+            })
+            .collect()
+    };
+    let marked: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
+    write_summary_atoms(&port(tree(0), Arc::clone(&marked)), root.path(), "sep")
+        .await
+        .unwrap();
+    let rebuilt = write_summary_atoms(&port(tree(10), marked), root.path(), "sep")
+        .await
+        .unwrap();
+    assert_eq!(rebuilt.retired, 3);
+
+    let article_atlas = root.path().join("sep-abduction").join("atlas");
+    let want: HashSet<String> = (10..13)
+        .map(|i| {
+            AtomId::summary_content_hash(&format!("node-{i}"), "sep")
+                .as_str()
+                .to_string()
+        })
+        .collect();
+    let atoms: HashSet<String> = read_atlas_atoms(&article_atlas)
+        .unwrap()
+        .atoms()
+        .iter()
+        .map(|a| a.id().as_str().to_string())
+        .collect();
+    assert_eq!(atoms, want, "atoms.json holds a tree that is not installed");
+    let seeds: HashSet<String> = AnnSeedTable::open(&ann_table_dir(&article_atlas))
+        .await
+        .unwrap()
+        .all_rows()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(seeds, want, "the seed table still reaches the old tree");
+}
+
 /// The atoms the idempotence check used to strand.
 ///
 /// Failing input, named: project with no checkpoint (a legitimate, REPORTED
@@ -295,4 +353,105 @@ async fn a_corpus_with_no_summary_table_is_named_not_zeroed() {
         .degradations
         .iter()
         .any(|d| d.contains("nothing to project")));
+}
+
+fn person(id: usize, name: &str, aliases: &[&str]) -> AtomEnvelope {
+    AtomEnvelope::Entity(understanding_vocab::atoms::Entity {
+        id: AtomId::entity(id),
+        canonical_name: name.into(),
+        aliases: aliases.iter().map(|a| a.to_string()).collect(),
+        entity_type: understanding_vocab::taxonomy::EntityType::Concept,
+        first_appearance: ChunkRef::new("sec_0001", None),
+        description: "x".into(),
+        defining_quote: None,
+        salience: 0.5,
+        enrichment_depth: EnrichmentDepth::Extracted,
+        affiliation: None,
+        role: None,
+        participants: vec![],
+        provenance: Default::default(),
+        attributes: serde_json::Map::new(),
+        concept_kind: None,
+    })
+}
+
+fn summary(node: &str, text: &str) -> AtomEnvelope {
+    AtomEnvelope::Summary(Summary {
+        id: AtomId::summary_content_hash(node, "pilot"),
+        node_id: node.into(),
+        level: 0,
+        text: text.into(),
+        evidence: Vec::new(),
+        children: Vec::new(),
+        enrichment_depth: EnrichmentDepth::extracted_default(),
+    })
+}
+
+/// A summary is linked to every entity its text names, by alias as well as
+/// canonical name, weighted by mentions over the most-mentioned entity's; an
+/// entity it does not name gets no edge, a summary naming nobody is counted,
+/// and a second pass over the linked atlas adds nothing. Failing inputs: a
+/// projector that writes no `Involves` (the pre-2026-10-03 shape), weights
+/// every mention 1.0, or relinks on every run.
+#[test]
+fn a_summary_involves_the_entities_its_text_names_once() {
+    let dir = tempdir().unwrap();
+    let s1 = summary(
+        "n1",
+        "Elizabeth refuses Carl; Elizabeth waits for Salve Kristiansen.",
+    );
+    let s2 = summary("n2", "The harbour freezes over in a hard winter.");
+    let kept = vec![
+        person(1, "Elizabeth Raklev", &["Elizabeth"]),
+        person(2, "Salve Kristiansen", &[]),
+        person(3, "Fru Beck", &[]),
+        s1.clone(),
+        s2.clone(),
+    ];
+    let installed: HashSet<String> = [&s1, &s2]
+        .iter()
+        .map(|a| a.id().as_str().to_string())
+        .collect();
+    let mut next = 7;
+    let mut report = SummaryProjection::default();
+    let edges = involves_edges(
+        dir.path(),
+        &kept,
+        &[],
+        &installed,
+        &[],
+        &mut next,
+        &mut report,
+    );
+    let got: Vec<(&str, &str, f32)> = edges
+        .iter()
+        .map(|e| (e.source.as_str(), e.target.as_str(), e.confidence))
+        .collect();
+    let s1_id = s1.id().as_str();
+    assert_eq!(
+        got,
+        vec![
+            (s1_id, AtomId::entity(1).as_str(), 1.0),
+            (s1_id, AtomId::entity(2).as_str(), 0.5),
+        ]
+    );
+    assert!(edges.iter().all(|e| e.edge_type == EdgeType::Involves));
+    assert_eq!(
+        (report.involves_written, report.unlinked_summaries, next),
+        (2, 1, 9)
+    );
+
+    let again = involves_edges(
+        dir.path(),
+        &kept,
+        &[],
+        &installed,
+        &edges,
+        &mut next,
+        &mut report,
+    );
+    assert!(
+        again.iter().all(|e| e.source.as_str() != s1_id),
+        "linked twice"
+    );
 }

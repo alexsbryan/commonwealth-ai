@@ -12,14 +12,16 @@ use sovereign_contracts::error::{Error, Result};
 pub(crate) struct Refusal {
     pub(crate) status: reqwest::StatusCode,
     pub(crate) body: String,
-    /// `(attempts, waited)` when the host shed until the budget ran out.
-    shed_spent: Option<(u32, std::time::Duration)>,
+    /// `(attempts, waited, last Retry-After)` when the host shed until the
+    /// budget ran out.
+    shed_spent: Option<(u32, std::time::Duration, std::time::Duration)>,
 }
 
 impl Refusal {
-    /// The refusal as the error callers have always seen. A shed is reported
-    /// AS a shed: the caller needs to know this was "busy", not "broken", to
-    /// decide whether to route elsewhere (§18.3).
+    /// The refusal as the error callers see. A shed is reported AS a shed,
+    /// typed: the caller needs "busy", not "broken", to decide whether to come
+    /// back or route elsewhere (§18.3), and this is the variant the in-process
+    /// engine returns for the same refusal.
     pub(crate) fn into_error(self, what: &str) -> Error {
         match self.shed_spent {
             None => Error::Inference(format!(
@@ -27,11 +29,20 @@ impl Refusal {
                 self.status,
                 error_excerpt(&self.body)
             )),
-            Some((attempt, waited)) => Error::Inference(format!(
-                "{what} shed by the host after {attempt} attempt(s), {}s waited: {}",
-                waited.as_secs(),
-                error_excerpt(&self.body)
-            )),
+            Some((attempt, waited, delay)) => {
+                // The wire states no queue position (0); the body's reason has
+                // no field on `QueueShed`, so it goes to the trace.
+                tracing::info!(
+                    target: "oicp_client",
+                    what,
+                    attempt,
+                    waited_ms = waited.as_millis() as u64,
+                    retry_after_secs = delay.as_secs(),
+                    body = error_excerpt(&self.body),
+                    "shed budget spent — returning the host's refusal as a typed shed"
+                );
+                Error::queue_shed(0, delay.as_millis() as u64)
+            }
         }
     }
 }
@@ -99,7 +110,7 @@ impl RemoteApiProvider {
                 }));
             };
             if attempt >= SHED_MAX_ATTEMPTS || waited + delay > SHED_TOTAL_WAIT_CAP {
-                let shed_spent = Some((attempt, waited));
+                let shed_spent = Some((attempt, waited, delay));
                 return Ok(Err(Refusal {
                     status,
                     body,

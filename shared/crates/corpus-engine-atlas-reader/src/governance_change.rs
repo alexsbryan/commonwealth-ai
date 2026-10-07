@@ -38,7 +38,7 @@ use crate::oplog::Op;
 use corpus_index::error::{Error, Result};
 use understanding_atlas::enrichment::ontology::clock::section_date;
 use understanding_vocab::ontology::decl::AttrFamily;
-use understanding_vocab::ontology::{ChangePolicy, OntologyPolicies};
+use understanding_vocab::ontology::{ChangePolicy, OntologyPolicies, DOCUMENT_DATE_ATTR};
 
 /// What [`derive_active_with_policy`] needs to know about one rule atom.
 ///
@@ -193,7 +193,8 @@ fn are_linked(a: &RuleFacts, b: &RuleFacts, by_id: &BTreeMap<&AtomId, &RuleFacts
 /// 1. the declared time attribute `change.supersedes` names for the type
 ///    (`{ rule = "valid" }` → `attributes["valid"]`), read at its start
 ///    when it is a range;
-/// 2. `attributes["document_date"]`, when something upstream stamped one;
+/// 2. `attributes["document_date"]`, stamped at resolution from the field the
+///    recipe's `change.document.date` names;
 /// 3. the evidence chunk id, read by
 ///    [`understanding_atlas::enrichment::ontology::clock::section_date`] — which finds a
 ///    date only when the section id carries one, and returns `None`
@@ -284,7 +285,7 @@ fn rule_clock(c: &Claim, change: &ChangePolicy) -> Option<String> {
         .claim_kind
         .as_deref()
         .and_then(|k| change.supersedes.get(k))
-        .filter(|attr| attr.as_str() != "document_date");
+        .filter(|attr| attr.as_str() != DOCUMENT_DATE_ATTR);
     if let Some(attr) = declared {
         if let Some(v) = c.attributes.get(attr).and_then(|v| v.as_str()) {
             // A validity RANGE speaks from its start.
@@ -294,7 +295,11 @@ fn rule_clock(c: &Claim, change: &ChangePolicy) -> Option<String> {
             }
         }
     }
-    if let Some(v) = c.attributes.get("document_date").and_then(|v| v.as_str()) {
+    if let Some(v) = c
+        .attributes
+        .get(DOCUMENT_DATE_ATTR)
+        .and_then(|v| v.as_str())
+    {
         if !v.trim().is_empty() {
             return Some(v.trim().to_string());
         }

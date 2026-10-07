@@ -2,7 +2,7 @@
 # ralph worker on the Claude subscription instead of opencode+openrouter.
 #
 # scripts/ralph.py spawns `$RALPH_OPENCODE_BIN run [--model M] [--variant V] <prompt>`
-# and reads back only the exit code, the iter log, and whether a commit
+# and reads back only the session's `ralph-result` and whether a commit
 # landed. It was hardwired to opencode, whose only key on this host was
 # openrouter (2026-09-17: $40 gone in a day and a half, the last three
 # iterations dying on "would exceed your available credits"). This shim keeps
@@ -64,7 +64,7 @@ echo "ralph-claude-shim: model=${model:-default} effort=${effort:-default}" >&2
 # default), said "when it finishes I'll paste the rows", ended its turn 36 s
 # in, and the next session repeated it - a stall that would have halted the
 # loop. This is the harness's property, so it is said here, not in PROMPT.md.
-args+=(--append-system-prompt "HARNESS: you are a one-shot print-mode session. The process exits the moment you end your turn, and every background task you started is killed with it - no notification will ever reach you. Never run a command in the background and never end your turn while a check is running. Run long checks (DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the Bash tool's timeout parameter set to 600000; if a single check cannot finish inside ten minutes, split it or write ralph/NEEDS_HUMAN.md saying so. Commit before you end your turn - an uncommitted turn is lost.")
+args+=(--append-system-prompt "HARNESS: you are a one-shot print-mode session. The process exits the moment you end your turn, and every background task you started is killed with it - no notification will ever reach you. Never run a command in the background and never end your turn while a check is running. Run long checks (DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the Bash tool's timeout parameter set to 600000; if a single check cannot finish inside ten minutes, split it, or end your turn with: ralph-result await <budget> -- <the check> (the loop runs it and resumes you with its exit code and log). Commit before you end your turn - an uncommitted turn is lost.")
 # The directories .opencode/opencode.json's external_directory already
 # granted: /run (the PROMPT's containerenv premise check), /tmp (the cargo
 # lock), and ralph's own state under ~/.svrnmesh. Anything else outside the
@@ -74,15 +74,25 @@ for d in /run /tmp "$HOME/.svrnmesh/ralph"; do
 done
 
 # The gray zone — a call the settings neither allow nor deny — bubbles to the
-# operator through scripts/ralph-permission-bridge.py (ralph/PERMISSION_REQUEST.md,
-# answered by ralph/PERMISSION_ANSWER, denied after RALPH_PERMISSION_WAIT_SECS).
+# operator through scripts/ralph-permission-bridge.py (PERMISSION_REQUEST.md in
+# the loop's control dir, answered by PERMISSION_ANSWER beside it, denied after
+# RALPH_PERMISSION_WAIT_SECS). RALPH_SESSION_CWD tells it which pool lane asks.
+export RALPH_SESSION_CWD="$PWD"
 # RALPH_PERMISSION_BRIDGE=0 falls back to refusing the gray zone outright.
 #
-# MCP is pinned: the repo's .mcp.json (code intel) plus the bridge, and
-# nothing from the user's own config — a worker has no business with web
-# search or the claude.ai connectors the seat happens to have.
+# MCP is pinned: the WORKDIR's own .mcp.json plus the bridge, and nothing
+# from the user's own config — a worker has no business with web search or
+# the claude.ai connectors the seat happens to have. The workdir's, not this
+# checkout's: a repo's .mcp.json names its own code corpus (x-svrn-corpus) and,
+# where its workers may only read, says so (x-svrn-effects: read). A repo
+# without one gets no code intelligence, said once in the iter log.
 mcp_json="{\"mcpServers\":{\"ralph\":{\"command\":\"python3\",\"args\":[\"$here/scripts/ralph-permission-bridge.py\"]}}}"
-args+=(--strict-mcp-config --mcp-config "$here/.mcp.json")
+args+=(--strict-mcp-config)
+if [ -f "$PWD/.mcp.json" ]; then
+    args+=(--mcp-config "$PWD/.mcp.json")
+else
+    echo "ralph-claude-shim: no .mcp.json in $PWD — this worker has no code-intelligence server" >&2
+fi
 if [ "${RALPH_PERMISSION_BRIDGE:-1}" != "0" ]; then
     args+=(--mcp-config "$mcp_json" --permission-prompts host --permission-prompt-tool mcp__ralph__approve)
 fi

@@ -248,14 +248,16 @@ pub fn render_tools_list_gated(
     descriptors: &[sovereign_contracts::types::ToolDescriptor],
     feature_root: Option<&std::path::Path>,
 ) -> Vec<serde_json::Value> {
-    render_tools_list_gated_by(descriptors, feature_root, is_mcp_exposed)
+    render_tools_list_gated_by(descriptors, feature_root, false, is_mcp_exposed)
 }
 
-/// [`render_tools_list_gated`] over another host's exposure list: the svrn
-/// daemon passes the union of its ids and code's while it mounts both.
+/// [`render_tools_list_gated`] over another host's exposure list, for a
+/// connection that may be `read_only` (`x-svrn-effects: read`), which lists
+/// no tool whose effect is not `Read`.
 pub fn render_tools_list_gated_by(
     descriptors: &[sovereign_contracts::types::ToolDescriptor],
     feature_root: Option<&std::path::Path>,
+    read_only: bool,
     exposed: fn(&str) -> bool,
 ) -> Vec<serde_json::Value> {
     let spec_visible = match feature_root {
@@ -264,7 +266,7 @@ pub fn render_tools_list_gated_by(
         // of disk state.
         None => true,
     };
-    let out = sovereign_contracts::mcp_host::render_tool_entries(descriptors, |id| {
+    let out = sovereign_contracts::mcp_host::render_tool_entries(descriptors, read_only, |id| {
         exposed(id) && (spec_visible || !MCP_TOOLS_SPEC_GATED.contains(&id))
     });
     // No alias mirrors. See [`MCP_TOOL_ALIASES`]: aliases are accepted

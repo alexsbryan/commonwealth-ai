@@ -58,6 +58,21 @@ pub fn render_declared_types(policies: &OntologyPolicies) -> String {
             if let Some(subject) = t.subject.as_deref() {
                 facets.push(format!("about a {subject}"));
             }
+            // A relation's declared ends are enforced at resolution, positionally
+            // (`check_relation_endpoints`); unstated here, the model read
+            // `holds_coins_of` as "who holds the coins" and every relation one
+            // section emitted named a collector, and was dropped.
+            if t.kind == TypeKind::Relation {
+                let ends = match index.endpoints(&t.name) {
+                    [Some(from), Some(to)] => Some(format!("from a {from} to a {to}")),
+                    [Some(from), None] => Some(format!("from a {from}")),
+                    [None, Some(to)] => Some(format!("to a {to}")),
+                    [None, None] => None,
+                };
+                if let Some(ends) = ends {
+                    facets.push(format!("{ends} (participants in that order)"));
+                }
+            }
             // A state type names one of the two state facets, and which one
             // is not guessable from the name — `of` decides it. Say it, or
             // the model has a `state_type` enum on two lists and no rule for
@@ -89,7 +104,7 @@ pub fn render_declared_types(policies: &OntologyPolicies) -> String {
             if !facets.is_empty() {
                 out.push_str(&format!("  {}\n", facets.join(" · ")));
             }
-            let attrs = index.effective_attributes(&t.name);
+            let attrs = index.extracted_attributes(&t.name);
             if !attrs.is_empty() {
                 out.push_str(&format!(
                     "  attributes: {}\n",
@@ -258,7 +273,7 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
         .shape
         .types
         .iter()
-        .map(|t| (t, index.effective_attributes(&t.name)))
+        .map(|t| (t, index.extracted_attributes(&t.name)))
         .filter(|(_, a)| !a.is_empty())
         .collect();
     let Some((t, attrs)) = candidates
@@ -309,7 +324,7 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
     // type carries a ref, so a text-only declaration pays nothing.
     let ref_context = if policies.shape.types.iter().any(|t| {
         index
-            .effective_attributes(&t.name)
+            .extracted_attributes(&t.name)
             .iter()
             .any(|a| matches!(a.family, AttrFamily::Ref { .. }))
     }) {
@@ -420,7 +435,7 @@ fn render_subject_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) -> S
     // leave it out. `deontic` and `grade` ride in the same bag as the
     // declared attributes (`set_attribute_property`), in the order that
     // function inserts them, so prompt and schema agree on generation order.
-    let mut pairs = attribute_pairs(&index.effective_attributes(&t.name));
+    let mut pairs = attribute_pairs(&index.extracted_attributes(&t.name));
     if let Some(first) = t.deontic.first() {
         if !pairs.is_empty() {
             pairs.push_str(", ");

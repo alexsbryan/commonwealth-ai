@@ -785,6 +785,9 @@ impl Executor {
                     // params are model output and a descriptor's
                     // instruction is not a guarantee (ARCH §7.6).
                     question: Some(task.goal.clone()),
+                    // A plan step's tools answer about every corpus: the
+                    // runtime's own retrieval decides which to read.
+                    corpus_scope: None,
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();

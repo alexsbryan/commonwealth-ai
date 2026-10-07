@@ -34,7 +34,7 @@ use crate::enrichment::ontology::{
 /// block with no declarations run the same code under the same policy.
 ///
 /// The maps are keyed by the declared type NAME, and their attribute lists are
-/// [`TypeIndex::effective_attributes`] — the same accessor the schema
+/// [`TypeIndex::extracted_attributes`] — the same accessor the schema
 /// generator reads, so what the grammar offers and what the parser accepts
 /// cannot disagree (§10.6).
 #[derive(Debug, Clone, Default)]
@@ -207,7 +207,7 @@ impl ParsePolicy {
         let mut out = Self::default();
         for t in &policies.shape.types {
             let attrs: Vec<AttrDecl> = index
-                .effective_attributes(&t.name)
+                .extracted_attributes(&t.name)
                 .into_iter()
                 .cloned()
                 .collect();

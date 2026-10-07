@@ -1,0 +1,52 @@
+[corpus]
+id = "uv-support"
+name = "Support cases from an issue tracker: astral-sh/uv (152 issues, their comments and timeline events)"
+description = "The second example for composed types (svrn/docs/specs/ONTOLOGY_METHOD.md): cases composed from issue, comment and event documents, scored against research/ontology-apps/support/GOLD_SPEC.md. The same code path as crm-ward-acts; only the declaration differs."
+license = "evaluation-only"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.0
+size_indexed_gb = 0.05
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/bench-corpora/uv-support/raw/documents.jsonl"
+
+# Every field the extractor does not consume (id, thread, kind, author, author_association, created_at,
+# labels, event_type, url) passes through as document metadata: the declared document fields read it.
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+[enrichment]
+enabled = false
+
+# Read by `svrn enrich resolve-statements --type case`; never built.
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+description = "one underlying problem or request, whatever the number of issues reporting it"
+identity_criterion = "Two mentions are one case when they are about the same underlying problem or request: the same bug, feature request or question, however many issues report it and whoever writes. Issues a maintainer closes as duplicates of each other are one case. Two issues that only look alike, or share a root cause no maintainer has stated, are different cases, and so is a comment that raises a different problem inside an existing thread."
+identity_evidential = [
+  { evidence = "document_thread", right = 190, of = 210, measured_on = "uv-support tune, gold, no model: 190 of 210 links (field_precision.py; resolve-prereg.md Ring 1a)" },
+  { evidence = "document_date", right = 15, of = 16, measured_on = "uv-support tune, gold, no model: 15 of 16 links (field_precision.py; resolve-prereg.md Ring 1a)" },
+  { evidence = "model_choice", right = 10, of = 21, measured_on = "uv-support tune, Ring 1a run, live: 10 of 21 selections (resolve-prereg.md Ring 1a)" },
+  { evidence = "proposed_answer", right = 257, of = 311, measured_on = "uv-support tune floor run, live: 257 of 311 links (resolve-prereg.md Ring 1b)" },
+]
+identity_bar = 0.5
+
+[enrichment.ontology.change]
+document = { date = "created_at", thread = "thread", id = "id" }

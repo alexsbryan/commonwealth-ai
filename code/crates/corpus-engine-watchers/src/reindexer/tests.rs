@@ -34,11 +34,14 @@ async fn overlay_merge_refreshes_symbol_defs_from_disk() {
     // disk, with NO rust-analyzer, purely via the tree-sitter overlay.
     let g = graph.load();
     assert!(!g
-        .find_symbols_by_name("hello", None, 8)
+        .find_symbols_by_name("hello", None, None, 8)
         .await
         .unwrap()
         .is_empty());
-    let world = g.find_symbols_by_name("world", None, 8).await.unwrap();
+    let world = g
+        .find_symbols_by_name("world", None, None, 8)
+        .await
+        .unwrap();
     assert_eq!(world.len(), 1);
     assert_eq!(world[0].file_path, "lib.rs");
 }
@@ -79,7 +82,7 @@ async fn overlay_merge_drops_defs_for_deleted_file() {
     .await;
     assert!(!graph
         .load()
-        .find_symbols_by_name("ghost", None, 8)
+        .find_symbols_by_name("ghost", None, None, 8)
         .await
         .unwrap()
         .is_empty());
@@ -101,7 +104,7 @@ async fn overlay_merge_drops_defs_for_deleted_file() {
     assert!(
         graph
             .load()
-            .find_symbols_by_name("ghost", None, 8)
+            .find_symbols_by_name("ghost", None, None, 8)
             .await
             .unwrap()
             .is_empty(),
@@ -165,6 +168,39 @@ fn a_project_rooted_under_an_excluded_name_is_still_watched() {
     let under_extra = tmp.path().join("my-cache").join("proj");
     let filter = build_ignore_filter(&under_extra, &["my-cache".to_string()]);
     assert!(!filter.is_ignored(&under_extra.join("src/main.rs")));
+}
+
+/// A root reached through a symlink gets its saves under the root it was
+/// registered as. FSEvents reports the resolved path, so on macOS every
+/// save under a temp dir (`/var` → `/private/var`) missed the root and the
+/// worker dropped it. Where the backend reports paths as watched (inotify)
+/// this passes either way.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_save_under_a_symlinked_root_arrives_under_that_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let real = tmp.path().join("real");
+    std::fs::create_dir_all(&real).unwrap();
+    let root = tmp.path().join("link");
+    std::os::unix::fs::symlink(&real, &root).unwrap();
+    let (tx, mut rx) = mpsc::channel(64);
+    let _watcher = start_fs_watcher(&root, &[], tx).expect("the watcher starts");
+    // Saved until one is seen: a backend may start delivering a beat late.
+    let mut evt = None;
+    for i in 0..20 {
+        std::fs::write(root.join("a.rs"), format!("fn a{i}() {{}}\n")).unwrap();
+        if let Ok(got) = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
+            evt = got;
+            break;
+        }
+    }
+    let evt = evt.expect("a save under the root reaches the worker");
+    assert!(
+        evt.paths.iter().all(|p| p.starts_with(&root)),
+        "{:?} is not under the registered root {}",
+        evt.paths,
+        root.display()
+    );
 }
 
 #[test]

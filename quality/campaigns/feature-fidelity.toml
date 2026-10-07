@@ -8,17 +8,18 @@ declared  = "2026-10-02"
 status    = "active"
 
 [predicate]
-statement = "Each of fi-raptor-whole-work, fi-ontology-list and fi-gliner-declared-labels reads met on its newest measurement row, or DEFAULTS_LEDGER.md carries a row naming that bar id (the feature shipped default-off)."
+statement = "Each of fi-raptor-whole-work, fi-ontology-list and fi-gliner-declared-labels reads met on its newest measurement row, or DEFAULTS_LEDGER.md carries a row whose ### heading names that bar id (the feature shipped default-off). A mention in prose is not a row: until 2026-10-03 any substring counted, and a paragraph naming fi-ontology-list as an owed measurement read as ledgered."
 check     = '''python3 - <<'PY'
 import json, pathlib, sys
 rows = [json.loads(l) for l in (pathlib.Path.home() / ".sovereign/comaintainer/bar-measurements.jsonl").read_text().splitlines() if l.strip()]
-ledger = pathlib.Path("docs/DEFAULTS_LEDGER.md").read_text()
+heads = [l for l in pathlib.Path("docs/DEFAULTS_LEDGER.md").read_text().splitlines() if l.startswith("### ")]
 ok = True
 for bar in ("fi-raptor-whole-work", "fi-ontology-list", "fi-gliner-declared-labels"):
     mine = [r for r in rows if r.get("campaign") == "feature-fidelity" and r.get("bar") == bar]
     met = bool(mine) and mine[-1].get("verdict") == "met"
-    print(f"{bar}: {'met' if met else 'ledger' if bar in ledger else 'OPEN'}")
-    ok &= met or bar in ledger
+    row = any(f"`{bar}`" in h for h in heads)
+    print(f"{bar}: {'met' if met else 'ledger' if row else 'OPEN'}")
+    ok &= met or row
 sys.exit(0 if ok else 1)
 PY'''
 
@@ -28,7 +29,8 @@ demo         = "D2's inner loop: K1 recall read straight from the typed atlas, n
 rung         = "O-T0"
 one_line     = "Share of text-attested K1 members (gold members_local) that the ei7-ans typed records carry: hoard resolved, coins linked to it, their mint/ruler/denomination named"
 derives_from = "records_recall.py first run 2026-10-02: 31/32 hoards resolve, 23/32 rows have no coin linked (49 of 362 coins carry a hoard ref), mean 0.031 of the local ceiling; ref snaps are type-unchecked by design (ingest/crates/corpus-engine/src/enrichment/atlas/resolution_ontology.rs:16-23) and land coin.mint on hoard entities"
-status       = "open"
+# descoped 2026-10-03 (operator): the ontology leg is closed, not refuted — records rebuilt from prose by a local model, graded against the NUDS/Nomisma records that were never loaded. Caveats: DEFAULTS_LEDGER fi-ontology-list row.
+status       = "descoped"
 direction    = "higher_is_better"
 floor        = 0.014
 floor_basis  = "n=1 deterministic read of ~/.svrnmesh/indexes/ei7-ans/atlas (atoms.json mtime 2026-09-22), 2026-10-02; was 0.031 until the instrument stopped crediting a row with an entity citing another IGCH number (IGCH 1438 and 1441 had scored IGCH 1437's coins)"
@@ -56,7 +58,8 @@ demo         = "D2: 'List every <X>' — typed, cited table beside bare retrieva
 rung         = "O-T2"
 one_line     = "Member recall on ANS K1 from the typed read path minus the better of bare k=20 and wide k=80, three runs, K0 as the guard"
 derives_from = "ei7-prove-ontology's margin rule, max(0.15, 2 x band); study 1 bare K1 0.385, full 0.222"
-status       = "open"
+# descoped 2026-10-03 (operator): closed, not refuted — a chat-answer bar on a fixture top-k mostly covers, with no linking step; best case +0.134 (k1_bound.py). The typed surface moves to svrn-docs/ontology-apps (CRM records gold). Caveats: DEFAULTS_LEDGER fi-ontology-list row.
+status       = "descoped"
 direction    = "higher_is_better"
 floor        = 0.0
 floor_basis  = "a margin; 0 = no better than the better baseline"

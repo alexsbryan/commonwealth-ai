@@ -32,9 +32,10 @@ use crate::RailsDaemon;
 
 /// The endpoint's own origins, which no claim holds: its gossip and join
 /// routes on `cwth/http/0` (any dialer — a joiner is not a member yet, and
-/// the gossip merge authorizes for itself) and its ring routes under
-/// `/internal/ring` (members only). The media origin is [`stand_media`]'s,
-/// because `rails.toml` can change it while this process runs.
+/// the gossip merge authorizes for itself) and its ring sync and live routes
+/// (members only; never the checkpoint, a local operator's). The media
+/// origin is [`stand_media`]'s, because `rails.toml` can change it while this
+/// process runs.
 pub fn stand_own(registry: &OriginRegistry, internal: SocketAddr) -> Result<(), OriginRefusal> {
     registry.stand(
         ALPN,
@@ -44,10 +45,14 @@ pub fn stand_own(registry: &OriginRegistry, internal: SocketAddr) -> Result<(), 
         Vec::new(),
     )?;
     // The ring's peer routes (pb-rails-parity): members only; each ring then
-    // asks its own roster about the stamped key (`crate::ring_routes`).
+    // asks its own roster about the stamped key (`crate::ring_routes`). Named
+    // one by one, never as `/internal/ring`: that prefix also covered the
+    // checkpoint route, a local operator's export of a whole ring
+    // (sovereign-cli-base `rail_checkpoint`), so any member could pull any
+    // ring this node held.
     registry.stand(
         ALPN,
-        &["/internal/ring"],
+        &["/internal/ring/sync", "/internal/ring/live"],
         internal,
         Admit::Members(Vec::new()),
         Vec::new(),
@@ -265,5 +270,55 @@ pub fn merge_declared(
         caps.benchmark = caps.benchmark.take().or_else(|| d.benchmark.clone());
         caps.current_in_flight = caps.current_in_flight.or(d.current_in_flight);
         caps.anchor = caps.anchor.take().or_else(|| d.anchor.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use commonwealth_core::ids::{NodeId, NodePubkey};
+    use commonwealth_media::MemberIdentity;
+    use commonwealth_transport::iroh::Forward;
+    use commonwealth_transport::iroh_routed_forward::route_by_prefix;
+
+    use super::*;
+
+    /// How a member's dial on `cwth/http/0` is routed for `target`: the
+    /// prefix it binds under, or the status it is refused with.
+    fn routed_for_a_member(target: &str) -> Result<String, u16> {
+        let registry = OriginRegistry::new(commonwealth_media::PublishedApps::default());
+        stand_own(&registry, "127.0.0.1:1".parse().unwrap()).unwrap();
+        let member = MemberIdentity {
+            name: "LittleMac".into(),
+            node_id: NodeId::from_u128(0xB0B),
+        };
+        let Some(Forward::HttpByPrefix { routes, .. }) =
+            registry.forward_for(ALPN, Some(&member), NodePubkey([7u8; 32]))
+        else {
+            panic!("cwth/http/0 routes by prefix");
+        };
+        let head = format!("GET {target} HTTP/1.1\r\nHost: x\r\n\r\n");
+        route_by_prefix(&routes, head.as_bytes())
+            .map(|r| r.key)
+            .map_err(|u| u.status)
+    }
+
+    /// The failing input: a member asks a peer for a ring's checkpoint. The
+    /// route is a local operator's (sovereign-cli-base `rail_checkpoint`), so
+    /// the endpoint registers no path to it — refused at the acceptor, by
+    /// name, before any origin is dialled — while sync and live still route.
+    #[test]
+    fn a_member_reaches_ring_sync_and_live_but_not_a_checkpoint() {
+        assert_eq!(
+            routed_for_a_member("/internal/ring/sync").as_deref(),
+            Ok("/internal/ring/sync")
+        );
+        assert_eq!(
+            routed_for_a_member("/internal/ring/live").as_deref(),
+            Ok("/internal/ring/live")
+        );
+        assert_eq!(
+            routed_for_a_member("/internal/ring/checkpoint/house"),
+            Err(404)
+        );
     }
 }

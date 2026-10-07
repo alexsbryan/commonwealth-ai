@@ -65,6 +65,9 @@ const REFS_INSERT_SQL: &str = "INSERT INTO refs (corpus_id, caller_symbol, calle
 /// a file to justify itself — new surface goes beside it, not into it.
 #[path = "scip_graph_edges.rs"]
 mod edges;
+/// Exact-name symbol lookup, scoped to a corpus (code-intel-repo-scope).
+#[path = "scip_graph_lookup.rs"]
+mod lookup;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -162,6 +165,8 @@ pub struct Callee {
 /// A function or method that calls the queried symbol.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Caller {
+    /// The corpus the call site was ingested under (a merged graph mixes them).
+    pub corpus_id: String,
     pub symbol_name: String,
     pub file_path: String,
     pub line: i32,
@@ -180,6 +185,8 @@ pub struct Caller {
 /// A single entry in a blast-radius traversal result.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct BlastEntry {
+    /// The corpus the call site was ingested under (a merged graph mixes them).
+    pub corpus_id: String,
     /// The symbol that (transitively) calls the changed symbol.
     pub symbol_name: String,
     /// File where this call-site lives.
@@ -818,15 +825,15 @@ impl ScipGraph {
         Some(age.num_seconds().max(0) as u64)
     }
 
-    /// Resolve a symbol name to its canonical form in the database.
-    /// Tries exact match first, then suffix match (for unqualified names).
-    pub async fn resolve_symbol(&self, name: &str) -> Result<Option<String>> {
+    /// Resolve a symbol name to its canonical form in the database, within
+    /// `corpus` when `Some` (every corpus when `None`, as for every scoped
+    /// query here). Tries exact match first, then suffix match (for unqualified names).
+    pub async fn resolve_symbol(&self, name: &str, corpus: Option<&str>) -> Result<Option<String>> {
         let conn = self.conn.lock().await;
-
         // Exact match.
         if let Ok(found) = conn.query_row(
-            "SELECT name FROM symbols WHERE name = ? LIMIT 1",
-            params![name],
+            "SELECT name FROM symbols WHERE name = ?1 AND (?2 IS NULL OR corpus_id = ?2) LIMIT 1",
+            params![name, corpus],
             |row| row.get::<_, String>(0),
         ) {
             return Ok(Some(found));
@@ -836,8 +843,8 @@ impl ScipGraph {
         // "my_crate::module::my_fn".
         let pattern = format!("%{name}");
         if let Ok(found) = conn.query_row(
-            "SELECT name FROM symbols WHERE name LIKE ? LIMIT 1",
-            params![pattern],
+            "SELECT name FROM symbols WHERE name LIKE ?1 AND (?2 IS NULL OR corpus_id = ?2) LIMIT 1",
+            params![pattern, corpus],
             |row| row.get::<_, String>(0),
         ) {
             return Ok(Some(found));
@@ -846,81 +853,13 @@ impl ScipGraph {
         Ok(None)
     }
 
-    /// Look up symbols by exact name (and optional kind filter)
-    /// across every corpus this graph has ingested. The Symbol Lookup
-    /// MCP tool uses this as the authoritative source — Lance carried
-    /// the same data redundantly until the move to SCIP-as-truth, but
-    /// the SQLite path here doesn't depend on the chunk index being
-    /// fresh and survives a corrupt Lance corpus.
-    ///
-    /// `limit` is a hard cap on the row count; pass `8` for the
-    /// default tool contract. `kind` is matched verbatim against the
-    /// schema's `kind` column when `Some`; pass `None` to skip the
-    /// filter.
-    pub async fn find_symbols_by_name(
-        &self,
-        name: &str,
-        kind: Option<&str>,
-        limit: usize,
-    ) -> Result<Vec<SymbolRow>> {
-        let limit_clamped: i64 = limit.clamp(1, 256) as i64;
-        let conn = self.conn.lock().await;
-        let map_row = |row: &rusqlite::Row| -> rusqlite::Result<SymbolRow> {
-            Ok(SymbolRow {
-                corpus_id: row.get(0)?,
-                name: row.get(1)?,
-                qualified_name: row.get(2)?,
-                kind: row.get(3)?,
-                file_path: row.get(4)?,
-                line_start: row.get(5)?,
-                line_end: row.get(6)?,
-                language: row.get(7)?,
-            })
-        };
-        // Collect inside the same scope as `stmt` / `conn`. Returning
-        // a MappedRows out of a sub-block drops `stmt` before the
-        // iterator is consumed — recorded as an invariant in repo
-        // memory.
-        let rows: Vec<SymbolRow> = match kind {
-            Some(k) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT corpus_id, name, qualified_name, kind, file_path, \
-                                line_start, line_end, language \
-                         FROM symbols \
-                         WHERE name = ?1 AND kind = ?2 \
-                         ORDER BY corpus_id, file_path, line_start \
-                         LIMIT ?3",
-                    )
-                    .map_err(|e| Error::Database(format!("find_symbols_by_name prepare: {e}")))?;
-                let iter = stmt
-                    .query_map(params![name, k, limit_clamped], map_row)
-                    .map_err(|e| Error::Database(format!("find_symbols_by_name query: {e}")))?;
-                iter.filter_map(|r| r.ok()).collect()
-            }
-            None => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT corpus_id, name, qualified_name, kind, file_path, \
-                                line_start, line_end, language \
-                         FROM symbols \
-                         WHERE name = ?1 \
-                         ORDER BY corpus_id, file_path, line_start \
-                         LIMIT ?2",
-                    )
-                    .map_err(|e| Error::Database(format!("find_symbols_by_name prepare: {e}")))?;
-                let iter = stmt
-                    .query_map(params![name, limit_clamped], map_row)
-                    .map_err(|e| Error::Database(format!("find_symbols_by_name query: {e}")))?;
-                iter.filter_map(|r| r.ok()).collect()
-            }
-        };
-        Ok(rows)
-    }
-
     /// Find all symbols that the given symbol calls.
-    pub async fn find_callees(&self, symbol_name: &str) -> Result<(Vec<Callee>, StalenessCaution)> {
-        let resolved = self.resolve_symbol(symbol_name).await?;
+    pub async fn find_callees(
+        &self,
+        symbol_name: &str,
+        corpus: Option<&str>,
+    ) -> Result<(Vec<Callee>, StalenessCaution)> {
+        let resolved = self.resolve_symbol(symbol_name, corpus).await?;
         let Some(resolved) = resolved else {
             return Ok((vec![], StalenessCaution::None));
         };
@@ -931,13 +870,13 @@ impl ScipGraph {
                 .prepare(
                     "SELECT r.callee_symbol, r.file_path, r.line, r.ref_kind
                      FROM refs r
-                     WHERE r.caller_symbol = ?
+                     WHERE r.caller_symbol = ?1 AND (?2 IS NULL OR r.corpus_id = ?2)
                      ORDER BY r.file_path, r.line",
                 )
                 .map_err(|e| Error::Database(format!("find_callees prepare: {e}")))?;
 
             let result: Vec<Callee> = stmt
-                .query_map(params![resolved], |row| {
+                .query_map(params![resolved, corpus], |row| {
                     Ok(Callee {
                         symbol_name: row.get(0)?,
                         file_path: row.get(1)?,
@@ -977,14 +916,15 @@ impl ScipGraph {
         Ok((callees, caution))
     }
 
-    /// Find all symbols that call the given symbol.
+    /// Find all symbols that call the given symbol, within `corpus` when `Some`.
     /// `depth` is capped at 2: 1 = direct callers, 2 = callers of callers.
     pub async fn find_callers(
         &self,
         symbol_name: &str,
         depth: usize,
+        corpus: Option<&str>,
     ) -> Result<(Vec<Caller>, StalenessCaution)> {
-        let resolved = self.resolve_symbol(symbol_name).await?;
+        let resolved = self.resolve_symbol(symbol_name, corpus).await?;
         let Some(resolved) = resolved else {
             return Ok((vec![], StalenessCaution::None));
         };
@@ -1009,15 +949,16 @@ impl ScipGraph {
                     // file_path from refs is the source of truth.
                     let mut stmt = conn
                         .prepare(
-                            "SELECT r.caller_symbol, r.file_path, r.line, r.ref_kind, r.end_col
+                            "SELECT r.caller_symbol, r.file_path, r.line, r.ref_kind, r.end_col,
+                                    r.corpus_id
                              FROM refs r
-                             WHERE r.callee_symbol = ?
+                             WHERE r.callee_symbol = ?1 AND (?2 IS NULL OR r.corpus_id = ?2)
                              ORDER BY r.file_path, r.line",
                         )
                         .map_err(|e| Error::Database(format!("find_callers prepare: {e}")))?;
 
                     let result: Vec<Caller> = stmt
-                        .query_map(params![target], |row| {
+                        .query_map(params![target, corpus], |row| {
                             Ok(Caller {
                                 symbol_name: row.get(0)?,
                                 file_path: row.get(1)?,
@@ -1026,6 +967,7 @@ impl ScipGraph {
                                     &row.get::<_, String>(3).unwrap_or_default(),
                                 ),
                                 end_col: row.get(4).unwrap_or(-1),
+                                corpus_id: row.get(5)?,
                             })
                         })
                         .map_err(|e| Error::Database(format!("find_callers query: {e}")))?
@@ -1355,6 +1297,7 @@ impl ScipGraph {
             let rows: Vec<Caller> = stmt
                 .query_map(params![self.corpus_id, name, qualified], |row| {
                     Ok(Caller {
+                        corpus_id: self.corpus_id.clone(),
                         symbol_name: row.get(0)?,
                         file_path: row.get(1)?,
                         line: row.get(2)?,
@@ -2070,11 +2013,11 @@ impl ScipGraph {
         symbol_name: &str,
         max_depth: usize,
         max_symbols: usize,
+        corpus: Option<&str>,
     ) -> Result<BlastRadiusResult> {
         let max_depth = max_depth.clamp(1, 5);
         let max_symbols = max_symbols.clamp(1, 200);
-
-        let resolved = self.resolve_symbol(symbol_name).await?;
+        let resolved = self.resolve_symbol(symbol_name, corpus).await?;
         let Some(resolved) = resolved else {
             return Ok(BlastRadiusResult {
                 entries: vec![],
@@ -2103,16 +2046,16 @@ impl ScipGraph {
                     let conn = self.conn.lock().await;
                     let mut stmt = conn
                         .prepare(
-                            "SELECT DISTINCT r.caller_symbol, r.file_path, r.line
+                            "SELECT DISTINCT r.caller_symbol, r.file_path, r.line, r.corpus_id
                              FROM refs r
-                             WHERE r.callee_symbol = ?
+                             WHERE r.callee_symbol = ?1 AND (?2 IS NULL OR r.corpus_id = ?2)
                              ORDER BY r.file_path, r.line",
                         )
                         .map_err(|e| Error::Database(format!("blast_radius prepare: {e}")))?;
 
-                    let result: Vec<(String, String, i32)> = stmt
-                        .query_map(params![target], |row| {
-                            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                    let result: Vec<(String, String, i32, String)> = stmt
+                        .query_map(params![target, corpus], |row| {
+                            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
                         })
                         .map_err(|e| Error::Database(format!("blast_radius query: {e}")))?
                         .filter_map(|r| r.ok())
@@ -2120,12 +2063,13 @@ impl ScipGraph {
                     result
                 };
 
-                for (caller, file, line) in rows {
+                for (caller, file, line, corpus_id) in rows {
                     if visited.contains(&caller) {
                         continue;
                     }
                     visited.insert(caller.clone());
                     entries.push(BlastEntry {
+                        corpus_id,
                         is_test: is_test_path(&file),
                         symbol_name: caller.clone(),
                         file_path: file,
@@ -2713,14 +2657,14 @@ mod integrity_tests {
             .unwrap();
         assert_eq!(g.symbol_count().await, 1);
         assert!(
-            g.find_symbols_by_name("old_a", None, 8)
+            g.find_symbols_by_name("old_a", None, None, 8)
                 .await
                 .unwrap()
                 .is_empty(),
             "replace_all must clear prior rows"
         );
         assert!(!g
-            .find_symbols_by_name("new_c", None, 8)
+            .find_symbols_by_name("new_c", None, None, 8)
             .await
             .unwrap()
             .is_empty());
@@ -2752,21 +2696,21 @@ mod integrity_tests {
             "a.rs replaced (2→1), b.rs kept (1)"
         );
         assert!(
-            g.find_symbols_by_name("a_one", None, 8)
+            g.find_symbols_by_name("a_one", None, None, 8)
                 .await
                 .unwrap()
                 .is_empty(),
             "old a.rs rows gone"
         );
         assert!(
-            !g.find_symbols_by_name("a_new", None, 8)
+            !g.find_symbols_by_name("a_new", None, None, 8)
                 .await
                 .unwrap()
                 .is_empty(),
             "new a.rs row present"
         );
         assert!(
-            !g.find_symbols_by_name("b_one", None, 8)
+            !g.find_symbols_by_name("b_one", None, None, 8)
                 .await
                 .unwrap()
                 .is_empty(),
@@ -2869,14 +2813,14 @@ mod integrity_tests {
 
         // Symbol def updated...
         assert!(
-            g.find_symbols_by_name("a_renamed", None, 8)
+            g.find_symbols_by_name("a_renamed", None, None, 8)
                 .await
                 .unwrap()
                 .len()
                 == 1
         );
         assert!(g
-            .find_symbols_by_name("a_one", None, 8)
+            .find_symbols_by_name("a_one", None, None, 8)
             .await
             .unwrap()
             .is_empty());
@@ -2897,7 +2841,7 @@ mod integrity_tests {
         .await
         .unwrap();
         // Findable (name lookup is corpus-agnostic) and stored under projA.
-        let hits = g.find_symbols_by_name("fn_a", None, 8).await.unwrap();
+        let hits = g.find_symbols_by_name("fn_a", None, None, 8).await.unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(
             hits[0].corpus_id, "projA",
@@ -2914,12 +2858,18 @@ mod integrity_tests {
         .await
         .unwrap();
         assert_eq!(
-            g.find_symbols_by_name("fn_a", None, 8).await.unwrap().len(),
+            g.find_symbols_by_name("fn_a", None, None, 8)
+                .await
+                .unwrap()
+                .len(),
             1,
             "projA untouched"
         );
         assert_eq!(
-            g.find_symbols_by_name("fn_b", None, 8).await.unwrap().len(),
+            g.find_symbols_by_name("fn_b", None, None, 8)
+                .await
+                .unwrap()
+                .len(),
             1
         );
     }
@@ -3255,7 +3205,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (callees, caution) = graph.find_callees("auth_middleware").await.unwrap();
+        let (callees, caution) = graph.find_callees("auth_middleware", None).await.unwrap();
 
         assert_eq!(caution, StalenessCaution::None);
         assert_eq!(callees.len(), 2);
@@ -3273,7 +3223,10 @@ mod tests {
             .await
             .unwrap();
 
-        let (callers, caution) = graph.find_callers("issue_token_pair", 1).await.unwrap();
+        let (callers, caution) = graph
+            .find_callers("issue_token_pair", 1, None)
+            .await
+            .unwrap();
 
         assert_eq!(caution, StalenessCaution::None);
         assert_eq!(callers.len(), 2);
@@ -3346,12 +3299,12 @@ mod tests {
         graph.ingest_symbols_and_refs(symbols, refs).await.unwrap();
 
         // Depth 1: callers of c = [b]
-        let (callers_1, _) = graph.find_callers("c", 1).await.unwrap();
+        let (callers_1, _) = graph.find_callers("c", 1, None).await.unwrap();
         assert_eq!(callers_1.len(), 1);
         assert_eq!(callers_1[0].symbol_name, "b");
 
         // Depth 2: callers of c = [b, a]
-        let (callers_2, _) = graph.find_callers("c", 2).await.unwrap();
+        let (callers_2, _) = graph.find_callers("c", 2, None).await.unwrap();
         assert_eq!(callers_2.len(), 2);
         let names: Vec<&str> = callers_2.iter().map(|c| c.symbol_name.as_str()).collect();
         assert!(names.contains(&"a"));
@@ -3366,7 +3319,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (callees, caution) = graph.find_callees("nonexistent_xyz").await.unwrap();
+        let (callees, caution) = graph.find_callees("nonexistent_xyz", None).await.unwrap();
         assert!(callees.is_empty());
         assert_eq!(caution, StalenessCaution::None);
     }
@@ -3383,7 +3336,7 @@ mod tests {
         graph.mark_file_stale("src/middleware/auth.rs").await;
 
         // Query for a symbol whose callees include that file.
-        let (_, caution) = graph.find_callees("auth_middleware").await.unwrap();
+        let (_, caution) = graph.find_callees("auth_middleware", None).await.unwrap();
 
         match caution {
             StalenessCaution::SomeCallSitesMayBeStale { stale_files } => {
@@ -3407,7 +3360,7 @@ mod tests {
         graph.record_export().await;
         assert_eq!(graph.stale_file_count().await, 0);
 
-        let (_, caution) = graph.find_callees("auth_middleware").await.unwrap();
+        let (_, caution) = graph.find_callees("auth_middleware", None).await.unwrap();
         assert_eq!(caution, StalenessCaution::None);
     }
 
@@ -3432,13 +3385,13 @@ mod tests {
 
         // Exact match.
         let resolved = graph
-            .resolve_symbol("my_crate::module::my_fn")
+            .resolve_symbol("my_crate::module::my_fn", None)
             .await
             .unwrap();
         assert_eq!(resolved, Some("my_crate::module::my_fn".to_string()));
 
         // Suffix match.
-        let resolved = graph.resolve_symbol("my_fn").await.unwrap();
+        let resolved = graph.resolve_symbol("my_fn", None).await.unwrap();
         assert_eq!(resolved, Some("my_crate::module::my_fn".to_string()));
     }
 
@@ -3486,7 +3439,10 @@ mod tests {
             .unwrap();
 
         // blast_radius of issue_token_pair should find login_handler and refresh_handler.
-        let result = graph.blast_radius("issue_token_pair", 1, 50).await.unwrap();
+        let result = graph
+            .blast_radius("issue_token_pair", 1, 50, None)
+            .await
+            .unwrap();
         let names: Vec<&str> = result
             .entries
             .iter()
@@ -3554,7 +3510,7 @@ mod tests {
         graph.ingest_symbols_and_refs(symbols, refs).await.unwrap();
 
         // Should terminate without infinite loop.
-        let result = graph.blast_radius("b", 5, 50).await.unwrap();
+        let result = graph.blast_radius("b", 5, 50, None).await.unwrap();
         // 'a' calls 'b', so 'a' is a depth-1 caller of 'b'.
         // Then 'b' calls 'a' but 'b' is already visited — cycle cut.
         assert_eq!(result.entries.len(), 1);
@@ -3603,7 +3559,7 @@ mod tests {
         }
         graph.ingest_symbols_and_refs(symbols, refs).await.unwrap();
 
-        let result = graph.blast_radius("root", 1, 10).await.unwrap();
+        let result = graph.blast_radius("root", 1, 10, None).await.unwrap();
         assert!(result.capped, "should be capped");
         assert_eq!(result.entries.len(), 10);
     }
@@ -3672,7 +3628,10 @@ mod tests {
         // Mark the file where callers live as stale.
         graph.mark_file_stale("src/routes/auth.rs").await;
 
-        let result = graph.blast_radius("issue_token_pair", 1, 50).await.unwrap();
+        let result = graph
+            .blast_radius("issue_token_pair", 1, 50, None)
+            .await
+            .unwrap();
         assert!(
             matches!(
                 result.caution,

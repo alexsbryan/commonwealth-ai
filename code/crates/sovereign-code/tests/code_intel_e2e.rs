@@ -546,3 +546,6 @@ fn percentile(times: &[u128], p: usize) -> u128 {
 
 #[path = "code_intel_e2e/demo_auth.rs"]
 mod demo_auth;
+
+#[path = "code_intel_e2e/corpus_scope.rs"]
+mod corpus_scope;

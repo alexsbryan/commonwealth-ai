@@ -64,7 +64,8 @@ use crate::provider::AtlasProvider;
 pub struct SummaryQuery<'a> {
     /// The question, in the space the seed tables were built in.
     pub question_embedding: &'a [f32],
-    /// How many summaries the row's budget still has room for.
+    /// How many summaries to supply at most: the row's whole quota (see
+    /// [`compose`] rule 1).
     pub want: usize,
     /// The atlases in scope. The `Raptor` arm asks each for its chunk corpus.
     pub graphs: &'a [&'a dyn AtlasProvider],
@@ -193,9 +194,13 @@ async fn raptor_rows(q: &SummaryQuery<'_>) -> Vec<SummaryNode> {
 ///
 /// The three rules that make several sources behave as one producer:
 ///
-/// 1. **One budget.** Each source is asked only for the room that is left, so
-///    the total can never exceed the row's `Summary` quota however many
-///    sources are listed. This is the rule whose absence cost −7.5/66.
+/// 1. **One budget.** Composition stops at the row's `Summary` quota however
+///    many sources are listed — the rule whose absence cost −7.5/66. Each
+///    source is asked for the WHOLE quota, not the room left: an earlier
+///    source's picks reappear in a later one and dedupe away, and asking for
+///    the room left under-filled by exactly that overlap (pilot trajectory
+///    rows, 2026-10-03: 3 walk-reached + 5 asked of the cosine arm, 5-7
+///    served of 8).
 /// 2. **One entry per summary.** Deduped on the summary's own content-derived
 ///    id, so an earlier source wins and a migrated corpus that composes both
 ///    is idempotent.
@@ -212,13 +217,12 @@ pub async fn compose(
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut served: SourceYield = sources.iter().map(|s| (*s, 0usize)).collect();
     for source in sources {
-        let want = budget.saturating_sub(kept.len());
-        if want == 0 {
+        if kept.len() >= budget {
             break;
         }
         let q = SummaryQuery {
             question_embedding: q_embedding,
-            want,
+            want: budget,
             graphs,
             reached,
         };
@@ -260,8 +264,8 @@ mod tests {
     }
 
     /// ONE BUDGET across every source, which is the rule whose absence cost
-    /// −7.5/66. Failing input: ask each source for `budget` instead of for the
-    /// room that is left, and two sources return twice the cap.
+    /// −7.5/66. Failing input: drop the stop at `kept.len() >= budget`, and
+    /// two sources return twice the cap.
     #[tokio::test]
     async fn several_sources_share_one_budget() {
         let reached = vec![node("a", 0.9), node("b", 0.8), node("c", 0.7)];

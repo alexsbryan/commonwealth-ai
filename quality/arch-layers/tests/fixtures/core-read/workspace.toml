@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+    "core-probe",
+    "engine-probe",
+    "corpus-index",
+    "corpus-engine-yield",
+]

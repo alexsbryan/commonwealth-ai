@@ -677,6 +677,7 @@ fn caller() {
     fn a_site_whose_line_no_longer_names_the_symbol_is_dropped_not_pointed_at() {
         let callers = vec![
             Caller {
+                corpus_id: String::new(),
                 symbol_name: "caller".into(),
                 file_path: "a.rs".into(),
                 line: 6,
@@ -684,6 +685,7 @@ fn caller() {
                 end_col: 18,
             },
             Caller {
+                corpus_id: String::new(),
                 symbol_name: "drifted".into(),
                 file_path: "b.rs".into(),
                 line: 99,
@@ -705,6 +707,7 @@ fn caller() {
     #[test]
     fn the_declaration_itself_is_never_a_destination() {
         let callers = vec![Caller {
+            corpus_id: String::new(),
             symbol_name: "helper".into(),
             file_path: "decl.rs".into(),
             line: 1,
@@ -722,6 +725,7 @@ fn caller() {
     fn a_jump_list_past_the_cap_reports_truncation_rather_than_shortening_silently() {
         let callers: Vec<Caller> = (0..MAX_SITES as i32 + 5)
             .map(|i| Caller {
+                corpus_id: String::new(),
                 symbol_name: "c".into(),
                 file_path: format!("f{i}.rs"),
                 line: i,

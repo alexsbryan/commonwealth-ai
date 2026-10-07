@@ -59,6 +59,18 @@ const MANUFACTURED: &[(&str, &str)] = &[
     // Atlas claim atoms injected as virtual chunks when a question is an
     // overview ask and the pool has no anchor.
     ("atom_enum_claim", "an atlas claim atom, not an indexed row"),
+    // 7bc206fd1. A list question over a declared ontology answered by a typed
+    // query: code runs it over the atlas's declared records and renders the
+    // matched rows as ONE table chunk, each row citing the chunks behind it
+    // (`sovereign-core::runtime::retrieval::atom_enum_typed`). The table is
+    // computed, not stored, so no index holds it. It comes off this list the
+    // day the cited chunks are fetched back through a `CorpusIndex` door and
+    // enter the pool as `Acquired` rows beside the table, rather than being
+    // carried as citations inside one manufactured chunk.
+    (
+        "atom_enum_typed_table",
+        "a table computed from the atlas's declared records, not an indexed row",
+    ),
     // `raptor_summary` was here until ei-5c (2026-09-07) and came off the list
     // the way this test's own message says a producer should: the code went, so
     // the row went, in the same commit. It was the retrieval-time RAPTOR

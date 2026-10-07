@@ -44,8 +44,9 @@
 pub use understanding_atlas::enrichment::ontology::clock;
 pub use understanding_atlas::enrichment::ontology::type_index;
 mod validate;
+mod validate_derived;
 
-pub use understanding_atlas::enrichment::ontology::clock::section_date;
+pub use understanding_atlas::enrichment::ontology::clock::{metadata_date, section_date};
 pub use understanding_atlas::enrichment::ontology::type_index::TypeIndex;
 pub use validate::{
     validate_block, OntologyValidation, MAX_ATTRS_PER_TYPE, MAX_ENUM_VALUES, MAX_TYPES_PER_KIND,
@@ -58,11 +59,13 @@ pub use crate::recipe_ontology::language::{OntologyLanguage, OntologyLanguageReg
 
 // The parsed policy data and the author-facing declaration types — the leaf.
 pub use understanding_vocab::ontology::decl::{
-    AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Deontic, DeriveDecl, Force, OntologyTypeDecl,
-    OntologyV1, OntologyVocabulary, SourceDecl, SupersessionClock, TensionDecl, TypeKind,
-    VoicesDecl,
+    AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Deontic, DeriveDecl, DocumentFieldsDecl,
+    FieldReader, Force, MetadataSourceDecl, OntologyTypeDecl, OntologyV1, OntologyVocabulary,
+    SourceDecl, SourceRef, SupersessionClock, TableSourceDecl, TensionDecl, TypeKind, VoicesDecl,
 };
+pub use understanding_vocab::ontology::derived;
 pub use understanding_vocab::ontology::{
-    AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
-    OntologyPolicies, ProsePolicy, QuestionKind, SeedPolicy, ShapePolicy, WalkPolicy,
+    AssertionPolicy, ChangePolicy, DerivationPolicy, DocumentStamp, IdentityPolicy,
+    NavigationPolicy, OntologyPolicies, ProsePolicy, QuestionKind, SeedPolicy, ShapePolicy,
+    WalkPolicy, DOCUMENT_COUNT_ATTR, DOCUMENT_DATE_ATTR, DOCUMENT_ID_ATTR, DOCUMENT_THREAD_ATTR,
 };

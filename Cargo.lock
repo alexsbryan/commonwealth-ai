@@ -228,7 +228,11 @@ name = "arch-layers"
 version = "0.8.0"
 dependencies = [
  "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
  "toml 0.8.2",
+ "tracing",
  "workspace-hack",
 ]
 

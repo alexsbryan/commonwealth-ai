@@ -288,6 +288,17 @@ impl Runtime {
             .filter(|s| !s.is_empty())?
             .to_string();
 
+        // ---- Stage 1b: a corpus that DECLARED its types answers the list in
+        // code (`atom_enum_typed.rs`); Stage 2 is the named fallback.
+        if !vocabs.is_empty() {
+            match self.typed_enumeration(message, &graphs).await {
+                Ok(table) => return Some(table),
+                Err(why) => {
+                    tracing::info!(target: "retrieval_audit", event = "atom_enum_typed_fallback", reason = why, "typed answer not taken; degree-ranked enumeration instead")
+                }
+            }
+        }
+
         // ---- Stage 2: enumerate top-salience atoms of that type from
         // the atlas GRAPH. The graph is failure-immune by construction:
         // `AtlasGraph::load_from_disk` inserts every atom, so no-role
@@ -635,11 +646,7 @@ impl Runtime {
         // person enumeration when re-searching). Scored descending by
         // rank so the most-central members sit highest; SOVEREIGN_ATOM_
         // ENUM_SCORE tunes the band relative to base cosine hits.
-        let enum_score: f32 = std::env::var("SOVEREIGN_ATOM_ENUM_SCORE")
-            .ok()
-            .and_then(|v| v.parse::<f32>().ok())
-            .filter(|&s| s > 0.0)
-            .unwrap_or(0.04);
+        let enum_score = super::atom_enum_typed::atom_enum_seed_score();
 
         // Atlas DIRECTS retrieval. For each enumerated entity, fetch its
         // REAL evidence chunk (`first_appearance.chunk_id`) from the
@@ -774,11 +781,7 @@ impl Runtime {
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&k| k > 0 && k <= 100)
             .unwrap_or(16);
-        let enum_score: f32 = std::env::var("SOVEREIGN_ATOM_ENUM_SCORE")
-            .ok()
-            .and_then(|v| v.parse::<f32>().ok())
-            .filter(|&s| s > 0.0)
-            .unwrap_or(0.04);
+        let enum_score = super::atom_enum_typed::atom_enum_seed_score();
         // ONE decider for this scope — see `resolve_atom_enum_scope`. An
         // absent scope resolves to the corpora this turn actually reached,
         // never to every corpus installed on the box.

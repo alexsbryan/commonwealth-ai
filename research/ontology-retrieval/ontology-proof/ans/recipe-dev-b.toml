@@ -75,10 +75,16 @@ name = "hoard"
 kind = "entity"
 description = "A group of coins buried and found together, named by findspot and year of discovery: the Demanhur hoard, Asia Minor 1964."
 attributes = [
-  { name = "findspot", type = "text" },
-  { name = "found",    type = "time" },
-  { name = "buried",   type = "time", range = true },
+  { name = "findspot", type = "text", description = "the place where the hoard was found (a place name, region or country)" },
+  { name = "found",    type = "time", description = "when the hoard was discovered (a year)" },
+  { name = "buried",   type = "time", range = true, description = "when the hoard was buried (a year, or a span of years)" },
+  { name = "igch",     type = "text", description = "the hoard's IGCH catalogue number, digits only: 1441 for \"IGCH 1441\"" },
 ]
+# IGCH is the catalogue that identifies a hoard. Without the key, name shape
+# decided: "Asia Minor 1964 (IGCH 1441)" absorbed three other Asia Minor hoards
+# (IGCH 1437, 1444, the 1970 find) by shared tokens (resolution rule 3), 14 K2
+# misses on ft-ans-dev-b.
+identity = ["igch"]
 
 [[enrichment.ontology.types]]
 name = "coin"
@@ -88,10 +94,10 @@ attributes = [
   { name = "ruler",        type = "ref",      of = "ruler" },
   { name = "mint",         type = "ref",      of = "mint" },
   { name = "hoard",        type = "ref",      of = "hoard" },
-  { name = "denomination", type = "text" },
-  { name = "metal",        type = "text",     values = ["gold", "silver", "billon", "copper"] },
-  { name = "weight",       type = "quantity", unit = "g" },
-  { name = "struck",       type = "time",     range = true },
+  { name = "denomination", type = "text", description = "the coin's denomination (stater, tetradrachm, drachm ...)" },
+  { name = "metal",        type = "text",     values = ["gold", "silver", "billon", "copper"], description = "the coin's metal" },
+  { name = "weight",       type = "quantity", unit = "g", description = "the coin's weight" },
+  { name = "struck",       type = "time",     range = true, description = "when the coin was struck (a year, or a span of years)" },
 ]
 
 [[enrichment.ontology.types]]

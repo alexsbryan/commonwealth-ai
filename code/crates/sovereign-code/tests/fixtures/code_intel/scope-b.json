@@ -1,0 +1,24 @@
+{
+ "corpus_id": "scope-b",
+ "embedding_dimensions": 8,
+ "license": "private",
+ "rows": [
+  {
+   "source_doc_id": "src/b_foo.rs",
+   "title": "Foo",
+   "url": null,
+   "metadata": {
+    "symbol_name": "Foo",
+    "symbol_kind": "struct",
+    "file_path": "src/b_foo.rs",
+    "line_start": 0,
+    "line_end": 0,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "Corpus b's Foo."
+   },
+   "content": "Foo\n\n/// Corpus b's Foo.\npub struct Foo;"
+  }
+ ]
+}

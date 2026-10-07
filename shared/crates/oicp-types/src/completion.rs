@@ -465,7 +465,11 @@ impl CompletionRequest {
     /// mesh scheduler and the local slot picker share one detector.
     pub fn forced_choice_candidates(&self) -> Option<Vec<String>> {
         let so = self.structured_output.as_ref()?;
-        if so.get("x_forced_choice").and_then(|v| v.as_bool()) != Some(true) {
+        if so
+            .get(crate::forced_choice::SENTINEL)
+            .and_then(|v| v.as_bool())
+            != Some(true)
+        {
             return None;
         }
         let cands: Vec<String> = so

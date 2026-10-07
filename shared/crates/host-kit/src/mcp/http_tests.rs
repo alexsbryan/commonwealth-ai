@@ -6,6 +6,23 @@ use crate::mcp::{McpDispatcher, McpToolHost, ToolOutcome};
 use serde_json::json;
 use std::sync::Mutex;
 
+/// Serve `app` on a loopback port: its base URL, and the client the tests
+/// post with — this file's one HTTP-client construction site, as the egress
+/// census registers it.
+async fn serve(app: axum::Router) -> (String, reqwest::Client) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap();
+    });
+    (base, reqwest::Client::new())
+}
+
 /// `notify_tools_list_changed` delivers the same frame to every subscriber:
 /// independent cursors, broadcast fan-out. (Moved from the daemon's
 /// mcp_router with the notifier.)
@@ -44,7 +61,7 @@ impl McpToolHost for SessionEcho {
     fn instructions(&self) -> Option<String> {
         None
     }
-    fn list(&self) -> Value {
+    fn list(&self, _ctx: &McpRequestContext) -> Value {
         json!([{ "name": "whoami" }])
     }
     async fn call(
@@ -82,17 +99,7 @@ async fn http_framing_answers_posts_and_streams_notifications() {
         McpDispatcher::new("fake", "0", SessionEcho, Arc::clone(&calls)).list_changed(true);
     let notifier = McpNotifier::new();
     let app = routes(Arc::new(dispatcher), notifier.clone());
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move {
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap();
-    });
-    let client = reqwest::Client::new();
+    let (base, client) = serve(app).await;
 
     let init: Value = client
         .post(format!("{base}/mcp"))
@@ -144,4 +151,115 @@ async fn http_framing_answers_posts_and_streams_notifications() {
         }
     }
     assert!(seen.contains("event: endpoint\ndata: /mcp"), "{seen}");
+}
+
+/// Holds corpus `a` alone and echoes the scope a call arrived with.
+struct ScopeEcho;
+
+impl McpToolHost for ScopeEcho {
+    fn instructions(&self) -> Option<String> {
+        None
+    }
+    fn list(&self, ctx: &McpRequestContext) -> Value {
+        json!([{ "name": format!("read_only={}", ctx.read_only) }])
+    }
+    fn admit(&self, ctx: &McpRequestContext) -> Result<(), String> {
+        match ctx.corpus.as_deref() {
+            None | Some("a") => Ok(()),
+            Some(other) => Err(format!("no corpus `{other}`; held: a")),
+        }
+    }
+    async fn call(
+        &self,
+        _name: &str,
+        _args: &Value,
+        ctx: &McpRequestContext,
+    ) -> Option<ToolOutcome> {
+        Some(ToolOutcome::answer(
+            format!("{:?}/{}", ctx.corpus, ctx.read_only),
+            None,
+        ))
+    }
+}
+
+/// The two scope headers over a real socket: each reaches the host's list and
+/// call; a corpus the host does not hold is -32602 before any tool runs, and
+/// an effect cap the framing does not know is refused at the edge rather than
+/// read as no cap. FAILING INPUT for the last: an edge that maps an unknown
+/// value to `read_only: false` answers 200 and lists the host's tools.
+#[tokio::test]
+async fn the_scope_headers_reach_the_host_and_a_bad_one_is_refused() {
+    let app = routes(
+        Arc::new(McpDispatcher::new("fake", "0", ScopeEcho, ())),
+        McpNotifier::new(),
+    );
+    let (base, client) = serve(app).await;
+    let post = |headers: &'static [(&'static str, &'static str)], method: &'static str| {
+        let mut req = client.post(format!("{base}/mcp"));
+        for (k, v) in headers {
+            req = req.header(*k, *v);
+        }
+        req.json(&json!({ "jsonrpc": "2.0", "id": 1, "method": method,
+                          "params": { "name": "x" } }))
+            .send()
+    };
+
+    let call: Value = post(
+        &[("x-svrn-corpus", "a"), ("x-svrn-effects", "read")],
+        "tools/call",
+    )
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(
+        call["result"]["content"][0]["text"], "Some(\"a\")/true",
+        "{call}"
+    );
+
+    let listed: Value = post(&[("x-svrn-effects", "read")], "tools/list")
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        listed["result"]["tools"][0]["name"], "read_only=true",
+        "{listed}"
+    );
+
+    let unscoped: Value = post(&[], "tools/call").await.unwrap().json().await.unwrap();
+    assert_eq!(
+        unscoped["result"]["content"][0]["text"], "None/false",
+        "{unscoped}"
+    );
+
+    let unknown: Value = post(&[("x-svrn-corpus", "nope")], "tools/call")
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(unknown["error"]["code"], -32602, "{unknown}");
+    assert!(
+        unknown["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("held: a"),
+        "{unknown}"
+    );
+
+    let typo = post(&[("x-svrn-effects", "reed")], "tools/list")
+        .await
+        .unwrap();
+    assert_eq!(typo.status(), reqwest::StatusCode::BAD_REQUEST);
+    let typo: Value = typo.json().await.unwrap();
+    assert!(
+        typo["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("`reed`"),
+        "{typo}"
+    );
 }

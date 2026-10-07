@@ -211,7 +211,22 @@ thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
 - `index/` — LanceDB (IVF-PQ) + Tantivy FTS, `IndexMeta`, `ScopeMeta`.
 - `enrichment/` — v1 field engine, v2 atlas, `reconciliation/` (multi-origin
   merge with reversible oplog; signals are identity-grade only).
-- `atlas_traversal/`, `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
+- `atlas_traversal/` (pure half in `understanding-atlas`) — question →
+  `QueryPlan` → `traverse` → brief, no model. Every declared-type question
+  runs through ONE executor, `typed::execute`: a `TypedQuery` (target type;
+  filters `eq`/`lt`/`gt`/`contains`, times as signed-year intervals; relation
+  constraints over a declared relation type or a `<type>.<attr>` ref, a named
+  far end matched by folded name or alias, never a substring; a depth-2
+  `where`; `none`/`count`/`argmax`/`argmin`/`tally`) answers with a
+  `TypedTable` whose rows carry evidence chunk ids, which the brief prints
+  as a cited table with a count line. An unset attribute sets the atom
+  aside as unjudged and says so. `svrn enrich atlas-query <corpus> --typed
+  '<json>'` runs one as written (`--json`: rows `{name, atom_id,
+  attributes, evidence}`). `typed_prompt::query_grammar` renders a declared
+  ontology as the documentation and per-type JSON Schema a model writes one
+  against (the query-layer probe's, byte for byte); `AtlasGraph::typed_answer`
+  runs the same executor over a loaded graph.
+- `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
   `alignment_projector.rs`.
 
 **The wall clock has one decider per dependency island.**
@@ -360,6 +375,13 @@ in: a `[[package]]` row's crates under the program's own directory, leaves
 under `shared/`, distributions under `distributions/`, clients under
 `clients/` and tooling under `quality/`. `cargo xtask boundary-gate` fails a
 member outside its row's directory, and a member no row claims.
+The test-only `quality/arch-layers/examples/agent_admission.rs` admits managed
+dependency proposals after candidate-bound checks. Its `--episode core-read`
+observes historical source, probes the existing interface, and checks a typed
+extension artifact with the compiler and package policy before receipt-bound
+acceptance. This is a source-bound compiler projection, not an engine runtime
+proof. Controls live in `quality/arch-layers/tests/agent_admission.rs` and its
+core-read sibling; it adds no product API.
 `baselines/` holds machine-written ratchet baselines, regenerated only via
 `--update-baseline`, banked via `--tighten`. `cargo xtask quality` runs every
 fast local gate with one table carrying FOUR verdicts: passed / failed /
@@ -554,7 +576,80 @@ question the pipeline asks about a type is a method on the resolved
   recipe-declared genre from a versioned `[enrichment.ontology]` block. A
   version-1 declaration drives the Phase-1 prompt, the generated response
   schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
-  the navigation map. **Both tension axes degrade by REPORTING, never by
+  the navigation map; a relation declared with both ends also gets one focused
+  Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`).
+  `change.document` names per-document metadata fields; resolution stamps each
+  claim with `document_date` (ISO 8601), `document_thread` and `document_id`
+  from the ONE document its evidence anchor lands in
+  (`enrichment/atlas/resolution_documents.rs`, rows from
+  `corpus_io::section_documents`), and records a claim it cannot place in
+  `resolution_failures.json` instead of guessing. An entity type's
+  `source = { metadata = [...], attributes = {...} }` (`MetadataSourceDecl`)
+  projects one atom per distinct identity value read from those same rows'
+  fields through a closed reader set (`address`, `domain`, `display_name`,
+  `value`; `enrichment/atlas/resolution_sources.rs`), provenance
+  `SignalKind::DocumentField`, id `exact_entity_content_hash` of the value; in
+  Phase 3a the reconciler's strict `ExternalIdSignal` names the model atoms
+  carrying that value and the resolver's `merge_into_existing` folds them in,
+  counted on the resolve step's output. A source's `refs` (`SourceRef`) link a
+  declared `ref` attribute to another sourced type's atom by the identity value
+  a reader reads on the same mailbox (Contact -> Account: `employer = { of =
+  "company", reader = "domain" }`), linked after every type is projected;
+  attributes merge first-wins, so a model's raw name never displaces the link.
+  A `domain`-read identity value at a mailbox provider (the bundled
+  `mailbox_providers` asset, free-email-domains at a pinned commit, or a
+  subdomain of a listed domain) is never projected and is counted as
+  `providers`, so no recipe lists ISPs to keep a contact's account honest.
+  RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
+  puts each statement of one document into an open record of one declared
+  type, or opens one. An equal declared `identity` key decides without a call;
+  so does an `identity_evidential` document field (a `change.document` stamp,
+  read by `read_stamp`, the one reader claim stamping uses too) whose measured
+  precision clears the type's `identity_bar` and whose value exactly one record
+  from an earlier document holds (`resolve_records/fields.rs`,
+  `Decision::Field`); otherwise ONE grammar-constrained call per document, given the type's
+  `identity_criterion`, the candidates the proposers offered
+  (`resolve_records/propose.rs`: the records of the document's declared
+  thread, `change.document.thread`, then TF-IDF over documents already
+  resolved; each candidate shown with its `Reason`s) and the answer threads,
+  wording and similarity alone propose (`ProposalRule`), partitions the
+  document's statements into particulars, each the same as one candidate or
+  none, with a passage per statement code must find in the document.
+  `--answer proposed` takes that proposed answer with no call: the zero-model
+  floor a model answer is held to, judged and folded by the same code.
+  `--answer select` (`resolve_records/select.rs`) asks instead one forced
+  choice per statement, in document order, over the shown candidates and the
+  records this document opened, read as a distribution in one forward pass and
+  kept on the outcome (`Choice`); the argmax decides (`Decision::Selected`),
+  Ring 0 of `research/ontology-apps/resolve-prereg.md`. The closed
+  A type's `identity_necessary` attributes (each with declared `values`) are READ
+  per asked statement as one forced choice over those values
+  (`resolve_records/read.rs`); a candidate whose value differs is not offered.
+  `identity_evidential` also weighs `model_choice` and `proposed_answer` at their
+  measured precision: of those that name a candidate, the more precise that
+  clears `identity_bar` decides (`Decision::Proposed` for the proposed answer),
+  and a choice below the bar is never asked. `--answer reason` reads the same
+  choice after the model's own bounded reasoning (`reasoned_choice`).
+  `Decision` is `Key | Field | Cited | Selected | Proposed | Opened`; anything else is a counted `Refusal`,
+  never defaulted. Records keep the passage around each statement, which is
+  what later calls compare. `svrn enrich resolve-statements` runs it alone over
+  supplied statements (the gold-mention setting). The atlas build runs it after
+  3b (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
+  as the ONE decider of every entity type that declares an `identity_criterion`
+  and no `source` (`decides`): its statements are the claims of each kind whose
+  `subject` is the type, placed by their anchor in the one document `locate`
+  finds; documents go in clock order under `Answerer::Select` with the adopted
+  proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
+  MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
+  statement, and each claim's subject its statement's record. 3b leaves such a
+  subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
+  retired with every reference to them, dropped and recorded, never repointed.
+  Decisions land in `atlas/resolve_decisions.jsonl`. Around it run the declared
+  derived attributes (`enrichment/atlas/resolution_derived.rs`; ONTOLOGY_PRIMITIVES
+  §8): paths over `subject`, `document`, source fields (the `Participants` the
+  source projection records) and refs, filtered by sets, combined by a fold from a
+  closed registry; claim attributes before RESOLVE, a decided type's after, each
+  outcome typed in `atlas/derived_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at
@@ -562,7 +657,9 @@ question the pipeline asks about a type is a method on the resolved
 - **`tiered`** — three progressive tiers (T1 embeddings → T2 entity-graph +
   PPR → T3 RAPTOR cluster tree). The RAPTOR builder is in
   `sovereign-tools/src/raptor_atlas.rs`, injected via
-  `TieredEnrichmentProvider` to avoid a cyclic dep. GLiNER augments the
+  `TieredEnrichmentProvider` to avoid a cyclic dep. A summary call the host
+  sheds comes back until `SHED_WAIT_CAP` (10 min) instead of taking the
+  extractive floor. GLiNER augments the
   conversation path through the `LabeledEntityExtractor` seam. **The NER seam
   is input-bounded** — `BoundedInputs` caps batches at 16 chunks and holds
   back anything over 2,048 chars; an over-cap chunk is REPORTED
@@ -729,7 +826,10 @@ accounting, a concurrent bounded claim fan-out, an audit pass with a plan and
 an outcome, a citation stage whose support decider is the gate's own judge,
 and a value-presence veto. Every fail-open exit names WHY at one site. Judges
 run against ONE register, enforced by `cargo xtask judge-funnel-gate`, and a
-register change is priced in both directions or it is not judged.
+register change is priced in both directions or it is not judged. The
+forced-choice body itself is built in one place for every subsystem,
+`oicp_types::forced_choice::schema` beside its detector, and each caller issues
+it through a census (`gate_call` here, RESOLVE's `decision_call` in ingest).
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER
@@ -742,6 +842,11 @@ late summaries and prompt admission; the pipeline's `scope_audit` is not the
 final prompt pool. Atlas grounding reports raw request counts separately
 from the pipeline's chunk-equivalent injection ledger because one request can
 yield multiple passages.
+`atom_enum` (opt-in `SOVEREIGN_ATOM_ENUM=1`) answers a list question its
+Stage-1 gate calls ENUMERATE; when a corpus in scope declared types, the model
+writes a typed query (`atom_enum_typed.rs`, primary slot, schema-constrained)
+and the executed, cited table enters the pool as one `source=atom-enum`
+chunk, with the degree-ranked entity fetch as the named fallback.
 
 **An answer over missing knowledge says so, and CODE guarantees it.**
 `UnavailabilityReason` is a closed enum, `corpus_unavailability()` is the one
@@ -858,6 +963,25 @@ knowledge server (docs/internal/FIVE_PROGRAMS.md §2). Tools under
 (`callers`, `callees`, `blast_radius`), watchers, notes,
 drift, capability docs, project context, session reflection, and work-atlas
 coordination (`declare_scope`, `release_scope`, `work_in_flight`).
+
+**One daemon, each repo's own answers** (code-intel-repo-scope). The daemon
+holds every repo's code corpus, and a call says which one it is about:
+`ToolContext::corpus_scope`, filled at each surface's edge. Over MCP it is the
+`x-svrn-corpus` header (`oicp_types::mcp::MCP_CORPUS_HEADER`, carried on
+`McpRequestContext`); code's host admits only a corpus it holds
+(`sovereign_code::admit_corpus`) and answers anything else -32602 naming the
+corpora that exist, before any tool runs. On the CLI it is the code corpus
+whose `source_path` is the cwd's git root (`tools_cmd/scope.rs`), else every
+corpus with one stderr line saying so; `--all-corpora` asks for every one. The
+graph tools take the scope as a SQL predicate (`corpus_id` is a column on
+`symbols` and `refs`), and the chunk tools read one enumeration,
+`code_indexes`. A connection that sends `x-svrn-effects: read` neither lists
+nor calls a tool whose manifest effect is not `Read`
+(`sovereign_contracts::mcp_host::effect_reachable`, the one rule both paths
+apply). Each repo's `.mcp.json` names its corpus; the ralph shim hands a
+worker its workdir's, never this checkout's. The merged graph still loads
+once per daemon, so a corpus indexed later answers after a restart
+(order `code-intel-graph-refresh`).
 
 Code's tool graph and the Reindexer share ONE merged `ScipGraph` handle,
 so updates are visible to `symbols`/`callers`/`blast` live. Each debounced
@@ -1011,7 +1135,7 @@ own loopback origin; the key the QUIC handshake proved is the discriminator):
 | `cwth/app/0` | one of several named HTTP apps, chosen by first path segment; each app claim carries its publisher's allow list (svrn's `[iroh] app_allow`) | REFUSED |
 | `cwth/offer/0` | svrn's `[iroh] offer_origin`, for members inside `[iroh] offer_allow` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
 | `cwth/guest/0` | — | svrn's guest listener; it reads the bearer |
-| `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring` (members), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
+| `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring/sync` and `/internal/ring/live` (members; the checkpoint is local-only), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
 
 Federated media and named apps ride that surface: the holder declares an
 origin (`svrn mesh media offer | admit | withdraw | origin | declare` write
@@ -1401,8 +1525,8 @@ that registration's live tie as it believes its own acceptor's mark. Outbound (p
 and the `mesh-reach` leaf's `RailsTransport` is the `PeerTransport` that asks it, so a program that is not
 the mesh endpoint dials peers through this one. Since phase-b pb-rails-parity it runs the ring round itself
 (`commonwealth-rails/src/ring_sync.rs`, moved from sovereign-mesh; the daemon runs the same code over its
-rail port until the flip), woken by its append door, and serves `/internal/ring/{sync,live,checkpoint/{ns}}`
-to members under a standing `/internal/ring` prefix (`ring_routes.rs`) and `GET /v1/mesh/relay-candidates`
+rail port until the flip), woken by its append door, and serves `/internal/ring/{sync,live}` to members, each
+path registered by name, and `/internal/ring/checkpoint/{ns}` to local callers only (`ring_routes.rs`) and `GET /v1/mesh/relay-candidates`
 (address discovery, moved to `commonwealth-discovery::mesh_discovery`). It also runs the reachability
 watchdog (`iroh_watchdog.rs`, moved from sovereign-mesh) over its own endpoint, whose rebuild re-binds and
 swaps the endpoint, transport and acceptor as one (`self_heal.rs`); `/v1/mesh/status` carries
@@ -1579,7 +1703,8 @@ the shared report.
 | See what the CLI promises and how much can fail | **`svrn contract`** (`map` / `census` / `nightly`). `census` splits the manifest into steps a lane RUNS and steps nothing runs, because a step in a never-run journey is a written intention |
 | Judge architecture health at a glance | **`svrn code fieldglass [corpus] --open`** — one deterministic self-contained HTML, evidence only: no scores, no gates. [`docs/FIELDGLASS.md`](FIELDGLASS.md) |
 | Price or execute a refactor | `svrn code refactor plan` / `gate` / `status`; `code suggest-seams <file> --plan` → `cargo xtask refactor-apply`; `code wire-check`. Process [`quality/REFACTOR_FACTORY.md`](../quality/REFACTOR_FACTORY.md) |
-| Judge the judgment, not just the code | `gym/comaintainer/` + [`docs/COMAINTAINER.md`](COMAINTAINER.md); landing seat `scripts/co-review.sh` |
+| Judge the judgment, not just the code | `gym/comaintainer/` + [`docs/COMAINTAINER.md`](COMAINTAINER.md); landing seat `scripts/co-review.sh`. Its `design_reuse/` lane compares bounded BASE-only source discovery with supplied dossiers, freezes run inputs, and reports reference/label agreement separately from unjudged semantic adequacy |
+| Check an order's extension references in another source repository | `scripts/co-order.sh check <id> --repo <path>`; `CO_FEATURES` selects the order directory, while `--repo` selects the Git tree for revision/citation checks. This checks reference validity — including that a `home:` holds the names it claims and a citation's span names what the claim names — not ownership suitability or approval |
 | Is any quality subsystem's posture stale? | **`svrn posture`** — one table: drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines, each row naming its refresh command |
 | Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>]`** — the curated ~30-minute check. Lanes are DATA in `quality/instruments.toml`; each states its verdict as a `kernel_types::Judgement` on its last stdout line. `--distribute` runs the same selection as work on the `work` ring |
 | Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh`** (~2-4h) — the FULL nightly, where drift against committed baselines is judged |

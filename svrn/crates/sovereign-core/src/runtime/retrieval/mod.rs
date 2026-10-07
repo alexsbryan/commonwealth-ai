@@ -21,6 +21,7 @@ pub mod atlas_grounding;
 // writer reaches the one definition instead of a corpus-engine path.
 pub use atlas_grounding::candidate_atlas_ids;
 mod atom_enum;
+mod atom_enum_typed;
 mod boosts;
 mod conv_tiered;
 pub(crate) mod corpus_search;

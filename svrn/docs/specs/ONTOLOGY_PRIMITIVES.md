@@ -734,3 +734,80 @@ absorbed. The order of landing is unchanged: M0 (ground on build), Axis
 1, then Change and Derivation because six and seven users need them,
 then Identity as the counted types show up. The ten users are the
 acceptance set; a facet none of them would write does not land.
+
+## 8. Proposed: types composed from what is said (2026-10-03; steps 1-2 built: per-claim document stamps, typed atoms from document fields)
+
+Some types are never mentioned, only done. A deal in a mailbox is the joint
+commitment a run of acts builds (a request, an indication, a counter, an
+accept, a confirm); a support case is the tickets and requests one customer
+files about one feature (§1.10). No single section carries their identity or
+their state, so Phase 1 cannot extract them. Measured on the crm-proof
+baseline (`quality/campaigns/crm-proof.toml`): 22 deal atoms for 79 gold
+transactions, 153 of 222 stage claims with no subject, 0 of 206 holdout
+stage updates matched. Header structure alone regroups the gold deals at
+B-cubed F1 0.60 (thread subject; counterparty domain 0.57).
+
+Kinds stay closed (§0). A composed type is an ENTITY type with a `compose`
+facet, so claims about it keep using `subject`. Four pieces, each on its axis,
+each reusing what exists:
+
+| Axis | Piece | Reuses |
+|---|---|---|
+| 1 Shape | `source = { metadata = [...], attributes = {...}, exclude = [...] }`: typed atoms from a document's own fields (email headers, front matter), no model | **Step 2, built 2026-10-04:** `SourceDecl` is a table-or-metadata enum (`understanding-vocab/src/ontology/source.rs`; both or neither refuses at load), the metadata form `MetadataSourceDecl` (`deny_unknown_fields`). Each attribute names a reader from a closed set, `FieldReader` (`address`, `domain`, `display_name`, `value`); no field name is in code. `atlas::resolution_sources` projects one entity atom per distinct identity value from the rows step 1 reads (`corpus_io::section_documents`): attributes the most frequent value read, name the display name, else the most salient model atom folded in (2026-10-05: an address-named contact cost the crm-ward holdout 5 of 10 commitments, whose subjects the scorer finds by name), else the identity value, provenance `SignalKind::DocumentField`, id `exact_entity_content_hash` of the folded value, `document_count`. An unreadable field is a `resolution_failures.json` record, an absent one a count. On the crm-ward-acts copy: 1,134 people and 305 companies (the prototype's 1,138 people less 4 address pairs the identity fold makes one, e.g. `.lisa@` and `lisa@`). **Roles as JOINs (2026-10-05):** `refs = { employer = { of = "company", reader = "domain" } }` links a projected atom to the target type's projected atom whose identity value the reader reads on the same mailbox (`SourceRef`); on crm-ward-stamp 984 of 1,134 people link and crm-contacts reads 47/83 (from 12), no model call. A body-only address (a signature) is a model atom the projection never sees, so it links nothing yet. The table form still has no consumer |
+| 3 Identity | a declared `identity` key match merges (what `recipe validate` already prints as "strict merge") | the identity veto (`resolution_identity.rs`); `ExternalIdSignal`. **Built for projected atoms (step 2):** inside Phase 3a the reconciler (`reconcile_with_signals` with `ExternalIdSignal` alone) names the model atoms carrying a projected atom's value, `merge_permitted` may refuse, and the resolver's `merge_into_existing` folds each in; counted on the resolve output (crm-ward copy: 125 person atoms on email, 19 company atoms on domain, equal to the prototype). Model-to-model key merges stay with `enrich reconcile` |
+| 4 Change | `clock` from a declared metadata field, stamped per atom as `document_date`; a state type `of` a composed type derives one state per member, ordered by that clock, so "current" is the latest | **Step 1, built 2026-10-04:** `change.document = { date, thread, id }` (`DocumentFieldsDecl`) names the fields; `atlas::resolution_documents` stamps every claim with `document_date` (RFC 2822 / ISO 8601 → ISO 8601), `document_thread`, `document_id` from the ONE document its evidence anchor lands in, reading the chunk rows the build already loads (`corpus_io::section_documents`). An anchor in no document or several, or an unreadable field, stamps nothing and is a `resolution_failures.json` record. The governance clock fold reads the stamp (`governance_change::rule_clock`); `ThreadRootSignal` still has no installed lookup. Trajectories still order by section id |
+| 5 Derivation | `compose = { of, block, link, anchor, adjudicate }`: member claims grouped where `block` attributes are equal, `link` attributes compatible or the document thread shared, an `anchor` attribute (a deal number) deciding outright; ambiguous pairs optionally put to the model as "same X?" | the reconciler's blocked pairs and union-find; the Phase-6 chat loop and `same_as` reification. NOT Configuration: it is a Phase-8 LLM rollup (`analysis/configuration.rs`) whose edges are `Configures` (`store/configures.rs`), and `Composes` is emitted only by the RAPTOR summary tree (`sovereign-tools/src/summary_atoms.rs:568`) — the composed write and its member edges are new |
+
+```toml
+[[enrichment.ontology.types]]
+name = "deal"
+kind = "entity"
+compose = { of = ["deal_act"], block = ["counterparty"], link = ["commodity", "delivery_point", "period"],
+            anchor = "deal_ref", adjudicate = true }
+
+[[enrichment.ontology.types]]
+name = "deal_act"
+kind = "claim"
+force = "commissive"
+subject = "deal"
+attributes = [{ name = "act", type = "text", values = ["request", "offer", "counter", "accept", "decline", "confirm"] },
+              { name = "counterparty", type = "ref", of = "company" }, { name = "commodity", type = "text" },
+              { name = "delivery_point", type = "text" }, { name = "period", type = "time" }, { name = "deal_ref", type = "text" }]
+
+[[enrichment.ontology.types]]
+name = "deal_stage"
+kind = "state"
+of = "deal"
+derive = { from = "deal_act.act", map = { request = "lead", offer = "proposal", counter = "negotiating",
+                                          accept = "won", confirm = "won", decline = "lost" } }
+```
+
+The §1.10 support lead writes the same facet: `case` composed of `request`
+and `ticket`, blocked on `customer` and `feature`. Lands only after a
+prototype over the declaration (not over deals) moves crm-proof's deal and
+stage bars on the holdout; then Rust, with `deny_unknown_fields` on the new
+facets (unknown per-type keys are dropped silently today), a `derived_facets`
+line per facet, and the composed type added to the pipeline's `emits()`.
+
+**Derived attributes (agreed and built 2026-10-06).** A value no single passage states, computed from
+what the build already holds, declared as three flat, id-referenced primitives (`understanding-vocab`
+`ontology/derived.rs`): a **path** walks the graph (`subject` and `^subject` between a claim and its
+particular, `document` to the one document a claim lands in, a document field to the atoms a metadata
+`source` projected from it, a declared `ref`; `/`, `|` inside parentheses only, `^`, and a set filter
+`[s]`/`[!s]` on any step, SPARQL 1.1 property paths cut down); a **set** names particulars, or documents,
+by attribute conditions (`is`, `in`, word `suffix`); a **fold** turns its inputs' values into one by a
+function from a closed registry (`first` in priority order, an ambiguous input falling through; `agree`;
+`most` over distinct documents; `earliest`/`latest` by the declared clock; `all`). An attribute names the
+path or fold that fills it with `derived = "<id>"`; cardinality is the function's, so there is no separate
+`one`. Every outcome is typed (decided, with the documents it came through and the values it superseded,
+or nothing / ambiguous / conflict / tie / unordered), never collapsed into empty, and values a `[!set]`
+dropped are kept on the line. Order is inferred from what each derivation reads, a cycle refused at
+`recipe validate`; an attribute of a type RESOLVE decides is derived after it, every other one before, and
+validate refuses a before-RESOLVE derivation that reads what RESOLVE makes. A derived attribute is never
+asked of Phase 1 (`TypeIndex::extracted_attributes`). Evaluated in `atlas/resolution_derived.rs`, decisions
+in `atlas/derived_decisions.jsonl`. Ward declares the other side of a message as `document / (from | to |
+cc) / employer [!ours]` (`first`) and a deal's party as `^subject / party` (`most`): crm-ward holdout
+crm-deals 0/69 with RESOLVE alone, 16/69 with the party derived (baseline 5/69). Deferred, admitted by the
+shape: closure, time windows, value maps, relation-endpoint steps, computing functions (count, min, max),
+the `protocol` fold, attributes that must come from one winning source together.
+

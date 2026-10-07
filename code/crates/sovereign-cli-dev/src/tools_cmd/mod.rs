@@ -19,7 +19,9 @@
 //!   including parameter schema and example invocations.
 //! - `tools call <id> [--k=v ...]` — build a JSON params object from
 //!   `--key value` pairs, invoke the tool, print the `StepOutput` as
-//!   plain text (or `--format json` for pipelines).
+//!   plain text (or `--format json` for pipelines). The code tools answer
+//!   about the corpus built from the cwd's repo (`scope`), or every corpus
+//!   with `--all-corpora`.
 //!
 //! Generic dispatch means adding a new tool gets CLI surface for free
 //! — no per-tool code here.
@@ -32,6 +34,7 @@ use sovereign_contracts::types::{Effect, Scope, ToolContext, ToolDescriptor};
 mod args;
 mod format;
 mod registry;
+mod scope;
 
 use args::{get_flag, split_args};
 use format::{behaviour_tag, render_step_output, OutputMode};
@@ -79,6 +82,8 @@ fn print_help() {
          \n\
          FLAGS (for `call`)\n\
          \x20   --format text|json                Output format (default: text)\n\
+         \x20   --all-corpora                     Code tools answer about every code corpus, not\n\
+         \x20                                     the one built from this repo (the default)\n\
          \n\
          NOTES\n\
          \x20   Tools with a 'Write' effect are audited but not approval-gated on\n\
@@ -298,10 +303,15 @@ async fn cmd_call(args: &[String]) -> i32 {
         }
     };
 
-    // Build JSON params from --key=value flags (excluding --format).
-    // Numbers and booleans get coerced; everything else stays String.
+    // Build JSON params from --key=value flags (excluding the command's own,
+    // --format and --all-corpora). Numbers and booleans get coerced;
+    // everything else stays String.
+    let all_corpora = flags.iter().any(|(k, _)| k == "all-corpora");
     let mut params = serde_json::Map::new();
-    for (k, v) in flags.iter().filter(|(k, _)| k != "format") {
+    for (k, v) in flags
+        .iter()
+        .filter(|(k, _)| k != "format" && k != "all-corpora")
+    {
         params.insert(k.clone(), coerce_value(v));
     }
     let params_value = Value::Object(params);
@@ -401,6 +411,26 @@ async fn cmd_call(args: &[String]) -> i32 {
         );
     }
 
+    // The code corpus this call is about: the one built from the cwd's repo,
+    // else every corpus, said on stderr so a cross-repo answer is never
+    // mistaken for this repo's (ARCH 6). `--all-corpora` asks for every one.
+    let corpus_scope = if all_corpora {
+        None
+    } else {
+        let root = std::env::current_dir()
+            .ok()
+            .and_then(|d| crate::converge_cmd::git_root_of(&d));
+        let corpora = crate::converge_cmd::code_corpora(&env.indexes_dir);
+        match scope::scope_for_root(&corpora, root.as_deref()) {
+            Ok(id) => Some(id),
+            Err(why) => {
+                eprintln!("{why}");
+                None
+            }
+        }
+    };
+    tracing::debug!(tool = %id, ?corpus_scope, all_corpora, "tools call: corpus scope");
+
     let ctx = ToolContext {
         conversation_id: "cli-tools".to_string(),
         task_id: None,
@@ -410,6 +440,7 @@ async fn cmd_call(args: &[String]) -> i32 {
         in_reasoning_loop: false,
         agent_session_token: None,
         turn_index: 0,
+        corpus_scope,
         ..Default::default()
     };
 

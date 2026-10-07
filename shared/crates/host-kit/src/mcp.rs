@@ -15,30 +15,32 @@ use std::pin::Pin;
 
 use oicp_types::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use oicp_types::mcp::{negotiate_mcp_protocol_version, McpMethod};
-// What one tool run produced is MCP wire vocabulary (`CallToolResult`), so it
-// lives beside the method set in oicp-types; this is its historical path.
-pub use oicp_types::mcp::{CallAudit, ToolOutcome};
+// What one tool run produced, and what one request carried, are MCP wire
+// vocabulary, so they live beside the method set in oicp-types; this is their
+// historical path. The request context moved down so the registry half
+// (sovereign-contracts' `mcp_host`, which links no kit) reads the same one.
+pub use oicp_types::mcp::{CallAudit, McpRequestContext, ToolOutcome};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
 #[cfg(feature = "http")]
 pub mod http;
 
-/// What one request carries besides its JSON-RPC body: the transport's view
-/// of who asked. Stdio has none of it, so there it is the default.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct McpRequestContext {
-    /// The `X-Agent-Session` header the agent sent, if it sent one.
-    pub agent_session: Option<String>,
-}
-
 /// The tool-host port: what a program supplies so the dispatcher can serve
 /// its tools.
 pub trait McpToolHost {
     /// Free text for `initialize`'s `instructions`, if the host has any.
     fn instructions(&self) -> Option<String>;
-    /// The `tools/list` array, exactly as it goes on the wire.
-    fn list(&self) -> Value;
+    /// The `tools/list` array for this request's connection, exactly as it
+    /// goes on the wire.
+    fn list(&self, ctx: &McpRequestContext) -> Value;
+    /// Whether this host serves a request carrying `ctx` at all. `Err` names
+    /// why not, and the `tools/call` is answered -32602 before any tool runs
+    /// (a corpus the host does not hold). Every request is admitted unless the
+    /// host says otherwise.
+    fn admit(&self, _ctx: &McpRequestContext) -> Result<(), String> {
+        Ok(())
+    }
     /// Run one tool. `None` means no tool has that name (-32601); a tool that
     /// ran and failed is `Some` with `is_error` set.
     fn call(
@@ -67,8 +69,12 @@ impl McpCallLog for () {
 /// its own tool host and call log, so its calls run and log the same way
 /// whether it serves alone or mounted.
 pub trait McpMountedTools: Send + Sync {
-    /// The `tools/list` entries, exactly as they go on the wire.
-    fn list(&self) -> Value;
+    /// The `tools/list` entries for this request's connection, exactly as
+    /// they go on the wire.
+    fn list(&self, ctx: &McpRequestContext) -> Value;
+    /// [`McpToolHost::admit`]: the mounting server asks before it runs any
+    /// tool, its own included, for a request carrying `ctx`.
+    fn admit(&self, ctx: &McpRequestContext) -> Result<(), String>;
     /// Run one tool and record it in the mounted program's call log. `None`
     /// means the tool is not this program's; nothing is logged then.
     fn call<'a>(
@@ -84,8 +90,12 @@ where
     H: McpToolHost + Send + Sync,
     L: McpCallLog + Send + Sync,
 {
-    fn list(&self) -> Value {
-        self.host.list()
+    fn list(&self, ctx: &McpRequestContext) -> Value {
+        self.host.list(ctx)
+    }
+
+    fn admit(&self, ctx: &McpRequestContext) -> Result<(), String> {
+        self.host.admit(ctx)
     }
 
     fn call<'a>(
@@ -213,11 +223,15 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
             }
             Some(McpMethod::Ping) => JsonRpcResponse::result(id, json!({})),
             Some(McpMethod::ToolsList) => {
-                JsonRpcResponse::result(id, json!({ "tools": self.host.list() }))
+                JsonRpcResponse::result(id, json!({ "tools": self.host.list(ctx) }))
             }
             Some(McpMethod::ToolsCall) => {
                 let name = params["name"].as_str().unwrap_or("");
                 let args = params.get("arguments").cloned().unwrap_or(json!({}));
+                if let Err(why) = self.host.admit(ctx) {
+                    tracing::debug!(tool = name, reason = %why, "mcp: request not admitted");
+                    return Some(JsonRpcResponse::error(id, -32602, why));
+                }
                 match self.run_tool(name, &args, ctx).await {
                     Some(outcome) => {
                         tracing::debug!(tool = name, is_error = outcome.is_error, "mcp: tool ran");
@@ -327,7 +341,7 @@ mod tests {
         fn instructions(&self) -> Option<String> {
             Some("fake instructions".into())
         }
-        fn list(&self) -> Value {
+        fn list(&self, _ctx: &McpRequestContext) -> Value {
             json!([{ "name": "echo" }, { "name": "refuse" }])
         }
         async fn call(
@@ -447,7 +461,7 @@ mod tests {
         let dispatcher = McpDispatcher::new("fake", "0", FakeHost, &log);
         let mounted: &dyn McpMountedTools = &dispatcher;
         let ctx = McpRequestContext::default();
-        assert_eq!(mounted.list()[0]["name"], "echo");
+        assert_eq!(mounted.list(&ctx)[0]["name"], "echo");
         let ran = mounted.call("echo", &json!({ "text": "hi" }), &ctx).await;
         assert_eq!(ran.map(|o| o.text), Some("hi".to_string()));
         assert!(mounted.call("nope", &json!({}), &ctx).await.is_none());
