@@ -11,7 +11,7 @@
 //! be measured against the generated partition's. The full distribution is
 //! kept on every outcome for the decider that replaces the argmax.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
 
 use oicp_types::forced_choice;
@@ -50,6 +50,188 @@ pub(super) struct Chosen {
     pub calls: u32,
     /// Candidates not offered because a necessary value differs.
     pub vetoed: u32,
+}
+
+/// Two value sets are compatible when every necessary attribute evidenced on
+/// both sides has exactly one shared value. Missing evidence is permissive;
+/// contaminated multi-value sets match neither of their members.
+pub(super) fn necessary_compatible(
+    criterion: &Criterion,
+    left: &BTreeMap<String, BTreeSet<String>>,
+    right: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
+    criterion.necessary.iter().all(|(attr, _)| {
+        let Some(left) = left.get(attr).filter(|values| !values.is_empty()) else {
+            return true;
+        };
+        let Some(right) = right.get(attr).filter(|values| !values.is_empty()) else {
+            return true;
+        };
+        left.len() == 1 && right.len() == 1 && left.first() == right.first()
+    })
+}
+
+/// Prior records matching a statement's declared sufficient keys.
+pub(super) fn key_hits(
+    by_key: &HashMap<(String, String), usize>,
+    keys: &[Vec<(String, String)>],
+) -> Vec<Vec<(usize, String, String)>> {
+    keys.iter()
+        .map(|keys| {
+            keys.iter()
+                .filter_map(|(key, value)| {
+                    by_key
+                        .get(&(key.clone(), value.clone()))
+                        .map(|&record| (record, key.clone(), value.clone()))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// A sufficient key settles only when its record's necessary values agree.
+pub(super) fn key_plan(
+    criterion: &Criterion,
+    statement: &Statement,
+    hits: &[(usize, String, String)],
+    read: &BTreeMap<String, BTreeSet<String>>,
+    records: &[Record],
+    document: &str,
+    vetoed: &mut u32,
+) -> Option<Plan> {
+    let held: BTreeSet<usize> = hits.iter().map(|(record, _, _)| *record).collect();
+    match (held.len(), hits.first()) {
+        (0, _) | (_, None) => None,
+        (1, Some((record, key, value))) => {
+            if necessary_compatible(criterion, read, &records[*record].fields) {
+                Some(Plan::Key {
+                    record: *record,
+                    key: key.clone(),
+                    value: value.clone(),
+                })
+            } else {
+                *vetoed += 1;
+                debug!(
+                    document,
+                    statement = %statement.id,
+                    candidate = %records[*record].id,
+                    route = "sufficient_key",
+                    "atlas/resolve: necessary-field conflict vetoed the key join"
+                );
+                Some(Plan::Refuse(Refusal::Contradiction {
+                    targets: vec![records[*record].id.clone()],
+                }))
+            }
+        }
+        _ => Some(Plan::Refuse(Refusal::Contradiction {
+            targets: held
+                .iter()
+                .map(|&record| records[record].id.clone())
+                .collect(),
+        })),
+    }
+}
+
+/// Apply an evidential-field match only where necessary values are compatible.
+pub(super) fn settle_field(
+    criterion: &Criterion,
+    statements: &[Statement],
+    read: &[BTreeMap<String, BTreeSet<String>>],
+    records: &[Record],
+    plans: &mut [Option<Plan>],
+    field: Option<Plan>,
+    document: &str,
+    vetoed: &mut u32,
+) {
+    let Some(Plan::Field { record, .. }) = field.as_ref() else {
+        return;
+    };
+    let record = *record;
+    for (i, plan) in plans.iter_mut().enumerate() {
+        if plan.is_some() {
+            continue;
+        }
+        if necessary_compatible(criterion, &read[i], &records[record].fields) {
+            *plan = field.clone();
+        } else {
+            *vetoed += 1;
+            debug!(
+                document,
+                statement = %statements[i].id,
+                candidate = %records[record].id,
+                route = "evidential_field",
+                "atlas/resolve: necessary-field conflict vetoed the field join"
+            );
+        }
+    }
+}
+
+/// Recheck every answerer join and every same-document opened group before fold.
+pub(super) fn gate_plans(
+    criterion: &Criterion,
+    statements: &[Statement],
+    asked: &[usize],
+    read: &[BTreeMap<String, BTreeSet<String>>],
+    records: &[Record],
+    decided: Vec<Plan>,
+    document: &str,
+    vetoed: &mut u32,
+) -> Vec<Plan> {
+    let mut open_groups: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut gated = Vec::with_capacity(decided.len());
+    for (j, mut plan) in decided.into_iter().enumerate() {
+        let i = asked[j];
+        let target = match &plan {
+            Plan::Key { record, .. }
+            | Plan::Join { record, .. }
+            | Plan::Selected { record, .. }
+            | Plan::Field { record, .. }
+            | Plan::Proposed { record, .. } => Some(*record),
+            Plan::Open { .. } | Plan::Refuse(_) => None,
+        };
+        if let Some(record) = target {
+            if !necessary_compatible(criterion, &read[i], &records[record].fields) {
+                *vetoed += 1;
+                debug!(
+                    document,
+                    statement = %statements[i].id,
+                    candidate = %records[record].id,
+                    "atlas/resolve: necessary-field conflict vetoed the answerer join"
+                );
+                plan = Plan::Refuse(Refusal::Contradiction {
+                    targets: vec![records[record].id.clone()],
+                });
+            }
+        }
+        let open_group = match &plan {
+            Plan::Open { group, .. } => Some(*group),
+            _ => None,
+        };
+        if let Some(group) = open_group {
+            let conflict = open_groups.get(&group).and_then(|prior| {
+                prior
+                    .iter()
+                    .copied()
+                    .find(|&prior| !necessary_compatible(criterion, &read[i], &read[prior]))
+            });
+            if let Some(prior) = conflict {
+                *vetoed += 1;
+                debug!(
+                    document,
+                    statement = %statements[i].id,
+                    candidate = %statements[prior].id,
+                    "atlas/resolve: necessary-field conflict vetoed the within-document join"
+                );
+                plan = Plan::Refuse(Refusal::Contradiction {
+                    targets: vec![statements[prior].id.clone()],
+                });
+            } else {
+                open_groups.entry(group).or_default().push(i);
+            }
+        }
+        gated.push(plan);
+    }
+    gated
 }
 
 /// RESOLVE's census funnel: every forced-choice call RESOLVE makes is issued
@@ -108,9 +290,9 @@ pub(super) async fn decision_call(
 }
 
 /// Ask each asked statement, in document order, which candidate it is about.
-/// A candidate whose necessary value differs from the statement's, both READ
-/// (`read.rs`), is not offered. Where the model's choice is measured
-/// (`model_choice`) it is weighed beside the proposed answer
+/// A candidate whose necessary value differs from the statement's, both
+/// supplied or READ (`read.rs`), is not offered. Where the model's choice is
+/// measured (`model_choice`) it is weighed beside the proposed answer
 /// (`proposed_answer`): of those that name a candidate, the more precise that
 /// clears the type's bar decides, and a choice below the bar is never asked.
 /// Unmeasured, the argmax decides (Ring 0), so the choice can be measured.
@@ -123,7 +305,7 @@ pub(super) async fn choose(
     shown: &[(usize, &Proposal)],
     records: &[Record],
     key_edges: &[(usize, usize)],
-    read: &[BTreeMap<String, String>],
+    read: &[BTreeMap<String, BTreeSet<String>>],
     proposed: Option<&Proposed>,
     reason: bool,
     infer: &InferenceFn,
@@ -155,7 +337,12 @@ pub(super) async fn choose(
         let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
         candidates.extend(shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
         let offered = candidates.len();
-        candidates.retain(|c| !differs(criterion, &read[j], c, records, read));
+        candidates.retain(|c| match *c {
+            Candidate::Record(r, _) => {
+                necessary_compatible(criterion, &read[j], &records[r].fields)
+            }
+            Candidate::Opened(g) => necessary_compatible(criterion, &read[j], &read[g]),
+        });
         if candidates.len() < offered {
             let n = offered - candidates.len();
             vetoed += n as u32;
@@ -181,7 +368,7 @@ pub(super) async fn choose(
                     ))
                 }
                 Some(ProposedVerdict::Earlier(f))
-                    if !differs(criterion, &read[j], &Candidate::Opened(f), records, read) =>
+                    if necessary_compatible(criterion, &read[j], &read[f]) =>
                 {
                     Some((plans[f].clone(), pa))
                 }
@@ -304,29 +491,6 @@ pub(super) async fn choose(
         calls,
         vetoed,
     }
-}
-
-/// Whether candidate `c` holds, for some necessary attribute, a value other
-/// than the statement's (`mine`), both READ. One unread side decides nothing.
-fn differs(
-    criterion: &Criterion,
-    mine: &BTreeMap<String, String>,
-    c: &Candidate,
-    records: &[Record],
-    read: &[BTreeMap<String, String>],
-) -> bool {
-    criterion.necessary.iter().any(|(attr, _)| {
-        let Some(v) = mine.get(attr) else {
-            return false;
-        };
-        match *c {
-            Candidate::Record(r, _) => records[r]
-                .fields
-                .get(attr)
-                .is_some_and(|held| !held.is_empty() && !held.contains(v)),
-            Candidate::Opened(g) => read[g].get(attr).is_some_and(|w| w != v),
-        }
-    })
 }
 
 /// The one-statement question. The type, criterion and document come first

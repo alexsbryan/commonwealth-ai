@@ -84,6 +84,7 @@ fn sketch(name: &str, ty: &str, attrs: serde_json::Value) -> EntitySketch {
 
 fn section(id: &str, entities: Vec<EntitySketch>) -> SectionExtraction {
     SectionExtraction {
+        document_read: None,
         section_id: id.into(),
         enrichment_depth: EnrichmentDepth::Extracted,
         entities_introduced: entities,

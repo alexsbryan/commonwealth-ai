@@ -13,9 +13,9 @@ use super::inference_client::{
 };
 use super::paths;
 use corpus_engine::enrichment::pipeline::{
-    checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest,
-    ChapterManifestWrite, ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind,
-    PhaseRunner, PipelineRegistry, RetryMode, RunOutputWriter,
+    collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest, ChapterManifestWrite,
+    ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind, PhaseRunner,
+    PipelineRegistry, RetryMode, RunOutputWriter,
 };
 use std::sync::Arc;
 
@@ -143,6 +143,40 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // write the canonical run-file, update cache. Zero LLM calls,
     // no daemon required.
     if parsed.finalize {
+        let policies = cfg
+            .ontology
+            .as_ref()
+            .map(|spec| spec.policies())
+            .unwrap_or_default();
+        let entries = match read_phase1_checkpoint(&checkpoint_path) {
+            Ok(entries) => entries,
+            Err(error) => {
+                eprintln!(
+                    "error: reading checkpoint {}: {error}",
+                    checkpoint_path.display()
+                );
+                return 1;
+            }
+        };
+        let chapters = if policies.document_reading {
+            match rebuild_corpus_state(&cfg) {
+                Ok((chapters, _)) => chapters,
+                Err(error) => {
+                    eprintln!("error: rebuilding current document context for checkpoint: {error}");
+                    return 2;
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        if let Err(error) = corpus_engine::enrichment::pipeline::document_read::validate_checkpoint(
+            &entries, &chapters, &policies,
+        ) {
+            eprintln!(
+                "error: refusing stale declared document-read checkpoint: {error}; re-run `svrn enrich extract --full`"
+            );
+            return 2;
+        }
         return cmd_finalize(&cfg, &checkpoint_path).await;
     }
 
@@ -348,7 +382,14 @@ pub async fn run_extract(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        let done = checkpoint_processed_ids(&entries);
+        let policies = cfg
+            .ontology
+            .as_ref()
+            .map(|spec| spec.policies())
+            .unwrap_or_default();
+        let done = corpus_engine::enrichment::pipeline::document_read::checkpoint_processed_ids(
+            &entries, &inputs, &policies,
+        );
         if done.is_empty() {
             println!(
                 "  · --resume: checkpoint at {} is empty (or missing); proceeding with full selection.",

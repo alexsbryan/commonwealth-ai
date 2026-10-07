@@ -95,6 +95,7 @@ impl RawSectionExtraction {
     pub(super) fn into_extraction(self, policy: &ParsePolicy) -> SectionExtraction {
         SectionExtraction {
             section_id: self.section_id,
+            document_read: None,
             // Pin depth at `Extracted` — the atlas pipeline is by
             // definition the extraction-first ingestion strategy.
             // A structure-first strategy would build its

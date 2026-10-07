@@ -298,6 +298,13 @@ fn a_claim_takes_its_message_party_and_a_record_the_party_its_claims_agree_on() 
         DerivedOutcome::Decided { documents, .. } => assert_eq!(documents, &["m1", "m2"]),
         other => panic!("{other:?}"),
     }
+    assert!(
+        serde_json::to_value(b.line("entity-d1"))
+            .unwrap()
+            .get("protocol")
+            .is_none(),
+        "legacy derived-decision lines keep their existing wire shape"
+    );
     assert_eq!(b.line("entity-d2").outcome, DerivedOutcome::Nothing);
 }
 

@@ -38,6 +38,7 @@ pub(super) fn section(
     events: Vec<EventSketch>,
 ) -> SectionExtraction {
     SectionExtraction {
+        document_read: None,
         section_id: id.into(),
         enrichment_depth: EnrichmentDepth::Extracted,
         entities_introduced: entities,

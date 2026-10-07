@@ -31,6 +31,7 @@ pub mod atlas_clustering;
 pub mod atlas_extensions;
 pub mod atom_normalizer;
 pub mod chapter_manifest;
+pub mod document_read;
 pub mod exemplar_bank;
 pub mod phase_cache;
 pub mod pipelines;
@@ -57,6 +58,9 @@ pub use atlas::{
 };
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest, ChapterManifestWrite};
+pub use document_read::{
+    DocumentRead, DocumentReadClaim, DocumentReadField, DocumentReadOutcome, DocumentReadStatus,
+};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{CacheModelIdentity, PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use pipelines::configurable_atlas::{CustomAtlasSpec, CustomVocabulary};

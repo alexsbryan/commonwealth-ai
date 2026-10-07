@@ -30,6 +30,50 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `[enrichment.ontology].document_reading` — false unless a recipe opts in (2026-10-07)
+
+**What ships.** In a version-1 recipe, `[enrichment.ontology]` may set
+`document_reading = true` to use the accountable reader over hydrated source
+documents. Absent or false preserves the shared Phase-1 path.
+Ward's commissive `commitment` binds only to an existing projected person by
+the declared email identity; missing or ambiguous identity remains unbound and
+counted, never a name fallback or a duplicate person atom.
+
+**Why false.** The per-document reader has not yet been measured end to end on
+the Ward and uv tune documents. Enabling it by default would change reads for
+recipes whose force, evidence and membership needs have not been evaluated.
+
+**Flip condition.** Enable the option only for a recipe whose Arm D, on the same
+tune documents, model and identity policy, has both higher membership coverage
+and lower whole-build cost per document than the current reader, while preserving
+declared force, document evidence, local references, and no-state membership.
+Otherwise keep the recipe opted out. Settled by the production READ comparison
+in `research/ontology-apps/TASK_MODEL.md` §Hypotheses and §Implementation order
+(Arms C and D); the parent will run it after implementation.
+
+**Review by 2026-10-31.**
+
+### Recipe-declared qualified scalar protocol fold — off unless a recipe opts in (2026-10-07)
+
+**What ships.** A version-1 ontology may declare one `by = "protocol"` fold for
+a closed text attribute. Its state mappings and claim qualifications are recipe
+data; the build applies them after RESOLVE to cited claims assigned to the record.
+Report time comes from `change.document.date`; a declared transition effective
+time is kept separately. Missing qualifications, source-field provenance or a
+total report-time order produce a pending outcome, not a default state.
+
+**Why no default.** There is no adopted application protocol yet. A source claim,
+cross-reference, or unqualified state word must grant no effect on its own.
+Legacy caches without the additive `DocumentRead` field-evidence pointer remain
+unqualified, even if a flattened value is present.
+
+**Flip condition.** The parent adopts a recipe-specific set of rules only after
+the paired reader comparison in `research/ontology-apps/TASK_MODEL.md`
+§Implementation order; that comparison's task-model counts remain development
+reports, not protocol calibration.
+
+**Review by 2026-10-31.**
+
 ### Typed list answer over a declared ontology — rides `SOVEREIGN_ATOM_ENUM`, off (`fi-ontology-list`, 2026-10-03)
 
 **What changed.** A list question over a declared ontology gets a typed query

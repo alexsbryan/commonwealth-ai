@@ -25,6 +25,10 @@ use super::config::EnrichConfig;
 use super::paths;
 use super::source_loader::load_plaintext;
 
+#[cfg(test)]
+#[path = "corpus_io_tests.rs"]
+mod hydrated_document_tests;
+
 /// Sentinel scheme used by `enrich init --from-corpus <id>` to record
 /// "this enrichment is driven by an already-indexed corpus, not a
 /// source file". `<id>` is the source corpus_id; `rebuild_corpus_state`
@@ -84,6 +88,7 @@ pub fn rebuild_corpus_state(cfg: &EnrichConfig) -> Result<(Vec<ChapterInput>, Ch
             title: sec.title.clone(),
             text,
             metadata: sec.metadata.clone(),
+            source_documents: Vec::new(),
             approx_tokens,
         });
     }
@@ -278,36 +283,55 @@ fn rebuild_corpus_state_from_corpus(
     // source corpus (see `chunks_by_ids`); subset runs still materialise
     // every chapter — the selection filter runs downstream.
     let chunks = fetch_enrichment_chunks(source_corpus_id, &manifest_chunk_ids(&manifest))?;
-
-    // Build a chunk_id → content map for fast lookup.
-    let chunk_text: std::collections::HashMap<u64, String> =
-        chunks.into_iter().map(|c| (c.id, c.content)).collect();
-
-    let mut inputs = Vec::with_capacity(manifest.chapters.len());
-    for entry in &manifest.chapters {
-        let mut sorted_ids = entry.chunk_ids.clone();
-        sorted_ids.sort_unstable();
-        let body: String = sorted_ids
-            .iter()
-            .filter_map(|id| chunk_text.get(id).cloned())
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        let approx_tokens = body.len() / 4;
-        inputs.push(ChapterInput {
-            chapter_id: entry.id.clone(),
-            title: entry.title.clone(),
-            text: body,
-            metadata: entry
-                .metadata
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            approx_tokens,
-        });
-    }
+    let inputs = hydrate_corpus_chapters_from_rows(&manifest, &chunks);
 
     // The manifest is already authoritative on this path; return as-is.
     Ok((inputs, manifest))
+}
+
+/// Hydrate chapter text and accountable source documents from the same index
+/// rows. `SectionDocuments` is the single document assembler used by RESOLVE.
+fn hydrate_corpus_chapters_from_rows(
+    manifest: &ChapterManifest,
+    chunks: &[corpus_index::index::EnrichmentChunkRow],
+) -> Vec<ChapterInput> {
+    let documents = SectionDocuments::from_chunk_rows(
+        manifest
+            .chapters
+            .iter()
+            .map(|chapter| (chapter.id.as_str(), chapter.chunk_ids.as_slice())),
+        chunks,
+    );
+    let chunk_text: std::collections::HashMap<u64, String> = chunks
+        .iter()
+        .map(|row| (row.id, row.content.clone()))
+        .collect();
+    manifest
+        .chapters
+        .iter()
+        .map(|entry| {
+            let mut sorted_ids = entry.chunk_ids.clone();
+            sorted_ids.sort_unstable();
+            let body = sorted_ids
+                .iter()
+                .filter_map(|id| chunk_text.get(id).cloned())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let approx_tokens = body.len() / 4;
+            ChapterInput {
+                chapter_id: entry.id.clone(),
+                title: entry.title.clone(),
+                text: body,
+                metadata: entry
+                    .metadata
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+                source_documents: documents.documents_for_section(&entry.id).to_vec(),
+                approx_tokens,
+            }
+        })
+        .collect()
 }
 
 /// Build a full `CorpusContext` (chapters + paragraph chunks + titles)

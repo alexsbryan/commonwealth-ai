@@ -711,6 +711,10 @@ pub struct ChapterInput {
     pub text: String,
     /// Detector metadata carried through from `SectionedChunker`.
     pub metadata: HashMap<String, String>,
+    /// Source documents batched into this chapter. Empty for file-backed
+    /// chapters and for pre-document-reading pipeline inputs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_documents: Vec<crate::enrichment::atlas::SourceDocument>,
     /// Approximate token count (4 chars per token heuristic) — used by
     /// the runner to decide whether the input fits the model's context.
     pub approx_tokens: usize,

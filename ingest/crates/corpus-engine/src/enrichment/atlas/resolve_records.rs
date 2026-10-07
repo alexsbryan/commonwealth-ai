@@ -55,7 +55,7 @@ pub struct Criterion {
     /// The measured precision of the proposed answer (`proposed_answer`).
     /// `None`: it decides nothing in a forced-choice run.
     pub proposed_answer: Option<f64>,
-    /// The attributes whose read values must agree, each with its values.
+    /// The attributes whose supplied or read values must agree, each with its values.
     pub necessary: Vec<(String, Vec<String>)>,
 }
 
@@ -161,8 +161,7 @@ pub struct Record {
     pub statements: Vec<String>,
     /// Folded values of the declared keys its statements carried.
     pub keys: BTreeMap<String, BTreeSet<String>>,
-    /// The document stamps of its statements' documents, by stamp attribute,
-    /// and the values READ for its statements' necessary attributes.
+    /// The document stamps and necessary values supplied or READ for its statements.
     pub fields: BTreeMap<String, BTreeSet<String>>,
     /// One entry per folded statement; later calls are shown these.
     pub evidence: Vec<Evidence>,
@@ -365,9 +364,9 @@ pub struct DocumentResolution {
     /// The candidate records the model was shown, in the proposer's order.
     pub candidates: Vec<String>,
     pub calls: u32,
-    /// Candidates not offered because a necessary value READ differs.
+    /// Join routes vetoed because necessary values conflict.
     pub vetoed: u32,
-    /// Necessary attributes READ as none of their values, or refused.
+    /// Necessary READs that returned none of their declared values or were refused.
     pub unread: u32,
     pub outcomes: Vec<StatementOutcome>,
 }
@@ -461,6 +460,33 @@ impl Resolver {
             .iter()
             .map(|s| declared_keys(criterion, s))
             .collect();
+        let key_hits = select::key_hits(&self.by_key, &folded_keys);
+        let field = fields::settle(criterion, doc, &self.by_field);
+        let mut read_of = read::provided(criterion, doc, statements);
+        let (mut calls, mut unread, mut vetoed) = (0, 0, 0);
+
+        // READ once before any route can settle: sufficient keys and evidential
+        // fields need the same necessary values as the answerer routes do.
+        let read_infer = match answerer {
+            Answerer::Select(infer) | Answerer::Reason(infer) => Some(infer),
+            Answerer::Model(_) | Answerer::Proposed => None,
+        };
+        if let Some(infer) = read_infer {
+            let to_read: Vec<usize> = (0..n)
+                .filter(|&i| !surface[i].trim().is_empty())
+                .filter(|&i| {
+                    let held: BTreeSet<usize> =
+                        key_hits[i].iter().map(|(record, _, _)| *record).collect();
+                    held.len() <= 1
+                })
+                .collect();
+            let read = read::read(criterion, doc, statements, &to_read, &read_of, infer).await;
+            calls += read.calls;
+            unread += read.unknown;
+            for (&i, values) in to_read.iter().zip(&read.values) {
+                read_of[i] = values.clone();
+            }
+        }
 
         for (i, s) in statements.iter().enumerate() {
             if surface[i].trim().is_empty() {
@@ -474,30 +500,29 @@ impl Resolver {
                 }));
                 continue;
             }
-            let hits: Vec<(usize, &str, &str)> = folded_keys[i]
-                .iter()
-                .filter_map(|(k, v)| Some((*self.by_key.get(&(k.clone(), v.clone()))?, &**k, &**v)))
-                .collect();
-            let held: BTreeSet<usize> = hits.iter().map(|h| h.0).collect();
-            plan[i] = match (held.len(), hits.first()) {
-                (0, _) | (_, None) => None,
-                (1, Some(&(record, key, value))) => Some(Plan::Key {
-                    record,
-                    key: key.to_string(),
-                    value: value.to_string(),
-                }),
-                _ => Some(Plan::Refuse(Refusal::Contradiction {
-                    targets: held.iter().map(|&r| self.records[r].id.clone()).collect(),
-                })),
-            };
+            plan[i] = select::key_plan(
+                criterion,
+                s,
+                &key_hits[i],
+                &read_of[i],
+                &self.records,
+                doc.id,
+                &mut vetoed,
+            );
         }
 
-        // An evidential field settles what no key did, before any answerer.
-        if let Some(field) = fields::settle(criterion, doc, &self.by_field) {
-            for p in plan.iter_mut().filter(|p| p.is_none()) {
-                *p = Some(field.clone());
-            }
-        }
+        // An evidential field settles only statements compatible with the
+        // necessary values the same READ pass supplied above.
+        select::settle_field(
+            criterion,
+            statements,
+            &read_of,
+            &self.records,
+            &mut plan,
+            field,
+            doc.id,
+            &mut vetoed,
+        );
 
         // The rest go to the model, in document order.
         let mut asked: Vec<usize> = (0..n).filter(|&i| plan[i].is_none()).collect();
@@ -514,19 +539,12 @@ impl Resolver {
         }
         let shown_records: Vec<usize> = shown.iter().map(|&(r, _)| r).collect();
         let key_edges = key_edges(&asked, &folded_keys);
-        let mut calls = 0;
         let mut choices: Vec<Option<Choice>> = vec![None; n];
-        let mut read_of: Vec<BTreeMap<String, String>> = vec![BTreeMap::new(); n];
-        let (mut vetoed, mut unread) = (0, 0);
         let decided: Vec<Plan> = if let (Answerer::Select(infer) | Answerer::Reason(infer), false) =
             (answerer, asked.is_empty())
         {
-            // READ each asked statement's necessary attributes first: a
-            // candidate whose value differs is never offered.
-            let read = read::read(criterion, doc, statements, &asked, infer).await;
-            for (&i, values) in asked.iter().zip(&read.values) {
-                read_of[i] = values.clone();
-            }
+            let asked_read: Vec<BTreeMap<String, BTreeSet<String>>> =
+                asked.iter().map(|&i| read_of[i].clone()).collect();
             let proposed = criterion
                 .proposed_answer
                 .map(|_| Proposed::of(self.rule, doc, statements, &asked, &shown, &self.records));
@@ -538,15 +556,14 @@ impl Resolver {
                 &shown,
                 &self.records,
                 &key_edges,
-                &read.values,
+                &asked_read,
                 proposed.as_ref(),
                 matches!(answerer, Answerer::Reason(_)),
                 infer,
             )
             .await;
-            calls = read.calls + chosen.calls;
-            vetoed = chosen.vetoed;
-            unread = read.unknown;
+            calls += chosen.calls;
+            vetoed += chosen.vetoed;
             for (&i, c) in asked.iter().zip(chosen.choices) {
                 choices[i] = c;
             }
@@ -600,14 +617,48 @@ impl Resolver {
                 Err(refusal) => vec![Plan::Refuse(refusal); asked.len()],
             }
         };
-        for (&i, p) in asked.iter().zip(decided) {
+        let gated = select::gate_plans(
+            criterion,
+            statements,
+            &asked,
+            &read_of,
+            &self.records,
+            decided,
+            doc.id,
+            &mut vetoed,
+        );
+        for (&i, p) in asked.iter().zip(gated) {
             plan[i] = Some(p);
         }
+
+        // `group` is a per-answer partition label, not identity. Choose the
+        // lexically stable statement identity of each linked open group so
+        // equal spans and input order cannot alias or rename its record.
+        let mut open_identity_by_group = HashMap::<usize, String>::new();
+        for &i in &asked {
+            let Some(Plan::Open { group, .. }) = plan[i].as_ref() else {
+                continue;
+            };
+            let identity = &statements[i].id;
+            open_identity_by_group
+                .entry(*group)
+                .and_modify(|current| {
+                    if identity.as_str() < current.as_str() {
+                        *current = identity.clone();
+                    }
+                })
+                .or_insert_with(|| identity.clone());
+        }
+        tracing::debug!(
+            document = doc.id,
+            open_groups = open_identity_by_group.len(),
+            "atlas/resolve: open identities derived from statement ids"
+        );
 
         // FOLD, in document order, so opened ids follow the text.
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by_key(|&i| (statements[i].start, statements[i].end));
-        let mut opened: HashMap<usize, usize> = HashMap::new();
+        let mut opened: HashMap<String, usize> = HashMap::new();
         let mut outcomes: Vec<Option<StatementOutcome>> = vec![None; n];
         for i in order {
             let p = plan[i].take().unwrap_or_else(|| {
@@ -704,9 +755,13 @@ impl Resolver {
                     })
                 }
                 Plan::Open { group, cite } => {
+                    let identity = open_identity_by_group
+                        .get(&group)
+                        .expect("every open plan has a linked statement identity")
+                        .clone();
                     let record = *opened
-                        .entry(group)
-                        .or_insert_with(|| self.open(&statements[i].id));
+                        .entry(identity.clone())
+                        .or_insert_with(|| self.open(&identity));
                     self.fold(
                         record,
                         doc,
@@ -752,24 +807,26 @@ impl Resolver {
             statements = n,
             candidates = resolution.candidates.len(),
             calls,
+            vetoed,
+            unread,
             tally = ?resolution.tally(),
             "atlas/resolve: document resolved"
         );
         resolution
     }
 
-    /// Open a record introduced by statement `opener`. Statement ids are the
-    /// caller's and must be unique; `resolve_statements` refuses a file that
-    /// repeats one.
-    fn open(&mut self, opener: &str) -> usize {
+    /// Open a record under its content-derived statement identity. The
+    /// caller supplies a stable id containing the local reference where one
+    /// exists; statement ids are unique within the document.
+    fn open(&mut self, statement_identity: &str) -> usize {
         let at = self.records.len();
-        let clash = self.position.insert(opener.to_string(), at);
+        let clash = self.position.insert(statement_identity.to_string(), at);
         debug_assert!(
             clash.is_none(),
-            "statement id `{opener}` opened two records"
+            "statement id `{statement_identity}` opened two records"
         );
         self.records.push(Record {
-            id: opener.to_string(),
+            id: statement_identity.to_string(),
             handle: format!("r{at}"),
             statements: Vec::new(),
             keys: BTreeMap::new(),
@@ -786,16 +843,16 @@ impl Resolver {
         statement: &Statement,
         surface: &str,
         keys: &[(String, String)],
-        read: &BTreeMap<String, String>,
+        read: &BTreeMap<String, BTreeSet<String>>,
         cite: Option<&str>,
     ) {
         let record = &mut self.records[r];
-        for (attr, v) in read {
+        for (attr, values) in read {
             record
                 .fields
                 .entry(attr.clone())
                 .or_default()
-                .insert(v.clone());
+                .extend(values.iter().cloned());
         }
         record.statements.push(statement.id.clone());
         for (k, v) in keys {
@@ -902,3 +959,7 @@ use answer::{judge, prompt, Proposed, ProposedVerdict};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "resolve_records/open_identity_tests.rs"]
+mod open_identity_tests;

@@ -619,6 +619,7 @@ mod tests {
             title: "1. Introduction".into(),
             text,
             metadata,
+            source_documents: Vec::new(),
             approx_tokens,
         }
     }

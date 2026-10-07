@@ -34,6 +34,7 @@ fn chapter(id: &str, title: &str, body: &str) -> ChapterInput {
         title: title.into(),
         text,
         metadata: HashMap::new(),
+        source_documents: Vec::new(),
         approx_tokens,
     }
 }
@@ -652,6 +653,7 @@ async fn phase_1_skips_chapters_with_empty_bodies() {
         title: "Part I".into(),
         text: "Book I. The History Of A Family".into(),
         metadata: std::collections::HashMap::new(),
+        source_documents: Vec::new(),
         approx_tokens: 10,
     };
     let real = chapter("sec_0002", "Chapter 1", &"body word ".repeat(60));
@@ -685,6 +687,7 @@ async fn phase_1_skip_floor_is_the_corpus_setting() {
                    Miletus, Lampsacus and Sidon, buried about 305 B.C."
             .into(),
         metadata: std::collections::HashMap::new(),
+        source_documents: Vec::new(),
         approx_tokens: 30,
     };
     let heading = ChapterInput {
@@ -692,6 +695,7 @@ async fn phase_1_skip_floor_is_the_corpus_setting() {
         title: "Part I".into(),
         text: "Book I. The History Of A Family".into(),
         metadata: std::collections::HashMap::new(),
+        source_documents: Vec::new(),
         approx_tokens: 10,
     };
     let res = runner

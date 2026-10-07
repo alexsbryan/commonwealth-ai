@@ -230,6 +230,13 @@ impl CustomOntology {
         include_exemplars: bool,
         phase_id: &str,
     ) -> Option<ChatPrompt> {
+        if self.policies.document_reading {
+            return Some(super::super::document_read::compose(
+                chapter,
+                &self.policies,
+                phase_id,
+            ));
+        }
         let schema = self.phase1_schema.clone()?;
         let user = render_phase1_user_body(chapter, exemplars, include_exemplars, seed);
         Some(
@@ -372,6 +379,7 @@ mod tests {
             approx_tokens: 12,
             text: "A Series R sceatta of 1.29 g, struck at Hamwic.".into(),
             metadata: Default::default(),
+            source_documents: Vec::new(),
         }
     }
 
@@ -658,6 +666,13 @@ impl super::genre::AtlasGenre for CustomOntology {
     /// declared slots, so the reader is the SAME one — parameterised by the
     /// policy those slots were generated from.
     fn parse_phase1(&self, response: &str) -> Option<crate::error::Result<Phase1ChapterResult>> {
+        if self.policies.document_reading {
+            let parsed = super::super::document_read::parse_response(response, &self.policies);
+            if let Err(error) = &parsed {
+                tracing::warn!(error = %error, "phase1.document_read_parse_failed");
+            }
+            return Some(parsed);
+        }
         if self.phase1_schema.is_none() {
             return None;
         }

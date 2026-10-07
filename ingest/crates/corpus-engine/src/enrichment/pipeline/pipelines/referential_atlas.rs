@@ -639,6 +639,7 @@ mod tests {
             title: "Albert Einstein".into(),
             text,
             metadata,
+            source_documents: Vec::new(),
             approx_tokens,
         }
     }

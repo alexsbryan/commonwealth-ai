@@ -15,6 +15,9 @@ use super::atoms::{AtomId, Entity};
 use super::resolution::{build_name_index, build_token_index, resolve_entity_id_with_salience};
 use super::resolution_ontology::ResolutionPolicy;
 
+mod source_subject;
+pub(super) use source_subject::resolve_metadata_source_subject;
+
 // ── 3a: what may fold into what ──────────────────────────────
 
 /// Whether the declared ontology permits folding one entity mention into

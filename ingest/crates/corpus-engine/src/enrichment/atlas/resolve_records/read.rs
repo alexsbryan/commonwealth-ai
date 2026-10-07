@@ -8,10 +8,10 @@
 //! kind of happening); asked the attribute alone, it reads it (.721 on GVC
 //! dev), and code compares.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use oicp_types::forced_choice;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use super::select::{decision_call, LABELS, NONE};
 use super::{marked_context, Criterion, Document, Statement};
@@ -20,22 +20,56 @@ use crate::InferenceFn;
 
 const SYSTEM: &str = include_str!("../resolve_read_prompt.md");
 
-/// The values READ for each asked statement (by position in `asked`), the
-/// calls made, and the reads that came back unknown or refused.
+/// Necessary values supplied or READ for each asked statement (by position in
+/// `asked`), the calls made, and the reads that came back unknown or refused.
 pub(super) struct Read {
-    pub values: Vec<BTreeMap<String, String>>,
+    pub values: Vec<BTreeMap<String, BTreeSet<String>>>,
     pub calls: u32,
     pub unknown: u32,
 }
 
+/// Necessary values explicitly supplied with a statement are evidence only
+/// when they belong to the attribute's declared closed set.
+pub(super) fn provided(
+    criterion: &Criterion,
+    doc: Document<'_>,
+    statements: &[Statement],
+) -> Vec<BTreeMap<String, BTreeSet<String>>> {
+    let mut out: Vec<BTreeMap<String, BTreeSet<String>>> = vec![BTreeMap::new(); statements.len()];
+    for (i, statement) in statements.iter().enumerate() {
+        for (attr, allowed) in &criterion.necessary {
+            let Some(value) = statement.keys.get(attr) else {
+                continue;
+            };
+            if allowed.contains(value) {
+                out[i]
+                    .entry(attr.clone())
+                    .or_default()
+                    .insert(value.clone());
+            } else {
+                warn!(
+                    document = doc.id,
+                    statement = %statement.id,
+                    attr,
+                    value,
+                    ?allowed,
+                    "atlas/resolve read: supplied necessary value is outside the declared set"
+                );
+            }
+        }
+    }
+    out
+}
+
 /// READ every necessary attribute of every asked statement. A value is kept
-/// only when its label is the most probable; "none of them" and a refused
-/// call leave the attribute unknown, counted, never defaulted to a value.
+/// only when its label is the most probable; a validated supplied value skips
+/// the call, while "none of them" and a refusal leave the value unknown.
 pub(super) async fn read(
     criterion: &Criterion,
     doc: Document<'_>,
     statements: &[Statement],
     asked: &[usize],
+    provided: &[BTreeMap<String, BTreeSet<String>>],
     infer: &InferenceFn,
 ) -> Read {
     let mut out = Read {
@@ -44,8 +78,12 @@ pub(super) async fn read(
         unknown: 0,
     };
     for (j, &i) in asked.iter().enumerate() {
+        out.values[j] = provided[i].clone();
         let s = &statements[i];
         for (attr, values) in &criterion.necessary {
+            if out.values[j].contains_key(attr) {
+                continue;
+            }
             let labels: Vec<&str> = LABELS[..values.len()]
                 .iter()
                 .copied()
@@ -74,7 +112,10 @@ pub(super) async fn read(
             match labels.iter().position(|&l| l == best.0) {
                 Some(k) if best.0 != NONE => {
                     debug!(document = doc.id, statement = %s.id, attr, value = %values[k], p = best.1, "atlas/resolve read");
-                    out.values[j].insert(attr.clone(), values[k].clone());
+                    out.values[j]
+                        .entry(attr.clone())
+                        .or_default()
+                        .insert(values[k].clone());
                 }
                 _ => {
                     debug!(document = doc.id, statement = %s.id, attr, p = best.1, "atlas/resolve read: none of the values");

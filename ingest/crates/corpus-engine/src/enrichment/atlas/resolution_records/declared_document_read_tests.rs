@@ -1,0 +1,485 @@
+use super::*;
+use crate::enrichment::atlas::ann_store::AtlasSeeding;
+use crate::enrichment::atlas::AtomEnvelope;
+use crate::enrichment::ontology::{AttrDecl, AttrFamily, DocumentFieldsDecl, Force};
+use crate::enrichment::pipeline::document_read::{
+    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+};
+use serde_json::json;
+
+#[tokio::test]
+async fn state_free_membership_resolves_and_survives_the_production_atlas_writer() {
+    let body = "Issue 842 is closed; its spin-off issue 159 is also closed.";
+    let rows = [
+        corpus_index::index::EnrichmentChunkRow {
+            id: 41,
+            content: body.into(),
+            title: Some("Same title".into()),
+            url: Some("https://example.test/a".into()),
+            metadata_raw: Some(json!({"thread":"t1","id":"doc-a"}).to_string()),
+            source_doc_id: Some("doc-a".into()),
+        },
+        corpus_index::index::EnrichmentChunkRow {
+            id: 42,
+            content: body.into(),
+            title: Some("Same title".into()),
+            url: Some("https://example.test/b".into()),
+            metadata_raw: Some(json!({"thread":"t1","id":"doc-b"}).to_string()),
+            source_doc_id: Some("doc-b".into()),
+        },
+    ];
+    let documents = SectionDocuments::from_chunk_rows([("sec_1", &[41u64, 42][..])], &rows);
+    let mut policies = OntologyPolicies::default();
+    policies.document_reading = true;
+    policies.shape.types = vec![
+        OntologyTypeDecl {
+            name: "case".into(),
+            kind: TypeKind::Entity,
+            description: "A support case".into(),
+            identity_criterion: Some("the same issue identifier".into()),
+            identity_necessary: vec!["project".into()],
+            attributes: vec![
+                AttrDecl {
+                    name: "number".into(),
+                    family: AttrFamily::Text { values: Vec::new() },
+                    description: "The issue number".into(),
+                    derived: None,
+                },
+                AttrDecl {
+                    name: "project".into(),
+                    family: AttrFamily::Text {
+                        values: vec!["uv".into(), "pip".into()],
+                    },
+                    description: "The owning project".into(),
+                    derived: None,
+                },
+            ],
+            ..Default::default()
+        },
+        OntologyTypeDecl {
+            name: "membership".into(),
+            kind: TypeKind::Claim,
+            force: Some(Force::Assertive),
+            subject: Some("case".into()),
+            ..Default::default()
+        },
+        OntologyTypeDecl {
+            name: "reported_status".into(),
+            kind: TypeKind::Claim,
+            force: Some(Force::Assertive),
+            subject: Some("case".into()),
+            attributes: vec![AttrDecl {
+                name: "status".into(),
+                family: AttrFamily::Text {
+                    values: vec!["open".into(), "closed".into()],
+                },
+                description: "The reported case status".into(),
+                derived: None,
+            }],
+            ..Default::default()
+        },
+    ];
+    policies
+        .identity
+        .identity
+        .insert("case".into(), vec!["number".into()]);
+    policies.change.document = Some(DocumentFieldsDecl {
+        date: None,
+        thread: Some("thread".into()),
+        id: Some("id".into()),
+    });
+
+    let claim = |id: &str, kind: &str, document: &str, local: &str, number: &str, project: &str| {
+        let mut attributes = Map::new();
+        if kind == "reported_status" {
+            attributes.insert("status".into(), Value::String("closed".into()));
+        }
+        attributes.insert(LOCAL_REF_ATTRIBUTE.into(), Value::String(local.into()));
+        attributes.insert(
+            SOURCE_DOCUMENT_ATTRIBUTE.into(),
+            Value::String(document.into()),
+        );
+        attributes.insert(
+            SUBJECT_FIELDS_ATTRIBUTE.into(),
+            json!({"number": number, "project": project}),
+        );
+        serde_json::from_value(json!({
+            "id": id,
+            "content": "This document concerns the named support case.",
+            "discourse_act": "assert",
+            "epistemic_status": "attributed",
+            "scope": "universal",
+            "evidence": [{"chunk_id":"sec_1","passage_preview":body}],
+            "subject": null,
+            "claim_kind": kind,
+            "anchor": body,
+            "attributes": attributes,
+            "enrichment_depth": "extracted"
+        }))
+        .unwrap()
+    };
+    let mut entities = Vec::new();
+    let mut events = Vec::new();
+    let mut states = Vec::new();
+    let mut relations = Vec::new();
+    let mut claims = vec![
+        claim("claim-1", "membership", "doc-a", "case-main", "842", "uv"),
+        claim(
+            "claim-2",
+            "membership",
+            "doc-a",
+            "case-spin-off",
+            "159",
+            "pip",
+        ),
+        claim("claim-3", "membership", "doc-b", "case-main", "842", "uv"),
+        claim(
+            "claim-4",
+            "reported_status",
+            "doc-b",
+            "case-main",
+            "842",
+            "uv",
+        ),
+    ];
+    let mut argument_reconstructions = Vec::new();
+    let mut positions = Vec::new();
+    let mut oppositions = Vec::new();
+    let mut edges = Vec::new();
+    let mut trajectories = BTreeMap::new();
+    let (reports, failures) = {
+        let mut atoms = BuildAtoms {
+            entities: &mut entities,
+            events: &mut events,
+            states: &mut states,
+            relations: &mut relations,
+            claims: &mut claims,
+            argument_reconstructions: &mut argument_reconstructions,
+            positions: &mut positions,
+            oppositions: &mut oppositions,
+            edges: &mut edges,
+            trajectories: &mut trajectories,
+        };
+        let mut on_document = |_: &str, _: &DocumentResolution| {};
+        resolve_declared_types(
+            &mut atoms,
+            &documents,
+            &policies,
+            "cases",
+            Answerer::Proposed,
+            &mut on_document,
+        )
+        .await
+    };
+
+    assert_eq!(
+        reports[0].records, 1,
+        "the evidence-keyed case is retained; the conflicting spin-off is not made novel"
+    );
+    assert_eq!(
+        reports[0].statements, 3,
+        "same-anchor local refs remain separate statements"
+    );
+    assert_eq!(reports[0].outcomes.get("refused:contradiction"), Some(&1));
+    assert_eq!(
+        failures.len(),
+        1,
+        "the spin-off remains explicitly unresolved"
+    );
+    let cases: Vec<_> = entities
+        .iter()
+        .filter(|entity| entity.entity_type.as_str_repr() == "case")
+        .collect();
+    assert_eq!(cases.len(), 1);
+    let memberships: Vec<_> = claims
+        .iter()
+        .filter(|claim| claim.claim_kind.as_deref() == Some("membership"))
+        .collect();
+    assert_eq!(memberships.len(), 3);
+    assert_eq!(memberships[0].subject, memberships[2].subject);
+    assert!(memberships[1].subject.is_none());
+    for claim in &memberships {
+        assert!(claim.attributes.is_empty(), "membership is state-free");
+        assert_eq!(
+            claim.evidence[0].source_doc_id.as_deref(),
+            Some(if claim.id.as_str() == "claim-2" {
+                "doc-a"
+            } else if claim.id.as_str() == "claim-3" {
+                "doc-b"
+            } else {
+                "doc-a"
+            })
+        );
+    }
+
+    let directory = tempfile::tempdir().unwrap();
+    crate::enrichment::atlas::writer::write_atlas_full(
+        directory.path(),
+        &entities,
+        &events,
+        &states,
+        &relations,
+        &claims,
+        &[],
+        &[],
+        &argument_reconstructions,
+        &positions,
+        &oppositions,
+        &edges,
+        &trajectories,
+        &AtlasSeeding::Deferred("document-read adapter test has no embedder"),
+    )
+    .unwrap();
+    let written = understanding_vocab::read::read_atlas_atoms(directory.path()).unwrap();
+    let written_claims: Vec<_> = written
+        .atoms()
+        .iter()
+        .filter_map(|atom| match atom {
+            AtomEnvelope::Claim(claim) if claim.claim_kind.as_deref() == Some("membership") => {
+                Some(claim)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(written_claims.len(), 3);
+    assert!(written_claims
+        .iter()
+        .all(|claim| claim.attributes.is_empty()));
+    assert_eq!(
+        written_claims
+            .iter()
+            .map(|claim| claim.evidence[0].source_doc_id.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        ["doc-a", "doc-a", "doc-b"]
+    );
+    assert_eq!(
+        written_claims
+            .iter()
+            .filter_map(|claim| claim.subject.as_ref().map(|subject| subject.as_str()))
+            .collect::<BTreeSet<_>>()
+            .len(),
+        1,
+        "the confirmed case is written; the spin-off has no fabricated subject"
+    );
+    let status = written
+        .atoms()
+        .iter()
+        .find_map(|atom| match atom {
+            AtomEnvelope::Claim(claim)
+                if claim.claim_kind.as_deref() == Some("reported_status") =>
+            {
+                Some(claim)
+            }
+            _ => None,
+        })
+        .expect("declared claim qualifier survives the production writer");
+    assert_eq!(status.attributes["status"], "closed");
+    assert_eq!(status.evidence[0].source_doc_id.as_deref(), Some("doc-b"));
+}
+
+async fn run_open_writer_case(
+    particulars: serde_json::Value,
+) -> (
+    usize,
+    usize,
+    usize,
+    usize,
+    Vec<Option<String>>,
+    usize,
+    Vec<Option<String>>,
+) {
+    use std::sync::Arc;
+
+    let body = "Two local references appear in this one passage.";
+    let rows = [corpus_index::index::EnrichmentChunkRow {
+        id: 41,
+        content: body.into(),
+        title: Some("One source".into()),
+        url: Some("https://example.test/doc-a".into()),
+        metadata_raw: Some(json!({"id":"doc-a"}).to_string()),
+        source_doc_id: Some("doc-a".into()),
+    }];
+    let documents = SectionDocuments::from_chunk_rows([("sec_1", &[41u64][..])], &rows);
+    let mut policies = OntologyPolicies::default();
+    policies.shape.types = vec![
+        OntologyTypeDecl {
+            name: "case".into(),
+            kind: TypeKind::Entity,
+            description: "A support case".into(),
+            identity_criterion: Some("the same issue".into()),
+            ..Default::default()
+        },
+        OntologyTypeDecl {
+            name: "membership".into(),
+            kind: TypeKind::Claim,
+            force: Some(Force::Assertive),
+            subject: Some("case".into()),
+            ..Default::default()
+        },
+    ];
+    let claim = |id: &str, local_ref: &str| {
+        let mut attributes = Map::new();
+        attributes.insert(LOCAL_REF_ATTRIBUTE.into(), Value::String(local_ref.into()));
+        attributes.insert(
+            SOURCE_DOCUMENT_ATTRIBUTE.into(),
+            Value::String("doc-a".into()),
+        );
+        attributes.insert(SUBJECT_FIELDS_ATTRIBUTE.into(), json!({}));
+        serde_json::from_value(json!({
+            "id": id,
+            "content": "This source passage concerns a case.",
+            "discourse_act": "assert",
+            "epistemic_status": "attributed",
+            "scope": "universal",
+            "evidence": [{"chunk_id":"sec_1","passage_preview":body}],
+            "subject": null,
+            "claim_kind": "membership",
+            "anchor": body,
+            "attributes": attributes,
+            "enrichment_depth": "extracted"
+        }))
+        .unwrap()
+    };
+    let mut entities = Vec::new();
+    let mut events = Vec::new();
+    let mut states = Vec::new();
+    let mut relations = Vec::new();
+    let mut claims = vec![claim("claim-a", "local-a"), claim("claim-b", "local-b")];
+    let mut argument_reconstructions = Vec::new();
+    let mut positions = Vec::new();
+    let mut oppositions = Vec::new();
+    let mut edges = Vec::new();
+    let mut trajectories = BTreeMap::new();
+    let (reports, failures) = {
+        let mut atoms = BuildAtoms {
+            entities: &mut entities,
+            events: &mut events,
+            states: &mut states,
+            relations: &mut relations,
+            claims: &mut claims,
+            argument_reconstructions: &mut argument_reconstructions,
+            positions: &mut positions,
+            oppositions: &mut oppositions,
+            edges: &mut edges,
+            trajectories: &mut trajectories,
+        };
+        let answer = particulars.to_string();
+        let infer: crate::types::InferenceFn = Arc::new(move |_, _| {
+            let answer = answer.clone();
+            Box::pin(async move { Ok(answer) })
+        });
+        let mut on_document = |_: &str, _: &DocumentResolution| {};
+        resolve_declared_types(
+            &mut atoms,
+            &documents,
+            &policies,
+            "same-anchor",
+            Answerer::Model(&infer),
+            &mut on_document,
+        )
+        .await
+    };
+    let record_count = reports[0].records;
+    let statement_count = reports[0].statements;
+    let opened = *reports[0].outcomes.get("opened").unwrap_or(&0);
+    let membership_subjects: Vec<Option<String>> = claims
+        .iter()
+        .filter(|claim| claim.claim_kind.as_deref() == Some("membership"))
+        .map(|claim| {
+            claim
+                .subject
+                .as_ref()
+                .map(|subject| subject.as_str().to_string())
+        })
+        .collect();
+
+    let directory = tempfile::tempdir().unwrap();
+    crate::enrichment::atlas::writer::write_atlas_full(
+        directory.path(),
+        &entities,
+        &events,
+        &states,
+        &relations,
+        &claims,
+        &[],
+        &[],
+        &argument_reconstructions,
+        &positions,
+        &oppositions,
+        &edges,
+        &trajectories,
+        &AtlasSeeding::Deferred("same-anchor identity test has no embedder"),
+    )
+    .unwrap();
+    let written = understanding_vocab::read::read_atlas_atoms(directory.path()).unwrap();
+    let written_cases = written
+        .atoms()
+        .iter()
+        .filter(|atom| {
+            matches!(atom, AtomEnvelope::Entity(entity) if entity.entity_type.as_str_repr() == "case")
+        })
+        .count();
+    let written_subjects = written
+        .atoms()
+        .iter()
+        .filter_map(|atom| match atom {
+            AtomEnvelope::Claim(claim) if claim.claim_kind.as_deref() == Some("membership") => {
+                Some(
+                    claim
+                        .subject
+                        .as_ref()
+                        .map(|subject| subject.as_str().to_string()),
+                )
+            }
+            _ => None,
+        })
+        .collect();
+    (
+        record_count,
+        statement_count,
+        opened,
+        failures.len(),
+        membership_subjects,
+        written_cases,
+        written_subjects,
+    )
+}
+
+#[tokio::test]
+async fn same_anchor_local_references_follow_explicit_open_and_link_decisions_in_writer() {
+    let body = "Two local references appear in this one passage.";
+    let independent = json!({
+        "particulars": [
+            {"same_as":"none", "mentions":[{"statement":"s0", "cite":body}]},
+            {"same_as":"none", "mentions":[{"statement":"s1", "cite":body}]}
+        ]
+    });
+    let linked = json!({
+        "particulars": [
+            {"same_as":"none", "mentions":[
+                {"statement":"s0", "cite":body},
+                {"statement":"s1", "cite":body}
+            ]}
+        ]
+    });
+
+    let (records, statements, opened, failures, subjects, written_cases, written_subjects) =
+        run_open_writer_case(independent).await;
+    assert_eq!(
+        (records, statements, opened, failures, written_cases),
+        (2, 2, 2, 0, 2)
+    );
+    assert_ne!(subjects[0], subjects[1]);
+    let written_set: BTreeSet<_> = written_subjects.into_iter().flatten().collect();
+    assert_eq!(written_set.len(), 2);
+
+    let (records, statements, opened, failures, subjects, written_cases, written_subjects) =
+        run_open_writer_case(linked).await;
+    assert_eq!(
+        (records, statements, opened, failures, written_cases),
+        (1, 2, 2, 0, 1)
+    );
+    assert_eq!(subjects[0], subjects[1]);
+    assert!(written_subjects.iter().all(Option::is_some));
+    assert_eq!(written_subjects[0], written_subjects[1]);
+}

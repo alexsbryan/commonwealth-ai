@@ -162,6 +162,7 @@ fn fixed_chapter() -> ChapterInput {
         approx_tokens: text.len() / 4,
         text,
         metadata: HashMap::from([("ordinal".to_string(), "2".to_string())]),
+        source_documents: Vec::new(),
     }
 }
 

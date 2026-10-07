@@ -279,6 +279,11 @@ whose turn lanes ask svrn over its turn route (`bench_cmd/subject.rs`) and whose
 ask svrn's `__probe` for the grounding gate's own verdicts and judge registers
 (`bench_cmd/svrn_judge.rs`); pure scorers in `sovereign-eval/`.
 
+`bench er-score` reports standard clustering metrics conditional on shared mention IDs, and a separate
+`recovery_b_cubed` measure using full cluster sizes: omitted gold members lose recall and extra placements
+lose precision. Callers scope the evaluation universe; the support-case scorer includes known no-case
+placements and reports membership coverage beside the conditional metrics.
+
 `scripts/sovereign-ci-bench.sh` is the full nightly (~2-4h) and **the primary
 way to catch a regression anywhere in the inference + retrieval stack** — one
 command spanning retrieval recall, enrichment atom-F1, intent routing,
@@ -578,6 +583,17 @@ question the pipeline asks about a type is a method on the resolved
   schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
   the navigation map; a relation declared with both ends also gets one focused
   Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`).
+  Opt-in `document_reading = true` adds an accountable Phase-1 read over the
+  hydrated source documents for every declared claim kind whose subject is a
+  source-free entity with `identity_criterion` or a metadata-sourced entity
+  with declared identity fields, preserving its declared force. Metadata-backed
+  subjects bind to existing projected entities by exact identity and are never
+  re-extracted. V1 validation names and refuses unsupported claim kinds.
+  `DocumentRead` outcomes, evidence and `subject_local_ref`s travel through
+  `SectionExtraction` cache/checkpoints, keyed by the read contract and source
+  context; generic questions are skipped on this path, and accountable source
+  identity and subject fields flow to RESOLVE. `false` preserves the default
+  path.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from the ONE document its evidence anchor lands in
@@ -650,7 +666,17 @@ question the pipeline asks about a type is a method on the resolved
   source projection records) and refs, filtered by sets, combined by a fold from a
   closed registry; claim attributes before RESOLVE, a decided type's after, each
   outcome typed in `atlas/derived_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
-  enforcing a criterion the extraction did not fill.** Every pipeline writes
+  enforcing a criterion the extraction did not fill.** The optional `by = "protocol"`
+  fold projects a closed text state only after RESOLVE, from cited claims assigned
+  through `^subject`. Each rule requires source-supported `DocumentRead` fields;
+  absent qualifications and legacy caches without the additive field-evidence
+  pointer remain pending. `change.document.date` orders state reports, while a
+  configured claim `effective_time` is retained separately and never orders them.
+  Undated, mixed-precision or unsupported partial report times remain alternatives;
+  incompatible states at the same report time conflict. The existing decision line
+  retains rule fingerprint, claim basis, assignment, source document, field evidence
+  and history, including duplicates, corrections and superseded reports. Existing
+  ref-valued folds keep their semantics. Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at
   `pipelines/ontologies/<id>.toml`.

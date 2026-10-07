@@ -14,7 +14,7 @@
 //! mention that is not a statement has no decided particular to point at
 //! (ARCH 6).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -39,6 +39,9 @@ use crate::enrichment::ontology::{
     DocumentStamp, OntologyPolicies, OntologyTypeDecl, TypeIndex, TypeKind,
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+use crate::enrichment::pipeline::document_read::{
+    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+};
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 
 /// The extractor id on a record's atom.
@@ -178,6 +181,11 @@ pub async fn resolve_declared_types(
         info!(r#type = %t.name, records = report.records, statements = report.statements, unplaced = report.unplaced, retired = report.retired, calls = report.calls, "atlas/resolve: type decided");
         reports.push(report);
     }
+    for claim in atoms.claims.iter_mut() {
+        claim.attributes.remove(LOCAL_REF_ATTRIBUTE);
+        claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE);
+        claim.attributes.remove(SUBJECT_FIELDS_ATTRIBUTE);
+    }
     (reports, failures)
 }
 
@@ -206,9 +214,28 @@ async fn resolve_type(
         .map(|c| c.name.as_str())
         .collect();
     let of_kinds = |c: &Claim| c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k));
-    // Their subjects are RESOLVE's to decide; any a name lookup set goes.
-    for c in atoms.claims.iter_mut().filter(|c| of_kinds(c)) {
-        c.subject = None;
+    // Reader-local references and supplied values are transient handoff data;
+    // the qualified read itself remains in the Phase-1 cache.
+    let mut read_document_of = HashMap::<usize, String>::new();
+    let mut read_local_ref_of = HashMap::<usize, String>::new();
+    let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
+    for (i, claim) in atoms.claims.iter_mut().enumerate() {
+        if !of_kinds(claim) {
+            continue;
+        }
+        claim.subject = None;
+        if let Some(Value::String(document)) = claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE) {
+            for evidence in &mut claim.evidence {
+                evidence.source_doc_id = Some(document.clone());
+            }
+            read_document_of.insert(i, document);
+        }
+        if let Some(Value::String(local_ref)) = claim.attributes.remove(LOCAL_REF_ATTRIBUTE) {
+            read_local_ref_of.insert(i, local_ref);
+        }
+        if let Some(Value::Object(fields)) = claim.attributes.remove(SUBJECT_FIELDS_ATTRIBUTE) {
+            read_subject_fields_of.insert(i, fields);
+        }
     }
 
     // One decider: the Phase-1 atoms of the type go first, whatever follows.
@@ -248,6 +275,7 @@ async fn resolve_type(
     // mark one span share its statement.
     let mut placed: Vec<Placed<'_>> = Vec::new();
     let mut at: HashMap<&str, usize> = HashMap::new();
+    let mut conflicting_keys: HashSet<(String, String)> = HashSet::new();
     let mut statement_of: Vec<(usize, String)> = Vec::new();
     let mut section_of: HashMap<String, String> = HashMap::new();
     for (i, claim) in atoms.claims.iter().enumerate() {
@@ -255,7 +283,22 @@ async fn resolve_type(
             continue;
         };
         report.claims += 1;
-        let spot = locate(claim, documents).and_then(|doc| {
+        let locate_accountable = || {
+            let document_id = read_document_of.get(&i).ok_or_else(|| {
+                "accountable document id is absent from the claim handoff".to_string()
+            })?;
+            let section = claim
+                .evidence
+                .first()
+                .map(|evidence| evidence.chunk_id.as_str())
+                .ok_or_else(|| "accountable claim carries no section evidence".to_string())?;
+            let doc = documents
+                .document_for_section(section, document_id)
+                .ok_or_else(|| {
+                    format!(
+                        "accountable document `{document_id}` is not present in evidence section `{section}`"
+                    )
+                })?;
             let anchor = claim
                 .anchor
                 .as_deref()
@@ -263,13 +306,37 @@ async fn resolve_type(
                     claim
                         .evidence
                         .iter()
-                        .find_map(|e| e.passage_preview.as_deref())
+                        .find_map(|evidence| evidence.passage_preview.as_deref())
                 })
                 .map(fold_ws)
-                .filter(|a| !a.is_empty())
+                .filter(|anchor| !anchor.is_empty())
                 .ok_or_else(|| "the claim carries no anchor".to_string())?;
+            if !doc.body().contains(&anchor) {
+                return Err(format!(
+                    "anchor {anchor:?} is not in explicitly named document `{document_id}`"
+                ));
+            }
             Ok((doc, anchor))
-        });
+        };
+        let spot = if read_document_of.contains_key(&i) {
+            locate_accountable()
+        } else {
+            locate(claim, documents).and_then(|doc| {
+                let anchor = claim
+                    .anchor
+                    .as_deref()
+                    .or_else(|| {
+                        claim
+                            .evidence
+                            .iter()
+                            .find_map(|e| e.passage_preview.as_deref())
+                    })
+                    .map(fold_ws)
+                    .filter(|a| !a.is_empty())
+                    .ok_or_else(|| "the claim carries no anchor".to_string())?;
+                Ok((doc, anchor))
+            })
+        };
         let (doc, anchor) = match spot {
             Ok(s) => s,
             Err(why) => {
@@ -302,14 +369,58 @@ async fn resolve_type(
             continue;
         };
         let end = start + anchor.len();
-        let id = format!("{}@{start}..{end}", doc.key);
+        let id = match read_local_ref_of.get(&i) {
+            Some(local_ref) => format!(
+                "{}@{start}..{end}#{}",
+                doc.key,
+                serde_json::to_string(local_ref).expect("local references are serializable")
+            ),
+            None => format!("{}@{start}..{end}", doc.key),
+        };
+        let mut keys = BTreeMap::new();
+        if let Some(fields) = read_subject_fields_of.get(&i) {
+            for key in criterion.keys.iter().chain(t.identity_necessary.iter()) {
+                let value = fields.get(key).and_then(|value| match value {
+                    Value::String(text) => Some(text.clone()),
+                    Value::Number(number) => Some(number.to_string()),
+                    _ => None,
+                });
+                if let Some(value) = value {
+                    keys.insert(key.clone(), value);
+                }
+            }
+        }
         if !placed[k].statements.iter().any(|s| s.id == id) {
             placed[k].statements.push(Statement {
                 id: id.clone(),
                 start,
                 end,
-                keys: BTreeMap::new(),
+                keys,
             });
+        } else if let Some(statement) = placed[k].statements.iter_mut().find(|s| s.id == id) {
+            for (key, value) in keys {
+                let conflict = (id.clone(), key.clone());
+                if conflicting_keys.contains(&conflict) {
+                    continue;
+                }
+                match statement.keys.get(&key) {
+                    Some(previous) if previous != &value => {
+                        statement.keys.remove(&key);
+                        conflicting_keys.insert(conflict);
+                        failures.push(failure(
+                            format!("document:{}", doc.key),
+                            PhaseFailureKind::Other,
+                            format!(
+                                "accountable claims for local subject `{}` conflict on identity field `{key}`; withheld from RESOLVE",
+                                read_local_ref_of.get(&i).map(String::as_str).unwrap_or("?")
+                            ),
+                        ));
+                    }
+                    _ => {
+                        statement.keys.entry(key).or_insert(value);
+                    }
+                }
+            }
         }
         if let Some(e) = claim.evidence.first() {
             section_of
@@ -632,3 +743,7 @@ fn drop_attr_refs(attributes: &mut Map<String, Value>, gone: &BTreeSet<AtomId>) 
 #[cfg(test)]
 #[path = "resolution_records/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resolution_records/declared_document_read_tests.rs"]
+mod declared_document_read_tests;

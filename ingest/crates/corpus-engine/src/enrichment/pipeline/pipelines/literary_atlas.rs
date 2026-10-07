@@ -1790,6 +1790,7 @@ mod tests {
             title: "The Elder's Counsel".into(),
             text: "Zosima laid his hand upon Alyosha's head.".into(),
             metadata: HashMap::new(),
+            source_documents: Vec::new(),
             approx_tokens: 10,
         }
     }

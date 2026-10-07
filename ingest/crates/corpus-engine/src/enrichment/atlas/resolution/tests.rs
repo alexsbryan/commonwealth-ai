@@ -75,6 +75,7 @@ fn step_3b_resolves_state_relation_claim_question_atoms_from_sketches() {
     // further (so Transition edges fire).
     let sections = vec![
         SectionExtraction {
+            document_read: None,
             section_id: "sec_0001".into(),
             enrichment_depth: EnrichmentDepth::Extracted,
             entities_introduced: vec![EntitySketch {

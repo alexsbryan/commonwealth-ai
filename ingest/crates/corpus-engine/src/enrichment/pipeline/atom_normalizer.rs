@@ -483,6 +483,7 @@ mod tests {
 
     fn empty_section() -> SectionExtraction {
         SectionExtraction {
+            document_read: None,
             section_id: "sec_0001".to_string(),
             enrichment_depth: Default::default(),
             entities_introduced: Vec::new(),
