@@ -30,7 +30,10 @@
   "mcp": {
     "sovereign": {
       "type": "remote",
-      "url": "http://localhost:9741/mcp"
+      "url": "http://localhost:9741/mcp",
+      "headers": {
+        "x-svrn-corpus": "commonwealth-ai"
+      }
     }
   },
   "agent": {

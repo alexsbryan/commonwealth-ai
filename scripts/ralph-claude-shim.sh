@@ -80,11 +80,19 @@ done
 export RALPH_SESSION_CWD="$PWD"
 # RALPH_PERMISSION_BRIDGE=0 falls back to refusing the gray zone outright.
 #
-# MCP is pinned: the repo's .mcp.json (code intel) plus the bridge, and
-# nothing from the user's own config — a worker has no business with web
-# search or the claude.ai connectors the seat happens to have.
+# MCP is pinned: the WORKDIR's own .mcp.json plus the bridge, and nothing
+# from the user's own config — a worker has no business with web search or
+# the claude.ai connectors the seat happens to have. The workdir's, not this
+# checkout's: a repo's .mcp.json names its own code corpus (x-svrn-corpus) and,
+# where its workers may only read, says so (x-svrn-effects: read). A repo
+# without one gets no code intelligence, said once in the iter log.
 mcp_json="{\"mcpServers\":{\"ralph\":{\"command\":\"python3\",\"args\":[\"$here/scripts/ralph-permission-bridge.py\"]}}}"
-args+=(--strict-mcp-config --mcp-config "$here/.mcp.json")
+args+=(--strict-mcp-config)
+if [ -f "$PWD/.mcp.json" ]; then
+    args+=(--mcp-config "$PWD/.mcp.json")
+else
+    echo "ralph-claude-shim: no .mcp.json in $PWD — this worker has no code-intelligence server" >&2
+fi
 if [ "${RALPH_PERMISSION_BRIDGE:-1}" != "0" ]; then
     args+=(--mcp-config "$mcp_json" --permission-prompts host --permission-prompt-tool mcp__ralph__approve)
 fi
