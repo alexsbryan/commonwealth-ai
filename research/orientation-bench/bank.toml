@@ -294,9 +294,9 @@ line = 57
 id = "G07"
 shape = "guardrail"
 text = "Which function finds stored chunks that are exact duplicates of each other and marks them for removal?"
-gold = ["ingest/crates/corpus-engine/src/index/write.rs"]
-symbol = "dedupe_by_content_hash"
-line = 454
+gold = ["shared/crates/corpus-index/src/index/chunk_key.rs"]
+symbol = "dedupe_chunk_rows"
+line = 124
 
 [[question]]
 id = "G08"

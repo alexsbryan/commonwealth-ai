@@ -537,12 +537,12 @@ pub(super) async fn cmd_corpus_diag(args: &[String]) -> i32 {
     }
 
     if check_duplicates {
-        println!("Counting distinct content_hashes (this scans every chunk row)…");
-        match index.count_distinct_content_hashes().await {
+        println!("Counting distinct (document, text) chunk keys (this scans every chunk row)…");
+        match index.count_distinct_chunk_keys().await {
             Ok((distinct, with_hash, total)) => {
                 println!("  total chunks:             {total}");
                 println!("  with content_hash set:    {with_hash}");
-                println!("  distinct content_hashes:  {distinct}");
+                println!("  distinct chunk keys:      {distinct}");
                 let hashless = total.saturating_sub(with_hash);
                 if hashless > 0 {
                     println!(
@@ -568,7 +568,7 @@ pub(super) async fn cmd_corpus_diag(args: &[String]) -> i32 {
                 }
             }
             Err(e) => {
-                eprintln!("  failed to count distinct content_hashes: {e}");
+                eprintln!("  failed to count distinct chunk keys: {e}");
             }
         }
     }
@@ -764,11 +764,11 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
     };
 
     // Show the user what we're about to do BEFORE the destructive
-    // call. The count_distinct_content_hashes scan is the same one
+    // call. The count_distinct_chunk_keys scan is the same one
     // dedupe runs internally, but cheap enough to repeat — the
     // delete pass is the load-bearing part.
     println!("Scanning content_hashes (full table read)…");
-    let (distinct, with_hash, total) = match index.count_distinct_content_hashes().await {
+    let (distinct, with_hash, total) = match index.count_distinct_chunk_keys().await {
         Ok(triple) => triple,
         Err(e) => {
             eprintln!("Failed to count content_hashes: {e}");
@@ -783,7 +783,7 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
     };
     println!("  total chunks:             {total}");
     println!("  with content_hash set:    {with_hash}");
-    println!("  distinct content_hashes:  {distinct}");
+    println!("  distinct chunk keys:      {distinct}");
     println!("  duplicates to delete:     {dup_rows} ({dup_pct:.2}% of hashed)");
 
     if dup_rows == 0 {
@@ -814,12 +814,12 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
     }
 
     println!("\nRunning dedupe…");
-    match index.dedupe_by_content_hash().await {
+    match index.dedupe_chunk_rows().await {
         Ok(report) => {
             println!("  rows before:              {}", report.rows_before);
             println!("  rows after:               {}", report.rows_after);
             println!("  duplicates deleted:       {}", report.duplicates_deleted);
-            println!("  unique hashes preserved:  {}", report.unique_hashes_kept);
+            println!("  unique keys preserved:    {}", report.unique_keys_kept);
             println!(
                 "  hashless rows preserved:  {}",
                 report.hashless_rows_preserved
@@ -860,7 +860,7 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
 ///      acts on it.
 ///
 /// The embed-side dedup gate (loaded at ingest start from
-/// `list_indexed_content_hashes`) makes resuming safe — already-
+/// `list_indexed_chunk_keys`) makes resuming safe — already-
 /// embedded content is skipped, so only the genuinely missing shards
 /// do work.
 pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {

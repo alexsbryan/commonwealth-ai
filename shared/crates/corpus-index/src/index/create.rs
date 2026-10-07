@@ -851,12 +851,12 @@ impl CorpusIndex {
         // doesn't re-scan.
         if !self.is_chunks_deduped() {
             eprintln!("[{id}] Pre-build dedupe pass (0/3)...");
-            match self.dedupe_by_content_hash().await {
+            match self.dedupe_chunk_rows().await {
                 Ok(report) => {
                     if report.changed() {
                         let pct = report.dup_fraction() * 100.0;
                         eprintln!(
-                            "[{id}] Dedupe collapsed {} duplicate rows ({pct:.2}% \
+                            "[{id}] Dedupe collapsed {} rows repeating their document's own text ({pct:.2}% \
                              of hashed) — {} unique chunks remain",
                             report.duplicates_deleted, report.rows_after,
                         );

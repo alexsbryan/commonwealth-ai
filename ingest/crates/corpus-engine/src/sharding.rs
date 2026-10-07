@@ -792,9 +792,10 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
     }
 
     let mut next_id: i64 = 1;
-    // Track seen content_hashes (primary key) and (unit_id, source_doc_id)
-    // pairs (secondary key for rows with NULL content_hash).
-    let mut seen_hashes: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Track seen chunk keys (primary: document + text hash) and
+    // (unit_id, source_doc_id) pairs (secondary, for NULL content_hash).
+    let mut seen_keys: std::collections::HashSet<crate::index::ChunkKey> =
+        std::collections::HashSet::new();
     let mut seen_units: std::collections::HashSet<(i32, String)> = std::collections::HashSet::new();
     let mut dedup_count: u64 = 0;
 
@@ -818,14 +819,14 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
             }
 
             // ── Two-key deduplication ─────────────────────────────────
-            // Primary: content_hash. Secondary: (unit_id, source_doc_id)
-            // for rows with NULL content_hash (defensive fallback; under
-            // the pull-based queue path every chunk has a populated hash).
-            // Build a boolean keep-mask: true for rows whose primary OR
-            // secondary key has not been seen in any earlier shard.
-            let hash_col = batch
-                .column_by_name("content_hash")
-                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            // Primary: the chunk key (document + text hash), so the same
+            // text in two documents keeps both rows. Secondary:
+            // (unit_id, source_doc_id) for rows with NULL content_hash
+            // (defensive fallback; under the pull-based queue path every
+            // chunk has a populated hash). Build a boolean keep-mask: true
+            // for rows whose primary OR secondary key has not been seen in
+            // any earlier shard.
+            let key_cols = crate::index::ChunkKeyColumns::of(batch);
             let unit_id_col = batch
                 .column_by_name("unit_id")
                 .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int32Array>());
@@ -835,17 +836,13 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
 
             let keep_mask: BooleanArray = (0..num_rows)
                 .map(|row| {
-                    // Primary key: content_hash.
-                    if let Some(col) = hash_col {
-                        if !col.is_null(row) {
-                            let h = col.value(row);
-                            if seen_hashes.contains(h) {
-                                dedup_count += 1;
-                                return false;
-                            }
-                            seen_hashes.insert(h.to_string());
-                            return true;
+                    // Primary key: the chunk key.
+                    if let Some(key) = key_cols.as_ref().and_then(|c| c.key(row)) {
+                        if !seen_keys.insert(key) {
+                            dedup_count += 1;
+                            return false;
                         }
+                        return true;
                     }
                     // Secondary key: (unit_id, source_doc_id) when both exist.
                     if let (Some(u_col), Some(d_col)) = (unit_id_col, source_doc_col) {
@@ -1538,12 +1535,12 @@ pub async fn append_partition_to_canonical(
     let pre_info = canonical.info().await?;
     let mut next_id: i64 = pre_info.chunk_count.saturating_add(1) as i64;
 
-    // Pre-load existing content_hashes so we can drop dupes from the
-    // source before inserting. For very large canonicals this is N
-    // strings (one per chunk) — acceptable up to ~10M; if catalogs
+    // Pre-load existing chunk keys (document + text hash) so we can drop
+    // dupes from the source before inserting. For very large canonicals
+    // this is N keys (one per chunk) — acceptable up to ~10M; if catalogs
     // get larger we'd switch to a bloom filter.
-    let mut seen_hashes: std::collections::HashSet<String> = canonical
-        .list_indexed_content_hashes()
+    let mut seen_keys: std::collections::HashSet<crate::index::ChunkKey> = canonical
+        .list_indexed_chunk_keys()
         .await
         .unwrap_or_default();
     let mut seen_units: std::collections::HashSet<(i32, String)> = std::collections::HashSet::new();
@@ -1577,9 +1574,7 @@ pub async fn append_partition_to_canonical(
             continue;
         }
 
-        let hash_col = batch
-            .column_by_name("content_hash")
-            .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+        let key_cols = crate::index::ChunkKeyColumns::of(batch);
         let unit_id_col = batch
             .column_by_name("unit_id")
             .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int32Array>());
@@ -1589,16 +1584,12 @@ pub async fn append_partition_to_canonical(
 
         let keep_mask: BooleanArray = (0..num_rows)
             .map(|row| {
-                if let Some(col) = hash_col {
-                    if !col.is_null(row) {
-                        let h = col.value(row);
-                        if seen_hashes.contains(h) {
-                            chunks_deduped += 1;
-                            return false;
-                        }
-                        seen_hashes.insert(h.to_string());
-                        return true;
+                if let Some(key) = key_cols.as_ref().and_then(|c| c.key(row)) {
+                    if !seen_keys.insert(key) {
+                        chunks_deduped += 1;
+                        return false;
                     }
+                    return true;
                 }
                 if let (Some(u_col), Some(d_col)) = (unit_id_col, source_doc_col) {
                     if !u_col.is_null(row) && !d_col.is_null(row) {

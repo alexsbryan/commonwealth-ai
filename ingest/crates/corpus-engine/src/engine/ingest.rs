@@ -1056,31 +1056,28 @@ impl CorpusEngine {
         // Embedding is the dominant cost (~30-40 chunks/sec on
         // qwen-embedding-0.6b on M-class), so re-embedding content
         // we already wrote is the most expensive way to make this
-        // mistake. The fix: load every existing chunk's
-        // `content_hash` into a HashSet at startup; before pushing
-        // a new chunk into the embed queue, skip if its hash is
-        // already in the set.
+        // mistake. The fix: load every existing row's `ChunkKey`
+        // (document + text hash) into a HashSet at startup; before
+        // pushing a new chunk into the embed queue, skip it if its key
+        // is already in the set.
         //
         // Why a HashSet rather than per-chunk DB lookups: a single
         // table scan is cheap (~seconds at 4M rows), where 4M
         // individual `only_if(content_hash = '…')` queries would
-        // dominate runtime. The memory cost is bounded:
-        // `1.5M unique hashes × ~150 bytes/entry ≈ 225 MB`. For a
-        // first-time ingest the set starts empty and grows lazily
-        // as chunks are emitted in this run — caps the same-content
-        // dupes that show up within a single shard.
+        // dominate runtime. Memory is one entry per row: the hash plus
+        // the document id it now carries. For a first-time ingest the
+        // set starts empty and grows as chunks are emitted.
         //
-        // We populate the set ONCE at startup and add to it inline
-        // as new chunks are emitted (before they're embedded). This
-        // means within-batch duplicates are also caught — a section
-        // that appears identically in two source docs gets embedded
-        // exactly once.
-        let mut seen_hashes: std::collections::HashSet<String> =
-            match index.list_indexed_content_hashes().await {
+        // The key carries the document: the same text in two
+        // documents is two rows (a "closed" event in two threads),
+        // never one — a text-only key dropped 369 of uv-support's
+        // 2,954 documents (`corpus_index::ChunkKey`).
+        let mut seen_keys: std::collections::HashSet<crate::index::ChunkKey> =
+            match index.list_indexed_chunk_keys().await {
                 Ok(set) => {
                     if !set.is_empty() {
                         eprintln!(
-                            "[{}] Embed-side dedup gate: {} existing content_hashes loaded — \
+                            "[{}] Embed-side dedup gate: {} existing chunk keys loaded — \
                          resume will skip already-embedded chunks",
                             recipe.corpus.id,
                             set.len()
@@ -1292,8 +1289,11 @@ impl CorpusEngine {
                 None
             };
 
+            let source_doc_id = doc.url.clone().or_else(|| Some(doc.source_id.clone()));
             for content in chunk_texts {
                 let content_hash = blake3_hex(&content);
+                let chunk_key =
+                    crate::index::ChunkKey::new(source_doc_id.as_deref(), &content_hash);
                 // Embed-side dedup gate. If we already have a row
                 // with this content_hash (from a prior run, or from
                 // earlier in this run), skip re-embedding. This is
@@ -1301,11 +1301,10 @@ impl CorpusEngine {
                 // bug — without it, a second ingest pass over the
                 // same source data re-embeds everything and
                 // compounds the duplicate count.
-                if seen_hashes.contains(&content_hash) {
+                if !seen_keys.insert(chunk_key) {
                     dedup_skipped += 1;
                     continue;
                 }
-                seen_hashes.insert(content_hash.clone());
                 // Promote code-intelligence metadata from the extractor's
                 // metadata JSON into typed columns. Non-code extractors
                 // leave the JSON untouched and `code_meta_from_json`
@@ -1321,7 +1320,7 @@ impl CorpusEngine {
                     url: doc.url.clone(),
                     metadata: doc.metadata.as_ref().map(|m| m.to_string()),
                     content_hash: Some(content_hash),
-                    source_doc_id: doc.url.clone().or_else(|| Some(doc.source_id.clone())),
+                    source_doc_id: source_doc_id.clone(),
                     source_file: doc.source_file.clone(),
                     code,
                     unit_id,
