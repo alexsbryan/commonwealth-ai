@@ -1,0 +1,122 @@
+<|im_start|>system
+Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.
+
+# Tools
+
+You have access to the following functions:
+
+<tools>
+{"type": "function", "function": {"name": "read", "description": "Read the contents of a file. Supports text files and images (jpg, png, gif, webp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.", "parameters": {"type": "object", "required": ["path"], "properties": {"path": {"type": "string", "description": "Path to the file to read (relative or absolute)"}, "offset": {"type": "number", "description": "Line number to start reading from (1-indexed)"}, "limit": {"type": "number", "description": "Maximum number of lines to read"}}}}}
+{"type": "function", "function": {"name": "write", "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.", "parameters": {"type": "object", "required": ["path", "content"], "properties": {"path": {"type": "string", "description": "Path to the file to write (relative or absolute)"}, "content": {"type": "string", "description": "Content to write to the file"}}}}}
+{"type": "function", "function": {"name": "bash", "description": "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.", "parameters": {"type": "object", "required": ["command"], "properties": {"command": {"type": "string", "description": "Bash command to execute"}, "timeout": {"type": "number", "description": "Timeout in seconds (optional, no default timeout)"}}}}}
+{"type": "function", "function": {"name": "find", "description": "Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to 1000 results or 50KB (whichever is hit first).", "parameters": {"type": "object", "required": ["pattern"], "properties": {"pattern": {"type": "string", "description": "Glob pattern to match files, e.g. '*.ts', '**/*.json', or 'src/**/*.spec.ts'"}, "path": {"type": "string", "description": "Directory to search in (default: current directory)"}, "limit": {"type": "number", "description": "Maximum number of results (default: 1000)"}}}}}
+{"type": "function", "function": {"name": "grep", "description": "Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore. Output is truncated to 100 matches or 50KB (whichever is hit first). Long lines are truncated to 500 chars.", "parameters": {"type": "object", "required": ["pattern"], "properties": {"pattern": {"type": "string", "description": "Search pattern (regex or literal string)"}, "path": {"type": "string", "description": "Directory or file to search (default: current directory)"}, "glob": {"type": "string", "description": "Filter files by glob pattern, e.g. '*.ts' or '**/*.spec.ts'"}, "ignoreCase": {"type": "boolean", "description": "Case-insensitive search (default: false)"}, "literal": {"type": "boolean", "description": "Treat pattern as literal string instead of regex (default: false)"}, "context": {"type": "number", "description": "Number of lines to show before and after each match (default: 0)"}, "limit": {"type": "number", "description": "Maximum number of matches to return (default: 100)"}}}}}
+{"type": "function", "function": {"name": "ls", "description": "List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries or 50KB (whichever is hit first).", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Directory to list (default: current directory)"}, "limit": {"type": "number", "description": "Maximum number of entries to return (default: 500)"}}}}}
+</tools>
+
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+<tool_call>
+<function=example_function_name>
+<parameter=example_parameter_1>
+value_1
+</parameter>
+<parameter=example_parameter_2>
+This is the value for the second parameter
+that can span
+multiple lines
+</parameter>
+</function>
+</tool_call>
+
+<IMPORTANT>
+Reminder:
+- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags
+- Required parameters MUST be specified
+- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after
+- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls
+</IMPORTANT>
+
+You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.
+
+Available tools:
+- read: Read file contents
+- write: Create or overwrite files
+- bash: Execute bash commands (ls, grep, find, etc.)
+- find: Find files by glob pattern (respects .gitignore)
+- grep: Search file contents for patterns (respects .gitignore)
+- ls: List directory contents
+
+In addition to the tools above, you may have access to other custom tools depending on the project.
+
+Guidelines:
+- Use read to examine files instead of cat or sed.
+- Use write only for new files or complete rewrites.
+- Be concise in your responses
+- Show file paths clearly when working with files
+
+Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):
+- Main documentation: /home/alexbryan/.nvm/versions/node/v23.11.1/lib/node_modules/@earendil-works/pi-coding-agent/README.md
+- Additional docs: /home/alexbryan/.nvm/versions/node/v23.11.1/lib/node_modules/@earendil-works/pi-coding-agent/docs
+- Examples: /home/alexbryan/.nvm/versions/node/v23.11.1/lib/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)
+- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory
+- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md)
+- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing
+- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)
+Current date: 2026-10-06
+Current working directory: /tmp/sovereign-agent-bench-g5SfqC<|im_end|>
+<|im_start|>user
+## Workdir state (factual, current state of `.`)
+  lights_out.py  (569 bytes)
+  prompt.md  (2133 bytes)
+  tests/
+  tests/test_integration.py  (1545 bytes)
+
+---
+
+# Light's Out — minimum-press solver (Python, Scaffolded tier)
+
+You're solving the classic **Light's Out** puzzle on an `n × n` grid.
+
+Rules:
+- Each cell is either lit (`1`) or dark (`0`).
+- Pressing a cell at row `r`, column `c` **toggles** that cell **and** its 4 orthogonal neighbors (up, down, left, right), if they exist.
+- Each cell can be pressed any number of times (but pressing twice has no net effect).
+- Goal: starting from an arbitrary initial grid, find a sequence of presses that turns **every light off**.
+
+The grid is bounded — there is no wrap-around. Corners have 3 neighbors, edges have 4 (including themselves), and interior cells have 5.
+
+## Your task
+
+Implement, in `lights_out.py` at the workdir root:
+
+```python
+def solve(grid: list[list[int]]) -> list[tuple[int, int]] | None
+```
+
+- `grid` is square; `grid[r][c]` is `0` (dark) or `1` (lit).
+- Returns a list of `(row, column)` tuples that, when applied in any order, turn every cell off. The list must be **minimum-cardinality** (any minimum-count solution is fine — ties broken however you like).
+- Returns `None` if the initial grid is unsolvable.
+
+## Constraints
+
+- Must work correctly for any `n` up to `n = 20` in under one second per solve on a modern laptop.
+- Standard library only — no `numpy`, no `scipy`, no external installs.
+- Module name is `lights_out` at the workdir root (i.e. `lights_out.py`); the grader does `from lights_out import solve` and binds against the function exactly as declared.
+
+## Hint — but think about it yourself first
+
+Brute force is `2^(n^2)` — infeasible past `n ≈ 5`. There's a much cleaner approach that runs in polynomial time. If your solution is exponential in `n`, you'll want to reconsider before submitting.
+
+## How to deliver
+
+Check the workdir-state preamble above for what files exist. **Use
+the `write_file` tool** to author whatever is missing and the `solve`
+body. Files written via tools are the only thing the grader sees.
+
+When the implementation is in place, signal completion with the
+`agent_done` tool.
+
+**Do NOT paste the solution into chat.** Only files written via tools count.<|im_end|>
+<|im_start|>assistant
+<think>

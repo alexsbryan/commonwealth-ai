@@ -5,6 +5,7 @@
 #![allow(unused_imports)]
 
 pub mod capabilities;
+mod chat_template;
 mod compute_backend;
 mod control_vector;
 mod embed_only;

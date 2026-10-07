@@ -470,7 +470,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 # through to plain-text concat (lossy: role markers hallucinate,
 # stop tokens drift). Lean — no GIL, no JSON serialisation step
 # between Rust and the renderer.
-minijinja = { version = "2", features = ["loader"] }
+minijinja = { version = "2", features = ["loader", "preserve_order"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }

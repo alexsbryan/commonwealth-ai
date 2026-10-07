@@ -1,0 +1,71 @@
+{
+ "messages": [
+  {
+   "role": "system",
+   "content": "Café — naïve résumé 😀 and a tab\there."
+  },
+  {
+   "role": "user",
+   "content": "Set the dial."
+  },
+  {
+   "role": "assistant",
+   "content": null,
+   "tool_calls": [
+    {
+     "id": "c1",
+     "type": "function",
+     "function": {
+      "name": "set_dial",
+      "arguments": "{\"level\": 0.95, \"big\": 1000000.0, \"tiny\": 1.5e-07, \"n\": 3, \"label\": \"\\u00fcn\\u00ef\\u0001ctrl\", \"flags\": [true, false, null]}"
+     }
+    }
+   ]
+  },
+  {
+   "role": "tool",
+   "tool_call_id": "c1",
+   "content": "ok"
+  }
+ ],
+ "tools": [
+  {
+   "type": "function",
+   "strict": true,
+   "function": {
+    "name": "set_dial",
+    "description": "Sets a dial. Ünïcödé “quotes” and \\ backslash.",
+    "parameters": {
+     "type": "object",
+     "required": [
+      "level"
+     ],
+     "properties": {
+      "level": {
+       "type": "number",
+       "default": 0.95,
+       "maximum": 1000000.0,
+       "minimum": 0.0001,
+       "multipleOf": 1e-05
+      },
+      "big": {
+       "type": "number",
+       "examples": [
+        123456.7,
+        1e+21,
+        -2.5,
+        1.23456789e+21,
+        0.000123456789,
+        999999.5
+       ]
+      },
+      "label": {
+       "type": "string",
+       "pattern": "^[a-z]+\\n$"
+      }
+     }
+    }
+   }
+  }
+ ]
+}

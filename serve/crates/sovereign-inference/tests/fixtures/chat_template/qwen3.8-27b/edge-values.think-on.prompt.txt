@@ -1,0 +1,70 @@
+<|im_start|>system
+Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.
+
+# Tools
+
+You have access to the following functions:
+
+<tools>
+{"type": "function", "function": {"name": "set_dial", "description": "Sets a dial. Ünïcödé “quotes” and \\ backslash.", "parameters": {"type": "object", "required": ["level"], "properties": {"level": {"type": "number", "default": 0.95, "maximum": 1e+06, "minimum": 0.0001, "multipleOf": 1e-05}, "big": {"type": "number", "examples": [123457, 1e+21, -2.5, 1.23457e+21, 0.000123457, 1e+06]}, "label": {"type": "string", "pattern": "^[a-z]+\\n$"}}}}}
+</tools>
+
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+<tool_call>
+<function=example_function_name>
+<parameter=example_parameter_1>
+value_1
+</parameter>
+<parameter=example_parameter_2>
+This is the value for the second parameter
+that can span
+multiple lines
+</parameter>
+</function>
+</tool_call>
+
+<IMPORTANT>
+Reminder:
+- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags
+- Required parameters MUST be specified
+- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after
+- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls
+</IMPORTANT>
+
+Café — naïve résumé 😀 and a tab	here.<|im_end|>
+<|im_start|>user
+Set the dial.<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+<tool_call>
+<function=set_dial>
+<parameter=level>
+0.95
+</parameter>
+<parameter=big>
+1e+06
+</parameter>
+<parameter=tiny>
+1.5e-07
+</parameter>
+<parameter=n>
+3
+</parameter>
+<parameter=label>
+ünïctrl
+</parameter>
+<parameter=flags>
+[true, false, null]
+</parameter>
+</function>
+</tool_call><|im_end|>
+<|im_start|>user
+<tool_response>
+ok
+</tool_response><|im_end|>
+<|im_start|>assistant
+<think>
