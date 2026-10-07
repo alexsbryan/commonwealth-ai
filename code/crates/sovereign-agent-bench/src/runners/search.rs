@@ -11,15 +11,16 @@
 //! stall detection — are validated by `sovereign-tdd`'s own
 //! test suite.
 
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use serde_json::json;
-use tracing::warn;
+use tracing::{info, warn};
 
 use sovereign_tdd::{
-    run_trial, ChatBackend, Polarity, ReqwestChatBackend, Trial, TrialConfig, TrialStatus, Workdir,
+    run_trial_observed, ChatBackend, Polarity, ReqwestChatBackend, RoundObserver, RoundSummary,
+    Trial, TrialConfig, TrialStatus, Workdir,
 };
 
 use crate::runner::{
@@ -129,7 +130,55 @@ impl AgentRunner for SearchRunner {
             syntax_validator: ctx.syntax_validator.clone(),
         };
 
-        let result = run_trial(trial, Arc::clone(&self.backend)).await;
+        // The problem's wall cap binds search the way it binds pi and
+        // opencode: stop and keep the workdir. Past it the bench's outer
+        // watchdog substitutes an empty one. The canonical workdir only
+        // changes when a round promotes its winner (a synchronous
+        // `snapshot_dir`), and candidates live in a JoinSet that aborts
+        // on drop, so cancelling here leaves the last promoted state on
+        // disk. Rounds finished before the cap reach the artifact
+        // through the observer.
+        let rounds: Arc<Mutex<Vec<RoundSummary>>> = Arc::default();
+        let observer: RoundObserver = {
+            let rounds = Arc::clone(&rounds);
+            Arc::new(move |r: &RoundSummary| {
+                rounds
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(r.clone())
+            })
+        };
+        let cap = Duration::from_secs(ctx.wall_seconds_cap);
+        let trial_run = run_trial_observed(trial, Arc::clone(&self.backend), Some(observer));
+        let result = match tokio::time::timeout(cap, trial_run).await {
+            Ok(result) => result,
+            Err(_) => {
+                let trajectory = rounds.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                info!(
+                    cap_secs = ctx.wall_seconds_cap,
+                    rounds = trajectory.len(),
+                    "search: wall cap reached — returning the last promoted workdir"
+                );
+                return Ok(AgentRunArtifact {
+                    workdir: ctx.workdir,
+                    tokens: TokenCounts::default(),
+                    wall_ms: started.elapsed().as_millis() as u64,
+                    exit_reason: ExitReason::Timeout {
+                        cap_seconds: ctx.wall_seconds_cap,
+                    },
+                    tool_calls: vec![],
+                    stderr_tail: String::new(),
+                    final_assistant_text: format!(
+                        "Search stopped at the {}s wall cap after {} completed rounds.\n",
+                        ctx.wall_seconds_cap,
+                        trajectory.len()
+                    ),
+                    raw_stdout_lines: vec![],
+                    request_records: request_records(&trajectory),
+                    role_model_map_used: None,
+                });
+            }
+        };
 
         // Map TrialStatus → ExitReason. The bench's downstream
         // judges expect SearchStalled / SearchExhaustedRounds /
@@ -149,26 +198,7 @@ impl AgentRunner for SearchRunner {
             }
         };
 
-        let request_records: Vec<ChatRequestRecord> = result
-            .trajectory
-            .iter()
-            .enumerate()
-            .map(|(turn, round)| ChatRequestRecord {
-                turn: turn as u32,
-                role: None,
-                request: json!({
-                    "search_round": round.round,
-                    "candidates": round.candidates,
-                    "details": round.details,
-                }),
-                response: json!({
-                    "winner": round.winner,
-                    "passing_after": round.passing_after,
-                    "failed_after": round.failed_after,
-                }),
-                elapsed_ms: 0,
-            })
-            .collect();
+        let request_records = request_records(&result.trajectory);
 
         let final_assistant_text = format!(
             "Search summary: {}/{} tests passing after {} rounds.\n",
@@ -188,6 +218,28 @@ impl AgentRunner for SearchRunner {
             role_model_map_used: None,
         })
     }
+}
+
+fn request_records(trajectory: &[RoundSummary]) -> Vec<ChatRequestRecord> {
+    trajectory
+        .iter()
+        .enumerate()
+        .map(|(turn, round)| ChatRequestRecord {
+            turn: turn as u32,
+            role: None,
+            request: json!({
+                "search_round": round.round,
+                "candidates": round.candidates,
+                "details": round.details,
+            }),
+            response: json!({
+                "winner": round.winner,
+                "passing_after": round.passing_after,
+                "failed_after": round.failed_after,
+            }),
+            elapsed_ms: 0,
+        })
+        .collect()
 }
 
 fn crashed_artifact(
@@ -223,6 +275,61 @@ mod tests {
         assert_eq!(
             SearchRunner::new().default_model_handle(),
             Some("commonwealth/primary")
+        );
+    }
+
+    /// A backend that never answers within any cap a test sets.
+    struct StalledBackend;
+
+    #[async_trait]
+    impl ChatBackend for StalledBackend {
+        async fn complete(
+            &self,
+            _model: &str,
+            _messages: Vec<serde_json::Value>,
+            _temperature: f32,
+            _max_tokens: u32,
+        ) -> Result<sovereign_tdd::ChatResponse, sovereign_tdd::BackendError> {
+            tokio::time::sleep(std::time::Duration::from_secs(600)).await;
+            Err(sovereign_tdd::BackendError::Transport("stalled".into()))
+        }
+    }
+
+    /// pi and opencode stop at the problem's wall cap and hand back the
+    /// workdir they wrote. Search must do the same: past the cap the
+    /// bench's outer watchdog substitutes an EMPTY workdir, which scores
+    /// any progress the search made as zero.
+    #[tokio::test]
+    async fn search_stops_at_its_wall_cap_with_the_real_workdir() {
+        let workdir = tempfile::tempdir().unwrap();
+        std::fs::write(workdir.path().join("marker.txt"), "scaffold").unwrap();
+        let ctx = AgentRunContext {
+            problem_id: "cap".into(),
+            prompt: "make b pass".into(),
+            workdir,
+            tool_allowlist: &[],
+            token_budget: 1000,
+            wall_seconds_cap: 1,
+            model_handle: "m".into(),
+            build_cmd: "true".into(),
+            verify_cmd: "counts: printf 'PASS a\\nFAIL b\\n'".into(),
+            syntax_validator: None,
+            role_model_map: Default::default(),
+            workdir_scale: sovereign_agent_tools::WorkdirScale::Scaffold,
+        };
+        let runner = SearchRunner::with_backend(Arc::new(StalledBackend));
+        let artifact = tokio::time::timeout(std::time::Duration::from_secs(30), runner.run(ctx))
+            .await
+            .expect("search must stop at its own wall cap, not run past it")
+            .expect("run");
+        assert!(
+            matches!(artifact.exit_reason, ExitReason::Timeout { cap_seconds: 1 }),
+            "{:?}",
+            artifact.exit_reason
+        );
+        assert_eq!(
+            std::fs::read_to_string(artifact.workdir.path().join("marker.txt")).unwrap(),
+            "scaffold"
         );
     }
 
