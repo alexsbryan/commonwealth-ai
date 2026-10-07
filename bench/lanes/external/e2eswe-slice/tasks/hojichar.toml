@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Committed FACTS about the fetched E2E-SWE task (see ldaptor.toml for the pattern).
+# Text-cleaning pipeline, 81 hidden tests, obscure. Like cement it expects a
+# LIVE redis (dedup extensions); the verify sandbox starts one.
+
+id = "hojichar"
+upstream = "tasks/hojichar"
+hidden_tests = 81
+spec_chars = 25506
+
+[test]
+target = "tests/test_hojichar.py"
+pytest_timeout = 30
+needs_redis = true
+
+# instruction.md: runtime numpy<2 + tqdm<5; dedup deps datasketch, rensa, xxhash,
+# nltk, redis; build backend hatchling + uv-dynamic-versioning (the pyproject
+# uses the plugin, so `--no-build-isolation` needs it preinstalled). rensa is a
+# rust-wheels package — if its wheel refuses this python, `setup` fails loudly
+# here rather than at battery time.
+[deps]
+runtime = ["numpy>=1.26,<2.0", "tqdm>=4.65.0,<5", "datasketch", "rensa", "xxhash", "nltk", "redis"]
+build = ["setuptools", "wheel", "hatchling", "uv-dynamic-versioning"]

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Committed FACTS about the fetched E2E-SWE task (content itself is not committed;
+# `fetch.sh` materializes it into target/ and verifies it against manifest.json).
+# Difficulty rank: biggest Python hidden-test surface in the corpus (114), pure
+# codec/parser — no services, no redis.
+
+id = "ldaptor"
+upstream = "tasks/ldaptor"
+hidden_tests = 114          # task.toml test_case_count, at pinned commit
+spec_chars = 29754
+
+[test]
+# mirrors upstream tests/test.sh, with --junitxml in place of --ctrf (see README):
+# pytest-ctrf is not on PyPI (404 at /simple/pytest-ctrf/), and the reward
+# definition (pytest exit 0) is unchanged.
+target = "tests/test_ldaptor.py"
+pytest_timeout = 30
+needs_redis = false
+
+# Declared by instruction.md "Runtime dependencies" (Twisted required for the
+# LDIF LineReceiver; pyparsing optional for the RFC2254 grammar). Build backend
+# is the agent's own pyproject.toml, so setuptools/wheel must pre-exist for
+# `pip install -e . --no-build-isolation`.
+[deps]
+runtime = ["twisted", "pyparsing"]
+build = ["setuptools", "wheel"]
