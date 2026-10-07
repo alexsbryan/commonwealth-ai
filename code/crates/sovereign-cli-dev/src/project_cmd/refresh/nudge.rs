@@ -61,6 +61,7 @@ fn nudge_verdict(
     indexed_head: Option<&str>,
     git_head: Option<&str>,
     since_start: std::time::Duration,
+    descends: &dyn Fn(&str, &str) -> bool,
 ) -> NudgeVerdict {
     if status_state == Some("crashed") || status_state == Some("disabled") {
         return NudgeVerdict::Crashed {
@@ -80,15 +81,19 @@ fn nudge_verdict(
             };
         }
     }
+    // Covered when indexed at the nudge's HEAD or a later commit on it: a
+    // repo that commits while the daemon rebuilds is stamped past that HEAD,
+    // never at it (zoracite, 2026-10-06: 11 commits in the wait).
     if let (Some(i), Some(g)) = (indexed_head, git_head) {
-        if i == g {
+        if i == g || descends(g, i) {
             return NudgeVerdict::Completed;
         }
     }
     if since_start > VERIFY_BUDGET {
         return NudgeVerdict::Wedged {
             detail: format!(
-                "graph never reached git HEAD within {:.0} min (indexed at: {})",
+                "graph never reached the nudge's HEAD {} within {:.0} min (indexed at: {})",
+                git_head.unwrap_or("<unread>"),
                 VERIFY_BUDGET.as_secs_f64() / 60.0,
                 indexed_head.unwrap_or("<never indexed>"),
             ),
@@ -147,14 +152,16 @@ pub(super) async fn await_rebuild_completion(
             };
         }
         gone_polls = 0;
+        let indexed_head = project["last_indexed_head"].as_str();
         let verdict = nudge_verdict(
             project["status"]["scip"]["state"].as_str(),
             project["last_rebuild_error"][0].as_str(),
             project["last_rebuild_error"][1].as_u64(),
             baseline_error_ts,
-            project["last_indexed_head"].as_str(),
+            indexed_head,
             git_head.as_deref(),
             start.elapsed(),
+            &|nudged, indexed| descends_from(repo_root, nudged, indexed),
         );
         match verdict {
             NudgeVerdict::Pending => {
@@ -169,6 +176,14 @@ pub(super) async fn await_rebuild_completion(
             terminal => {
                 if !quiet {
                     eprintln!("\r                                                        \r");
+                    if terminal == NudgeVerdict::Completed && indexed_head != git_head.as_deref() {
+                        eprintln!(
+                            "    graph indexed at {}, past the HEAD the nudge was sent at ({}): \
+                             the repo committed during the rebuild",
+                            indexed_head.unwrap_or_default(),
+                            git_head.as_deref().unwrap_or_default(),
+                        );
+                    }
                 }
                 return terminal;
             }
@@ -196,6 +211,19 @@ fn git_head(root: &Path) -> Option<String> {
     }
 }
 
+/// Whether `commit` is `ancestor` or a later commit on it in `root`'s
+/// history (`git merge-base --is-ancestor`). A commit git does not know, or a
+/// git that cannot run, answers false: the poll keeps waiting, and the budget's
+/// verdict names both commits.
+fn descends_from(root: &Path, ancestor: &str, commit: &str) -> bool {
+    std::process::Command::new("git")
+        .args(["merge-base", "--is-ancestor", ancestor, commit])
+        .current_dir(root)
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,6 +240,71 @@ mod tests {
         std::time::Duration::from_secs(n)
     }
 
+    fn no_history(_: &str, _: &str) -> bool {
+        false
+    }
+
+    /// The 2026-10-06 zoracite refresh: the nudge went out at 7b2d466, the
+    /// repo committed 11 times in the next hour, and every rebuild the daemon
+    /// finished was stamped with a later commit, 9e6d231 when the budget ran
+    /// out. A graph indexed past the nudge's HEAD holds what the nudge asked
+    /// for. FAILING INPUT: equality alone, which calls this wedged.
+    #[test]
+    fn verdict_completed_when_graph_is_indexed_past_the_nudge_head() {
+        let descends = |nudged: &str, indexed: &str| (nudged, indexed) == ("7b2d466", "9e6d231");
+        let v = nudge_verdict(
+            Some("idle"),
+            None,
+            None,
+            0,
+            Some("9e6d231"),
+            Some("7b2d466"),
+            secs(51 * 60),
+            &descends,
+        );
+        assert_eq!(v, NudgeVerdict::Completed);
+        // A graph still at a commit the nudge's HEAD does not precede is not
+        // there yet.
+        let v = nudge_verdict(
+            Some("active"),
+            None,
+            None,
+            0,
+            Some("1111111"),
+            Some("7b2d466"),
+            secs(30),
+            &descends,
+        );
+        assert_eq!(v, NudgeVerdict::Pending);
+    }
+
+    #[test]
+    fn descends_from_reads_the_repository_history() {
+        let tmp = tempfile::tempdir().unwrap();
+        let git = |args: &[&str]| {
+            let ok = std::process::Command::new("git")
+                .args(["-c", "user.name=t", "-c", "user.email=t@t.invalid"])
+                .args(["-c", "commit.gpgsign=false"])
+                .args(args)
+                .current_dir(tmp.path())
+                .output()
+                .unwrap()
+                .status
+                .success();
+            assert!(ok, "git {args:?}");
+        };
+        git(&["init", "-q"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "a"]);
+        let a = git_head(tmp.path()).unwrap();
+        git(&["commit", "-q", "--allow-empty", "-m", "b"]);
+        let b = git_head(tmp.path()).unwrap();
+        assert!(descends_from(tmp.path(), &a, &b), "b is a later commit on a");
+        assert!(descends_from(tmp.path(), &a, &a), "a commit covers itself");
+        assert!(!descends_from(tmp.path(), &b, &a), "a precedes b");
+        let unknown = "0".repeat(40);
+        assert!(!descends_from(tmp.path(), &a, &unknown), "git knows no such commit");
+    }
+
     #[test]
     fn verdict_completed_when_graph_reaches_git_head() {
         let v = nudge_verdict(
@@ -222,6 +315,7 @@ mod tests {
             Some("abc123"),
             Some("abc123"),
             secs(30),
+            &no_history,
         );
         assert_eq!(v, NudgeVerdict::Completed);
     }
@@ -238,6 +332,7 @@ mod tests {
             Some("abc"),
             Some("def"),
             secs(30),
+            &no_history,
         );
         assert_eq!(v, NudgeVerdict::Pending);
         // Failure AFTER the baseline belongs to this nudge.
@@ -249,6 +344,7 @@ mod tests {
             Some("abc"),
             Some("def"),
             secs(30),
+            &no_history,
         );
         assert_eq!(
             v,
@@ -268,6 +364,7 @@ mod tests {
             Some("abc"),
             Some("def"),
             secs(51 * 60),
+            &no_history,
         );
         assert!(matches!(v, NudgeVerdict::Wedged { .. }));
     }
@@ -282,6 +379,7 @@ mod tests {
             Some("abc"),
             Some("abc"),
             secs(5),
+            &no_history,
         );
         assert!(matches!(v, NudgeVerdict::Crashed { .. }));
     }
@@ -298,6 +396,7 @@ mod tests {
             Some("abc"),
             Some("def"),
             secs(30),
+            &no_history,
         );
         assert_eq!(v, NudgeVerdict::Pending);
     }
