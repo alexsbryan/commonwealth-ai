@@ -32,3 +32,5 @@ mod mtp_prefill_logits_spike;
 mod state_cartridge_spike;
 #[path = "main/stream_send_policy_census.rs"]
 mod stream_send_policy_census;
+#[path = "main/tool_turn_finish_reason.rs"]
+mod tool_turn_finish_reason;

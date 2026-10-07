@@ -2913,16 +2913,20 @@ impl ModelSlot {
         let mut jump_fwd_max: usize = 0;
         let mut jump_fwd_bytes_n: usize = 0;
 
-        // Real finish_reason tracking — replaces the chars-per-token
-        // heuristic the runtime used to do post-hoc. Default to Length
-        // (the `while n_generated < max_tokens` predicate is the exit
-        // condition when the loop body doesn't break early). EOS path
-        // overwrites with Stop. Set this AFTER each potential exit
-        // branch — leaving it Length on a clean budget exhaustion is
-        // the correct answer.
-        let mut exit_reason: FinishReason = FinishReason::Length;
-
-        while n_generated < max_tokens {
+        // The finish reason is what the loop breaks with: every early stop
+        // (EOS, grammar accept, the `</tool_call>` marker, a balanced JSON
+        // envelope, a jump-forward stop) breaks with `Stop`, and only the
+        // budget check breaks with `Length`. It used to be a variable
+        // defaulted to `Length` that only the EOS branch overwrote, so a
+        // tool turn that stopped on its marker reported `length` — hidden
+        // while the call parsed (the adapter reports `tool_calls`), and
+        // sent to the client when it did not (opencode on Qwen3.8-27B,
+        // 2026-10-06: 26 tokens, "length", session ended). A bare `break;`
+        // here no longer compiles, so a new exit cannot forget its reason.
+        let exit_reason = loop {
+            if n_generated >= max_tokens {
+                break FinishReason::Length;
+            }
             if Instant::now() > deadline {
                 let elapsed = started_at.elapsed().as_secs();
                 tracing::warn!(
@@ -2971,8 +2975,7 @@ impl ModelSlot {
             sampler.accept(token);
 
             if model.is_eog_token(token) {
-                exit_reason = FinishReason::Stop;
-                break;
+                break FinishReason::Stop;
             }
 
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
@@ -3040,7 +3043,7 @@ impl ModelSlot {
                         "inference: stopping on llguidance grammar accept"
                     );
                     n_generated += 1;
-                    break;
+                    break FinishReason::Stop;
                 }
                 if tools_present {
                     if tail.contains("</tool_call>") {
@@ -3051,7 +3054,7 @@ impl ModelSlot {
                             "inference: stopping on </tool_call> marker"
                         );
                         n_generated += 1;
-                        break;
+                        break FinishReason::Stop;
                     }
                     if tool_stop.observe(&piece, in_think) {
                         tracing::info!(
@@ -3060,7 +3063,7 @@ impl ModelSlot {
                             "inference: stopping on balanced JSON envelope"
                         );
                         n_generated += 1;
-                        break;
+                        break FinishReason::Stop;
                     }
                 }
             }
@@ -3252,7 +3255,7 @@ impl ModelSlot {
             }
 
             if forced_hit_break {
-                break;
+                break FinishReason::Stop;
             }
 
             // Budget forcing: inject </think> if the think block runs too long.
@@ -3290,7 +3293,7 @@ impl ModelSlot {
                 }
                 in_think = false;
             }
-        }
+        };
 
         // Intentionally do NOT clear KV here. The prefix-cache
         // machinery at the top of generate_sync (cached_tokens +
