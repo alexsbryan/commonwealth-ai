@@ -60,6 +60,12 @@ const HELP: Help = Help {
                  before scaling to the full corpus.",
             ),
             (
+                "--max-chapter-words <N>",
+                "With --from-corpus, split a section longer than N words into parts at \
+                 document boundaries. Phase 1 reads a chapter in one call; a thread of \
+                 hundreds of comments needs several.",
+            ),
+            (
                 "--include-articles <path>",
                 "Restrict --from-corpus to article titles listed in <path>. Accepts \
                  plain titles (one per line; lines beginning with # and blank lines \
@@ -551,6 +557,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         // start ordinal so newly-appended chapters continue past the
         // existing manifest length.
         1,
+        parsed.max_chapter_words,
     ) {
         Ok(m) => m,
         Err(e) => {
@@ -667,6 +674,9 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     if let Some(n) = parsed.limit_articles {
         println!("  ✓ limit_articles = {n}");
     }
+    if let Some(n) = parsed.max_chapter_words {
+        println!("  ✓ max_chapter_words = {n}");
+    }
     if let Some(titles) = parsed.include_articles.as_ref() {
         println!("  ✓ include_articles = {} title(s)", titles.len());
     }
@@ -734,6 +744,9 @@ struct ParsedInit {
     /// articles included (sort by source_doc_id, take first N).
     /// `None` means no cap.
     limit_articles: Option<usize>,
+    /// When `from_corpus` is set, split a section longer than this many
+    /// words at document boundaries. `None` keeps sections whole.
+    max_chapter_words: Option<usize>,
     /// When `from_corpus` is set, optional explicit list of article
     /// titles to keep (one per line, with comments and blank lines
     /// ignored). Mutually exclusive with `--limit-articles`.
@@ -770,6 +783,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     let mut template_path: Option<PathBuf> = None;
     let mut from_corpus: Option<String> = None;
     let mut limit_articles: Option<usize> = None;
+    let mut max_chapter_words: Option<usize> = None;
     let mut include_articles_path: Option<PathBuf> = None;
 
     let mut i = 0;
@@ -817,6 +831,17 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                     return Err("--limit-articles must be > 0".into());
                 }
                 limit_articles = Some(n);
+                i += 2;
+            }
+            "--max-chapter-words" => {
+                let n = args
+                    .get(i + 1)
+                    .ok_or("--max-chapter-words requires a value".to_string())?
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|n| *n > 0)
+                    .ok_or("--max-chapter-words must be a positive integer".to_string())?;
+                max_chapter_words = Some(n);
                 i += 2;
             }
             "--include-articles" => {
@@ -946,6 +971,9 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     if limit_articles.is_some() && !corpus_mode {
         return Err("--limit-articles requires --from-corpus".to_string());
     }
+    if max_chapter_words.is_some() && !corpus_mode {
+        return Err("--max-chapter-words requires --from-corpus".to_string());
+    }
     if include_articles_path.is_some() && !corpus_mode {
         return Err("--include-articles requires --from-corpus".to_string());
     }
@@ -1062,6 +1090,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
         template_path,
         from_corpus,
         limit_articles,
+        max_chapter_words,
         include_articles,
     })
 }

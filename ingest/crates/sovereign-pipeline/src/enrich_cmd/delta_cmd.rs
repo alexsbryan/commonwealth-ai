@@ -682,6 +682,9 @@ pub async fn cmd_delta_manifest(args: &[String]) -> i32 {
         None,
         None,
         start_ordinal,
+        // Appended chunks are bucketed whole; the init-time cap is not
+        // recorded in config.json, so delta cannot know it.
+        None,
     ) {
         Ok(m) => m,
         Err(e) => {

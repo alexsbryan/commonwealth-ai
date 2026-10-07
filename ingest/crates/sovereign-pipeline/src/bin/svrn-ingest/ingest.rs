@@ -347,7 +347,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     // ── 6. The enrichment config — the ONE thing this verb writes ──────────
     let rows = corpus_io::fetch_all_corpus_chunks(&corpus_id)
         .with_context(|| format!("reading `{corpus_id}` chunks back for the chapter manifest"))?;
-    let manifest = corpus_io::build_manifest_from_corpus_rows(&corpus_id, rows, None, None, 1)
+    let manifest = corpus_io::build_manifest_from_corpus_rows(&corpus_id, rows, None, None, 1, None)
         .map_err(|e| anyhow::anyhow!("building the chapter manifest: {e}"))?;
     if manifest.is_empty() {
         bail!(
