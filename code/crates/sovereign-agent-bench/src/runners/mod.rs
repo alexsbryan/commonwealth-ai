@@ -2,6 +2,7 @@
 //! Concrete `AgentRunner` implementations + their registry.
 
 pub mod bare_metal;
+pub(crate) mod jsonl_agent;
 pub mod mock;
 pub mod native;
 pub mod pi;
