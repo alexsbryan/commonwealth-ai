@@ -17,6 +17,8 @@ when present). A refused request (4xx/5xx) is recorded with the server's
 error body, and with `--dump-dir` the request that drew it is saved whole
 as `<arm>-<seq>.request.json`: a shape one server rejects and another
 accepts is the finding, and it has to be reproducible from the file.
+`--dump-all` saves every chat request the same way, because a 200 can
+carry a malformed tool call just as well.
 
     tap.py --listen 127.0.0.1:18180 --upstream http://127.0.0.1:18080 \
            --log target/agent-coding-arms/A.tap.jsonl --arm A
@@ -124,6 +126,7 @@ class Tap(BaseHTTPRequestHandler):
     arm = ""
     log = None
     dump_dir = None
+    dump_all = False
 
     def log_message(self, *_):
         pass
@@ -196,13 +199,14 @@ class Tap(BaseHTTPRequestHandler):
             rec.update(finish_reason=tally.finish_reason, usage=tally.usage, timings=tally.timings,
                        content_chars=tally.content_chars, reasoning_chars=tally.reasoning_chars,
                        n_tool_calls=len(tally.tool_call_ids))
-        if resp.status >= 400:
+        refused = resp.status >= 400
+        if refused:
             rec["error_body"] = whole[:4000].decode("utf-8", "replace")
-            if self.dump_dir:
-                dump = f"{self.dump_dir}/{self.arm}-{seq}.request.json"
-                with open(dump, "wb") as f:
-                    f.write(body)
-                rec["request_dump"] = dump
+        if self.dump_dir and (refused or (self.dump_all and is_chat)):
+            dump = f"{self.dump_dir}/{self.arm}-{seq}.request.json"
+            with open(dump, "wb") as f:
+                f.write(body)
+            rec["request_dump"] = dump
         self.write_log(rec, is_chat)
 
     def write_log(self, rec: dict, is_chat: bool):
@@ -221,7 +225,12 @@ def main() -> int:
     ap.add_argument("--log", required=True, help="JSONL path, appended")
     ap.add_argument("--arm", required=True, help="label written on every record")
     ap.add_argument("--dump-dir", help="save the body of every refused request here")
+    ap.add_argument("--dump-all", action="store_true",
+                    help="with --dump-dir, save every chat request, not only refused ones: "
+                         "a 200 can carry a malformed call, and replaying it needs the body")
     a = ap.parse_args()
+    if a.dump_all and not a.dump_dir:
+        ap.error("--dump-all needs --dump-dir")
     host, port = a.listen.rsplit(":", 1)
     Tap.upstream = urllib.parse.urlparse(a.upstream)
     Tap.arm = a.arm
@@ -230,6 +239,7 @@ def main() -> int:
         import os
         os.makedirs(a.dump_dir, exist_ok=True)
         Tap.dump_dir = a.dump_dir
+        Tap.dump_all = a.dump_all
     srv = ThreadingHTTPServer((host, int(port)), Tap)
     srv.daemon_threads = True
     print(f"tap: {a.listen} -> {a.upstream} arm={a.arm} log={a.log}", file=sys.stderr, flush=True)
