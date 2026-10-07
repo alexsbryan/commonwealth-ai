@@ -1,0 +1,94 @@
+[trial]
+id = "reader-comparison-20261007-v2"
+date = "2026-10-07"
+model = "commonwealth/primary"
+embed_model = "qwen3-embedding-0.6b"
+chapter_word_limit = 2000
+minimum_section_body_words = 0
+run_order = ["uv-reader-v2-legacy", "uv-reader-v2-narrow", "ward-reader-v2-legacy", "ward-reader-v2-narrow"]
+
+[revision]
+v1 = "reader-comparison-20261007-v1 (reader-trial-prereg.toml) is the first run: legacy arms died creating atlas/derived_decisions.jsonl in a missing parent; narrow arms died on a decoder that offered the union of every claim kind's fields and on chapter-fatal evidence refusals."
+changed_for_v2 = "The production decoder now binds each claim kind to exactly its own fields and each outcome status to its own branch; a claim whose citation does not verify is refused by name and kept beside the read instead of failing the chapter; a claim may cite the document's own declared identity fields by exact match; decision JSONL files create their parent directory; stamping uses an accountable read's own document identity. Source selection, model, batching, identity policy and scorers are unchanged, so v2 remains the same paired comparison."
+
+[acceptance]
+uv_primary = ["membership_coverage", "recovery_b_cubed.f1"]
+ward_primary = ["deals.recall", "stage.recall"]
+uv_controls = ["no_case_documents_placed", "documents_in_several_records"]
+ward_controls = ["made_up.stage_updates", "made_up.commitments", "deal_atoms_unmatched"]
+rule = "The narrow arm must strictly improve both UV primary measures and both Ward primary measures, with no increase in any available paired control. Any regression in either application rejects adoption. One paired trial is not an adoption verdict."
+cost = "Report exact calls, prompt/completion/total tokens by available phase log or token snapshot, plus total scoped-build wall time; cost is not an acceptance target."
+extrapolation = "Results apply only to these frozen tune inputs. Extrapolate only after a full-mailbox trial."
+
+[uv]
+source = "~/.svrnmesh/bench-corpora/uv-support/raw/documents.jsonl"
+gold = "~/.svrnmesh/bench-corpora/uv-support/gold/cases.json"
+selected_case_document_ids = [
+  "1373",
+  "1947451522",
+  "ev-11821892457",
+  "ev-11821895309",
+  "ev-11822267689",
+  "ev-11822267728",
+  "ev-1373-merged-1380",
+  "ev-1373-xref-astral-sh/uv#1380-20240215T230927Z",
+  "1437",
+  "1619",
+  "1630",
+  "1712",
+  "1947794150",
+  "1950993105",
+  "ev-11838444610",
+  "1953020490",
+  "1953022747",
+  "1950702048",
+  "ev-1630-merged-1650",
+  "ev-1619-merged-2633",
+  "ev-1630-xref-astral-sh/uv#1650-20240218T143811Z",
+  "ev-1619-xref-astral-sh/uv#2633-20240325T194142Z",
+  "1950635234",
+  "1953024235",
+]
+selected_no_case_ids = [
+  "ev-28779269495",
+  "ev-28779270101",
+  "ev-28779290824",
+  "ev-28779298261",
+  "ev-28779298712",
+  "ev-28779301010",
+  "ev-28779301173",
+  "ev-28779295850",
+]
+no_case_selection = "All known no-case documents in the selected tune thread components, sorted by numeric thread, created_at, then id; frozen here before either arm runs."
+referenced_but_absent = "1597"
+absent_id_policy = "Do not fetch, synthesize, or add the absent issue."
+ambiguous_gold_policy = "Retain original associations; the existing support scorer excludes and counts the selected multi-case document."
+
+[ward]
+source = "~/.svrnmesh/bench-corpora/enron-ward/sample"
+manifest = "~/.svrnmesh/bench-corpora/enron-ward/manifest.json"
+gold = "~/.svrnmesh/bench-corpora/enron-ward/gold"
+folders = ["pasadena", "smurfit"]
+expected_source_messages = 50
+scope = "Every gold source file from these two folders, including files_with_nothing; copy original message bytes and names. Do not include other folders' message or gold files."
+filter_accounting = "Report any selected source messages absent from the actual index by folder/file name. Keep them in the gold denominator; never describe the run as full accountability when source filters excluded them."
+
+[[arm]]
+corpus_id = "uv-reader-v2-legacy"
+application = "uv"
+document_reading = false
+
+[[arm]]
+corpus_id = "uv-reader-v2-narrow"
+application = "uv"
+document_reading = true
+
+[[arm]]
+corpus_id = "ward-reader-v2-legacy"
+application = "ward"
+document_reading = false
+
+[[arm]]
+corpus_id = "ward-reader-v2-narrow"
+application = "ward"
+document_reading = true
