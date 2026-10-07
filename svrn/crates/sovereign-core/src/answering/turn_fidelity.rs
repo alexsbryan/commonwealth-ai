@@ -52,8 +52,9 @@ fn opt_in(raw: Option<&str>) -> bool {
 }
 
 /// Whether the runtime reshape passes may alter a chat turn. Default
-/// ON; `SOVEREIGN_FRONTDOOR_RESHAPE=0` serves the conversation and the
-/// model's output through unmodified.
+/// OFF: the conversation and the model's output are served through
+/// unmodified, as llama-server serves them; `SOVEREIGN_FRONTDOOR_RESHAPE=1`
+/// turns the passes on.
 ///
 /// Governs, on the request, the three runtime nudges, and on the
 /// response the heredoc and absolute-path canonicalizers, which REWRITE
@@ -73,38 +74,34 @@ fn opt_in(raw: Option<&str>) -> bool {
 /// committed turn whose tail repeats, failure-recovery claims it and
 /// anti-repetition never runs.
 ///
-/// Defaults on because all five key on the Codex/opencode contract
-/// (`exec_command` calls, the literal `Process exited with code N`
-/// result shape) and each was cut against a named gym fixture, so a
-/// client speaking a different tool vocabulary never trips them. It is
-/// nonetheless a switch because they are the only remaining passes that
-/// make a locally-served turn differ from bare llama.cpp, and an
-/// operator running a shared anchor node should not have to read this
-/// file to discover they exist. Every firing logs at INFO, so ON is
-/// auditable and OFF is total.
+/// All five key on the Codex/opencode contract (`exec_command` calls,
+/// the literal `Process exited with code N` result shape) and each was
+/// cut against a named gym fixture. They defaulted ON until 2026-10-07,
+/// when the operator made the OpenAI chat path's target llama-server
+/// parity (note fb4d2489): they are the passes that make a locally-served
+/// turn differ from bare llama.cpp, read-attractor appends a system
+/// message at the tail that a real chat template may refuse, and
+/// failure-recovery leans on the flattening the conversation path no
+/// longer does. Opt-in keeps them measurable. Every firing logs at INFO,
+/// so ON is auditable and OFF is total.
 ///
 /// NOT governed: `frontdoor::promote_in_content_tool_call`, which lifts a tool
 /// call the model emitted as content into the structured field. That
 /// RECOVERS the model's intent rather than overriding it — off, the
 /// call is silently lost, which is less faithful, not more.
 pub fn reshape_enabled() -> bool {
-    opt_out(std::env::var("SOVEREIGN_FRONTDOOR_RESHAPE").ok().as_deref())
+    reshape_from(std::env::var("SOVEREIGN_FRONTDOOR_RESHAPE").ok().as_deref())
 }
 
-/// Pure half of [`reshape_enabled`]: absent is ON, and only an
-/// explicit off-spelling turns it off. An unrecognised value stays ON
-/// rather than silently disabling the passes — a typo must not quietly
-/// change what the daemon serves.
-fn opt_out(raw: Option<&str>) -> bool {
-    !matches!(
-        raw,
-        Some(v) if v == "0" || v.eq_ignore_ascii_case("false") || v.eq_ignore_ascii_case("off")
-    )
+/// Pure half of [`reshape_enabled`], so its default is pinned by a test
+/// without mutating process env under every other test in the binary.
+fn reshape_from(raw: Option<&str>) -> bool {
+    opt_in(raw)
 }
 
 #[cfg(test)]
 mod switch_tests {
-    use super::{opt_in, opt_out};
+    use super::{opt_in, reshape_from};
 
     #[test]
     fn allowlist_synthesis_is_off_unless_explicitly_asked_for() {
@@ -120,17 +117,14 @@ mod switch_tests {
         assert!(opt_in(Some("TRUE")));
     }
 
+    /// Same spellings as the allowlist switch: only 1/true turns the
+    /// passes on, so a typo cannot start rewriting what clients sent.
     #[test]
-    fn reshape_is_on_unless_explicitly_turned_off() {
-        assert!(opt_out(None), "absent means on");
-        assert!(!opt_out(Some("0")));
-        assert!(!opt_out(Some("false")));
-        assert!(!opt_out(Some("off")));
-        assert!(!opt_out(Some("OFF")));
-        assert!(opt_out(Some("1")));
-        assert!(
-            opt_out(Some("no")),
-            "an unrecognised value must not silently change what the daemon serves"
-        );
+    fn reshape_is_off_unless_explicitly_turned_on() {
+        assert!(!reshape_from(None), "absent means off — llama-server parity");
+        assert!(!reshape_from(Some("0")));
+        assert!(!reshape_from(Some("on")), "unrecognised stays off");
+        assert!(reshape_from(Some("1")));
+        assert!(reshape_from(Some("true")));
     }
 }

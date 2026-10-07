@@ -250,10 +250,10 @@ both are documented per-flag in [ENV_FLAGS.md](./ENV_FLAGS.md).
   URLs and evidence handles seen in `role: tool` messages become sampler
   constraints. Right for retrieval synthesis, wrong for a general coding
   client. Leave it off on an anchor.
-- **`SOVEREIGN_FRONTDOOR_RESHAPE`** (default **on**) — the runtime
-  nudges and response canonicalizers. All of them key on the
-  Codex/opencode contract, so most clients never trip them. Set `0` if a
-  teammate reports the model saying something they did not prompt.
+- **`SOVEREIGN_FRONTDOOR_RESHAPE`** (default **off** since 2026-10-07) —
+  the runtime nudges and response canonicalizers, which key on the
+  Codex/opencode contract. Off, a chat turn is served as llama-server
+  would serve it. Set `1` only to measure them.
 
 If someone asks whether this is "just llama.cpp with extra steps": the
 inference is the same embedded llama.cpp, in-process, no proxy hop. The

@@ -10,8 +10,9 @@
 #      defaults one turn of this model ran 10-11k reasoning tokens, past
 #      its 4000-token candidate cap before any content.
 #   B  the stock daemon as shipped, release-built, on its client port
-#   C  B with SOVEREIGN_FRONTDOOR_RESHAPE=0 (turn_fidelity::reshape_enabled):
-#      the request nudges off, the serving layer otherwise identical
+#   C  B with SOVEREIGN_FRONTDOOR_RESHAPE=1 (turn_fidelity::reshape_enabled):
+#      the reshape passes opted in (default off since 2026-10-07), the
+#      serving layer otherwise identical
 #
 # What every arm shares is the model's identity, not the server's behaviour:
 # one GGUF, one context window per request (`--parallel 1`, the daemon's
@@ -56,8 +57,8 @@ case $arm in
     inst=$HOME/.cache/agent-coding-arms
     mkdir -p "$inst"
     cmp -s "$bin" "$inst/sovereign-stock" || cp "$bin" "$inst/sovereign-stock"
-    reshape=1
-    [ "$arm" = C ] && reshape=0
+    reshape=0
+    [ "$arm" = C ] && reshape=1
     (cd "$inst" && SOVEREIGN_SKIP_VRAM_CHECK=1 SOVEREIGN_FRONTDOOR_RESHAPE=$reshape \
       HOME=$root/home SVRNMESH_DATA_DIR=$root/svrnmesh CW_RAILS_DIR=$root/rails \
       SOVEREIGN_SERVE_PORT=$((port + 2)) RUST_LOG=${RUST_LOG:-info} \

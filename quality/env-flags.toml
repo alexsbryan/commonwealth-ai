@@ -1287,9 +1287,9 @@ purpose = "=1/true lets the daemon SYNTHESISE a citation allowlist from the conv
 [[flag]]
 name = "SOVEREIGN_FRONTDOOR_RESHAPE"
 cluster = "bench"
-default = "on"
+default = "off"
 status = "shipped"
-purpose = "=0/false/off serves a locally-served chat turn WITHOUT the runtime reshape passes: the three request-side nudges (failure-recovery, anti-repetition, read-attractor) that append a synthetic message the client never sent, and the two response-side canonicalizers (apply_patch heredoc, absolute path) that rewrite arguments the model already emitted. Defaults ON because all five key on the Codex/opencode contract (exec_command calls, the literal 'Process exited with code N' result shape) and each was cut against a named gym fixture -- a client with a different tool vocabulary never trips them. The switch exists because they are the only remaining passes that make a locally-served turn differ from what the same model and prompt produce under bare llama.cpp, and an operator running a shared anchor node should be able to say 'serve it unmodified' without reading frontdoor.rs to learn the passes exist. Every firing logs at INFO, so ON is auditable and OFF is total. Does NOT govern promote_in_content_tool_call, which recovers a tool call the model emitted as content and would otherwise be lost."
+purpose = "=1/true serves a locally-served chat turn WITH the runtime reshape passes: the three request-side nudges (failure-recovery, anti-repetition, read-attractor) that rewrite or append to the conversation the client sent, and the two response-side canonicalizers (apply_patch heredoc, absolute path) that rewrite arguments the model already emitted. All five key on the Codex/opencode contract and each was cut against a named gym fixture. Default ON until 2026-10-07; OFF since, because the OpenAI chat path's target is llama-server parity (note fb4d2489): these are the passes that make a served turn differ from bare llama.cpp, read-attractor appends a tail system message a real chat template may refuse, and failure-recovery relies on flattening the conversation path no longer does. Every firing logs at INFO. Does NOT govern promote_in_content_tool_call, which recovers a tool call the model emitted as content and would otherwise be lost."
 
 # ── enrichment: the build's progress wire ───────────────────────────
 

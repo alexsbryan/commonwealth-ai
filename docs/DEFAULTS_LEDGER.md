@@ -881,6 +881,37 @@ remains the default; the flag adds one branch at
 options are to run the three checks or to delete the child path — a second
 worker shape that nobody exercises is worse than either.
 
+### `SOVEREIGN_FRONTDOOR_RESHAPE` — shipped OFF (2026-10-07)
+
+**What is dark.** The five frontdoor reshape passes on
+`POST /v1/chat/completions`: the request-side failure-recovery,
+anti-repetition and read-attractor nudges (which delete history, replace the
+system prompt or append a tail system message) and the response-side
+apply_patch-heredoc and absolute-path canonicalizers (which rewrite arguments
+the model emitted). Default ON from their introduction until this commit.
+
+**Why it went dark.** Operator direction 2026-10-07: the OpenAI chat path's
+target is llama-server parity (note fb4d2489), and these are the passes that
+make a served turn differ from bare llama.cpp. Two of them also depend on the
+flattening the new conversation path removed: read-attractor appends a system
+message at the tail, which a real chat template may refuse, and
+failure-recovery orphans a tool result on the reasoning that the history is
+flattened anyway (frontdoor.rs). On the 2026-10-07 B-arm smokes they fired 0
+times across pi's 4 turns and opencode's 1.
+
+**What it costs while dark.** Nothing measured on the agent-coding battery.
+The Codex-gym fixtures each pass was cut against (gym 004, 006, 007) lose the
+nudge; `tests/main/turn_reshape_fidelity.rs` composes the passes directly and
+does not read the default.
+
+**Flip condition.** Flip ON only if a pre-registered A/B on the agent-coding
+battery, daemon at parity with llama-server, shows `SOVEREIGN_FRONTDOOR_RESHAPE=1`
+raising pi or opencode's witness pass rate beyond the run-to-run noise, with
+no client-visible rewrite the client did not ask for. Otherwise delete the
+passes.
+
+**Review by.** 2026-11-15.
+
 ### `SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST` — shipped OFF (2026-08-29)
 
 **What is dark.** The daemon's synthesis of a citation allowlist from the

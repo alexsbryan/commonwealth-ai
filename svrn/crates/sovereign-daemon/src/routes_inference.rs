@@ -212,11 +212,10 @@ pub async fn chat_completions(
         // time. Order matters: failure-recovery is most specific (a
         // single recent failure), anti-rep is intermediate (a pattern),
         // read-attractor is the most general (a mode).
-        // Opt-OUT, default on: see `turn_fidelity::reshape_enabled`. All
-        // three key on the Codex/opencode contract, so a client with a
-        // different tool vocabulary never trips them — but an operator
-        // running a shared anchor node can still say "serve it
-        // unmodified" with SOVEREIGN_FRONTDOOR_RESHAPE=0.
+        // Opt-IN since 2026-10-07 (llama-server parity, note fb4d2489):
+        // see `turn_fidelity::reshape_enabled`. All three key on the
+        // Codex/opencode contract; SOVEREIGN_FRONTDOOR_RESHAPE=1 turns
+        // them on for measurement.
         if crate::turn_fidelity::reshape_enabled() {
             crate::frontdoor::apply_failure_nudge_chat(&mut request);
             crate::frontdoor::apply_anti_repetition_chat(&mut request);

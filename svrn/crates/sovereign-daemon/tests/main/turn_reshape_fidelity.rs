@@ -229,9 +229,25 @@ fn compose(input: &ChatCompletionRequest, passes: &[Pass]) -> ChatCompletionRequ
     out
 }
 
+/// The passes are opt-in since 2026-10-07 (llama-server parity,
+/// `turn_fidelity::reshape_enabled`). This pack pins what they do when an
+/// operator turns them on, so every helper that drives the route turns
+/// them on first. nextest runs each test in its own process, so the
+/// setting reaches no test outside this pack; the default itself is
+/// pinned by `by_default_a_turn_that_would_trip_a_pass_is_served_as_sent`.
+fn reshape_opted_in() {
+    std::env::set_var("SOVEREIGN_FRONTDOOR_RESHAPE", "1");
+}
+
 /// Drives the real handler and returns the request the inference
 /// service received — after every frontdoor pass has had its turn.
 async fn served(input: &ChatCompletionRequest) -> ChatCompletionRequest {
+    reshape_opted_in();
+    served_as_configured(input).await
+}
+
+/// The handler under whatever the process environment says.
+async fn served_as_configured(input: &ChatCompletionRequest) -> ChatCompletionRequest {
     let svc = CapturesRequest::default();
     let state = solo_state(Arc::new(svc.clone()));
     let _ = chat_completions(
@@ -280,6 +296,30 @@ async fn the_served_turn_is_exactly_the_three_declared_passes() {
          moved, reordered, or dropped. Whichever it is, a client's conversation is now being \
          altered by something this pack does not name."
     );
+}
+
+/// P0. With the switch unset — the default since 2026-10-07 — a turn
+/// that WOULD trip a pass reaches the model exactly as the client sent
+/// it, as llama-server would serve it. Falsifier: a corpus turn that
+/// composing the passes changes, served unchanged only because the
+/// passes are off.
+#[tokio::test]
+async fn by_default_a_turn_that_would_trip_a_pass_is_served_as_sent() {
+    std::env::remove_var("SOVEREIGN_FRONTDOOR_RESHAPE");
+    let mut tripping = 0usize;
+    for f in corpus() {
+        if turn_view(&compose(&f.request, &GATED_REQUEST_PASSES)) == turn_view(&f.request) {
+            continue;
+        }
+        tripping += 1;
+        assert_eq!(
+            turn_view(&served_as_configured(&f.request).await),
+            turn_view(&f.request),
+            "{}: the reshape passes are off by default, so this turn must reach the model as sent",
+            f.name
+        );
+    }
+    assert!(tripping > 0, "no corpus turn trips a pass, so this check proves nothing");
 }
 
 /// P2. Every gated pass is load-bearing on the corpus: dropping any one
@@ -638,6 +678,7 @@ async fn served_response(
     request: &ChatCompletionRequest,
     canned: &ChatCompletionResponse,
 ) -> ChatCompletionResponse {
+    reshape_opted_in();
     let state = solo_state(Arc::new(RespondsWith(canned.clone())));
     let resp = chat_completions(
         State(state),
