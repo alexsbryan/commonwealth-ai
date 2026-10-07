@@ -7,6 +7,7 @@
 //! with the detection glue in `super`). Split out 2026-07-13; pure move.
 
 use super::*;
+use sovereign_core::oicp::mcp::MCP_CORPUS_HEADER;
 
 // ─── File generation ─────────────────────────────────────────
 
@@ -241,9 +242,12 @@ architect.
 /// Generate `.opencode/opencode.json` — registers the sovereign MCP server and,
 /// when Commonwealth is configured, a custom OpenAI-compatible provider backed
 /// by the OICP mesh. Models are populated from live OICP capabilities when
-/// available; falls back to a single `"auto"` entry otherwise.
+/// available; falls back to a single `"auto"` entry otherwise. The server
+/// entry names the repo's code corpus, so the code tools answer about this
+/// repo alone.
 pub(super) fn generate_opencode_config(
     port: u16,
+    corpus_id: &str,
     commonwealth_url: Option<&str>,
     commonwealth_models: &[String],
 ) -> String {
@@ -254,7 +258,8 @@ pub(super) fn generate_opencode_config(
         "mcp": {
             "sovereign": {
                 "type": "remote",
-                "url": format!("http://localhost:{port}/mcp")
+                "url": format!("http://localhost:{port}/mcp"),
+                "headers": { (MCP_CORPUS_HEADER): corpus_id }
             }
         }
     });
@@ -509,7 +514,8 @@ pub(super) fn generate_claude_settings(
         "mcpServers": {
             "sovereign": {
                 "type": "http",
-                "url": format!("http://localhost:{port}/mcp")
+                "url": format!("http://localhost:{port}/mcp"),
+                "headers": { (MCP_CORPUS_HEADER): corpus_id }
             }
         },
         "systemPrompt": system_prompt
@@ -620,9 +626,28 @@ mod tests {
 
     // ── opencode config generation ──────────────────────────────
 
+    /// Each generated MCP entry names the repo's code corpus, so a repo set up
+    /// by `svrn init` gets code tools scoped to itself without anyone adding
+    /// the header by hand (code-intel-repo-scope).
+    #[test]
+    fn generated_mcp_entries_name_the_repos_corpus() {
+        let opencode: serde_json::Value =
+            serde_json::from_str(&generate_opencode_config(9741, "zoracite", None, &[])).unwrap();
+        assert_eq!(
+            opencode["mcp"]["sovereign"]["headers"]["x-svrn-corpus"],
+            "zoracite"
+        );
+        let claude: serde_json::Value =
+            serde_json::from_str(&generate_claude_settings(9741, "zoracite", true, true)).unwrap();
+        assert_eq!(
+            claude["mcpServers"]["sovereign"]["headers"]["x-svrn-corpus"],
+            "zoracite"
+        );
+    }
+
     #[test]
     fn opencode_config_no_commonwealth() {
-        let s = generate_opencode_config(9741, None, &[]);
+        let s = generate_opencode_config(9741, "repo", None, &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(v["mcp"]["sovereign"]["url"], "http://localhost:9741/mcp");
         assert_eq!(v["mcp"]["sovereign"]["type"], "remote");
@@ -640,7 +665,7 @@ mod tests {
     #[test]
     fn merge_opencode_evicts_legacy_servers_shape() {
         let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:9741/mcp"}}}}"#;
-        let generated = generate_opencode_config(9741, None, &[]);
+        let generated = generate_opencode_config(9741, "repo", None, &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert_eq!(v["mcp"]["sovereign"]["type"], "remote");
@@ -655,7 +680,7 @@ mod tests {
     #[test]
     fn merge_opencode_keeps_foreign_entries_under_legacy_key() {
         let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:9741/mcp"},"github":{"type":"http","url":"https://example.com/mcp"}}}}"#;
-        let generated = generate_opencode_config(9741, None, &[]);
+        let generated = generate_opencode_config(9741, "repo", None, &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert_eq!(v["mcp"]["sovereign"]["type"], "remote");
@@ -668,7 +693,7 @@ mod tests {
 
     #[test]
     fn opencode_config_commonwealth_no_models_uses_auto_fallback() {
-        let s = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
+        let s = generate_opencode_config(9741, "repo", Some("http://localhost:9741"), &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(
             v["provider"]["commonwealth"]["options"]["baseURL"],
@@ -680,7 +705,7 @@ mod tests {
     #[test]
     fn opencode_config_commonwealth_real_models() {
         let models = vec!["Qwen3-9B".into(), "Qwen3-27B".into()];
-        let s = generate_opencode_config(9741, Some("http://localhost:9741"), &models);
+        let s = generate_opencode_config(9741, "repo", Some("http://localhost:9741"), &models);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         let m = &v["provider"]["commonwealth"]["models"];
         assert!(m["Qwen3-9B"].is_object());
@@ -694,7 +719,7 @@ mod tests {
     #[test]
     fn opencode_config_normalizes_internal_port() {
         // Port 9742 (internal mesh) should be rewritten to 9741 (public API)
-        let s = generate_opencode_config(9741, Some("http://localhost:9742"), &[]);
+        let s = generate_opencode_config(9741, "repo", Some("http://localhost:9742"), &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(
             v["provider"]["commonwealth"]["options"]["baseURL"],
@@ -705,7 +730,7 @@ mod tests {
     #[test]
     fn merge_opencode_adds_commonwealth_provider() {
         let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:9741/mcp"}}}}"#;
-        let generated = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
+        let generated = generate_opencode_config(9741, "repo", Some("http://localhost:9741"), &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert!(v["provider"]["commonwealth"]["options"]["baseURL"].is_string());
@@ -714,7 +739,7 @@ mod tests {
     #[test]
     fn merge_opencode_preserves_other_providers() {
         let existing = r#"{"mcp":{},"provider":{"openai":{"name":"OpenAI","options":{"baseURL":"https://api.openai.com/v1"}}}}"#;
-        let generated = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
+        let generated = generate_opencode_config(9741, "repo", Some("http://localhost:9741"), &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert!(
@@ -731,7 +756,7 @@ mod tests {
     fn merge_opencode_no_commonwealth_in_generated_leaves_existing_provider_intact() {
         let existing = r#"{"mcp":{},"provider":{"commonwealth":{"name":"old"}}}"#;
         // generate without commonwealth URL → no provider key in generated
-        let generated = generate_opencode_config(9741, None, &[]);
+        let generated = generate_opencode_config(9741, "repo", None, &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         // existing commonwealth entry should be preserved unchanged

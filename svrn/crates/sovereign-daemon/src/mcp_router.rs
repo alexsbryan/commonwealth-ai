@@ -98,10 +98,6 @@ impl McpRequestHandler for DaemonMcp {
         req: JsonRpcRequest,
         ctx: &McpRequestContext,
     ) -> impl Future<Output = Option<JsonRpcResponse>> + Send {
-        let agent_session_token = sovereign_contracts::mcp_host::agent_session_token(
-            ctx.agent_session.clone(),
-            &self.session_id,
-        );
         dispatch(
             req,
             Arc::clone(&self.tools),
@@ -109,7 +105,6 @@ impl McpRequestHandler for DaemonMcp {
             Arc::clone(&self.session_id),
             Arc::clone(&self.call_counter),
             self.code.clone(),
-            agent_session_token,
             ctx.clone(),
         )
     }
@@ -193,7 +188,6 @@ async fn dispatch(
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     code: Option<Arc<dyn McpMountedTools>>,
-    agent_session_token: String,
     ctx: McpRequestContext,
 ) -> Option<JsonRpcResponse> {
     // Notifications: no id → no response. We still want to accept the
@@ -225,11 +219,12 @@ async fn dispatch(
         Some(McpMethod::ToolsList) => {
             let mut tool_list = sovereign_contracts::mcp_host::render_tool_entries(
                 &tools.descriptors(),
+                ctx.read_only,
                 is_mcp_exposed,
             );
             match &code {
                 Some(code) => {
-                    if let Value::Array(entries) = code.list() {
+                    if let Value::Array(entries) = code.list(&ctx) {
                         tool_list.extend(entries);
                     }
                 }
@@ -246,7 +241,6 @@ async fn dispatch(
                 session_id,
                 call_counter,
                 code,
-                agent_session_token,
                 &ctx,
             )
             .await
@@ -275,7 +269,6 @@ async fn handle_tool_call(
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     code: Option<Arc<dyn McpMountedTools>>,
-    agent_session_token: String,
     ctx: &McpRequestContext,
 ) -> JsonRpcResponse {
     let Some(params) = params else {
@@ -289,6 +282,24 @@ async fn handle_tool_call(
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
 
+    // The corpus a connection names is code's to judge: it holds the
+    // corpora. A name it does not hold refuses every call on the connection,
+    // svrn's included, so a misnamed repo config is loud at its first call
+    // rather than answering about nothing. With no code program here no tool
+    // reads the scope, and the header passes unjudged.
+    match &code {
+        Some(code) => {
+            if let Err(why) = code.admit(ctx) {
+                tracing::debug!(tool = name, reason = %why, "mcp: request not admitted");
+                return JsonRpcResponse::error(id, -32602, why);
+            }
+        }
+        None if ctx.corpus.is_some() => {
+            tracing::debug!(corpus = ?ctx.corpus, "mcp: no code program to judge the corpus scope");
+        }
+        None => {}
+    }
+
     // The ToolRegistry half (validate, write audit, ToolContext, execute,
     // StepOutput mapping) is sovereign-contracts' `mcp_host`, which the code
     // server runs too; the log and the counter are this daemon's.
@@ -297,7 +308,7 @@ async fn handle_tool_call(
         name,
         &arguments,
         &session_id,
-        agent_session_token,
+        ctx,
         is_mcp_exposed,
     )
     .await

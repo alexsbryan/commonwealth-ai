@@ -22,8 +22,8 @@
 //!
 //! None of these tools return results when no code corpora are indexed.
 //! Non-code corpora (Wikipedia, SEP, etc.) are skipped explicitly by the
-//! [`has_code_graph`] screen in [`query_all_code_indexes`] and the
-//! parallel loop in `code_search` — which accepts a `CorpusKind::Code`
+//! [`has_code_graph`] screen in [`code_indexes`], the one enumeration
+//! `code_search` and [`query_all_code_indexes`] share — which accepts a `CorpusKind::Code`
 //! tag OR an on-disk `scip_graph.db`, because repo corpora are
 //! deliberately tagged `knowledge` (see [`has_code_graph`] for the full
 //! reasoning). The earlier design relied on
@@ -37,6 +37,10 @@ pub mod briefing_tool;
 #[cfg(feature = "treesitter")]
 pub mod bundle;
 pub mod code_search;
+/// The code corpora under an indexes root, and the judgement of a corpus a
+/// caller scopes its calls to.
+pub mod corpora;
+pub use corpora::{admit_corpus, code_corpora};
 /// The editor door, `POST /v1/edit_predictions` and its outcome route
 /// (NEXT_EDIT.md §3), moved from the svrn daemon at pb-meshapp-rest.
 #[cfg(feature = "treesitter")]
@@ -345,10 +349,29 @@ pub fn has_code_graph(info: &IndexInfo) -> bool {
     info.is_code_corpus()
 }
 
-/// Run a filter-pushdown query against every installed *code* corpus and
-/// collect the matching rows into `CodeRow` values. Used by
-/// `SymbolLookupTool` and `RecentChangesTool` — both are exact predicates
-/// on typed columns, no vector search involved.
+/// The code corpora a chunk tool reads for a call scoped to `scope`: every
+/// usable corpus [`has_code_graph`] admits, narrowed to the one corpus when
+/// `scope` names it. The one enumeration `code_search` and
+/// [`query_all_code_indexes`] share, so a scope cannot reach one and not the
+/// other. A listing that fails is an error, never an empty answer.
+pub(crate) async fn code_indexes(
+    engine: &Arc<dyn IndexSource>,
+    scope: Option<&str>,
+) -> Result<Vec<IndexInfo>, CorpusError> {
+    let indexes: Vec<IndexInfo> = engine
+        .usable_indexes()
+        .await?
+        .into_iter()
+        .filter(|info| has_code_graph(info) && scope.is_none_or(|id| info.corpus_id == id))
+        .collect();
+    tracing::debug!(corpus_scope = ?scope, corpora = indexes.len(), "code tools: chunk indexes in scope");
+    Ok(indexes)
+}
+
+/// Run a filter-pushdown query against every *code* corpus in `scope`
+/// ([`code_indexes`]) and collect the matching rows into `CodeRow` values.
+/// Used by `RecentChangesTool`: an exact predicate on typed columns, no
+/// vector search involved.
 ///
 /// Non-code corpora (Wikipedia, SEP, …) are skipped before any Lance call
 /// because their chunk tables lack the typed code columns entirely; the
@@ -358,16 +381,10 @@ pub(crate) async fn query_all_code_indexes(
     engine: &Arc<dyn IndexSource>,
     filter: &str,
     limit: usize,
+    scope: Option<&str>,
 ) -> Result<Vec<CodeRow>, CorpusError> {
     let mut out = Vec::new();
-    let Ok(indexes) = engine.usable_indexes().await else {
-        return Ok(out);
-    };
-
-    for info in &indexes {
-        if !has_code_graph(info) {
-            continue;
-        }
+    for info in &code_indexes(engine, scope).await? {
         let Ok(index) = engine.open_index(&info.path).await else {
             continue;
         };

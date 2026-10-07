@@ -34,11 +34,14 @@ async fn overlay_merge_refreshes_symbol_defs_from_disk() {
     // disk, with NO rust-analyzer, purely via the tree-sitter overlay.
     let g = graph.load();
     assert!(!g
-        .find_symbols_by_name("hello", None, 8)
+        .find_symbols_by_name("hello", None, None, 8)
         .await
         .unwrap()
         .is_empty());
-    let world = g.find_symbols_by_name("world", None, 8).await.unwrap();
+    let world = g
+        .find_symbols_by_name("world", None, None, 8)
+        .await
+        .unwrap();
     assert_eq!(world.len(), 1);
     assert_eq!(world[0].file_path, "lib.rs");
 }
@@ -79,7 +82,7 @@ async fn overlay_merge_drops_defs_for_deleted_file() {
     .await;
     assert!(!graph
         .load()
-        .find_symbols_by_name("ghost", None, 8)
+        .find_symbols_by_name("ghost", None, None, 8)
         .await
         .unwrap()
         .is_empty());
@@ -101,7 +104,7 @@ async fn overlay_merge_drops_defs_for_deleted_file() {
     assert!(
         graph
             .load()
-            .find_symbols_by_name("ghost", None, 8)
+            .find_symbols_by_name("ghost", None, None, 8)
             .await
             .unwrap()
             .is_empty(),

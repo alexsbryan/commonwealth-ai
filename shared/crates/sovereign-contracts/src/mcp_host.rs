@@ -11,7 +11,7 @@
 
 use serde_json::Value;
 
-use crate::oicp::mcp::{CallAudit, ToolOutcome};
+use crate::oicp::mcp::{CallAudit, McpRequestContext, ToolOutcome};
 use crate::registry::ToolRegistry;
 use crate::types::{StepOutput, ToolContext};
 use crate::Effect;
@@ -24,16 +24,27 @@ pub fn agent_session_token(header: Option<String>, session_id: &str) -> String {
     header.unwrap_or_else(|| format!("conn:{session_id}"))
 }
 
-/// Run one tool from `tools` as an MCP call. `None` when `exposed` refuses
-/// the canonical `name` (the caller answers -32601). A name the registry
-/// does not hold, and arguments that fail validation, answer without
-/// executing, so their outcome carries no audit.
+/// Whether a connection reaches a tool of `effect`: a read-only one
+/// (`x-svrn-effects: read`) reaches `Read` alone, `ReadWrite` counting as a
+/// write. The one rule both `tools/list` ([`render_tool_entries`]) and
+/// `tools/call` ([`call_registry_tool`]) apply, so a tool cannot be hidden
+/// from the list and still answer a call.
+pub fn effect_reachable(read_only: bool, effect: Effect) -> bool {
+    !read_only || effect == Effect::Read
+}
+
+/// Run one tool from `tools` as an MCP call for the request `ctx`. `None`
+/// when `exposed` refuses the canonical `name` (the caller answers -32601).
+/// A name the registry does not hold, a tool whose effect the connection
+/// does not reach, and arguments that fail validation answer without
+/// executing, so their outcome carries no audit. `ctx.corpus` is taken as
+/// admitted: the host judged it before calling here.
 pub async fn call_registry_tool(
     tools: &ToolRegistry,
     name: &str,
     arguments: &Value,
     session_id: &str,
-    agent_session_token: String,
+    ctx: &McpRequestContext,
     exposed: impl Fn(&str) -> bool,
 ) -> Option<ToolOutcome> {
     if !exposed(name) {
@@ -51,6 +62,17 @@ pub async fn call_registry_tool(
             ));
         }
     };
+
+    let effect = tool.descriptor().effect;
+    if !effect_reachable(ctx.read_only, effect) {
+        tracing::info!(tool = %name, ?effect, "mcp: refused, the connection reads only");
+        return Some(ToolOutcome::refusal(format!(
+            "`{name}` is a {effect:?} tool, and this connection reaches only Read tools \
+             (it sent `{}: {}`)",
+            crate::oicp::mcp::MCP_EFFECTS_HEADER,
+            crate::oicp::mcp::MCP_EFFECTS_READ,
+        )));
+    }
 
     if let Err(e) = tool.validate(arguments) {
         tracing::debug!(tool = %name, error = %e, "mcp: arguments refused");
@@ -87,24 +109,27 @@ pub async fn call_registry_tool(
     // Glassbox the dispatch so operators can correlate work-atlas
     // session creation with the MCP call that triggered it (ARCH §9.1).
     // Truncate the token to 12 chars per ARCH §9.3 — redact deliberately.
+    let agent_session_token = agent_session_token(ctx.agent_session.clone(), session_id);
     let token_redacted: String = agent_session_token.chars().take(12).collect();
     tracing::debug!(
         tool = %name,
         agent_session_token = %token_redacted,
+        corpus_scope = ?ctx.corpus,
         "mcp:tool_call dispatched"
     );
 
-    let ctx = ToolContext {
+    let tool_ctx = ToolContext {
         conversation_id: "mcp".to_string(),
         task_id: None,
         working_directory: None,
         in_reasoning_loop: false,
         agent_session_token: Some(agent_session_token),
         turn_index: 0,
+        corpus_scope: ctx.corpus.clone(),
         ..Default::default()
     };
 
-    let result = tool.execute(arguments, &ctx).await;
+    let result = tool.execute(arguments, &tool_ctx).await;
 
     let effect = descriptor.effect;
     // Detect empty/null results to flag "index missing content" signals.
@@ -141,16 +166,18 @@ pub fn call_log_tag(outcome: &ToolOutcome) -> Option<&'static str> {
     })
 }
 
-/// The `tools/list` entries for the `descriptors` that `keep` admits, as they
-/// go on the wire. Each program decides what it keeps (its exposure list, a
-/// spec gate); this is the one shape of an entry.
+/// The `tools/list` entries for the `descriptors` that `keep` admits and a
+/// connection that is `read_only` or not reaches ([`effect_reachable`]), as
+/// they go on the wire. Each program decides what it keeps (its exposure
+/// list, a spec gate); this is the one shape of an entry.
 pub fn render_tool_entries(
     descriptors: &[crate::types::ToolDescriptor],
+    read_only: bool,
     keep: impl Fn(&str) -> bool,
 ) -> Vec<Value> {
     descriptors
         .iter()
-        .filter(|desc| keep(&desc.id))
+        .filter(|desc| effect_reachable(read_only, desc.effect) && keep(&desc.id))
         .map(|desc| {
             serde_json::json!({
                 "name": desc.id,

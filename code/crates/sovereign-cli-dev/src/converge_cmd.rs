@@ -425,28 +425,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 // else still refuses, but now names the root it tried and every candidate's
 // source, so the message can no longer point at the wrong cause.
 
-/// A code corpus under `indexes_dir`: its id, and the tree it was built from.
-pub(crate) fn code_corpora(
-    indexes_dir: &std::path::Path,
-) -> Vec<(String, Option<std::path::PathBuf>)> {
-    let mut v: Vec<(String, Option<std::path::PathBuf>)> = std::fs::read_dir(indexes_dir)
-        .map(|rd| {
-            rd.flatten()
-                .filter(|e| e.path().join("scip_graph.db").exists())
-                .filter_map(|e| {
-                    let id = e.file_name().to_str()?.to_string();
-                    let src = std::fs::read_to_string(e.path().join("_corpus_meta.json"))
-                        .ok()
-                        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-                        .and_then(|v| v.get("source_path")?.as_str().map(std::path::PathBuf::from));
-                    Some((id, src))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    v.sort();
-    v
-}
+// The enumeration is code's own since code-intel-repo-scope: the MCP mount's
+// corpus admission reads the same list.
+pub(crate) use sovereign_code::code_corpora;
 
 /// The git worktree containing `start`, if any. `.git` is a FILE in a linked
 /// worktree, so this tests existence rather than directory-ness.

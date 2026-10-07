@@ -49,6 +49,9 @@ use sovereign_contracts::registry::ToolRegistry;
 /// three subcommands so none of them re-opens SQLite.
 pub(super) struct ToolsEnv {
     pub registry: ToolRegistry,
+    /// The indexes root the code tools read, whose code corpora a call's
+    /// scope is resolved against.
+    pub indexes_dir: PathBuf,
 }
 
 /// Open a `ToolRegistry` configured with the full set of native
@@ -68,6 +71,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| cwd.clone());
     let data_dir = default_data_dir().unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
+    let indexes_dir = data_dir.clone();
     // Flat-file stores (lint_results.db, test_results.db) live at
     // `~/.svrnmesh/` directly — the canonical path the running
     // `svrn daemon` writes to. Resolving them under `data_dir`
@@ -405,7 +409,10 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         tools.register(Box::new(tool.declared()));
     }
 
-    Ok(ToolsEnv { registry: tools })
+    Ok(ToolsEnv {
+        registry: tools,
+        indexes_dir,
+    })
 }
 
 // ─── Path resolution helpers (duplicated from project_cmd) ──────────

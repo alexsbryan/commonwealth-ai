@@ -55,7 +55,7 @@ impl RecentChangesTool {
     }
 
     /// The executable half of `recent_changes`.
-    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let hours = params
             .get("hours")
             .and_then(|v| v.as_u64())
@@ -67,12 +67,17 @@ impl RecentChangesTool {
         // anyway but we make the intent explicit.
         let filter = format!("symbol_name IS NOT NULL AND mtime > {since}");
 
-        let rows = query_all_code_indexes(&self.engine, &filter, MAX_ROWS_PER_CORPUS)
-            .await
-            .map_err(|e| Error::Tool {
-                tool_id: "recent_changes".to_string(),
-                message: e.to_string(),
-            })?;
+        let rows = query_all_code_indexes(
+            &self.engine,
+            &filter,
+            MAX_ROWS_PER_CORPUS,
+            ctx.corpus_scope.as_deref(),
+        )
+        .await
+        .map_err(|e| Error::Tool {
+            tool_id: "recent_changes".to_string(),
+            message: e.to_string(),
+        })?;
 
         if rows.is_empty() {
             return Ok(StepOutput::Text(format!(

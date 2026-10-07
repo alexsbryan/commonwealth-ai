@@ -964,6 +964,25 @@ knowledge server (docs/internal/FIVE_PROGRAMS.md §2). Tools under
 drift, capability docs, project context, session reflection, and work-atlas
 coordination (`declare_scope`, `release_scope`, `work_in_flight`).
 
+**One daemon, each repo's own answers** (code-intel-repo-scope). The daemon
+holds every repo's code corpus, and a call says which one it is about:
+`ToolContext::corpus_scope`, filled at each surface's edge. Over MCP it is the
+`x-svrn-corpus` header (`oicp_types::mcp::MCP_CORPUS_HEADER`, carried on
+`McpRequestContext`); code's host admits only a corpus it holds
+(`sovereign_code::admit_corpus`) and answers anything else -32602 naming the
+corpora that exist, before any tool runs. On the CLI it is the code corpus
+whose `source_path` is the cwd's git root (`tools_cmd/scope.rs`), else every
+corpus with one stderr line saying so; `--all-corpora` asks for every one. The
+graph tools take the scope as a SQL predicate (`corpus_id` is a column on
+`symbols` and `refs`), and the chunk tools read one enumeration,
+`code_indexes`. A connection that sends `x-svrn-effects: read` neither lists
+nor calls a tool whose manifest effect is not `Read`
+(`sovereign_contracts::mcp_host::effect_reachable`, the one rule both paths
+apply). Each repo's `.mcp.json` names its corpus; the ralph shim hands a
+worker its workdir's, never this checkout's. The merged graph still loads
+once per daemon, so a corpus indexed later answers after a restart
+(order `code-intel-graph-refresh`).
+
 Code's tool graph and the Reindexer share ONE merged `ScipGraph` handle,
 so updates are visible to `symbols`/`callers`/`blast` live. Each debounced
 save runs an embed-free tree-sitter overlay; the heavy rust-analyzer export is

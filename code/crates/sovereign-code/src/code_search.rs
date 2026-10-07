@@ -127,7 +127,7 @@ impl CodeSearchTool {
     }
 
     /// The executable half of `code_search`.
-    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -154,9 +154,8 @@ impl CodeSearchTool {
             None => "symbol_name IS NOT NULL".to_string(),
         };
 
-        let indexes = self
-            .engine
-            .usable_indexes()
+        let scope = ctx.corpus_scope.as_deref();
+        let indexes = super::code_indexes(&self.engine, scope)
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "code_search".to_string(),
@@ -168,7 +167,7 @@ impl CodeSearchTool {
         // code doesn't exist" when the real cause is a missing/stale chunk
         // index (the silent-degradation trap — a skipped corpus used to
         // vanish into a `tracing::debug!`).
-        let code_corpora = indexes.iter().filter(|i| super::has_code_graph(i)).count();
+        let code_corpora = indexes.len();
         let mut opened_ok = 0usize;
         // Chunk-index age per code corpus: `last_updated` is stamped by
         // `sovereign code index`, so a corpus nobody re-indexes keeps
@@ -181,9 +180,6 @@ impl CodeSearchTool {
             .unwrap_or(0);
         let mut aging_corpora: Vec<(String, u64)> = Vec::new();
         for info in &indexes {
-            if !super::has_code_graph(info) {
-                continue;
-            }
             let age_days = now_secs.saturating_sub(info.last_updated) / 86_400;
             if info.last_updated > 0 && age_days >= CHUNK_STALE_DAYS {
                 aging_corpora.push((info.corpus_id.clone(), age_days));
@@ -261,11 +257,15 @@ impl CodeSearchTool {
         //     missing chunk index); the symbol may exist but not appear here
         //   - corpora all opened, still empty → a genuine no-match (no note)
         if code_corpora == 0 {
-            text.push_str(
-                "\n\n---\nIndex: absent | 0 code corpora\n\
+            let absent = match scope {
+                Some(id) => format!("no chunk index for the `{id}` code corpus"),
+                None => "0 code corpora".to_string(),
+            };
+            text.push_str(&format!(
+                "\n\n---\nIndex: absent | {absent}\n\
                  Code index not built. Run `sovereign code index <path>` \
-                 to enable semantic code search.",
-            );
+                 to enable semantic code search."
+            ));
         } else if opened_ok < code_corpora {
             let failed = code_corpora - opened_ok;
             text.push_str(&format!(

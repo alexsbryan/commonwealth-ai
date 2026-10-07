@@ -17,7 +17,8 @@ impl McpToolHost for Server {
         Some(Server::instructions(self))
     }
 
-    fn list(&self) -> Value {
+    /// Stdio alone, so no connection ever arrives scoped.
+    fn list(&self, _ctx: &McpRequestContext) -> Value {
         self.tool_list()
     }
 

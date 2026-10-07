@@ -57,7 +57,7 @@ impl FindCallersTool {
     }
 
     /// The executable half of `callers`.
-    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -69,15 +69,16 @@ impl FindCallersTool {
             .unwrap_or(1)
             .min(2) as usize;
 
+        let scope = ctx.corpus_scope.as_deref();
+        tracing::debug!(symbol, depth, corpus_scope = ?scope, "callers: lookup");
         let graph = self.graph.load_full().await;
-        let (callers, caution) =
-            graph
-                .find_callers(symbol, depth)
-                .await
-                .map_err(|e| Error::Tool {
-                    tool_id: "callers".to_string(),
-                    message: e.to_string(),
-                })?;
+        let (callers, caution) = graph
+            .find_callers(symbol, depth, scope)
+            .await
+            .map_err(|e| Error::Tool {
+                tool_id: "callers".to_string(),
+                message: e.to_string(),
+            })?;
 
         if callers.is_empty() {
             return Ok(StepOutput::Text(format!(
@@ -97,8 +98,8 @@ impl FindCallersTool {
 
         for c in callers.iter().take(20) {
             out.push_str(&format!(
-                "- `{}` in `{}` line {}\n",
-                c.symbol_name, c.file_path, c.line
+                "- `{}` in `{}` line {}  ({})\n",
+                c.symbol_name, c.file_path, c.line, c.corpus_id
             ));
         }
 

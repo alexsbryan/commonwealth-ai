@@ -71,7 +71,7 @@ impl SymbolLookupTool {
     }
 
     /// The executable half of `symbols`.
-    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let name = params
             .get("name")
             .and_then(|v| v.as_str())
@@ -84,9 +84,11 @@ impl SymbolLookupTool {
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty());
 
+        let scope = ctx.corpus_scope.as_deref();
+        tracing::debug!(name, corpus_scope = ?scope, "symbols: lookup");
         let graph = self.graph.load_full().await;
         let rows = graph
-            .find_symbols_by_name(name, kind, 8)
+            .find_symbols_by_name(name, kind, scope, 8)
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "symbols".to_string(),
@@ -111,8 +113,12 @@ impl SymbolLookupTool {
                      index and doesn't depend on SCIP."
                 )));
             }
+            let searched = match scope {
+                Some(id) => format!("the `{id}` code corpus"),
+                None => "any installed code corpus".to_string(),
+            };
             return Ok(StepOutput::Text(format!(
-                "No symbol named `{name}` found in any installed code corpus.\n\n\
+                "No symbol named `{name}` found in {searched}.\n\n\
                  Try `code_search` with a description of what you're looking \
                  for — it does semantic search (approximate) instead of exact \
                  name matching."

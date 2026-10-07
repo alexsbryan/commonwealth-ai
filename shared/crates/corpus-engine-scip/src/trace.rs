@@ -66,7 +66,7 @@ pub async fn build_symbol_trace(
     symbol: &str,
     qualified_name: &str,
 ) -> Result<SymbolTrace> {
-    let (callers_raw, _staleness) = scip.find_callers(symbol, 1).await?;
+    let (callers_raw, _staleness) = scip.find_callers(symbol, 1, None).await?;
     let mut callers: Vec<CallSite> = callers_raw
         .into_iter()
         .map(|c| CallSite {

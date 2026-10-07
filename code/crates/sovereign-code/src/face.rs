@@ -489,6 +489,7 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
             tools: Arc::clone(&tools),
             session_id: session_id.clone(),
             feature_root: workspace.clone(),
+            indexes_dir: indexes_dir.clone(),
         },
         CodeCallLog {
             matcher: Arc::new(

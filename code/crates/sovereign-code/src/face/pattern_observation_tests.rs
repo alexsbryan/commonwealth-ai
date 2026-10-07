@@ -107,6 +107,7 @@ async fn blast_then_build_writes_observed_note_via_live_mcp_wire() {
             tools: registry,
             session_id: "obs-test-session".into(),
             feature_root: Some(dir.path().to_path_buf()),
+            indexes_dir: dir.path().join("indexes"),
         },
         CodeCallLog {
             notes: Arc::clone(&notes),

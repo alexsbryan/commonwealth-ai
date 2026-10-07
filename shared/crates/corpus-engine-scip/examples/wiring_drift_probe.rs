@@ -88,7 +88,7 @@ async fn main() {
             capped = true;
             break;
         }
-        let callees = match graph.find_callees(&sym).await {
+        let callees = match graph.find_callees(&sym, None).await {
             Ok((c, _caution)) => c,
             Err(_) => continue,
         };
@@ -165,7 +165,7 @@ async fn main() {
     // ── self-validation: are the tool nodes live (have callers) but just not from us? ──
     println!("\n── self-validation: the tools exist as live graph nodes, reached by SOMEONE ──");
     for probe in ["find_callees", "SymbolLookupTool"] {
-        match graph.find_callers(probe, 2).await {
+        match graph.find_callers(probe, 2, None).await {
             Ok((callers, _)) if !callers.is_empty() => {
                 let sample: Vec<String> = callers
                     .iter()

@@ -18,6 +18,7 @@ use axum::routing::post;
 use axum::{Json, Router};
 use futures::stream::{self, Stream, StreamExt};
 use oicp_types::jsonrpc::JsonRpcResponse;
+use oicp_types::mcp::{MCP_CORPUS_HEADER, MCP_EFFECTS_HEADER, MCP_EFFECTS_READ};
 use serde_json::Value;
 
 use super::{dispatch_body, McpRequestContext, McpRequestHandler};
@@ -142,16 +143,57 @@ async fn mcp_handle<H: McpRequestHandler + 'static>(
         )
             .into_response();
     }
-    let ctx = McpRequestContext {
-        agent_session: headers
-            .get(AGENT_SESSION_HEADER)
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_string),
+    let ctx = match request_context(&headers) {
+        Ok(ctx) => ctx,
+        Err(why) => {
+            tracing::debug!(reason = %why, "mcp: request refused at the edge");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(JsonRpcResponse::error(Value::Null, -32600, why)),
+            )
+                .into_response();
+        }
     };
     match dispatch_body(&*handler, body, &ctx).await {
         Some(reply) => (StatusCode::OK, Json(reply)).into_response(),
         None => StatusCode::ACCEPTED.into_response(),
     }
+}
+
+/// The request's [`McpRequestContext`], read off its headers. An effect cap
+/// this framing does not know is refused, never read as no cap: a typo in a
+/// read-only client's config must not hand it the write tools. Which corpora
+/// exist is the tool host's to judge ([`super::McpToolHost::admit`]).
+fn request_context(headers: &HeaderMap) -> Result<McpRequestContext, String> {
+    let text = |name: &str| -> Result<Option<String>, String> {
+        headers
+            .get(name)
+            .map(|v| {
+                v.to_str()
+                    .map(str::to_string)
+                    .map_err(|_| format!("the {name} header is not visible ASCII"))
+            })
+            .transpose()
+    };
+    let read_only = match text(MCP_EFFECTS_HEADER)?.as_deref() {
+        None => false,
+        Some(MCP_EFFECTS_READ) => true,
+        Some(other) => {
+            return Err(format!(
+                "{MCP_EFFECTS_HEADER}: `{other}` is not an effect cap; the one value is \
+                 `{MCP_EFFECTS_READ}`"
+            ))
+        }
+    };
+    let ctx = McpRequestContext {
+        agent_session: text(AGENT_SESSION_HEADER).ok().flatten(),
+        corpus: text(MCP_CORPUS_HEADER)?,
+        read_only,
+    };
+    if ctx.corpus.is_some() || ctx.read_only {
+        tracing::debug!(corpus = ?ctx.corpus, read_only = ctx.read_only, "mcp: connection scope");
+    }
+    Ok(ctx)
 }
 
 #[cfg(test)]

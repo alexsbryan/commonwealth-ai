@@ -187,7 +187,7 @@ mod integrity_tests {
             2,
             "a partial answer replaced the file's edges"
         );
-        let (callers, _) = g.find_callers("SomeType", 1).await.unwrap();
+        let (callers, _) = g.find_callers("SomeType", 1, None).await.unwrap();
         assert_eq!(
             callers.len(),
             1,
@@ -226,7 +226,7 @@ mod integrity_tests {
         assert_eq!(g.add_call_edges_for("alpha", &moved).await.unwrap(), 1);
         assert_eq!(g.ref_count().await, 3);
 
-        let (callers, _) = g.find_callers("other", 1).await.unwrap();
+        let (callers, _) = g.find_callers("other", 1, None).await.unwrap();
         assert_eq!(
             callers.first().map(|c| c.symbol_name.as_str()),
             Some("a_one"),
