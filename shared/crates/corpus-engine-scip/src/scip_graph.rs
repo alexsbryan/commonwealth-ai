@@ -2198,7 +2198,7 @@ pub const REBUILD_COALESCED: &str = "another writer holds the rebuild lock";
 #[derive(Debug)]
 pub struct LiveExport {
     pub summary: crate::scip_export::ExportSummary,
-    /// The git HEAD recorded in `scip_meta` alongside the export
+    /// The git HEAD the export started from, recorded in `scip_meta`
     /// (`None` for non-git roots).
     pub head: Option<String>,
 }
@@ -2269,6 +2269,10 @@ impl ScipGraph {
         let tempdir = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
         let export_out = tempdir.path().join("scip");
 
+        // The stamp is the HEAD the export starts from: a commit landing
+        // mid-export is one the exporter may not have read, and the git poll
+        // must still see it as drift.
+        let head = read_git_head(repo_root);
         let summary = crate::scip_export::export_all(
             repo_root,
             &export_out,
@@ -2292,7 +2296,6 @@ impl ScipGraph {
             ));
         }
 
-        let head = read_git_head(repo_root);
         let outcomes_json = serde_json::json!({
             "succeeded": summary.languages_exported,
             "skipped": summary

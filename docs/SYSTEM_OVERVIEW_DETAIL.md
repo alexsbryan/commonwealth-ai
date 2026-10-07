@@ -4281,7 +4281,9 @@ The whole-workspace export is **one-writer and guarded** (2026-08-14):
 cross-process `.rebuild.lock` (flock) and renames it over the live graph only
 on success — a query in flight always sees a complete graph, and a daemon
 restart mid-export cannot empty it (the `export_to_live` wipe guard refuses
-to rename over a populated graph). The rebuild loop runs at most
+to rename over a populated graph). It stamps `last_indexed_head` with the
+HEAD the export started from, so a commit landing mid-export still reads as
+drift to the git poll. The rebuild loop runs at most
 `MAX_FOLLOWUP_PASSES` (4) passes **under the same** cross-project rebuild
 permit — the follow-up pass that at HEAD re-acquired the sole permit and
 self-deadlocked (live incident 2026-08-14: status `active` for hours, every
@@ -4289,11 +4291,16 @@ nudge coalescing silently) is structurally impossible now; a 45-minute
 watchdog (`MAX_REBUILD_WALL`) and an RAII guard clear both the worker
 `in_flight` flag and the `ProjectState` claim on hang or panic, record the
 failure (`record_rebuild_failure`, visible via `project watch status`), and
-write a `WEDGE GUARD` line to the daemon log. Every cycle appends to
+write a `WEDGE GUARD` line to the daemon log. Every pass appends to
 `~/.svrnmesh/logs/watch-<corpus>-scip.log` (`project watch logs <corpus>
-scip`). `project refresh` now **verifies**: it nudges the daemon, polls
-`/v1/projects` to a named verdict (completed / failed / crashed / wedged /
-daemon-gone), prints `✓ SCIP graph at HEAD` or a loud ✗ reason, and on
+scip`) with its reason (`follow_up` for one the loop runs because signals
+fired mid-pass) and its pass and queue times; the daemon's `scip rebuild
+complete` line carries `queued_ms` and `pass_ms`, since `elapsed_ms` counts
+the wait behind other projects for the one permit. `project refresh` now
+**verifies**: it nudges the daemon, polls `/v1/projects` to a named verdict
+(completed, meaning indexed at the nudge's HEAD or a later commit on it /
+failed / crashed / wedged / daemon-gone), prints `✓ SCIP graph at HEAD` or a
+loud ✗ reason, and on
 failure falls back to a local in-process export through the SAME
 `export_to_live` lock — one writer for the DB across daemon and `--local`
 paths; a local export that loses the lock to the daemon exits 1 with
