@@ -13,8 +13,8 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 use crate::error::{Error, Result};
 
 use super::{
-    corpus_schema, now_unix, read_meta, write_meta, CorpusIndex, EmbeddedChunk,
-    InsertChunk, StoredChunk,
+    corpus_schema, now_unix, read_meta, write_meta, CorpusIndex, EmbeddedChunk, InsertChunk,
+    StoredChunk,
 };
 
 impl CorpusIndex {
