@@ -298,11 +298,17 @@ mod tests {
         let a = git_head(tmp.path()).unwrap();
         git(&["commit", "-q", "--allow-empty", "-m", "b"]);
         let b = git_head(tmp.path()).unwrap();
-        assert!(descends_from(tmp.path(), &a, &b), "b is a later commit on a");
+        assert!(
+            descends_from(tmp.path(), &a, &b),
+            "b is a later commit on a"
+        );
         assert!(descends_from(tmp.path(), &a, &a), "a commit covers itself");
         assert!(!descends_from(tmp.path(), &b, &a), "a precedes b");
         let unknown = "0".repeat(40);
-        assert!(!descends_from(tmp.path(), &a, &unknown), "git knows no such commit");
+        assert!(
+            !descends_from(tmp.path(), &a, &unknown),
+            "git knows no such commit"
+        );
     }
 
     #[test]
