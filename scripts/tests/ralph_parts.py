@@ -121,6 +121,15 @@ def answering_client(tmp):
     return str(f)
 
 
+def recording_client(tmp, name, out):
+    """A stand-in client that records the argv it was handed, one line per
+    call, and answers the probe's word."""
+    f = pathlib.Path(tmp) / name
+    f.write_text(f'#!/bin/sh\necho "$@" >> "{out}"\necho OK\n')
+    f.chmod(0o755)
+    return f
+
+
 def install_script(tmp, name, source=None):
     dst = pathlib.Path(tmp) / "scripts" / name
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1588,6 +1597,50 @@ class ProbeTests(unittest.TestCase):
         # "Single-model values behave exactly as today (the probe still runs)."
         self.assertEqual(ralph.parse_roster("prov/dead,prov/alive"), ["prov/dead", "prov/alive"])
         self.assertEqual(ralph.parse_roster("prov/solo"), ["prov/solo"])
+
+
+class ClientRoutingTests(unittest.TestCase):
+    """One seam routes a model id to its client: `provider/model` is opencode's
+    grammar (the battery); a bare id is the declaring worker_bin's (the claude
+    shim). probe_model and _start_session both call client_for, so the client a
+    model is probed through is the client that runs the row."""
+
+    def test_a_pair_id_runs_on_opencode_and_a_bare_id_on_the_declared_worker_bin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shim = recording_client(tmp, "shim-stub.sh", pathlib.Path(tmp) / "shim.out")
+            opencode = recording_client(tmp, "opencode-stub.sh", pathlib.Path(tmp) / "oc.out")
+            paths = ralph.Paths(pathlib.Path(tmp), manifest=mock.Mock(worker_bin=str(shim)))
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(opencode)}):
+                self.assertEqual(ralph.client_for("claude-opus-5-5", paths), str(shim))
+                self.assertEqual(ralph.client_for("zai-coding-plan/glm-5.3-flash", paths),
+                                 str(opencode))
+                # No model configured: the declaring client's own default.
+                self.assertEqual(ralph.client_for("", paths), str(shim))
+
+    def test_each_model_is_probed_on_the_client_that_will_run_it(self):
+        # FAILING INPUT: probe_model ran every roster name through
+        # worker_bin(paths), so a provider/model name was handed to the claude
+        # shim and the battery was never probed — zoracite's s5-3-missing
+        # blocked on a weekly-limited claude while three battery models were
+        # healthy (2026-10-07).
+        with tempfile.TemporaryDirectory() as tmp:
+            shim_out = pathlib.Path(tmp) / "shim.out"
+            oc_out = pathlib.Path(tmp) / "oc.out"
+            shim = recording_client(tmp, "shim-stub.sh", shim_out)
+            opencode = recording_client(tmp, "opencode-stub.sh", oc_out)
+            paths = ralph.Paths(pathlib.Path(tmp), manifest=mock.Mock(worker_bin=str(shim)))
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(opencode)}):
+                self.assertEqual(ralph.probe_model("claude-opus-5-5", paths), (True, ""))
+                self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
+                # The probe and the session agree: client_for is the one routing.
+                self.assertEqual(ralph.client_for("claude-opus-5-5", paths), str(shim))
+                self.assertEqual(ralph.client_for("prov/x", paths), str(opencode))
+            recorded = lambda p: p.read_text().splitlines() if p.exists() else []
+            shim_argv, oc_argv = recorded(shim_out), recorded(oc_out)
+            self.assertEqual(len(shim_argv), 1, shim_argv)
+            self.assertIn("--model claude-opus-5-5", shim_argv[0])
+            self.assertEqual(len(oc_argv), 1, oc_argv)
+            self.assertIn("--model prov/x", oc_argv[0])
 
 
 class ErrorTailTests(unittest.TestCase):

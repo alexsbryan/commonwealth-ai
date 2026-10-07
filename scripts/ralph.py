@@ -802,14 +802,14 @@ def probe_refusal(model, paths):
 
 
 def probe_model(model, paths, timeout=PROBE_TIMEOUT_S):
-    """One minimal chat call per model through the same client lanes use
-    (`<worker_bin> run --model M`), provider-direct. Returns (True, "") when
-    the model answers, else (False, cause kept from the error: quota reset
-    text, provider error, timeout)."""
+    """One minimal chat call per model through the client the session will use
+    (`client_for(model) run --model M`), provider-direct. Returns (True, "")
+    when the model answers, else (False, cause kept from the error: quota
+    reset text, provider error, timeout)."""
     refusal = probe_refusal(model, paths)
     if refusal:
         return False, f"{model}: {refusal}"
-    client = worker_bin(paths)
+    client = client_for(model, paths)
     try:
         r = subprocess.run([client, "run", "--model", model, PROBE_PROMPT],
                            cwd=str(paths.workdir), capture_output=True, text=True,
@@ -1169,6 +1169,18 @@ def worker_bin(paths):
     if declared:
         return str(paths.p(declared)) if "/" in declared else declared
     return os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+
+
+def client_for(model, paths):
+    """Which client runs this model id: a `provider/model` pair is opencode's
+    grammar (probe_refusal's seam) and runs through opencode; a bare id is the
+    declaring worker_bin's (the claude shim's). probe_model and _start_session
+    both route through here, so the probe and the session cannot disagree on
+    the client. An empty model (no roster configured) takes the declaring
+    client's own default."""
+    if model and "/" in model:
+        return os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+    return worker_bin(paths)
 
 # A conflicts.txt line `<id> *` pairs the row with every other: it runs alone.
 ALONE = "*"
@@ -2535,7 +2547,7 @@ class Loop:
                     "RALPH_AWAIT_MAX": str(self.await_max_s)})
         full_env = {**os.environ, **session_env(self.paths), **env,
                     "PATH": f"{RALPH_BIN}{os.pathsep}{os.environ.get('PATH', '')}"}
-        proc = self.spawn([worker_bin(self.paths), "run", *model_args, prompt],
+        proc = self.spawn([client_for(model, self.paths), "run", *model_args, prompt],
                           cwd=cwd, env=full_env, log_path=log)
         entry["sessions"] = n
         entry["notes"] = []

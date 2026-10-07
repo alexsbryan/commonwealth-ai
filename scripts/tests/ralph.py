@@ -147,16 +147,24 @@ class Procs:
         return [a for a, *_ in self.spawned if a[0] != "/bin/sh"]
 
 
+def manifest_stub(worker_bin):
+    """The queue manifest the loop reads, shaped as the loop touches it: a
+    declared worker_bin, no dispatch census, no audit cadence, no freeze."""
+    return mock.Mock(worker_bin=worker_bin, settings="", dispatch_requires=(),
+                     audit_every=None, scope_file="", path="ralph/next/t/queue.toml")
+
+
 class Rig:
     """A Loop over a temp repo, with every seam faked."""
 
     def __init__(self, tmp, state, *, lane_mode=False, lanes=1, charter=None, prompt=PROMPT,
-                 models=None, probe=None, disk=None, extra=None, **kw):
+                 models=None, probe=None, disk=None, extra=None, manifest=None, **kw):
         self.tmp = pathlib.Path(tmp)
         self.wd = make_repo(tmp, state, prompt, extra)
         self.procs, self.clock, self.notes = Procs(), Clock(), []
         self.disk = disk or (lambda: 100)
         self.probe = probe or (lambda m: (True, ""))
+        self.manifest = manifest
         self.kw = dict(label="t", lanes=lanes, lane_mode=lane_mode, base_branch="main",
                        charter=charter, models=models or {"MODEL": "prov/m"},
                        state_dir=self.tmp / "state", lane_root=self.tmp / "lanes", **kw)
@@ -164,7 +172,7 @@ class Rig:
 
     def new_loop(self):
         return ralph.Loop(
-            ralph.Paths(self.wd), spawn=self.procs.spawn, alive=self.procs.alive,
+            ralph.Paths(self.wd, manifest=self.manifest), spawn=self.procs.spawn, alive=self.procs.alive,
             kill=self.procs.kill, clock=self.clock, sleep=lambda s: FOREVER,
             probe=lambda m: self.probe(m), jobs_share=lambda n: (2, "test budget"),
             disk_free_gb=lambda: self.disk(), code_digest=lambda: "same",
@@ -894,6 +902,54 @@ class IncidentTests(unittest.TestCase):
         argv = rig.procs.session_argvs()[0]
         # One probed model, never the roster as one --model (9 resolver deaths, 2026-10).
         self.assertEqual(argv[argv.index("--model") + 1], "prov/a")
+
+    def test_a_roster_spawns_each_model_on_its_own_client(self):
+        # A mixed roster: the bare id runs on the queue's worker_bin (the
+        # claude shim), the provider/model id on opencode. FAILING INPUT:
+        # _start_session spawned worker_bin(paths) for every roster name, so
+        # the battery id was executed by the claude shim — argv[0] constant.
+        shim, opencode = "/nonexistent/claude-shim", "/nonexistent/opencode"
+        alive = {"claude-opus-5-5": True}
+
+        def cont(s):
+            s.commit()
+            assert s.result("continue", "more") == 0, s.last
+            return 0
+
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n",
+                  models={"MODEL": "claude-opus-5-5,prov/x"},
+                  manifest=manifest_stub(shim),
+                  probe=lambda m: (alive.get(m, m == "prov/x"), ""))
+        rig.procs.sessions += [cont, cont]
+        with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": opencode}):
+            rig.tick()
+            alive["claude-opus-5-5"] = False
+            rig.clock.advance(ralph.PROBE_OK_TTL_S)
+            rig.tick(2)
+        argvs = rig.procs.session_argvs()
+        self.assertGreaterEqual(len(argvs), 2, argvs)
+        self.assertEqual(argvs[0][0], shim)
+        self.assertEqual(argvs[0][argvs[0].index("--model") + 1], "claude-opus-5-5")
+        self.assertEqual(argvs[1][0], opencode)
+        self.assertEqual(argvs[1][argvs[1].index("--model") + 1], "prov/x")
+
+    def test_a_director_dispatch_takes_the_resolve_roster_too(self):
+        # An escalated row's director runs RESOLVE_MODEL, routed by the same
+        # grammar: the parked row's director died on the weekly limit while
+        # the battery was healthy (2026-10-07). FAILING INPUT: the director's
+        # provider/model name spawned on the shim.
+        shim, opencode = "/nonexistent/claude-shim", "/nonexistent/opencode"
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", charter="decide",
+                  max_strikes=0,
+                  models={"MODEL": "prov/w", "RESOLVE_MODEL": "claude-opus-5-5,prov/x"},
+                  manifest=manifest_stub(shim),
+                  probe=lambda m: (m == "prov/x", "weekly limit"))
+        rig.procs.sessions.append(lambda s: FOREVER)
+        with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": opencode}):
+            rig.tick()
+        argv = rig.procs.session_argvs()[0]
+        self.assertEqual(argv[0], opencode)
+        self.assertEqual(argv[argv.index("--model") + 1], "prov/x")
 
     def test_permission_rejections_are_named_in_the_strike(self):
         rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
