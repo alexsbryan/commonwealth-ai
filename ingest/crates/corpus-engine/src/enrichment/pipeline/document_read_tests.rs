@@ -4,10 +4,13 @@ use serde_json::{json, Value};
 
 use super::*;
 use crate::enrichment::atlas::SectionDocuments;
-use crate::enrichment::ontology::{Force, OntologyPolicies, OntologyV1};
+use crate::enrichment::ontology::{OntologyPolicies, OntologyV1};
 use crate::enrichment::pipeline::atlas::SectionExtraction;
 use crate::enrichment::pipeline::runner::Phase1CheckpointEntry;
 use crate::enrichment::pipeline::types::ChapterInput;
+
+#[path = "document_read/claim_check_tests.rs"]
+mod claim_check_tests;
 
 pub(super) fn policies() -> OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
@@ -698,95 +701,6 @@ fn a_repeated_local_reference_with_a_changed_label_is_refused_not_fatal() {
     assert!(read.documents[0].refused[0]
         .reason
         .contains("changes label"));
-}
-
-#[test]
-fn document_read_accepts_every_declared_claim_force() {
-    let policies = policies();
-    let membership = policies
-        .shape
-        .types
-        .iter()
-        .find(|ty| ty.name == "membership")
-        .unwrap();
-    for force in Force::ALL {
-        let mut declared = membership.clone();
-        declared.force = Some(force);
-        assert!(
-            eligible_claim(&declared, &policies),
-            "document reading must include declared {force:?} claims"
-        );
-    }
-}
-
-#[test]
-fn document_read_preserves_commissive_force_without_licensing_an_act() {
-    let body = "Ada commits to add an alias for issue 842 by Friday.";
-    let rows = [row(
-        1,
-        "doc-a",
-        body,
-        r#"{"author":"Alice","role":"member","date":"2024-02-03","kind":"comment","id":"doc-a"}"#,
-    )];
-    let chapter = input_chapter(&rows);
-    let mut policies = policies();
-    let assertive_contract = contract_fingerprint(&policies);
-    policies
-        .shape
-        .types
-        .iter_mut()
-        .find(|ty| ty.name == "membership")
-        .unwrap()
-        .force = Some(Force::Commissive);
-    assert_ne!(assertive_contract, contract_fingerprint(&policies));
-
-    let prompt = compose(&chapter, &policies, "commissive-test");
-    assert!(prompt
-        .system
-        .contains("not permission or authorization for this system"));
-    let schema = prompt.response_schema.unwrap();
-    let read = schema["properties"]["documents"]["items"]["oneOf"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|branch| branch["properties"]["status"]["const"] == "read")
-        .unwrap();
-    let kinds: Vec<Value> = read["properties"]["claims"]["items"]["oneOf"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|branch| branch["properties"]["kind"]["const"].clone())
-        .collect();
-    assert_eq!(kinds, vec![json!("membership"), json!("reported_status")]);
-    assert_eq!(
-        super::schema::contract_value(&policies)["claim_types"][0]["force"],
-        "commissive"
-    );
-
-    let mut commitment = claim("membership", "commitment-1", "Case 842", body, "unknown");
-    commitment["content"] = json!(body);
-    commitment["speaker"] = json!("Ada");
-    let raw = response(json!([{
-        "document_id":"doc-a",
-        "status":"read",
-        "claims":[commitment]
-    }]));
-    let mut parsed = parse_response(&raw, &policies).unwrap();
-    let extraction = parsed.section_extraction.as_mut().unwrap();
-    validate_and_stamp(&chapter, &policies, extraction).unwrap();
-
-    assert_eq!(
-        extraction.claims[0].discourse_act,
-        crate::enrichment::pipeline::atlas::DiscourseAct::Commit
-    );
-    assert_eq!(extraction.claims[0].attributed_to.as_deref(), Some("Ada"));
-    assert_eq!(extraction.claims[0].anchor, body);
-    assert_eq!(extraction.claims.len(), 1);
-    assert!(extraction.entities_developed.is_empty());
-    assert!(extraction.relations_introduced.is_empty());
-    assert!(extraction.relations_developed.is_empty());
-    assert!(extraction.events.is_empty());
-    assert!(extraction.questions_raised.is_empty());
 }
 
 #[test]

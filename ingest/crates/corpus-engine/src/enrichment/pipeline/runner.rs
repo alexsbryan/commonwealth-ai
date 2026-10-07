@@ -16,6 +16,10 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::atlas::{SectionExtraction, SeedEntities, SeedOrigin, SeedStrategy};
+use super::document_read::{
+    runner_cache_text, runner_load_exemplar_bank, runner_missing_source_documents,
+    runner_phase1_inputs, runner_validate_response,
+};
 use super::exemplar_bank::{Exemplar, ExemplarBank};
 use super::phase_cache::PhaseCache;
 use super::run_output::RunOutputWriter;
@@ -361,7 +365,7 @@ fn classify_phase1_parse_failure(response: &str, err: &Error) -> PhaseFailureKin
 /// mode hit.
 ///
 /// Returns `None` when the input is entirely whitespace.
-fn truncate_response_head(text: &str) -> Option<String> {
+pub(super) fn truncate_response_head(text: &str) -> Option<String> {
     if text.trim().is_empty() {
         return None;
     }
@@ -791,21 +795,10 @@ impl PhaseRunner {
         // through.
         let policies = self.pipeline.declaration();
         let document_reading = policies.document_reading;
-        if document_reading {
-            tracing::debug!(
-                chapters = targets.len(),
-                "phase1.document_read_mode_enabled"
-            );
-        }
         let exemplar_path = self.exemplar_path(PipelinePhase::Questions);
-        let bank = if document_reading {
-            None
-        } else {
-            Some(
-                ExemplarBank::load_embedded(&exemplar_path, PipelinePhase::Questions, &self.embed)
-                    .await?,
-            )
-        };
+        let bank =
+            runner_load_exemplar_bank(document_reading, targets.len(), &exemplar_path, &self.embed)
+                .await?;
         let k = self.pipeline.top_k_exemplars(PipelinePhase::Questions);
 
         progress(Phase1Progress::Start {
@@ -817,15 +810,7 @@ impl PhaseRunner {
         // miss is non-fatal — the pipeline's compose_phase1_with_seed
         // default falls through to the seedless prompt. Pipelines
         // with `SeedStrategy::None` never write this cache entry.
-        let seed_opt: Option<SeedEntities> = if document_reading {
-            None
-        } else {
-            self.cache.read(PipelinePhase::SeedExtraction)?
-        };
-        // One focused call per declared relation with both ends per `from`
-        // entity; empty, so zero calls, for a corpus that declares none.
-        let focus = (!document_reading)
-            .then(|| super::pipelines::relation_focus::RelationFocus::from_policies(&policies));
+        let (seed_opt, focus) = runner_phase1_inputs(document_reading, &self.cache, &policies)?;
 
         let mut extracted: Vec<ExtractedQuestion> = Vec::with_capacity(targets.len());
         let mut failures: Vec<Phase1Failure> = Vec::new();
@@ -858,25 +843,11 @@ impl PhaseRunner {
                 chapter_id: &chapter.chapter_id,
             });
 
-            if document_reading && chapter.source_documents.is_empty() {
-                let reason = format!(
-                    "declared document reading requires hydrated source documents for chapter `{}`",
-                    chapter.chapter_id
-                );
-                tracing::warn!(
-                    chapter = %chapter.chapter_id,
-                    "phase1.document_read_missing_source_documents"
-                );
+            if let Some(failure) = runner_missing_source_documents(document_reading, chapter) {
                 progress(Phase1Progress::ChapterFailed {
                     chapter_id: &chapter.chapter_id,
-                    reason: &reason,
+                    reason: &failure.reason,
                 });
-                let failure = Phase1Failure {
-                    chapter_id: chapter.chapter_id.clone(),
-                    reason,
-                    raw_response_head: None,
-                    failure_kind: PhaseFailureKind::Skipped,
-                };
                 self.persist_failure_checkpoint(&failure);
                 failures.push(failure);
                 continue;
@@ -980,21 +951,7 @@ impl PhaseRunner {
             // version + model id. Only the default retry mode
             // consults the cache — terse retries are by definition
             // a different prompt shape and would corrupt the entry.
-            let cache_text = if document_reading {
-                let prompt = serde_json::to_string(&prompt).map_err(|error| {
-                    Error::Serialization(format!(
-                        "serialise declared document-read prompt for cache identity: {error}"
-                    ))
-                })?;
-                format!(
-                    "{}\0{}\0{}",
-                    super::document_read::contract_fingerprint(&policies),
-                    super::document_read::context_fingerprint(chapter),
-                    prompt
-                )
-            } else {
-                chapter.text.clone()
-            };
+            let cache_text = runner_cache_text(document_reading, &policies, chapter, &prompt)?;
             let section_cache_key = if retry_mode.is_none() {
                 self.section_cache.as_ref().map(|cfg| {
                     crate::enrichment::atlas::section_cache::cache_key(
@@ -1205,35 +1162,16 @@ impl PhaseRunner {
             };
 
             if document_reading {
-                let validation = parsed
-                    .section_extraction
-                    .as_mut()
-                    .ok_or_else(|| {
-                        Error::Serialization(
-                            "document-reading policy returned no SectionExtraction".into(),
-                        )
-                    })
-                    .and_then(|extraction| {
-                        super::document_read::validate_and_stamp(chapter, &policies, extraction)
-                    });
-                if let Err(error) = validation {
-                    let head = truncate_response_head(&response);
-                    let reason = format!("document-read validation error: {error}");
-                    tracing::warn!(
-                        chapter_id = %chapter.chapter_id,
-                        error = %error,
-                        "phase1.document_read_validation_failed"
-                    );
+                if let Err(failure) = runner_validate_response(
+                    chapter,
+                    &policies,
+                    parsed.section_extraction.as_mut(),
+                    &response,
+                ) {
                     progress(Phase1Progress::ChapterFailed {
                         chapter_id: &chapter.chapter_id,
-                        reason: &reason,
+                        reason: &failure.reason,
                     });
-                    let failure = Phase1Failure {
-                        chapter_id: chapter.chapter_id.clone(),
-                        reason,
-                        raw_response_head: head,
-                        failure_kind: PhaseFailureKind::ParseDrift,
-                    };
                     self.persist_failure_checkpoint(&failure);
                     failures.push(failure);
                     continue;

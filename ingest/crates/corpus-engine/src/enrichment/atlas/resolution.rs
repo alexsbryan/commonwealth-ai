@@ -46,8 +46,7 @@ use crate::types::EmbedFn;
 use super::atoms::{AtomId, ChunkRef, Entity, Event, SectionPosition};
 use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 use super::resolution_identity::{
-    declared_subject_type, merge_permitted, resolve_metadata_source_subject,
-    resolve_relation_participants, resolve_within_declared_type, sketch_may_merge_into,
+    bind_claim_subject, merge_permitted, resolve_relation_participants, sketch_may_merge_into,
     MergeEvidence, TypedSubjectPools,
 };
 use super::resolution_ontology::{
@@ -1649,103 +1648,21 @@ pub fn resolve_step_3b_with(
             // on `attribution`), so its subject resolves among atoms of that
             // type: "Series Y sceattas of Aldfrith" is a coin, not the king
             // whose name it carries.
-            let declared_subject = declared_subject_type(policy, sketch.claim_kind.as_deref());
-            // A subject RESOLVE decides is left to it (`resolution_records`).
-            let left = declared_subject
-                .is_some_and(|t| super::resolution_records::decides(policy.index(), t));
-            let document_read = sketch
-                .attributes
-                .contains_key(crate::enrichment::pipeline::document_read::LOCAL_REF_ATTRIBUTE);
-            let metadata_subject = declared_subject
-                .and_then(|type_name| policy.index().get(type_name))
-                .is_some_and(|decl| decl.source.is_some());
-            let mut source_identity_failure = None;
-            let subject = if document_read && metadata_subject {
-                let source_document = sketch
-                    .attributes
-                    .get(crate::enrichment::pipeline::document_read::SOURCE_DOCUMENT_ATTRIBUTE)
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|document| !document.is_empty());
-                let subject_fields = sketch
-                    .attributes
-                    .get(crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE)
-                    .and_then(serde_json::Value::as_object);
-                match (declared_subject, source_document, subject_fields) {
-                    (Some(type_name), Some(_), Some(fields)) => {
-                        match resolve_metadata_source_subject(type_name, fields, policy, entities) {
-                            Ok(id) => Some(id),
-                            Err(reason) => {
-                                debug!(
-                                    subject_type = type_name,
-                                    claim = %sketch.content,
-                                    %reason,
-                                    "atlas/resolution 3b: metadata-backed claim subject remains unbound"
-                                );
-                                source_identity_failure = Some(reason);
-                                None
-                            }
-                        }
-                    }
-                    (Some(type_name), _, _) => {
-                        source_identity_failure = Some(format!(
-                            "document-read claim for metadata-backed `{type_name}` lacks its source document or identity carrier"
-                        ));
-                        None
-                    }
-                    (None, _, _) => None,
-                }
-            } else {
-                sketch.subject.as_ref().filter(|_| !left).and_then(|name| {
-                    let resolved = resolve_within_declared_type(
-                        name,
-                        declared_subject,
-                        policy,
-                        entities,
-                        &name_index,
-                        &token_index,
-                        &mut typed_pools,
-                    );
-                    if resolved.is_none() {
-                        failures.push(PhaseFailure {
-                            phase: PipelinePhase::Questions,
-                            subject: format!(
-                                "sketch:claim:{}#{}",
-                                section.section_id, sketch_index
-                            ),
-                            kind: PhaseFailureKind::UnresolvedClaimSubject,
-                            reason: match declared_subject {
-                                Some(t) => format!(
-                                    "claim subject `{}` did not resolve to a `{t}` — `{}` \
-                                     declares subject = `{t}` (claim content: `{}`)",
-                                    name,
-                                    sketch.claim_kind.as_deref().unwrap_or("?"),
-                                    sketch.content.trim()
-                                ),
-                                None => format!(
-                                    "claim subject `{}` did not resolve (claim content: `{}`)",
-                                    name,
-                                    sketch.content.trim()
-                                ),
-                            },
-                            raw_response_head: None,
-                        });
-                    }
-                    resolved
-                })
-            };
-            if let Some(reason) = source_identity_failure {
-                failures.push(PhaseFailure {
-                    phase: PipelinePhase::Questions,
-                    subject: format!("sketch:claim:{}#{}", section.section_id, sketch_index),
-                    kind: PhaseFailureKind::UnresolvedClaimSubject,
-                    reason,
-                    raw_response_head: None,
-                });
-            }
-            let source_document = sketch
-                .attributes
-                .get(crate::enrichment::pipeline::document_read::SOURCE_DOCUMENT_ATTRIBUTE)
-                .and_then(serde_json::Value::as_str);
+            let binding = bind_claim_subject(
+                sketch,
+                &section.section_id,
+                sketch_index,
+                policy,
+                entities,
+                &name_index,
+                &token_index,
+                &mut typed_pools,
+                &mut failures,
+            );
+            let subject = binding.subject;
+            let source_document = binding.source_document;
+            let document_read = binding.document_read;
+            let claim_attributes = binding.attributes;
             let mut evidence = sketch_anchor_evidence(&section.section_id, &sketch.anchor);
             if document_read {
                 if let Some(source_document) = source_document {
@@ -1753,15 +1670,6 @@ pub fn resolve_step_3b_with(
                         reference.source_doc_id = Some(source_document.to_string());
                     }
                 }
-            }
-            let mut claim_attributes = sketch.attributes.clone();
-            if document_read && metadata_subject {
-                claim_attributes
-                    .remove(crate::enrichment::pipeline::document_read::LOCAL_REF_ATTRIBUTE);
-                claim_attributes
-                    .remove(crate::enrichment::pipeline::document_read::SOURCE_DOCUMENT_ATTRIBUTE);
-                claim_attributes
-                    .remove(crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE);
             }
             // Carry the anchor onto the persisted atom. Empty-string
             // anchors collapse to `None` so the renderer can branch on

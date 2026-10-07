@@ -16,7 +16,14 @@ use super::resolution::{build_name_index, build_token_index, resolve_entity_id_w
 use super::resolution_ontology::ResolutionPolicy;
 
 mod source_subject;
-pub(super) use source_subject::resolve_metadata_source_subject;
+pub(super) use source_subject::bind_claim_subject;
+
+pub(super) struct BoundClaimSubject<'a> {
+    pub(super) subject: Option<AtomId>,
+    pub(super) source_document: Option<&'a str>,
+    pub(super) document_read: bool,
+    pub(super) attributes: serde_json::Map<String, serde_json::Value>,
+}
 
 // ── 3a: what may fold into what ──────────────────────────────
 

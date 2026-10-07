@@ -8,6 +8,7 @@ use serde_json::Value;
 
 mod cache;
 mod projection;
+mod runner_support;
 mod schema;
 mod validation;
 
@@ -16,6 +17,11 @@ pub use cache::{
     phase1_cache_matches, validate_checkpoint,
 };
 pub use projection::parse_response;
+pub(super) use runner_support::{
+    cache_text as runner_cache_text, load_exemplar_bank as runner_load_exemplar_bank,
+    missing_source_documents as runner_missing_source_documents,
+    phase1_inputs as runner_phase1_inputs, validate_response as runner_validate_response,
+};
 pub use schema::compose;
 pub use validation::field_evidence_exists;
 pub use validation::validate_and_stamp;
