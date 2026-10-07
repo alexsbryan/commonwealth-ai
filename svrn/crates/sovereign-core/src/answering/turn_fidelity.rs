@@ -121,7 +121,10 @@ mod switch_tests {
     /// passes on, so a typo cannot start rewriting what clients sent.
     #[test]
     fn reshape_is_off_unless_explicitly_turned_on() {
-        assert!(!reshape_from(None), "absent means off — llama-server parity");
+        assert!(
+            !reshape_from(None),
+            "absent means off — llama-server parity"
+        );
         assert!(!reshape_from(Some("0")));
         assert!(!reshape_from(Some("on")), "unrecognised stays off");
         assert!(reshape_from(Some("1")));

@@ -319,7 +319,10 @@ async fn by_default_a_turn_that_would_trip_a_pass_is_served_as_sent() {
             f.name
         );
     }
-    assert!(tripping > 0, "no corpus turn trips a pass, so this check proves nothing");
+    assert!(
+        tripping > 0,
+        "no corpus turn trips a pass, so this check proves nothing"
+    );
 }
 
 /// P2. Every gated pass is load-bearing on the corpus: dropping any one
