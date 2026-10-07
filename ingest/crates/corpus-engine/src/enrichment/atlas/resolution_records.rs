@@ -132,7 +132,7 @@ struct Placed<'d> {
 /// `on_document` sees each document's resolution as it is made, so the caller
 /// can keep the decisions beside the atlas.
 pub async fn resolve_declared_types(
-    mut atoms: BuildAtoms<'_>,
+    atoms: &mut BuildAtoms<'_>,
     documents: &SectionDocuments,
     policies: &OntologyPolicies,
     corpus_id: &str,
@@ -164,7 +164,7 @@ pub async fn resolve_declared_types(
             continue;
         }
         let report = resolve_type(
-            &mut atoms,
+            atoms,
             t,
             &index,
             documents,

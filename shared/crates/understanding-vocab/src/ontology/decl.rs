@@ -267,6 +267,14 @@ pub struct OntologyV1 {
     /// spec's pre-registered defaults; the policy struct IS the TOML shape.
     #[serde(default)]
     pub navigation: NavigationPolicy,
+    /// `[[enrichment.ontology.paths]]`, `sets`, `folds`: what fills a
+    /// derived attribute (`derived.rs`).
+    #[serde(default)]
+    pub paths: Vec<super::derived::PathDecl>,
+    #[serde(default)]
+    pub sets: Vec<super::derived::SetDecl>,
+    #[serde(default)]
+    pub folds: Vec<super::derived::FoldDecl>,
 }
 
 impl OntologyV1 {
@@ -330,6 +338,11 @@ impl OntologyV1 {
                 // `true`, which is invariant I1.
                 configurations: self.derive.configurations.unwrap_or(!declares_types),
                 arguments: self.derive.arguments.unwrap_or(false),
+                derived: super::derived::DerivedPolicy {
+                    paths: self.paths,
+                    sets: self.sets,
+                    folds: self.folds,
+                },
             },
             prose: ProsePolicy {
                 guidance: self.guidance,
@@ -494,6 +507,10 @@ pub struct AttrDecl {
     /// What the attribute holds, for the extraction prompt.
     #[serde(default)]
     pub description: String,
+    /// The declared path or fold that fills it, instead of the extractor
+    /// (`derived.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived: Option<String>,
 }
 
 /// The four value families an attribute can take.
@@ -729,6 +746,7 @@ fn text_attrs(keys: &[String]) -> Vec<AttrDecl> {
             name: k.clone(),
             family: AttrFamily::Text { values: Vec::new() },
             description: String::new(),
+            derived: None,
         })
         .collect()
 }

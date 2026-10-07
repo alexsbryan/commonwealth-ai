@@ -174,7 +174,7 @@ impl Build {
 
     async fn resolve(&mut self) -> (Vec<RecordsReport>, Vec<PhaseFailure>, Vec<String>) {
         let (mut ars, mut positions, mut oppositions) = (Vec::new(), Vec::new(), Vec::new());
-        let atoms = BuildAtoms {
+        let mut atoms = BuildAtoms {
             entities: &mut self.entities,
             events: &mut self.events,
             states: &mut self.states,
@@ -189,7 +189,7 @@ impl Build {
         let mut seen = Vec::new();
         let mut sink = |ty: &str, r: &DocumentResolution| seen.push(format!("{ty}:{}", r.document));
         let (reports, failures) = resolve_declared_types(
-            atoms,
+            &mut atoms,
             &documents(),
             &policies(),
             CORPUS,

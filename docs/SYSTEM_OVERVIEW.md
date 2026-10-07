@@ -644,7 +644,12 @@ question the pipeline asks about a type is a method on the resolved
   statement, and each claim's subject its statement's record. 3b leaves such a
   subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
   retired with every reference to them, dropped and recorded, never repointed.
-  Decisions land in `atlas/resolve_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
+  Decisions land in `atlas/resolve_decisions.jsonl`. Around it run the declared
+  derived attributes (`enrichment/atlas/resolution_derived.rs`; ONTOLOGY_PRIMITIVES
+  §8): paths over `subject`, `document`, source fields (the `Participants` the
+  source projection records) and refs, filtered by sets, combined by a fold from a
+  closed registry; claim attributes before RESOLVE, a decided type's after, each
+  outcome typed in `atlas/derived_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at

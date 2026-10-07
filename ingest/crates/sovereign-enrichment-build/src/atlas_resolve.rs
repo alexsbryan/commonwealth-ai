@@ -30,7 +30,6 @@ use corpus_engine::enrichment::pipeline::{
 use corpus_engine::types::EmbedFn;
 use corpus_engine::InferenceFn;
 
-use super::atlas_resolve_documents::DocumentInputs;
 pub use super::atlas_resolve_documents::SourceCounts;
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
@@ -296,11 +295,9 @@ pub async fn resolve_into_dir(
     let mut resolution_failures: Vec<corpus_engine::enrichment::pipeline::PhaseFailure> =
         Vec::new();
 
-    let DocumentInputs {
-        documents,
-        projection,
-    } = super::atlas_resolve_documents::load(cfg, &policies, want_3b)?;
-    let sources = projection
+    let mut inputs = super::atlas_resolve_documents::load(cfg, &policies, want_3b)?;
+    let sources = inputs
+        .projection
         .as_ref()
         .map(|p| p.atoms.clone())
         .unwrap_or_default();
@@ -313,7 +310,7 @@ pub async fn resolve_into_dir(
         .map_err(|e| format!("atlas resolution (3a) failed: {e}"))?;
     let atlas_dir = target_atlas_dir;
     resolution_failures.extend(step_3a.failures.iter().cloned());
-    if let Some(p) = projection {
+    if let Some(p) = inputs.projection.take() {
         for line in p.report.summary_lines(&step_3a.sources) {
             println!("  ✓ {line}");
         }
@@ -395,9 +392,10 @@ pub async fn resolve_into_dir(
             edges: &mut edges,
             trajectories: &mut step_3b.trajectories,
         };
-        let (docs, corpus) = (documents.as_ref(), cfg.corpus_id.as_str());
-        let applied =
-            super::atlas_resolve_documents::apply(atoms, docs, &policies, corpus, infer, atlas_dir);
+        let corpus = cfg.corpus_id.as_str();
+        let applied = super::atlas_resolve_documents::apply(
+            atoms, &inputs, &policies, corpus, infer, atlas_dir,
+        );
         resolution_failures.extend(applied.await?);
 
         let result = write_atlas_full(

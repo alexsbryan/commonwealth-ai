@@ -177,6 +177,7 @@ fn a_ref_attribute_earns_the_example_and_names_its_context() {
                 name: "findspot".into(),
                 family: AttrFamily::Text { values: vec![] },
                 description: String::new(),
+                derived: None,
             }],
             specializes: None,
             role_of: None,
@@ -231,6 +232,7 @@ fn the_identity_keys_are_singled_out() {
         name: "catalogue_ref".into(),
         family: AttrFamily::Text { values: vec![] },
         description: String::new(),
+        derived: None,
     });
     coin.identity = vec!["catalogue_ref".into()];
 
@@ -461,6 +463,7 @@ fn the_shipped_fixture_fits_the_prompt_budget() {
         name: "catalogue_ref".into(),
         family: AttrFamily::Text { values: vec![] },
         description: String::new(),
+        derived: None,
     });
     coin.identity = vec!["catalogue_ref".into()];
     let probe_size = measure("numismatics (wessex-hoard probe)", &probe);

@@ -26,6 +26,7 @@ fn attr_text(name: &str, values: &[&str]) -> AttrDecl {
             values: values.iter().map(|s| (*s).to_string()).collect(),
         },
         description: String::new(),
+        derived: None,
     }
 }
 
@@ -36,6 +37,7 @@ fn attr_quantity(name: &str, unit: Option<&str>) -> AttrDecl {
             unit: unit.map(str::to_string),
         },
         description: String::new(),
+        derived: None,
     }
 }
 
@@ -44,6 +46,7 @@ fn attr_time(name: &str, range: bool) -> AttrDecl {
         name: name.into(),
         family: AttrFamily::Time { range },
         description: String::new(),
+        derived: None,
     }
 }
 
@@ -52,6 +55,7 @@ fn attr_ref(name: &str, of: &str) -> AttrDecl {
         name: name.into(),
         family: AttrFamily::Ref { of: of.into() },
         description: String::new(),
+        derived: None,
     }
 }
 

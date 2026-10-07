@@ -125,6 +125,20 @@ impl SectionDocuments {
         self.by_section.values().map(Vec::len).sum()
     }
 
+    /// Every document by its key, as the first section holding it has it.
+    pub(super) fn by_key(&self) -> HashMap<&str, &SourceDocument> {
+        let mut out = HashMap::new();
+        for d in self
+            .order
+            .iter()
+            .filter_map(|s| self.by_section.get(s))
+            .flatten()
+        {
+            out.entry(d.key.as_str()).or_insert(d);
+        }
+        out
+    }
+
     /// Every document ONCE, in manifest order, as `(section it is first
     /// seen in, document key, metadata fields)`.
     pub(super) fn each_document(&self) -> Vec<(&str, &str, &Map<String, Value>)> {

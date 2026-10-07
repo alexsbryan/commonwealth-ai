@@ -25,6 +25,7 @@
 //! linking the engine that extracted to it (enrichment-as-plugin Step 3).
 
 pub mod decl;
+pub mod derived;
 pub mod navigation;
 pub mod source;
 
@@ -229,6 +230,9 @@ pub struct DerivationPolicy {
     /// Reconstruct arguments. Default `false` (today).
     #[serde(default)]
     pub arguments: bool,
+    /// Derived attributes: the declared paths, sets and folds (`derived`).
+    #[serde(default)]
+    pub derived: derived::DerivedPolicy,
 }
 
 impl Default for DerivationPolicy {
@@ -238,6 +242,7 @@ impl Default for DerivationPolicy {
             patterns: Vec::new(),
             configurations: true,
             arguments: false,
+            derived: derived::DerivedPolicy::default(),
         }
     }
 }

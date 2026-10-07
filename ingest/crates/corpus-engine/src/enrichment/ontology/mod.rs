@@ -44,6 +44,7 @@
 pub use understanding_atlas::enrichment::ontology::clock;
 pub use understanding_atlas::enrichment::ontology::type_index;
 mod validate;
+mod validate_derived;
 
 pub use understanding_atlas::enrichment::ontology::clock::{metadata_date, section_date};
 pub use understanding_atlas::enrichment::ontology::type_index::TypeIndex;
@@ -57,6 +58,7 @@ pub use crate::recipe_ontology::language;
 pub use crate::recipe_ontology::language::{OntologyLanguage, OntologyLanguageRegistry};
 
 // The parsed policy data and the author-facing declaration types — the leaf.
+pub use understanding_vocab::ontology::derived;
 pub use understanding_vocab::ontology::decl::{
     AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Deontic, DeriveDecl, DocumentFieldsDecl,
     FieldReader, Force, MetadataSourceDecl, OntologyTypeDecl, OntologyV1, OntologyVocabulary,

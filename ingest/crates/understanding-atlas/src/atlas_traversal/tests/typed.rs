@@ -20,6 +20,7 @@ fn attr(name: &str, family: AttrFamily) -> AttrDecl {
         name: name.into(),
         family,
         description: String::new(),
+        derived: None,
     }
 }
 

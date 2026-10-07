@@ -70,7 +70,7 @@ identity_evidential = [
 identity_bar = 0.5
 identity_necessary = ["term"]
 attributes = [
-  { name = "counterparty", type = "ref", of = "company" },
+  { name = "counterparty", type = "ref", of = "company", derived = "party_of_deal" },
   { name = "amount", type = "quantity", unit = "USD" },
   { name = "term", type = "text", values = [
     "month to month, daily or spot, with no fixed term",
@@ -85,7 +85,10 @@ name = "stage_update"
 kind = "claim"
 force = "assertive"
 subject = "deal"
-attributes = [{ name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost"] }]
+attributes = [
+  { name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost"] },
+  { name = "party", type = "ref", of = "company", derived = "party_of_message" },
+]
 
 [[enrichment.ontology.types]]
 name = "commitment"
@@ -100,3 +103,24 @@ document = { date = "date", thread = "thread_id", id = "message_id" }
 
 [enrichment.ontology.tension]
 between = ["stage_update"]
+
+# Derived attributes (ONTOLOGY_PRIMITIVES.md §8): the other side of a message is who took part in it, read from
+# its address fields, never from a mention; a deal's party is the one its messages name most.
+[[enrichment.ontology.sets]]
+id = "ours"
+type = "company"
+where = { domain = { suffix = "enron.com" } }
+
+[[enrichment.ontology.paths]]
+id = "outside_parties"
+path = "document / (from | to | cc) / employer [!ours]"
+
+[[enrichment.ontology.folds]]
+id = "party_of_message"
+by = "first"
+from = ["outside_parties"]
+
+[[enrichment.ontology.folds]]
+id = "party_of_deal"
+by = "most"
+from = ["^subject / party"]

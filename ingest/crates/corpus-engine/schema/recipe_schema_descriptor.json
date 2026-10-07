@@ -175,7 +175,8 @@
   "ontology": {
     "attribute": [
       "name",
-      "description"
+      "description",
+      "derived"
     ],
     "attribute_families": [
       {
@@ -313,7 +314,10 @@
       "tension",
       "derive",
       "patterns",
-      "navigation"
+      "navigation",
+      "paths",
+      "sets",
+      "folds"
     ],
     "versions": [
       0,

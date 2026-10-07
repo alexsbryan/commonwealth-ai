@@ -856,6 +856,7 @@ mod tests {
                     name: "mint".into(),
                     family: AttrFamily::Ref { of: "mint".into() },
                     description: String::new(),
+                    derived: None,
                 }],
                 ..Default::default()
             },
@@ -894,6 +895,7 @@ mod tests {
                         of: "company".into(),
                     },
                     description: String::new(),
+                    derived: None,
                 }],
                 ..Default::default()
             },
@@ -938,6 +940,7 @@ mod tests {
                     name: "hoard".into(),
                     family: AttrFamily::Ref { of: "hoard".into() },
                     description: String::new(),
+                    derived: None,
                 }],
                 ..Default::default()
             },

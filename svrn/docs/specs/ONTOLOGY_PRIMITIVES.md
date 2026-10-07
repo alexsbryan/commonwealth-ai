@@ -788,3 +788,26 @@ prototype over the declaration (not over deals) moves crm-proof's deal and
 stage bars on the holdout; then Rust, with `deny_unknown_fields` on the new
 facets (unknown per-type keys are dropped silently today), a `derived_facets`
 line per facet, and the composed type added to the pipeline's `emits()`.
+
+**Derived attributes (agreed and built 2026-10-06).** A value no single passage states, computed from
+what the build already holds, declared as three flat, id-referenced primitives (`understanding-vocab`
+`ontology/derived.rs`): a **path** walks the graph (`subject` and `^subject` between a claim and its
+particular, `document` to the one document a claim lands in, a document field to the atoms a metadata
+`source` projected from it, a declared `ref`; `/`, `|` inside parentheses only, `^`, and a set filter
+`[s]`/`[!s]` on any step, SPARQL 1.1 property paths cut down); a **set** names particulars, or documents,
+by attribute conditions (`is`, `in`, word `suffix`); a **fold** turns its inputs' values into one by a
+function from a closed registry (`first` in priority order, an ambiguous input falling through; `agree`;
+`most` over distinct documents; `earliest`/`latest` by the declared clock; `all`). An attribute names the
+path or fold that fills it with `derived = "<id>"`; cardinality is the function's, so there is no separate
+`one`. Every outcome is typed (decided, with the documents it came through and the values it superseded,
+or nothing / ambiguous / conflict / tie / unordered), never collapsed into empty, and values a `[!set]`
+dropped are kept on the line. Order is inferred from what each derivation reads, a cycle refused at
+`recipe validate`; an attribute of a type RESOLVE decides is derived after it, every other one before, and
+validate refuses a before-RESOLVE derivation that reads what RESOLVE makes. A derived attribute is never
+asked of Phase 1 (`TypeIndex::extracted_attributes`). Evaluated in `atlas/resolution_derived.rs`, decisions
+in `atlas/derived_decisions.jsonl`. Ward declares the other side of a message as `document / (from | to |
+cc) / employer [!ours]` (`first`) and a deal's party as `^subject / party` (`most`): crm-ward holdout
+crm-deals 0/69 with RESOLVE alone, 16/69 with the party derived (baseline 5/69). Deferred, admitted by the
+shape: closure, time windows, value maps, relation-endpoint steps, computing functions (count, min, max),
+the `protocol` fold, attributes that must come from one winning source together.
+

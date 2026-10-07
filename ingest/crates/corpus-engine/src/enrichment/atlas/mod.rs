@@ -48,6 +48,7 @@ pub mod migrate_ids;
 pub mod ontology_coverage;
 pub mod registry;
 pub mod resolution;
+pub mod resolution_derived;
 pub mod resolution_documents;
 pub mod resolution_identity;
 pub mod resolution_ontology;
@@ -100,7 +101,8 @@ pub use resolution_documents::{
 };
 pub use resolution_ontology::ResolutionPolicy;
 pub use resolution_sources::{
-    next_entity_index, project_source_atoms, SourceFoldReport, SourceProjection, SourceReport,
+    next_entity_index, project_source_atoms, Participants, SourceFoldReport, SourceProjection,
+    SourceReport,
 };
 pub use resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, ResolvedChunk};
 pub use schema_validation::{

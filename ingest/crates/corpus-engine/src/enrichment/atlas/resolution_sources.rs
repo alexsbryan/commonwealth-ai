@@ -13,7 +13,7 @@
 //! (`merge_permitted`) may still refuse one, and the resolver's own
 //! `merge_into_existing` folds each mention in.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::OnceLock;
 
 use mailparse::{MailAddr, SingleInfo};
@@ -44,8 +44,14 @@ pub struct SourceProjection {
     /// One atom per distinct identity value per sourced type, id from that
     /// value (`AtomId::exact_entity_content_hash`).
     pub atoms: Vec<Entity>,
+    /// Who took part in each document: the field each atom was read from.
+    pub participants: Participants,
     pub report: SourceReport,
 }
+
+/// Document key → `(field, atom)` for every atom a metadata source projected
+/// from that field of that document. A derived path's field step reads it.
+pub type Participants = BTreeMap<String, Vec<(String, AtomId)>>;
 
 /// What projection saw, per sourced type, for the resolve step's output.
 #[derive(Debug, Clone, Default)]
@@ -172,8 +178,15 @@ pub fn project_source_atoms(
         let ty = EntityType::from_str_repr(&t.name);
         for mut a in accs {
             let refs = std::mem::take(&mut a.refs);
+            let seen_in = std::mem::take(&mut a.seen_in);
             let key = a.key.clone();
             let e = a.into_entity(src, &identity, &ty, corpus_id);
+            for (doc, field) in seen_in {
+                out.participants
+                    .entry(doc)
+                    .or_default()
+                    .push((field, e.id.clone()));
+            }
             for (attr, vals) in refs {
                 let of = src.refs[&attr].of.clone();
                 pending.push((out.atoms.len(), t.name.clone(), attr, of, vals));
@@ -243,6 +256,8 @@ struct Accum {
     section: String,
     document: String,
     documents: HashSet<String>,
+    /// Each `(document, field)` the value was read from.
+    seen_in: BTreeSet<(String, String)>,
     /// Attribute → each value read, with its count, first-seen first.
     values: BTreeMap<String, Vec<(String, usize)>>,
     /// `refs` attribute → each folded target identity value read, with its count.
@@ -344,6 +359,7 @@ fn project_type(
                             section: section.to_string(),
                             document: doc.to_string(),
                             documents: HashSet::new(),
+                            seen_in: BTreeSet::new(),
                             values: BTreeMap::new(),
                             refs: BTreeMap::new(),
                         });
@@ -351,6 +367,7 @@ fn project_type(
                     });
                     let acc = &mut accs[i];
                     acc.documents.insert(doc.to_string());
+                    acc.seen_in.insert((doc.to_string(), field.clone()));
                     for (attr, r) in &src.refs {
                         if let Some(v) = read(r.reader).as_deref().and_then(fold_identity_value) {
                             let seen = acc.refs.entry(attr.clone()).or_default();

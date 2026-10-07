@@ -29,6 +29,7 @@ fn policies() -> OntologyPolicies {
                     name: "findspot".into(),
                     family: AttrFamily::Text { values: vec![] },
                     description: String::new(),
+                    derived: None,
                 }],
                 ..Default::default()
             },

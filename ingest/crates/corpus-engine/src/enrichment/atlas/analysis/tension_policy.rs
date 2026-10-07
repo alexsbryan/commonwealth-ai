@@ -570,6 +570,7 @@ mod tests {
                 name: "valid".into(),
                 family: AttrFamily::Time { range: true },
                 description: String::new(),
+                derived: None,
             }],
             ..Default::default()
         });

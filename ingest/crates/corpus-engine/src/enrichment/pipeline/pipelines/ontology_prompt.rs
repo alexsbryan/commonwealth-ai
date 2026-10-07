@@ -104,7 +104,7 @@ pub fn render_declared_types(policies: &OntologyPolicies) -> String {
             if !facets.is_empty() {
                 out.push_str(&format!("  {}\n", facets.join(" · ")));
             }
-            let attrs = index.effective_attributes(&t.name);
+            let attrs = index.extracted_attributes(&t.name);
             if !attrs.is_empty() {
                 out.push_str(&format!(
                     "  attributes: {}\n",
@@ -273,7 +273,7 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
         .shape
         .types
         .iter()
-        .map(|t| (t, index.effective_attributes(&t.name)))
+        .map(|t| (t, index.extracted_attributes(&t.name)))
         .filter(|(_, a)| !a.is_empty())
         .collect();
     let Some((t, attrs)) = candidates
@@ -324,7 +324,7 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
     // type carries a ref, so a text-only declaration pays nothing.
     let ref_context = if policies.shape.types.iter().any(|t| {
         index
-            .effective_attributes(&t.name)
+            .extracted_attributes(&t.name)
             .iter()
             .any(|a| matches!(a.family, AttrFamily::Ref { .. }))
     }) {
@@ -435,7 +435,7 @@ fn render_subject_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) -> S
     // leave it out. `deontic` and `grade` ride in the same bag as the
     // declared attributes (`set_attribute_property`), in the order that
     // function inserts them, so prompt and schema agree on generation order.
-    let mut pairs = attribute_pairs(&index.effective_attributes(&t.name));
+    let mut pairs = attribute_pairs(&index.extracted_attributes(&t.name));
     if let Some(first) = t.deontic.first() {
         if !pairs.is_empty() {
             pairs.push_str(", ");

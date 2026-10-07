@@ -789,6 +789,9 @@ Allowed values:
 | `derive` | `DeriveDecl` | no | type default | Opt-in derivation passes (interpretive configurations, arguments). |
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph patterns to detect over declared relation/event types. Same shapes as `[[enrichment.patterns]]` (`PatternDecl`). |
 | `navigation` | `NavigationPolicy` | no | type default | `[enrichment.ontology.navigation]` — how a reader walks the atlas per question kind (`NavigationPolicy`). Omit it, or any row, to take the spec's pre-registered defaults; the policy struct IS the TOML shape. |
+| `paths` | `Vec<super::derived::PathDecl>` | no | type default | `[[enrichment.ontology.paths]]`, `sets`, `folds`: what fills a derived attribute (`derived.rs`). |
+| `sets` | `Vec<super::derived::SetDecl>` | no | type default |  |
+| `folds` | `Vec<super::derived::FoldDecl>` | no | type default |  |
 
 ## `EvidentialFieldDecl`
 
@@ -853,6 +856,7 @@ One typed attribute on a declared type. `name` and `type` are required; the rema
 | `name` | `String` | **yes** | — | The attribute key the extractor fills (`weight`, `dose`, `valid`). |
 | `(inline: AttrFamily)` | `AttrFamily` | **yes** | — | The value family, selected with `type = "…"`, plus its family keys. |
 | `description` | `String` | no | type default | What the attribute holds, for the extraction prompt. |
+| `derived` | `Option<String>` | no | type default | The declared path or fold that fills it, instead of the extractor (`derived.rs`). |
 
 ## `AttrFamily` (select with `type = "…"`)
 
@@ -1214,7 +1218,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
