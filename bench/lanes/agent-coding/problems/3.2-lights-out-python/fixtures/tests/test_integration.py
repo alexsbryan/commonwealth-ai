@@ -94,10 +94,17 @@ def test_all_lit_5x5_solvable():
     check_solves(grid)
 
 
-def test_one_lit_5x5_corner_solvable():
+def test_one_lit_5x5_corner_unsolvable_returns_none():
+    # Unsolvable: the corner overlaps an odd number of cells of one of the
+    # 5x5 board's two quiet patterns. This test asserted "solvable" until
+    # 2026-10-07; light chasing over all 32 first rows finds no solution,
+    # and an exact reference solver passed every other case here.
     grid = [[0] * 5 for _ in range(5)]
     grid[0][0] = 1
-    check_solves(grid)
+    presses = solve(grid)
+    assert presses is None, (
+        f"expected single-corner-lit 5x5 to be unsolvable; got {presses!r}"
+    )
 
 
 def test_diagonal_lit_4x4_solvable():
