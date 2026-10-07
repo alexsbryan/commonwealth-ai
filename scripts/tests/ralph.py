@@ -433,6 +433,18 @@ class SerialTests(unittest.TestCase):
         self.assertTrue(env["PATH"].startswith(str(ralph.RALPH_BIN)))
         self.assertEqual(env["RALPH_UNIT"], "a")
 
+    def test_the_one_shot_contract_rides_in_the_prompt_every_client_gets(self):
+        # FAILING INPUT: the one-shot note lived only in the claude shim's
+        # --append-system-prompt, so a battery worker (opencode) was never
+        # told the process dies with its background tasks and an uncommitted
+        # turn is lost. The note is the CONTRACT's now, in every prompt.
+        rig = self.rig()
+        rig.procs.sessions.append(done)
+        rig.tick()
+        prompt = rig.procs.session_argvs()[0][-1]
+        self.assertIn("one-shot", prompt)
+        self.assertIn("Commit before you end your turn", prompt)
+
     def test_a_continue_note_reaches_the_next_session(self):
         rig = self.rig()
 

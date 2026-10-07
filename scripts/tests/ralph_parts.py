@@ -1061,9 +1061,29 @@ class SessionEnvTests(unittest.TestCase):
             self.assertEqual(ralph.session_env(paths), {
                 "RALPH_QUEUE": "a", "RALPH_STATE": "ralph/next/a/STATE.md",
                 "RALPH_CONTROL_DIR": "ralph/next/a/ctl", "RALPH_WORKDIR": tmp,
-                "RALPH_CLAUDE_SETTINGS": f"{tmp}/ralph/next/a/settings.json"})
+                "RALPH_CLAUDE_SETTINGS": f"{tmp}/ralph/next/a/settings.json",
+                "OPENCODE_CONFIG": ""})
             with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": "/nonexistent/worker"}):
                 self.assertEqual(ralph.worker_bin(paths), f"{tmp}/stub-worker.sh")
+
+    def test_a_workdir_with_an_opencode_ralph_config_hands_the_session_it(self):
+        # FAILING INPUT: session_env carried no OPENCODE_CONFIG, so an opencode
+        # battery worker ran under whatever config a parent left in the
+        # environment, never its workdir's own — and a leaked parent value
+        # could not be cleared (opencode reads an empty one as unset).
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = str(pathlib.Path(tmp).resolve())
+            git_repo(tmp)
+            stub_worker(tmp, "exit 0\n")
+            write(tmp, "ralph/next/a/queue.toml", 'worker_bin = "./stub-worker.sh"\n')
+            write(tmp, ".opencode/ralph.json", "{}")
+            paths = queue_paths(tmp, "a")
+            with mock.patch.dict(os.environ, {"OPENCODE_CONFIG": "/leaked/opencode.json"}):
+                self.assertEqual(ralph.session_env(paths)["OPENCODE_CONFIG"],
+                                 f"{tmp}/.opencode/ralph.json")
+            (pathlib.Path(tmp) / ".opencode" / "ralph.json").unlink()
+            with mock.patch.dict(os.environ, {"OPENCODE_CONFIG": "/leaked/opencode.json"}):
+                self.assertEqual(ralph.session_env(paths)["OPENCODE_CONFIG"], "")
 
     def test_a_legacy_session_is_told_its_state_too(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1658,6 +1678,14 @@ class ErrorTailTests(unittest.TestCase):
         self.assertEqual(ralph.error_tail(None), "")
         self.assertEqual(len(ralph.error_tail("fatal: " + "x" * 400)), 200)
 
+    def test_a_weekly_limit_line_is_the_tail(self):
+        # FAILING INPUT: "weekly limit" was not an error shape, so a strikeout
+        # whose sessions died on the claude plan's weekly limit kept no cause
+        # (error_tail returned "" and the park package named nothing).
+        self.assertEqual(ralph.error_tail(
+            "working...\nYou've hit your weekly limit · resets 2am (America/Los_Angeles)\n"),
+            "You've hit your weekly limit · resets 2am (America/Los_Angeles)")
+
     def test_a_halt_carries_the_transcripts_last_error_line(self):
         with tempfile.TemporaryDirectory() as tmp:
             lane = write(tmp, "target/ralph/lane-dm-a.out", self.LANE)
@@ -2240,6 +2268,21 @@ class ShimTests(unittest.TestCase):
         self.assertIn("--effort medium", r.stderr)
         self.assertIn("effort=medium", r.stderr)
         self.assertNotIn("dropping --variant", r.stderr)
+
+    def test_the_one_shot_note_is_the_prompts_not_the_shims(self):
+        # FAILING INPUT: the shim appended the note as --append-system-prompt;
+        # opencode has no such flag, so a battery session never saw it. The
+        # note is ralph.py's CONTRACT now, delivered in every session prompt.
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = pathlib.Path(tmp) / "claude"
+            stub.write_text('#!/bin/sh\necho "argv: $*" >&2\n')
+            stub.chmod(0o755)
+            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}",
+                   "RALPH_PERMISSION_BRIDGE": "0"}
+            r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
+                                "do the unit"], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("--append-system-prompt", r.stderr)
 
 
 if __name__ == "__main__":

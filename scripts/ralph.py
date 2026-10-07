@@ -734,7 +734,7 @@ def parse_roster(value):
 # by both the probe's cause-keeping and the strikeout halt's tail.
 ERROR_SHAPE_RE = re.compile(
     r"(?i)\b(error|failed|failure|fatal|panic|refused|denied|timeout|timed out"
-    r"|quota|usage limit|rate.?limit|unauthori[sz]ed|forbidden|not found"
+    r"|quota|usage limit|weekly limit|rate.?limit|unauthori[sz]ed|forbidden|not found"
     r"|invalid api key|unexpected server)\b")
 
 PROBE_TIMEOUT_S = 45
@@ -1153,13 +1153,19 @@ def session_env(paths):
     ralph-mark.sh and ralph-check.sh need no per-campaign default. RALPH_QUEUE
     is set even when empty: a legacy loop launched from inside a queue's
     session must not inherit that queue. RALPH_CLAUDE_SETTINGS likewise (the
-    shim reads empty as its default). RALPH_WORKDIR is the loop's checkout, not
-    a pool lane's worktree: the permission bridge asks the operator there."""
+    shim reads empty as its default). OPENCODE_CONFIG likewise: the workdir's
+    own .opencode/ralph.json when it has one, empty otherwise (opencode reads
+    an empty one as unset), so an opencode battery session gets its workdir's
+    permissions and never a config a parent loop leaked in. RALPH_WORKDIR is
+    the loop's checkout, not a pool lane's worktree: the permission bridge
+    asks the operator there."""
     settings = paths.manifest.settings if paths.manifest else ""
+    opencode = paths.workdir / ".opencode" / "ralph.json"
     return {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
             "RALPH_CONTROL_DIR": paths.control_dir,
             "RALPH_WORKDIR": str(paths.workdir.resolve()),
-            "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else ""}
+            "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else "",
+            "OPENCODE_CONFIG": str(opencode) if opencode.is_file() else ""}
 
 
 def worker_bin(paths):
@@ -1691,8 +1697,12 @@ runs no ralph-result is counted by its commits alone.
   ralph-result needs-human [--package FILE] <why>
                                           a decision the row and the design do not make; FILE holds
                                           the evidence (commands, their actual output, file:line)
-Run <cmd> in the foreground of that call: never start a process yourself with nohup or `&`,
-since it dies with this session or outlives it unseen.
+This session is one-shot: the process exits the moment you end your turn and every background
+task you started is killed with it — no notification will ever reach you. Never end your turn
+while a check is running, and never start a process yourself with nohup or `&`. Run long checks
+(DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the
+Bash tool's timeout parameter set to 600000, or split them, or end your turn with
+`ralph-result await` above. Commit before you end your turn — an uncommitted turn is lost.
 """
 CONTRACT_OPERATOR = """\
   ralph-result needs-human --operator ... a fork the charter leaves to the operator: no director
