@@ -22,20 +22,24 @@ with the full set beside:
   contacts     external gold people whose person atom's employer resolves to their gold company
   deals        gold transaction deals matched by a deal atom citing one of their messages whose
                 counterparty resolves to the gold counterparty; each atom used once
-  stage        gold stage_updates matched by a stage_update claim citing the file, subject = the
-                matched transaction or master-agreement atom, same stage; unconditional current
-                stage recovery and the matched-deal conditional diagnostic beside
+  stage_served gold deals with a current stage (their latest gold update, by message date) whose
+                matched transaction or master-agreement atom SERVES that stage (the recipe's
+                `deal_stage` fold, read off the atom), and every document the fold decided on
+                (atlas/derived_decisions.jsonl) is a message gold places that deal at that stage;
+                each miss is counted by why beside it. The instrument never folds a stage itself
   commitments  gold commitments matched by a commitment claim citing the file whose subject is
                the gold person's atom
 Reported beside: atoms matching nothing, emails split across atoms, made-up claims (a claim on
-a file where gold has none of that kind).
+a file where gold has none of that kind), and `stage`: gold stage_updates matched by a
+stage_update claim citing the file, subject = the matched atom, same stage (the reading
+diagnostic, crm-stage's bar under ward-score-v2).
 """
 import argparse, email.utils, json, pathlib, re, sys, unicodedata
 
 HERE = pathlib.Path(__file__).resolve().parent
 HOME = pathlib.Path.home()
 WARD = HOME / ".svrnmesh/bench-corpora/enron-ward"
-INSTRUMENT_VERSION = "ward-score-v2"
+INSTRUMENT_VERSION = "ward-score-v3"
 
 
 def fold(s):
@@ -48,6 +52,7 @@ def squash(s):
 
 
 DATES = {}  # folder/file -> sortable date, from the manifest; unknown dates sort by file name
+DOC_FILES = {}  # the index's source_doc_id -> folder/file, so a fold's provenance documents read as gold's files
 
 
 def when(f):
@@ -58,10 +63,13 @@ def section_files(corpus):
     """sec id -> [(folder/file, folded body)] via chapters.json chunk ids -> chunk Message-ID -> manifest."""
     import lance  # noqa: PLC0415  (only the scoring path needs it)
     idx = HOME / ".svrnmesh/indexes" / corpus
-    chunks = lance.dataset(str(idx / "chunks.lance")).to_table(columns=["id", "metadata"]).to_pylist()
+    chunks = lance.dataset(str(idx / "chunks.lance")).to_table(columns=["id", "metadata", "source_doc_id"]).to_pylist()
     mid_of = {str(c["id"]): (json.loads(c["metadata"] or "{}").get("message_id") or "") for c in chunks}
     manifest = json.loads((WARD / "manifest.json").read_text())
     path_of = {m: e["path"] for e in manifest for m in e["message_ids"]}
+    for c in chunks:
+        if c.get("source_doc_id") and mid_of[str(c["id"])] in path_of:
+            DOC_FILES[c["source_doc_id"]] = path_of[mid_of[str(c["id"])]]
     for e in manifest:
         try:
             DATES[e["path"]] = email.utils.parsedate_to_datetime(e["date"]).isoformat()
@@ -91,9 +99,19 @@ def load_gold(gold_dir):
     return g
 
 
-def load_atlas(atoms, secfiles):
+def load_decisions(path):
+    """The build's derived_decisions.jsonl beside an atlas; absent is no decisions, which every served stage misses on."""
+    p = pathlib.Path(path)
+    return [json.loads(l) for l in p.read_text().splitlines() if l.strip()] if p.exists() else []
+
+
+def load_atlas(atoms, secfiles, decisions=()):
     ent = {x["data"]["id"]: x["data"] for x in atoms if x["atom_type"] == "Entity"}
     claims = [x["data"] for x in atoms if x["atom_type"] == "Claim"]
+    for d in decisions:  # a deal's stage decision: its outcome and the files of the documents it decided on
+        if d.get("attribute") == "stage" and (ent.get(d.get("atom")) or {}).get("entity_type") == "deal":
+            ent[d["atom"]]["_stage"] = {"outcome": d.get("outcome"), "values": d.get("values") or [],
+                                        "files": [DOC_FILES.get(k) for k in d.get("documents") or []]}
 
     def files(sec, anchor=None):
         cand = secfiles.get(sec, [])
@@ -270,19 +288,37 @@ def score(g, ent, claims, scope):
         if len(latest_stages) == 1 and None not in latest_stages:
             current_deals.append(d)
             gold_current[d["id"]] = next(iter(latest_stages))
-    cur_ok = cur_matched_ok = cur_matched_n = 0
+    # The CRM shows a deal's current stage with the message it came from: credit the stage the matched atom SERVES
+    # only when every document its decision names is one gold places that deal at that stage. Each miss says why.
+    # unbacked: no decided decision names the served value; provenance_unmapped: a deciding document the index
+    # cannot name as a gold file (the instrument could not judge it, apart from a message gold does not place)
+    served_hit, missed = 0, dict.fromkeys(("unmatched_deal", "wrong_stage", "unbacked", "unplaced",
+                                           "provenance_unmapped", "no_decision"), 0)
     for d in current_deals:
         subject = stage_subject.get(d["id"])
         if subject is None:
+            missed["unmatched_deal"] += 1
             continue
-        theirs = [c for c in claims if c.get("claim_kind") == "stage_update" and c.get("subject") == subject and c["_files"]]
-        latest_when = max((max(when(f) for f in c["_files"]) for c in theirs), default=None)
-        latest = [c for c in theirs if max(when(f) for f in c["_files"]) == latest_when]
-        latest_stages = {(c.get("attributes") or {}).get("stage") for c in latest}
-        cur_matched_n += 1
-        correct = len(latest_stages) == 1 and next(iter(latest_stages)) == gold_current[d["id"]]
-        cur_matched_ok += correct
-        cur_ok += correct
+        served = (ent[subject].get("attributes") or {}).get("stage")
+        decision = ent[subject].get("_stage")
+        if served is None:
+            why = decision["outcome"] if decision else "no_decision"
+            missed[why] = missed.get(why, 0) + 1
+            continue
+        if served != gold_current[d["id"]]:
+            missed["wrong_stage"] += 1
+            continue
+        placed = {s["file"] for s in updates_by_deal[d["id"]] if s["stage"] == served}
+        if not decision:
+            missed["no_decision"] += 1
+        elif decision["outcome"] != "decided" or decision["values"] != [served] or not decision["files"]:
+            missed["unbacked"] += 1
+        elif None in decision["files"]:
+            missed["provenance_unmapped"] += 1
+        elif set(decision["files"]) <= placed:
+            served_hit += 1
+        else:
+            missed["unplaced"] += 1
     gc = [c for c in g["commitments"] if c["file"] in scope]
     ch = sum(1 for k in gc if any(c.get("claim_kind") == "commitment" and k["file"] in c["_files"]
                                   and c.get("subject") in {person_atom.get(k["person"]), person_atom.get(k["person"] + "#name")} - {None}
@@ -299,8 +335,7 @@ def score(g, ent, claims, scope):
             "deals": r(len(deal_atom), len(gd)), "master_agreements": r(len(master_atom), len(gm)),
             "deal_atoms_unmatched": len(deals) - len(used),
             "deal_matches": {"transactions": deal_atom, "master_agreements": master_atom},
-            "stage": r(sh, len(gs)), "current_stage": r(cur_ok, len(current_deals)),
-            "current_stage_matched": r(cur_matched_ok, cur_matched_n),
+            "stage_served": r(served_hit, len(current_deals)), "stage_served_missed": missed, "stage": r(sh, len(gs)),
             "commitments": r(ch, len(gc)), "made_up": made_up,
             "person_atoms_unmatched": sum(1 for e in persons if e["id"] not in set(person_atom.values()))}
 
@@ -336,7 +371,8 @@ def selftest():
              {"atom_type": "Entity", "data": {"id": "e4", "entity_type": "company", "canonical_name": "City of X",
                                               "attributes": {"domain": "city.gov"}}},
              {"atom_type": "Entity", "data": {"id": "e5", "entity_type": "deal", "canonical_name": "5-yr supply",
-                                              "first_appearance": {"chunk_id": "s1"}, "attributes": {"counterparty": "e4"}}},
+                                              "first_appearance": {"chunk_id": "s1"},
+                                              "attributes": {"counterparty": "e4", "stage": "won"}}},
              {"atom_type": "Claim", "data": {"id": "k1", "claim_kind": "stage_update", "subject": "e5", "anchor": "Price is $4.12",
                                              "evidence": [{"chunk_id": "s1"}], "attributes": {"stage": "proposal"}}},
              {"atom_type": "Claim", "data": {"id": "k2", "claim_kind": "stage_update", "subject": "e5", "anchor": "We accept",
@@ -356,12 +392,16 @@ def selftest():
              # anchored in f/3; only without anchor narrowing would it reach f/2's "won"
              {"atom_type": "Claim", "data": {"id": "k9", "claim_kind": "stage_update", "subject": "e5", "anchor": "unrelated",
                                              "evidence": [{"chunk_id": "s2"}], "attributes": {"stage": "won"}}}]
-    ent, claims = load_atlas(atoms, sec)
+    # e5 serves f-d1's current stage (won, f/2) from f/2; f-d2 (current lead) has no matched atom
+    DOC_FILES.update({"doc-1": "f/1", "doc-2": "f/2", "doc-3": "f/3"})
+    decisions = [{"type": "deal", "attribute": "stage", "atom": "e5", "outcome": "decided", "values": ["won"],
+                  "documents": ["doc-2"]}]
+    ent, claims = load_atlas(atoms, sec, decisions)
     got = score(g, ent, claims, g["files"])
-    want = {"people": 1, "emails_split": 1, "companies": 1, "deals": 1, "stage": 1, "current_stage": 0,
+    want = {"people": 1, "emails_split": 1, "companies": 1, "deals": 1, "stage": 1, "stage_served": 1,
             "commitments": 1, "made_up_stage": 0}
     have = {"people": got["people"]["hit"], "emails_split": got["emails_split"], "companies": got["companies"]["hit"],
-            "deals": got["deals"]["hit"], "stage": got["stage"]["hit"], "current_stage": got["current_stage"]["hit"],
+            "deals": got["deals"]["hit"], "stage": got["stage"]["hit"], "stage_served": got["stage_served"]["hit"],
             "commitments": got["commitments"]["hit"], "made_up_stage": got["made_up"]["stage_updates"]}
     bad = {k: (have[k], v) for k, v in want.items() if have[k] != v}
     print(json.dumps({"instrument_version": INSTRUMENT_VERSION,
@@ -383,8 +423,10 @@ def main():
     if a.selftest:
         return selftest()
     secfiles = section_files(a.corpus)
-    atoms = json.loads((a.atoms or HOME / ".svrnmesh/indexes" / a.corpus / "atlas/atoms.json").read_text())["atoms"]
-    ent, claims = load_atlas(atoms, secfiles)
+    atoms_path = a.atoms or HOME / ".svrnmesh/indexes" / a.corpus / "atlas/atoms.json"
+    atoms = json.loads(atoms_path.read_text())["atoms"]
+    decisions = load_decisions(atoms_path.parent / "derived_decisions.jsonl")
+    ent, claims = load_atlas(atoms, secfiles, decisions)
     g = load_gold(a.gold)
     done = json.loads((HOME / ".svrnmesh/enrichment" / a.corpus / "cache/questions.json").read_text())
     extracted = {q.get("chapter_id") for q in (done.get("questions_by_chapter") or done.get("chapters") or [])}
@@ -398,6 +440,7 @@ def main():
     out = {"instrument_version": INSTRUMENT_VERSION,
            "deal_matching_basis": "maximum-cardinality evidence+counterparty coverage; not descriptor-level transaction identity proof",
            "gold_files": len(g["files"]), "covered_files": len(covered),
+           "stage_decisions": sum(1 for e in ent.values() if "_stage" in e),
            "cost": {"phase1_wall_s": round(wall, 1), "calls": sum(t["calls"] for t in snaps),
                     "messages_extracted": messages, "s_per_message": round(wall / messages, 2) if messages and snaps else None,
                     "prompt_tokens": sum(t["prompt_tokens"] for t in snaps),
@@ -409,7 +452,7 @@ def main():
         a.run.mkdir(parents=True, exist_ok=True)
         art = a.run / "score.json"
         art.write_text(json.dumps(out, indent=1) + "\n")
-        key = {"crm-people": "people", "crm-companies": "companies", "crm-deals": "deals", "crm-stage": "stage",
+        key = {"crm-people": "people", "crm-companies": "companies", "crm-deals": "deals", "crm-stage": "stage_served",
                "crm-commitments": "commitments", "crm-contacts": "contacts"}.get(a.bar)
         value = out["cost"]["s_per_message"] if a.bar == "crm-cost" else (out["holdout"][key]["recall"] if key else None)
         if value is None:

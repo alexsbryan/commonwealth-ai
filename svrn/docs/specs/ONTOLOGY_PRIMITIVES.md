@@ -831,4 +831,10 @@ and unsupported intervals refuse to select an order; same-time incompatible
 states conflict. The existing `derived_decisions.jsonl` records rule
 fingerprint, claim basis, subject assignments, source document identities,
 field evidence, alternatives and retained history. Existing ref-valued folds,
-including `latest`, keep their prior semantics.
+including `latest`, keep their prior semantics. Ward declares a deal's current
+stage this way (`deal_stage`: one rule per stage, `when = { stage = X }`, a
+transition identified by the stage it enters), and crm-stage credits that
+served value only when every deciding document is one gold places the deal at
+that stage (`ward-score-v3`). On the legacy reader every deal record is
+pending, since no claim carries field evidence (162 of 162, crm-ward cached reads);
+on the document reader's ward-v3 reads, 6 of 21 decide.
