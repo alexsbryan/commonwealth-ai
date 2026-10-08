@@ -245,6 +245,7 @@ pub async fn knowledge_search(
                                     source_doc_id: r.source_doc_id,
                                     peer_name: None,
                                     peer_node_id: None,
+                                    document: None,
                                 }
                             }));
                         }

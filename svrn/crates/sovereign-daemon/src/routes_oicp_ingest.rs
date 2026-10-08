@@ -50,6 +50,7 @@ pub async fn corpus_install(
     Ok(Json(CorpusInstallResponse {
         corpus_id: req.corpus_id,
         spawned,
+        recipe_sha256: None,
     }))
 }
 

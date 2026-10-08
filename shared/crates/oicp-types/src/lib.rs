@@ -23,11 +23,19 @@
 //! the ingest extension (§5), and model fingerprints (§6). Every v0.4
 //! field is serde-defaulted; an empty v0.4 value serializes identically
 //! to a v0.3 manifest.
+//!
+//! v0.5 (`cmnwlth/docs/oicp-v0.5.md`) adds, the same way, the evidence
+//! extension ([`evidence`]): texts stored by their sha256, read back by
+//! address, quotations aligned against them; search hits that carry their
+//! document's record; install with a recipe; and named clients. Each is
+//! gated by its own feature string, never by the version.
 
 pub mod capabilities;
 pub mod capability;
 pub mod completion;
 pub mod error;
+/// The v0.5 evidence extension: stored texts, spans into them, alignment.
+pub mod evidence;
 pub mod forced_choice;
 // Crate-private: `model_aliases` is its only caller and always was. It was
 // `pub mod glob` in `commonwealth-core` and the move is what makes the
@@ -85,6 +93,10 @@ pub use completion::{
     TurnAdmission,
 };
 pub use error::{InferenceError, InferenceResult};
+pub use evidence::{
+    AlignRequest, AlignResponse, Alignment, CorpusTexts, Difference, DifferenceKind, Document,
+    EvidenceEndpoints, SourceRef, Span, TextSlice, Unavailable,
+};
 pub use job::{
     InvalidJobKind, Isolation, JobExecutorDescriptor, JobKind, JobRequirements, JobUnit,
     OfferedRepo, WorkOffer,

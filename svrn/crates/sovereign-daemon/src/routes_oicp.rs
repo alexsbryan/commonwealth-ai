@@ -208,6 +208,7 @@ async fn apply_v04_enrichment(
                     search_endpoint: "/v1/knowledge/search".into(),
                     embed_model,
                     ingest,
+                    evidence: None,
                 });
             }
         }
@@ -351,6 +352,7 @@ pub async fn capabilities(
             search_endpoint: "/v1/knowledge/search".into(),
             embed_model: None,
             ingest: None,
+            evidence: None,
         }),
         federation,
         features: Vec::new(),

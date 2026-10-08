@@ -28,7 +28,8 @@ pub struct IngestEndpoints {
     pub test_endpoint: Option<String>,
 }
 
-/// `POST {install_endpoint}` — install a corpus by recipe id (§5.1).
+/// `POST {install_endpoint}` — install a corpus by recipe id (§5.1), or,
+/// with `recipe_toml`, install that recipe under `corpus_id` (v0.5 §4).
 /// Idempotent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorpusInstallRequest {
@@ -37,6 +38,11 @@ pub struct CorpusInstallRequest {
     /// when the recipe takes no parameters.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub parameters: BTreeMap<String, serde_json::Value>,
+    /// v0.5 §4: the full recipe TOML to install under `corpus_id`, in place
+    /// of a recipe the host already knows by that id. Honoured only when
+    /// the host advertises `ingest:recipe`; an invalid recipe is a `400`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipe_toml: Option<String>,
 }
 
 /// Response to [`CorpusInstallRequest`] (§5.1).
@@ -44,8 +50,15 @@ pub struct CorpusInstallRequest {
 pub struct CorpusInstallResponse {
     pub corpus_id: String,
     /// `true` — a fresh ingest job started. `false` — the corpus is
-    /// already installed or an ingest for it is already running.
+    /// already installed from the same recipe, or an ingest for it is
+    /// already running.
     pub spawned: bool,
+    /// v0.5 §4: sha256, 64 lowercase hex, of the `recipe_toml` bytes the
+    /// corpus is installed from. Present when the request carried
+    /// `recipe_toml`; the same `(corpus_id, recipe_sha256)` twice is
+    /// `spawned: false`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipe_sha256: Option<String>,
 }
 
 /// Coarse ingest phase (§5.2). A protocol type — deliberately does not
@@ -158,6 +171,7 @@ mod tests {
         let req = CorpusInstallRequest {
             corpus_id: "acme-emails".into(),
             parameters: params,
+            recipe_toml: None,
         };
         let back: CorpusInstallRequest =
             serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
@@ -168,6 +182,7 @@ mod tests {
         let bare = CorpusInstallRequest {
             corpus_id: "x".into(),
             parameters: BTreeMap::new(),
+            recipe_toml: None,
         };
         let v = serde_json::to_value(&bare).unwrap();
         assert!(v.get("parameters").is_none(), "empty parameters omitted");
@@ -185,6 +200,35 @@ mod tests {
         let back: CorpusProgressResponse =
             serde_json::from_str(&serde_json::to_string(&prog).unwrap()).unwrap();
         assert_eq!(back.progress["acme-emails"].phase, IngestPhase::Embedding);
+    }
+
+    /// v0.4 install payloads read into the v0.5 types and write back
+    /// unchanged; the v0.5 fields round-trip when present.
+    #[test]
+    fn install_dtos_are_additive_over_v04() {
+        let v04_req = serde_json::json!({"corpus_id": "sep", "parameters": {"year": 2026}});
+        let req: CorpusInstallRequest = serde_json::from_value(v04_req.clone()).unwrap();
+        assert!(req.recipe_toml.is_none());
+        assert_eq!(serde_json::to_value(&req).unwrap(), v04_req);
+
+        let v04_resp = serde_json::json!({"corpus_id": "sep", "spawned": false});
+        let resp: CorpusInstallResponse = serde_json::from_value(v04_resp.clone()).unwrap();
+        assert!(resp.recipe_sha256.is_none());
+        assert_eq!(serde_json::to_value(&resp).unwrap(), v04_resp);
+
+        let toml = "[corpus]\nid = \"fixture\"\n";
+        let v05_req = serde_json::json!({"corpus_id": "fixture", "recipe_toml": toml});
+        let req: CorpusInstallRequest = serde_json::from_value(v05_req.clone()).unwrap();
+        assert_eq!(req.recipe_toml.as_deref(), Some(toml));
+        assert_eq!(serde_json::to_value(&req).unwrap(), v05_req);
+
+        let v05_resp = serde_json::json!({
+            "corpus_id": "fixture",
+            "spawned": true,
+            "recipe_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        });
+        let resp: CorpusInstallResponse = serde_json::from_value(v05_resp.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&resp).unwrap(), v05_resp);
     }
 
     #[test]

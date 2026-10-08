@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::capability::CapabilityClaim;
+use crate::evidence::EvidenceEndpoints;
 use crate::ingest::IngestEndpoints;
 use crate::version::OICP_VERSION;
 
@@ -48,6 +49,19 @@ pub mod features {
     /// §6 fingerprints are populated on manifest models and echoed in
     /// response metadata.
     pub const MODEL_FINGERPRINT: &str = "model_fingerprint";
+    /// v0.5 §2.2: texts are stored and `knowledge.evidence.text_endpoint`
+    /// reads them; MUST co-occur with a populated `knowledge.evidence`.
+    pub const EVIDENCE_TEXT: &str = "evidence:text";
+    /// v0.5 §2.3: `knowledge.evidence.align_endpoint` aligns a quote against
+    /// stored texts; MUST co-occur with that endpoint.
+    pub const EVIDENCE_ALIGN: &str = "evidence:align";
+    /// v0.5 §3: knowledge-search hits carry `document`.
+    pub const KNOWLEDGE_DOCUMENT: &str = "knowledge:document";
+    /// v0.5 §4: install accepts `recipe_toml`; requires `ingest:v1`.
+    pub const INGEST_RECIPE: &str = "ingest:recipe";
+    /// v0.5 §5.1: a presented named credential is honoured, and a bogus
+    /// one refused, from any address.
+    pub const AUTH_NAMED_CLIENT: &str = "auth:named_client";
 
     /// Extension (§4.3): a request may carry the forced-choice sentinel
     /// (`structured_output: {"x_forced_choice": true, "enum": [...]}`) and
@@ -116,6 +130,11 @@ pub mod features {
         INGEST_V1,
         INGEST_RECIPE_TEST,
         MODEL_FINGERPRINT,
+        EVIDENCE_TEXT,
+        EVIDENCE_ALIGN,
+        KNOWLEDGE_DOCUMENT,
+        INGEST_RECIPE,
+        AUTH_NAMED_CLIENT,
     ];
 
     /// True iff `f` is a registered feature string or a well-formed
@@ -300,6 +319,12 @@ pub struct KnowledgeManifest {
     /// the manifest MUST also advertise the `ingest:v1` feature.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ingest: Option<IngestEndpoints>,
+    /// v0.5 §2.1: the evidence routes this host exposes. `None` means it
+    /// stores no texts it will serve. When present, the manifest MUST also
+    /// advertise `evidence:text`, and `evidence:align` iff
+    /// `align_endpoint` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<EvidenceEndpoints>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -418,6 +443,91 @@ mod tests {
         assert!(features::is_valid("x:prose"), "well-formed extension");
         assert!(!features::is_valid("x:"), "empty extension tag is invalid");
         assert!(!features::is_valid("bogus"), "unregistered bare feature");
+    }
+
+    // ───── v0.5 additivity ─────────────────────────────────
+
+    #[test]
+    fn v05_features_are_registered() {
+        for f in [
+            features::EVIDENCE_TEXT,
+            features::EVIDENCE_ALIGN,
+            features::KNOWLEDGE_DOCUMENT,
+            features::INGEST_RECIPE,
+            features::AUTH_NAMED_CLIENT,
+        ] {
+            assert!(features::REGISTERED.contains(&f), "{f} not registered");
+            assert!(features::is_valid(f));
+            assert!(
+                !features::EMBEDDED_FEATURES.contains(&f)
+                    && !features::OPENAI_COMPATIBLE_FEATURES.contains(&f),
+                "{f}: registered only; each row's own work turns it on"
+            );
+        }
+    }
+
+    /// Every key path in `v` (`models.0.status.loaded`, …), with each
+    /// leaf's value when it is not a float: f32 fields widen on the way
+    /// back (0.55 → 0.550000011920929), which is v0.3's, not additivity's.
+    fn wire_paths(v: &serde_json::Value, at: &str, out: &mut Vec<String>) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m {
+                    wire_paths(x, &format!("{at}.{k}"), out);
+                }
+            }
+            serde_json::Value::Array(a) => {
+                for (i, x) in a.iter().enumerate() {
+                    wire_paths(x, &format!("{at}.{i}"), out);
+                }
+            }
+            serde_json::Value::Number(n) if n.is_f64() => out.push(at.to_string()),
+            leaf => out.push(format!("{at}={leaf}")),
+        }
+    }
+
+    /// The committed v0.4 wire fixture reads into the v0.5 types and writes
+    /// back as the same JSON: nothing a v0.4 host sent is lost, and no v0.5
+    /// key appears that it did not send.
+    #[test]
+    fn the_v04_wire_fixture_round_trips_unchanged_through_v05() {
+        let sent: serde_json::Value = serde_json::from_str(WIRE_FIXTURE).unwrap();
+        let m: ProviderManifest = serde_json::from_str(WIRE_FIXTURE).unwrap();
+        if let Some(k) = &m.knowledge {
+            assert!(k.evidence.is_none(), "a v0.4 host advertises no evidence");
+        }
+        let (mut want, mut got) = (Vec::new(), Vec::new());
+        wire_paths(&sent, "", &mut want);
+        wire_paths(&serde_json::to_value(&m).unwrap(), "", &mut got);
+        want.sort();
+        got.sort();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn a_v04_knowledge_manifest_round_trips_without_evidence() {
+        let v04 = serde_json::json!({
+            "corpora": [],
+            "search_endpoint": "/v1/knowledge/search",
+            "ingest": {
+                "install_endpoint": "/oicp/v1/corpus/install",
+                "progress_endpoint": "/oicp/v1/corpus/progress"
+            }
+        });
+        let k: KnowledgeManifest = serde_json::from_value(v04.clone()).unwrap();
+        assert!(k.evidence.is_none());
+        assert_eq!(serde_json::to_value(&k).unwrap(), v04);
+
+        let mut v05 = v04;
+        v05["evidence"] = serde_json::json!({
+            "text_endpoint": "/oicp/v1/text",
+            "align_endpoint": "/oicp/v1/align"
+        });
+        let k: KnowledgeManifest = serde_json::from_value(v05.clone()).unwrap();
+        let e = k.evidence.as_ref().unwrap();
+        assert_eq!(e.text_endpoint, "/oicp/v1/text");
+        assert_eq!(e.align_endpoint.as_deref(), Some("/oicp/v1/align"));
+        assert_eq!(serde_json::to_value(&k).unwrap(), v05);
     }
 
     // ───── ProviderManifest round-trip ──────────────────────

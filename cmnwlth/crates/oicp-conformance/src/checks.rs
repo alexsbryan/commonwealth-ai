@@ -800,6 +800,7 @@ mod tests {
                 progress_endpoint: "/oicp/v1/corpus/progress".into(),
                 test_endpoint: None,
             }),
+            evidence: None,
         });
         assert!(feature_failures(&m).is_empty());
     }

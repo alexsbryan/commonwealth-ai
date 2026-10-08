@@ -116,6 +116,13 @@ pub struct KnowledgeResult {
     /// That peer's node id, stamped beside `peer_name`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peer_node_id: Option<String>,
+    /// v0.5 §3: the stored text this hit was cut from, with its record and
+    /// metadata. Present on every hit when the host advertises
+    /// `knowledge:document`, and `document.metadata` then supersedes the
+    /// v0.2 `metadata` map, which the reference host leaves empty. `None`
+    /// from a host that predates the field or keeps no texts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<crate::evidence::Document>,
 }
 
 // -----------------------------------------------------------------
@@ -415,6 +422,7 @@ mod tests {
             grain: Some("summary".into()),
             peer_name: None,
             peer_node_id: None,
+            document: None,
         };
         let json = serde_json::to_string(&modern).unwrap();
         let back: KnowledgeResult = serde_json::from_str(&json).unwrap();
@@ -454,6 +462,35 @@ mod tests {
             !json.contains("grain"),
             "absence must not be serialised: {json}"
         );
+    }
+
+    /// A v0.4 hit reads into the v0.5 type and writes back unchanged; a
+    /// v0.5 hit carries its document, metadata verbatim.
+    #[test]
+    fn knowledge_result_document_is_additive_over_v04() {
+        let v04 = serde_json::json!({
+            "content": "passage",
+            "corpus_id": "bk",
+            "score": 0.5,
+            "metadata": {"author": "Dostoevsky"},
+            "chunk_id": 42
+        });
+        let hit: KnowledgeResult = serde_json::from_value(v04.clone()).unwrap();
+        assert!(hit.document.is_none());
+        assert_eq!(serde_json::to_value(&hit).unwrap(), v04);
+
+        let mut v05 = v04;
+        v05["document"] = serde_json::json!({
+            "text_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+            "extractor": "plaintext@0.1.0",
+            "source": {"id": "bk-ch01", "sha256": null},
+            "metadata": {"id": "okafor2019", "type": "article-journal"}
+        });
+        let hit: KnowledgeResult = serde_json::from_value(v05.clone()).unwrap();
+        let doc = hit.document.as_ref().unwrap();
+        assert_eq!(doc.source.sha256, None, "a record has no source bytes");
+        assert_eq!(doc.metadata.as_ref().unwrap()["type"], "article-journal");
+        assert_eq!(serde_json::to_value(&hit).unwrap(), v05);
     }
 
     #[test]

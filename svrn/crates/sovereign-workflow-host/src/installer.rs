@@ -259,6 +259,7 @@ mod tests {
                 progress_endpoint: "/oicp/v1/corpus/progress".into(),
                 test_endpoint: Some("/oicp/v1/recipe/test".into()),
             }),
+            evidence: None,
         }
     }
 
