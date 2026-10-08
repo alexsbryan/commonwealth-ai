@@ -55,8 +55,7 @@
 2050	serve/crates/sovereign-compute/src/supervisor.rs
 4406	serve/crates/sovereign-inference/src/embedded/engine.rs
 1319	serve/crates/sovereign-inference/src/embedded/gates.rs
-6168	serve/crates/sovereign-inference/src/embedded/model_slot.rs
-1400	serve/crates/sovereign-inference/src/embedded/prefix_state.rs
+6146	serve/crates/sovereign-inference/src/embedded/model_slot.rs
 3512	serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 1952	serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
 1545	serve/crates/sovereign-scheduler/src/decision_log.rs

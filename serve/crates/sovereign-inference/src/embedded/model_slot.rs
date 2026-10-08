@@ -652,52 +652,6 @@ pub(crate) fn forced_choice_candidates(request: &CompletionRequest) -> Option<Ve
     request.forced_choice_candidates()
 }
 
-/// Map a caller-declared stable-prefix byte length (over the RAW user
-/// prompt, `CompletionRequest.stable_prefix_len`) to a conservative
-/// token boundary in the rendered prompt's token stream, for the
-/// pinned-prefix cache's directed plan. `None` (→ sighting-based plan)
-/// when the declaration is absent, malformed, or unlocatable.
-///
-/// Method: locate the declared prefix substring inside the rendered
-/// prompt (chat templates concatenate message content verbatim),
-/// tokenize the rendered text UP TO that boundary, and take its LCP
-/// with the full token stream, backing off 2 tokens. The back-off
-/// matters: BPE merges at the cut can differ from the full stream's
-/// (the boundary token may fuse with suffix bytes), and LCP+back-off
-/// makes the pin a guaranteed common token prefix of every sibling
-/// sharing the declared bytes. Cost: one extra tokenize of the prefix
-/// per request. Failures degrade to the undirected plan — full
-/// prefill at worst, never wrong output.
-fn directed_pin_tokens(
-    model: &LlamaModel,
-    request: &CompletionRequest,
-    full_prompt: &str,
-    tokens: &[crate::llama::cpp::token::LlamaToken],
-) -> Option<usize> {
-    let n = request.stable_prefix_len?;
-    // `.get` enforces both the range and the char-boundary contract.
-    let raw_prefix = request.prompt.get(..n)?;
-    if raw_prefix.is_empty() {
-        return None;
-    }
-    let start = full_prompt.find(raw_prefix)?;
-    let rendered_prefix = &full_prompt[..start + raw_prefix.len()];
-    let prefix_tokens = model.str_to_token(rendered_prefix, AddBos::Always).ok()?;
-    let lcp = prefix_tokens
-        .iter()
-        .zip(tokens.iter())
-        .take_while(|(a, b)| a == b)
-        .count();
-    // Same margin as the undirected path, from the same constant, so the
-    // two planners cannot drift apart on how much tail a restore needs.
-    // Kept as a plain subtraction rather than `pin_with_tail` on purpose:
-    // this path is measured and working (4,881 tokens restored in 45 ms),
-    // and widening its pin would rotate `directed_key` for every existing
-    // judge family to buy two tokens.
-    let pin = lcp.saturating_sub(super::prefix_state::PIN_TAIL_MARGIN);
-    (pin > 0).then_some(pin)
-}
-
 /// Read the model's next-token distribution over `candidates` in one
 /// forward pass (prompt already decoded). For each candidate we sum the
 /// mass over its single-token encodings — bare and space-prefixed, to
@@ -3588,10 +3542,8 @@ impl ModelSlot {
         //
         //  - `session.begin(0, &tokens)` still receives the FULL
         //    token list, so per-seq position bookkeeping is unchanged.
-        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
-            Some(pin) => prefix_state.plan_directed(&tokens, pin),
-            None => prefix_state.plan(&tokens),
-        };
+        let (plan, repin) =
+            super::prefix_pin::plan_for(model, request, &full_prompt, &tokens, false, prefix_state);
         let mut prefix_base: usize = 0;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {
@@ -3788,6 +3740,15 @@ impl ModelSlot {
             .begin(0, &tokens)
             .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::SessionBegin);
+        if let Some(key) = repin {
+            let rows = if tail_logits_only {
+                1
+            } else {
+                tokens.len() - prefix_base
+            };
+            let ctx = session.target_context();
+            super::prefix_pin::repin(ctx, prefix_state, key, &tokens, rows, model_id, "MTP");
+        }
 
         // Sample the first token from prefill's last logit position.
         // Use ConstrainedSampler::Explore — no JSON-schema mask is
@@ -4682,10 +4643,14 @@ impl ModelSlot {
         // 2026-07-12). Restore/Learn override the LCP machinery for
         // this request (full clear either way); Pass leaves the
         // pre-existing behavior byte-identical.
-        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
-            Some(pin) => prefix_state.plan_directed(&tokens, pin),
-            None => prefix_state.plan(&tokens),
-        };
+        let (plan, repin) = super::prefix_pin::plan_for(
+            model,
+            request,
+            &full_prompt,
+            &tokens,
+            prefix_cache_safe,
+            prefix_state,
+        );
         let mut state_prefix_ready = false;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {
@@ -4837,6 +4802,9 @@ impl ModelSlot {
                 "prefix_cache: decode failed — state at failure"
             );
             return Err(Error::Inference(format!("Prompt decode failed: {e}")));
+        }
+        if let Some(key) = repin {
+            super::prefix_pin::repin(ctx, prefix_state, key, tokens, 1, model_id, "single-token");
         }
         // Decode succeeded — record the new cached sequence so the
         // next call can compute its LCP against this one. The decode

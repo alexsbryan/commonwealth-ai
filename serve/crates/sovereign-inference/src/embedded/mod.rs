@@ -21,6 +21,7 @@ pub(crate) mod idle_slot;
 pub(crate) mod kv_budget;
 pub mod kv_ops;
 mod model_slot;
+mod prefix_pin;
 mod prefix_state;
 mod prompt_helpers;
 mod rerank_slot;
