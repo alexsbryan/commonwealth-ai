@@ -45,6 +45,7 @@ SAMPLING = ("temperature", "top_p", "top_k", "min_p", "presence_penalty",
 
 LOCK = threading.Lock()
 SEQ = [0]
+INJECT_KWARGS: dict = {}
 
 
 def request_shape(body: bytes) -> dict:
@@ -150,6 +151,19 @@ class Tap(BaseHTTPRequestHandler):
         path = (up.path.rstrip("/") + self.path) if up.path not in ("", "/") else self.path
         rec = {"seq": seq, "arm": self.arm, "ts": time.time(), "method": self.command, "path": self.path}
         is_chat = self.command == "POST" and self.path.rstrip("/").endswith("/chat/completions")
+        if is_chat and INJECT_KWARGS:
+            # Client-side model knob, stamped by the tap so a client that
+            # cannot send the extension field still gets it. Glassbox: the
+            # injected keys land in the log row too — a reader of the tap log
+            # sees exactly what the server saw.
+            try:
+                req = json.loads(body or b"{}")
+                kw = req.setdefault("chat_template_kwargs", {})
+                kw.update(INJECT_KWARGS)
+                body = json.dumps(req).encode()
+                rec["injected_chat_template_kwargs"] = dict(INJECT_KWARGS)
+            except (ValueError, AttributeError):
+                rec["injected_chat_template_kwargs"] = "failed: unparsable body"
         if is_chat:
             rec.update(request_shape(body))
         tally = Tally(t0)
@@ -224,6 +238,9 @@ def main() -> int:
     ap.add_argument("--upstream", required=True, help="the arm's base URL, e.g. http://127.0.0.1:18080")
     ap.add_argument("--log", required=True, help="JSONL path, appended")
     ap.add_argument("--arm", required=True, help="label written on every record")
+    ap.add_argument("--inject-chat-template-kwargs", dest="inject_chat_template_kwargs",
+                    help='JSON merged into every chat request\'s chat_template_kwargs '
+                         '(e.g. \'{"enable_thinking": false}\'); recorded per row')
     ap.add_argument("--dump-dir", help="save the body of every refused request here")
     ap.add_argument("--dump-all", action="store_true",
                     help="with --dump-dir, save every chat request, not only refused ones: "
@@ -234,6 +251,11 @@ def main() -> int:
     host, port = a.listen.rsplit(":", 1)
     Tap.upstream = urllib.parse.urlparse(a.upstream)
     Tap.arm = a.arm
+    global INJECT_KWARGS
+    if a.inject_chat_template_kwargs:
+        INJECT_KWARGS = json.loads(a.inject_chat_template_kwargs)
+        print(f"tap: injecting chat_template_kwargs {INJECT_KWARGS} into every chat request",
+              file=sys.stderr, flush=True)
     Tap.log = open(a.log, "a", encoding="utf-8")
     if a.dump_dir:
         import os
