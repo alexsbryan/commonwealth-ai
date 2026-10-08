@@ -85,7 +85,7 @@ CC0: implement it freely on either side, no obligations.
 
 ## 1. Point any OpenAI client at the local model
 
-The universal recipe. Base URL, any non-empty key (loopback ignores it):
+The universal recipe. Base URL, any non-empty key not starting with `svrn_`; on loopback it is ignored:
 
 ```sh
 export OPENAI_BASE_URL=http://localhost:9741/v1

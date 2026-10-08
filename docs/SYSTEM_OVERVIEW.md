@@ -1327,6 +1327,16 @@ a bearer token or serves nobody; when the token chain fails entirely the
 posture installs NONE, so `client_auth` refuses every remote caller rather
 than serving unauthenticated.
 
+A presented credential decides, from any address. `client_auth` and the edge
+resolver read one classification, `client_principal::Presentation`
+(`client_principal/presented.rs`): a bearer that verifies (a live grant, a
+named token, an API key, the daemon-wide token) admits as what it is; one in
+the daemon's form (`svrn_`, which `client_auth::generate_bearer_token` writes
+on every credential it mints) that verifies nothing is a 401 from loopback
+too; one NOT in that form from a local process, where loopback is the owner,
+is read as no credential (INTEROP §1's `OPENAI_API_KEY=local`), and from
+anywhere else is refused.
+
 A non-loopback caller presents one of two bearers. `client_token` is
 daemon-wide. An **ephemeral guest grant** is the narrow one: short-lived,
 revocable, bound to a closed `Scope` enum whose `paths()` is the only route

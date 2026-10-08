@@ -109,6 +109,8 @@ mod meshapp_parcels_e2e;
 mod meshapp_surface_e2e;
 #[path = "main/models_http_e2e.rs"]
 mod models_http_e2e;
+#[path = "main/named_client_e2e.rs"]
+mod named_client_e2e;
 #[path = "main/ner_one_load_census.rs"]
 mod ner_one_load_census;
 #[path = "main/no_engine_census.rs"]

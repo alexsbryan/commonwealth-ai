@@ -25,7 +25,16 @@
 //!
 //! ## Decision (per connection, not per header)
 //!
-//! - **Loopback caller** → always admitted. The local user, the
+//! - **A presented credential decides, from any address**
+//!   (`crate::client_principal::presented`). A bearer that verifies admits as
+//!   what it is — a guest grant still bounded by its scope, a named token, an
+//!   API key, the daemon-wide token. A bearer in this daemon's form (`svrn_`)
+//!   that verifies nothing is a 401 from loopback too. A bearer NOT in that
+//!   form, from a local process on a listener where loopback is the owner, is
+//!   read as no credential and logged at debug (`OPENAI_API_KEY=local`,
+//!   `docs/INTEROP.md` §1); from anywhere else it is refused like any wrong
+//!   bearer.
+//! - **Loopback caller presenting nothing** → admitted. The local user, the
 //!   desktop app (attach-mode probes `127.0.0.1`), and in-process
 //!   callers never need a token. This is decided from the real
 //!   `ConnectInfo<SocketAddr>` peer address — NOT a request header.
@@ -82,6 +91,7 @@
 //! `CLIENT_ALPN` → the trusting listener, which is what lets their federated
 //! inference (which carries no `Authorization` at all) keep working.
 
+#[cfg(doc)]
 use sovereign_contracts::principal::Principal;
 use sovereign_grants::{GuestGrant, GuestSession};
 use std::fs;
@@ -89,7 +99,6 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use subtle::ConstantTimeEq;
 
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::StatusCode;
@@ -97,6 +106,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
+use crate::client_principal::{Presentation, Verified};
 use crate::state::AppState;
 use host_kit::locality::{cross_origin_refusal, RequestLocality};
 
@@ -159,15 +169,7 @@ pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities", "/h
 /// Extract the bearer token from an `Authorization` header value, if
 /// present and well-formed (`Bearer <token>`, case-insensitive scheme).
 pub(crate) fn bearer_token(req: &Request) -> Option<&str> {
-    let header = req.headers().get(axum::http::header::AUTHORIZATION)?;
-    let value = header.to_str().ok()?;
-    let rest = value.strip_prefix("Bearer ").or_else(|| {
-        // Tolerate lowercase / mixed-case scheme without allocating.
-        let (scheme, rest) = value.split_once(' ')?;
-        scheme.eq_ignore_ascii_case("bearer").then_some(rest)
-    })?;
-    let token = rest.trim();
-    (!token.is_empty()).then_some(token)
+    crate::client_principal::bearer(req.headers())
 }
 
 fn unauthorized(reason: &'static str) -> Response {
@@ -224,24 +226,44 @@ pub async fn client_auth_layer(
     // a `Principal`"). The admission middlewares read this rather than
     // resolving a second time; the internal router, which carries no
     // `client_auth_layer`, keeps its `AdmissionHost::resolve` fallback.
-    let principal = state.resolve(request.headers(), Some(peer), policy);
+    let (principal, presentation) = state.resolve_presented(request.headers(), Some(peer), policy);
     let mut request = request;
     request
         .extensions_mut()
         .insert(crate::admission::AttachedPrincipal(principal.clone()));
+    let locality = RequestLocality::of(&peer, request.headers());
+    let path = request.uri().path().to_string();
+
+    // A presented credential decides, from any address (ADDRESSED_TEXT §5.5
+    // rule 1). Until 2026-10-08 a loopback caller was admitted here BEFORE its
+    // bearer was read, so a bogus or revoked bearer from 127.0.0.1 passed as
+    // the owner. `presentation` is the one classification: a bearer that
+    // verifies, one that does not, and one read as absent (no header, or one
+    // not in this daemon's form from a local process where loopback is the
+    // owner). The order below is otherwise the one this layer always had.
+    if let Presentation::Absent { ignored: Some(why) } = &presentation {
+        tracing::debug!(
+            peer = %peer,
+            path = %path,
+            why,
+            "client_auth: Authorization read as no credential"
+        );
+    }
 
     // Loopback is local — admit without a token, on a listener where that
-    // inference holds. It does not hold on the guest listener: see the module
-    // docs, and `ClientAuthPolicy`. Nor for a web page: a browser on this
-    // machine is a loopback peer too, so the one decider also reads `Host`,
-    // `Origin` and `Sec-Fetch-Site` (`host_kit::locality`).
-    let locality = RequestLocality::of(&peer, request.headers());
-    if policy.trust_loopback && locality.is_local() {
+    // inference holds, when nothing was presented. It does not hold on the
+    // guest listener: see the module docs, and `ClientAuthPolicy`. Nor for a
+    // web page: a browser on this machine is a loopback peer too, so the one
+    // decider also reads `Host`, `Origin` and `Sec-Fetch-Site`
+    // (`host_kit::locality`).
+    let absent = matches!(presentation, Presentation::Absent { .. });
+    if absent && policy.trust_loopback && locality.is_local() {
         return next.run(request).await;
     }
 
-    // Federation/health surface stays open to remote callers.
-    if AUTH_EXEMPT_PATHS.contains(&request.uri().path()) {
+    // Federation/health surface stays open to any caller: it asks for
+    // nothing, so what was presented does not matter on it.
+    if AUTH_EXEMPT_PATHS.contains(&path.as_str()) {
         return next.run(request).await;
     }
 
@@ -253,7 +275,7 @@ pub async fn client_auth_layer(
             RequestLocality::CrossOrigin(origin) => {
                 tracing::warn!(
                     peer = %peer,
-                    path = %request.uri().path(),
+                    path = %path,
                     %origin,
                     "client_auth: refused a web page of another origin"
                 );
@@ -261,7 +283,7 @@ pub async fn client_auth_layer(
             }
             RequestLocality::ForeignHost(host) => tracing::debug!(
                 peer = %peer,
-                path = %request.uri().path(),
+                path = %path,
                 %host,
                 "client_auth: loopback caller addressed to a foreign name is not local"
             ),
@@ -269,130 +291,22 @@ pub async fn client_auth_layer(
         }
     }
 
-    // Remote, gated path. The caller's identity is resolved ONCE, through the
-    // one edge resolver, and this layer's decision reads the arm it returns.
-    // Two credentials can admit here — the daemon-wide token and an ephemeral
-    // guest grant — and they are INDEPENDENT. The resolver reads the grant
-    // store, so a live grant is the `Guest` arm and any other bearer the
-    // `RemoteClient` arm; the token is checked only on that arm.
-    //
-    // Until 2026-08-28 this read "no daemon token configured → 403" BEFORE
-    // ever looking at a grant, which made a live guest grant unusable on any
-    // daemon that had no client token — including the daemon that minted it.
-    // Observed on the wire: FOX minted a link, MAC presented it through the
-    // guest tunnel, and FOX answered `remote access not configured` (live
-    // bar 3.2, 2026-08-28). A valid credential refused because an unrelated
-    // one is absent is the substitution this codebase refuses (§18.3).
-    let configured = state.client_token();
-    let presented = bearer_token(&request);
-
-    match principal {
-        // A bearer that is a live guest grant. The grant bounds the routes:
-        // it must cover this path, and it is attached for the handlers that
-        // refine a scope per-request. It is re-read here because the resolver
-        // returns only the non-secret fingerprint, not the grant itself.
-        Principal::Guest { .. } => {
-            if let Some(p) = presented {
-                let now = sovereign_time::unix_millis();
-                match state.inner.node.guest_grants.live(p, now) {
-                    Some(grant) if grant.permits_path(request.uri().path()) => {
-                        // Debug, not info: the ring page drains its live lane
-                        // on a timer, so this fires several times a second.
-                        tracing::debug!(
-                            peer = %peer,
-                            path = %request.uri().path(),
-                            label = ?grant.label,
-                            scopes = %grant.summary(),
-                            "client_auth: guest grant admitted"
-                        );
-                        // WHO, beside WHAT. A handle the store does not know
-                        // under this grant is REFUSED rather than dropped to
-                        // `None`: "this phone's session lapsed" and "this phone
-                        // never claimed a name" are the two answers a guest
-                        // most needs to tell apart, and defaulting the first to
-                        // the second would silently un-name them mid-room
-                        // (ARCH 6).
-                        let session = match request
-                            .headers()
-                            .get(crate::routes_guest_session::RING_SESSION_HEADER)
-                        {
-                            None => None,
-                            Some(raw) => {
-                                let handle = raw.to_str().unwrap_or("").trim();
-                                match state.inner.node.guest_sessions.live(handle, &grant, now) {
-                                    Some(s) => Some(s),
-                                    None => {
-                                        tracing::info!(
-                                            peer = %peer,
-                                            path = %request.uri().path(),
-                                            "client_auth: guest session handle is not live \
-                                             under this grant"
-                                        );
-                                        return stale_session();
-                                    }
-                                }
-                            }
-                        };
-                        request.extensions_mut().insert(Guest {
-                            grant: Arc::new(grant),
-                            session,
-                        });
-                        return next.run(request).await;
-                    }
-                    Some(grant) => {
-                        // Out of scope, not unauthenticated. Say which — a bare
-                        // 403 sends the operator hunting for a credential
-                        // problem that isn't there.
-                        tracing::info!(
-                            peer = %peer,
-                            path = %request.uri().path(),
-                            scopes = %grant.summary(),
-                            "client_auth: guest grant does not cover this path"
-                        );
-                        return guest_out_of_scope(&grant, request.uri().path());
-                    }
-                    // Not a live grant either — a raced revocation. Fall
-                    // through to the shared refusal below.
-                    None => {}
-                }
-            }
+    match presentation {
+        Presentation::Verified(verified) => {
+            return admit_verified(verified, request, next, &state, &peer, &path).await
         }
-        // A bearer that is not a grant. TWO credentials admit here and they
-        // are independent: a NAMED token (one device, revocable alone) and
-        // the daemon-wide one. The named set is read first because it is the
-        // one that can be withdrawn without disturbing anything else, and
-        // because its admit line can name WHO — see `crate::client_tokens`.
-        Principal::RemoteClient { .. } => {
-            if let Some(p) = presented {
-                if let Some(label) = state.inner.node.named_client_tokens.label_for(p) {
-                    // The LABEL, never the token: a credential in a log is a
-                    // credential in every scrollback, bug report and log
-                    // shipper downstream of it.
-                    tracing::debug!(
-                        peer = %peer,
-                        path = %request.uri().path(),
-                        label = %label,
-                        "client_auth: named client token admitted"
-                    );
-                    return next.run(request).await;
-                }
-                if let Some(expected) = configured.as_ref() {
-                    if bool::from(p.as_bytes().ct_eq(expected.as_bytes())) {
-                        if state.inner.node.client_tokens.admits_shared_token() {
-                            return next.run(request).await;
-                        }
-                        return shared_token_refused(&peer, request.uri().path());
-                    }
-                }
-            }
+        // A caller loopback would have admitted is told so: its bearer, not
+        // its address, is what was refused.
+        Presentation::Unverified { reason } if policy.trust_loopback && locality.is_local() => {
+            tracing::warn!(
+                peer = %peer,
+                path = %path,
+                reason,
+                "client_auth: refused a local caller's presented credential"
+            );
+            return unauthorized("presented credential does not verify");
         }
-        // An API key. Only a keyed daemon holds keys, and there
-        // `crate::api_keys::seal` wraps every client listener, so the key was
-        // already admitted and scoped by the time it reaches this layer.
-        Principal::Asserted { .. } => return next.run(request).await,
-        // A member, a local owner or an anonymous caller is not admitted on a
-        // remote gated path by this layer.
-        _ => {}
+        Presentation::Unverified { .. } | Presentation::Absent { .. } => {}
     }
 
     // Nothing admitted. A daemon that never configured a client token is
@@ -402,11 +316,14 @@ pub async fn client_auth_layer(
     // to serve remotely. Same reasoning as `guest_out_of_scope`: name the
     // boundary when naming it leaks nothing the caller could not already
     // infer from being refused.
-    if configured.is_none() {
+    let presented = request
+        .headers()
+        .contains_key(axum::http::header::AUTHORIZATION);
+    if state.client_token().is_none() {
         tracing::warn!(
             peer = %peer,
-            path = %request.uri().path(),
-            presented_a_bearer = presented.is_some(),
+            path = %path,
+            presented_a_bearer = presented,
             "client_auth: remote caller refused and no client token configured — \
              (bind 127.0.0.1, or set a token to serve remotely)"
         );
@@ -416,11 +333,110 @@ pub async fn client_auth_layer(
         )
             .into_response();
     }
-    unauthorized(if presented.is_some() {
+    unauthorized(if presented {
         "bearer mismatch"
     } else {
         "missing bearer"
     })
+}
+
+/// Admit a request whose bearer verified, or refuse it for what it verified
+/// as. Independent of where the request came from: the credential decides.
+///
+/// Two credentials can admit beside a grant and they are INDEPENDENT: a named
+/// token (one device, revocable alone) and the daemon-wide one. Until
+/// 2026-08-28 a daemon with no client token answered `remote access not
+/// configured` BEFORE looking at a grant, which made a live guest grant
+/// unusable on the daemon that minted it (live bar 3.2): a valid credential
+/// refused because an unrelated one is absent is the substitution this
+/// codebase refuses (§18.3).
+async fn admit_verified(
+    verified: Verified,
+    mut request: Request,
+    next: Next,
+    state: &AppState,
+    peer: &SocketAddr,
+    path: &str,
+) -> Response {
+    match verified {
+        // A live guest grant. The grant bounds the routes: it must cover this
+        // path, and it is attached for the handlers that refine a scope
+        // per-request.
+        Verified::Guest(grant) if grant.permits_path(path) => {
+            // Debug, not info: the ring page drains its live lane on a timer,
+            // so this fires several times a second.
+            tracing::debug!(
+                peer = %peer,
+                path = %path,
+                label = ?grant.label,
+                scopes = %grant.summary(),
+                "client_auth: guest grant admitted"
+            );
+            // WHO, beside WHAT. A handle the store does not know under this
+            // grant is REFUSED rather than dropped to `None`: "this phone's
+            // session lapsed" and "this phone never claimed a name" are the
+            // two answers a guest most needs to tell apart, and defaulting the
+            // first to the second would silently un-name them mid-room
+            // (ARCH 6).
+            let session = match request
+                .headers()
+                .get(crate::routes_guest_session::RING_SESSION_HEADER)
+            {
+                None => None,
+                Some(raw) => {
+                    let handle = raw.to_str().unwrap_or("").trim();
+                    let now = sovereign_time::unix_millis();
+                    match state.inner.node.guest_sessions.live(handle, &grant, now) {
+                        Some(s) => Some(s),
+                        None => {
+                            tracing::info!(
+                                peer = %peer,
+                                path = %path,
+                                "client_auth: guest session handle is not live under this grant"
+                            );
+                            return stale_session();
+                        }
+                    }
+                }
+            };
+            request.extensions_mut().insert(Guest {
+                grant: Arc::new(grant),
+                session,
+            });
+            next.run(request).await
+        }
+        // Out of scope, not unauthenticated. Say which — a bare 403 sends the
+        // operator hunting for a credential problem that isn't there.
+        Verified::Guest(grant) => {
+            tracing::info!(
+                peer = %peer,
+                path = %path,
+                scopes = %grant.summary(),
+                "client_auth: guest grant does not cover this path"
+            );
+            guest_out_of_scope(&grant, path)
+        }
+        // The LABEL, never the token: a credential in a log is a credential
+        // in every scrollback, bug report and log shipper downstream of it.
+        Verified::NamedToken { label } => {
+            tracing::debug!(
+                peer = %peer,
+                path = %path,
+                label = %label,
+                "client_auth: named client token admitted"
+            );
+            next.run(request).await
+        }
+        // An API key. On a keyed daemon `crate::api_keys::seal` wraps every
+        // client listener, so the key was already admitted and scoped by the
+        // time it reaches this layer.
+        Verified::Key { sub, .. } => {
+            tracing::debug!(peer = %peer, path = %path, sub = %sub, "client_auth: API key admitted");
+            next.run(request).await
+        }
+        Verified::Shared => next.run(request).await,
+        Verified::SharedRefused => shared_token_refused(peer, path),
+    }
 }
 
 /// The authenticated guest behind a request, attached by [`client_auth_layer`]
@@ -638,19 +654,31 @@ pub fn load_or_create_client_token(data_dir: &Path) -> std::io::Result<String> {
     }
 }
 
-/// Mint a fresh bearer token: 256 bits of OS entropy, hex-encoded.
+/// Mint a fresh bearer token: [`CREDENTIAL_PREFIX`] and 256 bits of OS
+/// entropy, hex-encoded (`svrn_` + 64 hex).
 ///
 /// THE definition of what a bearer this daemon accepts looks like, shared by
-/// the persisted client token below and by ephemeral guest grants
-/// (`sovereign_grants::guest_grant`). Both land in the same
-/// `Authorization: Bearer` header and are compared by the same
+/// the persisted client token below, named credentials, the process's own key
+/// and ephemeral guest grants (`sovereign_grants::guest_grant`). All land in
+/// the same `Authorization: Bearer` header and are compared by the same
 /// `client_auth_layer`, so two generators would be two answers to one
 /// question (ARCH §10.6) — and the weaker one would set the real strength.
+///
+/// The prefix is what lets a presented bearer be told apart from a
+/// placeholder: one in this form that verifies nothing is refused from any
+/// address, while `Bearer local` from a local process is read as no
+/// credential (`crate::client_principal::presented`, `docs/INTEROP.md` §1).
+///
+/// [`CREDENTIAL_PREFIX`]: crate::client_principal::CREDENTIAL_PREFIX
 pub fn generate_bearer_token() -> std::io::Result<String> {
     let mut raw = [0u8; 32];
     getrandom::fill(&mut raw)
         .map_err(|e| std::io::Error::other(format!("bearer-token entropy failed: {e}")))?;
-    Ok(hex::encode(raw))
+    Ok(format!(
+        "{}{}",
+        crate::client_principal::CREDENTIAL_PREFIX,
+        hex::encode(raw)
+    ))
 }
 
 fn save_client_token(data_dir: &Path) -> std::io::Result<String> {
@@ -683,8 +711,11 @@ mod token_tests {
         let first = load_or_create_client_token(dir.path()).unwrap();
         let second = load_or_create_client_token(dir.path()).unwrap();
         assert_eq!(first, second, "token must be stable across boots");
-        assert_eq!(first.len(), 64, "256-bit hex token");
-        assert!(first.chars().all(|c| c.is_ascii_hexdigit()));
+        let hex = first
+            .strip_prefix(crate::client_principal::CREDENTIAL_PREFIX)
+            .expect("a minted token carries the credential prefix");
+        assert_eq!(hex.len(), 64, "256-bit hex token");
+        assert!(hex.chars().all(|c| c.is_ascii_hexdigit()));
         assert!(dir.path().join(CLIENT_TOKEN_FILE).exists());
     }
 
@@ -695,7 +726,11 @@ mod token_tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(CLIENT_TOKEN_FILE), b"   \n").unwrap();
         let token = load_or_create_client_token(dir.path()).unwrap();
-        assert_eq!(token.len(), 64, "blank file regenerated into a real token");
+        assert_eq!(
+            token.len(),
+            crate::client_principal::CREDENTIAL_PREFIX.len() + 64,
+            "blank file regenerated into a real token"
+        );
     }
 
     #[cfg(unix)]

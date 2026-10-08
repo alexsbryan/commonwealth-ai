@@ -40,6 +40,13 @@ Three zones, from most to least trusted:
   (`shared/crates/host-kit/src/locality.rs`, read by every site that
   trusts loopback). Until 2026-10-08 the address alone decided, so any web
   page the owner had open passed as a local process.
+  A local process that PRESENTS a credential is decided by it, not by its
+  address (`svrn/crates/sovereign-daemon/src/client_principal/presented.rs`):
+  every bearer the daemon mints starts with `svrn_`, and one in that form
+  that verifies nothing (wrong, revoked, lapsed) is a 401 from loopback too.
+  A bearer not in that form from a local process is read as no credential,
+  so `OPENAI_API_KEY=local` (`docs/INTEROP.md` §1) keeps working. Until
+  2026-10-08 a loopback caller was admitted before its bearer was read.
 - **The mesh perimeter.** In trusted-network mode a Commonwealth mesh runs
   on a network you control — a tailnet, WireGuard, or a LAN behind a
   firewall. Inside that perimeter, nodes that hold the join key are peers.
@@ -122,7 +129,7 @@ Three zones, from most to least trusted:
 
 | Surface | Default bind | Auth | Encryption |
 |---|---|---|---|
-| Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`svrn/crates/sovereign-daemon/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <token>`, matched full-token-first then guest-grant (`client_auth.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
+| Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`svrn/crates/sovereign-daemon/src/daemon.rs`) | A local process presenting nothing is exempt; any non-loopback caller needs `Authorization: Bearer <token>` (`client_auth.rs`), and a presented credential decides from any address: a `svrn_` bearer that verifies nothing is a 401 from loopback too (`client_principal/presented.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
 | ~~Client API `:9741` — standalone `commonwealth` binary~~ | ~~`0.0.0.0` (hardcoded)~~ | ~~Same `client_auth` bearer layer as above~~ | Struck 2026-09-20: the binary was deleted by `27c0fe031` (2026-08-26) and no crate of that name is in the tree, so this surface does not ship. See Known gaps entry 4. |
 | MCP `/mcp` (rides `:9741`) | — | Local-process-only middleware, no token by design (`svrn/crates/sovereign-daemon/src/mcp_router.rs`). Corrected 2026-10-08: this row said permissive CORS was safe *because* of the loopback gate. It was not, since a browser page on this machine passes a loopback gate: `OPTIONS /mcp` from `https://evil.example` got `access-control-allow-origin: *`, and that origin was served `tools/list` (observed against the running daemon). The CORS layer is gone, and a cross-origin or foreign-`Host` request is refused by name | — |
 | Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated and gossip carries a mesh proof; **the other routes, admin ones included, have no guard of their own** (corrected 2026-09-20: this row said they were per-handler loopback-only, and no handler reads the caller's address) | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |

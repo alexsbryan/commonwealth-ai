@@ -16,7 +16,10 @@ build anything load-bearing.
 `POST /v1/chat/completions`, `POST /v1/responses` (the OpenAI
 Responses dialect), `POST /v1/embeddings`, and `GET /v1/models`. Any
 OpenAI-SDK client works. Non-loopback callers need a bearer token
-(`[daemon] client_token`).
+(`[daemon] client_token`). A presented credential decides from any address:
+a bearer starting with `svrn_` (every credential the daemon mints) that
+verifies nothing is a 401 from loopback too, while any other key a local
+client sends (`OPENAI_API_KEY=local`) is ignored.
 
 **Ollama-native shim** — the same port serves `/api/chat`,
 `/api/generate`, `/api/tags`, and friends, so Ollama-native clients
