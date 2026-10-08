@@ -613,6 +613,7 @@ fn translate_input_items(
                             arguments: c.arguments,
                         },
                     }]),
+                    reasoning_content: None,
                 });
             }
             ResponsesInputItem::FunctionCallOutput(o) => {
@@ -621,6 +622,7 @@ fn translate_input_items(
                     content: o.output,
                     tool_call_id: Some(o.call_id),
                     tool_calls: None,
+                    reasoning_content: None,
                 });
             }
         }
@@ -646,6 +648,7 @@ fn translate_message_item(m: MessageItem) -> Result<ChatMessage, String> {
         content,
         tool_call_id: None,
         tool_calls: None,
+        reasoning_content: None,
     })
 }
 

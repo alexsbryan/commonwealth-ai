@@ -143,6 +143,7 @@ impl LocalInferenceService for ProviderService {
                     content: resp.text,
                     tool_call_id: None,
                     tool_calls: None,
+                    reasoning_content: None,
                 },
                 finish_reason: Some(reason.as_openai_str().to_string()),
             }],

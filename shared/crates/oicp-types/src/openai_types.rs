@@ -193,6 +193,13 @@ pub struct ChatMessage {
     /// output; supplied by the caller when replaying prior turns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+    /// The assistant's thinking, apart from `content`, as llama-server
+    /// returns it (its default `--reasoning-format`). Set on replies by the
+    /// adapter; on history a client sends back, the conversation path hands
+    /// it to the model's template, which may render it (Qwen's does, inside
+    /// `<think>`, for turns after the last user message).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 /// Custom deserializer for `ChatMessage.content`: accepts either a plain
@@ -312,6 +319,7 @@ impl ChatMessage {
             content: content.into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 }
@@ -456,6 +464,9 @@ pub struct StreamUsage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamFrame {
     Token(String),
+    /// A piece of the assistant's thinking; rendered as
+    /// `delta.reasoning_content`, apart from the reply's `content`.
+    Reasoning(String),
     ToolCalls(Vec<ToolCall>),
     Finish {
         reason: FinishReason,
@@ -879,6 +890,7 @@ mod tests {
                     arguments: r#"{"city":"SF"}"#.into(),
                 },
             }]),
+            reasoning_content: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
         let back: ChatMessage = serde_json::from_str(&json).unwrap();

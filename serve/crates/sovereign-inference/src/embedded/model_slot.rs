@@ -2694,7 +2694,8 @@ impl ModelSlot {
             SlotInferenceMode::SingleToken { ctx } => ctx,
             SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
         };
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let (full_prompt, turn_opener) =
+            format_prompt(model, model_id, request, quirks)?.into_parts();
 
         let tokens = model
             .str_to_token(&full_prompt, add_bos_for(request))
@@ -3353,7 +3354,8 @@ impl ModelSlot {
         );
 
         let outcome = GenerationOutcome {
-            text: output,
+            // The turn starts where its prompt left off (`Prompt::turn_opener`).
+            text: turn_opener + &output,
             prompt_tokens: tokens.len(),
             completion_tokens: n_generated,
             finish_reason: exit_reason,
@@ -3513,7 +3515,8 @@ impl ModelSlot {
         session.draft_context_mut().clear_kv_cache(); // kv-phase: RequestStartReset
         cached_tokens.clear();
 
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let (full_prompt, turn_opener) =
+            format_prompt(model, model_id, request, quirks)?.into_parts();
         let tokens = model
             .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
@@ -3774,6 +3777,19 @@ impl ModelSlot {
         // after the loop so the slot is freed rather than pinned.
         let mut consumer_stalled = false;
         let mut finish_reason = FinishReason::Length;
+        // The turn starts where its prompt left off (`Prompt::turn_opener`):
+        // sent first here, prepended to the sync text at the end. `output`
+        // stays the model's own text, which the loop's checks read.
+        if let Some(s) = sink.filter(|_| !turn_opener.is_empty()) {
+            match s.send_piece(&turn_opener) {
+                StreamSend::Sent => {}
+                StreamSend::ReceiverGone => receiver_gone = true,
+                StreamSend::DeadlineExceeded => {
+                    receiver_gone = true;
+                    consumer_stalled = true;
+                }
+            }
+        }
         if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
             output.push_str(&piece);
             if let Some(s) = sink {
@@ -4321,7 +4337,12 @@ impl ModelSlot {
             }
         }
 
-        Ok((output, tokens.len(), n_generated, finish_reason))
+        Ok((
+            turn_opener + &output,
+            tokens.len(),
+            n_generated,
+            finish_reason,
+        ))
     }
 
     /// Multi-sequence batched autoregressive decode for short-call
@@ -4364,11 +4385,11 @@ impl ModelSlot {
         // production chat-template renderer (system + user + thinking
         // injection per `quirks`).
         let forensic = std::env::var("SOVEREIGN_FORENSIC").ok().as_deref() == Some("1");
-        let tokenized: Vec<Vec<LlamaToken>> = requests
+        let (tokenized, openers): (Vec<Vec<LlamaToken>>, Vec<String>) = requests
             .iter()
             .enumerate()
             .map(|(idx, r)| {
-                let prompt = format_prompt(model, model_id, r, quirks)?;
+                let (prompt, turn_opener) = format_prompt(model, model_id, r, quirks)?.into_parts();
                 let toks = model
                     .str_to_token(&prompt, AddBos::Always)
                     .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
@@ -4392,9 +4413,11 @@ impl ModelSlot {
                         "batched-prefill: request tokenized to zero tokens — will fail the batch"
                     );
                 }
-                Ok(toks)
+                Ok((toks, turn_opener))
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .unzip();
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
@@ -4558,7 +4581,9 @@ impl ModelSlot {
 
         let mut results = Vec::with_capacity(requests.len());
         for (seq, output) in outputs.into_iter().enumerate() {
-            results.push((output, tokenized[seq].len(), n_generated[seq]));
+            // Each turn starts where its own prompt left off.
+            let text = openers[seq].clone() + &output;
+            results.push((text, tokenized[seq].len(), n_generated[seq]));
         }
         Ok(results)
     }
@@ -4864,7 +4889,8 @@ impl ModelSlot {
             SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
         };
 
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let (full_prompt, turn_opener) =
+            format_prompt(model, model_id, request, quirks)?.into_parts();
         let tokens = model
             .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
@@ -4906,6 +4932,7 @@ impl ModelSlot {
             cancel,
             prompt_len: prompt_tokens,
             max_tokens,
+            turn_opener: &turn_opener,
             // FALSE now, and that is load-bearing: an end-of-generation clear
             // here would silently desync from the `cached_tokens` this path now
             // populates — the exact 2026-05 incident the phase discipline was
@@ -4964,7 +4991,8 @@ impl ModelSlot {
             SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
         };
 
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        // A raw FIM prompt opens no turn: its opener is always empty.
+        let (full_prompt, _) = format_prompt(model, model_id, request, quirks)?.into_parts();
         let tokens = model
             .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
@@ -5030,6 +5058,7 @@ impl ModelSlot {
             cancel,
             prompt_len: prompt_tokens,
             max_tokens,
+            turn_opener: "",
             clear_kv_at_end: false,
         })
     }
@@ -5228,6 +5257,9 @@ struct StreamLoopParams<'a, 'ctx> {
     /// tokens (NOT the prefilled tail length under partial-keep).
     prompt_len: usize,
     max_tokens: usize,
+    /// Sent before the model's first piece: the turn starts where its
+    /// prompt left off (`Prompt::turn_opener`).
+    turn_opener: &'a str,
     /// Legacy behaviour: clear the KV cache at end-of-generation. The
     /// FIM entry passes false so the prompt's KV slice survives for
     /// the next keystroke's LCP.
@@ -5249,11 +5281,21 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         cancel,
         prompt_len,
         max_tokens,
+        turn_opener,
         clear_kv_at_end,
     } = p;
     {
         let tokens_len = prompt_len;
         let prompt_tokens = prompt_len;
+        if !turn_opener.is_empty() {
+            match sink.send_piece(turn_opener) {
+                StreamSend::Sent => {}
+                StreamSend::ReceiverGone => return Ok(()),
+                StreamSend::DeadlineExceeded => {
+                    return Err(stalled_consumer_abort(model_id, ctx, 0))
+                }
+            }
+        }
 
         let mut sampler = build_sampler(model, request, quirks)?;
         let mut n_generated = 0usize;

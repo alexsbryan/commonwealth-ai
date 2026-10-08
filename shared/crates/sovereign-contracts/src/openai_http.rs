@@ -46,6 +46,10 @@ pub struct ChunkHeader {
     pub created: u64,
     /// The model the request named, else `local`.
     pub model: String,
+    /// Tool calls this stream has already sent. A call's `index` is its
+    /// place in the turn, so a frame per call (the live stream) and one
+    /// frame of all of them (the synthetic one) index the same way.
+    calls_sent: std::sync::atomic::AtomicUsize,
 }
 
 impl ChunkHeader {
@@ -57,6 +61,7 @@ impl ChunkHeader {
             id: format!("chatcmpl-{}", sovereign_time::unix_millis()),
             created: sovereign_time::unix_now_u64(),
             model: model.unwrap_or_else(|| "local".into()),
+            calls_sent: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 }
@@ -79,6 +84,20 @@ pub fn sse_item(header: &ChunkHeader, frame: StreamFrame) -> SseItem {
             });
             SseItem::Data(chunk.to_string())
         }
+        StreamFrame::Reasoning(delta) => {
+            let chunk = serde_json::json!({
+                "id": header.id,
+                "object": "chat.completion.chunk",
+                "created": header.created,
+                "model": header.model,
+                "choices": [{
+                    "index": 0,
+                    "delta": { "reasoning_content": delta },
+                    "finish_reason": null
+                }]
+            });
+            SseItem::Data(chunk.to_string())
+        }
         StreamFrame::ToolCalls(calls) => {
             // Synthetic tools-streaming chunk. Local backends
             // parse `<tool_call>` markup post-generation, so we
@@ -87,12 +106,15 @@ pub fn sse_item(header: &ChunkHeader, frame: StreamFrame) -> SseItem {
             // OpenAI spec also permits. Both shapes are
             // wire-legal — clients accumulate by `tool_calls[i].
             // index` regardless of chunk count.
+            let base = header
+                .calls_sent
+                .fetch_add(calls.len(), std::sync::atomic::Ordering::Relaxed);
             let tool_calls_json: Vec<serde_json::Value> = calls
                 .iter()
                 .enumerate()
                 .map(|(i, c)| {
                     serde_json::json!({
-                        "index": i,
+                        "index": base + i,
                         "id": c.id,
                         "type": c.kind,
                         "function": {
@@ -370,4 +392,61 @@ pub fn model_rows(
         });
     }
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oicp_types::openai_types::{FunctionCall, ToolCall};
+
+    fn data(item: SseItem) -> serde_json::Value {
+        match item {
+            SseItem::Data(s) => serde_json::from_str(&s).expect("chunk is json"),
+            SseItem::Comment(c) => panic!("expected data, got comment {c}"),
+        }
+    }
+
+    fn call(name: &str) -> ToolCall {
+        ToolCall {
+            id: format!("call_{name}"),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: name.into(),
+                arguments: "{}".into(),
+            },
+        }
+    }
+
+    /// A live stream sends each call in its own frame as its block
+    /// closes. Clients merge `tool_calls` deltas by `index`, so a second
+    /// call indexed 0 would be appended onto the first.
+    #[test]
+    fn a_frame_per_call_indexes_calls_by_their_place_in_the_turn() {
+        let header = ChunkHeader::new(Some("m".into()));
+        let first = data(sse_item(
+            &header,
+            StreamFrame::ToolCalls(vec![call("read")]),
+        ));
+        let second = data(sse_item(
+            &header,
+            StreamFrame::ToolCalls(vec![call("bash")]),
+        ));
+        assert_eq!(first["choices"][0]["delta"]["tool_calls"][0]["index"], 0);
+        assert_eq!(second["choices"][0]["delta"]["tool_calls"][0]["index"], 1);
+        assert_eq!(
+            second["choices"][0]["delta"]["tool_calls"][0]["function"]["name"],
+            "bash"
+        );
+    }
+
+    /// llama-server's shape: thinking in `reasoning_content`, never in
+    /// `content`.
+    #[test]
+    fn reasoning_renders_as_reasoning_content() {
+        let header = ChunkHeader::new(None);
+        let chunk = data(sse_item(&header, StreamFrame::Reasoning("plan".into())));
+        let delta = &chunk["choices"][0]["delta"];
+        assert_eq!(delta["reasoning_content"], "plan");
+        assert!(delta.get("content").is_none(), "{delta}");
+    }
 }

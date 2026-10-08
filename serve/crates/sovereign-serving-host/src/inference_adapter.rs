@@ -1195,11 +1195,11 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         };
         // A conversation's reply is parsed as llama-server parses it:
         // reasoning apart, calls in the model's own format.
-        let conversation_turn = matches!(
-            req.prompt_shape,
-            Some(sovereign_contracts::types::PromptShape::Conversation { .. })
-        )
-        .then(|| conversation::parse_reply(&resp.text, &req));
+        let conversation_turn = conversation::is_conversation(&req)
+            .then(|| conversation::parse_reply(&resp.text, &req));
+        let reasoning_content = conversation_turn
+            .as_ref()
+            .and_then(|t| t.reasoning_content.clone());
         let (parsed_calls, parse_errors) = if let Some(turn) = &conversation_turn {
             (turn.tool_calls.clone(), turn.unparsed.clone())
         } else if tools_present {
@@ -1322,6 +1322,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             content: clean_content,
             tool_call_id: None,
             tool_calls: tool_calls_out,
+            reasoning_content,
         };
         Ok(ChatCompletionResponse {
             id: format!("chatcmpl-{}", started.elapsed().as_micros()),
@@ -1360,17 +1361,12 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             "inference_adapter:chat_completion_stream_entry"
         );
 
-        // Streaming + tool_calls path. Local backends parse the
-        // `<tool_call>` markup AFTER the model finishes generating, so
-        // genuine token-by-token streaming for tool turns isn't
-        // possible without re-architecting the parser. Instead we
-        // route through the non-streaming `chat_completion` (which
-        // already handles tool extraction, content cleanup, and
-        // finish_reason logic) and synthesize an OpenAI-shaped stream
-        // from the response. opencode and other clients that always
-        // request `stream=true` once tools are bound now succeed
-        // instead of getting a 503.
-        if tools_present {
+        // A conversation streams live, tools or not
+        // (`conversation::stream_turn`). The Hermes path's tool turns
+        // (in-repo callers) parse their envelope after generation, so
+        // they run the non-streaming `chat_completion` and replay it as
+        // an OpenAI-shaped stream.
+        if tools_present && conversation::hermes_path_reason(&request).is_some() {
             // Tools path delegates to chat_completion; the compactor
             // runs there. Don't compact twice.
             let resp = self.chat_completion(request).await?;
@@ -1409,7 +1405,13 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .complete_stream_with_finish(&req)
             .await
             .map_err(map_provider_error)?;
-        tracing::info!("sovereign inference adapter: typed streaming started");
+        tracing::info!(
+            conversation = conversation::is_conversation(&req),
+            "sovereign inference adapter: typed streaming started"
+        );
+        if conversation::is_conversation(&req) {
+            return Ok(Box::pin(conversation::stream_turn(inner, &req)));
+        }
         // Translate sovereign_contracts::types::StreamFrame →
         // oicp_types::openai_types::StreamFrame. The two
         // shapes are identical by design (see openai_types.rs);

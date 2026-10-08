@@ -28,7 +28,7 @@ pub(crate) fn render_conversation(
     model_id: &str,
     request: &CompletionRequest,
     messages: &[Json],
-) -> Result<String> {
+) -> Result<Prompt> {
     let template = crate::llama::chat_template(model).ok_or_else(|| {
         Error::Inference(format!(
             "{model_id}: a conversation needs the model's chat template and the GGUF has none"
@@ -54,9 +54,51 @@ pub(crate) fn render_conversation(
         enable_thinking,
         thinking_from_client = request.enable_thinking.is_some(),
         prompt_chars = prompt.len(),
+        turn_opener = turn_opener(&prompt),
         "format_prompt: conversation rendered by the model's template"
     );
-    Ok(prompt)
+    let turn_opener = turn_opener(&prompt).to_string();
+    Ok(Prompt {
+        text: prompt,
+        turn_opener,
+    })
+}
+
+/// A rendered prompt and the text its reply continues from.
+pub(crate) struct Prompt {
+    pub text: String,
+    /// The prompt's tail that the reply is written inside of: `"<think>\n"`
+    /// when a conversation's prompt leaves a think block open, else empty.
+    /// Every generation path starts the turn's text with it (prepended to
+    /// the sync text, sent first on a stream), so the turn says on its face
+    /// that it opens in reasoning, and whoever parses it (`chat_turn`, on
+    /// whichever node) needs no flag.
+    pub turn_opener: String,
+}
+
+impl Prompt {
+    /// `(text, turn_opener)`: every caller binds both, so a generation
+    /// path cannot drop the opener without saying `_`.
+    pub(crate) fn into_parts(self) -> (String, String) {
+        (self.text, self.turn_opener)
+    }
+}
+
+/// The tail of `prompt` from an open `<think>` with only whitespace after
+/// it, else "". llama.cpp parses the reply with the generation prompt's
+/// tail from the reasoning tag on as its prefix (chat-auto-parser-generator.cpp
+/// `build_parser`, `p.prefix(generation_prompt, reasoning_start)`, vendored
+/// 035e227); this is that tail. A prompt that closed the block
+/// (`enable_thinking: false` renders `<think>\n\n</think>\n\n`) or never
+/// opened one (a template without thinking) has none.
+pub(crate) fn turn_opener(prompt: &str) -> &str {
+    const THINK: &str = "<think>";
+    let body = prompt.trim_end();
+    if body.ends_with(THINK) {
+        &prompt[body.len() - THINK.len()..]
+    } else {
+        ""
+    }
 }
 
 /// Whether this request's tools ride the daemon's own Hermes envelope
@@ -542,6 +584,27 @@ mod llama_server_parity {
                 &expected[lo..(at + 120).min(expected.len())],
             );
         }
+    }
+
+    /// P2-5 (note d25c3a96), on llama-server's own renders: thinking on
+    /// leaves a `<think>` open, so the reply starts inside it; thinking off
+    /// closes the block in the prompt, so the reply is plain. A template
+    /// with no thinking at all opens nothing either.
+    #[test]
+    fn the_turn_opens_in_reasoning_only_when_the_prompt_left_think_open() {
+        let dir = fixture_dir();
+        for case in ["pi-turn1", "pi-midsession", "opencode-turn2"] {
+            let on =
+                std::fs::read_to_string(dir.join(format!("{case}.think-on.prompt.txt"))).unwrap();
+            let off =
+                std::fs::read_to_string(dir.join(format!("{case}.think-off.prompt.txt"))).unwrap();
+            assert_eq!(turn_opener(&on), "<think>\n", "{case} thinking on");
+            assert_eq!(turn_opener(&off), "", "{case} thinking off");
+        }
+        assert_eq!(
+            turn_opener("<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n"),
+            ""
+        );
     }
 
     #[test]

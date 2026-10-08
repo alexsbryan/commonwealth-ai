@@ -1214,7 +1214,10 @@ async fn serve_local_stream(
     let chunks_count_for_stream = chunks_count.clone();
     let sse_events = token_stream.map(move |frame| {
         use crate::openai_types::StreamFrame;
-        if matches!(frame, StreamFrame::Token(_) | StreamFrame::ToolCalls(_)) {
+        if matches!(
+            frame,
+            StreamFrame::Token(_) | StreamFrame::Reasoning(_) | StreamFrame::ToolCalls(_)
+        ) {
             chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         Ok::<_, std::convert::Infallible>(crate::openai_http::sse_event(&header, frame))

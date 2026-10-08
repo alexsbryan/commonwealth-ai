@@ -313,7 +313,13 @@ pub(crate) fn format_prompt(
     model_id: &str,
     request: &CompletionRequest,
     quirks: &ModelQuirks,
-) -> Result<String> {
+) -> Result<super::chat_template::Prompt> {
+    // Only a conversation's reply is parsed by `chat_turn`, so only its
+    // prompt names a turn opener; every other shape keeps its own parse.
+    let plain = |text: String| super::chat_template::Prompt {
+        text,
+        turn_opener: String::new(),
+    };
     // Raw pass-through (INLINE_COMPLETION.md §3.1, decision D4): the
     // caller already assembled the exact string the model must see
     // (FIM markers and all) — no chat template, no think-suppression,
@@ -321,7 +327,7 @@ pub(crate) fn format_prompt(
     // special tokens and skips BOS (`AddBos::Never` at the serving
     // sites), so the string is the whole contract.
     if matches!(request.prompt_shape, Some(PromptShape::Raw)) {
-        return Ok(request.prompt.clone());
+        return Ok(plain(request.prompt.clone()));
     }
     // A whole conversation (the OpenAI chat path): the model's template
     // renders it, as llama-server does, and nothing below applies — no
@@ -347,10 +353,10 @@ pub(crate) fn format_prompt(
     let suppress = request.think_budget == Some(0);
     let think_family = matches!(quirks.thinking, ThinkingControl::SystemPromptToken { .. });
     let rendered = enforce_think_suppression(rendered, suppress, think_family);
-    Ok(append_assistant_prefix(
+    Ok(plain(append_assistant_prefix(
         rendered,
         request.assistant_prefix.as_deref(),
-    ))
+    )))
 }
 
 /// Deterministically suppress the thinking phase when the caller set

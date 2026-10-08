@@ -1329,7 +1329,7 @@ admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
 
 | Path | Notes |
 |---|---|
-| `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400 |
+| `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400. An external client's conversation (no OICP envelope) takes llama-server's path: the model's template renders it whole, the reply is parsed in the model's own format with `reasoning_content` apart, and a stream is live with or without tools (`serve/crates/sovereign-serving-host/src/inference_adapter/conversation.rs`, `oicp_types::chat_turn::TurnStream`); a prompt over the window is 400 `exceed_context_size_error` |
 | `POST /v1/responses` | OpenAI Responses-API adapter |
 | `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
