@@ -290,6 +290,7 @@ fn build_insert_pairs(
                     mtime: Some(chunk.mtime),
                 },
                 unit_id: None,
+                text_sha256: None,
             };
             (insert, emb)
         })
@@ -438,6 +439,7 @@ impl CorpusEngine {
                     source_file: None,
                     code,
                     unit_id: None,
+                    text_sha256: None,
                 };
                 (insert, emb)
             })

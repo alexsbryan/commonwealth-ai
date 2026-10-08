@@ -13,6 +13,7 @@ mod read;
 mod readiness;
 mod rows;
 mod search;
+mod texts;
 mod write;
 
 pub use chunk_key::{ChunkKey, ChunkKeyColumns};
@@ -20,6 +21,10 @@ pub use evidence::{Evidence, EvidenceSet};
 pub(crate) use provenance::{custody_of, grain_of};
 pub use provenance::{Acquisition, ChunkProvenance};
 pub use read::NeighborWindow;
+pub use texts::{
+    DocSource, DocumentInput, DocumentRecord, StoredText, TextAbsence, TextLookup, TextWriter,
+    DOCUMENTS_TABLE,
+};
 pub use rows::{
     code_meta_from_json, DedupeReport, EmbeddedChunk, EnrichmentChunkRow, InsertChunk,
     InsertCodeMeta, StoredChunk, StoredChunkWithMetadata,
@@ -135,6 +140,8 @@ pub fn corpus_schema(embedding_dim: usize) -> SchemaRef {
         // Populated when ingest runs under a WorkQueueManager lease so the
         // merge step can dedupe re-processed units across peer partition dirs.
         Field::new("unit_id", DataType::Int32, true),
+        // v4: the stored text this chunk was cut from (`texts/<sha256>`).
+        Field::new("text_sha256", DataType::Utf8, true),
     ]))
 }
 
@@ -145,7 +152,8 @@ pub fn corpus_schema(embedding_dim: usize) -> SchemaRef {
 /// - v2: added code-intelligence columns (symbol_name, symbol_kind, file_path,
 ///   line_start, line_end, language, mtime).
 /// - v3: added `unit_id` for pull-based queue dedup.
-pub const CURRENT_INDEX_SCHEMA_VERSION: u32 = 3;
+/// - v4: added `text_sha256`, the stored text a chunk was cut from.
+pub const CURRENT_INDEX_SCHEMA_VERSION: u32 = 4;
 
 fn default_index_schema_version() -> u32 {
     1 // Files without the field predate versioning → treat as v1.
@@ -188,6 +196,11 @@ struct IndexMeta {
     /// are migrated in place via `Table::add_columns`.
     #[serde(default = "default_index_schema_version")]
     schema_version: u32,
+    /// The index carries a text store (`texts/` and the `documents` table)
+    /// covering every document it holds. `false` on indexes written before
+    /// v4, which answer `texts not stored` until reingested.
+    #[serde(default)]
+    text_store: bool,
     #[serde(default)]
     is_shard: bool,
     #[serde(default)]
@@ -540,6 +553,7 @@ fn meta_path(index_dir: &Path) -> std::path::PathBuf {
 ///
 /// - v1 → v2 adds the seven code-intelligence columns.
 /// - v2 → v3 adds `unit_id` for pull-based queue dedup.
+/// - v3 → v4 adds `text_sha256`; rows written before it stay Null.
 async fn migrate_schema(table: &lancedb::Table, from_version: u32) -> Result<()> {
     if from_version >= CURRENT_INDEX_SCHEMA_VERSION {
         return Ok(());
@@ -570,6 +584,7 @@ async fn migrate_schema(table: &lancedb::Table, from_version: u32) -> Result<()>
         ("language", DataType::Utf8),
         ("mtime", DataType::Int64),
         ("unit_id", DataType::Int32),
+        ("text_sha256", DataType::Utf8),
     ];
 
     let missing: Vec<Field> = wanted
@@ -1193,6 +1208,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[1.0, 0.0, 0.0, 0.0]),
             ),
@@ -1207,6 +1223,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.0, 1.0, 0.0, 0.0]),
             ),
@@ -1221,6 +1238,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.0, 0.0, 1.0, 0.0]),
             ),
@@ -1235,6 +1253,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.9, 0.1, 0.0, 0.0]),
             ),
@@ -1316,6 +1335,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[1.0, 0.0, 0.0, 0.0]),
             ));
@@ -1333,6 +1353,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.0, 1.0, 0.0, 0.0]),
             ));
@@ -1388,6 +1409,7 @@ mod tests {
                 source_file: None,
                 code: InsertCodeMeta::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             make_embedding(&[1.0, 0.0, 0.0, 0.0]),
         )
@@ -1780,6 +1802,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[1.0, 0.0, 0.0, 0.0]),
             ),
@@ -1794,6 +1817,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.9, 0.1, 0.0, 0.0]),
             ),
@@ -1808,6 +1832,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.0, 1.0, 0.0, 0.0]),
             ),
@@ -1846,6 +1871,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[1.0, 0.0, 0.0, 0.0]),
             ));
@@ -1874,6 +1900,7 @@ mod tests {
                 source_file: None,
                 code: InsertCodeMeta::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             make_embedding(&[1.0, 0.0, 0.0, 0.0]),
         )];
@@ -2152,6 +2179,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[ord, 0.0, 0.0, 0.0]),
             )
@@ -2193,6 +2221,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.0, 0.0, 0.0, 0.0]),
             )
@@ -2230,6 +2259,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_embedding(&[0.0, 0.0, 0.0, 0.0]),
             )
@@ -2264,6 +2294,7 @@ mod tests {
                 source_file: None,
                 code: InsertCodeMeta::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             make_embedding(&[1.0, 0.0, 0.0, 0.0]),
         );

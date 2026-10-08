@@ -118,6 +118,7 @@ fn chunk(doc_id: &str, title: &str, content: &str) -> InsertChunk {
         source_file: None,
         code: Default::default(),
         unit_id: None,
+        text_sha256: None,
     }
 }
 

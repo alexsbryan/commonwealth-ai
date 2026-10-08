@@ -34,6 +34,14 @@ impl Sha256Hash {
         Sha256Hash::of(s.as_bytes())
     }
 
+    /// Hash everything a reader yields, streamed — for source files too large
+    /// to hold. Equal to `of` over the same bytes.
+    pub fn of_reader(mut r: impl std::io::Read) -> std::io::Result<Self> {
+        let mut hasher = Sha256::new();
+        std::io::copy(&mut r, &mut hasher)?;
+        Ok(Sha256Hash(hasher.finalize().into()))
+    }
+
     /// Adopt a digest computed elsewhere — `from_bytes`, not `new`, so a
     /// reader sees that no hashing happened here.
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
@@ -114,6 +122,13 @@ mod tests {
             Sha256Hash::of_str("Hello World!").to_ni(),
             "ni:///sha-256;f4OxZX_x_FO5LcGBSKHWXfwtSx-j1ncoSt3SABJtkGk"
         );
+    }
+
+    #[test]
+    fn a_streamed_hash_equals_the_whole_buffer_hash() {
+        let bytes = vec![7u8; 100_000];
+        let streamed = Sha256Hash::of_reader(&bytes[..]).unwrap();
+        assert_eq!(streamed, Sha256Hash::of(&bytes));
     }
 
     #[test]

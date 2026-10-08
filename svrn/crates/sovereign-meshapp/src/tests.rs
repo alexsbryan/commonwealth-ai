@@ -298,6 +298,7 @@ async fn document_feed_orders_docs_desc_and_parses_links() {
             source_file: None,
             code: Default::default(),
             unit_id: None,
+            text_sha256: None,
         },
         embedding: vec![0.1, 0.2, 0.3, 0.4],
     };

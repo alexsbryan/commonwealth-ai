@@ -53,6 +53,7 @@ async fn ingest(indexes_dir: &std::path::Path) {
                 source_file: None,
                 code: Default::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             vec![0.0_f32; DIMS],
         )])

@@ -820,6 +820,7 @@ pub(crate) async fn run_test(
                             source_file: None,
                             code: crate::index::InsertCodeMeta::default(),
                             unit_id: None,
+                            text_sha256: None,
                         },
                         emb,
                     ));

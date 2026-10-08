@@ -179,6 +179,7 @@ async fn fixture(files: &[(&str, &str)], defs: &[Def]) -> Fixture {
                 source_file: None,
                 code: code_meta_from_json(Some(&meta)),
                 unit_id: None,
+                text_sha256: None,
             };
             (insert, d.vector.to_vec())
         })

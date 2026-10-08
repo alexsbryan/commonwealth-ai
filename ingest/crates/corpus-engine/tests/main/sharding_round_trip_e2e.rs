@@ -43,6 +43,7 @@ fn chunk(content: &str, title: &str, content_hash: Option<&str>) -> InsertChunk 
         source_file: None,
         code: InsertCodeMeta::default(),
         unit_id: None,
+        text_sha256: None,
     }
 }
 

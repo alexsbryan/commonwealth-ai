@@ -80,6 +80,7 @@ async fn a_duplicate_chunk_id_resolves_to_the_lowest_row_position() {
             source_file: None,
             code: InsertCodeMeta::default(),
             unit_id: None,
+            text_sha256: None,
         },
         make_embedding(&[1.0, 0.0, 0.0, 0.0]),
     )];
@@ -103,6 +104,7 @@ async fn a_duplicate_chunk_id_resolves_to_the_lowest_row_position() {
             source_file: None,
             code: InsertCodeMeta::default(),
             unit_id: None,
+            text_sha256: None,
         },
         make_embedding(&[0.0, 1.0, 0.0, 0.0]),
     )];

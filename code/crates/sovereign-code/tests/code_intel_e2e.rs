@@ -84,6 +84,7 @@ pub(crate) async fn build_fixture_index(data_dir: &Path, name: &str, backdate: O
             source_file: None,
             code: code_meta_from_json(Some(&metadata)),
             unit_id: None,
+            text_sha256: None,
         };
         chunks.push((insert, vec![0.0; dims]));
     }

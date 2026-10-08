@@ -143,6 +143,11 @@ impl CorpusIndex {
             .map(|(c, _)| c.unit_id.map(|u| u as i32))
             .collect();
 
+        let text_sha256s: Vec<Option<String>> = chunks
+            .iter()
+            .map(|(c, _)| c.text_sha256.map(|h| h.to_hex()))
+            .collect();
+
         // Build the embedding FixedSizeList array.
         let dim = self.embedding_dimensions as i32;
         let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
@@ -170,6 +175,7 @@ impl CorpusIndex {
                 Arc::new(StringArray::from(languages)),
                 Arc::new(Int64Array::from(mtimes)),
                 Arc::new(Int32Array::from(unit_ids)),
+                Arc::new(StringArray::from(text_sha256s)),
             ],
         )
         .map_err(|e| Error::Serialization(format!("record batch: {e}")))?;

@@ -3719,6 +3719,7 @@ mod tests {
                         source_file: None,
                         code: InsertCodeMeta::default(),
                         unit_id: None,
+                        text_sha256: None,
                     },
                     embedding(i as f32),
                 )

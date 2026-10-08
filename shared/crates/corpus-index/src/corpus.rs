@@ -55,6 +55,9 @@ use crate::types::IndexInfo;
 /// it cost to not have this constant.
 pub const CORPUS_META_FILENAME: &str = "_corpus_meta.json";
 
+/// The directory of stored texts inside an index directory.
+pub const TEXTS_DIRNAME: &str = "texts";
+
 /// Infix in a partition directory name: `<id>-partition-<node>`.
 const PARTITION_INFIX: &str = "-partition-";
 
@@ -115,6 +118,19 @@ impl Corpus {
     /// enumerating or sweeping `<id>-partition-*`.
     pub fn partition_prefix(&self) -> String {
         format!("{}{PARTITION_INFIX}", self.id)
+    }
+
+    /// The stored texts of the canonical directory: `<root>/texts`, one file
+    /// per text, named by the sha256 of its bytes. Per corpus, so promote,
+    /// merge, snapshot and removal carry them with the directory.
+    pub fn texts_dir(&self) -> PathBuf {
+        Self::texts_in(self.root())
+    }
+
+    /// The texts directory inside an arbitrary index directory — a partition,
+    /// a shard, an unpacked snapshot. The ONE join for this name.
+    pub fn texts_in(dir: impl AsRef<Path>) -> PathBuf {
+        dir.as_ref().join(TEXTS_DIRNAME)
     }
 
     /// Metadata sidecar inside the canonical directory.
@@ -215,6 +231,11 @@ mod tests {
         assert_eq!(
             Corpus::meta_in("/anywhere"),
             PathBuf::from("/anywhere/_corpus_meta.json")
+        );
+        assert_eq!(c.texts_dir(), PathBuf::from("/idx/wikipedia/texts"));
+        assert_eq!(
+            Corpus::texts_in("/anywhere"),
+            PathBuf::from("/anywhere/texts")
         );
     }
 

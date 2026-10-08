@@ -706,6 +706,7 @@ mod tests {
                 source_file: None,
                 code: crate::index::InsertCodeMeta::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             crate::index::InsertChunk {
                 content: "body2".into(),
@@ -718,6 +719,7 @@ mod tests {
                 source_file: None,
                 code: crate::index::InsertCodeMeta::default(),
                 unit_id: None,
+                text_sha256: None,
             },
         ];
         stamp_doc_identity(&mut chunks, "notes/daily/2026-06-10.md");

@@ -824,6 +824,7 @@ async fn tiny_index(dir: &Path, only_first: bool) -> crate::index::CorpusIndex {
                 source_file: None,
                 code: InsertCodeMeta::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             v.to_vec(),
         )

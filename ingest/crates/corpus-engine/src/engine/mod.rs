@@ -2349,6 +2349,7 @@ impl CorpusEngine {
                     source_file: None,
                     code: crate::index::InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 }
             })
             .collect();
@@ -2725,6 +2726,7 @@ mod tests {
                     source_file: None,
                     code: crate::index::InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 vec![0.1_f32; 8],
             )

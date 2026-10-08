@@ -588,6 +588,7 @@ pub(crate) async fn write_donor_partition(
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: Some(unit_id),
+                    text_sha256: None,
                 },
                 vec![0.25_f32; EMBED_DIM],
             )

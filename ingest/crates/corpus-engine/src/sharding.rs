@@ -927,6 +927,7 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
                     // produced it. Legacy shards without the column get a
                     // NULL-filled replacement via col_or_null_i32.
                     col_or_null_i32("unit_id"),
+                    col_or_null_str("text_sha256"),
                 ],
             )
             .map_err(|e| Error::Serialization(format!("merge batch: {e}")))?;
@@ -1168,6 +1169,7 @@ async fn merge_shards_source_doc_id_newest_mtime(
                     col_or_null_str("language"),
                     col_or_null_i64("mtime"),
                     col_or_null_i32("unit_id"),
+                    col_or_null_str("text_sha256"),
                 ],
             )
             .map_err(|e| Error::Serialization(format!("mutable merge batch: {e}")))?;
@@ -1663,6 +1665,7 @@ pub async fn append_partition_to_canonical(
                 col_or_null_str("language"),
                 col_or_null_i64("mtime"),
                 col_or_null_i32("unit_id"),
+                col_or_null_str("text_sha256"),
             ],
         )
         .map_err(|e| Error::Serialization(format!("append batch: {e}")))?;
@@ -1730,6 +1733,7 @@ mod tests {
                         source_file: None,
                         code: crate::index::InsertCodeMeta::default(),
                         unit_id: None,
+                        text_sha256: None,
                     },
                     make_test_embedding(i as f32),
                 )
@@ -2515,6 +2519,7 @@ mod tests {
                             ..Default::default()
                         },
                         unit_id: None,
+                        text_sha256: None,
                     },
                     make_test_embedding(*mtime as f32),
                 )
@@ -2639,6 +2644,7 @@ mod tests {
                         source_file: None,
                         code: crate::index::InsertCodeMeta::default(),
                         unit_id: None,
+                        text_sha256: None,
                     },
                     make_test_embedding(1.0),
                 )])

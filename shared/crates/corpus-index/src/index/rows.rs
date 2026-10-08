@@ -81,6 +81,10 @@ pub struct InsertChunk {
     /// peer's chunks. `None` for legacy (static-partition) ingest and
     /// local Desktop-driven ingest, which have no shared work queue.
     pub unit_id: Option<u32>,
+    /// The stored text this chunk was cut from, by its published name
+    /// (`<corpus>/texts/<sha256>`). `None` when no text was stored: a
+    /// producer with no document, or a corpus that predates the text store.
+    pub text_sha256: Option<kernel_types::Sha256Hash>,
 }
 
 /// A pre-embedded chunk ready for direct insertion.

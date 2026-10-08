@@ -65,6 +65,7 @@ pub(crate) async fn install_corpus(indexes_dir: &std::path::Path, id: &str) {
                 source_file: None,
                 code: Default::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             vec![0.0_f32; 4],
         )])

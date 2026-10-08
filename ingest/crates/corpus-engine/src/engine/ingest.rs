@@ -1324,6 +1324,7 @@ impl CorpusEngine {
                     source_file: doc.source_file.clone(),
                     code,
                     unit_id,
+                    text_sha256: None,
                 });
                 // Track chunk count per source file for manifest reporting.
                 if let Some(ref sf) = doc.source_file {
