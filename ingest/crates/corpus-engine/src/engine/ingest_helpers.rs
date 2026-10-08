@@ -35,6 +35,10 @@ pub(crate) fn chunk_doc(chunker: &dyn Chunker, doc: &ExtractedDoc) -> Vec<String
 /// Strip model-generated artifacts from raw corpus text before chunking.
 /// Some HuggingFace datasets contain LLM-generated content with `<think>`
 /// blocks; storing those verbatim pollutes every chunk and breaks enrichment.
+///
+/// An unclosed `<think>` is not a block: it and everything after it are kept
+/// verbatim. Dropping the tail would delete text on a guess (a document may
+/// quote the tag), and the result is the text ingest stores and names.
 pub(crate) fn normalize_content(s: &str) -> String {
     if !s.contains("<think>") {
         return s.to_string();
@@ -47,7 +51,14 @@ pub(crate) fn normalize_content(s: &str) -> String {
             Some(rel_end) => {
                 rest = &rest[start + rel_end + "</think>".len()..];
             }
-            None => break,
+            None => {
+                tracing::debug!(
+                    at_byte = s.len() - rest.len() + start,
+                    "normalize_content: unclosed <think> kept verbatim"
+                );
+                rest = &rest[start..];
+                break;
+            }
         }
     }
     out.push_str(rest);
@@ -190,5 +201,31 @@ pub(crate) fn mark_complete_shards(
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_content;
+
+    #[test]
+    fn normalize_content_strips_closed_think_blocks() {
+        assert_eq!(normalize_content("a<think>x</think>b"), "ab");
+        assert_eq!(normalize_content("no tags"), "no tags");
+    }
+
+    /// An unclosed `<think>` is kept verbatim, and the text before it once.
+    /// Before the fix the `break` left `rest` unadvanced, so the text before
+    /// the tag was pushed twice — a stored text that duplicates itself.
+    #[test]
+    fn normalize_content_keeps_text_before_an_unclosed_think_once() {
+        assert_eq!(
+            normalize_content("intro <think>unfinished"),
+            "intro <think>unfinished"
+        );
+        assert_eq!(
+            normalize_content("a<think>x</think>b<think>y"),
+            "ab<think>y"
+        );
     }
 }
