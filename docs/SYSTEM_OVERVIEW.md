@@ -657,7 +657,10 @@ question the pipeline asks about a type is a method on the resolved
   as the ONE decider of every entity type that declares an `identity_criterion`
   and no `source` (`decides`): its statements are the claims of each kind whose
   `subject` is the type, placed by their anchor in the one document `locate`
-  finds; documents go in clock order under `Answerer::Select` with the adopted
+  finds. Claims the reader gave one `subject_local_ref` in one document are one
+  statement at the earliest span (`resolution_records/local_subjects.rs`), unless
+  they disagree on a supplied identity value; a ref never joins across
+  documents. Documents go in clock order under `Answerer::Select` with the adopted
   proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
   MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
   statement, and each claim's subject its statement's record. 3b leaves such a

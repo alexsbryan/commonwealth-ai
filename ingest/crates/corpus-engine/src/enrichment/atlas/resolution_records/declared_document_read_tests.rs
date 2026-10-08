@@ -483,3 +483,218 @@ async fn same_anchor_local_references_follow_explicit_open_and_link_decisions_in
     assert!(written_subjects.iter().all(Option::is_some));
     assert_eq!(written_subjects[0], written_subjects[1]);
 }
+
+/// One support case read from issue text and a label event: `case` with a
+/// declared `number` key, a state-free membership and a reported state.
+fn local_subject_fixture() -> (
+    Vec<corpus_index::index::EnrichmentChunkRow>,
+    OntologyPolicies,
+) {
+    let row = |id: u64, doc: &str, body: &str| corpus_index::index::EnrichmentChunkRow {
+        id,
+        content: body.into(),
+        title: None,
+        url: Some(format!("https://example.test/{doc}")),
+        metadata_raw: Some(json!({ "id": doc }).to_string()),
+        source_doc_id: Some(doc.into()),
+    };
+    let rows = vec![
+        row(51, "issue", ISSUE),
+        row(52, "label-event", "Label compatibility added to #1373."),
+    ];
+    let mut policies = OntologyPolicies::default();
+    policies.document_reading = true;
+    policies.shape.types = vec![
+        OntologyTypeDecl {
+            name: "case".into(),
+            kind: TypeKind::Entity,
+            description: "A support case".into(),
+            identity_criterion: Some("the same issue".into()),
+            identity: vec!["number".into()],
+            attributes: vec![AttrDecl {
+                name: "number".into(),
+                family: AttrFamily::Text { values: Vec::new() },
+                description: "The issue number".into(),
+                derived: None,
+            }],
+            ..Default::default()
+        },
+        OntologyTypeDecl {
+            name: "case_membership".into(),
+            kind: TypeKind::Claim,
+            force: Some(Force::Assertive),
+            subject: Some("case".into()),
+            ..Default::default()
+        },
+        OntologyTypeDecl {
+            name: "case_state".into(),
+            kind: TypeKind::Claim,
+            force: Some(Force::Assertive),
+            subject: Some("case".into()),
+            attributes: vec![AttrDecl {
+                name: "state".into(),
+                family: AttrFamily::Text {
+                    values: vec!["reported".into(), "fixed".into()],
+                },
+                description: "The reported case state".into(),
+                derived: None,
+            }],
+            ..Default::default()
+        },
+    ];
+    (rows, policies)
+}
+
+const ISSUE: &str = "Support --no-cache-dir as an alias. Running it fails with error: unexpected argument '--no-cache-dir' found. pip accepts the flag.";
+const ISSUE_STATE: &str = "error: unexpected argument '--no-cache-dir' found.";
+
+fn local_subject_claim(id: &str, kind: &str, document: &str, anchor: &str, number: &str) -> Claim {
+    let mut attributes = Map::new();
+    if kind == "case_state" {
+        attributes.insert("state".into(), Value::String("reported".into()));
+    }
+    attributes.insert(LOCAL_REF_ATTRIBUTE.into(), Value::String("#1373".into()));
+    attributes.insert(
+        SOURCE_DOCUMENT_ATTRIBUTE.into(),
+        Value::String(document.into()),
+    );
+    attributes.insert(SUBJECT_FIELDS_ATTRIBUTE.into(), json!({ "number": number }));
+    serde_json::from_value(json!({
+        "id": id,
+        "content": "The source reports this about the case.",
+        "discourse_act": "assert",
+        "epistemic_status": "attributed",
+        "scope": "universal",
+        "evidence": [{"chunk_id":"sec_1","passage_preview":anchor}],
+        "subject": null,
+        "claim_kind": kind,
+        "anchor": anchor,
+        "attributes": attributes,
+        "enrichment_depth": "extracted"
+    }))
+    .unwrap()
+}
+
+async fn resolve_local_subjects(
+    claims: &mut Vec<Claim>,
+    entities: &mut Vec<Entity>,
+) -> (Vec<RecordsReport>, Vec<PhaseFailure>) {
+    let (rows, policies) = local_subject_fixture();
+    let documents = SectionDocuments::from_chunk_rows([("sec_1", &[51u64, 52][..])], &rows);
+    let (mut events, mut states, mut relations) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut argument_reconstructions, mut positions, mut oppositions) =
+        (Vec::new(), Vec::new(), Vec::new());
+    let (mut edges, mut trajectories) = (Vec::new(), BTreeMap::new());
+    let mut atoms = BuildAtoms {
+        entities,
+        events: &mut events,
+        states: &mut states,
+        relations: &mut relations,
+        claims,
+        argument_reconstructions: &mut argument_reconstructions,
+        positions: &mut positions,
+        oppositions: &mut oppositions,
+        edges: &mut edges,
+        trajectories: &mut trajectories,
+    };
+    let mut on_document = |_: &str, _: &DocumentResolution| {};
+    resolve_declared_types(
+        &mut atoms,
+        &documents,
+        &policies,
+        "local-subjects",
+        Answerer::Proposed,
+        &mut on_document,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn one_local_subject_at_two_spans_is_one_statement_and_survives_the_writer() {
+    let mut claims = vec![
+        local_subject_claim("membership", "case_membership", "issue", ISSUE, "1373"),
+        local_subject_claim("state", "case_state", "issue", ISSUE_STATE, "1373"),
+        local_subject_claim(
+            "label",
+            "case_membership",
+            "label-event",
+            "Label compatibility added to #1373.",
+            "1373",
+        ),
+    ];
+    let mut entities = Vec::new();
+    let (reports, failures) = resolve_local_subjects(&mut claims, &mut entities).await;
+
+    assert_eq!(
+        reports[0].statements, 2,
+        "the issue's two spans are one statement; the label event's same ref string is its own"
+    );
+    assert!(failures.is_empty(), "{failures:?}");
+    assert!(claims[0].subject.is_some());
+    assert_eq!(
+        claims[0].subject, claims[1].subject,
+        "membership and state share one case"
+    );
+    assert_eq!(claims[0].anchor.as_deref(), Some(ISSUE));
+    assert_eq!(
+        claims[1].anchor.as_deref(),
+        Some(ISSUE_STATE),
+        "each claim keeps its own citation"
+    );
+
+    let directory = tempfile::tempdir().unwrap();
+    crate::enrichment::atlas::writer::write_atlas_full(
+        directory.path(),
+        &entities,
+        &[],
+        &[],
+        &[],
+        &claims,
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &BTreeMap::new(),
+        &AtlasSeeding::Deferred("local-subject test has no embedder"),
+    )
+    .unwrap();
+    let written = understanding_vocab::read::read_atlas_atoms(directory.path()).unwrap();
+    let written_claim = |id: &str| {
+        written
+            .atoms()
+            .iter()
+            .find_map(|atom| match atom {
+                AtomEnvelope::Claim(claim) if claim.id.as_str() == id => Some(claim),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let (membership, state) = (written_claim("membership"), written_claim("state"));
+    assert!(membership.subject.is_some());
+    assert_eq!(membership.subject, state.subject);
+    assert_eq!(state.attributes["state"], "reported");
+    assert_eq!(state.anchor.as_deref(), Some(ISSUE_STATE));
+}
+
+#[tokio::test]
+async fn one_local_subject_whose_spans_disagree_on_an_identity_value_is_not_joined() {
+    let mut claims = vec![
+        local_subject_claim("membership", "case_membership", "issue", ISSUE, "1373"),
+        local_subject_claim("state", "case_state", "issue", ISSUE_STATE, "1374"),
+    ];
+    let mut entities = Vec::new();
+    let (reports, failures) = resolve_local_subjects(&mut claims, &mut entities).await;
+
+    assert_eq!(
+        reports[0].statements, 2,
+        "a disagreement keeps each span its own statement"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|f| f.reason.contains("kept as separate statements")),
+        "the disagreement is reported: {failures:?}"
+    );
+}

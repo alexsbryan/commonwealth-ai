@@ -44,6 +44,10 @@ use crate::enrichment::pipeline::document_read::{
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 
+#[path = "resolution_records/local_subjects.rs"]
+mod local_subjects;
+use local_subjects::{Assigned, Spot};
+
 /// The extractor id on a record's atom.
 const EXTRACTOR_ID: &str = "atlas/resolve";
 
@@ -272,12 +276,15 @@ async fn resolve_type(
         .is_some_and(|d| d.thread.is_some());
 
     // Statements: each claim's anchor span in its one document. Claims that
-    // mark one span share its statement.
+    // mark one span share its statement, and so do claims the reader gave one
+    // local subject reference in that document (`local_subjects`).
     let mut placed: Vec<Placed<'_>> = Vec::new();
     let mut at: HashMap<&str, usize> = HashMap::new();
     let mut conflicting_keys: HashSet<(String, String)> = HashSet::new();
     let mut statement_of: Vec<(usize, String)> = Vec::new();
     let mut section_of: HashMap<String, String> = HashMap::new();
+    let mut spots: Vec<Spot> = Vec::new();
+    let mut spot_claims: Vec<(usize, Option<String>)> = Vec::new();
     for (i, claim) in atoms.claims.iter().enumerate() {
         let Some(kind) = claim.claim_kind.as_deref().filter(|k| kinds.contains(k)) else {
             continue;
@@ -369,14 +376,6 @@ async fn resolve_type(
             continue;
         };
         let end = start + anchor.len();
-        let id = match read_local_ref_of.get(&i) {
-            Some(local_ref) => format!(
-                "{}@{start}..{end}#{}",
-                doc.key,
-                serde_json::to_string(local_ref).expect("local references are serializable")
-            ),
-            None => format!("{}@{start}..{end}", doc.key),
-        };
         let mut keys = BTreeMap::new();
         if let Some(fields) = read_subject_fields_of.get(&i) {
             for key in criterion.keys.iter().chain(t.identity_necessary.iter()) {
@@ -390,6 +389,22 @@ async fn resolve_type(
                 }
             }
         }
+        spots.push(Spot {
+            placed: k,
+            start,
+            end,
+            local_ref: read_local_ref_of.get(&i).cloned(),
+            keys,
+        });
+        spot_claims.push((i, claim.evidence.first().map(|e| e.chunk_id.clone())));
+    }
+    let document_of: Vec<&str> = placed.iter().map(|p| p.doc.key.as_str()).collect();
+    let assigned = local_subjects::assign(&document_of, &spots, failures);
+    for ((spot, Assigned { id, start, end }), (i, section)) in
+        spots.into_iter().zip(assigned).zip(spot_claims)
+    {
+        let (k, keys) = (spot.placed, spot.keys);
+        let document = placed[k].doc;
         if !placed[k].statements.iter().any(|s| s.id == id) {
             placed[k].statements.push(Statement {
                 id: id.clone(),
@@ -408,11 +423,11 @@ async fn resolve_type(
                         statement.keys.remove(&key);
                         conflicting_keys.insert(conflict);
                         failures.push(failure(
-                            format!("document:{}", doc.key),
+                            format!("document:{}", document.key),
                             PhaseFailureKind::Other,
                             format!(
                                 "accountable claims for local subject `{}` conflict on identity field `{key}`; withheld from RESOLVE",
-                                read_local_ref_of.get(&i).map(String::as_str).unwrap_or("?")
+                                spot.local_ref.as_deref().unwrap_or("?")
                             ),
                         ));
                     }
@@ -422,10 +437,8 @@ async fn resolve_type(
                 }
             }
         }
-        if let Some(e) = claim.evidence.first() {
-            section_of
-                .entry(id.clone())
-                .or_insert_with(|| e.chunk_id.clone());
+        if let Some(section) = section {
+            section_of.entry(id.clone()).or_insert(section);
         }
         statement_of.push((i, id));
     }
