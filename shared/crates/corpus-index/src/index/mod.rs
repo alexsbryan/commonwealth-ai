@@ -21,13 +21,13 @@ pub use evidence::{Evidence, EvidenceSet};
 pub(crate) use provenance::{custody_of, grain_of};
 pub use provenance::{Acquisition, ChunkProvenance};
 pub use read::NeighborWindow;
-pub use texts::{
-    DocSource, DocumentInput, DocumentRecord, StoredText, TextAbsence, TextLookup, TextWriter,
-    DOCUMENTS_TABLE,
-};
 pub use rows::{
     code_meta_from_json, DedupeReport, EmbeddedChunk, EnrichmentChunkRow, InsertChunk,
     InsertCodeMeta, StoredChunk, StoredChunkWithMetadata,
+};
+pub use texts::{
+    DocSource, DocumentInput, DocumentRecord, StoredText, TextAbsence, TextLookup, TextWriter,
+    DOCUMENTS_TABLE,
 };
 
 use std::path::{Path, PathBuf};
