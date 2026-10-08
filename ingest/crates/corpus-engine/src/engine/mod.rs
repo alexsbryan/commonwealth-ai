@@ -2493,28 +2493,6 @@ pub(crate) fn blake3_hex(s: &str) -> String {
     kernel_types::ContentHash::of_str(s).to_hex()
 }
 
-/// Strip model-generated artifacts from raw corpus text before chunking.
-/// Some HuggingFace datasets contain LLM-generated content with `<think>`
-/// blocks; storing those verbatim pollutes every chunk and breaks enrichment.
-pub(crate) fn normalize_content(s: &str) -> String {
-    if !s.contains("<think>") {
-        return s.to_string();
-    }
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(start) = rest.find("<think>") {
-        out.push_str(&rest[..start]);
-        match rest[start..].find("</think>") {
-            Some(rel_end) => {
-                rest = &rest[start + rel_end + "</think>".len()..];
-            }
-            None => break,
-        }
-    }
-    out.push_str(rest);
-    out
-}
-
 /// Selection rule for [`CorpusEngine::resume_interrupted_conversation_enrichment`].
 /// Pure so the boot-resume corpus filter is unit-testable without a wired
 /// engine: re-kick only NON-folder-shaped corpora whose pass says

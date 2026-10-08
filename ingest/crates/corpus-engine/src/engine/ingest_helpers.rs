@@ -24,12 +24,34 @@ use crate::recipe::{ExtractorConfig, Recipe};
 /// authoring-harness runner call it, so the two paths cannot drift — the
 /// load-bearing seam behind the harness's "no second pipeline" invariant.
 pub(crate) fn chunk_doc(chunker: &dyn Chunker, doc: &ExtractedDoc) -> Vec<String> {
-    let cleaned = super::normalize_content(&doc.content);
+    let cleaned = normalize_content(&doc.content);
     chunker
         .chunk(&cleaned)
         .into_iter()
         .map(|tc| corpus_index::chunkers::title_headed(doc.title.as_deref(), &tc.content))
         .collect()
+}
+
+/// Strip model-generated artifacts from raw corpus text before chunking.
+/// Some HuggingFace datasets contain LLM-generated content with `<think>`
+/// blocks; storing those verbatim pollutes every chunk and breaks enrichment.
+pub(crate) fn normalize_content(s: &str) -> String {
+    if !s.contains("<think>") {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("</think>") {
+            Some(rel_end) => {
+                rest = &rest[start + rel_end + "</think>".len()..];
+            }
+            None => break,
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Set the `shard_indices` field on a recipe's `WikipediaJsonl` extractor
