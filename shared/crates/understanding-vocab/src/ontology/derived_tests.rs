@@ -89,14 +89,22 @@ fn policy() -> DerivedPolicy {
                 id: "party_of_message".into(),
                 by: FoldBy::First,
                 from: vec!["outside".into()],
+                protocol: None,
             },
             FoldDecl {
                 id: "party_of_deal".into(),
                 by: FoldBy::Most,
                 from: vec!["^subject / party".into()],
+                protocol: None,
             },
         ],
     }
+}
+
+#[test]
+fn legacy_fold_wire_omits_the_optional_protocol_declaration() {
+    let value = serde_json::to_value(policy()).unwrap();
+    assert!(value["folds"][0].get("protocol").is_none());
 }
 
 #[test]

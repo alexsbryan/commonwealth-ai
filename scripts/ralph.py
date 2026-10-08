@@ -734,7 +734,7 @@ def parse_roster(value):
 # by both the probe's cause-keeping and the strikeout halt's tail.
 ERROR_SHAPE_RE = re.compile(
     r"(?i)\b(error|failed|failure|fatal|panic|refused|denied|timeout|timed out"
-    r"|quota|usage limit|rate.?limit|unauthori[sz]ed|forbidden|not found"
+    r"|quota|usage limit|weekly limit|rate.?limit|unauthori[sz]ed|forbidden|not found"
     r"|invalid api key|unexpected server)\b")
 
 PROBE_TIMEOUT_S = 45
@@ -802,14 +802,14 @@ def probe_refusal(model, paths):
 
 
 def probe_model(model, paths, timeout=PROBE_TIMEOUT_S):
-    """One minimal chat call per model through the same client lanes use
-    (`<worker_bin> run --model M`), provider-direct. Returns (True, "") when
-    the model answers, else (False, cause kept from the error: quota reset
-    text, provider error, timeout)."""
+    """One minimal chat call per model through the client the session will use
+    (`client_for(model) run --model M`), provider-direct. Returns (True, "")
+    when the model answers, else (False, cause kept from the error: quota
+    reset text, provider error, timeout)."""
     refusal = probe_refusal(model, paths)
     if refusal:
         return False, f"{model}: {refusal}"
-    client = worker_bin(paths)
+    client = client_for(model, paths)
     try:
         r = subprocess.run([client, "run", "--model", model, PROBE_PROMPT],
                            cwd=str(paths.workdir), capture_output=True, text=True,
@@ -1038,7 +1038,10 @@ class Paths:
     queue: str = ""                       # the --queue name; "" on a legacy launch line
     control_dir: str = "ralph"            # a queue's own: ralph/next/<name>/ctl
     director_commits: str = "ralph/.director-commits"
-    log_dir: str = "target/ralph"
+    # <control_dir>/log: transcripts, run logs, kept lane evidence. Never under
+    # target/: hosts purge build output under disk pressure, and zoracite's
+    # went overnight on 2026-10-08 with an awaiting unit's run log in it.
+    log_dir: str = "ralph/log"
     prompt_addendum: str = ""             # set when the prompt is rendered, not read
     manifest: QueueManifest | None = None
 
@@ -1052,7 +1055,8 @@ class Paths:
                 "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
                 "waiting": f"{control_dir}/waiting", "parked": f"{control_dir}/parked",
                 "heartbeat": f"{control_dir}/.heartbeat",
-                "director_commits": f"{control_dir}/.director-commits"}
+                "director_commits": f"{control_dir}/.director-commits",
+                "log_dir": f"{control_dir}/log"}
 
 
 PROMPT_BASE = "ralph/PROMPT.base.md"
@@ -1153,13 +1157,20 @@ def session_env(paths):
     ralph-mark.sh and ralph-check.sh need no per-campaign default. RALPH_QUEUE
     is set even when empty: a legacy loop launched from inside a queue's
     session must not inherit that queue. RALPH_CLAUDE_SETTINGS likewise (the
-    shim reads empty as its default). RALPH_WORKDIR is the loop's checkout, not
-    a pool lane's worktree: the permission bridge asks the operator there."""
+    shim reads empty as its default). OPENCODE_CONFIG likewise: the workdir's
+    own .opencode/ralph.json when it has one, empty otherwise (opencode reads
+    an empty one as unset), so an opencode battery session gets its workdir's
+    permissions and never a config a parent loop leaked in. RALPH_WORKDIR is
+    the loop's checkout, not a pool lane's worktree: the permission bridge
+    asks the operator there. RALPH_LOG_DIR is relative, so ralph-check.sh
+    logs into the worktree it runs in: a lane's own, kept at its removal."""
     settings = paths.manifest.settings if paths.manifest else ""
+    opencode = paths.workdir / ".opencode" / "ralph.json"
     return {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
-            "RALPH_CONTROL_DIR": paths.control_dir,
+            "RALPH_CONTROL_DIR": paths.control_dir, "RALPH_LOG_DIR": paths.log_dir,
             "RALPH_WORKDIR": str(paths.workdir.resolve()),
-            "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else ""}
+            "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else "",
+            "OPENCODE_CONFIG": str(opencode) if opencode.is_file() else ""}
 
 
 def worker_bin(paths):
@@ -1169,6 +1180,18 @@ def worker_bin(paths):
     if declared:
         return str(paths.p(declared)) if "/" in declared else declared
     return os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+
+
+def client_for(model, paths):
+    """Which client runs this model id: a `provider/model` pair is opencode's
+    grammar (probe_refusal's seam) and runs through opencode; a bare id is the
+    declaring worker_bin's (the claude shim's). probe_model and _start_session
+    both route through here, so the probe and the session cannot disagree on
+    the client. An empty model (no roster configured) takes the declaring
+    client's own default."""
+    if model and "/" in model:
+        return os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+    return worker_bin(paths)
 
 # A conflicts.txt line `<id> *` pairs the row with every other: it runs alone.
 ALONE = "*"
@@ -1679,8 +1702,12 @@ runs no ralph-result is counted by its commits alone.
   ralph-result needs-human [--package FILE] <why>
                                           a decision the row and the design do not make; FILE holds
                                           the evidence (commands, their actual output, file:line)
-Run <cmd> in the foreground of that call: never start a process yourself with nohup or `&`,
-since it dies with this session or outlives it unseen.
+This session is one-shot: the process exits the moment you end your turn and every background
+task you started is killed with it — no notification will ever reach you. Never end your turn
+while a check is running, and never start a process yourself with nohup or `&`. Run long checks
+(DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the
+Bash tool's timeout parameter set to 600000, or split them, or end your turn with
+`ralph-result await` above. Commit before you end your turn — an uncommitted turn is lost.
 """
 CONTRACT_OPERATOR = """\
   ralph-result needs-human --operator ... a fork the charter leaves to the operator: no director
@@ -2535,7 +2562,7 @@ class Loop:
                     "RALPH_AWAIT_MAX": str(self.await_max_s)})
         full_env = {**os.environ, **session_env(self.paths), **env,
                     "PATH": f"{RALPH_BIN}{os.pathsep}{os.environ.get('PATH', '')}"}
-        proc = self.spawn([worker_bin(self.paths), "run", *model_args, prompt],
+        proc = self.spawn([client_for(model, self.paths), "run", *model_args, prompt],
                           cwd=cwd, env=full_env, log_path=log)
         entry["sessions"] = n
         entry["notes"] = []
@@ -2726,10 +2753,23 @@ class Loop:
         r = entry["run"]
         how = (f"exited {code}" if code is not None else
                "is gone without an exit status (a reboot, or something killed it)")
+        now, ended = self.clock(), self._ended_at(r)
+        late = (f" (the loop saw it {fmt_secs(now - ended)} later)"
+                if ended is not None and now - ended > STALL_SECS else "")
         self._note(entry, f"your background run {r['argv']} {how} after "
-                          f"{fmt_secs(self.clock() - r['begun'])}; its log is {r['log']}. Read it "
-                          "and carry on from what it shows.")
+                          f"{fmt_secs((now if ended is None else ended) - r['begun'])}{late}; "
+                          f"its log is {r['log']}. Read it and carry on from what it shows.")
         return f"run {how}"
+
+    def _ended_at(self, r):
+        """When the run wrote its exit status, or None. A run a stopped loop
+        sees late ended when it wrote the file, not when the loop looked
+        (2026-10-08: a 29-minute demo was reported to its session as 14h09m)."""
+        try:
+            t = pathlib.Path(r["exit_file"]).stat().st_mtime
+        except OSError:
+            return None
+        return t if r["begun"] <= t <= self.clock() else None
 
     def _do_run_over_budget(self, unit, entry):
         r = entry["run"]
@@ -2996,19 +3036,22 @@ class Lanes:
                 "its target holds disk until it is")
 
     def keep_evidence(self, unit, wt):
-        """A lane's raw evidence (its target/ralph/: check logs, readings) is
-        copied to <log_dir>/<unit>/ in the main tree before the worktree, its
-        target included, is removed. False when the copy failed: the caller
-        keeps the worktree rather than lose what a commit may cite."""
-        src = wt / "target" / "ralph"
-        if not src.is_dir():
+        """A lane's raw evidence is copied to <log_dir>/<unit>/ in the main
+        tree before the worktree, its target included, is removed: its own log
+        dir (ralph-check.sh's logs, commit messages), and its target/ralph/,
+        where a repo's own scripts may still write readings and check logs.
+        False when a copy failed: the caller keeps the worktree rather than
+        lose what a commit may cite."""
+        srcs = [d for d in (wt / "target" / "ralph", wt / self.paths.log_dir) if d.is_dir()]
+        if not srcs:
             return True
         dest = self.paths.p(self.paths.log_dir) / unit
-        try:
-            shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
-        except (OSError, shutil.Error) as e:
-            say(f"lane {unit} evidence copy to {dest} failed: {e}")
-            return False
+        for src in srcs:
+            try:
+                shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
+            except (OSError, shutil.Error) as e:
+                say(f"lane {unit} evidence copy to {dest} failed: {e}")
+                return False
         say(f"lane {unit} evidence kept at {dest}")
         return True
 # ---------------------------------------------------------------------------
@@ -3128,7 +3171,7 @@ def adopt_legacy(loop, dry=False):
         if row is not None:
             park(row.id, text, "the file protocol's halt package")
         else:
-            dest = paths.workdir / "target" / "ralph" / "halts" / f"{int(time.time())}-adopted.md"
+            dest = paths.p(paths.log_dir) / "halts" / f"{int(time.time())}-adopted.md"
             lines.append(f"{paths.needs_human} names no row — archived at {dest}: "
                          f"{first_line(pkg)[:120]}")
             if not dry:
@@ -3435,7 +3478,7 @@ def paths_for(args):
     return Paths(workdir, prompt=m.prompt, state=m.state, charter=m.charter,
                  prompt_addendum=addendum,
                  conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m,
-                 log_dir=f"target/ralph/{name}", **Paths.control_files(m.control_dir))
+                 **Paths.control_files(m.control_dir))
 
 
 def queue_flags(paths):

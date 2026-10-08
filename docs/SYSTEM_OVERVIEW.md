@@ -279,6 +279,11 @@ whose turn lanes ask svrn over its turn route (`bench_cmd/subject.rs`) and whose
 ask svrn's `__probe` for the grounding gate's own verdicts and judge registers
 (`bench_cmd/svrn_judge.rs`); pure scorers in `sovereign-eval/`.
 
+`bench er-score` reports standard clustering metrics conditional on shared mention IDs, and a separate
+`recovery_b_cubed` measure using full cluster sizes: omitted gold members lose recall and extra placements
+lose precision. Callers scope the evaluation universe; the support-case scorer includes known no-case
+placements and reports membership coverage beside the conditional metrics.
+
 `scripts/sovereign-ci-bench.sh` is the full nightly (~2-4h) and **the primary
 way to catch a regression anywhere in the inference + retrieval stack** — one
 command spanning retrieval recall, enrichment atom-F1, intent routing,
@@ -578,6 +583,20 @@ question the pipeline asks about a type is a method on the resolved
   schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
   the navigation map; a relation declared with both ends also gets one focused
   Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`).
+  Opt-in `document_reading = true` adds an accountable Phase-1 read over the
+  hydrated source documents for every declared claim kind whose subject is a
+  source-free entity with `identity_criterion` or a metadata-sourced entity
+  with declared identity fields, preserving its declared force. Metadata-backed
+  subjects bind to existing projected entities by exact identity and are never
+  re-extracted. V1 validation names and refuses unsupported claim kinds.
+  `DocumentRead` outcomes, evidence and `subject_local_ref`s travel through
+  `SectionExtraction` cache/checkpoints, keyed by the read contract and source
+  context; generic questions are skipped on this path, and accountable source
+  identity and subject fields flow to RESOLVE. Its decoder selects document-scoped
+  source-citation handles; validation expands them to exact source quotes and
+  rebuilds the qualified claim projection before caching. Unknown or foreign
+  handles refuse the claim; exact source verification remains mandatory. `false` preserves the default
+  path.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from the ONE document its evidence anchor lands in
@@ -638,7 +657,10 @@ question the pipeline asks about a type is a method on the resolved
   as the ONE decider of every entity type that declares an `identity_criterion`
   and no `source` (`decides`): its statements are the claims of each kind whose
   `subject` is the type, placed by their anchor in the one document `locate`
-  finds; documents go in clock order under `Answerer::Select` with the adopted
+  finds. Claims the reader gave one `subject_local_ref` in one document are one
+  statement at the earliest span (`resolution_records/local_subjects.rs`), unless
+  they disagree on a supplied identity value; a ref never joins across
+  documents. Documents go in clock order under `Answerer::Select` with the adopted
   proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
   MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
   statement, and each claim's subject its statement's record. 3b leaves such a
@@ -650,7 +672,17 @@ question the pipeline asks about a type is a method on the resolved
   source projection records) and refs, filtered by sets, combined by a fold from a
   closed registry; claim attributes before RESOLVE, a decided type's after, each
   outcome typed in `atlas/derived_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
-  enforcing a criterion the extraction did not fill.** Every pipeline writes
+  enforcing a criterion the extraction did not fill.** The optional `by = "protocol"`
+  fold projects a closed text state only after RESOLVE, from cited claims assigned
+  through `^subject`. Each rule requires source-supported `DocumentRead` fields;
+  absent qualifications and legacy caches without the additive field-evidence
+  pointer remain pending. `change.document.date` orders state reports, while a
+  configured claim `effective_time` is retained separately and never orders them.
+  Undated, mixed-precision or unsupported partial report times remain alternatives;
+  incompatible states at the same report time conflict. The existing decision line
+  retains rule fingerprint, claim basis, assignment, source document, field evidence
+  and history, including duplicates, corrections and superseded reports. Existing
+  ref-valued folds keep their semantics. Every pipeline writes
   `atlas/ontology.json`, so a reader can tell an author's declaration from a
   genre writing its fixed vocabulary down; built-in vocabularies are DATA at
   `pipelines/ontologies/<id>.toml`.
@@ -1341,7 +1373,13 @@ removed; never describe `:9742` as mTLS.**
 
 **The loopback guard has three layers and one trap.** Router-level
 `from_fn(loopback_only)` middleware, per-handler `ConnectInfo` extraction, and
-a pinned listener-shape test. The listener MUST use
+a pinned listener-shape test. Every layer asks one decider,
+`host_kit::locality::RequestLocality`. A loopback peer address is necessary
+and not sufficient: the request's `Host` must name loopback, and it must carry
+no `Origin` or `Sec-Fetch-Site` of another origin, because a browser on this
+machine is a loopback peer. `client_auth`'s loopback admission, the
+`X-Principal` owner naming, the internal gate and both `/mcp/stats` handlers
+read the same decider. The listener MUST use
 `.into_make_service_with_connect_info::<SocketAddr>()` — bare `axum::serve`
 leaves `ConnectInfo` absent and the guards fail closed for *every* caller.
 The guard lives in the host kit (`host_kit::shell::guard`, re-exported at

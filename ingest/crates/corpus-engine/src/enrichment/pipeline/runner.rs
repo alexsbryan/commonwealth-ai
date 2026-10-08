@@ -16,6 +16,10 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::atlas::{SectionExtraction, SeedEntities, SeedOrigin, SeedStrategy};
+use super::document_read::{
+    runner_cache_text, runner_load_exemplar_bank, runner_missing_source_documents,
+    runner_phase1_inputs, runner_validate_response,
+};
 use super::exemplar_bank::{Exemplar, ExemplarBank};
 use super::phase_cache::PhaseCache;
 use super::run_output::RunOutputWriter;
@@ -361,7 +365,7 @@ fn classify_phase1_parse_failure(response: &str, err: &Error) -> PhaseFailureKin
 /// mode hit.
 ///
 /// Returns `None` when the input is entirely whitespace.
-fn truncate_response_head(text: &str) -> Option<String> {
+pub(super) fn truncate_response_head(text: &str) -> Option<String> {
     if text.trim().is_empty() {
         return None;
     }
@@ -789,27 +793,24 @@ impl PhaseRunner {
         // Load the exemplar bank. Bank presence is optional — phase 1
         // runs with an empty bank (no few-shot context) the first time
         // through.
+        let policies = self.pipeline.declaration();
+        let document_reading = policies.document_reading;
         let exemplar_path = self.exemplar_path(PipelinePhase::Questions);
         let bank =
-            ExemplarBank::load_embedded(&exemplar_path, PipelinePhase::Questions, &self.embed)
+            runner_load_exemplar_bank(document_reading, targets.len(), &exemplar_path, &self.embed)
                 .await?;
         let k = self.pipeline.top_k_exemplars(PipelinePhase::Questions);
 
         progress(Phase1Progress::Start {
             total: targets.len(),
-            exemplars_loaded: bank.len(),
+            exemplars_loaded: bank.as_ref().map_or(0, ExemplarBank::len),
         });
 
         // Read the Stage 1a seed list once per map loop. A cache
         // miss is non-fatal — the pipeline's compose_phase1_with_seed
         // default falls through to the seedless prompt. Pipelines
         // with `SeedStrategy::None` never write this cache entry.
-        let seed_opt: Option<SeedEntities> = self.cache.read(PipelinePhase::SeedExtraction)?;
-        // One focused call per declared relation with both ends per `from`
-        // entity; empty, so zero calls, for a corpus that declares none.
-        let focus = super::pipelines::relation_focus::RelationFocus::from_policies(
-            &self.pipeline.declaration(),
-        );
+        let (seed_opt, focus) = runner_phase1_inputs(document_reading, &self.cache, &policies)?;
 
         let mut extracted: Vec<ExtractedQuestion> = Vec::with_capacity(targets.len());
         let mut failures: Vec<Phase1Failure> = Vec::new();
@@ -841,6 +842,16 @@ impl PhaseRunner {
                 total: targets.len(),
                 chapter_id: &chapter.chapter_id,
             });
+
+            if let Some(failure) = runner_missing_source_documents(document_reading, chapter) {
+                progress(Phase1Progress::ChapterFailed {
+                    chapter_id: &chapter.chapter_id,
+                    reason: &failure.reason,
+                });
+                self.persist_failure_checkpoint(&failure);
+                failures.push(failure);
+                continue;
+            }
 
             // Skip sections with essentially no body. The chapter-regex
             // detector treats `Part I` headings as their own section
@@ -882,11 +893,13 @@ impl PhaseRunner {
             // Build the query-side embedding used to score exemplars
             // against this chapter.
             let query_text = phase1_query_text(chapter);
-            let picked: Vec<&Exemplar> = if bank.is_empty() {
-                Vec::new()
-            } else {
-                let query_emb = (self.embed)(&query_text).await?;
-                bank.select_top_k(&query_emb, k)
+            let picked: Vec<&Exemplar> = match bank.as_ref() {
+                None => Vec::new(),
+                Some(bank) if bank.is_empty() => Vec::new(),
+                Some(bank) => {
+                    let query_emb = (self.embed)(&query_text).await?;
+                    bank.select_top_k(&query_emb, k)
+                }
             };
 
             // Prompt composition + chat dispatch branch on retry
@@ -938,10 +951,11 @@ impl PhaseRunner {
             // version + model id. Only the default retry mode
             // consults the cache — terse retries are by definition
             // a different prompt shape and would corrupt the entry.
+            let cache_text = runner_cache_text(document_reading, &policies, chapter, &prompt)?;
             let section_cache_key = if retry_mode.is_none() {
                 self.section_cache.as_ref().map(|cfg| {
                     crate::enrichment::atlas::section_cache::cache_key(
-                        &chapter.text,
+                        &cache_text,
                         &cfg.prompt_version,
                         &cfg.model_id,
                     )
@@ -1117,7 +1131,7 @@ impl PhaseRunner {
                 }
             };
 
-            let parsed = match self.pipeline.parse_phase1(&response) {
+            let mut parsed = match self.pipeline.parse_phase1(&response) {
                 Ok(p) => p,
                 Err(e) => {
                     let head = truncate_response_head(&response);
@@ -1146,6 +1160,23 @@ impl PhaseRunner {
                     continue;
                 }
             };
+
+            if document_reading {
+                if let Err(failure) = runner_validate_response(
+                    chapter,
+                    &policies,
+                    parsed.section_extraction.as_mut(),
+                    &response,
+                ) {
+                    progress(Phase1Progress::ChapterFailed {
+                        chapter_id: &chapter.chapter_id,
+                        reason: &failure.reason,
+                    });
+                    self.persist_failure_checkpoint(&failure);
+                    failures.push(failure);
+                    continue;
+                }
+            }
 
             // `EntityType` is a closed set of six plus `Other(String)`, so a
             // type the parser did not recognise as a base kind IS a declared
@@ -1204,14 +1235,18 @@ impl PhaseRunner {
             if let Some(ref mut sx) = section_extraction {
                 sx.section_id = chapter.chapter_id.clone();
                 // Before the chain, so its sketches are snapped like the joint pass's.
-                focus.apply(&self.chat, &prompt, sx).await;
+                if let Some(focus) = focus.as_ref() {
+                    focus.apply(&self.chat, &prompt, sx).await;
+                }
                 // Cross-cutting post-process chain. Every pipeline's
                 // output flows through this registry — adding a new
                 // shared transform (path canonicalisation, dedupe,
                 // …) is a `register` call on the registry, not a
                 // runner edit. See `atom_normalizer` for the trait
                 // contract and current default chain.
-                self.atom_post_processors.process(sx, &chapter.text);
+                if !document_reading {
+                    self.atom_post_processors.process(sx, &chapter.text);
+                }
                 // Phase 1b coverage check — an audit pass that asks
                 // the model "what did you miss?" against its own
                 // extraction. Disabled by default because the SEP
@@ -1233,7 +1268,7 @@ impl PhaseRunner {
                     .ok()
                     .filter(|v| !v.trim().is_empty() && v != "0")
                     .is_some();
-                if retry_mode.is_none() && run_1b {
+                if !document_reading && retry_mode.is_none() && run_1b {
                     run_phase1b_coverage(self.pipeline.as_ref(), chapter, sx, &self.chat).await;
                 }
             }

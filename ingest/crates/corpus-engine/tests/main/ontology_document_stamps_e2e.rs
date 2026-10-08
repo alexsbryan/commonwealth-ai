@@ -77,6 +77,7 @@ fn act(content: &str, anchor: &str) -> ClaimSketch {
 
 fn section(id: &str, claims: Vec<ClaimSketch>) -> SectionExtraction {
     SectionExtraction {
+        document_read: None,
         section_id: id.into(),
         enrichment_depth: EnrichmentDepth::Extracted,
         entities_introduced: Vec::new(),

@@ -4281,7 +4281,9 @@ The whole-workspace export is **one-writer and guarded** (2026-08-14):
 cross-process `.rebuild.lock` (flock) and renames it over the live graph only
 on success — a query in flight always sees a complete graph, and a daemon
 restart mid-export cannot empty it (the `export_to_live` wipe guard refuses
-to rename over a populated graph). The rebuild loop runs at most
+to rename over a populated graph). It stamps `last_indexed_head` with the
+HEAD the export started from, so a commit landing mid-export still reads as
+drift to the git poll. The rebuild loop runs at most
 `MAX_FOLLOWUP_PASSES` (4) passes **under the same** cross-project rebuild
 permit — the follow-up pass that at HEAD re-acquired the sole permit and
 self-deadlocked (live incident 2026-08-14: status `active` for hours, every
@@ -4289,11 +4291,16 @@ nudge coalescing silently) is structurally impossible now; a 45-minute
 watchdog (`MAX_REBUILD_WALL`) and an RAII guard clear both the worker
 `in_flight` flag and the `ProjectState` claim on hang or panic, record the
 failure (`record_rebuild_failure`, visible via `project watch status`), and
-write a `WEDGE GUARD` line to the daemon log. Every cycle appends to
+write a `WEDGE GUARD` line to the daemon log. Every pass appends to
 `~/.svrnmesh/logs/watch-<corpus>-scip.log` (`project watch logs <corpus>
-scip`). `project refresh` now **verifies**: it nudges the daemon, polls
-`/v1/projects` to a named verdict (completed / failed / crashed / wedged /
-daemon-gone), prints `✓ SCIP graph at HEAD` or a loud ✗ reason, and on
+scip`) with its reason (`follow_up` for one the loop runs because signals
+fired mid-pass) and its pass and queue times; the daemon's `scip rebuild
+complete` line carries `queued_ms` and `pass_ms`, since `elapsed_ms` counts
+the wait behind other projects for the one permit. `project refresh` now
+**verifies**: it nudges the daemon, polls `/v1/projects` to a named verdict
+(completed, meaning indexed at the nudge's HEAD or a later commit on it /
+failed / crashed / wedged / daemon-gone), prints `✓ SCIP graph at HEAD` or a
+loud ✗ reason, and on
 failure falls back to a local in-process export through the SAME
 `export_to_live` lock — one writer for the DB across daemon and `--local`
 paths; a local export that loses the lock to the daemon exits 1 with
@@ -8188,7 +8195,7 @@ Default ports:
 | Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `ingest/crates/corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
 | Read or extend the multi-origin reconciliation primitive | `ingest/crates/corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl`. `oplog::reverse_merge` is the actual undo: it matches an `OpId` against the log and restores the merge's RECORDED inputs, stamping `reverts` on the Split (the governance `Revert { targets }` shape). `multi_origin::split_atom` is the operator's own judgement — caller-supplied outputs, no lookup — and is not undo |
 | Add an atom to an atlas after `write_atlas_full` ran | `writer::append_atoms_and_edges` — reads both JSON files, extends, rewrites, and rebuilds the v2 store from the merged set (the store is the read path; writing only `atoms.json` leaves it short). Ids are the caller's problem |
-| Score a clustering of mention-ids vs ground truth (B³ + pairwise-F1) | `sovereign-eval/src/entity_resolution_score.rs` (scorer) + `entity_resolution_bench.rs` (Split/peek-budget) |
+| Score a clustering of mention-ids vs ground truth | `bench/crates/sovereign-eval/src/entity_resolution_score.rs` (conditional B³, pairwise, CEAF-e, LEA, MUC/CoNLL) + `entity_resolution_recovery.rs` (nonstandard coverage-aware recovery, full input cluster sizes). `bench er-score` prints both; `research/ontology-apps/support/score.py` scopes predictions, includes known noise, reports missing coverage and rejects unknown source IDs. `entity_resolution_bench.rs` owns Split/peek-budget. |
 | Run the Phase 5 Enron measurement loop | `svrn bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-bench/src/bench_cmd/enron.rs` |
 | Add another typed Entity column-extractor for tabular asset kinds | `ingest/crates/corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |
 | Content-addressed asset store on disk | `ingest/crates/corpus-engine/src/asset_store/{mod,fs,ledger}.rs` (AD-1; raw bytes + parsed-form caches + append-only ledger under `<corpus>/assets/`) |

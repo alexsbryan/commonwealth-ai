@@ -139,6 +139,7 @@ fn reason_string_mapping_is_stable() {
     );
     assert_eq!(RebuildReason::Lazy.as_str(), "lazy");
     assert_eq!(RebuildReason::Explicit.as_str(), "explicit");
+    assert_eq!(RebuildReason::FollowUp.as_str(), "follow_up");
 }
 
 #[test]
@@ -444,6 +445,34 @@ async fn followup_pass_runs_under_single_permit() {
     assert!(
         !state.is_rebuild_in_flight(),
         "rebuild claim must be released after the loop"
+    );
+}
+
+/// A follow-up pass is logged as one, with its own pass and queue times.
+/// zoracite's daemon log of 2026-10-07 read "explicit" seven times in an
+/// hour, each a follow-up of the cycle before it, every one timed from
+/// before the wait for the permit. FAILING INPUT: the loop labelling its
+/// follow-up `Explicit`.
+#[tokio::test]
+async fn a_follow_up_pass_is_logged_as_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (ctx, state, _graph) = test_rebuild_ctx(&tmp, "label");
+    state.mark_dirty();
+    run_one_rebuild_with(ctx, explicit_req(), body_ok).await;
+    let log = tmp.path().join("logs").join("watch-label-scip.log");
+    let text = std::fs::read_to_string(&log).unwrap();
+    let passes: Vec<&str> = text
+        .lines()
+        .filter(|l| l.contains("rebuild complete"))
+        .collect();
+    assert_eq!(passes.len(), 2, "{text}");
+    assert!(passes[0].contains("(explicit)"), "{text}");
+    assert!(passes[1].contains("(follow_up)"), "{text}");
+    assert!(
+        passes
+            .iter()
+            .all(|l| l.contains("pass ") && l.contains("queued ")),
+        "{text}"
     );
 }
 

@@ -581,6 +581,7 @@ mod tests {
             title: "Ostrom Summary".into(),
             text: "Your textbook tells you a story...".into(),
             metadata: HashMap::new(),
+            source_documents: Vec::new(),
             approx_tokens: 100,
         }
     }

@@ -207,4 +207,130 @@ type = "atlas"
             .custom_ontology()
             .is_none());
     }
+
+    #[test]
+    fn declared_document_reading_recipe_roundtrips_and_requires_a_record_type() {
+        let recipe = r#"
+[corpus]
+id = "document-read"
+name = "document-read"
+[acquire]
+type = "local_file"
+path = "/tmp/issues.jsonl"
+[extract]
+type = "markdown"
+[chunk]
+type = "passthrough"
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "issue records"
+[enrichment.ontology]
+version = 1
+document_reading = true
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue identifier"
+identity = ["number"]
+[[enrichment.ontology.types.attributes]]
+name = "number"
+type = "text"
+
+[[enrichment.ontology.types]]
+name = "membership"
+kind = "claim"
+force = "assertive"
+subject = "case"
+"#;
+        let parsed = Recipe::from_toml(recipe).expect("the opt-in recipe parses");
+        let spec = parsed
+            .custom_atlas_spec()
+            .expect("custom atlas policy persists");
+        assert!(spec.policies().document_reading);
+        let wire = serde_json::to_vec(&spec).unwrap();
+        let restored: crate::enrichment::pipeline::CustomAtlasSpec =
+            serde_json::from_slice(&wire).unwrap();
+        assert_eq!(restored, spec);
+        assert!(restored.policies().document_reading);
+
+        let invalid = recipe.replace("identity_criterion = \"same issue identifier\"\n", "");
+        let error = Recipe::from_toml(&invalid).unwrap_err().to_string();
+        assert!(error.contains("document_reading"), "{error}");
+    }
+
+    /// The Ward recipe's shape (`research/ontology-apps/ward/recipe.toml`):
+    /// a metadata-sourced person, a deal decided by an identity criterion,
+    /// and a commissive commitment about that person. A mirror keeps this
+    /// crate liftable (no compile-time embed of a research tree); the real
+    /// recipe is validated by `sovereign recipe validate` and the reader
+    /// trial, which run over the actual file.
+    #[test]
+    fn a_commissive_commitment_about_a_sourced_person_opts_in() {
+        let recipe = r#"
+[corpus]
+id = "ward-shape"
+name = "ward-shape"
+[acquire]
+type = "local_file"
+path = "sample"
+[extract]
+type = "email"
+[chunk]
+type = "paragraph"
+[enrichment]
+enabled = true
+type = "atlas"
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+identity = ["email"]
+attributes = [{ name = "email", type = "text" }]
+source = { metadata = ["from", "to"], attributes = { email = "address" } }
+
+[[enrichment.ontology.types]]
+name = "deal"
+kind = "entity"
+identity = ["deal_id"]
+identity_criterion = "the same declared deal id"
+attributes = [{ name = "deal_id", type = "text" }]
+
+[[enrichment.ontology.types]]
+name = "commitment"
+kind = "claim"
+force = "commissive"
+subject = "person"
+
+[[enrichment.ontology.types]]
+name = "membership"
+kind = "claim"
+force = "assertive"
+subject = "deal"
+"#;
+        let opt_in = recipe.replace(
+            "[enrichment.ontology]\nversion = 1\n",
+            "[enrichment.ontology]\nversion = 1\ndocument_reading = true\n",
+        );
+        let parsed = Recipe::from_toml(&opt_in).expect("the opt-in Ward-shaped recipe validates");
+        let policies = parsed
+            .custom_atlas_spec()
+            .expect("a declared ontology makes a custom atlas")
+            .policies();
+        let commitment = policies
+            .shape
+            .types
+            .iter()
+            .find(|ty| ty.name == "commitment")
+            .expect("the declared commitment remains present");
+        assert!(policies.document_reading);
+        assert_eq!(
+            commitment.force,
+            Some(crate::enrichment::ontology::Force::Commissive)
+        );
+        assert!(commitment.is_document_reading_eligible(&policies.shape.types));
+    }
 }

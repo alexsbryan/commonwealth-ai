@@ -483,6 +483,30 @@ fn ontology_schema(descriptor: &Value) -> Value {
                 }
             },
             "patterns": { "type": "array", "items": pattern_schema(descriptor) },
+            // Derived attributes (`understanding_vocab::ontology::derived`),
+            // each `deny_unknown_fields`. `by` names the closed fold registry
+            // (`FoldBy`); the descriptor does not carry it, so `recipe
+            // validate` is what refuses an unknown function.
+            "paths": { "type": "array", "items": {
+                "type": "object", "additionalProperties": false, "required": ["id", "path"],
+                "properties": { "id": { "type": "string" }, "path": { "type": "string" } }
+            } },
+            "sets": { "type": "array", "items": {
+                "type": "object", "additionalProperties": false, "required": ["id", "type"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "type": { "type": "string" },
+                    "where": { "type": "object" }
+                }
+            } },
+            "folds": { "type": "array", "items": {
+                "type": "object", "additionalProperties": false, "required": ["id", "by", "from"],
+                "properties": {
+                    "id": { "type": "string" },
+                    "by": { "type": "string" },
+                    "from": { "type": "array", "items": { "type": "string" } }
+                }
+            } },
             // `[enrichment.ontology.navigation]` — one walk row per question
             // kind (ei-2-map). Every row defaults to the spec table, so the
             // tool offers the keys and requires none; nothing reads it yet.
@@ -602,7 +626,25 @@ fn ontology_type_schema(descriptor: &Value) -> Value {
             "label":             { "type": "string" },
             "identity":          str_array.clone(),
             "identity_fallback": str_array.clone(),
-            "force":             { "enum": desc_ontology(descriptor, "force") },
+            // RESOLVE (`ONTOLOGY_METHOD.md`): the criterion in words, the
+            // evidence each kind of link carries with its counts, the bar a
+            // link's expected precision must clear, and the extracted
+            // fields a mention must fill before it can be linked.
+            "identity_criterion":  { "type": "string" },
+            "identity_evidential": { "type": "array", "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["evidence", "right", "of", "measured_on"],
+                "properties": {
+                    "evidence":    { "type": "string" },
+                    "right":       { "type": "integer", "minimum": 0 },
+                    "of":          { "type": "integer", "minimum": 0 },
+                    "measured_on": { "type": "string" }
+                }
+            } },
+            "identity_bar":        { "type": "number", "minimum": 0, "maximum": 1 },
+            "identity_necessary":  str_array.clone(),
+            "force":            { "enum": desc_ontology(descriptor, "force") },
             "deontic":           { "type": "array", "items": { "enum": desc_ontology(descriptor, "deontic") } },
             "subject":           { "type": "string" },
             "grades":            str_array.clone(),
@@ -622,6 +664,8 @@ fn ontology_attr_schema(descriptor: &Value) -> Value {
             "name":        { "type": "string" },
             "type":        { "enum": desc_ontology(descriptor, "attribute_family") },
             "description": { "type": "string" },
+            // A declared path or fold id that fills the attribute (no model).
+            "derived":     { "type": "string" },
             "values":      { "type": "array", "items": { "type": "string" } },
             "unit":        { "type": "string" },
             "range":       { "type": "boolean" },

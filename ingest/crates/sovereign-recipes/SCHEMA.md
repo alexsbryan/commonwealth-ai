@@ -782,6 +782,7 @@ Allowed values:
 | `vocabulary` | `Option<OntologyVocabulary>` | no | type default | Version-0 term overrides, still honoured. In version 1 prefer `label` on a type and `tension.label`; `validate` warns when both are set. |
 | `must_not` | `Vec<String>` | no | type default | Things the corpus must never be used for ("give dosing advice"). Read by the extraction prompt and the answer gate. Block-level. |
 | `types` | `Vec<OntologyTypeDecl>` | no | type default | The declared types (`[[enrichment.ontology.types]]`), each specializing one atom kind. |
+| `document_reading` | `bool` | no | type default | Opt in at `[enrichment.ontology]` with `document_reading = true` to read claims whose subjects are either source-free records with an `identity_criterion` or metadata-sourced entities with declared identity fields, preserving each type's force. Validation refuses and names unsupported declarations. Default false preserves the shared Phase-1 prompt and output bytes. |
 | `max_entities_per_section` | `Option<usize>` | no | type default | How many entities one section may introduce in Phase 1. Absent takes the shipped schema's cap of 15 — raise it for a corpus whose sections enumerate (a data table, a list of recipients). Outside `MIN_ENTITIES_PER_SECTION`..=`MAX_ENTITIES_PER_SECTION` (5..=60) the recipe refuses at load rather than clamping. |
 | `voices` | `VoicesDecl` | no | type default | Who speaks in the corpus, and which speakers are not subject matter. |
 | `change` | `ChangeDecl` | no | type default | What holds when: the clock and which claim types supersede. |
@@ -984,6 +985,102 @@ Allowed values:
 |---|---|---|---|---|
 | `configurations` | `Option<bool>` | no | type default | Run the interpretive-configuration rollups (Phase 8). Default true. |
 | `arguments` | `Option<bool>` | no | type default | Reconstruct arguments. Default false. |
+
+## `PathDecl`
+
+`[[enrichment.ontology.paths]]`
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id` | `String` | **yes** | — |  |
+| `path` | `String` | **yes** | — |  |
+
+## `SetDecl`
+
+`[[enrichment.ontology.sets]]`: the particulars of one declared type (or documents) whose attributes meet every condition.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id` | `String` | **yes** | — |  |
+| `type` | `String` | **yes** | — |  |
+| `where` | `BTreeMap<String, Condition>` | no | type default |  |
+
+## `Condition`
+
+One condition on an attribute, compared after the identity fold.
+
+### `type = "Is"`
+
+_No fields._
+
+### `type = "In"`
+
+_No fields._
+
+### `type = "Suffix"`
+
+Equal, or ending in it at a word boundary (a subdomain of a domain).
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `suffix` | `String` | **yes** | — |  |
+
+## `FoldDecl`
+
+`[[enrichment.ontology.folds]]`
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id` | `String` | **yes** | — |  |
+| `by` | `FoldBy` | **yes** | — |  |
+| `from` | `Vec<String>` | **yes** | — | Path expressions, a declared id among them, in priority order. |
+| `protocol` | `Option<ProtocolFoldDecl>` | no | type default | A recipe-defined state protocol, required only when `by = "protocol"`. |
+
+## `ProtocolFoldDecl`
+
+Data for a qualified scalar fold over already-assigned, cited claims.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `identity` | `String` | **yes** | — | A source-supported, stable identity for one reported transition. |
+| `effective_time` | `Option<String>` | no | type default | A source-supported transition effective time; never used as report order. |
+| `rules` | `Vec<ProtocolRuleDecl>` | no | type default | Explicit claim qualifications map to application state values. |
+
+## `ProtocolRuleDecl`
+
+One application-data mapping from a qualified claim to a scalar state.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id` | `String` | **yes** | — | Stable recipe identity for this mapping, included in the audit. |
+| `claim_kind` | `String` | **yes** | — | The declared claim type this mapping applies to. |
+| `state` | `String` | **yes** | — | A value in the derived attribute's closed text set. |
+| `when` | `BTreeMap<String, String>` | no | type default | Every named field must be source-supported at the exact declared value. |
+| `corrects` | `Option<String>` | no | type default | An optional field whose supported identity must name a prior transition. |
+
+## `FoldBy`
+
+The fold registry. Closed: a new function is a variant here and an arm in the evaluator. Each deciding function yields one value or a counted absence; `all` yields the set.
+
+Allowed values:
+
+- `first` — The first input, in `from` order, that yields exactly one value; an input that yields several is ambiguous and the next is tried.
+- `agree` — Every value the inputs yield is the same one.
+- `most` — The value the most distinct documents yield; a tie decides nothing.
+- `all` — Every value the inputs yield.
+- `earliest` — The value of the earliest document by the declared clock.
+- `latest` — The value of the latest document by the declared clock.
+- `protocol` — A qualified state projection whose rules and states are recipe data.
+
+## `DerivedPolicy`
+
+The three declarations, as the policies carry them (Axis 5).
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `paths` | `Vec<PathDecl>` | no | type default |  |
+| `sets` | `Vec<SetDecl>` | no | type default |  |
+| `folds` | `Vec<FoldDecl>` | no | type default |  |
 
 ## `TableSourceDecl`
 
@@ -1218,7 +1315,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `document_reading`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
@@ -1311,6 +1408,51 @@ date that does not parse. An unknown key inside `document` refuses at load.
 document = { date = "date", thread = "thread_id", id = "message_id" }
 ```
 
+`by = "protocol"` is the opt-in scalar fold. Its target attribute must be
+closed `text` with `values`; every rule names a declared claim type, one of
+those state values, and at least one exact `when` qualification. The claim's
+`DocumentRead` carrier must mark each requested value supported and retain
+field evidence from that claim's cited source. A missing field or a legacy
+claim cache without that pointer remains pending; flattened claim attributes
+are not a substitute. The separate `DocumentReadClaim.speaker` field is claim
+attribution, not a protocol qualification. Declare a voice field when a rule
+requires it; the document's carrier author is never a fallback.
+
+The target type must be a source-free entity decided by RESOLVE, and every
+`from` path must end at its assigned claims (`^subject`). `change.document.date`
+is report time: it determines which state is current *as reported*. An optional
+`effective_time` names a source-supported time field on each rule's claim type;
+it is recorded separately and never orders reports. An exact duplicate requires
+the same transition identity, rule, state, report time and effective time; all
+copies remain in the decision history. A correction rule names a `corrects`
+field whose value must identify a prior transition; a newer timestamp alone
+does not correct one. Missing or undated inputs, mixed date precision, and
+unsupported partial report times stay pending. Incompatible states at the same
+report time conflict. Reopen and correction behavior is defined by recipe state
+values and rules, not by Rust state names.
+
+```toml
+[[enrichment.ontology.folds]]
+id = "record_state"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "transition_id"
+effective_time = "effective_at"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "qualified_resolution"
+claim_kind = "record_update"
+state = "resolved"
+when = { action = "resolved_by_authority", role = "maintainer", voice = "maintainer", polarity = "affirmative" }
+```
+
+The derived `record.state` attribute must be a closed text enum containing
+`resolved`; `record_update` declares the fields in `when`, `transition_id`, and
+`effective_at`. `recipe validate` rejects unknown fields, claim types, state
+values, invalid paths, or a target not decided by RESOLVE.
+
 An entity type's `source` can name the documents' own metadata fields instead
 of a table (`MetadataSourceDecl`): one atom per distinct value of the type's
 `identity` attribute seen in those fields, no model call. Each source
@@ -1378,9 +1520,9 @@ hops = 2
 budget = 8
 ```
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`,
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `document_reading`,
 `max_entities_per_section`, `voices`, `change`, `tension`, `derive`,
-`patterns`, `navigation`. `recipe validate` checks that every
+`patterns`, `navigation`, `paths`, `sets`, `folds`. `recipe validate` checks that every
 `specializes`, `role_of`, `from`, `to`, `participants`, `of`, `subject` and
 `ref … of` names a declared type or one of the base entity kinds the atlas
 already emits (`person`, `concept`, `institution`, `work`, `place`,

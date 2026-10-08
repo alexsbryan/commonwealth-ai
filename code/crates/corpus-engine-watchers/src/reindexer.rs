@@ -72,9 +72,15 @@ async fn prime(primer: &Option<MergedPrimer>) {
 pub enum RebuildReason {
     Startup,
     FsChange,
-    GitHead { old: String, new: String },
+    GitHead {
+        old: String,
+        new: String,
+    },
     Lazy,
     Explicit,
+    /// A pass the rebuild loop runs because signals fired during the one
+    /// before it; which signals is not kept.
+    FollowUp,
 }
 
 impl RebuildReason {
@@ -85,6 +91,7 @@ impl RebuildReason {
             Self::GitHead { .. } => "git_poll",
             Self::Lazy => "lazy",
             Self::Explicit => "explicit",
+            Self::FollowUp => "follow_up",
         }
     }
 }
@@ -1200,16 +1207,23 @@ async fn run_one_rebuild_with(ctx: RebuildCtx, req: RebuildRequest, body: Rebuil
         ),
     );
 
+    // `elapsed_ms` counts from before the permit, so it carries the wait
+    // behind other projects; `queued_ms` and `pass_ms` split it.
+    let queued_ms = start.elapsed().as_millis() as u64;
     let mut passes: usize = 0;
     let mut req = req;
     loop {
+        let pass_start = Instant::now();
         let outcome = body(&ctx, &req).await;
+        let pass_ms = pass_start.elapsed().as_millis() as u64;
         match &outcome {
             Ok(summary) => {
                 tracing::info!(
                     corpus = %ctx.entry.corpus_id,
                     reason = %req.reason.as_str(),
                     elapsed_ms = start.elapsed().as_millis() as u64,
+                    queued_ms,
+                    pass_ms,
                     symbols = summary.symbols,
                     refs = summary.refs,
                     "scip rebuild complete"
@@ -1218,10 +1232,10 @@ async fn run_one_rebuild_with(ctx: RebuildCtx, req: RebuildRequest, body: Rebuil
                 append_watcher_log(
                     &ctx,
                     &format!(
-                        "rebuild complete: {} symbols, {} refs in {}s",
+                        "rebuild complete ({}): {} symbols, {} refs; pass {pass_ms}ms, queued {queued_ms}ms",
+                        req.reason.as_str(),
                         summary.symbols,
                         summary.refs,
-                        start.elapsed().as_secs(),
                     ),
                 );
             }
@@ -1250,6 +1264,7 @@ async fn run_one_rebuild_with(ctx: RebuildCtx, req: RebuildRequest, body: Rebuil
                         reason = %req.reason.as_str(),
                         error = %e,
                         consecutive_failures = n,
+                        pass_ms,
                         "scip rebuild failed"
                     );
                 } else {
@@ -1279,7 +1294,7 @@ async fn run_one_rebuild_with(ctx: RebuildCtx, req: RebuildRequest, body: Rebuil
             break;
         }
         req = RebuildRequest {
-            reason: RebuildReason::Explicit,
+            reason: RebuildReason::FollowUp,
             enqueued_at: Instant::now(),
         };
     }

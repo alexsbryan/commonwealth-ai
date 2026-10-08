@@ -34,6 +34,8 @@ const SOURCES: &[&str] = &[
     // `understanding-vocab` leaf since 2026-09-03; the generator parses
     // SOURCE, so it reads them where they are declared.
     "shared/crates/understanding-vocab/src/ontology/decl.rs",
+    // Paths, sets and folds are recipe-facing declarations in the vocabulary leaf.
+    "shared/crates/understanding-vocab/src/ontology/derived.rs",
     // A declared type's `source` facet, split from `decl.rs` beside it.
     "shared/crates/understanding-vocab/src/ontology/source.rs",
     // The navigation section (`[enrichment.ontology.navigation]`): the policy
@@ -427,6 +429,8 @@ fn recipe_schema_descriptor_is_fresh() {
     let source_file =
         descriptor::parse(&ws.join("shared/crates/understanding-vocab/src/ontology/source.rs"));
     // `source` takes one of two forms; the tool offers the keys of both.
+    let derived_file =
+        descriptor::parse(&ws.join("shared/crates/understanding-vocab/src/ontology/derived.rs"));
     let mut source_keys = descriptor::struct_fields(&source_file, "TableSourceDecl");
     for k in descriptor::struct_fields(&source_file, "MetadataSourceDecl") {
         if !source_keys.contains(&k) {
@@ -448,6 +452,14 @@ fn recipe_schema_descriptor_is_fresh() {
         "clock":              descriptor::variant_keys(&ontology_file, "SupersessionClock"),
         "deontic":            descriptor::variant_keys(&ontology_file, "Deontic"),
         "derive":             descriptor::struct_fields(&ontology_file, "DeriveDecl"),
+        "derived_attributes": {
+            "fold": descriptor::struct_fields(&derived_file, "FoldDecl"),
+            "fold_by": descriptor::variant_keys(&derived_file, "FoldBy"),
+            "path": descriptor::struct_fields(&derived_file, "PathDecl"),
+            "protocol": descriptor::struct_fields(&derived_file, "ProtocolFoldDecl"),
+            "protocol_rule": descriptor::struct_fields(&derived_file, "ProtocolRuleDecl"),
+            "set": descriptor::struct_fields(&derived_file, "SetDecl"),
+        },
         "force":              descriptor::variant_keys(&ontology_file, "Force"),
         "kind":               descriptor::variant_keys(&ontology_file, "TypeKind"),
         "source":             source_keys,

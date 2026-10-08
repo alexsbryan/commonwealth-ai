@@ -2,6 +2,7 @@
 //! CorpusIndex — wraps a LanceDB table for a per-corpus index
 //! with IVF-PQ vector search and Tantivy full-text search.
 
+mod chunk_key;
 mod create;
 mod enrichment;
 mod evidence;
@@ -13,6 +14,7 @@ mod readiness;
 mod search;
 mod write;
 
+pub use chunk_key::{ChunkKey, ChunkKeyColumns};
 pub use evidence::{Evidence, EvidenceSet};
 pub(crate) use provenance::{custody_of, grain_of};
 pub use provenance::{Acquisition, ChunkProvenance};
@@ -155,7 +157,7 @@ pub struct EnrichmentChunkRow {
     pub source_doc_id: Option<String>,
 }
 
-/// Counts produced by [`CorpusIndex::dedupe_by_content_hash`]. The
+/// Counts produced by [`CorpusIndex::dedupe_chunk_rows`]. The
 /// caller logs/displays these so the operator can see how much of
 /// their compute was duplicate work.
 #[derive(Debug, Clone, Copy, Default)]
@@ -164,13 +166,13 @@ pub struct DedupeReport {
     pub rows_before: u64,
     /// Total rows in the table after the dedupe pass.
     pub rows_after: u64,
-    /// Number of rows deleted because their `content_hash` was a
-    /// duplicate of a row with a smaller `id`.
+    /// Number of rows deleted because their [`ChunkKey`] (document and
+    /// text hash) repeated a row with a smaller `id`.
     pub duplicates_deleted: u64,
-    /// Number of distinct content_hashes preserved (= number of
-    /// "winning" rows kept). Plus any hashless rows, this is the
-    /// post-dedupe row count.
-    pub unique_hashes_kept: u64,
+    /// Number of distinct chunk keys preserved (= number of "winning"
+    /// rows kept). Plus any hashless rows, this is the post-dedupe row
+    /// count.
+    pub unique_keys_kept: u64,
     /// Rows where `content_hash` was null. Pre-existing legacy
     /// rows from before the field was populated. Left untouched
     /// because we have no signal to dedup them safely.
@@ -186,7 +188,7 @@ impl DedupeReport {
     /// Duplication rate as a fraction in [0.0, 1.0). Returns 0.0
     /// when the table was empty or had no hashed rows.
     pub fn dup_fraction(&self) -> f64 {
-        let hashed = self.unique_hashes_kept + self.duplicates_deleted;
+        let hashed = self.unique_keys_kept + self.duplicates_deleted;
         if hashed == 0 {
             0.0
         } else {
@@ -401,7 +403,7 @@ struct IndexMeta {
     #[serde(default)]
     title_fts_built: bool,
 
-    /// Set once `dedupe_by_content_hash()` has run successfully on
+    /// Set once `dedupe_chunk_rows()` has run successfully on
     /// this index. Used by `build_indexes()` to skip re-running the
     /// pre-build dedupe pass on a resume — it's idempotent (a clean
     /// index dedups to a no-op) but the table scan is wasted I/O on
@@ -1572,11 +1574,11 @@ mod tests {
         .unwrap();
         assert_eq!(idx.chunk_count().await.unwrap(), 3);
 
-        let report = idx.dedupe_by_content_hash().await.unwrap();
+        let report = idx.dedupe_chunk_rows().await.unwrap();
         assert_eq!(report.rows_before, 3);
         assert_eq!(report.rows_after, 1);
         assert_eq!(report.duplicates_deleted, 2);
-        assert_eq!(report.unique_hashes_kept, 1);
+        assert_eq!(report.unique_keys_kept, 1);
         assert_eq!(report.hashless_rows_preserved, 0);
         assert!(report.changed());
         assert!((report.dup_fraction() - 2.0 / 3.0).abs() < 1e-9);
@@ -1600,11 +1602,11 @@ mod tests {
         .unwrap();
         assert_eq!(idx.chunk_count().await.unwrap(), 6);
 
-        let report = idx.dedupe_by_content_hash().await.unwrap();
+        let report = idx.dedupe_chunk_rows().await.unwrap();
         assert_eq!(report.rows_before, 6);
         assert_eq!(report.rows_after, 5);
         assert_eq!(report.duplicates_deleted, 1);
-        assert_eq!(report.unique_hashes_kept, 1);
+        assert_eq!(report.unique_keys_kept, 1);
         assert_eq!(report.hashless_rows_preserved, 4);
         assert_eq!(idx.chunk_count().await.unwrap(), 5);
     }
@@ -1624,11 +1626,11 @@ mod tests {
         .await
         .unwrap();
 
-        let report = idx.dedupe_by_content_hash().await.unwrap();
+        let report = idx.dedupe_chunk_rows().await.unwrap();
         assert_eq!(report.rows_before, 3);
         assert_eq!(report.rows_after, 3);
         assert_eq!(report.duplicates_deleted, 0);
-        assert_eq!(report.unique_hashes_kept, 3);
+        assert_eq!(report.unique_keys_kept, 3);
         assert!(!report.changed());
         assert_eq!(report.dup_fraction(), 0.0);
     }
@@ -1674,11 +1676,11 @@ mod tests {
         assert_eq!(idx.chunk_count().await.unwrap(), 3);
     }
 
-    /// `list_indexed_content_hashes` returns the deduped set so
+    /// `list_indexed_chunk_keys` returns the deduped set so
     /// embed-side gating works against an honest seed even when the
     /// index itself has duplicates.
     #[tokio::test]
-    async fn list_content_hashes_dedupes_in_set() {
+    async fn list_chunk_keys_dedupes_in_set() {
         let dir = tempdir().unwrap();
         let idx = create_test_index(dir.path()).await;
 
@@ -1691,11 +1693,41 @@ mod tests {
         .await
         .unwrap();
 
-        let hashes = idx.list_indexed_content_hashes().await.unwrap();
-        assert_eq!(hashes.len(), 3);
-        assert!(hashes.contains("h-x"));
-        assert!(hashes.contains("h-y"));
-        assert!(hashes.contains("h-z"));
+        let keys = idx.list_indexed_chunk_keys().await.unwrap();
+        assert_eq!(keys.len(), 3);
+        for h in ["h-x", "h-y", "h-z"] {
+            assert!(keys.contains(&ChunkKey::new(None, h)), "{h}");
+        }
+    }
+
+    fn chunk_in(doc: &str, content: &str, hash: &str) -> (InsertChunk, Vec<f32>) {
+        let (mut c, e) = chunk_with_hash(content, hash);
+        c.source_doc_id = Some(doc.into());
+        (c, e)
+    }
+
+    /// Failing input, named: two timeline events in two threads that both
+    /// read "closed". A text-only key deleted the second document's only
+    /// row; the (document, text) key keeps both, and still collapses the
+    /// same text written twice for one document (the rewound resume).
+    #[tokio::test]
+    async fn dedupe_keeps_the_same_text_in_two_documents() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&[
+            chunk_in("issues/1#event-1", "closed", "h-closed"),
+            chunk_in("issues/2#event-2", "closed", "h-closed"),
+            chunk_in("issues/2#event-2", "closed", "h-closed"), // rewound resume
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(idx.list_indexed_chunk_keys().await.unwrap().len(), 2);
+        assert_eq!(idx.count_distinct_chunk_keys().await.unwrap(), (2, 3, 3));
+        let report = idx.dedupe_chunk_rows().await.unwrap();
+        assert_eq!(report.duplicates_deleted, 1);
+        assert_eq!(report.unique_keys_kept, 2);
+        assert_eq!(idx.chunk_count().await.unwrap(), 2);
     }
 
     /// A corpus whose three sub-indexes are all built is searchable even when

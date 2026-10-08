@@ -443,6 +443,10 @@ pub struct SectionExtraction {
     /// structurally impossible since primary ≥ 1/6).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub type_extensions: Vec<TypeExtension>,
+    /// Accountable per-document reading, retained beside compatibility
+    /// sketches so identity-policy rebuilds need no model read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_read: Option<super::document_read::DocumentRead>,
 }
 
 impl SectionExtraction {
@@ -459,6 +463,7 @@ impl SectionExtraction {
             && self.questions_raised.is_empty()
             && self.type_extension.is_none()
             && self.type_extensions.is_empty()
+            && self.document_read.is_none()
     }
 
     /// Total atom count across all typed fields, including any
@@ -879,6 +884,7 @@ mod tests {
     #[test]
     fn section_extraction_roundtrips_full_payload() {
         let extraction = SectionExtraction {
+            document_read: None,
             section_id: "ch_0013".into(),
             enrichment_depth: EnrichmentDepth::Extracted,
             entities_introduced: vec![EntitySketch {

@@ -25,6 +25,10 @@ use super::config::EnrichConfig;
 use super::paths;
 use super::source_loader::load_plaintext;
 
+#[cfg(test)]
+#[path = "corpus_io_tests.rs"]
+mod hydrated_document_tests;
+
 /// Sentinel scheme used by `enrich init --from-corpus <id>` to record
 /// "this enrichment is driven by an already-indexed corpus, not a
 /// source file". `<id>` is the source corpus_id; `rebuild_corpus_state`
@@ -84,6 +88,7 @@ pub fn rebuild_corpus_state(cfg: &EnrichConfig) -> Result<(Vec<ChapterInput>, Ch
             title: sec.title.clone(),
             text,
             metadata: sec.metadata.clone(),
+            source_documents: Vec::new(),
             approx_tokens,
         });
     }
@@ -278,36 +283,55 @@ fn rebuild_corpus_state_from_corpus(
     // source corpus (see `chunks_by_ids`); subset runs still materialise
     // every chapter — the selection filter runs downstream.
     let chunks = fetch_enrichment_chunks(source_corpus_id, &manifest_chunk_ids(&manifest))?;
-
-    // Build a chunk_id → content map for fast lookup.
-    let chunk_text: std::collections::HashMap<u64, String> =
-        chunks.into_iter().map(|c| (c.id, c.content)).collect();
-
-    let mut inputs = Vec::with_capacity(manifest.chapters.len());
-    for entry in &manifest.chapters {
-        let mut sorted_ids = entry.chunk_ids.clone();
-        sorted_ids.sort_unstable();
-        let body: String = sorted_ids
-            .iter()
-            .filter_map(|id| chunk_text.get(id).cloned())
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        let approx_tokens = body.len() / 4;
-        inputs.push(ChapterInput {
-            chapter_id: entry.id.clone(),
-            title: entry.title.clone(),
-            text: body,
-            metadata: entry
-                .metadata
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            approx_tokens,
-        });
-    }
+    let inputs = hydrate_corpus_chapters_from_rows(&manifest, &chunks);
 
     // The manifest is already authoritative on this path; return as-is.
     Ok((inputs, manifest))
+}
+
+/// Hydrate chapter text and accountable source documents from the same index
+/// rows. `SectionDocuments` is the single document assembler used by RESOLVE.
+fn hydrate_corpus_chapters_from_rows(
+    manifest: &ChapterManifest,
+    chunks: &[corpus_index::index::EnrichmentChunkRow],
+) -> Vec<ChapterInput> {
+    let documents = SectionDocuments::from_chunk_rows(
+        manifest
+            .chapters
+            .iter()
+            .map(|chapter| (chapter.id.as_str(), chapter.chunk_ids.as_slice())),
+        chunks,
+    );
+    let chunk_text: std::collections::HashMap<u64, String> = chunks
+        .iter()
+        .map(|row| (row.id, row.content.clone()))
+        .collect();
+    manifest
+        .chapters
+        .iter()
+        .map(|entry| {
+            let mut sorted_ids = entry.chunk_ids.clone();
+            sorted_ids.sort_unstable();
+            let body = sorted_ids
+                .iter()
+                .filter_map(|id| chunk_text.get(id).cloned())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let approx_tokens = body.len() / 4;
+            ChapterInput {
+                chapter_id: entry.id.clone(),
+                title: entry.title.clone(),
+                text: body,
+                metadata: entry
+                    .metadata
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+                source_documents: documents.documents_for_section(&entry.id).to_vec(),
+                approx_tokens,
+            }
+        })
+        .collect()
 }
 
 /// Build a full `CorpusContext` (chapters + paragraph chunks + titles)
@@ -401,12 +425,20 @@ pub fn build_corpus(cfg: &EnrichConfig) -> Result<(CorpusContext, ChapterManifes
 /// `sec_NNNNN` ids that continue past the live manifest without
 /// colliding — the `chapter` field + `ordinal` metadata follow the
 /// same numbering.
+///
+/// `max_chapter_words` splits a section longer than that into consecutive
+/// parts at document boundaries (a document longer than the cap is a part
+/// of its own). Phase 1 reads a chapter in one call, so a section of
+/// hundreds of documents (one support thread's comments and events) cannot
+/// get claims for most of them within one output budget. `None` keeps
+/// every section whole.
 pub fn build_manifest_from_corpus_rows(
     corpus_id: &str,
     rows: Vec<corpus_index::index::EnrichmentChunkRow>,
     limit_articles: Option<usize>,
     include_articles: Option<Vec<String>>,
     start_ordinal: u32,
+    max_chapter_words: Option<usize>,
 ) -> std::result::Result<ChapterManifest, String> {
     use corpus_engine::WikipediaChunkMetadata;
     use std::collections::BTreeMap;
@@ -425,8 +457,8 @@ pub fn build_manifest_from_corpus_rows(
         pov_count: i64,
         citation_needed_count: i64,
         url: Option<String>,
-        chunk_ids: Vec<u64>,
-        chunks: Vec<(u64, String)>, // (id, content) — sorted by id at finalisation
+        // (id, content, source_doc_id) — sorted by id at finalisation
+        chunks: Vec<(u64, String, Option<String>)>,
     }
 
     let mut buckets: BTreeMap<(ArticleKey, SectionKey), Bucket> = BTreeMap::new();
@@ -492,11 +524,9 @@ pub fn build_manifest_from_corpus_rows(
                 pov_count,
                 citation_needed_count,
                 url: row.url.clone(),
-                chunk_ids: Vec::new(),
                 chunks: Vec::new(),
             });
-        bucket.chunk_ids.push(row.id);
-        bucket.chunks.push((row.id, row.content));
+        bucket.chunks.push((row.id, row.content, row.source_doc_id));
     }
 
     // Apply the per-article cap and/or include-list. `include_articles`
@@ -558,63 +588,146 @@ pub fn build_manifest_from_corpus_rows(
         if !kept_articles.contains(&article_key) {
             continue;
         }
-        bucket.chunks.sort_by_key(|(id, _)| *id);
-        bucket.chunk_ids.sort_unstable();
-        let body: String = bucket
-            .chunks
-            .iter()
-            .map(|(_, c)| c.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        let word_count = body.split_whitespace().count() as u64;
-        let first_line = body
-            .lines()
-            .find(|l| !l.trim().is_empty())
-            .unwrap_or("")
-            .chars()
-            .take(160)
-            .collect::<String>();
-        let title = if bucket.section_name.is_empty() {
+        bucket.chunks.sort_by_key(|(id, _, _)| *id);
+        let parts = split_at_documents(&bucket.chunks, max_chapter_words);
+        let base_title = if bucket.section_name.is_empty() {
             bucket.article_title.clone()
         } else {
             format!("{} — {}", bucket.article_title, bucket.section_name)
         };
-        chapter_ord += 1;
-        let id = format!("sec_{chapter_ord:05}");
-        let mut metadata: BTreeMap<String, String> = BTreeMap::new();
-        metadata.insert("article_title".into(), bucket.article_title);
-        metadata.insert("section_path".into(), bucket.section_path_joined);
-        if let Some(st) = bucket.section_type {
-            metadata.insert("section_type".into(), st);
-        }
-        if bucket.pov_count > 0 {
-            metadata.insert("pov_count".into(), bucket.pov_count.to_string());
-        }
-        if bucket.citation_needed_count > 0 {
-            metadata.insert(
-                "citation_needed_count".into(),
-                bucket.citation_needed_count.to_string(),
+        if parts.len() > 1 {
+            tracing::info!(
+                section = %base_title,
+                parts = parts.len(),
+                max_chapter_words = ?max_chapter_words,
+                "manifest: section split at document boundaries"
             );
         }
-        if let Some(u) = bucket.url {
-            metadata.insert("url".into(), u);
-        }
-        metadata.insert("ordinal".into(), chapter_ord.to_string());
+        for (k, part) in parts.iter().enumerate() {
+            let body: String = part
+                .iter()
+                .map(|(_, c, _)| c.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let word_count = body.split_whitespace().count() as u64;
+            let first_line = body
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .chars()
+                .take(160)
+                .collect::<String>();
+            let title = if parts.len() > 1 {
+                format!("{base_title} (part {} of {})", k + 1, parts.len())
+            } else {
+                base_title.clone()
+            };
+            chapter_ord += 1;
+            let id = format!("sec_{chapter_ord:05}");
+            let mut metadata: BTreeMap<String, String> = BTreeMap::new();
+            metadata.insert("article_title".into(), bucket.article_title.clone());
+            metadata.insert("section_path".into(), bucket.section_path_joined.clone());
+            if let Some(st) = &bucket.section_type {
+                metadata.insert("section_type".into(), st.clone());
+            }
+            if bucket.pov_count > 0 {
+                metadata.insert("pov_count".into(), bucket.pov_count.to_string());
+            }
+            if bucket.citation_needed_count > 0 {
+                metadata.insert(
+                    "citation_needed_count".into(),
+                    bucket.citation_needed_count.to_string(),
+                );
+            }
+            if let Some(u) = &bucket.url {
+                metadata.insert("url".into(), u.clone());
+            }
+            metadata.insert("ordinal".into(), chapter_ord.to_string());
 
-        manifest
-            .chapters
-            .push(corpus_engine::enrichment::pipeline::ChapterEntry {
-                id,
-                title,
-                part: None,
-                chapter: Some(chapter_ord),
-                first_line,
-                word_count,
-                chunk_ids: bucket.chunk_ids,
-                characters_present: Vec::new(),
-                metadata,
-            });
+            manifest
+                .chapters
+                .push(corpus_engine::enrichment::pipeline::ChapterEntry {
+                    id,
+                    title,
+                    part: None,
+                    chapter: Some(chapter_ord),
+                    first_line,
+                    word_count,
+                    chunk_ids: part.iter().map(|(id, _, _)| *id).collect(),
+                    characters_present: Vec::new(),
+                    metadata,
+                });
+        }
     }
 
     Ok(manifest)
+}
+
+/// Consecutive runs of `chunks` (sorted by id), each at most `max_words`
+/// words, cut only where the document changes: one document's chunks stay
+/// in one run, even when it alone is longer than the cap. `None` is one run.
+fn split_at_documents(
+    chunks: &[(u64, String, Option<String>)],
+    max_words: Option<usize>,
+) -> Vec<&[(u64, String, Option<String>)]> {
+    let Some(max) = max_words else {
+        return vec![chunks];
+    };
+    let mut parts = Vec::new();
+    let (mut start, mut words) = (0, 0);
+    let mut i = 0;
+    while i < chunks.len() {
+        let doc = &chunks[i].2;
+        let end = i + chunks[i..].iter().take_while(|c| &c.2 == doc).count();
+        let doc_words: usize = chunks[i..end]
+            .iter()
+            .map(|c| c.1.split_whitespace().count())
+            .sum();
+        if words > 0 && words + doc_words > max {
+            parts.push(&chunks[start..i]);
+            (start, words) = (i, 0);
+        }
+        words += doc_words;
+        i = end;
+    }
+    if start < chunks.len() {
+        parts.push(&chunks[start..]);
+    }
+    parts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_at_documents;
+
+    fn chunk(id: u64, words: usize, doc: &str) -> (u64, String, Option<String>) {
+        (id, vec!["w"; words].join(" "), Some(doc.to_string()))
+    }
+
+    /// Failing input, named: a cut inside document `b` (whose two chunks
+    /// hold 6 words) would put its halves in two chapters, and a claim
+    /// citing it could land in neither.
+    #[test]
+    fn a_section_splits_only_between_documents() {
+        let chunks = vec![
+            chunk(1, 3, "a"),
+            chunk(2, 3, "b"),
+            chunk(3, 3, "b"),
+            chunk(4, 2, "c"),
+            chunk(5, 12, "d"),
+            chunk(6, 1, "e"),
+        ];
+        let ids = |cap| -> Vec<Vec<u64>> {
+            split_at_documents(&chunks, cap)
+                .iter()
+                .map(|p| p.iter().map(|c| c.0).collect())
+                .collect()
+        };
+        assert_eq!(ids(None), vec![vec![1, 2, 3, 4, 5, 6]]);
+        assert_eq!(
+            ids(Some(8)),
+            vec![vec![1], vec![2, 3, 4], vec![5], vec![6]],
+            "b stays whole; d alone exceeds the cap and is a part of its own"
+        );
+    }
 }

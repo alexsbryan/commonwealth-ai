@@ -183,6 +183,12 @@ struct Jsonl {
 
 impl Jsonl {
     fn create(path: std::path::PathBuf) -> Result<Self, String> {
+        if let Some(parent) = path.parent() {
+            // A fresh corpus has no `atlas/` directory until the first store
+            // write; a decision line must not fail for want of a parent.
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("creating {}: {e}", parent.display()))?;
+        }
         let file = std::fs::File::create(&path)
             .map_err(|e| format!("creating {}: {e}", path.display()))?;
         Ok(Self {
@@ -225,6 +231,10 @@ impl Jsonl {
         Ok(self.path)
     }
 }
+
+#[cfg(test)]
+#[path = "atlas_resolve_documents_tests.rs"]
+mod tests;
 
 /// Atoms projected from document fields (`source = { metadata = … }`), and
 /// the model atoms merged into them on the identity key. Zero for a corpus

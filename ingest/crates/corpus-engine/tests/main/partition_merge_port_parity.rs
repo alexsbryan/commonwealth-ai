@@ -43,7 +43,8 @@ fn unused_embed_fn() -> EmbedFn {
 
 /// One partition holding `rows` (content, content_hash), as grants' fixture
 /// builds it.
-async fn build_partition(path: &Path, rows: &[(&str, &str)]) {
+/// Rows are `(document, content, content_hash)`.
+async fn build_partition(path: &Path, rows: &[(&str, &str, &str)]) {
     let index = CorpusIndex::create(
         path,
         CORPUS,
@@ -57,7 +58,7 @@ async fn build_partition(path: &Path, rows: &[(&str, &str)]) {
     .expect("create index");
     let batch: Vec<_> = rows
         .iter()
-        .map(|(content, hash)| {
+        .map(|(doc, content, hash)| {
             (
                 InsertChunk {
                     content: (*content).into(),
@@ -65,7 +66,7 @@ async fn build_partition(path: &Path, rows: &[(&str, &str)]) {
                     url: None,
                     metadata: None,
                     content_hash: Some((*hash).into()),
-                    source_doc_id: None,
+                    source_doc_id: Some((*doc).into()),
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
@@ -122,8 +123,8 @@ async fn fixture() -> Fixture {
 async fn two_donors(f: &Fixture) -> Vec<PathBuf> {
     let local = f.partition("local");
     let peer = f.partition("peer");
-    build_partition(&local, &[("alpha", "h-alpha")]).await;
-    build_partition(&peer, &[("bravo", "h-bravo")]).await;
+    build_partition(&local, &[("doc-a", "alpha", "h-alpha")]).await;
+    build_partition(&peer, &[("doc-b", "bravo", "h-bravo")]).await;
     vec![local, peer]
 }
 
@@ -262,19 +263,23 @@ async fn a_second_merge_over_the_canonical_leaves_its_rows() {
     }
 }
 
-/// **The dedupe itself.** Two donors both contribute `bravo` under one
-/// `content_hash`; the canonical holds it once. Four input rows across three
-/// shards, three out.
+/// **The dedupe itself.** Two donors both contribute document `doc-b`'s
+/// `bravo` under one `content_hash`; the canonical holds it once. Four input
+/// rows across three shards, three out.
 ///
-/// Failing input, named: delete the `seen_hashes.contains(h)` early-return
-/// from `merge_shards` (`ingest/crates/corpus-engine/src/sharding.rs`) and the canonical
-/// comes back with 4 chunks, `bravo` twice.
+/// Failing input, named: make the `seen_keys.insert(key)` check in
+/// `merge_shards` (`ingest/crates/corpus-engine/src/sharding.rs`) always keep the row and
+/// the canonical comes back with 4 chunks, `bravo` twice.
 #[tokio::test]
 async fn the_merge_dedupes_a_row_two_donors_both_contributed() {
     let f = fixture().await;
     let mut donors = two_donors(&f).await;
     let second_peer = f.partition("peer-2");
-    build_partition(&second_peer, &[("bravo", "h-bravo"), ("delta", "h-delta")]).await;
+    build_partition(
+        &second_peer,
+        &[("doc-b", "bravo", "h-bravo"), ("doc-d", "delta", "h-delta")],
+    )
+    .await;
     donors.push(second_peer);
 
     let info = f
@@ -294,4 +299,26 @@ async fn the_merge_dedupes_a_row_two_donors_both_contributed() {
         vec![true, true, true],
         "dedupe drops the REPEAT, never a distinct row",
     );
+}
+
+/// The same text in two documents is two rows. Two threads' timelines each
+/// hold an event reading `closed`: one `content_hash`, two documents.
+///
+/// Failing input, named: key `merge_shards`' dedupe on `content_hash` alone
+/// (`corpus_index::ChunkKey` without its document) and the canonical comes
+/// back with 1 chunk, the second thread's event gone.
+#[tokio::test]
+async fn the_merge_keeps_one_text_in_two_documents() {
+    let f = fixture().await;
+    let (local, peer) = (f.partition("local"), f.partition("peer"));
+    build_partition(&local, &[("issues/1#event-1", "closed", "h-closed")]).await;
+    build_partition(&peer, &[("issues/2#event-2", "closed", "h-closed")]).await;
+
+    let info = f
+        .port()
+        .merge_partitions(&[local, peer], &f.canonical())
+        .await
+        .expect("the merge");
+
+    assert_eq!(info.chunk_count, 2, "one text, two documents, two rows");
 }

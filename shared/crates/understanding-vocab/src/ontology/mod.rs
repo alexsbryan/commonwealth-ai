@@ -57,6 +57,10 @@ pub struct Vocabulary {
     pub evidence_term: String,
 }
 
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 /// Everything the pipeline reads from a declared ontology. Every field has a
 /// default; the default of the whole is "no ontology" (`is_empty`), and a
 /// prose-only version-0 block differs from it in `prose` alone.
@@ -66,6 +70,10 @@ pub struct OntologyPolicies {
     /// roles, endpoints, sources and labels.
     #[serde(default)]
     pub shape: ShapePolicy,
+    /// Select the accountable declared-types-only Phase-1 document reader.
+    /// Default false preserves the existing reader.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub document_reading: bool,
     /// What a source says: who speaks, and what the corpus must never do.
     /// Per-claim-type facets (force, deontic, subject, grades, anchors, scope)
     /// live on the [`OntologyTypeDecl`] of kind `claim` — see

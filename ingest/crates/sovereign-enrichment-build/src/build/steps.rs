@@ -264,27 +264,30 @@ pub(super) async fn run_step(
                 // Treating that as "resolve done" leaves the corpus with
                 // a 0-atom atlas even though Phase 1 extraction was rich
                 // (the in-app custom-atlas enrich bug).
-                let stale_reason: Option<&str> = if matches!(step, Step::Extract)
+                let stale_reason: Option<String> = if matches!(step, Step::Extract)
                     && !extract_cache_has_atlas_payloads(&cache_path)
                 {
-                    Some("from a non-atlas run (no section_extraction payloads)")
+                    Some("from a non-atlas run (no section_extraction payloads)".into())
+                } else if matches!(step, Step::Extract) {
+                    super::read_cache::extract_cache_matches_document_reads(&cache_path, corpus)
+                        .err()
                 } else if matches!(step, Step::Resolve)
                     && resolve_cache_is_structural_placeholder(
                         &paths::index_root(corpus).join(ATLAS_DIRNAME),
                     )
                 {
-                    Some("an empty post-install structural placeholder (no resolved atoms)")
+                    Some("an empty post-install structural placeholder (no resolved atoms)".into())
                 } else if matches!(step, Step::Resolve)
                     && resolve_map_is_stale(&paths::index_root(corpus).join(ATLAS_DIRNAME), corpus)
                 {
-                    Some("resolved under another declaration than the recipe now holds")
+                    Some("resolved under another declaration than the recipe now holds".into())
                 } else if matches!(step, Step::Backfill)
                     && !ann_table_is_fresh(&paths::index_root(corpus).join(ATLAS_DIRNAME))
                 {
                     // - Backfill: the table is keyed on atom-id, so one that
                     // predates the atoms.json this run (or a later resolve)
                     // wrote seeds grounding from atoms that no longer exist.
-                    Some("older than atlas/atoms.json (the atlas was re-resolved since it was embedded)")
+                    Some("older than atlas/atoms.json (the atlas was re-resolved since it was embedded)".into())
                 } else {
                     None
                 };

@@ -1,14 +1,14 @@
 # Ontology declaration v1 — ten users, five axes
 
-Status: **design proposal, fourth iteration — version 1 of a versioned
-surface** (2026-09-01). Follows
+Status: **design record and implementation ledger, fourth iteration — version 1
+of a versioned surface** (2026-09-01). Follows
 [`CUSTOM_ONTOLOGIES_AS_BUILT.md`](CUSTOM_ONTOLOGIES_AS_BUILT.md), which
 established what the custom path does today and why "declare types,
 generate the schema" is the move (its M1 and M2). Iteration one derived
 a flat list of primitives from ten users. Iteration two answered a
 review that named the positions the draft took. This iteration makes
 each primitive earn its keep, and finds that they are not fifteen peers
-but facets of five axes. Nothing here is built.
+but facets of five axes. Built facets are marked where they are described.
 
 ## 0. Positions this design takes
 
@@ -809,5 +809,32 @@ in `atlas/derived_decisions.jsonl`. Ward declares the other side of a message as
 cc) / employer [!ours]` (`first`) and a deal's party as `^subject / party` (`most`): crm-ward holdout
 crm-deals 0/69 with RESOLVE alone, 16/69 with the party derived (baseline 5/69). Deferred, admitted by the
 shape: closure, time windows, value maps, relation-endpoint steps, computing functions (count, min, max),
-the `protocol` fold, attributes that must come from one winning source together.
+attributes that must come from one winning source together.
 
+**Qualified scalar protocol fold (built 2026-10-07).** `by = "protocol"` is the
+single optional state-projection strategy. The target is a RESOLVE-decided,
+source-free entity with a closed text enum; each rule maps a declared claim
+kind and exact, source-supported `when` fields to one of its values. Its input
+path must end at claims assigned to that record (`^subject`), and a field value
+without its `DocumentRead` evidence pointer is unavailable, including on a
+legacy cache. The transition identity is source-supported and content-stable;
+exact duplicate reports are marked on the audit line while all cited members
+stay in history. A correction uses a declared `corrects` field that names an
+existing transition identity. A later report with a new identity (such as a
+reopen) may change the current projection without retracting older evidence.
+
+`change.document.date` supplies the report-time clock: `as_of_report_time` says
+what the record reported as of that document time. A configured claim
+`effective_time` is carried separately and is not substituted for the report
+clock. Missing timestamps, mixed day/instant precision, floating timestamps,
+and unsupported intervals refuse to select an order; same-time incompatible
+states conflict. The existing `derived_decisions.jsonl` records rule
+fingerprint, claim basis, subject assignments, source document identities,
+field evidence, alternatives and retained history. Existing ref-valued folds,
+including `latest`, keep their prior semantics. Ward declares a deal's current
+stage this way (`deal_stage`: one rule per stage, `when = { stage = X }`, a
+transition identified by the stage it enters), and crm-stage credits that
+served value only when every deciding document is one gold places the deal at
+that stage (`ward-score-v3`). On the legacy reader every deal record is
+pending, since no claim carries field evidence (162 of 162, crm-ward cached reads);
+on the document reader's ward-v3 reads, 6 of 21 decide.

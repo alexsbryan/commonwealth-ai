@@ -1009,3 +1009,6 @@ async fn a_reasoned_choice_is_read_after_the_models_own_reasoning() {
         .as_deref()
         .is_some_and(|t| t.contains("the rule holds")));
 }
+
+#[path = "necessary_tests.rs"]
+mod necessary_tests;

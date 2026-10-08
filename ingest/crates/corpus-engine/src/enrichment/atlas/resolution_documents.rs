@@ -28,16 +28,22 @@ use crate::enrichment::ontology::{metadata_date, DocumentFieldsDecl, DocumentSta
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 
 /// One source document as a section holds it.
-#[derive(Debug, Clone)]
-pub(super) struct SourceDocument {
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SourceDocument {
     /// The index's identity of the document (`source_doc_id`).
     pub(super) key: String,
+    /// The source index's document id, absent when the row had no id.
+    source_doc_id: Option<String>,
     /// The index's title for it, from its first chunk that has one.
     pub(super) title: Option<String>,
+    /// The index's URL, from its first chunk that has one.
+    url: Option<String>,
     /// The extractor's metadata object, parsed once.
     pub(super) fields: Map<String, Value>,
     /// Each chunk's text, whitespace-folded for the anchor match.
     texts: Vec<String>,
+    /// Original chunk bodies, retained for accountable reading.
+    raw_texts: Vec<String>,
 }
 
 impl SourceDocument {
@@ -46,6 +52,31 @@ impl SourceDocument {
     /// that overlap repeat their overlap.
     pub(super) fn body(&self) -> String {
         self.texts.join(" ")
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    pub fn source_doc_id(&self) -> Option<&str> {
+        self.source_doc_id.as_deref()
+    }
+
+    pub fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
+
+    pub fn url(&self) -> Option<&str> {
+        self.url.as_deref()
+    }
+
+    pub fn metadata(&self) -> &Map<String, Value> {
+        &self.fields
+    }
+
+    /// Unnormalised source chunks in their manifest order.
+    pub fn raw_body(&self) -> String {
+        self.raw_texts.join("\n\n")
     }
 }
 
@@ -100,18 +131,30 @@ impl SectionDocuments {
                     .as_deref()
                     .map(str::trim)
                     .filter(|t| !t.is_empty());
+                let url = row.url.as_deref().map(str::trim).filter(|u| !u.is_empty());
+                let metadata = metadata_object(row, section_id);
                 match docs.iter_mut().find(|d| d.key == key) {
                     Some(d) => {
                         d.texts.push(text);
+                        d.raw_texts.push(row.content.clone());
+                        for (name, value) in metadata {
+                            d.fields.entry(name).or_insert(value);
+                        }
                         if d.title.is_none() {
                             d.title = title.map(str::to_string);
                         }
+                        if d.url.is_none() {
+                            d.url = url.map(str::to_string);
+                        }
                     }
                     None => docs.push(SourceDocument {
-                        fields: metadata_object(row, section_id),
+                        fields: metadata,
                         key,
+                        source_doc_id: row.source_doc_id.clone(),
                         title: title.map(str::to_string),
+                        url: url.map(str::to_string),
                         texts: vec![text],
+                        raw_texts: vec![row.content.clone()],
                     }),
                 }
             }
@@ -123,6 +166,25 @@ impl SectionDocuments {
     /// How many documents, across every section.
     pub fn document_count(&self) -> usize {
         self.by_section.values().map(Vec::len).sum()
+    }
+
+    /// The source documents whose chunks make up one persisted chapter.
+    pub fn documents_for_section(&self, section_id: &str) -> &[SourceDocument] {
+        self.by_section
+            .get(section_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    /// Resolve an accountable read's document identity within its evidence section.
+    pub fn document_for_section(
+        &self,
+        section_id: &str,
+        document_id: &str,
+    ) -> Option<&SourceDocument> {
+        self.documents_for_section(section_id)
+            .iter()
+            .find(|document| document.key == document_id)
     }
 
     /// Every document by its key, as the first section holding it has it.
@@ -241,7 +303,7 @@ pub fn stamp_claim_documents(
     };
     for claim in claims.iter_mut() {
         let subject = format!("atom:{}", claim.id.as_str());
-        let doc = match locate(claim, documents) {
+        let doc = match locate_for_stamp(claim, documents) {
             Ok(doc) => doc,
             Err(reason) => {
                 debug!(
@@ -312,6 +374,32 @@ pub(super) fn failure(subject: String, kind: PhaseFailureKind, reason: String) -
         reason,
         raw_response_head: None,
     }
+}
+
+/// The document a claim's own document-read identity names, when it has one;
+/// otherwise the fuzzy evidence anchor. An accountable read knows which
+/// document it read, and stamping must not guess among a section's several.
+fn locate_for_stamp<'d>(
+    claim: &Claim,
+    documents: &'d SectionDocuments,
+) -> Result<&'d SourceDocument, String> {
+    let document_id = claim
+        .attributes
+        .get(crate::enrichment::pipeline::document_read::SOURCE_DOCUMENT_ATTRIBUTE)
+        .and_then(Value::as_str);
+    let Some(document_id) = document_id else {
+        return locate(claim, documents);
+    };
+    let section = claim
+        .evidence
+        .first()
+        .map(|evidence| evidence.chunk_id.as_str())
+        .ok_or_else(|| "accountable claim carries no section evidence".to_string())?;
+    documents
+        .document_for_section(section, document_id)
+        .ok_or_else(|| {
+            format!("accountable document `{document_id}` is not present in evidence section `{section}`")
+        })
 }
 
 /// The one document `claim`'s evidence lands in, or why there is not one.

@@ -97,7 +97,7 @@ pub use resolution::{
     TrajectoryTransition,
 };
 pub use resolution_documents::{
-    read_stamp, stamp_claim_documents, DocumentStampReport, SectionDocuments,
+    read_stamp, stamp_claim_documents, DocumentStampReport, SectionDocuments, SourceDocument,
 };
 pub use resolution_ontology::ResolutionPolicy;
 pub use resolution_sources::{

@@ -24,6 +24,10 @@ use super::{
     OntologyPolicies, ProsePolicy, ShapePolicy,
 };
 
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 fn default_true() -> bool {
     true
 }
@@ -239,6 +243,14 @@ pub struct OntologyV1 {
     /// specializing one atom kind.
     #[serde(default)]
     pub types: Vec<OntologyTypeDecl>,
+    /// Opt in at `[enrichment.ontology]` with `document_reading = true` to read
+    /// claims whose subjects are either source-free records with an
+    /// `identity_criterion` or metadata-sourced entities with declared identity
+    /// fields, preserving each type's force. Validation refuses and names
+    /// unsupported declarations. Default false preserves the shared Phase-1
+    /// prompt and output bytes.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub document_reading: bool,
     /// How many entities one section may introduce in Phase 1. Absent takes
     /// the shipped schema's cap of 15 — raise it for a corpus whose sections
     /// enumerate (a data table, a list of recipients). Outside
@@ -314,6 +326,7 @@ impl OntologyV1 {
                 types: self.types,
                 max_entities_per_section: self.max_entities_per_section,
             },
+            document_reading: self.document_reading,
             assertion: AssertionPolicy {
                 voices: self.voices,
                 must_not: self.must_not,
@@ -474,6 +487,37 @@ pub struct OntologyTypeDecl {
     /// Default universal.
     #[serde(default)]
     pub scope: Option<ClaimScopeDecl>,
+}
+
+impl OntologyTypeDecl {
+    /// Whether this claim has the force and subject contract required by the
+    /// accountable document reader. Source-backed metadata entities are
+    /// references only and need declared identity fields; the reader never
+    /// re-extracts them.
+    pub fn is_document_reading_eligible(&self, declared_types: &[Self]) -> bool {
+        self.kind == TypeKind::Claim
+            && self.force.is_some()
+            && self.subject.as_deref().is_some_and(|subject_name| {
+                declared_types
+                    .iter()
+                    .find(|subject| subject.name == subject_name)
+                    .is_some_and(|subject| {
+                        let resolvable_subject = match &subject.source {
+                            None => subject.identity_criterion.is_some(),
+                            Some(SourceDecl::Metadata(_)) => {
+                                !subject.identity.is_empty()
+                                    && subject.identity.iter().all(|key| {
+                                        subject.attributes.iter().any(|attribute| {
+                                            attribute.name == *key && attribute.derived.is_none()
+                                        })
+                                    })
+                            }
+                            Some(SourceDecl::Table(_)) => false,
+                        };
+                        subject.kind == TypeKind::Entity && resolvable_subject
+                    })
+            })
+    }
 }
 
 /// The atom kind a declared type specializes. Closed set: a new kind is a

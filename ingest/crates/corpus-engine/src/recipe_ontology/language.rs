@@ -165,6 +165,7 @@ const V1_KEYS: &[&str] = &[
     "vocabulary",
     "must_not",
     "types",
+    "document_reading",
     "max_entities_per_section",
     "voices",
     "change",
@@ -188,6 +189,30 @@ impl OntologyLanguage for V1 {
 
     fn parse(&self, body: &toml::Table) -> Result<OntologyPolicies> {
         let v1: OntologyV1 = body.clone().try_into().map_err(translate_parse_error)?;
+        if v1.document_reading {
+            let claims: Vec<_> = v1
+                .types
+                .iter()
+                .filter(|claim| claim.kind == TypeKind::Claim)
+                .collect();
+            if claims.is_empty() {
+                return Err(Error::Recipe(
+                    "ontology `document_reading = true` requires at least one declared claim type"
+                        .into(),
+                ));
+            }
+            let unsupported: Vec<&str> = claims
+                .iter()
+                .filter(|claim| !claim.is_document_reading_eligible(&v1.types))
+                .map(|claim| claim.name.as_str())
+                .collect();
+            if !unsupported.is_empty() {
+                return Err(Error::Recipe(format!(
+                    "ontology `document_reading = true` cannot silently omit unsupported declared claim type(s): {}. Each needs a declared force and a `subject` naming either a source-free entity type with an `identity_criterion` or a metadata-sourced entity type with declared identity fields",
+                    unsupported.join(", ")
+                )));
+            }
+        }
         // The one structural rule this version enforces at parse time. Force
         // is what separates a rule from a finding, and supersession applies
         // to the wrong things without it — so a claim type without it is
@@ -224,6 +249,10 @@ impl OntologyLanguage for V1 {
         include_str!("docs/v1.md")
     }
 }
+
+#[cfg(test)]
+#[path = "language/tests.rs"]
+mod tests;
 
 /// The wire spellings of closed enum values, for error messages — read back
 /// through serde so the text can never disagree with what the parser accepts.

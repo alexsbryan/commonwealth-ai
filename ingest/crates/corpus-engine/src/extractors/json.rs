@@ -285,18 +285,19 @@ impl Iterator for JsonlIterator {
                 .to_string();
 
             // Pass-through metadata: strip out the fields we already
-            // copied onto the ExtractedDoc (content / title / url /
-            // id) and keep the rest as a metadata object so
-            // downstream ChunkFilter predicates (see
-            // ChunkFilter::metadata_in / metadata_compare) can reach
-            // them. Legacy callers that don't need metadata simply
-            // ignore the field.
+            // copied onto the ExtractedDoc (content / title / url) and
+            // keep the rest as a metadata object so downstream
+            // ChunkFilter predicates (see ChunkFilter::metadata_in /
+            // metadata_compare) can reach them. `id` stays: the index
+            // keys a document by its url when it has one, so the
+            // record's own id survives only here, where a recipe's
+            // `change.document.id` reads it.
             let metadata = match obj.as_object() {
                 Some(map) => {
                     let mut filtered = serde_json::Map::new();
                     for (k, v) in map {
                         match k.as_str() {
-                            "content" | "title" | "url" | "id" | "text" => continue,
+                            "content" | "title" | "url" | "text" => continue,
                             _ => {
                                 filtered.insert(k.clone(), v.clone());
                             }
@@ -491,6 +492,30 @@ mod tests {
         assert_eq!(docs[0].title.as_deref(), Some("Doc One"));
         assert_eq!(docs[0].content, "Content of doc one.");
         assert_eq!(docs[1].title.as_deref(), Some("Doc Two"));
+    }
+
+    /// Failing input, named: a record with both `url` and `id`. The index
+    /// keys the document by its url, so the id must ride in the metadata
+    /// or a recipe's `change.document.id = "id"` reads nothing.
+    #[test]
+    fn record_id_passes_through_as_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("data.jsonl");
+        let mut f = File::create(&file_path).unwrap();
+        writeln!(
+            f,
+            r#"{{"id":"ev-7","url":"https://x/issues/1","thread":1,"content":"closed"}}"#
+        )
+        .unwrap();
+        let docs: Vec<_> = JsonlExtractor::new()
+            .extract(&file_path)
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+        let meta = docs[0].metadata.as_ref().expect("metadata");
+        assert_eq!(meta["id"], "ev-7");
+        assert_eq!(meta["thread"], 1);
+        assert!(meta.get("url").is_none() && meta.get("content").is_none());
     }
 
     #[test]

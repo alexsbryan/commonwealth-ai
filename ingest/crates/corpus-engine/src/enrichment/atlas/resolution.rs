@@ -46,8 +46,8 @@ use crate::types::EmbedFn;
 use super::atoms::{AtomId, ChunkRef, Entity, Event, SectionPosition};
 use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 use super::resolution_identity::{
-    declared_subject_type, merge_permitted, resolve_relation_participants,
-    resolve_within_declared_type, sketch_may_merge_into, MergeEvidence, TypedSubjectPools,
+    bind_claim_subject, merge_permitted, resolve_relation_participants, sketch_may_merge_into,
+    MergeEvidence, TypedSubjectPools,
 };
 use super::resolution_ontology::{
     check_event_participants, check_relation_endpoints, derive_section_context_refs,
@@ -1648,45 +1648,29 @@ pub fn resolve_step_3b_with(
             // on `attribution`), so its subject resolves among atoms of that
             // type: "Series Y sceattas of Aldfrith" is a coin, not the king
             // whose name it carries.
-            let declared_subject = declared_subject_type(policy, sketch.claim_kind.as_deref());
-            // A subject RESOLVE decides is left to it (`resolution_records`).
-            let left = declared_subject
-                .is_some_and(|t| super::resolution_records::decides(policy.index(), t));
-            let subject = sketch.subject.as_ref().filter(|_| !left).and_then(|name| {
-                let resolved = resolve_within_declared_type(
-                    name,
-                    declared_subject,
-                    policy,
-                    entities,
-                    &name_index,
-                    &token_index,
-                    &mut typed_pools,
-                );
-                if resolved.is_none() {
-                    failures.push(PhaseFailure {
-                        phase: PipelinePhase::Questions,
-                        subject: format!("sketch:claim:{}#{}", section.section_id, sketch_index),
-                        kind: PhaseFailureKind::UnresolvedClaimSubject,
-                        reason: match declared_subject {
-                            Some(t) => format!(
-                                "claim subject `{}` did not resolve to a `{t}` — `{}` \
-                                 declares subject = `{t}` (claim content: `{}`)",
-                                name,
-                                sketch.claim_kind.as_deref().unwrap_or("?"),
-                                sketch.content.trim()
-                            ),
-                            None => format!(
-                                "claim subject `{}` did not resolve (claim content: `{}`)",
-                                name,
-                                sketch.content.trim()
-                            ),
-                        },
-                        raw_response_head: None,
-                    });
+            let binding = bind_claim_subject(
+                sketch,
+                &section.section_id,
+                sketch_index,
+                policy,
+                entities,
+                &name_index,
+                &token_index,
+                &mut typed_pools,
+                &mut failures,
+            );
+            let subject = binding.subject;
+            let source_document = binding.source_document;
+            let document_read = binding.document_read;
+            let claim_attributes = binding.attributes;
+            let mut evidence = sketch_anchor_evidence(&section.section_id, &sketch.anchor);
+            if document_read {
+                if let Some(source_document) = source_document {
+                    for reference in &mut evidence {
+                        reference.source_doc_id = Some(source_document.to_string());
+                    }
                 }
-                resolved
-            });
-            let evidence = sketch_anchor_evidence(&section.section_id, &sketch.anchor);
+            }
             // Carry the anchor onto the persisted atom. Empty-string
             // anchors collapse to `None` so the renderer can branch on
             // "claim has a code reference" vs "claim has nothing to
@@ -1705,7 +1689,7 @@ pub fn resolve_step_3b_with(
                 }
             };
             claims.push(super::atoms::Claim {
-                attributes: sketch.attributes.clone(),
+                attributes: claim_attributes,
                 subject: subject.clone(),
                 id: claim_id.clone(),
                 content: sketch.content.trim().to_string(),

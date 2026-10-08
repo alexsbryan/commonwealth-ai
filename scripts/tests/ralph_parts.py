@@ -121,6 +121,15 @@ def answering_client(tmp):
     return str(f)
 
 
+def recording_client(tmp, name, out):
+    """A stand-in client that records the argv it was handed, one line per
+    call, and answers the probe's word."""
+    f = pathlib.Path(tmp) / name
+    f.write_text(f'#!/bin/sh\necho "$@" >> "{out}"\necho OK\n')
+    f.chmod(0o755)
+    return f
+
+
 def install_script(tmp, name, source=None):
     dst = pathlib.Path(tmp) / "scripts" / name
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -925,14 +934,22 @@ class PathsForTests(unittest.TestCase):
                  pa.heartbeat, pa.director_commits, pa.log_dir),
                 (ctl, f"{ctl}/DONE", f"{ctl}/STOP", f"{ctl}/NEEDS_HUMAN.md", f"{ctl}/waiting",
                  f"{ctl}/parked", f"{ctl}/.heartbeat", f"{ctl}/.director-commits",
-                 "target/ralph/a"))
-            self.assertEqual((pb.stop, pb.log_dir), ("var/b/STOP", "target/ralph/b"))
+                 f"{ctl}/log"))
+            self.assertEqual((pb.stop, pb.log_dir), ("var/b/STOP", "var/b/log"))
             # The loop's log dir too: a session log written after the dispatch
             # snapshot would otherwise read as the session's untracked file.
-            self.assertEqual(ralph.runtime_markers(pa), (f"{ctl}/", "target/ralph/a/"))
+            self.assertEqual(ralph.runtime_markers(pa), (f"{ctl}/", f"{ctl}/log/"))
             legacy = ralph.runtime_markers(ralph.Paths(pathlib.Path(tmp)))
-            self.assertEqual(legacy[-1], "target/ralph/")
+            self.assertEqual(legacy[-1], "ralph/log/")
             self.assertIn("ralph/parked/", legacy)
+
+    def test_no_log_dir_is_under_target(self):
+        # Hosts purge target/ under disk pressure: zoracite's went overnight on
+        # 2026-10-08, and with it the log an awaiting unit was told to read.
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            for p in (queue_paths(tmp, "a"), ralph.Paths(pathlib.Path(tmp))):
+                self.assertFalse(p.log_dir.startswith("target"), p.log_dir)
 
     def test_plan_prints_the_named_queues_head(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1051,10 +1068,30 @@ class SessionEnvTests(unittest.TestCase):
             paths = queue_paths(tmp, "a")
             self.assertEqual(ralph.session_env(paths), {
                 "RALPH_QUEUE": "a", "RALPH_STATE": "ralph/next/a/STATE.md",
-                "RALPH_CONTROL_DIR": "ralph/next/a/ctl", "RALPH_WORKDIR": tmp,
-                "RALPH_CLAUDE_SETTINGS": f"{tmp}/ralph/next/a/settings.json"})
+                "RALPH_CONTROL_DIR": "ralph/next/a/ctl", "RALPH_LOG_DIR": "ralph/next/a/ctl/log",
+                "RALPH_WORKDIR": tmp, "RALPH_CLAUDE_SETTINGS": f"{tmp}/ralph/next/a/settings.json",
+                "OPENCODE_CONFIG": ""})
             with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": "/nonexistent/worker"}):
                 self.assertEqual(ralph.worker_bin(paths), f"{tmp}/stub-worker.sh")
+
+    def test_a_workdir_with_an_opencode_ralph_config_hands_the_session_it(self):
+        # FAILING INPUT: session_env carried no OPENCODE_CONFIG, so an opencode
+        # battery worker ran under whatever config a parent left in the
+        # environment, never its workdir's own — and a leaked parent value
+        # could not be cleared (opencode reads an empty one as unset).
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = str(pathlib.Path(tmp).resolve())
+            git_repo(tmp)
+            stub_worker(tmp, "exit 0\n")
+            write(tmp, "ralph/next/a/queue.toml", 'worker_bin = "./stub-worker.sh"\n')
+            write(tmp, ".opencode/ralph.json", "{}")
+            paths = queue_paths(tmp, "a")
+            with mock.patch.dict(os.environ, {"OPENCODE_CONFIG": "/leaked/opencode.json"}):
+                self.assertEqual(ralph.session_env(paths)["OPENCODE_CONFIG"],
+                                 f"{tmp}/.opencode/ralph.json")
+            (pathlib.Path(tmp) / ".opencode" / "ralph.json").unlink()
+            with mock.patch.dict(os.environ, {"OPENCODE_CONFIG": "/leaked/opencode.json"}):
+                self.assertEqual(ralph.session_env(paths)["OPENCODE_CONFIG"], "")
 
     def test_a_legacy_session_is_told_its_state_too(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1590,6 +1627,50 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(ralph.parse_roster("prov/solo"), ["prov/solo"])
 
 
+class ClientRoutingTests(unittest.TestCase):
+    """One seam routes a model id to its client: `provider/model` is opencode's
+    grammar (the battery); a bare id is the declaring worker_bin's (the claude
+    shim). probe_model and _start_session both call client_for, so the client a
+    model is probed through is the client that runs the row."""
+
+    def test_a_pair_id_runs_on_opencode_and_a_bare_id_on_the_declared_worker_bin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shim = recording_client(tmp, "shim-stub.sh", pathlib.Path(tmp) / "shim.out")
+            opencode = recording_client(tmp, "opencode-stub.sh", pathlib.Path(tmp) / "oc.out")
+            paths = ralph.Paths(pathlib.Path(tmp), manifest=mock.Mock(worker_bin=str(shim)))
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(opencode)}):
+                self.assertEqual(ralph.client_for("claude-opus-5-5", paths), str(shim))
+                self.assertEqual(ralph.client_for("zai-coding-plan/glm-5.3-flash", paths),
+                                 str(opencode))
+                # No model configured: the declaring client's own default.
+                self.assertEqual(ralph.client_for("", paths), str(shim))
+
+    def test_each_model_is_probed_on_the_client_that_will_run_it(self):
+        # FAILING INPUT: probe_model ran every roster name through
+        # worker_bin(paths), so a provider/model name was handed to the claude
+        # shim and the battery was never probed — zoracite's s5-3-missing
+        # blocked on a weekly-limited claude while three battery models were
+        # healthy (2026-10-07).
+        with tempfile.TemporaryDirectory() as tmp:
+            shim_out = pathlib.Path(tmp) / "shim.out"
+            oc_out = pathlib.Path(tmp) / "oc.out"
+            shim = recording_client(tmp, "shim-stub.sh", shim_out)
+            opencode = recording_client(tmp, "opencode-stub.sh", oc_out)
+            paths = ralph.Paths(pathlib.Path(tmp), manifest=mock.Mock(worker_bin=str(shim)))
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(opencode)}):
+                self.assertEqual(ralph.probe_model("claude-opus-5-5", paths), (True, ""))
+                self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
+                # The probe and the session agree: client_for is the one routing.
+                self.assertEqual(ralph.client_for("claude-opus-5-5", paths), str(shim))
+                self.assertEqual(ralph.client_for("prov/x", paths), str(opencode))
+            recorded = lambda p: p.read_text().splitlines() if p.exists() else []
+            shim_argv, oc_argv = recorded(shim_out), recorded(oc_out)
+            self.assertEqual(len(shim_argv), 1, shim_argv)
+            self.assertIn("--model claude-opus-5-5", shim_argv[0])
+            self.assertEqual(len(oc_argv), 1, oc_argv)
+            self.assertIn("--model prov/x", oc_argv[0])
+
+
 class ErrorTailTests(unittest.TestCase):
     """A strikeout halt carries the failing session's last error-shaped
     transcript line (quota / permission path / provider error / crash tail),
@@ -1604,6 +1685,14 @@ class ErrorTailTests(unittest.TestCase):
         self.assertEqual(ralph.error_tail("working...\nall good\n"), "")
         self.assertEqual(ralph.error_tail(None), "")
         self.assertEqual(len(ralph.error_tail("fatal: " + "x" * 400)), 200)
+
+    def test_a_weekly_limit_line_is_the_tail(self):
+        # FAILING INPUT: "weekly limit" was not an error shape, so a strikeout
+        # whose sessions died on the claude plan's weekly limit kept no cause
+        # (error_tail returned "" and the park package named nothing).
+        self.assertEqual(ralph.error_tail(
+            "working...\nYou've hit your weekly limit · resets 2am (America/Los_Angeles)\n"),
+            "You've hit your weekly limit · resets 2am (America/Los_Angeles)")
 
     def test_a_halt_carries_the_transcripts_last_error_line(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1848,40 +1937,44 @@ class LanesTests(LaneFixture, unittest.TestCase):
             write(root, "target/ralph/phase-b/ship/esc/seed/config.toml", "seed")
             for d in ("target/debug/ro", "target/ralph/phase-b/ship/esc/seed"):
                 os.chmod(root / d, 0o555)
-            lanes = self.lanes(root, log_dir="target/ralph/q")
+            lanes = self.lanes(root, log_dir="ralph/next/q/ctl/log")
             lanes.CLONE_TARGET = ("cp", "-a")
             wt, _, _, _ = self.prepare(lanes, "q-a", jobs=2)
-            write(wt, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+            write(wt, "ralph/next/q/ctl/log/lint.log", "exit=0 the lane's lint\n")
             self.assertTrue(said(lanes.keep_evidence, "q-a", wt)[0])
             said(lanes.remove_lane, "q-a", wt)
             self.assertFalse(wt.exists())
-            kept = root / "target/ralph/q/q-a"
+            kept = root / "ralph/next/q/ctl/log/q-a"
             self.assertEqual(sorted(p.relative_to(kept).as_posix() for p in kept.rglob("*")),
-                             ["lane.env", "q", "q/lint.log"])
+                             ["lane.env", "lint.log"])
 
     def test_a_lanes_evidence_outlives_its_worktree(self):
         # (12): `git worktree remove --force` takes the lane's target/ with it.
+        # Kept outside the main tree's target/ too, which a host may purge: the
+        # lane's own log dir, and the target/ralph/ a repo's own scripts write.
         with tempfile.TemporaryDirectory() as tmp:
             root = self.repo(tmp, "- [ ] q-a — depends []\n")
-            lanes = self.lanes(root, log_dir="target/ralph/q")
+            lanes = self.lanes(root, log_dir="ralph/next/q/ctl/log")
             wt, _, _, _ = self.prepare(lanes, "q-a")
-            write(wt, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+            write(wt, "ralph/next/q/ctl/log/lint.log", "exit=0 the lane's lint\n")
+            write(wt, "target/ralph/reading.log", "the repo's own reading\n")
             self.assertTrue(said(lanes.keep_evidence, "q-a", wt)[0])
             _, out = said(lanes.remove_lane, "q-a", wt)
             self.assertFalse(wt.exists())
             self.assertEqual(out, "")                      # git removed it whole
-            self.assertEqual((root / "target/ralph/q/q-a/q/lint.log").read_text(),
-                             "exit=0 the lane's lint\n")
+            kept = root / "ralph/next/q/ctl/log/q-a"
+            self.assertEqual(((kept / "lint.log").read_text(), (kept / "reading.log").read_text()),
+                             ("exit=0 the lane's lint\n", "the repo's own reading\n"))
 
     def test_evidence_that_cannot_be_copied_says_so_and_a_lane_with_none_is_kept_trivially(self):
         # False tells the caller to keep the worktree rather than lose what a commit cites.
         with tempfile.TemporaryDirectory() as tmp:
             root = self.repo(tmp, "- [ ] q-a — depends []\n")
-            lanes = self.lanes(root, log_dir="target/ralph/q")
+            lanes = self.lanes(root, log_dir="ralph/next/q/ctl/log")
             wt, _, _, _ = self.prepare(lanes, "q-a")
             self.assertTrue(said(lanes.keep_evidence, "q-a", wt)[0])     # nothing to keep
-            write(wt, "target/ralph/q/lint.log", "exit=0\n")
-            write(root, "target/ralph/q/q-a", "a file where the evidence dir goes")
+            write(wt, "ralph/next/q/ctl/log/lint.log", "exit=0\n")
+            write(root, "ralph/next/q/ctl/log/q-a", "a file where the evidence dir goes")
             kept, out = said(lanes.keep_evidence, "q-a", wt)
             self.assertFalse(kept)
             self.assertIn("evidence copy to", out)
@@ -2117,8 +2210,19 @@ class RalphCheckTests(unittest.TestCase):
             self.assertIn("exit=0\nfrom-a extra arg\n", a.stdout)
             self.assertIn("exit=0\nfrom-b\n", b.stdout)
             root = pathlib.Path(tmp)
-            self.assertEqual((root / "target/ralph/a/hello.log").read_text(), "from-a extra arg\n")
-            self.assertEqual((root / "target/ralph/b/hello.log").read_text(), "from-b\n")
+            self.assertEqual((root / "ralph/next/a/ctl/log/hello.log").read_text(),
+                             "from-a extra arg\n")
+            self.assertEqual((root / "ralph/next/b/ctl/log/hello.log").read_text(), "from-b\n")
+            self.assertFalse((root / "target/ralph/a").exists())
+
+    def test_the_loops_log_dir_wins(self):
+        # A lane's RALPH_LOG_DIR is relative: the log lands in the tree the script runs in.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            with mock.patch.dict(os.environ, {"RALPH_LOG_DIR": "var/a/log"}):
+                r = self.check(tmp, "a", "hello")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual((pathlib.Path(tmp) / "var/a/log/hello.log").read_text(), "from-a\n")
 
     def test_a_declared_check_exits_with_its_own_code(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2187,6 +2291,21 @@ class ShimTests(unittest.TestCase):
         self.assertIn("--effort medium", r.stderr)
         self.assertIn("effort=medium", r.stderr)
         self.assertNotIn("dropping --variant", r.stderr)
+
+    def test_the_one_shot_note_is_the_prompts_not_the_shims(self):
+        # FAILING INPUT: the shim appended the note as --append-system-prompt;
+        # opencode has no such flag, so a battery session never saw it. The
+        # note is ralph.py's CONTRACT now, delivered in every session prompt.
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = pathlib.Path(tmp) / "claude"
+            stub.write_text('#!/bin/sh\necho "argv: $*" >&2\n')
+            stub.chmod(0o755)
+            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}",
+                   "RALPH_PERMISSION_BRIDGE": "0"}
+            r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
+                                "do the unit"], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("--append-system-prompt", r.stderr)
 
 
 if __name__ == "__main__":

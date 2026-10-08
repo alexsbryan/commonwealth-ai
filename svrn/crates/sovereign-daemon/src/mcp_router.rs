@@ -22,14 +22,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use axum::extract::{ConnectInfo, Extension};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{Json, Router};
+use host_kit::locality::RequestLocality;
 use host_kit::mcp::{
     McpCallLog, McpMountedTools, McpRequestContext, McpRequestHandler, ToolOutcome,
 };
 use serde_json::Value;
-use tower_http::cors::CorsLayer;
 
 use sovereign_contracts::notes::AgentNotes;
 use sovereign_core::registry::ToolRegistry;
@@ -148,21 +148,22 @@ pub fn mcp_router(
         // added here even if the author forgets the per-handler
         // `is_localhost` check. The per-handler check stays for
         // defense in depth.
+        //
+        // No CORS layer. A web page is not a local caller
+        // (`host_kit::locality`): the permissive layer that sat here let any
+        // page the owner had open call these tools and read the replies
+        // (observed 2026-10-08).
         .localhost_only()
         .layer(Extension(tools))
-        .layer(CorsLayer::permissive())
-}
-
-fn is_localhost(addr: &SocketAddr) -> bool {
-    addr.ip().is_loopback()
 }
 
 /// GET /mcp/stats — svrn's tool call counts since server start.
 async fn mcp_stats(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Extension(tools): Extension<Arc<ToolRegistry>>,
 ) -> impl IntoResponse {
-    if !is_localhost(&peer) {
+    if !RequestLocality::of(&peer, &headers).is_local() {
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "local-only"})),

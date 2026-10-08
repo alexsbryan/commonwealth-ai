@@ -7,9 +7,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::{ConnectInfo, Extension};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
+use host_kit::locality::RequestLocality;
 use sovereign_contracts::mcp_host::call_stats;
 use sovereign_contracts::ToolRegistry;
 
@@ -20,9 +21,10 @@ pub use sovereign_code::face::{CodeCallLog, CodeTools};
 /// --background` probes it for readiness.
 pub(crate) async fn mcp_stats(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Extension(tools): Extension<Arc<ToolRegistry>>,
 ) -> axum::response::Response {
-    if !peer.ip().is_loopback() {
+    if !RequestLocality::of(&peer, &headers).is_local() {
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "local-only"})),

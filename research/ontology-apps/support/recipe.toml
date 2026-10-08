@@ -29,11 +29,18 @@ fts = true
 vector = false
 
 [enrichment]
-enabled = false
+enabled = true
+type = "atlas"
 
-# Read by `svrn enrich resolve-statements --type case`; never built.
 [enrichment.ontology]
 version = 1
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "login", type = "text" }]
+identity = ["login"]
+source = { metadata = ["author"], attributes = { login = "value" } }
 
 [[enrichment.ontology.types]]
 name = "case"
@@ -47,6 +54,30 @@ identity_evidential = [
   { evidence = "proposed_answer", right = 257, of = 311, measured_on = "uv-support tune floor run, live: 257 of 311 links (resolve-prereg.md Ring 1b)" },
 ]
 identity_bar = 0.5
+attributes = [
+  { name = "reporter", type = "ref", of = "person", derived = "reporter_of_case" },
+]
+
+[[enrichment.ontology.types]]
+name = "case_state"
+kind = "claim"
+force = "assertive"
+subject = "case"
+attributes = [
+  { name = "state", type = "text", values = ["reported", "confirmed", "in_progress", "resolved", "declined"], description = "reported: a user describes a problem or asks for something; confirmed: a maintainer reproduces it or accepts it as valid; in_progress: a fix or design is being worked on, or a pull request is open; resolved: it is fixed, implemented, answered or released; declined: it is closed as won't fix, not planned, works as intended or invalid" },
+]
 
 [enrichment.ontology.change]
 document = { date = "created_at", thread = "thread", id = "id" }
+
+# Derived attributes (ONTOLOGY_PRIMITIVES.md §8): a case's reporter is who wrote its earliest document that no
+# maintainer wrote, read from the document's author field, never from a mention.
+[[enrichment.ontology.sets]]
+id = "maintainer_post"
+type = "document"
+where = { author_association = ["MEMBER", "OWNER", "COLLABORATOR"] }
+
+[[enrichment.ontology.folds]]
+id = "reporter_of_case"
+by = "earliest"
+from = ["^subject / document [!maintainer_post] / author"]

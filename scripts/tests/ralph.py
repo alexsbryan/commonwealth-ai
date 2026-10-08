@@ -58,7 +58,7 @@ def make_repo(tmp, state, prompt=PROMPT, extra=None):
         write(wd, rel, text)
     git(wd, "add", "-A")
     git(wd, "commit", "-q", "-m", "init")
-    ralph.ensure_excludes(wd, ralph.RUNTIME_MARKERS)
+    ralph.ensure_excludes(wd, ralph.runtime_markers(ralph.Paths(wd)))   # as cmd_run does
     return wd
 
 
@@ -147,16 +147,24 @@ class Procs:
         return [a for a, *_ in self.spawned if a[0] != "/bin/sh"]
 
 
+def manifest_stub(worker_bin):
+    """The queue manifest the loop reads, shaped as the loop touches it: a
+    declared worker_bin, no dispatch census, no audit cadence, no freeze."""
+    return mock.Mock(worker_bin=worker_bin, settings="", dispatch_requires=(),
+                     audit_every=None, scope_file="", path="ralph/next/t/queue.toml")
+
+
 class Rig:
     """A Loop over a temp repo, with every seam faked."""
 
     def __init__(self, tmp, state, *, lane_mode=False, lanes=1, charter=None, prompt=PROMPT,
-                 models=None, probe=None, disk=None, extra=None, **kw):
+                 models=None, probe=None, disk=None, extra=None, manifest=None, **kw):
         self.tmp = pathlib.Path(tmp)
         self.wd = make_repo(tmp, state, prompt, extra)
         self.procs, self.clock, self.notes = Procs(), Clock(), []
         self.disk = disk or (lambda: 100)
         self.probe = probe or (lambda m: (True, ""))
+        self.manifest = manifest
         self.kw = dict(label="t", lanes=lanes, lane_mode=lane_mode, base_branch="main",
                        charter=charter, models=models or {"MODEL": "prov/m"},
                        state_dir=self.tmp / "state", lane_root=self.tmp / "lanes", **kw)
@@ -164,7 +172,7 @@ class Rig:
 
     def new_loop(self):
         return ralph.Loop(
-            ralph.Paths(self.wd), spawn=self.procs.spawn, alive=self.procs.alive,
+            ralph.Paths(self.wd, manifest=self.manifest), spawn=self.procs.spawn, alive=self.procs.alive,
             kill=self.procs.kill, clock=self.clock, sleep=lambda s: FOREVER,
             probe=lambda m: self.probe(m), jobs_share=lambda n: (2, "test budget"),
             disk_free_gb=lambda: self.disk(), code_digest=lambda: "same",
@@ -425,6 +433,18 @@ class SerialTests(unittest.TestCase):
         self.assertTrue(env["PATH"].startswith(str(ralph.RALPH_BIN)))
         self.assertEqual(env["RALPH_UNIT"], "a")
 
+    def test_the_one_shot_contract_rides_in_the_prompt_every_client_gets(self):
+        # FAILING INPUT: the one-shot note lived only in the claude shim's
+        # --append-system-prompt, so a battery worker (opencode) was never
+        # told the process dies with its background tasks and an uncommitted
+        # turn is lost. The note is the CONTRACT's now, in every prompt.
+        rig = self.rig()
+        rig.procs.sessions.append(done)
+        rig.tick()
+        prompt = rig.procs.session_argvs()[0][-1]
+        self.assertIn("one-shot", prompt)
+        self.assertIn("Commit before you end your turn", prompt)
+
     def test_a_continue_note_reaches_the_next_session(self):
         rig = self.rig()
 
@@ -676,6 +696,10 @@ INCIDENTS = [
      "test_a_merge_conflict_goes_back_to_the_lane"),
     ("2026-10-06", "r12-release-preview: the cut exited 1, its success-only marker never came",
      "test_a_run_that_fails_resumes_its_lane_with_the_code_and_the_log"),
+    ("2026-10-08", "zoracite's target/ was purged overnight with an awaiting unit's run log in it",
+     "test_the_loops_logs_are_never_under_target"),
+    ("2026-10-08", "a 29-minute run a stopped loop saw 14h late was reported as 14h09m long",
+     "test_a_run_seen_late_reports_when_it_ended"),
 ]
 
 
@@ -895,6 +919,54 @@ class IncidentTests(unittest.TestCase):
         # One probed model, never the roster as one --model (9 resolver deaths, 2026-10).
         self.assertEqual(argv[argv.index("--model") + 1], "prov/a")
 
+    def test_a_roster_spawns_each_model_on_its_own_client(self):
+        # A mixed roster: the bare id runs on the queue's worker_bin (the
+        # claude shim), the provider/model id on opencode. FAILING INPUT:
+        # _start_session spawned worker_bin(paths) for every roster name, so
+        # the battery id was executed by the claude shim — argv[0] constant.
+        shim, opencode = "/nonexistent/claude-shim", "/nonexistent/opencode"
+        alive = {"claude-opus-5-5": True}
+
+        def cont(s):
+            s.commit()
+            assert s.result("continue", "more") == 0, s.last
+            return 0
+
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n",
+                  models={"MODEL": "claude-opus-5-5,prov/x"},
+                  manifest=manifest_stub(shim),
+                  probe=lambda m: (alive.get(m, m == "prov/x"), ""))
+        rig.procs.sessions += [cont, cont]
+        with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": opencode}):
+            rig.tick()
+            alive["claude-opus-5-5"] = False
+            rig.clock.advance(ralph.PROBE_OK_TTL_S)
+            rig.tick(2)
+        argvs = rig.procs.session_argvs()
+        self.assertGreaterEqual(len(argvs), 2, argvs)
+        self.assertEqual(argvs[0][0], shim)
+        self.assertEqual(argvs[0][argvs[0].index("--model") + 1], "claude-opus-5-5")
+        self.assertEqual(argvs[1][0], opencode)
+        self.assertEqual(argvs[1][argvs[1].index("--model") + 1], "prov/x")
+
+    def test_a_director_dispatch_takes_the_resolve_roster_too(self):
+        # An escalated row's director runs RESOLVE_MODEL, routed by the same
+        # grammar: the parked row's director died on the weekly limit while
+        # the battery was healthy (2026-10-07). FAILING INPUT: the director's
+        # provider/model name spawned on the shim.
+        shim, opencode = "/nonexistent/claude-shim", "/nonexistent/opencode"
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", charter="decide",
+                  max_strikes=0,
+                  models={"MODEL": "prov/w", "RESOLVE_MODEL": "claude-opus-5-5,prov/x"},
+                  manifest=manifest_stub(shim),
+                  probe=lambda m: (m == "prov/x", "weekly limit"))
+        rig.procs.sessions.append(lambda s: FOREVER)
+        with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": opencode}):
+            rig.tick()
+        argv = rig.procs.session_argvs()[0]
+        self.assertEqual(argv[0], opencode)
+        self.assertEqual(argv[argv.index("--model") + 1], "prov/x")
+
     def test_permission_rejections_are_named_in_the_strike(self):
         rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
 
@@ -998,6 +1070,46 @@ class IncidentTests(unittest.TestCase):
         rig.tick()
         self.assertIs(rig.row("r12-release-preview").status, ralph.Status.DONE)
 
+    def test_the_loops_logs_are_never_under_target(self):
+        # A host purges target/ under disk pressure; the transcript and the run
+        # log a resumed session is told to read live in the control dir's log/.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+
+        def cut(s):
+            s.commit()
+            return s.result("await", "1h", "--", "true")
+
+        rig.procs.sessions.append(cut)
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.AWAITING)
+        logs = [log.relative_to(rig.wd).as_posix() for *_, log in rig.procs.spawned]
+        self.assertEqual(logs, ["ralph/log/sessions/a-1.out", "ralph/log/sessions/a-1.await.log"])
+        self.assertEqual(rig.entry("a")["run"]["log"], str(rig.wd / logs[1]))
+
+    def test_a_run_seen_late_reports_when_it_ended(self):
+        # The loop was stopped while zoracite's demo ran; the next start told the
+        # session the run took 14h09m. Its exit file says when it ended.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+
+        def cut(s):
+            s.commit()
+            return s.result("await", "1h", "--", "true")
+
+        def judge(s):
+            self.assertIn("exited 0 after 29m00s (the loop saw it 13h40m later)", s.prompt)
+            s.result("done")
+
+        rig.procs.sessions += [cut, judge]
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        run = rig.entry("a")["run"]
+        exit_file = write(run["exit_file"], "", "0\n")
+        os.utime(exit_file, (run["begun"] + 29 * 60,) * 2)
+        rig.clock.t = run["begun"] + 14 * 3600 + 9 * 60
+        rig.tick(3)
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+
 
 # ---------------------------------------------------------------------------
 # End to end: real processes, the real wrapper on the session's PATH.
@@ -1035,7 +1147,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual(loop.run(), 0)
             row = ralph.Queue(wd / "ralph/STATE.md").by_id()["cut"]
             self.assertIs(row.status, ralph.Status.DONE)
-            log = (wd / "target/ralph/sessions/cut-1.await.log").read_text()
+            log = (wd / "ralph/log/sessions/cut-1.await.log").read_text()
             self.assertIn("the cut refused: dirty tree", log)
             self.assertEqual(sorted(p.name for p in wd.glob("turn-*")), ["turn-0", "turn-1"])
             self.assertIn("DONE — campaign complete", notes)

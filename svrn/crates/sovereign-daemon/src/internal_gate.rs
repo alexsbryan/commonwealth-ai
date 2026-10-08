@@ -46,6 +46,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
+use host_kit::locality::RequestLocality;
 use sovereign_contracts::principal::{AttachedPrincipal, Principal};
 
 use crate::state::AppState;
@@ -116,7 +117,7 @@ impl std::error::Error for UnknownInternalAuth {}
 /// decision is a pure function testable without a listener. The sentence it
 /// returns is the one the wire body carries, so the log and the body cannot
 /// say different things.
-fn refusal(who: &Principal, peer: Option<SocketAddr>) -> Option<&'static str> {
+fn refusal(who: &Principal, at: Option<&RequestLocality>) -> Option<&'static str> {
     if matches!(who, Principal::Member { .. }) {
         return None;
     }
@@ -125,9 +126,19 @@ fn refusal(who: &Principal, peer: Option<SocketAddr>) -> Option<&'static str> {
         return Some("this caller presented a mesh identity that could not be verified");
     }
     // A missing `ConnectInfo` is NOT loopback — the same stricter reading
-    // `internal_principal` and `client_auth` both fail closed on.
-    (!peer.is_some_and(|p| p.ip().is_loopback()))
-        .then_some("this caller presented no mesh identity")
+    // `internal_principal` and `client_auth` both fail closed on. A loopback
+    // peer is local only when it is a process, not a web page
+    // (`host_kit::locality`).
+    match at {
+        Some(RequestLocality::Local) => None,
+        Some(RequestLocality::CrossOrigin(_)) => {
+            Some("a web page of another origin is not a local process")
+        }
+        Some(RequestLocality::ForeignHost(_)) => {
+            Some("this caller is addressed to a name that is not this machine")
+        }
+        Some(RequestLocality::Remote) | None => Some("this caller presented no mesh identity"),
+    }
 }
 
 /// `from_fn_with_state`-compatible gate for the internal router. Apply it
@@ -157,14 +168,16 @@ pub async fn internal_gate_layer(
         // `admission::requester` reads it that way — named, not assumed.
         .unwrap_or(Principal::Anonymous);
     let path = request.uri().path().to_string();
+    let at = peer.map(|p| RequestLocality::of(&p, request.headers()));
 
-    match refusal(&who, peer) {
+    match refusal(&who, at.as_ref()) {
         None => next.run(request).await,
         Some(sentence) => {
             tracing::warn!(
                 target: "transport",
                 route = %path,
                 peer = ?peer,
+                locality = ?at,
                 principal = %who.label(),
                 "internal: refused — {sentence}"
             );
@@ -182,12 +195,12 @@ mod tests {
     use super::*;
     use kernel_types::NodeId;
 
-    fn loopback() -> Option<SocketAddr> {
-        Some("127.0.0.1:41000".parse().unwrap())
+    fn loopback() -> Option<&'static RequestLocality> {
+        Some(&RequestLocality::Local)
     }
 
-    fn lan() -> Option<SocketAddr> {
-        Some("10.0.0.7:41000".parse().unwrap())
+    fn lan() -> Option<&'static RequestLocality> {
+        Some(&RequestLocality::Remote)
     }
 
     #[test]
@@ -227,6 +240,22 @@ mod tests {
         assert_eq!(
             refusal(&Principal::Unverified, loopback()),
             Some("this caller presented a mesh identity that could not be verified")
+        );
+    }
+
+    /// A browser on this machine is a loopback peer. A page is not a local
+    /// process, and the refusal says which tell gave it away.
+    #[test]
+    fn a_web_page_on_loopback_is_refused_by_what_gave_it_away() {
+        let page = RequestLocality::CrossOrigin("https://evil.example".into());
+        assert_eq!(
+            refusal(&Principal::Anonymous, Some(&page)),
+            Some("a web page of another origin is not a local process")
+        );
+        let rebound = RequestLocality::ForeignHost("evil.example:9742".into());
+        assert_eq!(
+            refusal(&Principal::Anonymous, Some(&rebound)),
+            Some("this caller is addressed to a name that is not this machine")
         );
     }
 

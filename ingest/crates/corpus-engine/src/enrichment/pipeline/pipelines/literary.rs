@@ -629,7 +629,7 @@ where
 /// running. When the model opened a `<think>` block but never closed
 /// it, the returned error names the root cause — "truncated
 /// reasoning trace" — instead of the generic "no JSON object."
-pub(super) fn prepare_phase_json(response: &str, phase_label: &str) -> Result<String> {
+pub(crate) fn prepare_phase_json(response: &str, phase_label: &str) -> Result<String> {
     let cleaned = strip_reasoning_tags(response);
     let block = extract_json_block(&cleaned).ok_or_else(|| {
         if is_truncated_thinking_response(response) {
@@ -761,6 +761,7 @@ mod tests {
             title: title.into(),
             text: body.into(),
             metadata: meta,
+            source_documents: Vec::new(),
             approx_tokens: body.len() / 4,
         }
     }

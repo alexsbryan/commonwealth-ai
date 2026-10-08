@@ -63,6 +63,8 @@
 
 #[cfg(feature = "jobs")]
 pub mod jobs;
+#[cfg(any(feature = "shell", feature = "http"))]
+pub mod locality;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 #[cfg(feature = "memory")]

@@ -29,6 +29,9 @@ use crate::enrichment::ontology::derived::{
 use crate::enrichment::ontology::{DocumentStamp, OntologyPolicies, TypeIndex};
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
+#[path = "resolution_derived/protocol.rs"]
+mod protocol;
+
 /// Which side of RESOLVE a derivation runs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -62,6 +65,12 @@ pub enum DerivedOutcome {
     Tie { values: Vec<String> },
     /// `earliest`, `latest`: values were reached, none through a dated document.
     Unordered,
+    /// A declared protocol could apply, but a requested qualification or a
+    /// total report-time order is unavailable.
+    Pending {
+        values: Vec<String>,
+        reasons: Vec<String>,
+    },
 }
 
 impl DerivedOutcome {
@@ -73,8 +82,37 @@ impl DerivedOutcome {
             DerivedOutcome::Conflict { .. } => "conflict",
             DerivedOutcome::Tie { .. } => "tie",
             DerivedOutcome::Unordered => "unordered",
+            DerivedOutcome::Pending { .. } => "pending",
         }
     }
+}
+
+/// Replayable provenance for one recipe-declared scalar protocol projection.
+#[derive(Debug, Clone, Serialize)]
+pub struct DerivedProtocolAudit {
+    /// Content identity of the fold, its paths, qualifications and rule data.
+    pub rule_fingerprint: String,
+    /// Report time that selected the current state; never the transition's effective time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_of_report_time: Option<String>,
+    /// Effective-time values on the selected reports, retained without ordering them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub effective_times: Vec<String>,
+    /// Rules that matched or remained possible under missing qualifications.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rule_ids: Vec<String>,
+    /// Every claim reached through the assigned-subject path, including excluded inputs.
+    pub basis_claims: Vec<String>,
+    /// The input claim → resolved record assignment used by this projection.
+    pub assignment_dependencies: BTreeMap<String, String>,
+    /// Supported states that remain possible when the fold is pending or conflicting.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<String>,
+    /// Every reached claim, its source document, citation, field evidence and disposition.
+    pub history: Vec<Value>,
+    /// Why no unique state was projected, if applicable.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub reasons: Vec<String>,
 }
 
 /// One atom's derivation, as the build keeps it beside the atlas.
@@ -94,6 +132,9 @@ pub struct DerivedValue {
     /// The value the atom held before, when the derivation changed it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replaced: Option<Value>,
+    /// Rule, source, and assignment lineage for a protocol fold.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<DerivedProtocolAudit>,
 }
 
 /// Per attribute, what one stage did.
@@ -150,13 +191,13 @@ pub fn derive_attributes(
             for node in targets {
                 let mut fx = Effects::default();
                 let doc = graph.doc_of(&node);
-                let outcome = graph.derive(id, &node, doc, &mut fx)?;
+                let (outcome, protocol) = graph.derive(id, &node, doc, &mut fx)?;
                 tally.excluded += fx.excluded.len();
                 tally.unjudged += fx.unjudged;
-                results.push((node, outcome, fx.excluded));
+                results.push((node, outcome, fx.excluded, protocol));
             }
         }
-        for (node, outcome, excluded) in results {
+        for (node, outcome, excluded, protocol) in results {
             let (atom_id, attributes) = match node {
                 Node::Entity(i) => (
                     atoms.entities[i].id.as_str().to_string(),
@@ -179,7 +220,7 @@ pub fn derive_attributes(
             let replaced = previous.filter(|p| attributes.get(attr) != Some(p));
             tally.atoms += 1;
             *tally.outcomes.entry(outcome.label()).or_default() += 1;
-            debug!(r#type = type_name, attribute = attr, atom = %atom_id, outcome = outcome.label(), "atlas/derive: attribute derived");
+            debug!(r#type = type_name, attribute = attr, atom = %atom_id, outcome = outcome.label(), protocol = protocol.is_some(), "atlas/derive: attribute derived");
             sink(&DerivedValue {
                 stage,
                 type_name: type_name.to_string(),
@@ -189,6 +230,7 @@ pub fn derive_attributes(
                 outcome,
                 excluded: excluded.into_iter().collect(),
                 replaced,
+                protocol,
             });
         }
         info!(r#type = type_name, attribute = attr, derived = id, ?stage, atoms = tally.atoms, outcomes = ?tally.outcomes, excluded = tally.excluded, unjudged = tally.unjudged, "atlas/derive: attribute done");
@@ -351,7 +393,13 @@ impl<'a> Graph<'a> {
         node: &Node,
         doc: Option<String>,
         fx: &mut Effects,
-    ) -> Result<DerivedOutcome, String> {
+    ) -> Result<(DerivedOutcome, Option<DerivedProtocolAudit>), String> {
+        if let Some(Named::FoldDecl(fold)) = self.policies.derivation.derived.get(id) {
+            if fold.by == FoldBy::Protocol {
+                let (outcome, audit) = protocol::derive(self, fold, node, doc, fx)?;
+                return Ok((outcome, Some(audit)));
+            }
+        }
         let (by, exprs) = match self.policies.derivation.derived.get(id) {
             Some(Named::FoldDecl(f)) => (f.by, &self.parsed[id]),
             Some(Named::PathDecl(_)) => (FoldBy::All, &self.parsed[id]),
@@ -373,7 +421,7 @@ impl<'a> Graph<'a> {
                 Ok(values)
             })
             .collect::<Result<_, String>>()?;
-        Ok(decide(by, &inputs, &self.clock))
+        Ok((decide(by, &inputs, &self.clock), None))
     }
 
     fn walk(&self, p: &PathExpr, from: Reached, fx: &mut Effects) -> Result<Reached, String> {
@@ -472,7 +520,7 @@ impl<'a> Graph<'a> {
                 }
             }
             (id, false, Node::Entity(_) | Node::Claim(_)) if self.parsed.contains_key(id) => {
-                match self.derive(id, node, doc.clone(), fx)? {
+                match self.derive(id, node, doc.clone(), fx)?.0 {
                     DerivedOutcome::Decided { values, .. } => {
                         out.extend(
                             values
@@ -678,6 +726,7 @@ fn decide(
                 }
             }
         }
+        FoldBy::Protocol => unreachable!("protocol folds are evaluated over assigned claims"),
     }
 }
 

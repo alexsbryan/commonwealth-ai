@@ -243,6 +243,44 @@
       "configurations",
       "arguments"
     ],
+    "derived_attributes": {
+      "fold": [
+        "id",
+        "by",
+        "from",
+        "protocol"
+      ],
+      "fold_by": [
+        "first",
+        "agree",
+        "most",
+        "all",
+        "earliest",
+        "latest",
+        "protocol"
+      ],
+      "path": [
+        "id",
+        "path"
+      ],
+      "protocol": [
+        "identity",
+        "effective_time",
+        "rules"
+      ],
+      "protocol_rule": [
+        "id",
+        "claim_kind",
+        "state",
+        "when",
+        "corrects"
+      ],
+      "set": [
+        "id",
+        "type",
+        "where"
+      ]
+    },
     "force": [
       "assertive",
       "directive",
@@ -308,6 +346,7 @@
       "vocabulary",
       "must_not",
       "types",
+      "document_reading",
       "max_entities_per_section",
       "voices",
       "change",

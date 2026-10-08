@@ -296,7 +296,7 @@ impl ParsePolicy {
 
 /// Searle's force → the atlas's discourse act. The ONE mapping; a second
 /// spelling of it anywhere else is the §10.6 smell.
-fn discourse_act_for(force: Force) -> DiscourseAct {
+pub(crate) fn discourse_act_for(force: Force) -> DiscourseAct {
     match force {
         Force::Assertive => DiscourseAct::Assert,
         // A directive and a declaration both DO something by being said —
@@ -322,7 +322,7 @@ fn discourse_act_for(force: Force) -> DiscourseAct {
 ///
 /// Undeclared corpora never reach here — there is no `ClaimTypeRules` without
 /// a declared claim type — so the literary default stands where it belongs.
-fn claim_scope_for(scope: ClaimScopeDecl) -> ClaimScope {
+pub(crate) fn claim_scope_for(scope: ClaimScopeDecl) -> ClaimScope {
     match scope {
         ClaimScopeDecl::InWork => ClaimScope::Fictional,
         ClaimScopeDecl::AboutWork => ClaimScope::Contextual,

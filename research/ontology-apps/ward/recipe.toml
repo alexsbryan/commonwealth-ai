@@ -78,6 +78,7 @@ attributes = [
     "a fixed term of a year or more",
     "a master, credit or enabling agreement with no term of its own",
   ] },
+  { name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost"], derived = "deal_stage" },
 ]
 
 [[enrichment.ontology.types]]
@@ -124,3 +125,44 @@ from = ["outside_parties"]
 id = "party_of_deal"
 by = "most"
 from = ["^subject / party"]
+
+# A deal's current stage is its latest report by document date, projected by the protocol fold: only a stage the
+# reader supported with field evidence counts, and a deal with any unqualified report stays pending. A transition is
+# identified by the stage it enters; Ward declares no corrections.
+[[enrichment.ontology.folds]]
+id = "deal_stage"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "stage"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "lead"
+claim_kind = "stage_update"
+state = "lead"
+when = { stage = "lead" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "proposal"
+claim_kind = "stage_update"
+state = "proposal"
+when = { stage = "proposal" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "negotiating"
+claim_kind = "stage_update"
+state = "negotiating"
+when = { stage = "negotiating" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "won"
+claim_kind = "stage_update"
+state = "won"
+when = { stage = "won" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "lost"
+claim_kind = "stage_update"
+state = "lost"
+when = { stage = "lost" }

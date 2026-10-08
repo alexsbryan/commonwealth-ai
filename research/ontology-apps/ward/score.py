@@ -10,26 +10,36 @@ atoms cite SECTIONS (the email extractor keys a section by Subject, so one secti
 several messages); a claim's verbatim anchor narrows its section to the message file that
 contains it, and an entity's files are its first appearance plus every claim made about it.
 
-Per bar (quality/campaigns/crm-proof.toml), each over gold labels whose file the atlas
-extracted (coverage is reported), read on the holdout (files outside the smoke sections) with
-the full set beside:
+Deal matching uses the existing evidence-plus-counterparty edge predicate and deterministic
+maximum-cardinality matching. It measures evidence coverage, not descriptor-level transaction
+identity proof. Gold denominators are selected by gold source files, independent of extraction
+coverage; coverage remains a separate diagnostic.
+
+Per bar (quality/campaigns/crm-proof.toml), read on the holdout (files outside the smoke sections)
+with the full set beside:
   people       gold people with an email held by exactly ONE person atom carrying that email
   companies    gold companies matched by a domain or the folded name
   contacts     external gold people whose person atom's employer resolves to their gold company
   deals        gold transaction deals matched by a deal atom citing one of their messages whose
-               counterparty resolves to the gold counterparty; each atom used once
-  stage        gold stage_updates matched by a stage_update claim citing the file, subject = the
-               matched deal atom, same stage; current stage per matched deal beside
+                counterparty resolves to the gold counterparty; each atom used once
+  stage_served gold deals with a current stage (their latest gold update, by message date) whose
+                matched transaction or master-agreement atom SERVES that stage (the recipe's
+                `deal_stage` fold, read off the atom), and every document the fold decided on
+                (atlas/derived_decisions.jsonl) is a message gold places that deal at that stage;
+                each miss is counted by why beside it. The instrument never folds a stage itself
   commitments  gold commitments matched by a commitment claim citing the file whose subject is
                the gold person's atom
 Reported beside: atoms matching nothing, emails split across atoms, made-up claims (a claim on
-a file where gold has none of that kind).
+a file where gold has none of that kind), and `stage`: gold stage_updates matched by a
+stage_update claim citing the file, subject = the matched atom, same stage (the reading
+diagnostic, crm-stage's bar under ward-score-v2).
 """
 import argparse, email.utils, json, pathlib, re, sys, unicodedata
 
 HERE = pathlib.Path(__file__).resolve().parent
 HOME = pathlib.Path.home()
 WARD = HOME / ".svrnmesh/bench-corpora/enron-ward"
+INSTRUMENT_VERSION = "ward-score-v3"
 
 
 def fold(s):
@@ -42,6 +52,7 @@ def squash(s):
 
 
 DATES = {}  # folder/file -> sortable date, from the manifest; unknown dates sort by file name
+DOC_FILES = {}  # the index's source_doc_id -> folder/file, so a fold's provenance documents read as gold's files
 
 
 def when(f):
@@ -52,10 +63,13 @@ def section_files(corpus):
     """sec id -> [(folder/file, folded body)] via chapters.json chunk ids -> chunk Message-ID -> manifest."""
     import lance  # noqa: PLC0415  (only the scoring path needs it)
     idx = HOME / ".svrnmesh/indexes" / corpus
-    chunks = lance.dataset(str(idx / "chunks.lance")).to_table(columns=["id", "metadata"]).to_pylist()
+    chunks = lance.dataset(str(idx / "chunks.lance")).to_table(columns=["id", "metadata", "source_doc_id"]).to_pylist()
     mid_of = {str(c["id"]): (json.loads(c["metadata"] or "{}").get("message_id") or "") for c in chunks}
     manifest = json.loads((WARD / "manifest.json").read_text())
     path_of = {m: e["path"] for e in manifest for m in e["message_ids"]}
+    for c in chunks:
+        if c.get("source_doc_id") and mid_of[str(c["id"])] in path_of:
+            DOC_FILES[c["source_doc_id"]] = path_of[mid_of[str(c["id"])]]
     for e in manifest:
         try:
             DATES[e["path"]] = email.utils.parsedate_to_datetime(e["date"]).isoformat()
@@ -74,7 +88,8 @@ def load_gold(gold_dir):
         d = json.loads(p.read_text())
         f = d["folder"]
         q = lambda i: f"{f}:{i}"  # noqa: E731  (ids are local to a folder)
-        g["files"] |= {f"{f}/{x}" for x in d["files_read"]}
+        source_files = d.get("files_read", []) + d.get("files_with_nothing", [])
+        g["files"] |= {f"{f}/{x}" for x in source_files}
         g["people"] += [dict(x, id=q(x["id"]), company=q(x.get("company"))) for x in d["people"]]
         g["companies"] += [dict(x, id=q(x["id"])) for x in d["companies"]]
         g["deals"] += [dict(x, counterparty=q(x["counterparty"]), files={f"{f}/{m}" for m in x["messages"]})
@@ -84,17 +99,32 @@ def load_gold(gold_dir):
     return g
 
 
-def load_atlas(atoms, secfiles):
+def load_decisions(path):
+    """The build's derived_decisions.jsonl beside an atlas; absent is no decisions, which every served stage misses on."""
+    p = pathlib.Path(path)
+    return [json.loads(l) for l in p.read_text().splitlines() if l.strip()] if p.exists() else []
+
+
+def load_atlas(atoms, secfiles, decisions=()):
     ent = {x["data"]["id"]: x["data"] for x in atoms if x["atom_type"] == "Entity"}
     claims = [x["data"] for x in atoms if x["atom_type"] == "Claim"]
+    for d in decisions:  # a deal's stage decision: its outcome and the files of the documents it decided on
+        if d.get("attribute") == "stage" and (ent.get(d.get("atom")) or {}).get("entity_type") == "deal":
+            ent[d["atom"]]["_stage"] = {"outcome": d.get("outcome"), "values": d.get("values") or [],
+                                        "files": [DOC_FILES.get(k) for k in d.get("documents") or []]}
 
     def files(sec, anchor=None):
         cand = secfiles.get(sec, [])
-        if anchor and len(cand) > 1:
-            hit = [f for f, body in cand if squash(anchor)[:80] in body]
-            if hit:
-                return set(hit)
-        return {f for f, _ in cand}
+        if len(cand) == 1:
+            return {cand[0][0]}
+        if len(cand) > 1:
+            normalized = squash(anchor)
+            if not normalized:
+                return set()
+            # A repeated passage is still ambiguous; assigning every hit would guess.
+            hit = [f for f, body in cand if normalized in body]
+            return {hit[0]} if len(hit) == 1 else set()
+        return set()
 
     for c in claims:
         c["_files"] = set().union(set(), *(files(e.get("chunk_id"), c.get("anchor")) for e in c.get("evidence") or []))
@@ -156,6 +186,39 @@ def company_resolver(g, ent):
     return atoms_of, resolves
 
 
+def maximum_matching(left, right, has_edge):
+    """Return a deterministic maximum-cardinality left-id -> right-id assignment."""
+    ordered_left = sorted(left, key=lambda x: str(x["id"]))
+    ordered_right = sorted(right, key=lambda x: str(x["id"]))
+    adjacency = {
+        item["id"]: [candidate["id"] for candidate in ordered_right if has_edge(item, candidate)]
+        for item in ordered_left
+    }
+    owner = {}
+
+    def augment(left_id, seen_right):
+        for right_id in adjacency[left_id]:
+            if right_id in seen_right:
+                continue
+            seen_right.add(right_id)
+            if right_id not in owner or augment(owner[right_id], seen_right):
+                owner[right_id] = left_id
+                return True
+        return False
+
+    for item in ordered_left:
+        augment(item["id"], set())
+    assigned = {left_id: right_id for right_id, left_id in owner.items()}
+    return {item["id"]: assigned[item["id"]] for item in ordered_left if item["id"] in assigned}
+
+
+def scoring_scopes(gold_files, smoke_files):
+    """Choose folds from the gold file inventory; extraction coverage never defines eligibility."""
+    all_files = set(gold_files)
+    dev_files = all_files & set(smoke_files)
+    return {"all": all_files, "holdout": all_files - dev_files, "dev": dev_files}
+
+
 def score(g, ent, claims, scope):
     """scope: the set of message files counted (gold labels outside it are not scored)."""
     of = lambda t: [e for e in ent.values() if e.get("entity_type") == t]  # noqa: E731
@@ -193,26 +256,69 @@ def score(g, ent, claims, scope):
         ok = any(company_resolves(v, p["company"]) for v in emp)
         contact_hit += ok
         contact_wrong += bool(emp) and not ok
-    gd = [d for d in g["deals"] if d.get("kind", "transaction") == "transaction" and d["files"] & scope]
-    deal_atom, used = {}, set()
-    for d in gd:
-        for e in deals:
-            if e["id"] not in used and e["_files"] & d["files"] and resolves(e, d["counterparty"]):
-                deal_atom[d["id"]] = e["id"]; used.add(e["id"]); break
+    eligible_deals = [d for d in g["deals"] if d["files"] & scope]
+    gd = [d for d in eligible_deals if d.get("kind", "transaction") == "transaction"]
+    gm = [d for d in eligible_deals if d.get("kind") == "master_agreement"]
+
+    def evidence_party_edge(d, e):
+        return bool(e["_files"] & d["files"]) and resolves(e, d["counterparty"])
+
+    # The transaction population owns first choice of atoms so adding master agreements
+    # cannot reduce the pre-existing transaction-deal bar.
+    deal_atom = maximum_matching(gd, deals, evidence_party_edge)
+    used = set(deal_atom.values())
+    master_atom = maximum_matching(gm, [e for e in deals if e["id"] not in used], evidence_party_edge)
+    stage_subject = {**deal_atom, **master_atom}
     gs = [s for s in g["stage_updates"] if s["file"] in scope]
     sh = sum(1 for s in gs if any(c.get("claim_kind") == "stage_update" and s["file"] in c["_files"]
-                                  and deal_atom.get(s["deal"]) is not None
-                                  and c.get("subject") == deal_atom[s["deal"]]
+                                  and stage_subject.get(s["deal"]) is not None
+                                  and c.get("subject") == stage_subject[s["deal"]]
                                   and (c.get("attributes") or {}).get("stage") == s["stage"] for c in claims))
-    cur_ok = cur_n = 0
-    for d in gd:
-        mine = sorted((s for s in g["stage_updates"] if s["deal"] == d["id"]), key=lambda s: when(s["file"]))
-        if not mine or d["id"] not in deal_atom:
+    updates_by_deal = {}
+    for update in g["stage_updates"]:
+        updates_by_deal.setdefault(update["deal"], []).append(update)
+    current_deals, gold_current = [], {}
+    for d in eligible_deals:
+        updates = updates_by_deal.get(d["id"], [])
+        if not updates:
             continue
-        cur_n += 1
-        theirs = [c for c in claims if c.get("claim_kind") == "stage_update" and c.get("subject") == deal_atom[d["id"]]]
-        last = max(theirs, key=lambda c: max((when(f) for f in c["_files"]), default=""), default=None)
-        cur_ok += bool(last) and (last.get("attributes") or {}).get("stage") == mine[-1]["stage"]
+        latest_when = max(when(s["file"]) for s in updates)
+        latest_updates = [s for s in updates if when(s["file"]) == latest_when]
+        latest_stages = {s["stage"] for s in latest_updates}
+        if len(latest_stages) == 1 and None not in latest_stages:
+            current_deals.append(d)
+            gold_current[d["id"]] = next(iter(latest_stages))
+    # The CRM shows a deal's current stage with the message it came from: credit the stage the matched atom SERVES
+    # only when every document its decision names is one gold places that deal at that stage. Each miss says why.
+    # unbacked: no decided decision names the served value; provenance_unmapped: a deciding document the index
+    # cannot name as a gold file (the instrument could not judge it, apart from a message gold does not place)
+    served_hit, missed = 0, dict.fromkeys(("unmatched_deal", "wrong_stage", "unbacked", "unplaced",
+                                           "provenance_unmapped", "no_decision"), 0)
+    for d in current_deals:
+        subject = stage_subject.get(d["id"])
+        if subject is None:
+            missed["unmatched_deal"] += 1
+            continue
+        served = (ent[subject].get("attributes") or {}).get("stage")
+        decision = ent[subject].get("_stage")
+        if served is None:
+            why = decision["outcome"] if decision else "no_decision"
+            missed[why] = missed.get(why, 0) + 1
+            continue
+        if served != gold_current[d["id"]]:
+            missed["wrong_stage"] += 1
+            continue
+        placed = {s["file"] for s in updates_by_deal[d["id"]] if s["stage"] == served}
+        if not decision:
+            missed["no_decision"] += 1
+        elif decision["outcome"] != "decided" or decision["values"] != [served] or not decision["files"]:
+            missed["unbacked"] += 1
+        elif None in decision["files"]:
+            missed["provenance_unmapped"] += 1
+        elif set(decision["files"]) <= placed:
+            served_hit += 1
+        else:
+            missed["unplaced"] += 1
     gc = [c for c in g["commitments"] if c["file"] in scope]
     ch = sum(1 for k in gc if any(c.get("claim_kind") == "commitment" and k["file"] in c["_files"]
                                   and c.get("subject") in {person_atom.get(k["person"]), person_atom.get(k["person"] + "#name")} - {None}
@@ -226,8 +332,10 @@ def score(g, ent, claims, scope):
     return {"people": r(ph, len(gp)), "emails_split": split,
             "contacts": r(contact_hit, contact_n), "contacts_wrong_account": contact_wrong,
             "companies": r(len(company_atom), len(g["companies"])),
-            "deals": r(len(deal_atom), len(gd)), "deal_atoms_unmatched": len(deals) - len(used),
-            "stage": r(sh, len(gs)), "current_stage": r(cur_ok, cur_n),
+            "deals": r(len(deal_atom), len(gd)), "master_agreements": r(len(master_atom), len(gm)),
+            "deal_atoms_unmatched": len(deals) - len(used),
+            "deal_matches": {"transactions": deal_atom, "master_agreements": master_atom},
+            "stage_served": r(served_hit, len(current_deals)), "stage_served_missed": missed, "stage": r(sh, len(gs)),
             "commitments": r(ch, len(gc)), "made_up": made_up,
             "person_atoms_unmatched": sum(1 for e in persons if e["id"] not in set(person_atom.values()))}
 
@@ -263,7 +371,8 @@ def selftest():
              {"atom_type": "Entity", "data": {"id": "e4", "entity_type": "company", "canonical_name": "City of X",
                                               "attributes": {"domain": "city.gov"}}},
              {"atom_type": "Entity", "data": {"id": "e5", "entity_type": "deal", "canonical_name": "5-yr supply",
-                                              "first_appearance": {"chunk_id": "s1"}, "attributes": {"counterparty": "e4"}}},
+                                              "first_appearance": {"chunk_id": "s1"},
+                                              "attributes": {"counterparty": "e4", "stage": "won"}}},
              {"atom_type": "Claim", "data": {"id": "k1", "claim_kind": "stage_update", "subject": "e5", "anchor": "Price is $4.12",
                                              "evidence": [{"chunk_id": "s1"}], "attributes": {"stage": "proposal"}}},
              {"atom_type": "Claim", "data": {"id": "k2", "claim_kind": "stage_update", "subject": "e5", "anchor": "We accept",
@@ -283,15 +392,20 @@ def selftest():
              # anchored in f/3; only without anchor narrowing would it reach f/2's "won"
              {"atom_type": "Claim", "data": {"id": "k9", "claim_kind": "stage_update", "subject": "e5", "anchor": "unrelated",
                                              "evidence": [{"chunk_id": "s2"}], "attributes": {"stage": "won"}}}]
-    ent, claims = load_atlas(atoms, sec)
+    # e5 serves f-d1's current stage (won, f/2) from f/2; f-d2 (current lead) has no matched atom
+    DOC_FILES.update({"doc-1": "f/1", "doc-2": "f/2", "doc-3": "f/3"})
+    decisions = [{"type": "deal", "attribute": "stage", "atom": "e5", "outcome": "decided", "values": ["won"],
+                  "documents": ["doc-2"]}]
+    ent, claims = load_atlas(atoms, sec, decisions)
     got = score(g, ent, claims, g["files"])
-    want = {"people": 1, "emails_split": 1, "companies": 1, "deals": 1, "stage": 1, "current_stage": 0,
+    want = {"people": 1, "emails_split": 1, "companies": 1, "deals": 1, "stage": 1, "stage_served": 1,
             "commitments": 1, "made_up_stage": 0}
     have = {"people": got["people"]["hit"], "emails_split": got["emails_split"], "companies": got["companies"]["hit"],
-            "deals": got["deals"]["hit"], "stage": got["stage"]["hit"], "current_stage": got["current_stage"]["hit"],
+            "deals": got["deals"]["hit"], "stage": got["stage"]["hit"], "stage_served": got["stage_served"]["hit"],
             "commitments": got["commitments"]["hit"], "made_up_stage": got["made_up"]["stage_updates"]}
     bad = {k: (have[k], v) for k, v in want.items() if have[k] != v}
-    print(json.dumps({"selftest": "pass" if not bad else "FAIL", "mismatch": bad}))
+    print(json.dumps({"instrument_version": INSTRUMENT_VERSION,
+                      "selftest": "pass" if not bad else "FAIL", "mismatch": bad}))
     return 0 if not bad else 1
 
 
@@ -309,8 +423,10 @@ def main():
     if a.selftest:
         return selftest()
     secfiles = section_files(a.corpus)
-    atoms = json.loads((a.atoms or HOME / ".svrnmesh/indexes" / a.corpus / "atlas/atoms.json").read_text())["atoms"]
-    ent, claims = load_atlas(atoms, secfiles)
+    atoms_path = a.atoms or HOME / ".svrnmesh/indexes" / a.corpus / "atlas/atoms.json"
+    atoms = json.loads(atoms_path.read_text())["atoms"]
+    decisions = load_decisions(atoms_path.parent / "derived_decisions.jsonl")
+    ent, claims = load_atlas(atoms, secfiles, decisions)
     g = load_gold(a.gold)
     done = json.loads((HOME / ".svrnmesh/enrichment" / a.corpus / "cache/questions.json").read_text())
     extracted = {q.get("chapter_id") for q in (done.get("questions_by_chapter") or done.get("chapters") or [])}
@@ -320,24 +436,29 @@ def main():
     snaps = [json.loads(p.read_text()) for p in sorted(a.run.glob("tokens-*.json"))]
     messages = sum(len(secfiles.get(s, [])) for s in extracted)
     wall = sum(t["updated_at_ms"] - t["started_at_ms"] for t in snaps) / 1000
-    out = {"gold_files": len(g["files"]), "covered_files": len(covered),
+    scopes = scoring_scopes(g["files"], smoke_files)
+    out = {"instrument_version": INSTRUMENT_VERSION,
+           "deal_matching_basis": "maximum-cardinality evidence+counterparty coverage; not descriptor-level transaction identity proof",
+           "gold_files": len(g["files"]), "covered_files": len(covered),
+           "stage_decisions": sum(1 for e in ent.values() if "_stage" in e),
            "cost": {"phase1_wall_s": round(wall, 1), "calls": sum(t["calls"] for t in snaps),
                     "messages_extracted": messages, "s_per_message": round(wall / messages, 2) if messages and snaps else None,
                     "prompt_tokens": sum(t["prompt_tokens"] for t in snaps),
                     "completion_tokens": sum(t["completion_tokens"] for t in snaps)},
-           "holdout": score(g, ent, claims, covered - smoke_files), "all": score(g, ent, claims, covered),
-           "dev": score(g, ent, claims, covered & smoke_files)}
+           "holdout": score(g, ent, claims, scopes["holdout"]),
+           "all": score(g, ent, claims, scopes["all"]),
+           "dev": score(g, ent, claims, scopes["dev"])}
     if a.bar:
         a.run.mkdir(parents=True, exist_ok=True)
         art = a.run / "score.json"
         art.write_text(json.dumps(out, indent=1) + "\n")
-        key = {"crm-people": "people", "crm-companies": "companies", "crm-deals": "deals", "crm-stage": "stage",
+        key = {"crm-people": "people", "crm-companies": "companies", "crm-deals": "deals", "crm-stage": "stage_served",
                "crm-commitments": "commitments", "crm-contacts": "contacts"}.get(a.bar)
         value = out["cost"]["s_per_message"] if a.bar == "crm-cost" else (out["holdout"][key]["recall"] if key else None)
         if value is None:
             print(f"no value for {a.bar}", file=sys.stderr)
             return 4
-        print(json.dumps({"value": value, "artifact": str(art)}))
+        print(json.dumps({"value": value, "artifact": str(art), "instrument_version": INSTRUMENT_VERSION}))
         return 0
     print(json.dumps(out, indent=1))
     if a.json:

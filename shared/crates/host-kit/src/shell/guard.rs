@@ -35,10 +35,12 @@ use std::net::SocketAddr;
 
 use axum::extract::{ConnectInfo, Extension, FromRequestParts, Request};
 use axum::http::request::Parts;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
+
+use crate::locality::{cross_origin_refusal, RequestLocality};
 
 /// Per-handler loopback check. Returns `Ok(())` if `addr` is a
 /// loopback peer; otherwise a pre-built 403 `Response` ready to
@@ -54,16 +56,40 @@ use axum::{Json, Router};
 /// helper is the per-handler belt-and-suspenders check defended in
 /// `SYSTEM_OVERVIEW.md` §5.4 ("router middleware + per-handler
 /// enforce_localhost").
-pub fn enforce_localhost(addr: &SocketAddr) -> Result<(), Response> {
-    if addr.ip().is_loopback() {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({ "error": "local-only" })),
-        )
-            .into_response())
+pub fn enforce_localhost(addr: &SocketAddr, headers: &HeaderMap) -> Result<(), Response> {
+    admit(&RequestLocality::of(addr, headers), None)
+}
+
+/// The guard's one answer to a [`RequestLocality`]. A caller off this
+/// machine, or addressed to a name that is not this machine, gets the same
+/// `local-only` bytes the hand-written guards produced; a web page of another
+/// origin is refused by that name, so a browser is never mistaken for a
+/// stranger in the log or on the wire (ARCH 6).
+fn admit(at: &RequestLocality, path: Option<&str>) -> Result<(), Response> {
+    match at {
+        RequestLocality::Local => Ok(()),
+        RequestLocality::Remote => Err(local_only()),
+        RequestLocality::ForeignHost(host) => {
+            tracing::warn!(
+                %host,
+                path = ?path,
+                "guard: refused a loopback caller addressed to a name that is not this machine"
+            );
+            Err(local_only())
+        }
+        RequestLocality::CrossOrigin(origin) => {
+            tracing::warn!(%origin, path = ?path, "guard: refused a web page of another origin");
+            Err(cross_origin_refusal(origin))
+        }
     }
+}
+
+fn local_only() -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(serde_json::json!({ "error": "local-only" })),
+    )
+        .into_response()
 }
 
 /// The per-handler half of the guard, as an EXTRACTOR.
@@ -92,7 +118,11 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         match parts.extensions.get::<ConnectInfo<SocketAddr>>() {
-            Some(ConnectInfo(addr)) => enforce_localhost(addr).map(|()| LocalOnly),
+            Some(ConnectInfo(addr)) => admit(
+                &RequestLocality::of(addr, &parts.headers),
+                Some(parts.uri.path()),
+            )
+            .map(|()| LocalOnly),
             None => {
                 tracing::error!(
                     path = %parts.uri.path(),
@@ -163,21 +193,22 @@ pub async fn loopback_only(request: Request, next: Next) -> Response {
         .map(|c| c.0);
 
     match peer {
-        Some(p) if p.ip().is_loopback() => next.run(request).await,
         Some(p) => {
-            // Non-loopback: log and reject. We do echo the peer IP in
-            // the log (operator needs it to investigate) but keep it
-            // out of the response body — don't help probes.
-            tracing::warn!(
-                peer = %p,
-                path = %request.uri().path(),
-                "loopback_only: rejected non-loopback caller"
-            );
-            (
-                StatusCode::FORBIDDEN,
-                Json(serde_json::json!({ "error": "local-only" })),
-            )
-                .into_response()
+            let at = RequestLocality::of(&p, request.headers());
+            if at == RequestLocality::Remote {
+                // Non-loopback: log and reject. We do echo the peer IP in
+                // the log (operator needs it to investigate) but keep it
+                // out of the response body — don't help probes.
+                tracing::warn!(
+                    peer = %p,
+                    path = %request.uri().path(),
+                    "loopback_only: rejected non-loopback caller"
+                );
+            }
+            match admit(&at, Some(request.uri().path())) {
+                Ok(()) => next.run(request).await,
+                Err(refusal) => refusal,
+            }
         }
         None => {
             // ConnectInfo wasn't attached — either the listener
@@ -302,7 +333,7 @@ mod tests {
         ];
         for addr in allowed {
             assert!(
-                enforce_localhost(&addr).is_ok(),
+                enforce_localhost(&addr, &HeaderMap::new()).is_ok(),
                 "loopback {addr} must pass"
             );
         }
@@ -315,7 +346,7 @@ mod tests {
             SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)), 9741),
         ];
         for addr in denied {
-            let Err(resp) = enforce_localhost(&addr) else {
+            let Err(resp) = enforce_localhost(&addr, &HeaderMap::new()) else {
                 panic!("non-loopback {addr} must be rejected");
             };
             assert_eq!(resp.status(), StatusCode::FORBIDDEN);

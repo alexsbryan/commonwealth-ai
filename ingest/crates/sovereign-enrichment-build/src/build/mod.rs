@@ -15,6 +15,7 @@ use sovereign_contracts::launch::EXIT_CANCELLED;
 
 mod extract_step;
 mod plan;
+mod read_cache;
 mod steps;
 
 // The build's PUBLIC surface, and the whole of it. `sovereign-cli-llm`'s shim

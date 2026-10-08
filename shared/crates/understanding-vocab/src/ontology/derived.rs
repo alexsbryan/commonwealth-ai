@@ -72,6 +72,41 @@ pub struct FoldDecl {
     pub by: FoldBy,
     /// Path expressions, a declared id among them, in priority order.
     pub from: Vec<String>,
+    /// A recipe-defined state protocol, required only when `by = "protocol"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<ProtocolFoldDecl>,
+}
+
+/// Data for a qualified scalar fold over already-assigned, cited claims.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProtocolFoldDecl {
+    /// A source-supported, stable identity for one reported transition.
+    pub identity: String,
+    /// A source-supported transition effective time; never used as report order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_time: Option<String>,
+    /// Explicit claim qualifications map to application state values.
+    #[serde(default)]
+    pub rules: Vec<ProtocolRuleDecl>,
+}
+
+/// One application-data mapping from a qualified claim to a scalar state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProtocolRuleDecl {
+    /// Stable recipe identity for this mapping, included in the audit.
+    pub id: String,
+    /// The declared claim type this mapping applies to.
+    pub claim_kind: String,
+    /// A value in the derived attribute's closed text set.
+    pub state: String,
+    /// Every named field must be source-supported at the exact declared value.
+    #[serde(default)]
+    pub when: BTreeMap<String, String>,
+    /// An optional field whose supported identity must name a prior transition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corrects: Option<String>,
 }
 
 /// The fold registry. Closed: a new function is a variant here and an arm in
@@ -93,6 +128,8 @@ pub enum FoldBy {
     Earliest,
     /// The value of the latest document by the declared clock.
     Latest,
+    /// A qualified state projection whose rules and states are recipe data.
+    Protocol,
 }
 
 impl FoldBy {
@@ -104,6 +141,7 @@ impl FoldBy {
             FoldBy::All => "all",
             FoldBy::Earliest => "earliest",
             FoldBy::Latest => "latest",
+            FoldBy::Protocol => "protocol",
         }
     }
 }

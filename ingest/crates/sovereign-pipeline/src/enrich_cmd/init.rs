@@ -60,6 +60,12 @@ const HELP: Help = Help {
                  before scaling to the full corpus.",
             ),
             (
+                "--max-chapter-words <N>",
+                "With --from-corpus, split a section longer than N words into parts at \
+                 document boundaries. Phase 1 reads a chapter in one call; a thread of \
+                 hundreds of comments needs several.",
+            ),
+            (
                 "--include-articles <path>",
                 "Restrict --from-corpus to article titles listed in <path>. Accepts \
                  plain titles (one per line; lines beginning with # and blank lines \
@@ -133,24 +139,44 @@ const HELP: Help = Help {
     ],
 };
 
+/// Where a corpus's user recipe lives: where the recipe registry looks and
+/// `recipe publish` writes, so init reads the recipe the build will run.
+fn recipe_path(corpus_id: &str) -> Result<PathBuf, String> {
+    let recipes_dir = corpus_engine::RecipeRegistry::default_local_recipes_dir()
+        .ok_or("the recipe registry names no user recipes directory")?;
+    Ok(corpus_engine::recipe_install::recipe_path_in(
+        &recipes_dir,
+        corpus_id,
+    ))
+}
+
 /// Load a corpus's custom atlas ontology from its recipe, if it declares one.
 ///
 /// The `custom_atlas` pipeline is built from DATA, not the registry: this reads
-/// `<data_dir>/recipes/<corpus_id>/recipe.toml` and materializes
-/// `[enrichment.ontology]` into a [`corpus_engine::enrichment::pipeline::CustomAtlasSpec`]
-/// (the single recipe→pipeline mapping is `Recipe::custom_atlas_spec`). `None`
-/// when the recipe is missing or has no non-empty ontology guidance — so the
-/// caller can fall back to (or reject) a registry pipeline.
+/// [`recipe_path`] and materializes `[enrichment.ontology]` into a
+/// [`corpus_engine::enrichment::pipeline::CustomAtlasSpec`] (the single
+/// recipe→pipeline mapping is `Recipe::custom_atlas_spec`). `Ok(None)` when the
+/// corpus has no recipe or its recipe declares no active ontology, so the caller
+/// can fall back to (or reject) a registry pipeline. A recipe that exists and
+/// does not load is an `Err`: never a silent fall-back to another pipeline.
 fn custom_ontology_spec(
     corpus_id: &str,
-) -> Option<corpus_engine::enrichment::pipeline::CustomAtlasSpec> {
-    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.data.dir)
-        .ok()?;
-    let recipe_path = data_dir.join("recipes").join(corpus_id).join("recipe.toml");
-    corpus_engine::Recipe::from_file(&recipe_path)
-        .ok()?
-        .custom_atlas_spec()
+) -> Result<Option<corpus_engine::enrichment::pipeline::CustomAtlasSpec>, String> {
+    ontology_spec_at(&recipe_path(corpus_id)?)
+}
+
+fn ontology_spec_at(
+    path: &std::path::Path,
+) -> Result<Option<corpus_engine::enrichment::pipeline::CustomAtlasSpec>, String> {
+    if !path.exists() {
+        tracing::debug!(path = %path.display(), "enrich init: no recipe, so no custom ontology");
+        return Ok(None);
+    }
+    let spec = corpus_engine::Recipe::from_file(path)
+        .map_err(|e| format!("recipe {} does not load: {e}", path.display()))?
+        .custom_atlas_spec();
+    tracing::debug!(path = %path.display(), active = spec.is_some(), "enrich init: recipe ontology read");
+    Ok(spec)
 }
 
 /// One line saying which ontology `init` chose and how big it is, so the
@@ -200,7 +226,14 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     // --pipeline pin / domain heuristic. Normalize the pipeline id to
     // `custom_atlas` up front so validation, config.json, and logs all reflect
     // what actually runs — the caller need not pass --pipeline custom_atlas.
-    if custom_ontology_spec(&parsed.corpus_id).is_some() {
+    let ontology = match custom_ontology_spec(&parsed.corpus_id) {
+        Ok(ontology) => ontology,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
+    if ontology.is_some() {
         parsed.pipeline_id =
             corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::PIPELINE_ID
                 .to_string();
@@ -216,13 +249,13 @@ pub async fn cmd_init(args: &[String]) -> i32 {
             // `custom_atlas` is built from the recipe's [enrichment.ontology],
             // not the registry — require that ontology to be present + non-empty
             // here so the failure is legible at init, not deep in the build.
-            if custom_ontology_spec(&parsed.corpus_id).is_none() {
+            if ontology.is_none() {
                 eprintln!(
                     "error: --pipeline custom_atlas needs a recipe whose \
                      [enrichment.ontology] is active — non-empty `guidance` or at \
-                     least one declared type — for corpus `{}` \
-                     (looked in <data_dir>/recipes/{}/recipe.toml)",
-                    parsed.corpus_id, parsed.corpus_id
+                     least one declared type — for corpus `{}` (looked in {})",
+                    parsed.corpus_id,
+                    recipe_path(&parsed.corpus_id).map_or_else(|e| e, |p| p.display().to_string())
                 );
                 return 2;
             }
@@ -244,7 +277,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     // entirely. Build a chapter manifest directly from the LanceDB
     // index of an already-installed corpus.
     if let Some(ref source_corpus) = parsed.from_corpus {
-        return cmd_init_from_corpus(&parsed, source_corpus).await;
+        return cmd_init_from_corpus(&parsed, source_corpus, ontology).await;
     }
 
     // Read source file.
@@ -455,7 +488,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         // a per-phase cap).
         phase1b_max_output_tokens: None,
         phase_overrides: None,
-        ontology: custom_ontology_spec(&parsed.corpus_id),
+        ontology,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {
@@ -495,7 +528,11 @@ pub async fn cmd_init(args: &[String]) -> i32 {
 /// content, in stable id order. `chunk_ids` are pre-populated
 /// (the corpus is already indexed; no need for a post-ingest
 /// stitch pass).
-async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
+async fn cmd_init_from_corpus(
+    parsed: &ParsedInit,
+    source_corpus: &str,
+    ontology: Option<corpus_engine::enrichment::pipeline::CustomAtlasSpec>,
+) -> i32 {
     // Resolve data dir + indexes dir from setup config (matches
     // every other command's path resolution).
     let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
@@ -551,6 +588,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         // start ordinal so newly-appended chapters continue past the
         // existing manifest length.
         1,
+        parsed.max_chapter_words,
     ) {
         Ok(m) => m,
         Err(e) => {
@@ -649,7 +687,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         // a per-phase cap).
         phase1b_max_output_tokens: None,
         phase_overrides: None,
-        ontology: custom_ontology_spec(&parsed.corpus_id),
+        ontology,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {
@@ -666,6 +704,9 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     println!("  ✓ from_corpus   = {source_corpus}");
     if let Some(n) = parsed.limit_articles {
         println!("  ✓ limit_articles = {n}");
+    }
+    if let Some(n) = parsed.max_chapter_words {
+        println!("  ✓ max_chapter_words = {n}");
     }
     if let Some(titles) = parsed.include_articles.as_ref() {
         println!("  ✓ include_articles = {} title(s)", titles.len());
@@ -734,6 +775,9 @@ struct ParsedInit {
     /// articles included (sort by source_doc_id, take first N).
     /// `None` means no cap.
     limit_articles: Option<usize>,
+    /// When `from_corpus` is set, split a section longer than this many
+    /// words at document boundaries. `None` keeps sections whole.
+    max_chapter_words: Option<usize>,
     /// When `from_corpus` is set, optional explicit list of article
     /// titles to keep (one per line, with comments and blank lines
     /// ignored). Mutually exclusive with `--limit-articles`.
@@ -770,6 +814,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     let mut template_path: Option<PathBuf> = None;
     let mut from_corpus: Option<String> = None;
     let mut limit_articles: Option<usize> = None;
+    let mut max_chapter_words: Option<usize> = None;
     let mut include_articles_path: Option<PathBuf> = None;
 
     let mut i = 0;
@@ -817,6 +862,17 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                     return Err("--limit-articles must be > 0".into());
                 }
                 limit_articles = Some(n);
+                i += 2;
+            }
+            "--max-chapter-words" => {
+                let n = args
+                    .get(i + 1)
+                    .ok_or("--max-chapter-words requires a value".to_string())?
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|n| *n > 0)
+                    .ok_or("--max-chapter-words must be a positive integer".to_string())?;
+                max_chapter_words = Some(n);
                 i += 2;
             }
             "--include-articles" => {
@@ -946,6 +1002,9 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     if limit_articles.is_some() && !corpus_mode {
         return Err("--limit-articles requires --from-corpus".to_string());
     }
+    if max_chapter_words.is_some() && !corpus_mode {
+        return Err("--max-chapter-words requires --from-corpus".to_string());
+    }
     if include_articles_path.is_some() && !corpus_mode {
         return Err("--include-articles requires --from-corpus".to_string());
     }
@@ -1062,6 +1121,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
         template_path,
         from_corpus,
         limit_articles,
+        max_chapter_words,
         include_articles,
     })
 }
@@ -1145,179 +1205,5 @@ fn apply_template_to_parsed(parsed: &mut ParsedInit) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_args_minimal_form() {
-        let args = vec!["ak".to_string(), "--source".into(), "/tmp/ak.txt".into()];
-        let p = parse_args(&args).unwrap();
-        assert_eq!(p.corpus_id, "ak");
-        assert_eq!(p.source_path, PathBuf::from("/tmp/ak.txt"));
-        assert_eq!(p.pipeline_id, "literary");
-        assert_eq!(
-            p.min_section_body_words, 40,
-            "default should match config default"
-        );
-        assert!(!p.dry_run);
-        assert!(!p.force);
-    }
-
-    #[test]
-    fn parse_args_accepts_min_section_body_words_override() {
-        let args: Vec<String> = [
-            "ak",
-            "--source",
-            "/tmp/ak.txt",
-            "--min-section-body-words",
-            "0",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let p = parse_args(&args).unwrap();
-        assert_eq!(p.min_section_body_words, 0);
-    }
-
-    #[test]
-    fn parse_args_rejects_non_numeric_min_section_body_words() {
-        let args: Vec<String> = [
-            "ak",
-            "--source",
-            "/tmp/ak.txt",
-            "--min-section-body-words",
-            "lots",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let err = parse_args(&args).unwrap_err();
-        assert!(
-            err.contains("non-negative integer"),
-            "unexpected err: {err}"
-        );
-    }
-
-    #[test]
-    fn parse_args_all_flags() {
-        let args: Vec<String> = [
-            "ak",
-            "--source",
-            "/abs/ak.txt",
-            "--chapter-regex",
-            "^BOOK",
-            "--pipeline",
-            "literary",
-            "--chat-model",
-            "chat-x",
-            "--embed-model",
-            "embed-y",
-            "--dry-run",
-            "--force",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let p = parse_args(&args).unwrap();
-        assert_eq!(p.chapter_regex.as_deref(), Some("^BOOK"));
-        assert_eq!(p.chat_model.as_deref(), Some("chat-x"));
-        assert_eq!(p.embed_model.as_deref(), Some("embed-y"));
-        assert!(p.dry_run);
-        assert!(p.force);
-    }
-
-    #[test]
-    fn parse_args_rejects_unknown_flag() {
-        let err = parse_args(&["ak".into(), "--gibberish".into()]).unwrap_err();
-        assert!(err.contains("unknown flag"));
-    }
-
-    #[test]
-    fn parse_args_requires_corpus_id_and_source() {
-        let err = parse_args(&[]).unwrap_err();
-        assert!(err.contains("corpus-id"));
-        let err = parse_args(&["ak".into()]).unwrap_err();
-        assert!(err.contains("source"));
-    }
-
-    #[test]
-    fn parse_args_rejects_extra_positional() {
-        let err =
-            parse_args(&["a".into(), "--source".into(), "/x".into(), "b".into()]).unwrap_err();
-        assert!(err.contains("unexpected positional"));
-    }
-
-    #[test]
-    fn parse_args_accepts_from_template_without_source() {
-        let args: Vec<String> = ["fwd", "--from-template", "free-will-debate"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let p = parse_args(&args).unwrap();
-        assert_eq!(p.corpus_id, "fwd");
-        assert_eq!(p.from_template.as_deref(), Some("free-will-debate"));
-        assert!(p.template_path.is_none());
-        // source_path is filled in by cmd_init after materialisation.
-        assert_eq!(p.source_path, std::path::PathBuf::new());
-    }
-
-    #[test]
-    fn parse_args_rejects_template_with_source() {
-        let args: Vec<String> = [
-            "x",
-            "--from-template",
-            "free-will-debate",
-            "--source",
-            "/tmp/x.txt",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let err = parse_args(&args).unwrap_err();
-        assert!(err.contains("mutually exclusive"), "err: {err}");
-    }
-
-    #[test]
-    fn parse_args_rejects_both_template_flags() {
-        let args: Vec<String> = [
-            "x",
-            "--from-template",
-            "free-will-debate",
-            "--template-path",
-            "/tmp/x.toml",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let err = parse_args(&args).unwrap_err();
-        assert!(err.contains("mutually exclusive"), "err: {err}");
-    }
-
-    #[test]
-    fn parse_args_tracks_explicit_pipeline_with_template() {
-        // Default — pipeline_id is "literary" but unmodified by the
-        // operator, so apply_template_to_parsed will overwrite with
-        // the template's pipeline_id.
-        let args: Vec<String> = ["x", "--from-template", "free-will-debate"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let p = parse_args(&args).unwrap();
-        assert!(!p.pipeline_id_explicit);
-
-        // With explicit override, the operator's choice wins.
-        let args: Vec<String> = [
-            "x",
-            "--from-template",
-            "free-will-debate",
-            "--pipeline",
-            "literary",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let p = parse_args(&args).unwrap();
-        assert!(p.pipeline_id_explicit);
-        assert_eq!(p.pipeline_id, "literary");
-    }
-}
+#[path = "init_tests.rs"]
+mod tests;

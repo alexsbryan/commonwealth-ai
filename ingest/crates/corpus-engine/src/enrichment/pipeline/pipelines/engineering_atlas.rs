@@ -210,6 +210,7 @@ fn parse_engineering_phase1(response: &str) -> Result<Phase1ChapterResult> {
         setting: None,
         plot: None,
         section_extraction: Some(SectionExtraction {
+            document_read: None,
             section_id: String::new(), // runner stamps this
             enrichment_depth: EnrichmentDepth::Extracted,
             entities_introduced: Vec::new(),
@@ -336,6 +337,7 @@ mod tests {
             title: "Title".to_string(),
             text: "body".to_string(),
             metadata: Default::default(),
+            source_documents: Vec::new(),
             approx_tokens: 1,
         };
         let prompt = p.compose_phase1(&chapter, &[]);
