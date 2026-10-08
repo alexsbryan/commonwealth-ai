@@ -137,6 +137,27 @@ fn evidence_endpoints_omit_an_absent_align_endpoint() {
 }
 
 #[test]
+fn the_digest_preimage_is_sorted_distinct_lines_with_records_as_dash() {
+    let b = "b".repeat(64);
+    let a = "a".repeat(64);
+    let pre = texts_digest_preimage([
+        (b.as_str(), None, "jsonl@0.8.0"),
+        (a.as_str(), Some(SHA), "plaintext@0.8.0"),
+        (b.as_str(), None, "jsonl@0.8.0"),
+    ]);
+    assert_eq!(
+        pre,
+        format!("{a} {SHA} plaintext@0.8.0\n{b} - jsonl@0.8.0\n"),
+        "order of arrival and repeats do not change the digest"
+    );
+    assert_eq!(
+        texts_digest_preimage([]),
+        "",
+        "an empty corpus digests the empty string"
+    );
+}
+
+#[test]
 fn sha256_names_are_64_lowercase_hex() {
     assert!(is_sha256_hex(SHA));
     assert!(

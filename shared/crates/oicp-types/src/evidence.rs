@@ -258,6 +258,25 @@ impl DifferenceKind {
     }
 }
 
+/// The bytes [`CorpusTexts::texts_digest`] is the sha256 of (v0.5 §2.4):
+/// one line per stored text of the corpus,
+/// `"<text_sha256> <source_sha256, or - for a record> <extractor>\n"`, the
+/// distinct lines sorted bytewise and concatenated. Each item is
+/// `(text_sha256, source sha256, extractor)`. The one derivation: a host
+/// computing the digest and a client re-checking one both go through this,
+/// and hash it with sha256 themselves.
+pub fn texts_digest_preimage<'a>(
+    texts: impl IntoIterator<Item = (&'a str, Option<&'a str>, &'a str)>,
+) -> String {
+    let mut lines: Vec<String> = texts
+        .into_iter()
+        .map(|(text, source, extractor)| format!("{text} {} {extractor}\n", source.unwrap_or("-")))
+        .collect();
+    lines.sort();
+    lines.dedup();
+    lines.concat()
+}
+
 /// Whether `s` is a well-formed text or source name: 64 lowercase hex.
 pub fn is_sha256_hex(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
