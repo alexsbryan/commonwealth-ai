@@ -98,8 +98,7 @@ fn parse_args_requires_corpus_id_and_source() {
 
 #[test]
 fn parse_args_rejects_extra_positional() {
-    let err =
-        parse_args(&["a".into(), "--source".into(), "/x".into(), "b".into()]).unwrap_err();
+    let err = parse_args(&["a".into(), "--source".into(), "/x".into(), "b".into()]).unwrap_err();
     assert!(err.contains("unexpected positional"));
 }
 
@@ -181,12 +180,18 @@ fn parse_args_tracks_explicit_pipeline_with_template() {
 fn a_recipe_that_does_not_load_is_an_error_never_a_registry_fallback() {
     let dir = tempfile::tempdir().unwrap();
     // No recipe: no custom ontology, and the caller may use a registry pipeline.
-    assert_eq!(ontology_spec_at(&dir.path().join("absent/recipe.toml")), Ok(None));
+    assert_eq!(
+        ontology_spec_at(&dir.path().join("absent/recipe.toml")),
+        Ok(None)
+    );
     // A recipe that does not parse is an error naming it, not a quiet `None`.
     let recipe = dir.path().join("recipe.toml");
     std::fs::write(&recipe, "[corpus\nid = ").unwrap();
     let err = ontology_spec_at(&recipe).unwrap_err();
-    assert!(err.contains("does not load") && err.contains("recipe.toml"), "{err}");
+    assert!(
+        err.contains("does not load") && err.contains("recipe.toml"),
+        "{err}"
+    );
     std::fs::write(
         &recipe,
         r#"

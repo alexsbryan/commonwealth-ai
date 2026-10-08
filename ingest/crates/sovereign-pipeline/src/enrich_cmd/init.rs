@@ -255,8 +255,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
                      [enrichment.ontology] is active — non-empty `guidance` or at \
                      least one declared type — for corpus `{}` (looked in {})",
                     parsed.corpus_id,
-                    recipe_path(&parsed.corpus_id)
-                        .map_or_else(|e| e, |p| p.display().to_string())
+                    recipe_path(&parsed.corpus_id).map_or_else(|e| e, |p| p.display().to_string())
                 );
                 return 2;
             }
