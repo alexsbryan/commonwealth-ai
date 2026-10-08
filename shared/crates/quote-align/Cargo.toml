@@ -1,0 +1,17 @@
+[package]
+name = "quote-align"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Where a quotation stands in a text, and how it differs: norm_v0 with a map back to code points, rarest-3-gram seeding and a windowed token edit alignment. A pure leaf — std and unicode-normalization only; it knows nothing of corpora."
+
+# The dependency budget is the contract (ADDRESSED_TEXT §5.3): a quote matcher
+# every surface can converge on must not drag a corpus, a runtime or a wire
+# schema with it. The daemon's evidence route maps these types onto
+# `oicp_types::evidence` with one exhaustive match.
+[dependencies]
+unicode-normalization = { workspace = true }
+
+[lints]
+workspace = true

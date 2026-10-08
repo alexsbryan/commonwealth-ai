@@ -14,6 +14,10 @@ members = [
     # layer-0 membrane beside oicp-types, deliberately NOT merged with it:
     # oicp is what a node advertises, this is what content IS.
     "shared/crates/kernel-types",
+    # The one quote aligner (ADDRESSED_TEXT §5.3): norm_v0 and a seeded token
+    # alignment over plain `&str` texts. A pure leaf, std and
+    # unicode-normalization only, so every quote matcher can converge on it.
+    "shared/crates/quote-align",
     # Serving policy — fair-share scheduling + pipeline alias resolution.
     # Minted 2026-09-03: `fair_sched` was the ONLY reason sovereign-inference
     # and sovereign-server depended on commonwealth-core, so moving it here
@@ -354,6 +358,7 @@ cognitive_complexity = "warn"
 oicp-client = { path = "shared/crates/oicp-client" }
 oicp-types = { path = "shared/crates/oicp-types" }
 kernel-types = { path = "shared/crates/kernel-types" }
+quote-align = { path = "shared/crates/quote-align" }
 serving-policy = { path = "serve/crates/serving-policy" }
 serving-policy-core = { path = "shared/crates/serving-policy-core" }
 oplog = { path = "shared/crates/oplog" }

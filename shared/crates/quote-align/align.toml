@@ -1,0 +1,31 @@
+# The quote aligner's knobs. Data, not program (ARCH 9): loaded by
+# `AlignConfig::shipped()` through include_str!.
+#
+# Every key but `candidate_k` can move an alignment, so a change to one of
+# them changes `ALIGNER_ID` and re-blesses bank/golden.txt; the golden test
+# fails until both move together. The values below are first settings, to be
+# fitted by `svrn bench` (ADDRESSED_TEXT §5.3 step 4), not measurements.
+
+# Keep an alignment only when matched quote tokens / quote tokens reaches
+# this. The verdict a client draws from the reported differences is its own.
+coverage_floor = 0.7
+
+# How many chunks the host's lexical search over the quote contributes as
+# candidate texts. Read by the route, not by the aligner.
+candidate_k = 8
+
+# How many of the quote's rarest word 3-grams seed candidate windows.
+seeds = 4
+
+# At most this many (3-gram, occurrence) anchors are aligned per request.
+max_anchors = 32
+
+# How far, in tokens, an alignment may drift off its seed's diagonal on
+# either side.
+band = 8
+
+# How many source tokens one ellipsis in the quote may stand for.
+elide_max_tokens = 400
+
+# How many source tokens one square-bracketed insertion may stand for.
+bracket_max_tokens = 12

@@ -10477,6 +10477,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "quote-align"
+version = "0.8.0"
+dependencies = [
+ "unicode-normalization",
+]
+
+[[package]]
 name = "quoted_printable"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
