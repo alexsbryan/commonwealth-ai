@@ -79,6 +79,25 @@ three ways of combining keys; begun: an entity type with a criterion and no sour
 atlas build, over the claims whose subject it is, `resolution_records.rs`). A precision is measured on the rule as it runs, never under gold alone: a field
 follows whatever decision put its value in a record (uv thread .905 under gold, .71 live).
 
+## Reading (agreed 2026-10-08)
+
+The reader asks; it never decides identity. A document is prefilled once with its declared facts (metadata
+fields and the roles derived from them through declared sets, such as the sender's side), then asked a
+fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
+renaming: **Locate** each declared claim kind (line sets or none), **Mention** each entity type a read
+reference field targets and no exhaustive source covers, then per statement **Choose** each closed-valued
+field (the subject's identity fields included) as a distribution over its declared values and "not stated",
+**Pick** each reference field from candidates code proposes (identity keys derivable from the document's
+fields, plus located mentions, less any declared exclusion set), and **Point** at each open-valued field. A
+statement is one kind and at most three verified lines. Statements reach RESOLVE ungrouped. A choice decides
+only once its precision is measured on the rule as it runs; until then its argmax is recorded for measurement,
+and below the bar it is unknown with its distribution attached. An answer code cannot verify refuses that
+question alone. Answers assemble into the stored claims RESOLVE already reads; the `Asker` that answers takes
+the daemon, a replay, or gold, so every question is an oracle at its own boundary. One mode at a time
+(`off | one_shot | passes`); the reader that loses on both examples is deleted. Why: every one-shot read
+failed the same way — the local model asked to find, label, name and cite at once (stage ~43%, party
+.24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c).
+
 ## The generality test
 
 A piece belongs in the layer only if it is stated without a domain word and the examples exercise it:
