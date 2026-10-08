@@ -60,11 +60,11 @@ pub(super) fn necessary_compatible(
     left: &BTreeMap<String, BTreeSet<String>>,
     right: &BTreeMap<String, BTreeSet<String>>,
 ) -> bool {
-    criterion.necessary.iter().all(|(attr, _)| {
-        let Some(left) = left.get(attr).filter(|values| !values.is_empty()) else {
+    criterion.necessary.iter().all(|attr| {
+        let Some(left) = left.get(&attr.name).filter(|values| !values.is_empty()) else {
             return true;
         };
-        let Some(right) = right.get(attr).filter(|values| !values.is_empty()) else {
+        let Some(right) = right.get(&attr.name).filter(|values| !values.is_empty()) else {
             return true;
         };
         left.len() == 1 && right.len() == 1 && left.first() == right.first()

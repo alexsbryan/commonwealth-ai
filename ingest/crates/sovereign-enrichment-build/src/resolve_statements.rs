@@ -447,7 +447,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         bar: criterion.bar,
         model_choice: criterion.model_choice,
         proposed_answer: criterion.proposed_answer,
-        necessary: criterion.necessary.iter().map(|(n, _)| n.clone()).collect(),
+        necessary: criterion.necessary.iter().map(|n| n.name.clone()).collect(),
         vetoed,
         unread,
         proposer: proposer.describe(),

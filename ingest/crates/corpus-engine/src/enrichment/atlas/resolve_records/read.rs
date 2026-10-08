@@ -14,7 +14,7 @@ use oicp_types::forced_choice;
 use tracing::{debug, warn};
 
 use super::select::{decision_call, LABELS, NONE};
-use super::{marked_context, Criterion, Document, Statement};
+use super::{marked_context, Criterion, Document, NecessaryAttr, Statement};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
 
@@ -37,22 +37,22 @@ pub(super) fn provided(
 ) -> Vec<BTreeMap<String, BTreeSet<String>>> {
     let mut out: Vec<BTreeMap<String, BTreeSet<String>>> = vec![BTreeMap::new(); statements.len()];
     for (i, statement) in statements.iter().enumerate() {
-        for (attr, allowed) in &criterion.necessary {
-            let Some(value) = statement.keys.get(attr) else {
+        for attr in &criterion.necessary {
+            let Some(value) = statement.keys.get(&attr.name) else {
                 continue;
             };
-            if allowed.contains(value) {
+            if attr.values.contains(value) {
                 out[i]
-                    .entry(attr.clone())
+                    .entry(attr.name.clone())
                     .or_default()
                     .insert(value.clone());
             } else {
                 warn!(
                     document = doc.id,
                     statement = %statement.id,
-                    attr,
+                    attr = %attr.name,
                     value,
-                    ?allowed,
+                    allowed = ?attr.values,
                     "atlas/resolve read: supplied necessary value is outside the declared set"
                 );
             }
@@ -80,7 +80,8 @@ pub(super) async fn read(
     for (j, &i) in asked.iter().enumerate() {
         out.values[j] = provided[i].clone();
         let s = &statements[i];
-        for (attr, values) in &criterion.necessary {
+        for necessary in &criterion.necessary {
+            let (attr, values) = (necessary.name.as_str(), &necessary.values);
             if out.values[j].contains_key(attr) {
                 continue;
             }
@@ -89,7 +90,7 @@ pub(super) async fn read(
                 .copied()
                 .chain([NONE])
                 .collect();
-            let prompt = question(criterion, attr, values, &labels, doc, s);
+            let prompt = question(criterion, necessary, &labels, doc, s);
             out.calls += 1;
             let dist = match decision_call(infer, &prompt, &labels, doc.id, &s.id).await {
                 Ok(dist) => dist,
@@ -113,7 +114,7 @@ pub(super) async fn read(
                 Some(k) if best.0 != NONE => {
                     debug!(document = doc.id, statement = %s.id, attr, value = %values[k], p = best.1, "atlas/resolve read");
                     out.values[j]
-                        .entry(attr.clone())
+                        .entry(attr.to_string())
                         .or_default()
                         .insert(values[k].clone());
                 }
@@ -127,12 +128,12 @@ pub(super) async fn read(
     out
 }
 
-/// The one-attribute question: the type, the attribute and its values, and
-/// the statement marked in its passage.
+/// The one-attribute question: the type and the attribute, each with its
+/// declared description, the attribute's values, and the statement marked in
+/// its passage.
 fn question(
     criterion: &Criterion,
-    attr: &str,
-    values: &[String],
+    attr: &NecessaryAttr,
     labels: &[&str],
     doc: Document<'_>,
     s: &Statement,
@@ -141,11 +142,16 @@ fn question(
     if !criterion.description.is_empty() {
         u.push_str(&format!(" ({})", criterion.description));
     }
+    u.push_str(&format!("\nAttribute: {}", attr.name));
+    if !attr.description.is_empty() {
+        u.push_str(&format!(" ({})", attr.description));
+    }
     u.push_str(&format!(
-        "\nAttribute: {attr}\n\nStatement, its words in [[ ]]: \"…{}…\"\n\nWhich {attr} do the words in [[ ]] refer to?\n",
-        marked_context(doc.body, s.start, s.end)
+        "\n\nStatement, its words in [[ ]]: \"…{}…\"\n\nWhich {} do the words in [[ ]] refer to?\n",
+        marked_context(doc.body, s.start, s.end),
+        attr.name
     ));
-    for (v, l) in values.iter().zip(labels) {
+    for (v, l) in attr.values.iter().zip(labels) {
         u.push_str(&format!("{l} {v}\n"));
     }
     u.push_str(&format!(

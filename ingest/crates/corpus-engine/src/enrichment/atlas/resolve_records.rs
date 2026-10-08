@@ -55,8 +55,20 @@ pub struct Criterion {
     /// The measured precision of the proposed answer (`proposed_answer`).
     /// `None`: it decides nothing in a forced-choice run.
     pub proposed_answer: Option<f64>,
-    /// The attributes whose supplied or read values must agree, each with its values.
-    pub necessary: Vec<(String, Vec<String>)>,
+    /// The attributes whose supplied or read values must agree.
+    pub necessary: Vec<NecessaryAttr>,
+}
+
+/// A necessary attribute as READ asks it.
+#[derive(Debug, Clone)]
+pub struct NecessaryAttr {
+    pub name: String,
+    /// The author's words for what it holds, shown beside its name; empty
+    /// when the recipe declares none. Declared value meanings lifted stage
+    /// on ward's gold statements .525 -> .663 (crm-proof loop 13, C2).
+    pub description: String,
+    /// The declared closed set, one single-token label each.
+    pub values: Vec<String>,
 }
 
 impl Criterion {
@@ -91,7 +103,11 @@ impl Criterion {
                                 && !values.is_empty()
                                 && values.len() <= MAX_READ_VALUES =>
                         {
-                            Some((n.clone(), values.clone()))
+                            Some(NecessaryAttr {
+                                name: n.clone(),
+                                description: a.description.clone(),
+                                values: values.clone(),
+                            })
                         }
                         _ => None,
                     })

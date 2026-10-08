@@ -806,7 +806,11 @@ async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
 /// A criterion with `kind` necessary over two values.
 fn kind_necessary() -> Criterion {
     Criterion {
-        necessary: vec![("kind".into(), vec!["firing".into(), "death".into()])],
+        necessary: vec![NecessaryAttr {
+            name: "kind".into(),
+            description: String::new(),
+            values: vec!["firing".into(), "death".into()],
+        }],
         ..criterion(&[])
     }
 }

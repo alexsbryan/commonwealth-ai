@@ -4,13 +4,14 @@ use super::*;
 
 fn necessary(keys: &[&str]) -> Criterion {
     let mut c = criterion(keys);
-    c.necessary = vec![(
-        "kind".into(),
-        ["firing", "death"]
+    c.necessary = vec![NecessaryAttr {
+        name: "kind".into(),
+        description: String::new(),
+        values: ["firing", "death"]
             .into_iter()
             .map(str::to_string)
             .collect(),
-    )];
+    }];
     c
 }
 
@@ -441,4 +442,54 @@ async fn necessary_identity_proposal_cannot_join_conflicting_record() {
     assert_eq!(result.vetoed, 1);
     assert_eq!(resolver.records()[0].statements, ["source"]);
     assert_eq!(resolver.records().len(), 1);
+}
+
+/// READ shows a necessary attribute with its declared description, as it
+/// shows the type's (value meanings there lifted stage on ward's gold
+/// statements .525 -> .663, crm-proof loop 13 C2), and asks exactly the old
+/// question when the recipe declares none.
+#[tokio::test]
+async fn read_shows_the_declared_description_of_the_attribute_it_asks() {
+    use crate::enrichment::ontology::OntologyTypeDecl;
+    let described: OntologyTypeDecl = toml::from_str(
+        r#"
+name = "happening"
+kind = "event"
+identity_necessary = ["kind"]
+attributes = [{ name = "kind", type = "text", description = "firing: shots fired; death: a person died", values = ["firing", "death"] }]
+"#,
+    )
+    .unwrap();
+    let mut bare = described.clone();
+    bare.attributes[0].description.clear();
+    let body = "The victim died.";
+    let mut users = Vec::new();
+    for decl in [&described, &bare] {
+        let criterion = Criterion::of(decl, vec![]).unwrap();
+        let (read, seen) = scripted(vec![json!({"A": 0.1, "B": 0.85, "0": 0.05})]);
+        let mut resolver = Resolver::default();
+        resolver
+            .resolve_document(
+                &criterion,
+                doc("d0", body),
+                &[stmt("x", body, "died", 0, &[])],
+                &[],
+                Answerer::Select(&read),
+            )
+            .await;
+        assert_eq!(resolver.records()[0].fields["kind"], values(&["death"]));
+        users.push(seen.lock().unwrap()[0].user.clone());
+    }
+    let shown = " (firing: shots fired; death: a person died)";
+    assert!(
+        users[0].contains(&format!("\nAttribute: kind{shown}\n\nStatement")),
+        "{}",
+        users[0]
+    );
+    assert!(
+        users[1].contains("\nAttribute: kind\n\nStatement"),
+        "{}",
+        users[1]
+    );
+    assert_eq!(users[0].replacen(shown, "", 1), users[1]);
 }
