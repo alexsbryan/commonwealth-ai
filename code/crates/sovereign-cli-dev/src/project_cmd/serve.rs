@@ -333,8 +333,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         .merge(face.routes)
         .merge(face.edit_routes)
         .localhost_only()
-        .layer(axum::Extension(tools))
-        .layer(tower_http::cors::CorsLayer::permissive());
+        .layer(axum::Extension(tools));
 
     let service = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
     if let Err(e) = axum::serve(listener, service).await {

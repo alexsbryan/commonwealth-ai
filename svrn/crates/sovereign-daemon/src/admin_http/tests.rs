@@ -253,7 +253,7 @@ fn enforce_localhost_rejects_non_loopback() {
     ];
     for addr in allowed {
         assert!(
-            enforce_localhost(&addr).is_ok(),
+            enforce_localhost(&addr, &axum::http::HeaderMap::new()).is_ok(),
             "loopback {addr} must pass"
         );
     }
@@ -267,7 +267,7 @@ fn enforce_localhost_rejects_non_loopback() {
         SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)), 9741),
     ];
     for addr in denied {
-        let Err(resp) = enforce_localhost(&addr) else {
+        let Err(resp) = enforce_localhost(&addr, &axum::http::HeaderMap::new()) else {
             panic!("non-loopback {addr} must be rejected");
         };
         assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);

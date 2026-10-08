@@ -1362,7 +1362,13 @@ removed; never describe `:9742` as mTLS.**
 
 **The loopback guard has three layers and one trap.** Router-level
 `from_fn(loopback_only)` middleware, per-handler `ConnectInfo` extraction, and
-a pinned listener-shape test. The listener MUST use
+a pinned listener-shape test. Every layer asks one decider,
+`host_kit::locality::RequestLocality`. A loopback peer address is necessary
+and not sufficient: the request's `Host` must name loopback, and it must carry
+no `Origin` or `Sec-Fetch-Site` of another origin, because a browser on this
+machine is a loopback peer. `client_auth`'s loopback admission, the
+`X-Principal` owner naming, the internal gate and both `/mcp/stats` handlers
+read the same decider. The listener MUST use
 `.into_make_service_with_connect_info::<SocketAddr>()` — bare `axum::serve`
 leaves `ConnectInfo` absent and the guards fail closed for *every* caller.
 The guard lives in the host kit (`host_kit::shell::guard`, re-exported at

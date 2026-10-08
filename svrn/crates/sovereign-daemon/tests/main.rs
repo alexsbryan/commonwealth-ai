@@ -22,6 +22,8 @@
 mod admin_join_serves_venues_e2e;
 #[path = "main/atlas_surface_e2e.rs"]
 mod atlas_surface_e2e;
+#[path = "main/browser_origin_e2e.rs"]
+mod browser_origin_e2e;
 #[path = "main/canonical_pull_e2e.rs"]
 mod canonical_pull_e2e;
 #[path = "main/client_auth.rs"]

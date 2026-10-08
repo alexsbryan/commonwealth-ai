@@ -31,11 +31,15 @@ document) and `docs/SYSTEM_OVERVIEW.md` §"Discovery and membership".
 
 Three zones, from most to least trusted:
 
-- **The local machine.** Loopback callers are trusted: the desktop app,
+- **The local machine.** Loopback *processes* are trusted: the desktop app,
   local CLI, and in-process callers reach the client API without a token.
-  This is decided from the real socket peer address
-  (`ConnectInfo<SocketAddr>`), never from a spoofable header
-  (`svrn/crates/sovereign-daemon/src/client_auth.rs`).
+  The real socket peer address (`ConnectInfo<SocketAddr>`) must be loopback,
+  but that is not enough: a browser on this machine is a loopback peer too.
+  A request is local only when its `Host` also names loopback and it
+  carries no `Origin` or `Sec-Fetch-Site` of another origin
+  (`shared/crates/host-kit/src/locality.rs`, read by every site that
+  trusts loopback). Until 2026-10-08 the address alone decided, so any web
+  page the owner had open passed as a local process.
 - **The mesh perimeter.** In trusted-network mode a Commonwealth mesh runs
   on a network you control — a tailnet, WireGuard, or a LAN behind a
   firewall. Inside that perimeter, nodes that hold the join key are peers.
@@ -120,18 +124,23 @@ Three zones, from most to least trusted:
 |---|---|---|---|
 | Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`svrn/crates/sovereign-daemon/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <token>`, matched full-token-first then guest-grant (`client_auth.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
 | ~~Client API `:9741` — standalone `commonwealth` binary~~ | ~~`0.0.0.0` (hardcoded)~~ | ~~Same `client_auth` bearer layer as above~~ | Struck 2026-09-20: the binary was deleted by `27c0fe031` (2026-08-26) and no crate of that name is in the tree, so this surface does not ship. See Known gaps entry 4. |
-| MCP `/mcp` (rides `:9741`) | — | Loopback-only middleware, no token by design (`svrn/crates/sovereign-daemon/src/mcp_router.rs`); permissive CORS is safe *because* of the loopback gate | — |
+| MCP `/mcp` (rides `:9741`) | — | Local-process-only middleware, no token by design (`svrn/crates/sovereign-daemon/src/mcp_router.rs`). Corrected 2026-10-08: this row said permissive CORS was safe *because* of the loopback gate. It was not, since a browser page on this machine passes a loopback gate: `OPTIONS /mcp` from `https://evil.example` got `access-control-allow-origin: *`, and that origin was served `tools/list` (observed against the running daemon). The CORS layer is gone, and a cross-origin or foreign-`Host` request is refused by name | — |
 | Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated and gossip carries a mesh proof; **the other routes, admin ones included, have no guard of their own** (corrected 2026-09-20: this row said they were per-handler loopback-only, and no handler reads the caller's address) | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |
 | `sovereign-server` `:8080` (multi-tenant REST/WS, mobile-facing) | `127.0.0.1` (`sovereign/crates/sovereign-server/src/config.rs`) | API-key → tenant middleware. **Startup refuses a non-loopback bind with auth disabled** unless `allow_unauthenticated_remote = true` is set explicitly (`validate_exposure`). `/health` + `/status` unauthenticated by design. | Plain HTTP on the perimeter; iroh dial-by-key optional (`[iroh] enabled`) |
 | Worker-pod daemon `:9742` (rented/cloud worker) | `0.0.0.0` | Owner-only routes; client pins the worker's certificate thumbprint from the bootstrap seed | rustls TLS (`cmnwlth/crates/sovereign-pods/src/worker_daemon.rs`) |
 | Tensor-split RPC `:50051/:50052` (`llama-server` ↔ `rpc-server`) | `127.0.0.1` — including `--rpc-worker` and `role = "anchor"`, which took `0.0.0.0` until 2026-09-20. A non-loopback `SOVEREIGN_RPC_SERVE` is refused unless `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1` (or `[shared_model] allow_plaintext_lan = true`) acknowledges it (`sovereign-contracts/src/launch.rs`) | **None** | **None — raw TCP.** Members reach the worker over the member-only `RPC_ALPN` tunnel (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`), which needs no LAN bind. See Known gaps |
 | Desktop command bridge `:9745` (test automation) | `127.0.0.1` | Debug builds only, opt-in via `SOVEREIGN_COMMAND_BRIDGE=1`; must never ship enabled in release (`clients/desktop/src-tauri/src/command_bridge.rs`) | — |
 
-Browser CORS: the `:9741` client surface deliberately ships **no** CORS
-layer (`routes_ollama.rs` module doc — "honest disclosure over silent
-exposure"); `sovereign-server` applies permissive CORS only when auth is
-enabled (`[server] cors = "auto"`), so an unauthenticated server never
-invites cross-origin browser calls.
+Browser CORS: the `:9741` client surface ships **no** CORS layer
+(`routes_ollama.rs` module doc — "honest disclosure over silent
+exposure"). `/mcp`, and `svrn code`'s per-project MCP serve, carried a
+permissive one until 2026-10-08. No CORS is not sufficient on its own: a
+page served under a name that resolves to 127.0.0.1 is same-origin to the
+browser and needs none (DNS rebinding). The `Host` test in
+`host-kit/src/locality.rs` closes that, and `Origin` and `Sec-Fetch-Site`
+close the cross-site request. `sovereign-server` applies permissive CORS
+only when auth is enabled (`[server] cors = "auto"`), so an
+unauthenticated server never invites cross-origin browser calls.
 
 ## Two operating modes
 

@@ -22,6 +22,7 @@ use oicp_types::mcp::{MCP_CORPUS_HEADER, MCP_EFFECTS_HEADER, MCP_EFFECTS_READ};
 use serde_json::Value;
 
 use super::{dispatch_body, McpRequestContext, McpRequestHandler};
+use crate::locality::RequestLocality;
 
 /// The header an agent names its session with (the work atlas groups
 /// claims by it).
@@ -101,10 +102,12 @@ pub fn routes<H: McpRequestHandler + 'static>(handler: Arc<H>, notifier: McpNoti
 /// `/mcp`, so both transports converge on one handler.
 async fn mcp_sse(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Extension(notifier): Extension<McpNotifier>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    if !peer.ip().is_loopback() {
-        tracing::debug!(%peer, "mcp: sse refused, not loopback");
+    let at = RequestLocality::of(&peer, &headers);
+    if !at.is_local() {
+        tracing::debug!(%peer, locality = ?at, "mcp: sse refused, not a local process");
         return Err(StatusCode::FORBIDDEN);
     }
     let endpoint_event = stream::once(async {
@@ -131,15 +134,20 @@ async fn mcp_handle<H: McpRequestHandler + 'static>(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    if !peer.ip().is_loopback() {
-        tracing::debug!(%peer, "mcp: request refused, not loopback");
+    let at = RequestLocality::of(&peer, &headers);
+    if !at.is_local() {
+        tracing::debug!(%peer, locality = ?at, "mcp: request refused, not a local process");
+        let why = match &at {
+            RequestLocality::CrossOrigin(origin) => {
+                format!("MCP refuses a request from another origin ({origin})")
+            }
+            RequestLocality::Local | RequestLocality::Remote | RequestLocality::ForeignHost(_) => {
+                "MCP is local-only".to_string()
+            }
+        };
         return (
             StatusCode::FORBIDDEN,
-            Json(JsonRpcResponse::error(
-                Value::Null,
-                -32001,
-                "MCP is local-only",
-            )),
+            Json(JsonRpcResponse::error(Value::Null, -32001, why)),
         )
             .into_response();
     }

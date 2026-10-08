@@ -236,10 +236,12 @@ impl AppState {
             };
         }
 
-        // 4. A loopback caller may name itself, on a listener that trusts a
-        //    loopback peer address.
-        let from_loopback = peer.is_some_and(|p| p.ip().is_loopback());
-        if policy.trust_loopback && from_loopback {
+        // 4. A local process may name itself, on a listener that trusts a
+        //    loopback peer address. A web page is a loopback peer too, so the
+        //    one decider reads its headers as well (`host_kit::locality`).
+        let local =
+            peer.is_some_and(|p| host_kit::locality::RequestLocality::of(&p, headers).is_local());
+        if policy.trust_loopback && local {
             if let Some(declared) = headers
                 .get(PRINCIPAL_HEADER)
                 .and_then(|v| v.to_str().ok())

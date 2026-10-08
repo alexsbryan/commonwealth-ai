@@ -98,6 +98,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use crate::state::AppState;
+use host_kit::locality::{cross_origin_refusal, RequestLocality};
 
 /// Per-listener auth posture. See the module docs: the daemon binds the
 /// client router more than once, and the binds differ only in whether a
@@ -231,14 +232,41 @@ pub async fn client_auth_layer(
 
     // Loopback is local — admit without a token, on a listener where that
     // inference holds. It does not hold on the guest listener: see the module
-    // docs, and `ClientAuthPolicy`.
-    if peer.ip().is_loopback() && policy.trust_loopback {
+    // docs, and `ClientAuthPolicy`. Nor for a web page: a browser on this
+    // machine is a loopback peer too, so the one decider also reads `Host`,
+    // `Origin` and `Sec-Fetch-Site` (`host_kit::locality`).
+    let locality = RequestLocality::of(&peer, request.headers());
+    if policy.trust_loopback && locality.is_local() {
         return next.run(request).await;
     }
 
     // Federation/health surface stays open to remote callers.
     if AUTH_EXEMPT_PATHS.contains(&request.uri().path()) {
         return next.run(request).await;
+    }
+
+    // On the listener the owner's own tools use, a web page of another origin
+    // is refused by that name rather than read as a missing bearer; a caller
+    // addressed to a foreign name goes on as a remote one.
+    if policy.trust_loopback {
+        match &locality {
+            RequestLocality::CrossOrigin(origin) => {
+                tracing::warn!(
+                    peer = %peer,
+                    path = %request.uri().path(),
+                    %origin,
+                    "client_auth: refused a web page of another origin"
+                );
+                return cross_origin_refusal(origin);
+            }
+            RequestLocality::ForeignHost(host) => tracing::debug!(
+                peer = %peer,
+                path = %request.uri().path(),
+                %host,
+                "client_auth: loopback caller addressed to a foreign name is not local"
+            ),
+            RequestLocality::Local | RequestLocality::Remote => {}
+        }
     }
 
     // Remote, gated path. The caller's identity is resolved ONCE, through the
