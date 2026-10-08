@@ -12,6 +12,9 @@ use crate::enrichment::pipeline::types::ChapterInput;
 #[path = "document_read/claim_check_tests.rs"]
 mod claim_check_tests;
 
+#[path = "document_read/citation_tests.rs"]
+mod citation_tests;
+
 pub(super) fn policies() -> OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
         r#"

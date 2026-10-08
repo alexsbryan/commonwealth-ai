@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 mod cache;
+mod citations;
 mod projection;
 mod runner_support;
 mod schema;

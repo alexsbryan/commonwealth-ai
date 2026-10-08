@@ -592,7 +592,10 @@ question the pipeline asks about a type is a method on the resolved
   `DocumentRead` outcomes, evidence and `subject_local_ref`s travel through
   `SectionExtraction` cache/checkpoints, keyed by the read contract and source
   context; generic questions are skipped on this path, and accountable source
-  identity and subject fields flow to RESOLVE. `false` preserves the default
+  identity and subject fields flow to RESOLVE. Its decoder selects document-scoped
+  source-citation handles; validation expands them to exact source quotes and
+  rebuilds the qualified claim projection before caching. Unknown or foreign
+  handles refuse the claim; exact source verification remains mandatory. `false` preserves the default
   path.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`

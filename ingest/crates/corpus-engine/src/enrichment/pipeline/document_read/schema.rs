@@ -7,8 +7,8 @@ use crate::enrichment::ontology::{AttrDecl, OntologyPolicies, SourceDecl, TypeIn
 use crate::enrichment::pipeline::pipelines::ontology_schema::attribute_schema;
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 
-/// v2: per-kind field contracts and per-status outcome branches.
-const CONTRACT_VERSION: u32 = 2;
+/// v3 binds decoder citations to the actual supplied source, before projection.
+const CONTRACT_VERSION: u32 = 3;
 const SYSTEM: &str = include_str!("../document_read_system.md");
 
 /// Compose the small, declared-only prompt over the already-batched documents.
@@ -35,6 +35,7 @@ pub fn compose(chapter: &ChapterInput, policies: &OntologyPolicies, phase_id: &s
                 "url": document.url(),
                 "metadata": document.metadata(),
                 "metadata_source_references": metadata_references(document, policies),
+                "citation_choices": super::citations::choices(document),
                 "body": document.raw_body(),
             })
         })
@@ -163,7 +164,26 @@ fn schema_for(chapter: &ChapterInput, policies: &OntologyPolicies) -> Value {
         .iter()
         .map(SourceDocument::key)
         .collect();
-    schema_for_ids(&document_ids, policies)
+    let mut schema = schema_for_ids(&document_ids, policies);
+    let templates = schema["properties"]["documents"]["items"]["oneOf"]
+        .as_array()
+        .expect("document outcomes have decoder branches")
+        .clone();
+    let branches: Vec<Value> = chapter
+        .source_documents
+        .iter()
+        .flat_map(|document| {
+            templates.iter().cloned().map(move |mut branch| {
+                branch["properties"]["document_id"] = json!({"const":document.key()});
+                super::citations::constrain(&mut branch, document);
+                branch
+            })
+        })
+        .collect();
+    if !branches.is_empty() {
+        schema["properties"]["documents"]["items"]["oneOf"] = json!(branches);
+    }
+    schema
 }
 
 fn schema_for_ids(document_ids: &[&str], policies: &OntologyPolicies) -> Value {

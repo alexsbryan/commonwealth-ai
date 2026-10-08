@@ -44,7 +44,7 @@ pub fn validate_and_stamp(
             )));
         }
     }
-    let mut refused_any = false;
+    let mut reproject = false;
     {
         let read = extraction.document_read.as_mut().ok_or_else(|| {
             Error::Serialization("document-reading policy produced no document-read carrier".into())
@@ -61,6 +61,7 @@ pub fn validate_and_stamp(
                 actual.len()
             )));
         }
+        let expand_handles = read.context_fingerprint.is_empty();
         let mut seen: BTreeSet<String> = BTreeSet::new();
         for outcome in &mut read.documents {
             if !seen.insert(outcome.document_id.clone()) {
@@ -75,7 +76,7 @@ pub fn validate_and_stamp(
                     outcome.document_id
                 ))
             })?;
-            refused_any |= validate_outcome(outcome, document, policies)?;
+            reproject |= validate_outcome(outcome, document, policies, expand_handles)?;
         }
         if seen.len() != actual.len() {
             let missing: Vec<&str> = actual
@@ -90,7 +91,7 @@ pub fn validate_and_stamp(
         }
         read.context_fingerprint = super::cache::context_fingerprint(chapter);
     }
-    if refused_any {
+    if reproject {
         extraction.claims.clear();
         extraction.entities_introduced.clear();
         super::projection::project_compatibility_sketches(extraction, policies)?;
@@ -99,11 +100,12 @@ pub fn validate_and_stamp(
 }
 
 /// Validate one outcome and its claims. Returns whether any claim was
-/// refused; refused claims are recorded on the outcome by name.
+/// refused or source handles expanded; either requires compatibility reprojection.
 fn validate_outcome(
     outcome: &mut DocumentReadOutcome,
     document: &SourceDocument,
     policies: &OntologyPolicies,
+    expand_handles: bool,
 ) -> Result<bool> {
     match outcome.status {
         DocumentReadStatus::Read if outcome.claims.is_empty() => {
@@ -145,7 +147,19 @@ fn validate_outcome(
     let mut refused = Vec::new();
     let mut local_subjects: HashMap<(String, String), (String, Map<String, Value>)> =
         HashMap::new();
-    for claim in outcome.claims.drain(..) {
+    let mut expanded = false;
+    for mut claim in outcome.claims.drain(..) {
+        let binding_error = if expand_handles {
+            match super::citations::expand(&mut claim, document) {
+                Ok(changed) => {
+                    expanded |= changed;
+                    None
+                }
+                Err(reason) => Some(reason),
+            }
+        } else {
+            None
+        };
         let subject_key = (claim.subject_type.clone(), claim.subject_local_ref.clone());
         let supported: Map<String, Value> = claim
             .subject_fields
@@ -168,8 +182,9 @@ fn validate_outcome(
             }
             Some(_) => None,
         };
-        let refusal =
-            refusal.or_else(|| verify_claim(&claim, document, policies, &eligible, &index).err());
+        let refusal = binding_error
+            .or(refusal)
+            .or_else(|| verify_claim(&claim, document, policies, &eligible, &index).err());
         match refusal {
             None => kept.push(claim),
             Some(reason) => {
@@ -194,7 +209,7 @@ fn validate_outcome(
             "every claim ({before}) was refused: its citation did not verify in this document"
         ));
     }
-    Ok(before > outcome.claims.len())
+    Ok(expanded || before > outcome.claims.len())
 }
 
 /// Why one claim cannot be projected, or `Ok(())` when its citation, voice
@@ -220,11 +235,7 @@ fn verify_claim(
             claim.kind
         ));
     }
-    let evidence = fold_ws(&claim.evidence);
-    if evidence.is_empty()
-        || (!fold_ws(&document.raw_body()).contains(&evidence)
-            && !document_identity_matches(document, &evidence))
-    {
+    if !claim_evidence_exists(document, &claim.evidence) {
         return Err(format!(
             "evidence is not an exact passage in document `{}` nor one of its declared identity fields",
             document.key()
@@ -278,6 +289,13 @@ fn document_identity_matches(document: &SourceDocument, folded_evidence: &str) -
     ]
     .iter()
     .any(|value| !value.is_empty() && fold_ws(value) == folded_evidence)
+}
+
+pub(super) fn claim_evidence_exists(document: &SourceDocument, evidence: &str) -> bool {
+    let folded = fold_ws(evidence);
+    !folded.is_empty()
+        && (fold_ws(&document.raw_body()).contains(&folded)
+            || document_identity_matches(document, &folded))
 }
 
 pub(super) fn validate_fields(
@@ -345,7 +363,7 @@ pub fn field_evidence_exists(document: &SourceDocument, evidence: &str) -> bool 
     })
 }
 
-fn metadata_strings(value: &Value) -> Vec<String> {
+pub(super) fn metadata_strings(value: &Value) -> Vec<String> {
     match value {
         Value::String(text) => vec![text.clone()],
         Value::Number(number) => vec![number.to_string()],
