@@ -930,10 +930,17 @@ pub(super) async fn run_daemon(
     // `[retrieval] corpora`, and the mesh leg is not wired — it dials this
     // daemon's own `/v1/knowledge/search`, whose hits fold in past the
     // ceiling. `start_daemon` refuses a keyed store over an unkeyed Runtime.
-    let keyed = crate::client_tokens::ClientTokenStore::load(Some(
-        crate::client_tokens::client_tokens_dir(&data_dir),
-    ))
-    .is_keyed();
+    let keyed = match crate::client_tokens::loopback_grants_nothing(
+        config.daemon.loopback.as_deref(),
+        &data_dir,
+    ) {
+        Ok(keyed) => keyed,
+        Err(e) => {
+            tracing::error!("daemon: {e}");
+            eprintln!("{e}");
+            return 2;
+        }
+    };
     let (corpus_principal, mesh_knowledge): (
         Arc<dyn sovereign_core::traits::PrincipalResolver>,
         _,

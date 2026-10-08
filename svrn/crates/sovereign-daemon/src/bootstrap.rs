@@ -631,10 +631,17 @@ pub async fn setup_watched_folders(
             // included (phase-b-86), so the cleanup call presents the
             // daemon's own credential there; the store's own `is_keyed`
             // decides, read from the directory the seal reads.
-            let keyed = crate::client_tokens::ClientTokenStore::load(Some(
-                crate::client_tokens::client_tokens_dir(data_dir),
-            ))
-            .is_keyed();
+            // An unknown `[daemon] loopback` refuses the boot at the node
+            // seed with its sentence; here it is named and the pass presents
+            // no credential, which that refusal makes moot.
+            let keyed = crate::client_tokens::loopback_grants_nothing(
+                config.daemon.loopback.as_deref(),
+                data_dir,
+            )
+            .unwrap_or_else(|e| {
+                tracing::warn!("watched folders: {e}");
+                false
+            });
             super::ocr_install::install_ocr_ctx(
                 &manager,
                 data_dir,

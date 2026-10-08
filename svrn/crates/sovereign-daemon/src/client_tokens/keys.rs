@@ -1,56 +1,41 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! On-prem API keys — the on-disk half (`<data_dir>/client-tokens/<sub>.key`).
+//! Named credentials — the on-disk half (`<data_dir>/client-tokens/<name>.key`).
 //!
-//! A key file is the secret on its first line and, optionally, the groups the
-//! key asserts on a `groups = a, b` line:
+//! A record is the secret on its first line and, optionally, the groups it
+//! asserts on a `groups = a, b` line:
 //!
 //! ```text
-//! 3f9c…e1
+//! svrn_3f9c…e1
 //! groups = admin
 //! ```
 //!
-//! The file name is the key's `sub`, under the same label rule a named token
-//! has, because it is a file name and nothing else. This module reads, writes
-//! and removes those files; [`super::ClientTokenStore`] answers who a
-//! presented bearer is. One store, two credential kinds (principle 8): the
-//! daemon never needed a second table to ask "who is this key".
+//! The file name is the credential's name, under the label rule
+//! [`super::check_label`] enforces, because it is a file name and nothing
+//! else. A legacy device token (`<label>.token`, written by `svrn mesh token`
+//! before 2026-10-08) is the same record with no groups line, read as one and
+//! rewritten as `<label>.key` once the posture is declared
+//! ([`migrate_tokens`]). This module reads, writes and removes the files;
+//! [`super::ClientTokenStore`] answers who a presented bearer is.
 
 use std::path::{Path, PathBuf};
 
-use super::{check_label, harden_dir, harden_file, BadLabel};
-use crate::client_principal::fingerprint;
+use super::{check_label, harden_dir, harden_file, Named};
 
-/// The group whose keys reach the ingest and admin routes. Every other key is
-/// a lawyer's: its own conversations and the read routes `crate::api_keys`
-/// names.
+/// The group whose credentials reach ingest, the admin routes and minting.
+/// Every other credential reaches what its posture gives a named client: on
+/// `loopback = "none"`, its own conversations and the read routes
+/// `crate::api_keys` names.
 pub const KEY_ADMIN_GROUP: &str = "admin";
 
-/// One loaded key. Private to the store; the secret leaves only at mint.
-#[derive(Debug, Clone)]
-pub(super) struct ApiKey {
-    pub(super) sub: String,
-    pub(super) token: String,
-    pub(super) groups: Vec<String>,
+const KEY_EXT: &str = "key";
+const LEGACY_TOKEN_EXT: &str = "token";
+
+fn record_path(dir: &Path, name: &str, ext: &str) -> PathBuf {
+    dir.join(format!("{name}.{ext}"))
 }
 
-/// A key as `svrn daemon key --list` reports it: who, which groups, and the
-/// bucket key a log line carries. Never the secret.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ApiKeyRow {
-    /// The subject the key asserts; its conversations are owned by it.
-    pub sub: String,
-    /// The groups the key asserts.
-    pub groups: Vec<String>,
-    /// [`fingerprint`] of the secret.
-    pub fingerprint: String,
-}
-
-fn key_path(dir: &Path, sub: &str) -> PathBuf {
-    dir.join(format!("{sub}.key"))
-}
-
-/// Parse a key file's text. `None` when it holds no secret.
-fn parse_key(sub: &str, raw: &str) -> Option<ApiKey> {
+/// Parse a record's text. `None` when it holds no secret.
+fn parse_record(name: &str, raw: &str) -> Option<Named> {
     let mut lines = raw.lines().map(str::trim).filter(|l| !l.is_empty());
     let token = lines.next()?.to_string();
     let mut groups = Vec::new();
@@ -67,190 +52,144 @@ fn parse_key(sub: &str, raw: &str) -> Option<ApiKey> {
             );
         } else {
             tracing::warn!(
-                sub,
-                "client_tokens: key file line is not `groups = …` — ignored"
+                name,
+                "client_tokens: record line is not `groups = …` — ignored"
             );
         }
     }
-    Some(ApiKey {
-        sub: sub.to_string(),
+    Some(Named {
+        name: name.to_string(),
         token,
         groups,
     })
 }
 
-/// Every `<sub>.key` under `dir`. A missing directory is no keys; an
-/// unreadable or empty file is named and skipped, as a token file is.
-pub(super) fn read_dir_keys(dir: &Path) -> Vec<ApiKey> {
+/// The records' file names under `dir`: `(name, extension, path)` for every
+/// `<name>.key` and `<name>.token` whose name is a label. A missing directory
+/// is no records.
+fn record_files(dir: &Path) -> Vec<(String, &'static str, PathBuf)> {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
         Err(e) => {
-            tracing::warn!(dir = ?dir, "client_tokens: key directory unreadable: {e}");
+            tracing::warn!(dir = ?dir, "client_tokens: credential directory unreadable: {e}");
             return Vec::new();
         }
     };
     let mut out = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        let Some(sub) = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .and_then(|n| n.strip_suffix(".key"))
-        else {
+        let Some(file) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if check_label(sub).is_err() {
+        let (name, ext) = match file.rsplit_once('.') {
+            Some((name, KEY_EXT)) => (name, KEY_EXT),
+            Some((name, LEGACY_TOKEN_EXT)) => (name, LEGACY_TOKEN_EXT),
+            _ => continue,
+        };
+        if check_label(name).is_err() {
             tracing::warn!(
                 ?path,
-                "client_tokens: skipping a key whose name is not a label"
+                "client_tokens: skipping a file whose name is not a credential name"
             );
             continue;
         }
-        match std::fs::read_to_string(&path).map(|raw| parse_key(sub, &raw)) {
-            Ok(Some(key)) => out.push(key),
-            Ok(None) => tracing::warn!(?path, "client_tokens: key file is empty — skipping"),
-            Err(e) => tracing::warn!(?path, "client_tokens: key file unreadable: {e}"),
-        }
+        out.push((name.to_string(), ext, path));
     }
-    out.sort_by(|a, b| a.sub.cmp(&b.sub));
+    out.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
     out
 }
 
-/// Write a new key for `sub` asserting `groups`, mode 0600 in a 0700
-/// directory. Refuses a `sub` or group that is not a label, and a `sub` that
-/// already has a key: replacing one is a revoke and an add, said aloud.
-pub fn add_key(
-    dir: &Path,
-    sub: &str,
-    groups: &[String],
-    token: &str,
-) -> Result<ApiKeyRow, BadLabel> {
-    let sub = check_label(sub)?;
-    for g in groups {
-        check_label(g).map_err(|e| BadLabel(format!("group: {e}")))?;
-    }
-    let path = key_path(dir, sub);
-    if path.exists() {
-        return Err(BadLabel(format!(
-            "'{sub}' already has a key — revoke it first (`svrn daemon key --revoke {sub}`) \
-             if you meant to replace it"
-        )));
-    }
-    let mut body = format!("{}\n", token.trim());
-    if !groups.is_empty() {
-        body.push_str(&format!("groups = {}\n", groups.join(", ")));
-    }
-    std::fs::create_dir_all(dir)
-        .and_then(|()| {
-            harden_dir(dir);
-            std::fs::write(&path, body)
-        })
-        .map_err(|e| BadLabel(format!("could not write {}: {e}", path.display())))?;
-    harden_file(&path);
-    let fp = fingerprint(token.trim());
-    tracing::info!(sub, groups = ?groups, fingerprint = %fp, "client_tokens: wrote an API key");
-    Ok(ApiKeyRow {
-        sub: sub.to_string(),
-        groups: groups.to_vec(),
-        fingerprint: fp,
-    })
+/// Whether `dir` holds a `<name>.key` file: the evidence an undeclared
+/// posture is inferred from ([`super::LoopbackPosture::resolve`]).
+pub(super) fn holds_a_key_file(dir: &Path) -> bool {
+    record_files(dir).iter().any(|(_, ext, _)| *ext == KEY_EXT)
 }
 
-/// Remove `sub`'s key file. `Ok(false)` when there was none — reported, never
-/// counted as a revocation.
-pub fn revoke_key(dir: &Path, sub: &str) -> std::io::Result<bool> {
-    match std::fs::remove_file(key_path(dir, sub.trim())) {
-        Ok(()) => {
-            tracing::info!(sub, "client_tokens: removed an API key");
-            Ok(true)
+/// Every record under `dir`, both forms. When one name has both a `.key` and
+/// a legacy `.token`, the `.key` is the record and the `.token` is named as
+/// left unread: one name, one record (ARCH 8). An unreadable or empty file is
+/// named and skipped.
+pub(super) fn read_records(dir: &Path) -> Vec<Named> {
+    let files = record_files(dir);
+    let mut out: Vec<Named> = Vec::new();
+    for (name, ext, path) in &files {
+        if *ext == LEGACY_TOKEN_EXT && files.iter().any(|(n, e, _)| n == name && *e == KEY_EXT) {
+            tracing::warn!(
+                ?path,
+                "client_tokens: a legacy token shares its name with a key — the key is the \
+                 record, and this token is NOT admitted; revoke one of them by name"
+            );
+            continue;
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(e) => Err(e),
+        match std::fs::read_to_string(path).map(|raw| parse_record(name, &raw)) {
+            Ok(Some(record)) => out.push(record),
+            Ok(None) => tracing::warn!(?path, "client_tokens: credential file is empty — skipping"),
+            Err(e) => tracing::warn!(?path, "client_tokens: credential file unreadable: {e}"),
+        }
     }
+    out
 }
 
-/// The keys on disk now, as rows.
-pub fn list_keys(dir: &Path) -> Vec<ApiKeyRow> {
-    read_dir_keys(dir)
-        .into_iter()
-        .map(|k| ApiKeyRow {
-            fingerprint: fingerprint(&k.token),
-            sub: k.sub,
-            groups: k.groups,
-        })
-        .collect()
+/// Whether a record named `name` is on disk, in either form.
+pub(super) fn record_exists(dir: &Path, name: &str) -> bool {
+    record_path(dir, name, KEY_EXT).exists() || record_path(dir, name, LEGACY_TOKEN_EXT).exists()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::super::ClientTokenStore;
-    use super::*;
-
-    #[test]
-    fn a_key_asserts_its_sub_and_groups_and_makes_the_store_keyed() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().join("client-tokens");
-        assert!(!ClientTokenStore::load(Some(dir.clone())).is_keyed());
-        add_key(&dir, "it", &[KEY_ADMIN_GROUP.into()], "tok-it").unwrap();
-        add_key(&dir, "alice", &[], "tok-alice").unwrap();
-        let store = ClientTokenStore::load(Some(dir.clone()));
-        assert!(store.is_keyed());
-        assert_eq!(
-            store.asserted_for("tok-it"),
-            Some(("it".into(), vec![KEY_ADMIN_GROUP.to_string()]))
-        );
-        assert_eq!(
-            store.asserted_for("tok-alice"),
-            Some(("alice".into(), vec![]))
-        );
-        assert_eq!(store.asserted_for("tok-nobody"), None);
-        // A key is not a named device token: it never admits as one.
-        assert_eq!(store.label_for("tok-alice"), None);
-        assert!(
-            add_key(&dir, "alice", &[], "tok-2").is_err(),
-            "no silent rotation"
-        );
-        assert!(add_key(&dir, "../x", &[], "tok-3").is_err());
-        assert!(revoke_key(&dir, "alice").unwrap());
-        assert!(!revoke_key(&dir, "alice").unwrap());
-        assert_eq!(
-            list_keys(&dir)
-                .into_iter()
-                .map(|r| r.sub)
-                .collect::<Vec<_>>(),
-            vec!["it".to_string()]
-        );
+/// Write `record` as `<name>.key`, mode 0600 in a 0700 directory, by
+/// temp-and-rename so a crash never leaves a half-written secret. THE one
+/// writer of a record file: [`super::ClientTokenStore::mint`] and
+/// [`migrate_tokens`] both come through it.
+pub(super) fn write_record(dir: &Path, record: &Named) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    harden_dir(dir);
+    let mut body = format!("{}\n", record.token.trim());
+    if !record.groups.is_empty() {
+        body.push_str(&format!("groups = {}\n", record.groups.join(", ")));
     }
+    let target = record_path(dir, &record.name, KEY_EXT);
+    let tmp = dir.join(format!(".{}.key.tmp", record.name));
+    std::fs::write(&tmp, body)?;
+    harden_file(&tmp);
+    std::fs::rename(&tmp, &target)
+}
 
-    /// The daemon's own credential is admitted, as an admin, only by a store
-    /// the disk made keyed, and no operator listing shows it. Failing input:
-    /// insert it unconditionally and the unkeyed store admits it (and reads
-    /// keyed).
-    #[test]
-    fn the_self_credential_admits_only_on_a_keyed_store() {
-        let own = super::super::self_credential().expect("entropy");
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().join("client-tokens");
-        let unkeyed = ClientTokenStore::load(Some(dir.clone()));
-        assert!(!unkeyed.is_keyed());
-        assert_eq!(unkeyed.asserted_for(own), None);
-        add_key(&dir, "alice", &[], "tok-alice").unwrap();
-        let keyed = ClientTokenStore::load(Some(dir.clone()));
-        assert_eq!(
-            keyed.asserted_for(own),
-            Some((
-                super::super::SELF_SUB.to_string(),
-                vec![KEY_ADMIN_GROUP.to_string()]
-            ))
-        );
-        assert_eq!(
-            list_keys(&dir)
-                .into_iter()
-                .map(|r| r.sub)
-                .collect::<Vec<_>>(),
-            vec!["alice".to_string()]
-        );
-        assert!(check_label(super::super::SELF_SUB).is_err());
+/// Remove `name`'s record in both forms. `Ok(false)` when there was none —
+/// reported, never counted as a revocation.
+pub(super) fn remove_record(dir: &Path, name: &str) -> std::io::Result<bool> {
+    let mut removed = false;
+    for ext in [KEY_EXT, LEGACY_TOKEN_EXT] {
+        match std::fs::remove_file(record_path(dir, name, ext)) {
+            Ok(()) => removed = true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(removed)
+}
+
+/// Rewrite every legacy `<label>.token` as `<label>.key` (no groups), then
+/// remove the `.token`. Run only under a declared posture, where adding a
+/// `.key` file cannot change what an undeclared daemon infers. A label that
+/// already has a `.key` is left alone and named by [`read_records`].
+pub(super) fn migrate_tokens(dir: &Path) {
+    for (name, ext, path) in record_files(dir) {
+        if ext != LEGACY_TOKEN_EXT || record_path(dir, &name, KEY_EXT).exists() {
+            continue;
+        }
+        let record = match std::fs::read_to_string(&path).map(|raw| parse_record(&name, &raw)) {
+            Ok(Some(r)) => r,
+            Ok(None) | Err(_) => continue, // `read_records` names it.
+        };
+        match write_record(dir, &record).and_then(|()| std::fs::remove_file(&path)) {
+            Ok(()) => tracing::info!(
+                name = %name,
+                "client_tokens: migrated a legacy device token into the one record form"
+            ),
+            Err(e) => tracing::warn!(
+                name = %name,
+                "client_tokens: could not migrate a legacy device token (it is still read): {e}"
+            ),
+        }
     }
 }

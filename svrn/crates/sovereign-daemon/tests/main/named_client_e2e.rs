@@ -19,7 +19,7 @@ use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use kernel_types::NodeId;
 use sovereign_daemon::client_auth::generate_bearer_token;
-use sovereign_daemon::client_tokens::ClientTokenStore;
+use sovereign_daemon::client_tokens::{ClientTokenStore, Loopback, LoopbackPosture};
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, NodeSeed};
 use tower::ServiceExt;
@@ -27,7 +27,13 @@ use tower::ServiceExt;
 const LOOPBACK: &str = "127.0.0.1:55002";
 
 fn state(dir: &std::path::Path) -> (AppState, Arc<ClientTokenStore>) {
-    let tokens = Arc::new(ClientTokenStore::load(Some(dir.join("client-tokens"))));
+    let tokens = Arc::new(ClientTokenStore::load(
+        Some(dir.join("client-tokens")),
+        LoopbackPosture {
+            loopback: Loopback::Owner,
+            declared: true,
+        },
+    ));
     let state = AppState::new_with_node(
         NodeId::from_u128(1),
         NodeSeed {
@@ -85,7 +91,7 @@ async fn a_revoked_token_from_loopback_is_401() {
     let tmp = tempfile::tempdir().unwrap();
     let (state, tokens) = state(tmp.path());
     let token = generate_bearer_token().unwrap();
-    tokens.mint("harness", token.clone()).unwrap();
+    tokens.mint("harness", &[], token.clone()).unwrap();
     let header = format!("Bearer {token}");
     assert_eq!(
         models_from_loopback(state.clone(), Some(&header)).await,
@@ -140,7 +146,7 @@ async fn a_named_token_from_loopback_is_logged_by_name() {
     let tmp = tempfile::tempdir().unwrap();
     let (state, tokens) = state(tmp.path());
     let token = generate_bearer_token().unwrap();
-    tokens.mint("claude-code", token.clone()).unwrap();
+    tokens.mint("claude-code", &[], token.clone()).unwrap();
     let header = format!("Bearer {token}");
     let lines = captured_lines(async {
         assert_eq!(

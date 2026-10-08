@@ -375,12 +375,35 @@ wait_ready() {
 }
 keyed() { [ -n "$(ls -A "$DATA/client-tokens" 2>/dev/null)" ]; }
 
-# ── 9. Unkeyed phase: restore the corpus, register the share ─────────
+# ── 9. Keys first, then the corpus steps under IT's key ──────────────
+# The kit's config declares `[daemon] loopback = "none"`, so the daemon
+# never runs without keys: they are issued here with no daemon running
+# (`svrn daemon key` edits the store directly then), and the share is
+# registered presenting IT's admin key. Until 2026-10-08 this phase ran
+# the daemon unkeyed on loopback, which a declared `none` forbids.
 if keyed && [ "$FORCE_CONFIG" -eq 0 ]; then
     say "keys exist — corpus restore and share registration were done by an earlier run"
 else
+    # Stopped first: with a daemon listening, `svrn daemon key` asks it
+    # instead of editing the store, and this daemon would refuse it.
+    stop_daemon
     rm -rf "$DATA/client-tokens"
-    say "starting the daemon UNKEYED, on loopback, for the corpus steps"
+    say "API keys → $DATA/client-tokens (the daemon's key store)"
+    issue() {
+        local out key
+        out="$(svrn daemon key --add "$@")" || die "svrn daemon key --add $* failed: $out"
+        key="$(printf '%s\n' "$out" | sed -n 's/^  \([^ ][^ ]*\)$/\1/p' | head -n1)"
+        [ -n "$key" ] || die "svrn daemon key --add $* printed no key: $out"
+        printf '%s\t%s\n' "$1" "$key" >> "$ETC/issued-keys.txt"
+    }
+    install -m 0600 /dev/null "$ETC/issued-keys.txt"
+    issue firm                 # the lawyers' key: conversations, documents, corpora
+    issue it --group admin     # IT's key: ingest and the admin routes
+    svrn daemon key --list | sed 's/^/    /'
+    echo "    issued → $ETC/issued-keys.txt (mode 0600)"
+    IT_KEY="$(sed -n 's/^it\t//p' "$ETC/issued-keys.txt")"
+
+    say "starting the daemon KEYED, on loopback, for the corpus steps"
     start_daemon
     wait_ready
     CORPORA=()
@@ -417,6 +440,7 @@ else
     say "watching the document share: $DOCS_DIR (first sweep; a large share takes a while)"
     reg="$(curl -sS -X POST "$DAEMON_URL/internal/corpus/watch/register" \
         -H 'Content-Type: application/json' \
+        -H "Authorization: Bearer $IT_KEY" \
         --data "$(jq -nc --arg p "$DOCS_DIR" \
             '{path: $p, display_name: "firm-docs", config: {with_ocr: true, sweep_interval_secs: 300}, sync_initial: true}')")" \
         || { stop_daemon; die "could not reach $DAEMON_URL to register the share"; }
@@ -426,21 +450,7 @@ else
     echo "    corpus $docs_id, first sweep $(printf '%s' "$reg" | jq -c '.initial_sweep')"
     stop_daemon
 
-    # ── 10. Keys and the allow-list ──────────────────────────────────
-    say "API keys → $DATA/client-tokens (the daemon's key store)"
-    issue() {
-        local out key
-        out="$(svrn daemon key --add "$@")" || die "svrn daemon key --add $* failed: $out"
-        key="$(printf '%s\n' "$out" | sed -n 's/^  \([^ ][^ ]*\)$/\1/p' | head -n1)"
-        [ -n "$key" ] || die "svrn daemon key --add $* printed no key: $out"
-        printf '%s\t%s\n' "$1" "$key" >> "$ETC/issued-keys.txt"
-    }
-    install -m 0600 /dev/null "$ETC/issued-keys.txt"
-    issue firm                 # the lawyers' key: conversations, documents, corpora
-    issue it --group admin     # IT's key: ingest and the admin routes
-    svrn daemon key --list | sed 's/^/    /'
-    echo "    issued → $ETC/issued-keys.txt (mode 0600)"
-
+    # ── 10. The allow-list ───────────────────────────────────────────
     say "corpus allow-list → [retrieval] in $CONFIG"
     list="$(printf '"%s", ' "${CORPORA[@]}")"
     list="corpora = [${list%, }]"

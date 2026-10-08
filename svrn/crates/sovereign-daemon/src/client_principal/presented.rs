@@ -41,15 +41,11 @@ pub const CREDENTIAL_PREFIX: &str = "svrn_";
 pub enum Verified {
     /// A live guest grant. The grant bounds the routes.
     Guest(GuestGrant),
-    /// A named device token: the label the operator minted it under.
-    NamedToken {
-        /// What it is revoked by, and what an admit line names.
-        label: String,
-    },
-    /// An API key: the subject and groups it asserts.
-    Key {
-        /// The asserted subject.
-        sub: String,
+    /// A named credential (`svrn daemon key`): the name it was minted under,
+    /// which is the subject it asserts, and its groups.
+    Named {
+        /// The asserted subject: what a call is logged by, and revoked by.
+        name: String,
         /// The asserted groups.
         groups: Vec<String>,
     },
@@ -123,19 +119,16 @@ pub fn in_our_form(token: &str) -> bool {
 impl crate::state::AppState {
     /// The credential `token` is, if this daemon holds it live. Every store
     /// that admits a bearer is read here and nowhere else: the guest grants,
-    /// the named tokens, the API keys and the daemon-wide token, each compared
-    /// in constant time by its own store.
+    /// the named credentials and the daemon-wide token, each compared in
+    /// constant time by its own store.
     pub fn verify_bearer(&self, token: &str) -> Option<Verified> {
         let node = &self.inner.node;
         let now = sovereign_time::unix_millis();
         if let Some(grant) = node.guest_grants.live(token, now) {
             return Some(Verified::Guest(grant));
         }
-        if let Some((sub, groups)) = node.named_client_tokens.asserted_for(token) {
-            return Some(Verified::Key { sub, groups });
-        }
-        if let Some(label) = node.named_client_tokens.label_for(token) {
-            return Some(Verified::NamedToken { label });
+        if let Some((name, groups)) = node.named_client_tokens.asserted_for(token) {
+            return Some(Verified::Named { name, groups });
         }
         let shared = self.client_token()?;
         bool::from(token.as_bytes().ct_eq(shared.as_bytes())).then(|| {

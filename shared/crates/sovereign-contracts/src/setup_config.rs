@@ -1273,12 +1273,22 @@ pub struct DaemonSection {
 
     /// What the CLIENT API (`:9741`) accepts as a remote credential: `None`
     /// (default) is `"shared"` — the daemon-wide `client_token` admits, and so
-    /// does any token minted with `svrn mesh token --new <label>`. `"named-only"`
-    /// refuses the shared token and admits only the named ones. A CLOSED SET —
-    /// `sovereign_daemon::client_tokens::ClientTokens` is its one reader and
-    /// carries the whole contract.
+    /// does any credential minted with `svrn daemon key --add <name>`.
+    /// `"named-only"` refuses the shared token and admits only the named
+    /// ones. A CLOSED SET — `sovereign_daemon::client_tokens::ClientTokens` is
+    /// its one reader and carries the whole contract.
     #[serde(default)]
     pub client_tokens: Option<String>,
+
+    /// What a local process that presents no credential is on the client API:
+    /// `"owner"` (a desktop: it is the owner) or `"none"` (an on-prem box:
+    /// loopback grants nothing and every caller presents a key). `None` is
+    /// undeclared: the posture is inferred as before (`none` iff the store
+    /// holds a legacy API key file) and minting a credential refuses until it
+    /// is declared. A CLOSED SET — `sovereign_daemon::client_tokens::
+    /// LoopbackPosture::resolve` is its one reader.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loopback: Option<String>,
 
     /// Where the mesh's rails daemon (`cw-rails`) listens, as a base URL
     /// (`"http://127.0.0.1:9747"`). `None` (default) is
@@ -1331,6 +1341,7 @@ impl Default for DaemonSection {
             internal_bind: default_internal_bind(),
             internal_auth: None,
             client_tokens: None,
+            loopback: None,
             rails_base: None,
             local_only: default_local_only(),
         }
@@ -1557,46 +1568,9 @@ pub fn client_daemon_base() -> Result<String, String> {
     ))
 }
 
-/// The env leg of [`client_daemon_base`], isolated so the precedence is
-/// testable without a config file and so there is ONE answer to "which
-/// spelling of the knob counts, and what counts as set".
-///
-/// `SOVEREIGN_` first, then `SVRNMESH_`, for parity with every other reader of
-/// the pair (the boot bridge maps the legacy prefix forward, so both arrive).
-///
-/// A set-but-blank value is treated as UNSET rather than as an empty base URL:
-/// `SOVEREIGN_DAEMON_URL= svrn enrich` should fall through to the config, not
-/// dispatch at a bare `/v1/chat/completions`. Trailing slashes are trimmed
-/// because every caller appends `/v1/…`, and `http://h:9841//v1/models` is a
-/// different route to a strict router than `http://h:9841/v1/models`.
-pub fn daemon_url_override() -> Option<String> {
-    first_set_env(["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"], |v| {
-        v.trim_end_matches('/')
-    })
-}
-
-/// The first of `keys` whose value, trimmed then `normalize`d, is non-empty:
-/// the one rule [`daemon_url_override`] and [`client_credential`] read by.
-fn first_set_env(keys: [&str; 2], normalize: fn(&str) -> &str) -> Option<String> {
-    keys.iter().find_map(|key| {
-        let raw = std::env::var(key).ok()?;
-        let trimmed = normalize(raw.trim());
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    })
-}
-
-/// The API key a CLI client presents to a keyed daemon, or `None`. THE one
-/// accessor for the CLI's credential: a keyed daemon (an on-prem box)
-/// admits no caller without a key, loopback included, so IT exports its
-/// admin key here rather than driving the API with curl.
-///
-/// `SOVEREIGN_API_KEY`, then `SVRNMESH_API_KEY`, blank counting as unset, by
-/// the same rule as [`daemon_url_override`]. Distinct from the daemon-side
-/// `SOVEREIGN_CLIENT_TOKEN`, which is the token a daemon ADMITS, not one a
-/// client presents.
-pub fn client_credential() -> Option<String> {
-    first_set_env(["SOVEREIGN_API_KEY", "SVRNMESH_API_KEY"], |v| v)
-}
+#[path = "setup_config_env.rs"]
+mod env_leg;
+pub use env_leg::{client_credential, daemon_url_override};
 
 /// Pure builder behind [`client_daemon_base`], and the accessor for callers
 /// that manage the LOCAL daemon process rather than talk to a daemon as a

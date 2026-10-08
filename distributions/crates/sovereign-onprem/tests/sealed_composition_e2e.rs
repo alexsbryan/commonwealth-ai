@@ -121,20 +121,27 @@ fn the_onprem_binary_composes_no_shell_web_or_mcp_surface() {
     for d in [&home, &rails_dir, &data] {
         std::fs::create_dir_all(d).expect("dir");
     }
-    sovereign_daemon::client_tokens::keys::add_key(
-        &sovereign_daemon::client_tokens::client_tokens_dir(&data),
-        "lawyer",
-        &[],
-        KEY,
-    )
-    .expect("an API key on disk");
-    sovereign_daemon::client_tokens::keys::add_key(
-        &sovereign_daemon::client_tokens::client_tokens_dir(&data),
-        "it",
-        &[sovereign_daemon::client_tokens::KEY_ADMIN_GROUP.to_string()],
-        ADMIN,
-    )
-    .expect("IT's admin key on disk");
+    // What `svrn daemon key --add` does with no daemon running, under the
+    // kit's declared `loopback = "none"`. The config this binary boots from
+    // declares nothing, so the keys on disk are what keep it keyed.
+    {
+        use sovereign_daemon::client_tokens::{
+            client_tokens_dir, ClientTokenStore, Loopback, LoopbackPosture, KEY_ADMIN_GROUP,
+        };
+        let installer = ClientTokenStore::load(
+            Some(client_tokens_dir(&data)),
+            LoopbackPosture {
+                loopback: Loopback::None,
+                declared: true,
+            },
+        );
+        installer
+            .mint("lawyer", &[], KEY.into())
+            .expect("an API key on disk");
+        installer
+            .mint("it", &[KEY_ADMIN_GROUP.to_string()], ADMIN.into())
+            .expect("IT's admin key on disk");
+    }
     let (svrn, internal, serve, dead_rails) = (free_port(), free_port(), free_port(), free_port());
     let (proxy, attempts) = counting_proxy();
     let proxy_url = format!("http://127.0.0.1:{proxy}");

@@ -16,7 +16,7 @@ use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 
-use crate::client_tokens::{ClientTokenStore, ClientTokens};
+use crate::client_tokens::{ClientTokenStore, ClientTokens, LoopbackPosture};
 use crate::internal_gate::InternalAuth;
 
 /// Everything the node's part is constructed with (DC §4.2 "Construction is
@@ -119,9 +119,13 @@ impl NodeSeed {
             None => ClientTokens::default(),
             Some(raw) => ClientTokens::parse(raw)?,
         };
-        let named_client_tokens = Arc::new(ClientTokenStore::load(Some(
-            crate::client_tokens::client_tokens_dir(data_dir),
-        )));
+        // THE one reader of `[daemon] loopback`, refusing an unknown spelling
+        // like the two postures above. Undeclared, it is inferred exactly as
+        // before, and the boot says which (`LoopbackPosture::log`).
+        let tokens_dir = crate::client_tokens::client_tokens_dir(data_dir);
+        let loopback = LoopbackPosture::resolve(daemon.loopback.as_deref(), Some(&tokens_dir))?;
+        loopback.log();
+        let named_client_tokens = Arc::new(ClientTokenStore::load(Some(tokens_dir), loopback));
         if client_tokens == ClientTokens::NamedOnly && named_client_tokens.list().is_empty() {
             // Said at the moment it is chosen, not discovered by a device that
             // stopped being admitted: under this posture the shared token no
@@ -129,8 +133,8 @@ impl NodeSeed {
             // caller at all.
             tracing::warn!(
                 "node seed: [daemon] client_tokens = \"named-only\" and this node has \
-                 no named tokens — no remote client can be admitted until one is \
-                 minted (`svrn mesh token --new <label>`)"
+                 no named credentials — no remote client can be admitted until one is \
+                 minted (`svrn daemon key --add <name>`)"
             );
         }
         if internal_auth == InternalAuth::Perimeter {
@@ -207,7 +211,7 @@ pub struct NodePart {
     /// `crate::client_auth::client_auth_layer`. A construction argument
     /// ([`NodeSeed::client_tokens`]) for the same reason `internal_auth` is.
     pub client_tokens: ClientTokens,
-    /// The per-device credentials minted with `svrn mesh token`, each
+    /// The named credentials minted with `svrn daemon key`, each
     /// revocable without disturbing the others or the shared token. Consulted
     /// at exactly one point, `client_auth_layer`, beside the shared compare.
     /// See [`crate::client_tokens`].

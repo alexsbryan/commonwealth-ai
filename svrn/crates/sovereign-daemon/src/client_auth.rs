@@ -27,8 +27,8 @@
 //!
 //! - **A presented credential decides, from any address**
 //!   (`crate::client_principal::presented`). A bearer that verifies admits as
-//!   what it is — a guest grant still bounded by its scope, a named token, an
-//!   API key, the daemon-wide token. A bearer in this daemon's form (`svrn_`)
+//!   what it is — a guest grant still bounded by its scope, a named credential
+//!   (`svrn daemon key`), the daemon-wide token. A bearer in this daemon's form (`svrn_`)
 //!   that verifies nothing is a 401 from loopback too. A bearer NOT in that
 //!   form, from a local process on a listener where loopback is the owner, is
 //!   read as no credential and logged at debug (`OPENAI_API_KEY=local`,
@@ -40,11 +40,11 @@
 //!   `ConnectInfo<SocketAddr>` peer address — NOT a request header.
 //!   (The old local-vs-peer split keyed off the *presence* of the
 //!   spoofable `X-Node-Id` header, which meant "omit the header" was a
-//!   full-trust bypass. That footgun dies here.) Not on a KEYED daemon:
-//!   there [`crate::api_keys`] wraps every client listener and admits only an
-//!   API key, so loopback grants nothing.
+//!   full-trust bypass. That footgun dies here.) Not under `[daemon] loopback
+//!   = "none"`: there [`crate::api_keys`] wraps every client listener and admits
+//!   only a named credential, so loopback grants nothing.
 //! - **Remote caller** → must present `Authorization: Bearer <token>`
-//!   matching a NAMED token ([`crate::client_tokens`], one per device and
+//!   matching a named credential ([`crate::client_tokens`], one per client and
 //!   revocable alone) or the daemon's configured token (constant-time compare
 //!   either way). `[daemon] client_tokens = "named-only"` refuses the second
 //!   with a sentence.
@@ -416,22 +416,18 @@ async fn admit_verified(
             );
             guest_out_of_scope(&grant, path)
         }
-        // The LABEL, never the token: a credential in a log is a credential
-        // in every scrollback, bug report and log shipper downstream of it.
-        Verified::NamedToken { label } => {
+        // A named credential. The NAME, never the token: a credential in a
+        // log is a credential in every scrollback, bug report and log shipper
+        // downstream of it. Under `loopback = "none"`, `crate::api_keys::seal`
+        // wraps every client listener, so it was already admitted and scoped
+        // by the time it reaches this layer.
+        Verified::Named { name, .. } => {
             tracing::debug!(
                 peer = %peer,
                 path = %path,
-                label = %label,
-                "client_auth: named client token admitted"
+                name = %name,
+                "client_auth: named credential admitted"
             );
-            next.run(request).await
-        }
-        // An API key. On a keyed daemon `crate::api_keys::seal` wraps every
-        // client listener, so the key was already admitted and scoped by the
-        // time it reaches this layer.
-        Verified::Key { sub, .. } => {
-            tracing::debug!(peer = %peer, path = %path, sub = %sub, "client_auth: API key admitted");
             next.run(request).await
         }
         Verified::Shared => next.run(request).await,
@@ -499,7 +495,7 @@ fn shared_token_refused(peer: &SocketAddr, path: &str) -> Response {
         Json(serde_json::json!({
             "error": "this node no longer admits the shared client token \
                       ([daemon] client_tokens = \"named-only\") — ask its operator \
-                      for a token of your own (`svrn mesh token --new <label>`)",
+                      for a credential of your own (`svrn daemon key --add <name>`)",
             "code": "named_token_required",
         })),
     )

@@ -43,8 +43,9 @@
 //! 1. **A live guest grant** presented as `Authorization: Bearer` →
 //!    [`Principal::Guest`]. The grant is what bounds the caller's routes, so
 //!    nothing a guest also types may outrank it.
-//!    An on-prem API key (`crate::client_tokens::keys`) is read beside it →
-//!    [`Principal::Asserted`], for the same reason.
+//!    A named credential (`crate::client_tokens`, minted by `svrn daemon
+//!    key`) is read beside it → [`Principal::Asserted`]`{ sub: name, groups
+//!    }`, for the same reason.
 //! 2. **`X-Node-Id`** → [`Principal::Member`], or [`Principal::Unverified`]
 //!    when it is present and not the canonical wire form. Read *before* the
 //!    loopback branch: a mesh peer arrives on the trusting listener over
@@ -214,12 +215,13 @@ impl AppState {
                     grant: fingerprint(&grant.token),
                 };
             }
-            // 1b. An on-prem API key: an asserted subject. Like a grant, the
-            //     key is the caller's whole identity, so nothing it also
-            //     types (a node claim, `X-Principal`) may outrank it.
-            Presentation::Verified(Verified::Key { sub, groups }) => {
+            // 1b. A named credential (`svrn daemon key`): an asserted subject.
+            //     Like a grant, the credential is the caller's whole identity,
+            //     so nothing it also types (a node claim, `X-Principal`) may
+            //     outrank it.
+            Presentation::Verified(Verified::Named { name, groups }) => {
                 return Principal::Asserted {
-                    sub: sub.clone(),
+                    sub: name.clone(),
                     groups: groups.clone(),
                 };
             }

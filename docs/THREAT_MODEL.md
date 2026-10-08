@@ -270,14 +270,18 @@ it.
    holder of the client token had the same authority and taking it back from
    one device meant rotating it for all of them.
    (`sovereign-server` on `:8080` does have per-key tenants; guest grants are
-   per-bearer, scoped and expiring.) `svrn mesh token --new <label> | --list
-   | --revoke <label>` now mints a bearer per device, stored 0600 under
-   `<data_dir>/client-tokens/`; `revoke` drops the in-memory entry before
-   deleting the file, so the refusal lands in the same daemon lifetime with
-   no restart. A named token is not a new principal — it is the credential
-   `client_principal::resolve` already turns into `Principal::RemoteClient`,
-   with a label attached, so the admit log carries the label and no log line
-   carries a token. `[daemon] client_tokens` defaults to `"shared"`, which
+   per-bearer, scoped and expiring.) `svrn daemon key --add <name> | --list
+   | --revoke <name>` mints a named credential per client, stored 0600 under
+   `<data_dir>/client-tokens/<name>.key`; `revoke` drops the in-memory entry
+   before deleting the file, so the refusal lands in the same daemon lifetime
+   with no restart. Since 2026-10-08 named tokens and on-prem API keys are one
+   record `{name, token, groups}` resolving to `Principal::Asserted { sub:
+   name, groups }` (one store, one CLI, one arm; `svrn mesh token` is retired
+   and refuses by name), so the admit log carries the name and no log line
+   carries a token. `[daemon] loopback = "owner" | "none"` is declared rather
+   than inferred from keys present; an undeclared install keeps what it had
+   (`none` iff a legacy `.key` file exists) and minting refuses until it is
+   declared. `[daemon] client_tokens` defaults to `"shared"`, which
    keeps admitting the one shared token beside the named ones; `"named-only"`
    refuses it with a 401 naming the posture. This is not per-user tenancy:
    a named token's authority is still the whole client API, and on the

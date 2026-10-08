@@ -29,7 +29,9 @@ use sovereign_contracts::traits::{PrincipalResolver, StateStore};
 use sovereign_contracts::types::{CorpusState, CorpusVisibility};
 use sovereign_core::context::{build_context, PrincipalScope};
 use sovereign_daemon::api_keys::{self, KeyedOwners};
-use sovereign_daemon::client_tokens::{client_tokens_dir, keys, ClientTokenStore, KEY_ADMIN_GROUP};
+use sovereign_daemon::client_tokens::{
+    client_tokens_dir, ClientTokenStore, Loopback, LoopbackPosture, KEY_ADMIN_GROUP,
+};
 use sovereign_daemon::documents_http::documents_router;
 use sovereign_daemon::granted_http::granted_router;
 use sovereign_daemon::server::client_router;
@@ -66,11 +68,22 @@ async fn daemon(keys_on_disk: &[(&str, &[&str], &str)]) -> Daemon {
     install_corpus(&indexes, "firm-docs").await;
     install_corpus(&indexes, "secret").await;
     let dir = client_tokens_dir(tmp.path());
+    // The install writes the keys (`svrn daemon key --add`, declared `none`);
+    // the daemon then reads them with no declaration of its own, which is
+    // the upgrade path: keys on disk and nothing declared infer `none`.
+    let installer = ClientTokenStore::load(
+        Some(dir.clone()),
+        LoopbackPosture {
+            loopback: Loopback::None,
+            declared: true,
+        },
+    );
     for (sub, groups, token) in keys_on_disk {
         let groups: Vec<String> = groups.iter().map(|g| g.to_string()).collect();
-        keys::add_key(&dir, sub, &groups, token).unwrap();
+        installer.mint(sub, &groups, token.to_string()).unwrap();
     }
-    let tokens = Arc::new(ClientTokenStore::load(Some(dir)));
+    let posture = LoopbackPosture::resolve(None, Some(&dir)).unwrap();
+    let tokens = Arc::new(ClientTokenStore::load(Some(dir), posture));
 
     let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     let provider: Arc<dyn sovereign_contracts::traits::InferenceProvider> =

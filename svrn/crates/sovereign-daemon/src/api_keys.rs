@@ -15,9 +15,10 @@
 //!
 //! # The decision
 //!
-//! A daemon whose key store holds at least one API key
-//! ([`ClientTokenStore::is_keyed`](crate::client_tokens::ClientTokenStore::is_keyed))
-//! is KEYED for its lifetime, and [`seal`] wraps the WHOLE merged client
+//! A daemon under `[daemon] loopback = "none"` — declared, or inferred on an
+//! undeclared install whose store holds a legacy `<sub>.key` file
+//! ([`LoopbackPosture::resolve`](crate::client_tokens::LoopbackPosture::resolve))
+//! — is KEYED for its lifetime, and [`seal`] wraps the WHOLE merged client
 //! router in [`keyed_auth_layer`]:
 //!
 //! - loopback grants nothing: the one edge resolver runs under
@@ -95,15 +96,16 @@ pub fn key_scope_permits(method: &Method, path: &str) -> bool {
     })
 }
 
-/// Wrap the fully merged client router in [`keyed_auth_layer`] when this
-/// daemon holds keys; return it untouched when it holds none.
+/// Wrap the fully merged client router in [`keyed_auth_layer`] when loopback
+/// grants nothing on this daemon; return it untouched when loopback is the
+/// owner.
 pub fn seal(router: Router, state: &AppState) -> Router {
     if !state.inner.node.named_client_tokens.is_keyed() {
-        tracing::debug!("api_keys: no API keys — the client surface is unkeyed");
+        tracing::debug!("api_keys: loopback is the owner — the client surface is unkeyed");
         return router;
     }
     tracing::info!(
-        "api_keys: this daemon holds API keys — every client route requires one, \
+        "api_keys: loopback = none — every client route requires a named credential, \
          and loopback grants nothing"
     );
     router.layer(axum::middleware::from_fn_with_state(

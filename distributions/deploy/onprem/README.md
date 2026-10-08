@@ -168,8 +168,10 @@ every five minutes and picks up additions, edits and deletions.
 
 **Keys:** `svrn daemon key --add <name>` (add `--group admin` for IT),
 `--revoke <name>`, `--list`, run as the service account with
-`SVRNMESH_DATA_DIR=/var/lib/firm-rag`. The process reads keys when it
-starts: `systemctl restart firm-rag` after a change.
+`SVRNMESH_DATA_DIR=/var/lib/firm-rag`. With the daemon running the verb
+asks it, presenting IT's key from `SOVEREIGN_API_KEY`, and a change takes
+effect on the next request, a revoke included. With the daemon stopped it
+edits the key store, which the daemon reads when it starts.
 
 **Restarting:** `systemctl restart firm-rag` reloads the models and
 takes 30-90 seconds. The API returns errors during that window.
@@ -239,7 +241,7 @@ document access control:
   to the firm, and it is not a setting we can turn on.
 
 **No single sign-on.** Static bearer keys, issued and revoked with
-`svrn daemon key`, effective at the next restart. Fine for a dozen pilot
+`svrn daemon key`. Fine for a dozen pilot
 users; not fine for a firm.
 
 **Concurrency.** Questions queue on one model. The REST API gives no

@@ -1343,8 +1343,19 @@ revocable, bound to a closed `Scope` enum whose `paths()` is the only route
 allowlist there is. A guest is not a mesh member and cannot mint further
 grants, because no `Scope` variant names `/internal/*`.
 
-A daemon holding on-prem API keys (`<data_dir>/client-tokens/<sub>.key`,
-written by `svrn daemon key`) is KEYED: `api_keys::seal` wraps every client
+A named credential is one record `{name, token, groups}` at
+`<data_dir>/client-tokens/<name>.key` (`client_tokens::ClientTokenStore`; legacy
+`<label>.token` files are read as the same record and rewritten as `.key` once
+the posture is declared), minted and revoked by `svrn daemon key` — through the
+running daemon's operator routes, or the store itself when none runs — and it
+resolves to `Principal::Asserted { sub: name, groups }`. `[daemon] loopback`
+declares the posture (`client_tokens::LoopbackPosture::resolve`, its one
+reader): `"owner"` admits a local process presenting nothing as the owner;
+`"none"` grants loopback nothing. Undeclared, it is inferred as before (`none`
+iff a legacy `.key` file exists, warned at boot and in `svrn doctor`'s
+`loopback_posture`), and minting refuses until it is declared.
+
+A daemon under `loopback = "none"` is KEYED: `api_keys::seal` wraps every client
 listener (the guest door's in `guest_door::door_router`, so its own bind and
 the `GUEST_ALPN` forward take one sealed router), loopback grants nothing, a key resolves to `Principal::Asserted`,
 conversations are stored `{sub}:{id}`, a non-`admin` key reaches only
