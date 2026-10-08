@@ -3009,6 +3009,29 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - **Instrument:** `svrn bench enrichment-ablate --prefix-state` is
   committed and is the template for any daemon-side knob. The original
   harness (`scratchpad/arm_runner.py`) never was.
+- **Conversations re-pin (7f3e06a41, 2026-10-08).** An external client's
+  conversation now re-pins its whole prompt each turn instead of freezing
+  at turn 1. 35B-A3B e2eswe battery, 682 turns (arm log
+  `target/agent-coding-arms/B-18090/server-35b-repin.log` against
+  `server-35b-baseline.log`): median suffix prefilled per turn 34,525 →
+  469 tokens; non-generation time per turn at prompts over 25k 75.0 s →
+  2.5 s (median, n=23 vs 576); 409 re-pins, median save 461 ms, ~21 KB a
+  token (2.75 GB at 131k). The default `_MAX_MB=2048` refuses a 35B pin
+  past ~102k tokens (21,008 bytes a token); the battery ran at 8192.
+- **What a restore costs, measured.** Greedy A/B on 12 battery request
+  pairs, each prompt once by full prefill and once restored from the
+  previous turn's pin, with a full-vs-full control
+  (`target/e2eswe-slice/b3_ab.py`, `b3-ab.jsonl`). The control reproduced
+  12 of 12 outputs and acceptance rates exactly. Restored: MTP draft
+  acceptance 0.925 → 0.859 pooled, because the draft context is never
+  restored and drafts attend only to the suffix (`model_slot.rs`, the
+  prefix_state block in `generate_sync_mtp_impl`); 3.8% slower generation
+  on identical output. And restore is NOT bit-exact at the token level:
+  greedy output differed from full prefill in 7 of 12 pairs, which is the
+  caveat above, now measured. Saving the draft context's sequence state
+  with the pin (`MtpSession::draft_state_seq_get_data_ext`, unused) is the
+  lever for the first; the second needs a split-batch full prefill to tell
+  restore inexactness from batch-split float order.
 
 ### ~~RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`~~ — RETIRED 2026-09-07
 - **What was on by default:** summary nodes as virtual chunks, injected at
