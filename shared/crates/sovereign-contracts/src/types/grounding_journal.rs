@@ -317,7 +317,8 @@ impl JudgeFailureReason {
             Error::ComputeUnavailable { .. } => JudgeFailureReason::ComputeUnavailable,
             Error::ModelNotLoaded(_) => JudgeFailureReason::ModelNotLoaded,
             Error::Routing(_) => JudgeFailureReason::Routing,
-            Error::Inference(_) => JudgeFailureReason::Inference,
+            // A context overflow was an `Inference` error until it was typed.
+            Error::Inference(_) | Error::ContextExceeded { .. } => JudgeFailureReason::Inference,
             _ => JudgeFailureReason::ProviderOther,
         }
     }

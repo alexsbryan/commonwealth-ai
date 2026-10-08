@@ -1125,6 +1125,11 @@ async fn serve_local_non_stream(
                 retry_after_secs,
             )
         }
+        Err(crate::state::LocalInferenceError::ContextExceeded {
+            prompt_tokens,
+            n_ctx,
+        }) => sovereign_contracts::openai_http::context_exceeded_response(prompt_tokens, n_ctx)
+            .into_response(),
         Err(e) => {
             warn!(error = %e, "chat_completions: local inference failed");
             (
@@ -1172,6 +1177,16 @@ async fn serve_local_stream(
                 predicted_wait_ms,
                 retry_after_secs,
             );
+        }
+        Err(crate::state::LocalInferenceError::ContextExceeded {
+            prompt_tokens,
+            n_ctx,
+        }) => {
+            return sovereign_contracts::openai_http::context_exceeded_response(
+                prompt_tokens,
+                n_ctx,
+            )
+            .into_response()
         }
         Err(e) => {
             warn!(error = %e, "chat_completions: local stream failed to start");
@@ -1263,8 +1278,8 @@ async fn serve_local_stream(
 }
 
 #[cfg(test)]
-#[path = "routes_inference/shed_rendering_tests.rs"]
-mod shed_rendering_tests;
+#[path = "routes_inference/refusal_rendering_tests.rs"]
+mod refusal_rendering_tests;
 
 #[cfg(test)]
 #[path = "routes_inference/list_models_tests.rs"]

@@ -1083,28 +1083,6 @@ pub(crate) fn guard_tools_on_fast(
     Ok(())
 }
 
-/// Carry a queue shed's structure across the trait boundary; flatten
-/// everything else to prose exactly as before.
-///
-/// This is the ONE translation from the provider's error enum into the
-/// API layer's. Both chat entry points route through it, so a shed
-/// cannot reach the wire as backpressure on one path and as a crash on
-/// the other (ARCH_PRINCIPLES §10.6 — one decider, one name).
-fn map_provider_error(e: sovereign_contracts::Error) -> LocalInferenceError {
-    match e {
-        sovereign_contracts::Error::QueueShed {
-            position,
-            predicted_wait_ms,
-            retry_after_secs,
-        } => LocalInferenceError::Shed {
-            position,
-            predicted_wait_ms,
-            retry_after_secs,
-        },
-        other => LocalInferenceError::Other(format!("{other}")),
-    }
-}
-
 #[async_trait]
 impl LocalInferenceService for SovereignInferenceAdapter {
     async fn chat_completion(
@@ -1619,6 +1597,10 @@ impl InferenceProvider for SovereignInferenceAdapter {
 
 #[path = "inference_adapter/conversation.rs"]
 mod conversation;
+
+#[path = "inference_adapter/provider_error.rs"]
+mod provider_error;
+use provider_error::map_provider_error;
 
 #[cfg(test)]
 #[path = "inference_adapter/guard_tests.rs"]

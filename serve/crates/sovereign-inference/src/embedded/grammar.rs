@@ -657,6 +657,18 @@ mod clamp_tests {
         // hint phrasing so it stays actionable.
         let msg = format!("{err}");
         assert!(msg.contains("Prompt too long"), "{msg}");
+        // Typed, so the HTTP boundary can answer 400 instead of a 503
+        // that an agent's client retries.
+        assert!(
+            matches!(
+                err,
+                sovereign_contracts::error::Error::ContextExceeded {
+                    prompt_tokens: 8192,
+                    n_ctx: 8192
+                }
+            ),
+            "{err:?}"
+        );
     }
 
     #[test]

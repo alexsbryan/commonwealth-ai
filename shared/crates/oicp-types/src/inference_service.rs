@@ -128,6 +128,17 @@ pub enum LocalInferenceError {
         /// Hint for `Retry-After`; always >= 1.
         retry_after_secs: u64,
     },
+    /// The prompt alone fills the context window. Fields mirror
+    /// `sovereign_contracts::Error::ContextExceeded`, where the decision is
+    /// made. The route renders llama-server's `400 exceed_context_size_error`:
+    /// the caller must shorten the conversation, so a status a client
+    /// retries (503) would only repeat the refusal.
+    ContextExceeded {
+        /// Tokens in the rendered prompt.
+        prompt_tokens: u64,
+        /// The context window it was admitted against.
+        n_ctx: u64,
+    },
     /// Any other backend failure. Renders as `backend_error`.
     Other(String),
 }
@@ -146,6 +157,13 @@ impl std::fmt::Display for LocalInferenceError {
                 "host busy: ~{predicted_wait_ms} ms predicted wait at queue \
                  position {position}; retry after {retry_after_secs}s"
             ),
+            Self::ContextExceeded {
+                prompt_tokens,
+                n_ctx,
+            } => f.write_str(&crate::error::InferenceError::context_exceeded_message(
+                *prompt_tokens,
+                *n_ctx,
+            )),
             Self::Other(msg) => f.write_str(msg),
         }
     }

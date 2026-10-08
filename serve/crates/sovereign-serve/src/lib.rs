@@ -601,9 +601,15 @@ async fn chat_completions(
 }
 
 /// A shed is backpressure and carries `Retry-After` (serving-host's one
-/// shed renderer); any other failure is a 503 naming what failed.
+/// shed renderer); a prompt over the context window is llama-server's 400;
+/// any other failure is a 503 naming what failed.
 fn chat_refusal(err: LocalInferenceError, what: &'static str) -> Response {
     match err {
+        LocalInferenceError::ContextExceeded {
+            prompt_tokens,
+            n_ctx,
+        } => sovereign_contracts::openai_http::context_exceeded_response(prompt_tokens, n_ctx)
+            .into_response(),
         LocalInferenceError::Shed {
             position,
             predicted_wait_ms,

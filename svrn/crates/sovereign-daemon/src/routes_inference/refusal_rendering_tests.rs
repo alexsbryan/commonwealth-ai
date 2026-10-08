@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! A queue shed must reach the client as backpressure, not as a
-//! crash.
+//! A local refusal must reach the client as what it is, not as a crash:
+//! a queue shed as backpressure, a context overflow as llama-server's 400.
 //!
 //! These exist because the 2026-08-07 live-fleet probe caught the
 //! opposite: a caller whose peer had declined landed on a busy local
@@ -19,27 +19,26 @@ use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapab
 use std::pin::Pin;
 use std::sync::Arc;
 
+/// A local service that refuses every chat call with one error.
+struct Refuses(LocalInferenceError);
+
 /// The exact condition the probe hit: queue position 6, ~34.7 s
 /// predicted wait, past the 30 s bound.
-struct AlwaysSheds;
-
-impl AlwaysSheds {
-    fn shed() -> LocalInferenceError {
-        LocalInferenceError::Shed {
-            position: 6,
-            predicted_wait_ms: 34_746,
-            retry_after_secs: 35,
-        }
-    }
+fn shed() -> Refuses {
+    Refuses(LocalInferenceError::Shed {
+        position: 6,
+        predicted_wait_ms: 34_746,
+        retry_after_secs: 35,
+    })
 }
 
 #[async_trait::async_trait]
-impl InferenceProvider for AlwaysSheds {
+impl InferenceProvider for Refuses {
     async fn complete(
         &self,
         _r: &CompletionRequest,
     ) -> sovereign_core::error::Result<CompletionResponse> {
-        unimplemented!("chat not used on the shed path")
+        unimplemented!("chat not used on the refusal path")
     }
     async fn complete_stream(
         &self,
@@ -47,10 +46,10 @@ impl InferenceProvider for AlwaysSheds {
     ) -> sovereign_core::error::Result<
         Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
     > {
-        unimplemented!("chat not used on the shed path")
+        unimplemented!("chat not used on the refusal path")
     }
     async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
-        unimplemented!("embedding is not on the shed path")
+        unimplemented!("embedding is not on the refusal path")
     }
     fn capabilities(&self) -> ProviderCapabilities {
         unimplemented!()
@@ -58,18 +57,18 @@ impl InferenceProvider for AlwaysSheds {
 }
 
 #[async_trait::async_trait]
-impl LocalInferenceService for AlwaysSheds {
+impl LocalInferenceService for Refuses {
     async fn chat_completion(
         &self,
         _r: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, LocalInferenceError> {
-        Err(Self::shed())
+        Err(self.0.clone())
     }
     async fn chat_completion_stream(
         &self,
         _r: ChatCompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError> {
-        Err(Self::shed())
+        Err(self.0.clone())
     }
     fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
         None
@@ -136,9 +135,9 @@ async fn assert_reads_as_backpressure(resp: Response, lane: &str) {
 
 #[tokio::test]
 async fn non_streaming_shed_reads_as_backpressure() {
-    let state = test_app_state_with_inference(Arc::new(AlwaysSheds));
+    let state = test_app_state_with_inference(Arc::new(shed()));
     let resp = serve_local_non_stream(
-        Arc::new(AlwaysSheds),
+        Arc::new(shed()),
         chat_request(),
         state,
         None,
@@ -151,9 +150,9 @@ async fn non_streaming_shed_reads_as_backpressure() {
 #[tokio::test]
 async fn streaming_shed_reads_as_backpressure() {
     // The lane most clients actually take.
-    let state = test_app_state_with_inference(Arc::new(AlwaysSheds));
+    let state = test_app_state_with_inference(Arc::new(shed()));
     let resp = serve_local_stream(
-        Arc::new(AlwaysSheds),
+        Arc::new(shed()),
         chat_request(),
         state,
         None,
@@ -161,4 +160,71 @@ async fn streaming_shed_reads_as_backpressure() {
     )
     .await;
     assert_reads_as_backpressure(resp, "streaming").await;
+}
+
+/// The 35B e2eswe battery's failing input (cement task): a 131,076-token
+/// prompt against a 131,068 window.
+fn overflow() -> Refuses {
+    Refuses(LocalInferenceError::ContextExceeded {
+        prompt_tokens: 131_076,
+        n_ctx: 131_068,
+    })
+}
+
+/// Rendered as a 503 `backend_error`, this was retried 30 times by the
+/// agent's client. llama-server answers 400 with the numbers, in words
+/// litellm maps to `ContextWindowExceededError` rather than retrying.
+async fn assert_reads_as_context_exceeded(resp: Response, lane: &str) {
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "{lane}: an overflowing prompt is the caller's to fix, never a retryable 503"
+    );
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("body is json");
+    let error = &json["error"];
+    assert_eq!(
+        error["type"], "exceed_context_size_error",
+        "{lane}: {error}"
+    );
+    assert_eq!(error["code"], 400, "{lane}: {error}");
+    assert_eq!(error["n_prompt_tokens"], 131_076, "{lane}: {error}");
+    assert_eq!(error["n_ctx"], 131_068, "{lane}: {error}");
+    let message = error["message"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{lane}: error.message must be a string, got {error}"));
+    assert!(
+        message.contains("exceeds the available context size"),
+        "{lane}: the words litellm keys ContextWindowExceededError on, got {message}"
+    );
+}
+
+#[tokio::test]
+async fn non_streaming_context_overflow_reads_as_llama_server_400() {
+    let state = test_app_state_with_inference(Arc::new(overflow()));
+    let resp = serve_local_non_stream(
+        Arc::new(overflow()),
+        chat_request(),
+        state,
+        None,
+        "primary".to_string(),
+    )
+    .await;
+    assert_reads_as_context_exceeded(resp, "non-streaming").await;
+}
+
+#[tokio::test]
+async fn streaming_context_overflow_reads_as_llama_server_400() {
+    let state = test_app_state_with_inference(Arc::new(overflow()));
+    let resp = serve_local_stream(
+        Arc::new(overflow()),
+        chat_request(),
+        state,
+        None,
+        "primary".to_string(),
+    )
+    .await;
+    assert_reads_as_context_exceeded(resp, "streaming").await;
 }

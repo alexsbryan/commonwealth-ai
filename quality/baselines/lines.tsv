@@ -110,7 +110,7 @@
 9213	serve/crates/sovereign-serve
 3937	serve/crates/sovereign-serve::tests
 5378	serve/crates/sovereign-serving-host
-12810	serve/crates/sovereign-serving-host::tests
+12906	serve/crates/sovereign-serving-host::tests
 2969	shared/crates/commonwealth-rail-core
 818	shared/crates/commonwealth-rail-core::tests
 10948	shared/crates/corpus-engine-atlas-reader

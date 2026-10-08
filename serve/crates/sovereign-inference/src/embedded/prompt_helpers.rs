@@ -187,10 +187,10 @@ pub(crate) fn clamp_max_tokens(
     n_ctx: usize,
 ) -> Result<usize> {
     if prompt_tokens >= n_ctx {
-        return Err(Error::Inference(format!(
-            "Prompt too long: {prompt_tokens} tokens already meets or exceeds \
-             the context window of {n_ctx}. Shorten the conversation."
-        )));
+        return Err(Error::ContextExceeded {
+            prompt_tokens: prompt_tokens as u64,
+            n_ctx: n_ctx as u64,
+        });
     }
     let headroom = n_ctx - prompt_tokens;
     let resolved = match requested {

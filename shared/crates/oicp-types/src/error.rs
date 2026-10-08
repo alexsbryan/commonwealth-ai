@@ -90,6 +90,17 @@ pub enum InferenceError {
         retry_after_secs: u64,
     },
 
+    /// The prompt alone fills the context window it was admitted against.
+    /// The caller's to fix (shorten the conversation), never to retry as
+    /// is; an HTTP boundary renders it as llama-server's `400
+    /// exceed_context_size_error` from these two numbers.
+    ContextExceeded {
+        /// Tokens in the rendered prompt.
+        prompt_tokens: u64,
+        /// The context window it was admitted against.
+        n_ctx: u64,
+    },
+
     /// The request was rejected by validation before any work started.
     InvalidInput {
         /// What was wrong with the request.
@@ -125,6 +136,18 @@ impl InferenceError {
             predicted_wait_ms,
             retry_after_secs: predicted_wait_ms.div_ceil(1_000).max(1),
         }
+    }
+
+    /// The display text of a context overflow, for every type that carries
+    /// one (this enum, `sovereign_contracts::Error`, the API layer's
+    /// `LocalInferenceError`). It is the text `clamp_max_tokens` produced
+    /// before the overflow was typed, and callers match "Prompt too long" in
+    /// it, so it has one spelling.
+    pub fn context_exceeded_message(prompt_tokens: u64, n_ctx: u64) -> String {
+        format!(
+            "Inference error: Prompt too long: {prompt_tokens} tokens already meets or \
+             exceeds the context window of {n_ctx}. Shorten the conversation."
+        )
     }
 
     /// Convenience for the catch-all variant.
@@ -164,6 +187,7 @@ impl InferenceError {
             Self::ModelNotLoaded { .. } => "model_not_loaded",
             Self::Routing { .. } => "routing",
             Self::QueueShed { .. } => "queue_shed",
+            Self::ContextExceeded { .. } => "context_exceeded",
             Self::InvalidInput { .. } => "invalid_input",
             Self::NotImplemented { .. } => "not_implemented",
             Self::Cancelled => "cancelled",
@@ -173,7 +197,8 @@ impl InferenceError {
     /// Rebuild from a wire tag plus its message — the exact inverse of
     /// [`Self::kind`] for every variant whose payload is a single string.
     ///
-    /// The structured variants (`ComputeUnavailable`, `QueueShed`) cannot be
+    /// The structured variants (`ComputeUnavailable`, `QueueShed`,
+    /// `ContextExceeded`) cannot be
     /// reconstructed from a tag and a sentence, so they are carried whole as
     /// JSON by the serde representation and this function is not used for
     /// them. An unknown tag becomes [`Self::Inference`] — the fault came from
@@ -191,8 +216,9 @@ impl InferenceError {
             "invalid_input" => Self::InvalidInput { message },
             "not_implemented" => Self::NotImplemented { message },
             "cancelled" => Self::Cancelled,
-            // "inference", "queue_shed" (needs its numbers, so it never
-            // round-trips through this path), and anything unrecognised.
+            // "inference", "queue_shed" and "context_exceeded" (they need
+            // their numbers, so they never round-trip through this path),
+            // and anything unrecognised.
             _ => Self::Inference { message },
         }
     }
@@ -216,6 +242,10 @@ impl fmt::Display for InferenceError {
                 "host busy: ~{predicted_wait_ms} ms predicted wait at queue position \
                  {position}; retry after {retry_after_secs}s"
             ),
+            Self::ContextExceeded {
+                prompt_tokens,
+                n_ctx,
+            } => f.write_str(&Self::context_exceeded_message(*prompt_tokens, *n_ctx)),
             Self::InvalidInput { message } => write!(f, "Invalid input: {message}"),
             Self::NotImplemented { message } => write!(f, "Not implemented: {message}"),
             Self::Cancelled => write!(f, "Task cancelled"),
@@ -245,6 +275,10 @@ mod tests {
             },
             InferenceError::routing("no holder"),
             InferenceError::queue_shed(3, 2_400),
+            InferenceError::ContextExceeded {
+                prompt_tokens: 131_076,
+                n_ctx: 131_068,
+            },
             InferenceError::invalid_input("empty prompt"),
             InferenceError::not_implemented("rerank"),
             InferenceError::Cancelled,
@@ -276,7 +310,7 @@ mod tests {
         );
     }
 
-    /// Every string-payload variant survives tag + message. The two
+    /// Every string-payload variant survives tag + message. The three
     /// structured variants are excluded by construction, not by oversight —
     /// they travel as JSON.
     #[test]
@@ -284,7 +318,9 @@ mod tests {
         for e in every_variant() {
             if matches!(
                 e,
-                InferenceError::QueueShed { .. } | InferenceError::ComputeUnavailable { .. }
+                InferenceError::QueueShed { .. }
+                    | InferenceError::ComputeUnavailable { .. }
+                    | InferenceError::ContextExceeded { .. }
             ) {
                 continue;
             }

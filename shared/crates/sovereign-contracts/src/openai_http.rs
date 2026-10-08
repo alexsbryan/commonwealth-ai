@@ -2,10 +2,11 @@
 //! The OpenAI wire's rendering, shared by every host that answers it: the
 //! daemon's `/v1/*` routes and `serve`'s (phase-b pb-serve-program).
 //!
-//! Three pieces a host would otherwise re-derive: a chat stream frame as an
-//! SSE chunk ([`sse_item`]), an embeddings request answered against a
-//! provider ([`embeddings_response`]), and `/v1/models` rows from the
-//! manifests a host can dispatch ([`model_rows`]). What a host records about
+//! Four pieces a host would otherwise re-derive: a chat stream frame as an
+//! SSE chunk ([`sse_item`]), a prompt over the context window answered as
+//! llama-server answers it ([`context_exceeded_response`]), an embeddings
+//! request answered against a provider ([`embeddings_response`]), and
+//! `/v1/models` rows from the manifests a host can dispatch ([`model_rows`]). What a host records about
 //! the work (ledgers, activity) and where its provider comes from stay its
 //! own.
 //!
@@ -165,6 +166,44 @@ pub fn sse_item(header: &ChunkHeader, frame: StreamFrame) -> SseItem {
 /// The OpenAI `[DONE]` sentinel that closes a chat stream.
 /// `RemoteApiProvider::complete_stream` breaks its loop on it.
 pub const DONE: &str = "[DONE]";
+
+/// A prompt that fills the context window, answered as llama-server answers
+/// it: `400`, `type: "exceed_context_size_error"`, the two numbers, and its
+/// sentence (`server-common.cpp` `format_error_response` and `server-task.cpp`
+/// `server_task_result_error::to_json` at the vendored 035e227).
+///
+/// The sentence matters as much as the status: litellm keys
+/// `ContextWindowExceededError` on "exceeds the available context size" and
+/// does not retry it. Rendered as a `503 backend_error`, one overflowing
+/// prompt was retried 30 times by an agent's client before it gave up with
+/// `ServiceUnavailableError` (the 35B e2eswe battery, cement task). Both
+/// hosts' chat routes answer through this.
+pub fn context_exceeded_response(prompt_tokens: u64, n_ctx: u64) -> http::Response<String> {
+    warn!(
+        prompt_tokens,
+        n_ctx,
+        "chat_completions: prompt exceeds the context window — 400, the caller must shorten it"
+    );
+    let body = serde_json::json!({
+        "error": {
+            "code": 400,
+            "message": format!(
+                "request ({prompt_tokens} tokens) exceeds the available context size \
+                 ({n_ctx} tokens), try increasing it"
+            ),
+            "type": "exceed_context_size_error",
+            "n_prompt_tokens": prompt_tokens,
+            "n_ctx": n_ctx,
+        }
+    });
+    let mut response = http::Response::new(body.to_string());
+    *response.status_mut() = StatusCode::BAD_REQUEST;
+    response.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    response
+}
 
 /// Why an embeddings request was not answered: the status, the message and
 /// the OpenAI error type the host renders.
