@@ -149,7 +149,7 @@ async fn every_refusal_is_named() {
         Err(TextAbsence::TextsNotStored)
     );
     assert_eq!(
-        old.texts_digest().await.unwrap(),
+        old.documents().await.unwrap().map(|(_, rows)| rows.len()),
         Err(TextAbsence::TextsNotStored)
     );
     assert_eq!(
@@ -215,54 +215,25 @@ async fn replacing_a_source_swaps_its_records_and_drops_texts_no_one_names() {
     assert_eq!(shared_docs[0].source_id, "g.md");
 }
 
+/// The record table is a set: a record a resumed ingest re-flushes is one
+/// record, and the version moves with every write.
 #[tokio::test]
-async fn the_digest_moves_with_texts_sources_and_extractors_only() {
+async fn a_repeated_record_is_one_record() {
     let dir = tempfile::tempdir().unwrap();
-    let digest_of = |extractor: &'static str, dup: bool, id: &'static str| {
-        let root = dir.path().to_path_buf();
-        async move {
-            let idx = fresh(&root, id).await;
-            let mut w = TextWriter::open(&idx, extractor, true).await.unwrap();
-            w.store_document(input("alpha", "a", 0, &DocSource::Record))
-                .unwrap();
-            w.store_document(input("beta", "b", 0, &DocSource::Record))
-                .unwrap();
-            if dup {
-                // A resumed ingest re-flushing a record it already wrote.
-                w.store_document(input("beta", "b", 0, &DocSource::Record))
-                    .unwrap();
-            }
-            w.flush(&idx).await.unwrap();
-            idx.insert_batch(&[chunk("a chunk", None)]).await.unwrap();
-            idx.texts_digest().await.unwrap().unwrap()
-        }
-    };
-    let base = digest_of("x@1", false, "d1").await;
-    let expected = Sha256Hash::of_str(&format!(
-        "{} - x@1\n{} - x@1\n",
-        std::cmp::min(
-            Sha256Hash::of_str("alpha").to_hex(),
-            Sha256Hash::of_str("beta").to_hex()
-        ),
-        std::cmp::max(
-            Sha256Hash::of_str("alpha").to_hex(),
-            Sha256Hash::of_str("beta").to_hex()
-        ),
-    ));
-    assert_eq!(
-        base, expected,
-        "the digest is exactly ADDRESSED_TEXT §4's lines"
-    );
-    assert_eq!(
-        digest_of("x@1", true, "d2").await,
-        base,
-        "a repeated record is one record"
-    );
-    assert_ne!(
-        digest_of("x@2", false, "d3").await,
-        base,
-        "an extractor change moves it"
-    );
+    let idx = fresh(dir.path(), "c").await;
+    let mut w = TextWriter::open(&idx, "x@1", true).await.unwrap();
+    assert_eq!(idx.documents().await.unwrap().unwrap(), (None, Vec::new()));
+    w.store_document(input("beta", "b", 0, &DocSource::Record))
+        .unwrap();
+    w.flush(&idx).await.unwrap();
+    let (v1, rows) = idx.documents().await.unwrap().unwrap();
+    assert_eq!(rows.len(), 1);
+    w.store_document(input("beta", "b", 0, &DocSource::Record))
+        .unwrap();
+    w.flush(&idx).await.unwrap();
+    let (v2, rows) = idx.documents().await.unwrap().unwrap();
+    assert_eq!(rows.len(), 1, "identical rows collapse");
+    assert_ne!(v1, v2, "a write moves the version a digest memo keys on");
 }
 
 #[tokio::test]

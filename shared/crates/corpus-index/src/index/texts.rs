@@ -10,7 +10,7 @@
 //! [`TextWriter::store_document`] is the one writer, and every ingest path
 //! (the main loop, the watched-folder delta, reindex) routes through it. The
 //! reads — [`CorpusIndex::text`], [`CorpusIndex::documents_for`],
-//! [`CorpusIndex::texts_digest`] — answer a named [`TextAbsence`] rather than
+//! [`CorpusIndex::documents`] — answer a named [`TextAbsence`] rather than
 //! an empty result when the corpus cannot answer.
 //!
 //! The record table is a SET: a row repeated by a resumed ingest names the
@@ -18,7 +18,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_array::{Array, BooleanArray, Int64Array, RecordBatch, StringArray};
@@ -408,47 +408,23 @@ impl CorpusIndex {
         Ok(Ok(out))
     }
 
-    /// The corpus's library digest (ADDRESSED_TEXT §4): sha256 over its
-    /// records' `"<text_sha256> <source_sha256 or -> <extractor>\n"` lines,
-    /// sorted bytewise, one line per distinct record. It changes exactly when a
-    /// text, a source or an extractor does, never when chunking or embedding
-    /// does. One full scan of the record table, memoised per table version.
-    pub async fn texts_digest(&self) -> Result<TextLookup<Sha256Hash>> {
+    /// Every record this corpus holds, identical rows collapsed, with the
+    /// record table's Lance version (`None` before the first record). The
+    /// library digest is computed from these by corpus-engine through
+    /// `oicp_types::evidence::texts_digest_preimage`, the one derivation, and
+    /// can be memoised on the version. One full scan of the record table.
+    pub async fn documents(&self) -> Result<TextLookup<(Option<u64>, Vec<DocumentRecord>)>> {
         if !self.text_store() {
             return Ok(Err(TextAbsence::TextsNotStored));
         }
-        let dir = self.path();
         let Some(table) = documents_table(self, false).await? else {
-            return Ok(Ok(digest_lines(Vec::new())));
+            return Ok(Ok((None, Vec::new())));
         };
         let version = table
             .version()
             .await
             .map_err(|e| Error::Database(format!("documents version: {e}")))?;
-        if let Some((v, d)) = digest_memo().lock().ok().and_then(|m| m.get(&dir).copied()) {
-            if v == version {
-                return Ok(Ok(d));
-            }
-        }
-        let rows = read_rows(&table, None).await?;
-        let lines: Vec<String> = rows
-            .iter()
-            .map(|r| {
-                let source = r.source_sha256.map(|s| s.to_hex());
-                format!(
-                    "{} {} {}",
-                    r.text_sha256,
-                    source.as_deref().unwrap_or("-"),
-                    r.extractor
-                )
-            })
-            .collect();
-        let digest = digest_lines(lines);
-        tracing::debug!(corpus = %self.corpus_id(), version, records = rows.len(), %digest, "texts digest computed");
-        if let Ok(mut m) = digest_memo().lock() {
-            m.insert(dir, (version, digest));
-        }
-        Ok(Ok(digest))
+        Ok(Ok((Some(version), read_rows(&table, None).await?)))
     }
 
     /// The stored-text name each chunk was cut from. A chunk without one (a
@@ -548,23 +524,6 @@ impl CorpusIndex {
         );
         Ok(rows_added)
     }
-}
-
-fn digest_lines(mut lines: Vec<String>) -> Sha256Hash {
-    lines.sort();
-    let mut buf = String::new();
-    for l in &lines {
-        buf.push_str(l);
-        buf.push('\n');
-    }
-    Sha256Hash::of_str(&buf)
-}
-
-type DigestMemo = Mutex<HashMap<PathBuf, (u64, Sha256Hash)>>;
-
-fn digest_memo() -> &'static DigestMemo {
-    static MEMO: OnceLock<DigestMemo> = OnceLock::new();
-    MEMO.get_or_init(Default::default)
 }
 
 fn documents_schema() -> SchemaRef {
