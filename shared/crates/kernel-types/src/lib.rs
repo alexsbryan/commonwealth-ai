@@ -123,11 +123,14 @@ pub mod origin;
 /// host and sovereign-compute's shared-model host election, two programs and
 /// no cmnwlth site, so §12 3a's "ids and atoms" rung places it beside `NodeId`.
 pub mod partition;
-// The instrument registry's schema. Feature-gated so the default four-dep
+// The instrument registry's schema. Feature-gated so the default six-dep
 // budget in Cargo.toml still holds for a lift of this leaf — `toml` is only
 // linked by the three programs that read `quality/instruments.toml`.
 #[cfg(any(test, feature = "quality-registry"))]
 pub mod quality;
+/// The published identity of some bytes: SHA-256, 64 lowercase hex, with its
+/// RFC 6920 `ni:` rendering. `ContentHash` stays BLAKE3 and internal.
+pub mod sha256;
 #[cfg(any(test, feature = "wire-fixture"))]
 pub mod wire;
 
@@ -147,3 +150,4 @@ pub use judgement::{
 pub use origin::{Grain, Locator, Origin, Server, Source};
 #[cfg(any(test, feature = "quality-registry"))]
 pub use quality::{Coverage, Instrument, Registry as InstrumentRegistry};
+pub use sha256::Sha256Hash;
