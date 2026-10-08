@@ -934,14 +934,22 @@ class PathsForTests(unittest.TestCase):
                  pa.heartbeat, pa.director_commits, pa.log_dir),
                 (ctl, f"{ctl}/DONE", f"{ctl}/STOP", f"{ctl}/NEEDS_HUMAN.md", f"{ctl}/waiting",
                  f"{ctl}/parked", f"{ctl}/.heartbeat", f"{ctl}/.director-commits",
-                 "target/ralph/a"))
-            self.assertEqual((pb.stop, pb.log_dir), ("var/b/STOP", "target/ralph/b"))
+                 f"{ctl}/log"))
+            self.assertEqual((pb.stop, pb.log_dir), ("var/b/STOP", "var/b/log"))
             # The loop's log dir too: a session log written after the dispatch
             # snapshot would otherwise read as the session's untracked file.
-            self.assertEqual(ralph.runtime_markers(pa), (f"{ctl}/", "target/ralph/a/"))
+            self.assertEqual(ralph.runtime_markers(pa), (f"{ctl}/", f"{ctl}/log/"))
             legacy = ralph.runtime_markers(ralph.Paths(pathlib.Path(tmp)))
-            self.assertEqual(legacy[-1], "target/ralph/")
+            self.assertEqual(legacy[-1], "ralph/log/")
             self.assertIn("ralph/parked/", legacy)
+
+    def test_no_log_dir_is_under_target(self):
+        # Hosts purge target/ under disk pressure: zoracite's went overnight on
+        # 2026-10-08, and with it the log an awaiting unit was told to read.
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            for p in (queue_paths(tmp, "a"), ralph.Paths(pathlib.Path(tmp))):
+                self.assertFalse(p.log_dir.startswith("target"), p.log_dir)
 
     def test_plan_prints_the_named_queues_head(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1060,8 +1068,8 @@ class SessionEnvTests(unittest.TestCase):
             paths = queue_paths(tmp, "a")
             self.assertEqual(ralph.session_env(paths), {
                 "RALPH_QUEUE": "a", "RALPH_STATE": "ralph/next/a/STATE.md",
-                "RALPH_CONTROL_DIR": "ralph/next/a/ctl", "RALPH_WORKDIR": tmp,
-                "RALPH_CLAUDE_SETTINGS": f"{tmp}/ralph/next/a/settings.json",
+                "RALPH_CONTROL_DIR": "ralph/next/a/ctl", "RALPH_LOG_DIR": "ralph/next/a/ctl/log",
+                "RALPH_WORKDIR": tmp, "RALPH_CLAUDE_SETTINGS": f"{tmp}/ralph/next/a/settings.json",
                 "OPENCODE_CONFIG": ""})
             with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": "/nonexistent/worker"}):
                 self.assertEqual(ralph.worker_bin(paths), f"{tmp}/stub-worker.sh")
@@ -1929,40 +1937,44 @@ class LanesTests(LaneFixture, unittest.TestCase):
             write(root, "target/ralph/phase-b/ship/esc/seed/config.toml", "seed")
             for d in ("target/debug/ro", "target/ralph/phase-b/ship/esc/seed"):
                 os.chmod(root / d, 0o555)
-            lanes = self.lanes(root, log_dir="target/ralph/q")
+            lanes = self.lanes(root, log_dir="ralph/next/q/ctl/log")
             lanes.CLONE_TARGET = ("cp", "-a")
             wt, _, _, _ = self.prepare(lanes, "q-a", jobs=2)
-            write(wt, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+            write(wt, "ralph/next/q/ctl/log/lint.log", "exit=0 the lane's lint\n")
             self.assertTrue(said(lanes.keep_evidence, "q-a", wt)[0])
             said(lanes.remove_lane, "q-a", wt)
             self.assertFalse(wt.exists())
-            kept = root / "target/ralph/q/q-a"
+            kept = root / "ralph/next/q/ctl/log/q-a"
             self.assertEqual(sorted(p.relative_to(kept).as_posix() for p in kept.rglob("*")),
-                             ["lane.env", "q", "q/lint.log"])
+                             ["lane.env", "lint.log"])
 
     def test_a_lanes_evidence_outlives_its_worktree(self):
         # (12): `git worktree remove --force` takes the lane's target/ with it.
+        # Kept outside the main tree's target/ too, which a host may purge: the
+        # lane's own log dir, and the target/ralph/ a repo's own scripts write.
         with tempfile.TemporaryDirectory() as tmp:
             root = self.repo(tmp, "- [ ] q-a — depends []\n")
-            lanes = self.lanes(root, log_dir="target/ralph/q")
+            lanes = self.lanes(root, log_dir="ralph/next/q/ctl/log")
             wt, _, _, _ = self.prepare(lanes, "q-a")
-            write(wt, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+            write(wt, "ralph/next/q/ctl/log/lint.log", "exit=0 the lane's lint\n")
+            write(wt, "target/ralph/reading.log", "the repo's own reading\n")
             self.assertTrue(said(lanes.keep_evidence, "q-a", wt)[0])
             _, out = said(lanes.remove_lane, "q-a", wt)
             self.assertFalse(wt.exists())
             self.assertEqual(out, "")                      # git removed it whole
-            self.assertEqual((root / "target/ralph/q/q-a/q/lint.log").read_text(),
-                             "exit=0 the lane's lint\n")
+            kept = root / "ralph/next/q/ctl/log/q-a"
+            self.assertEqual(((kept / "lint.log").read_text(), (kept / "reading.log").read_text()),
+                             ("exit=0 the lane's lint\n", "the repo's own reading\n"))
 
     def test_evidence_that_cannot_be_copied_says_so_and_a_lane_with_none_is_kept_trivially(self):
         # False tells the caller to keep the worktree rather than lose what a commit cites.
         with tempfile.TemporaryDirectory() as tmp:
             root = self.repo(tmp, "- [ ] q-a — depends []\n")
-            lanes = self.lanes(root, log_dir="target/ralph/q")
+            lanes = self.lanes(root, log_dir="ralph/next/q/ctl/log")
             wt, _, _, _ = self.prepare(lanes, "q-a")
             self.assertTrue(said(lanes.keep_evidence, "q-a", wt)[0])     # nothing to keep
-            write(wt, "target/ralph/q/lint.log", "exit=0\n")
-            write(root, "target/ralph/q/q-a", "a file where the evidence dir goes")
+            write(wt, "ralph/next/q/ctl/log/lint.log", "exit=0\n")
+            write(root, "ralph/next/q/ctl/log/q-a", "a file where the evidence dir goes")
             kept, out = said(lanes.keep_evidence, "q-a", wt)
             self.assertFalse(kept)
             self.assertIn("evidence copy to", out)
@@ -2198,8 +2210,19 @@ class RalphCheckTests(unittest.TestCase):
             self.assertIn("exit=0\nfrom-a extra arg\n", a.stdout)
             self.assertIn("exit=0\nfrom-b\n", b.stdout)
             root = pathlib.Path(tmp)
-            self.assertEqual((root / "target/ralph/a/hello.log").read_text(), "from-a extra arg\n")
-            self.assertEqual((root / "target/ralph/b/hello.log").read_text(), "from-b\n")
+            self.assertEqual((root / "ralph/next/a/ctl/log/hello.log").read_text(),
+                             "from-a extra arg\n")
+            self.assertEqual((root / "ralph/next/b/ctl/log/hello.log").read_text(), "from-b\n")
+            self.assertFalse((root / "target/ralph/a").exists())
+
+    def test_the_loops_log_dir_wins(self):
+        # A lane's RALPH_LOG_DIR is relative: the log lands in the tree the script runs in.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            with mock.patch.dict(os.environ, {"RALPH_LOG_DIR": "var/a/log"}):
+                r = self.check(tmp, "a", "hello")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual((pathlib.Path(tmp) / "var/a/log/hello.log").read_text(), "from-a\n")
 
     def test_a_declared_check_exits_with_its_own_code(self):
         with tempfile.TemporaryDirectory() as tmp:

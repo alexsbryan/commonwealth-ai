@@ -58,7 +58,7 @@ def make_repo(tmp, state, prompt=PROMPT, extra=None):
         write(wd, rel, text)
     git(wd, "add", "-A")
     git(wd, "commit", "-q", "-m", "init")
-    ralph.ensure_excludes(wd, ralph.RUNTIME_MARKERS)
+    ralph.ensure_excludes(wd, ralph.runtime_markers(ralph.Paths(wd)))   # as cmd_run does
     return wd
 
 
@@ -696,6 +696,10 @@ INCIDENTS = [
      "test_a_merge_conflict_goes_back_to_the_lane"),
     ("2026-10-06", "r12-release-preview: the cut exited 1, its success-only marker never came",
      "test_a_run_that_fails_resumes_its_lane_with_the_code_and_the_log"),
+    ("2026-10-08", "zoracite's target/ was purged overnight with an awaiting unit's run log in it",
+     "test_the_loops_logs_are_never_under_target"),
+    ("2026-10-08", "a 29-minute run a stopped loop saw 14h late was reported as 14h09m long",
+     "test_a_run_seen_late_reports_when_it_ended"),
 ]
 
 
@@ -1066,6 +1070,46 @@ class IncidentTests(unittest.TestCase):
         rig.tick()
         self.assertIs(rig.row("r12-release-preview").status, ralph.Status.DONE)
 
+    def test_the_loops_logs_are_never_under_target(self):
+        # A host purges target/ under disk pressure; the transcript and the run
+        # log a resumed session is told to read live in the control dir's log/.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+
+        def cut(s):
+            s.commit()
+            return s.result("await", "1h", "--", "true")
+
+        rig.procs.sessions.append(cut)
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.AWAITING)
+        logs = [log.relative_to(rig.wd).as_posix() for *_, log in rig.procs.spawned]
+        self.assertEqual(logs, ["ralph/log/sessions/a-1.out", "ralph/log/sessions/a-1.await.log"])
+        self.assertEqual(rig.entry("a")["run"]["log"], str(rig.wd / logs[1]))
+
+    def test_a_run_seen_late_reports_when_it_ended(self):
+        # The loop was stopped while zoracite's demo ran; the next start told the
+        # session the run took 14h09m. Its exit file says when it ended.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+
+        def cut(s):
+            s.commit()
+            return s.result("await", "1h", "--", "true")
+
+        def judge(s):
+            self.assertIn("exited 0 after 29m00s (the loop saw it 13h40m later)", s.prompt)
+            s.result("done")
+
+        rig.procs.sessions += [cut, judge]
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        run = rig.entry("a")["run"]
+        exit_file = write(run["exit_file"], "", "0\n")
+        os.utime(exit_file, (run["begun"] + 29 * 60,) * 2)
+        rig.clock.t = run["begun"] + 14 * 3600 + 9 * 60
+        rig.tick(3)
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+
 
 # ---------------------------------------------------------------------------
 # End to end: real processes, the real wrapper on the session's PATH.
@@ -1103,7 +1147,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual(loop.run(), 0)
             row = ralph.Queue(wd / "ralph/STATE.md").by_id()["cut"]
             self.assertIs(row.status, ralph.Status.DONE)
-            log = (wd / "target/ralph/sessions/cut-1.await.log").read_text()
+            log = (wd / "ralph/log/sessions/cut-1.await.log").read_text()
             self.assertIn("the cut refused: dirty tree", log)
             self.assertEqual(sorted(p.name for p in wd.glob("turn-*")), ["turn-0", "turn-1"])
             self.assertIn("DONE — campaign complete", notes)

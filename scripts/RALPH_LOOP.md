@@ -42,11 +42,17 @@ Every session is told this, and has `ralph-result` on its PATH:
   goes to the next session.
 - `ralph-result await <budget> -- <cmd>`: a long run. The loop starts the
   command in the unit's worktree, in a process group of its own, logs it to
-  `target/ralph/sessions/<unit>-<n>.await.log`, and resumes the unit with the
-  exit code and the log when it ends however it ends (pass, failure, crash,
-  OOM kill, reboot), or kills it when the budget passes.
+  `<log dir>/sessions/<unit>-<n>.await.log`, and resumes the unit with the
+  exit code, how long it ran and the log when it ends however it ends (pass,
+  failure, crash, OOM kill, reboot), or kills it when the budget passes.
 - `ralph-result needs-human [--operator] [--package FILE] <why>`: a decision
   the row and the design do not make.
+
+The log dir is `<control_dir>/log/` (`ralph/log/` on a legacy launch line):
+session transcripts, run logs, a lane's kept evidence and `ralph-check.sh`'s
+logs, kept out of git by the loop's excludes. The loop keeps none of its
+records under `target/`, which a host may purge under disk pressure;
+`target/ralph/lane.env` stays there because every dispatch rewrites it.
 
 Nothing else a session writes is read as loop state. A session that ends
 without a result is judged by its commits alone: commits mean it continues,
@@ -122,10 +128,11 @@ fast-forwards onto the base, or merges the base in where its session can
 resolve a conflict. When a lane reports done, the loop renumbers its decision
 ids against the base, merges `--no-ff`, regenerates `ralph/DECISIONS.md`,
 marks the row `[x]` with the lane's tip and commits `ralph: <id> done` (what
-`audit_every` counts), copies the lane's `target/ralph/` into the main tree's,
-and removes the worktree. A conflict aborts the merge and strikes the unit;
-its next session gets the base merged in. Merges and main-tree commits wait
-while a main-tree unit's session or run holds the tree.
+`audit_every` counts), copies the lane's log dir and its `target/ralph/` into
+the main tree's `<log dir>/<unit>/`, and removes the worktree. A conflict
+aborts the merge and strikes the unit; its next session gets the base merged
+in. Merges and main-tree commits wait while a main-tree unit's session or run
+holds the tree.
 
 Rows in `conflicts.txt` never run at once, `heavy.txt` rows run one at a
 time, and `<id> *` runs alone. A ready review lets the lanes drain, then runs

@@ -1038,7 +1038,10 @@ class Paths:
     queue: str = ""                       # the --queue name; "" on a legacy launch line
     control_dir: str = "ralph"            # a queue's own: ralph/next/<name>/ctl
     director_commits: str = "ralph/.director-commits"
-    log_dir: str = "target/ralph"
+    # <control_dir>/log: transcripts, run logs, kept lane evidence. Never under
+    # target/: hosts purge build output under disk pressure, and zoracite's
+    # went overnight on 2026-10-08 with an awaiting unit's run log in it.
+    log_dir: str = "ralph/log"
     prompt_addendum: str = ""             # set when the prompt is rendered, not read
     manifest: QueueManifest | None = None
 
@@ -1052,7 +1055,8 @@ class Paths:
                 "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
                 "waiting": f"{control_dir}/waiting", "parked": f"{control_dir}/parked",
                 "heartbeat": f"{control_dir}/.heartbeat",
-                "director_commits": f"{control_dir}/.director-commits"}
+                "director_commits": f"{control_dir}/.director-commits",
+                "log_dir": f"{control_dir}/log"}
 
 
 PROMPT_BASE = "ralph/PROMPT.base.md"
@@ -1158,11 +1162,12 @@ def session_env(paths):
     an empty one as unset), so an opencode battery session gets its workdir's
     permissions and never a config a parent loop leaked in. RALPH_WORKDIR is
     the loop's checkout, not a pool lane's worktree: the permission bridge
-    asks the operator there."""
+    asks the operator there. RALPH_LOG_DIR is relative, so ralph-check.sh
+    logs into the worktree it runs in: a lane's own, kept at its removal."""
     settings = paths.manifest.settings if paths.manifest else ""
     opencode = paths.workdir / ".opencode" / "ralph.json"
     return {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
-            "RALPH_CONTROL_DIR": paths.control_dir,
+            "RALPH_CONTROL_DIR": paths.control_dir, "RALPH_LOG_DIR": paths.log_dir,
             "RALPH_WORKDIR": str(paths.workdir.resolve()),
             "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else "",
             "OPENCODE_CONFIG": str(opencode) if opencode.is_file() else ""}
@@ -2748,10 +2753,23 @@ class Loop:
         r = entry["run"]
         how = (f"exited {code}" if code is not None else
                "is gone without an exit status (a reboot, or something killed it)")
+        now, ended = self.clock(), self._ended_at(r)
+        late = (f" (the loop saw it {fmt_secs(now - ended)} later)"
+                if ended is not None and now - ended > STALL_SECS else "")
         self._note(entry, f"your background run {r['argv']} {how} after "
-                          f"{fmt_secs(self.clock() - r['begun'])}; its log is {r['log']}. Read it "
-                          "and carry on from what it shows.")
+                          f"{fmt_secs((now if ended is None else ended) - r['begun'])}{late}; "
+                          f"its log is {r['log']}. Read it and carry on from what it shows.")
         return f"run {how}"
+
+    def _ended_at(self, r):
+        """When the run wrote its exit status, or None. A run a stopped loop
+        sees late ended when it wrote the file, not when the loop looked
+        (2026-10-08: a 29-minute demo was reported to its session as 14h09m)."""
+        try:
+            t = pathlib.Path(r["exit_file"]).stat().st_mtime
+        except OSError:
+            return None
+        return t if r["begun"] <= t <= self.clock() else None
 
     def _do_run_over_budget(self, unit, entry):
         r = entry["run"]
@@ -3018,19 +3036,22 @@ class Lanes:
                 "its target holds disk until it is")
 
     def keep_evidence(self, unit, wt):
-        """A lane's raw evidence (its target/ralph/: check logs, readings) is
-        copied to <log_dir>/<unit>/ in the main tree before the worktree, its
-        target included, is removed. False when the copy failed: the caller
-        keeps the worktree rather than lose what a commit may cite."""
-        src = wt / "target" / "ralph"
-        if not src.is_dir():
+        """A lane's raw evidence is copied to <log_dir>/<unit>/ in the main
+        tree before the worktree, its target included, is removed: its own log
+        dir (ralph-check.sh's logs, commit messages), and its target/ralph/,
+        where a repo's own scripts may still write readings and check logs.
+        False when a copy failed: the caller keeps the worktree rather than
+        lose what a commit may cite."""
+        srcs = [d for d in (wt / "target" / "ralph", wt / self.paths.log_dir) if d.is_dir()]
+        if not srcs:
             return True
         dest = self.paths.p(self.paths.log_dir) / unit
-        try:
-            shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
-        except (OSError, shutil.Error) as e:
-            say(f"lane {unit} evidence copy to {dest} failed: {e}")
-            return False
+        for src in srcs:
+            try:
+                shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
+            except (OSError, shutil.Error) as e:
+                say(f"lane {unit} evidence copy to {dest} failed: {e}")
+                return False
         say(f"lane {unit} evidence kept at {dest}")
         return True
 # ---------------------------------------------------------------------------
@@ -3150,7 +3171,7 @@ def adopt_legacy(loop, dry=False):
         if row is not None:
             park(row.id, text, "the file protocol's halt package")
         else:
-            dest = paths.workdir / "target" / "ralph" / "halts" / f"{int(time.time())}-adopted.md"
+            dest = paths.p(paths.log_dir) / "halts" / f"{int(time.time())}-adopted.md"
             lines.append(f"{paths.needs_human} names no row — archived at {dest}: "
                          f"{first_line(pkg)[:120]}")
             if not dry:
@@ -3457,7 +3478,7 @@ def paths_for(args):
     return Paths(workdir, prompt=m.prompt, state=m.state, charter=m.charter,
                  prompt_addendum=addendum,
                  conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m,
-                 log_dir=f"target/ralph/{name}", **Paths.control_files(m.control_dir))
+                 **Paths.control_files(m.control_dir))
 
 
 def queue_flags(paths):

@@ -7,7 +7,7 @@
 #   scripts/ralph-check.sh test sovereign-mesh
 #   scripts/ralph-check.sh node cmnwlth/apps/ring-doc
 #
-# Each runs the gate into target/ralph/<check>.log, prints `exit=N`, tails the
+# Each runs the gate into <log dir>/<check>.log, prints `exit=N`, tails the
 # log, and exits N. Why a script and not the inline string it replaces: the
 # worker now runs as `claude -p` under an allowlist (ralph/claude-settings.json),
 # and a command carrying `$?` or a redirect never matches a rule, prefix or
@@ -16,11 +16,14 @@
 #
 # A queue's OWN checks are data, not verbs here: under a `--queue` loop
 # scripts/ralph.py exports RALPH_QUEUE, and a name that ralph/next/<queue>/queue.toml
-# declares under [checks] runs that argv (extra arguments appended), logging to
-# target/ralph/<queue>/ so two loops in one checkout do not share a log. The
-# built-ins below cannot be redeclared (the manifest loader refuses it). `toml`,
-# `demo`, `pilot` and `desktop` stay as verbs only for the queues still on
-# legacy launch lines; a queue with a manifest declares its own.
+# declares under [checks] runs that argv (extra arguments appended). The log
+# dir is the loop's RALPH_LOG_DIR (<control_dir>/log, relative, so a lane logs
+# into its own worktree), else ralph/next/<queue>/ctl/log, else ralph/log: one
+# per queue, so two loops in one checkout do not share a log, and never under
+# target/, which hosts purge under disk pressure. The loop's own excludes keep
+# it out of git. The built-ins below cannot be redeclared (the manifest loader
+# refuses it). `toml`, `demo`, `pilot` and `desktop` stay as verbs only for the
+# queues still on legacy launch lines; a queue with a manifest declares its own.
 #
 # The macros' own rules are kept here, not re-decided:
 #   clean  — no lock wrapper (at the 256G ceiling it is a du and never runs
@@ -38,7 +41,9 @@ if [ -r target/ralph/lane.env ]; then
         esac
     done < target/ralph/lane.env
 fi
-logdir="target/ralph${RALPH_QUEUE:+/$RALPH_QUEUE}"
+if [ -n "${RALPH_LOG_DIR:-}" ]; then logdir="$RALPH_LOG_DIR"
+elif [ -n "${RALPH_QUEUE:-}" ]; then logdir="ralph/next/$RALPH_QUEUE/ctl/log"
+else logdir="ralph/log"; fi
 mkdir -p target/ralph "$logdir"
 
 check="${1:-}"; shift || true
