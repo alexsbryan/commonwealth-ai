@@ -715,13 +715,14 @@ pub(crate) fn forced_choice_probs(
 
 /// Synthesise `FinishReason` from observed token counts. Real source
 /// of truth is the decode loop's exit branch (EOS vs `n_generated >=
-/// max_tokens`); this helper is the fallback for variants that haven't
-/// been migrated to return the typed reason directly (MTP +
-/// generate_sync_batched as of 2026-05-25). The only false positive
-/// is the vanishing edge where EOS lands at exactly the budget
-/// boundary. Single-token path uses its real exit-branch signal
-/// instead — see `GenerationOutcome` construction at the end of the
-/// single-token loop in `generate_sync`.
+/// max_tokens`); this helper is the fallback for the one variant that
+/// still returns none, `generate_sync_batched` (FastShort). It counts
+/// against `request.max_tokens`, so a reply cut short by a budget
+/// `clamp_max_tokens` lowered to the context's headroom reads as `Stop`
+/// here; the MTP path returned that wrong answer at the context edge
+/// until it was given its loop's own reason. FastShort admits only
+/// prompts under `FAST_SHORT_MAX_INPUT_CHARS`, far from that edge. The other false positive is
+/// EOS landing exactly on the budget.
 pub(crate) fn finish_reason_from_counts(
     request: &CompletionRequest,
     completion_tokens: usize,
@@ -2477,13 +2478,11 @@ impl ModelSlot {
             // `SOVEREIGN_MTP_QUARANTINE_DISABLE=1` to opt out
             // (debugging MTP-stability work).
             match Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks) {
-                Ok((text, prompt_tokens, completion_tokens)) => {
-                    // MTP loop hasn't been threaded for typed FinishReason
-                    // yet — synthesise via the counts helper. Migrating
-                    // MTP would require touching the draft+verify loop's
-                    // exit branches; deferred until the verify-side
-                    // acceptance-rate work settles.
-                    let finish_reason = finish_reason_from_counts(request, completion_tokens);
+                Ok((text, prompt_tokens, completion_tokens, finish_reason)) => {
+                    // The loop's own exit branch, not a count against
+                    // `request.max_tokens`: that count missed the budget
+                    // `clamp_max_tokens` cut to the context's headroom, so a
+                    // reply truncated at the context edge read as `stop`.
                     let outcome = GenerationOutcome {
                         text,
                         prompt_tokens,
@@ -3406,7 +3405,7 @@ impl ModelSlot {
         slot_ctx: &mut SlotContext,
         request: &CompletionRequest,
         quirks: &ModelQuirks,
-    ) -> Result<(String, usize, usize)> {
+    ) -> Result<(String, usize, usize, FinishReason)> {
         Self::generate_sync_mtp_impl(model, model_id, slot_ctx, request, quirks, None, None)
     }
 
@@ -3451,7 +3450,7 @@ impl ModelSlot {
         quirks: &ModelQuirks,
         sink: Option<&StreamSink<'_>>,
         cancel: Option<&tokio_util::sync::CancellationToken>,
-    ) -> Result<(String, usize, usize)> {
+    ) -> Result<(String, usize, usize, FinishReason)> {
         // **Build the MTP session for THIS request.** A session must
         // never outlive the request that made it: KV cache clear (below)
         // resets the contexts' token state but does NOT touch the
@@ -4312,7 +4311,7 @@ impl ModelSlot {
         if let Some(s) = sink {
             if !receiver_gone {
                 s.send_finish(
-                    finish_reason,
+                    finish_reason.clone(),
                     StreamUsage {
                         prompt_tokens: tokens.len() as u32,
                         completion_tokens: n_generated as u32,
@@ -4322,7 +4321,7 @@ impl ModelSlot {
             }
         }
 
-        Ok((output, tokens.len(), n_generated))
+        Ok((output, tokens.len(), n_generated, finish_reason))
     }
 
     /// Multi-sequence batched autoregressive decode for short-call
