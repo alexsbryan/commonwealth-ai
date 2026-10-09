@@ -33,7 +33,8 @@ use super::resolve_records::propose::{
     Proposers, SimilarDocuments, MAX_CANDIDATES, MIN_SIMILARITY, NEIGHBOURS,
 };
 use super::resolve_records::{
-    Answerer, Criterion, Document, DocumentResolution, ProposalRule, Resolver, Statement,
+    resolve_in_clock_order, Answerer, Criterion, Document, DocumentResolution, ProposalRule,
+    Resolver, Statement,
 };
 use crate::enrichment::ontology::{
     DocumentStamp, OntologyPolicies, OntologyTypeDecl, TypeIndex, TypeKind,
@@ -446,18 +447,9 @@ async fn resolve_type(
     for p in placed.iter_mut() {
         p.statements.sort_by_key(|s| (s.start, s.end));
     }
-    // The clock: dated documents first, oldest first; the key breaks ties.
-    let date = |p: &Placed<'_>| -> Option<String> {
-        p.stamps
-            .iter()
-            .find(|(s, _)| *s == DocumentStamp::Date)
-            .map(|(_, v)| v.clone())
-    };
-    placed.sort_by(|a, b| {
-        (date(a).is_none(), date(a), &a.doc.key).cmp(&(date(b).is_none(), date(b), &b.doc.key))
-    });
+    let undated = |p: &Placed<'_>| !p.stamps.iter().any(|(s, _)| *s == DocumentStamp::Date);
     report.documents = placed.len();
-    report.undated = placed.iter().filter(|p| date(p).is_none()).count();
+    report.undated = placed.iter().filter(|p| undated(p)).count();
     report.statements = placed.iter().map(|p| p.statements.len()).sum();
 
     let mut resolver = Resolver::with_rule(ProposalRule::default());
@@ -467,32 +459,44 @@ async fn resolve_type(
     );
     let mut record_of: HashMap<String, String> = HashMap::new();
     let mut refused: HashMap<String, &'static str> = HashMap::new();
-    for p in &placed {
-        let doc = Document {
-            id: &p.doc.key,
-            title: p.doc.title.as_deref(),
-            body: &p.body,
-            stamps: &p.stamps,
-        };
-        let candidates = proposer.propose(doc);
-        let r = resolver
-            .resolve_document(&criterion, doc, &p.statements, &candidates, answerer)
-            .await;
-        proposer.observe(doc, &r);
-        on_document(&t.name, &r);
-        report.calls += r.calls;
-        for o in &r.outcomes {
-            *report.outcomes.entry(o.outcome.label()).or_default() += 1;
-            match o.outcome.record() {
-                Some(rec) => {
-                    record_of.insert(o.statement.clone(), rec.to_string());
-                }
-                None => {
-                    refused.insert(o.statement.clone(), o.outcome.label());
+    let mut documents: Vec<(Document<'_>, &[Statement])> = placed
+        .iter()
+        .map(|p| {
+            (
+                Document {
+                    id: &p.doc.key,
+                    title: p.doc.title.as_deref(),
+                    body: &p.body,
+                    stamps: &p.stamps,
+                },
+                p.statements.as_slice(),
+            )
+        })
+        .collect();
+    // The clock orders them (`resolve_records::clock`), one loop for both drivers.
+    resolve_in_clock_order(
+        &criterion,
+        &mut documents,
+        &mut resolver,
+        &mut proposer,
+        answerer,
+        &mut |_, _, r| {
+            on_document(&t.name, r);
+            report.calls += r.calls;
+            for o in &r.outcomes {
+                *report.outcomes.entry(o.outcome.label()).or_default() += 1;
+                match o.outcome.record() {
+                    Some(rec) => {
+                        record_of.insert(o.statement.clone(), rec.to_string());
+                    }
+                    None => {
+                        refused.insert(o.statement.clone(), o.outcome.label());
+                    }
                 }
             }
-        }
-    }
+        },
+    )
+    .await;
 
     // Records become the type's atoms.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();

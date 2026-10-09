@@ -743,15 +743,26 @@ async fn an_evidential_field_one_earlier_record_holds_links_without_a_call() {
         )
         .await;
     assert_eq!(r.calls, 0);
-    assert_eq!(
-        r.outcomes[0].outcome,
-        Outcome::Decided(Decision::Field {
-            record: "x".into(),
-            field: "document_thread",
-            value: "7".into(),
-            precision: 0.83
-        })
-    );
+    // Alone, the field is weighed at its own precision (`weigh.rs`).
+    match &r.outcomes[0].outcome {
+        Outcome::Decided(Decision::Weighed {
+            record,
+            posterior,
+            sources,
+        }) => {
+            assert_eq!(record, "x");
+            assert!((posterior - 0.83).abs() < 1e-9, "{posterior}");
+            assert_eq!(
+                sources,
+                &[Vote {
+                    source: "document_thread",
+                    record: "x".into(),
+                    precision: 0.83
+                }]
+            );
+        }
+        o => panic!("{o:?}"),
+    }
     assert_eq!(res.records()[0].statements, ["x", "z"]);
     assert_eq!(res.records()[0].fields["document_thread"].len(), 1);
 }
@@ -882,18 +893,25 @@ async fn a_choice_below_the_bar_is_not_asked_and_the_proposed_answer_decides() {
         )
         .await;
     assert_eq!((r.calls, seen.lock().unwrap().len()), (0, 0));
-    assert_eq!(
-        r.outcomes[0].outcome,
-        Outcome::Decided(Decision::Proposed {
-            record: "x".into(),
-            precision: 0.8
-        })
-    );
+    match &r.outcomes[0].outcome {
+        Outcome::Decided(Decision::Weighed {
+            record, posterior, ..
+        }) => assert!(record == "x" && (posterior - 0.8).abs() < 1e-9),
+        o => panic!("{o:?}"),
+    }
 }
 
+/// Ring 2: the model's choice (on y) and the proposed answer (.8, on x) are
+/// weighed together, three alternatives (x, y, none). A far more precise
+/// choice carries y, a less precise one leaves x ahead, and two that are as
+/// precise as each other hold the statement: no record opens.
 #[tokio::test]
-async fn of_the_choice_and_the_proposed_answer_the_more_precise_decides() {
-    for (model_choice, want) in [(0.9, "selected"), (0.7, "proposed")] {
+async fn the_choice_and_the_proposed_answer_are_weighed_together_and_a_split_is_held() {
+    for (model_choice, want, record) in [
+        (0.9, "weighed", Some("y")),
+        (0.7, "weighed", Some("x")),
+        (0.8, "held", None),
+    ] {
         let mut res = fire_downtown().await;
         let y = "Flood uptown.";
         res.resolve_document(
@@ -922,11 +940,20 @@ async fn of_the_choice_and_the_proposed_answer_the_more_precise_decides() {
                 Answerer::Select(&infer),
             )
             .await;
+        let o = &r.outcomes[0].outcome;
         assert_eq!(
-            r.outcomes[0].outcome.label(),
-            want,
+            (o.label(), o.record()),
+            (want, record),
             "model_choice {model_choice}"
         );
+        if let Outcome::Held(h) = o {
+            assert_eq!(h.sources.len(), 2);
+            assert_eq!(h.alternatives.len(), 2);
+            assert!(h.alternatives.iter().all(|(_, p)| *p < 0.5));
+            // Held is not opened: the two records are all there are.
+            assert_eq!(res.records().len(), 2);
+            assert!(r.outcomes[0].choice.is_some());
+        }
     }
 }
 

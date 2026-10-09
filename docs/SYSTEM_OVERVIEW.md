@@ -663,12 +663,12 @@ question the pipeline asks about a type is a method on the resolved
   `providers`, so no recipe lists ISPs to keep a contact's account honest.
   RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
   puts each statement of one document into an open record of one declared
-  type, or opens one. An equal declared `identity` key decides without a call;
-  so does an `identity_evidential` document field (a `change.document` stamp,
-  read by `read_stamp`, the one reader claim stamping uses too) whose measured
-  precision clears the type's `identity_bar` and whose value exactly one record
-  from an earlier document holds (`resolve_records/fields.rs`,
-  `Decision::Field`); otherwise ONE grammar-constrained call per document, given the type's
+  type, opens one, or holds it. An equal declared `identity` key decides without a call.
+  An `identity_evidential` document field (a `change.document` stamp, read by
+  `read_stamp`, the one reader claim stamping uses too) names the one record
+  from an earlier document holding its value (`resolve_records/fields.rs`), a
+  vote at its declared precision. Under a partition answerer the fields alone
+  are weighed and link where they reach `identity_bar`; otherwise ONE grammar-constrained call per document, given the type's
   `identity_criterion`, the candidates the proposers offered
   (`resolve_records/propose.rs`: the records of the document's declared
   thread, `change.document.thread`, then TF-IDF over documents already
@@ -681,18 +681,23 @@ question the pipeline asks about a type is a method on the resolved
   `--answer select` (`resolve_records/select.rs`) asks instead one forced
   choice per statement, in document order, over the shown candidates and the
   records this document opened, read as a distribution in one forward pass and
-  kept on the outcome (`Choice`); the argmax decides (`Decision::Selected`),
-  Ring 0 of `research/ontology-apps/resolve-prereg.md`. The closed
+  kept on the outcome (`Choice`); unmeasured, the argmax decides
+  (`Decision::Selected`), Ring 0 of `research/ontology-apps/resolve-prereg.md`.
   A type's `identity_necessary` attributes (each with declared `values`) are READ
   per asked statement as one forced choice over those values
   (`resolve_records/read.rs`); a candidate whose value differs is not offered.
-  `identity_evidential` also weighs `model_choice` and `proposed_answer` at their
-  measured precision: of those that name a candidate, the more precise that
-  clears `identity_bar` decides (`Decision::Proposed` for the proposed answer),
-  and a choice below the bar is never asked. `--answer reason` reads the same
-  choice after the model's own bounded reasoning (`reasoned_choice`).
-  `Decision` is `Key | Field | Cited | Selected | Proposed | Opened`; anything else is a counted `Refusal`,
-  never defaulted. Records keep the passage around each statement, which is
+  `identity_evidential` also declares `model_choice` and `proposed_answer`
+  precisions. Ring 2's decider (`resolve_records/weigh.rs`) weighs every source
+  that names an alternative (fields, the proposed answer, the model's argmax)
+  as a log-likelihood ratio under a stated independence assumption: a
+  candidate whose posterior reaches `identity_bar` links (`Decision::Weighed`,
+  with the sources that named it); no source raising a candidate opens a
+  record; anything between is `Outcome::Held`, counted, its alternatives and
+  votes kept, never opened as a record. A choice below the bar is never asked.
+  `--answer reason` reads the same choice after the model's own bounded
+  reasoning (`reasoned_choice`). `Decision` is `Key | Cited | Selected |
+  Weighed | Opened`; anything else is a counted `Refusal` or `Held`, never
+  defaulted. Records keep the passage around each statement, which is
   what later calls compare. `svrn enrich resolve-statements` runs it alone over
   supplied statements (the gold-mention setting). The atlas build runs it after
   3b (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
@@ -702,7 +707,9 @@ question the pipeline asks about a type is a method on the resolved
   finds. Claims the reader gave one `subject_local_ref` in one document are one
   statement at the earliest span (`resolution_records/local_subjects.rs`), unless
   they disagree on a supplied identity value; a ref never joins across
-  documents. Documents go in clock order under `Answerer::Select` with the adopted
+  documents. Documents go in clock order (`resolve_records::clock`, through
+  `resolve_in_clock_order`, the one loop `resolve-statements` shares, so input
+  order never changes the records) under `Answerer::Select` with the adopted
   proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
   MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
   statement, and each claim's subject its statement's record. 3b leaves such a

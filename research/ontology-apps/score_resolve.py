@@ -79,7 +79,7 @@ def main():
 def verdict_block(run, gold, reps=500, seed=7):
     """How much the model's verdict tells, the same way for every answer form: over each statement's shown
     candidates (a candidate is the same particular when gold puts its opening statement in the statement's chain),
-    the verdict says "same" for the candidate it decided on (cited, selected, or linked by an evidential field). LR+ = P(says same | same) / P(says same | different),
+    the verdict says "same" for the candidate it decided on (cited, selected, linked by an evidential field, or weighed by Ring 2's decider). LR+ = P(says same | same) / P(says same | different),
     LR- likewise for not choosing; in nats, with a 90% bootstrap over documents. Where a forced choice left its
     distribution, Brier and expected calibration error (10 bins) of p(candidate) over the same pairs, and per
     statement: detection AUC (1 - p(none) between statements shown a same candidate and those not) and how often
@@ -90,7 +90,7 @@ def verdict_block(run, gold, reps=500, seed=7):
         pairs, probs = [], []
         for o in d["outcomes"]:
             dec = o["outcome"].get("decided")
-            chose = dec["record"] if dec and dec["decision"] in ("cited", "selected", "field", "proposed") else None
+            chose = dec["record"] if dec and dec["decision"] in ("cited", "selected", "field", "proposed", "weighed") else None
             p_of = dict(map(tuple, o["choice"]["candidates"])) if o.get("choice") else {}
             if p_of:
                 is_same = lambda c: gold.get(c) is not None and gold.get(c) == gold.get(o["statement"])  # noqa: E731

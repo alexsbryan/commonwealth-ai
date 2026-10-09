@@ -8,7 +8,8 @@
 //! other fields read only as the recipe declares them (`change.document`, each
 //! through `read_stamp`, a document lacking one counted in `stamps_unread`);
 //! a statement is `{document, id, start, end, keys?}`, byte offsets into the
-//! body. Documents resolve in the order the statements file first names them.
+//! body. Documents resolve on the clock (`resolve_records::clock`: dated first,
+//! oldest first, the id breaking ties), whatever order the file names them in.
 //! `--answer proposed` makes no call: it takes the proposed answer as given,
 //! the zero-model floor the model's answer is held to, through the same judge.
 
@@ -20,7 +21,8 @@ use std::time::Instant;
 use corpus_engine::enrichment::atlas::read_stamp;
 use corpus_engine::enrichment::atlas::resolve_records::propose::{Proposers, SimilarDocuments};
 use corpus_engine::enrichment::atlas::resolve_records::{
-    Answerer, Criterion, Document, Outcome, ProposalRule, Resolver, Statement,
+    resolve_in_clock_order, Answerer, Criterion, Document, Outcome, ProposalRule, Resolver,
+    Statement,
 };
 use corpus_engine::enrichment::ontology::{DocumentStamp, TypeIndex};
 use serde::{Deserialize, Serialize};
@@ -219,6 +221,8 @@ pub struct ResolveStatementsSummary {
     /// How `clustering.json` carries a refused statement: alone, so a scorer
     /// charges for it rather than dropping it.
     pub refused_scored_as: &'static str,
+    /// How a held (unsettled) statement is written in `clustering.json`.
+    pub held_scored_as: &'static str,
     pub tokens: TokenUsageSnapshot,
     pub wall_seconds: f64,
 }
@@ -388,43 +392,61 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         proposer.describe(),
         p.rule
     );
-    for (k, id) in order.iter().enumerate() {
-        let row = &docs[id];
-        let doc = Document {
-            id: &row.id,
-            title: row.title.as_deref(),
-            body: &row.body,
-            stamps: &stamps_of[id.as_str()],
-        };
-        let candidates = proposer.propose(doc);
-        let r = resolver
-            .resolve_document(&criterion, doc, &by_doc[id], &candidates, answerer)
-            .await;
-        proposer.observe(doc, &r);
-        serde_json::to_writer(&mut decisions, &r).map_err(|e| e.to_string())?;
-        decisions.write_all(b"\n").map_err(|e| e.to_string())?;
-        for o in &r.outcomes {
-            *tally.entry(o.outcome.label().to_string()).or_insert(0) += 1;
-            let cluster = match &o.outcome {
-                Outcome::Decided(_) => o.outcome.record().unwrap_or_default().to_string(),
-                Outcome::Refused(_) => format!("refused:{}", o.statement),
-            };
-            clustering.insert(o.statement.clone(), cluster);
-        }
-        calls += r.calls;
-        vetoed += r.vetoed;
-        unread += r.unread;
-        statements += r.outcomes.len();
-        eprintln!(
-            "  [{}/{}] {id}: {} statement(s), {} candidate(s), {} call(s) {:?}",
-            k + 1,
-            order.len(),
-            r.outcomes.len(),
-            r.candidates.len(),
-            r.calls,
-            r.tally()
-        );
-    }
+    let mut documents: Vec<(Document<'_>, &[Statement])> = order
+        .iter()
+        .map(|id| {
+            let row = &docs[id];
+            (
+                Document {
+                    id: &row.id,
+                    title: row.title.as_deref(),
+                    body: &row.body,
+                    stamps: &stamps_of[id.as_str()],
+                },
+                by_doc[id].as_slice(),
+            )
+        })
+        .collect();
+    let mut written: Result<(), String> = Ok(());
+    resolve_in_clock_order(
+        &criterion,
+        &mut documents,
+        &mut resolver,
+        &mut proposer,
+        answerer,
+        &mut |k, doc, r| {
+            if written.is_ok() {
+                written = serde_json::to_writer(&mut decisions, r)
+                    .map_err(|e| e.to_string())
+                    .and_then(|()| decisions.write_all(b"\n").map_err(|e| e.to_string()));
+            }
+            for o in &r.outcomes {
+                *tally.entry(o.outcome.label().to_string()).or_insert(0) += 1;
+                let cluster = match &o.outcome {
+                    Outcome::Decided(_) => o.outcome.record().unwrap_or_default().to_string(),
+                    Outcome::Refused(_) => format!("refused:{}", o.statement),
+                    Outcome::Held(_) => format!("held:{}", o.statement),
+                };
+                clustering.insert(o.statement.clone(), cluster);
+            }
+            calls += r.calls;
+            vetoed += r.vetoed;
+            unread += r.unread;
+            statements += r.outcomes.len();
+            eprintln!(
+                "  [{}/{}] {}: {} statement(s), {} candidate(s), {} call(s) {:?}",
+                k + 1,
+                order.len(),
+                doc.id,
+                r.outcomes.len(),
+                r.candidates.len(),
+                r.calls,
+                r.tally()
+            );
+        },
+    )
+    .await;
+    written?;
     decisions.flush().map_err(|e| e.to_string())?;
     write_json(&p.out.join("clustering.json"), &clustering)?;
     write_json(&p.out.join("records.json"), &resolver.records())?;
@@ -458,6 +480,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         calls_per_document: calls as f64 / order.len().max(1) as f64,
         tally,
         refused_scored_as: "singleton",
+        held_scored_as: "singleton",
         tokens: ledger.snapshot(),
         wall_seconds: started.elapsed().as_secs_f64(),
     };

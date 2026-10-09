@@ -4,12 +4,15 @@
 //! under its declared type's identity criterion and against the candidates a
 //! proposer offered. GROUP and JOIN are one step; novelty is the "none" answer.
 //!
-//! Identity is decided two ways only (§Invariants 2): equality on a key the
-//! type declares sufficient (`identity`), or a model answer whose cited
-//! passage code finds in the document. Candidates only bound what the model
-//! is shown. An answer code cannot verify refuses its statement, counted and
-//! traced, never defaulted to a new record or to the nearest one (§4). The
-//! statements of one document go to the model in ONE call.
+//! Identity is decided by declared fields (§Invariants 2): equality on a key
+//! the type declares sufficient (`identity`) links, a differing necessary
+//! value forbids, and otherwise every evidential source is weighed together
+//! (`weigh.rs`, Ring 2): link at the bar, a new record where nothing raised a
+//! candidate, held where the sources leave it unsettled. The partition
+//! answerer (`Answerer::Model`) instead cites a passage code must find.
+//! Candidates only bound what the model is shown. An answer code cannot
+//! verify refuses its statement, counted and traced, never defaulted to a new
+//! record or to the nearest one (§4).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -221,18 +224,15 @@ pub enum Decision {
     /// choice carries can be measured). Its whole distribution is the
     /// outcome's `choice`.
     Selected { record: String, probability: f64 },
-    /// An evidential document field the statement's document holds is held
-    /// by exactly one record from an earlier document, and the field's
-    /// measured precision clears the type's bar (`fields.rs`).
-    Field {
+    /// Every source that named a candidate was weighed (`weigh.rs`: fields,
+    /// the proposed answer, the model's choice), and the record's posterior
+    /// reached the type's bar ahead of every other. `sources` are those that
+    /// named it.
+    Weighed {
         record: String,
-        field: &'static str,
-        value: String,
-        precision: f64,
+        posterior: f64,
+        sources: Vec<Vote>,
     },
-    /// The proposed answer named the record, and its measured precision
-    /// cleared the bar and outranked the model's choice (`select.rs`).
-    Proposed { record: String, precision: f64 },
     /// None of the candidates: a record was opened. `cite` is `None` only for
     /// a statement alone in its document with no candidate, where no call is made.
     Opened {
@@ -269,6 +269,18 @@ pub enum Refusal {
 pub enum Outcome {
     Decided(Decision),
     Refused(Refusal),
+    /// Unsettled (`weigh::Zone::Unsettled`): sources named candidates and none
+    /// reached the bar. Held, counted, never opened as a record (Ring 2).
+    Held(Held),
+}
+
+/// What an unsettled statement was held with: each alternative's posterior,
+/// in the order weighed, none's, and every source's vote.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Held {
+    pub alternatives: Vec<(String, f64)>,
+    pub none: f64,
+    pub sources: Vec<Vote>,
 }
 
 impl Outcome {
@@ -278,9 +290,9 @@ impl Outcome {
             Outcome::Decided(Decision::Key { .. }) => "key",
             Outcome::Decided(Decision::Cited { .. }) => "cited",
             Outcome::Decided(Decision::Selected { .. }) => "selected",
-            Outcome::Decided(Decision::Field { .. }) => "field",
-            Outcome::Decided(Decision::Proposed { .. }) => "proposed",
+            Outcome::Decided(Decision::Weighed { .. }) => "weighed",
             Outcome::Decided(Decision::Opened { .. }) => "opened",
+            Outcome::Held(_) => "held",
             Outcome::Refused(r) => match r {
                 Refusal::Unreadable { .. } => "refused:unreadable",
                 Refusal::NoCriterion => "refused:no_criterion",
@@ -300,11 +312,10 @@ impl Outcome {
                 Decision::Key { record, .. }
                 | Decision::Cited { record, .. }
                 | Decision::Selected { record, .. }
-                | Decision::Field { record, .. }
-                | Decision::Proposed { record, .. }
+                | Decision::Weighed { record, .. }
                 | Decision::Opened { record, .. },
             ) => Some(record),
-            Outcome::Refused(_) => None,
+            Outcome::Refused(_) | Outcome::Held(_) => None,
         }
     }
 }
@@ -423,16 +434,12 @@ enum Plan {
         record: usize,
         probability: f64,
     },
-    Field {
+    Weighed {
         record: usize,
-        stamp: DocumentStamp,
-        value: String,
-        precision: f64,
+        posterior: f64,
+        votes: Vec<Vote>,
     },
-    Proposed {
-        record: usize,
-        precision: f64,
-    },
+    Held(Held),
     Open {
         group: usize,
         cite: Option<String>,
@@ -486,7 +493,7 @@ impl Resolver {
             .map(|s| declared_keys(criterion, s))
             .collect();
         let key_hits = select::key_hits(&self.by_key, &folded_keys);
-        let field = fields::settle(criterion, doc, &self.by_field);
+        let field_votes = fields::votes(criterion, doc, &self.by_field);
         let mut read_of = read::provided(criterion, doc, statements);
         let (mut calls, mut unread, mut vetoed) = (0, 0, 0);
 
@@ -536,18 +543,24 @@ impl Resolver {
             );
         }
 
-        // An evidential field settles only statements compatible with the
-        // necessary values the same READ pass supplied above.
-        select::settle_field(
-            criterion,
-            statements,
-            &read_of,
-            &self.records,
-            &mut plan,
-            field,
-            doc.id,
-            &mut vetoed,
-        );
+        // A partition answerer weighs no source, so the fields alone settle
+        // what they can before it, and only statements compatible with the
+        // necessary values READ supplied. A forced choice weighs the fields
+        // with every other source, statement by statement (`select::choose`).
+        if read_infer.is_none() {
+            let ids = |r: usize| self.records[r].id.clone();
+            let field = fields::settle(criterion, doc, &field_votes, &ids);
+            select::settle_field(
+                criterion,
+                statements,
+                &read_of,
+                &self.records,
+                &mut plan,
+                field,
+                doc.id,
+                &mut vetoed,
+            );
+        }
 
         // The rest go to the model, in document order.
         let mut asked: Vec<usize> = (0..n).filter(|&i| plan[i].is_none()).collect();
@@ -583,6 +596,7 @@ impl Resolver {
                 &key_edges,
                 &asked_read,
                 proposed.as_ref(),
+                &field_votes,
                 matches!(answerer, Answerer::Reason(_)),
                 infer,
             )
@@ -742,11 +756,10 @@ impl Resolver {
                         probability,
                     })
                 }
-                Plan::Field {
+                Plan::Weighed {
                     record,
-                    stamp,
-                    value,
-                    precision,
+                    posterior,
+                    votes,
                 } => {
                     self.fold(
                         record,
@@ -757,28 +770,15 @@ impl Resolver {
                         &read_of[i],
                         None,
                     );
-                    Outcome::Decided(Decision::Field {
+                    Outcome::Decided(Decision::Weighed {
                         record: self.records[record].id.clone(),
-                        field: stamp.attr(),
-                        value,
-                        precision,
+                        posterior,
+                        sources: votes,
                     })
                 }
-                Plan::Proposed { record, precision } => {
-                    self.fold(
-                        record,
-                        doc,
-                        &statements[i],
-                        surface[i],
-                        &folded_keys[i],
-                        &read_of[i],
-                        None,
-                    );
-                    Outcome::Decided(Decision::Proposed {
-                        record: self.records[record].id.clone(),
-                        precision,
-                    })
-                }
+                // Held: no record opens and nothing folds, so no later
+                // statement can join it at first sight.
+                Plan::Held(held) => Outcome::Held(held),
                 Plan::Open { group, cite } => {
                     let identity = open_identity_by_group
                         .get(&group)
@@ -974,15 +974,19 @@ fn marked_context(body: &str, start: usize, end: usize) -> String {
 }
 
 mod answer;
+mod drive;
 mod fields;
 pub mod propose;
 mod read;
 mod select;
+mod weigh;
 
 pub(crate) use read::choice_question;
 pub(crate) use select::{decision_call, LABELS, NONE};
 
 pub use answer::{cite_found, ProposalRule};
+pub use drive::{clock, resolve_in_clock_order};
+pub use weigh::Vote;
 use answer::{judge, prompt, Proposed, ProposedVerdict};
 
 #[cfg(test)]
