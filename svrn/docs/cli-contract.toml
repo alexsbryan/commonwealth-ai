@@ -2680,6 +2680,55 @@ exit = 0
 stdout_contains = "\"entity_type\": \"sceatta\""
 
 [[journey]]
+id = "layer-default-path"
+title = "Publish a typed recipe, run the default commands, and get its records"
+persona = "author"
+experience = "knowledge-corpora"
+tier = 3
+doc = "svrn/docs/ENRICH_A_CORPUS.md#records-from-a-declaration"
+# D1 of campaign ontology-layer: the same default commands give typed records
+# on any system. The fixture is a mail-shaped recipe in a neutral domain
+# (ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/mail/): sourced
+# people and companies, one type RESOLVE decides (`order`, an identity_criterion
+# and no source), one claim kind about it, `change.document` stamps, and a
+# protocol fold. No step names a phase or a reader: until 2026-10-09 the bare
+# resolve ran 3a alone and wrote no claims, so the layer was reachable only
+# through `--phase all`.
+[[journey.step]]
+run = "corpus install {layer_recipe} --wait"
+mutates = true
+note = "by PATH; `--wait` is the barrier for the reason given in enrich-atlas[0]."
+[journey.step.expect]
+exit = 0
+stdout_contains = "installed"
+[[journey.step]]
+run = "enrich init {layer_corpus} --from-corpus {layer_corpus}"
+mutates = true
+note = "no `--pipeline`: the declaration selects the custom atlas."
+[journey.step.expect]
+exit = 0
+stdout_contains = "custom ontology"
+[[journey.step]]
+run = "enrich extract {layer_corpus} --full"
+mutates = true
+note = "the reader is chosen by the declaration; no reader key, no flag."
+[journey.step.expect]
+exit = 0
+stdout_contains = "cache updated"
+[[journey.step]]
+run = "enrich resolve {layer_corpus}"
+mutates = true
+note = """THE PAYLOAD, with no `--phase`. `derived order.stage (AfterResolve)` is \
+printed only by the document step after 3b (`atlas_resolve_documents::apply`), \
+after RESOLVE decided `order`: the same step stamps every claim from its \
+document first (`document stamps:`), so the one line proves stamps, RESOLVE \
+records and the protocol fold ran. `--phase 3a` prints none of it (watched \
+2026-10-09 on this fixture)."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "derived order.stage (AfterResolve)"
+
+[[journey]]
 id = "meshapp-author"
 title = "Ship a mesh app: recipe to corpus to explorer to registry"
 persona = "author"

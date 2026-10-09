@@ -126,6 +126,27 @@ toward its parent, so asking for `coin` returns the sceattas too.
 This sequence is the `ontology-author` journey in the CLI contract
 (`svrn contract map`), so it is exercised rather than only described.
 
+## Records from a declaration
+
+A declaration can say more than nouns: which type's identity a criterion
+decides, which claim kinds are statements about it, which document fields
+date and thread each message, and how a record's state folds from its
+claims. The default commands run all of it, with no phase or reader flag:
+
+```sh
+svrn corpus install my-orders.toml --wait
+svrn enrich init my-orders --from-corpus my-orders
+svrn enrich extract my-orders --full     # reads each document for the declared claim kinds
+svrn enrich atlas-resolve my-orders      # stamps, RESOLVE, derived folds
+```
+
+`atlas-resolve` prints each part as it runs: `document stamps:` (each claim
+dated and threaded from its own document), `RESOLVE` per decided type (how
+many records its statements made, and how each was decided), and one
+`derived` line per declared fold. `--phase 3a` is the opt-in for entities
+and events alone. This sequence is the `layer-default-path` journey
+(`svrn contract map`).
+
 ## Where it lives
 
 Phase caches and run outputs under `~/.svrnmesh/enrichment/<corpus>/`;

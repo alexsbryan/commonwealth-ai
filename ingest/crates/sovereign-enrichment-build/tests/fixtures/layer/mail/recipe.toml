@@ -1,0 +1,131 @@
+# A mail-shaped fixture for the ontology layer's default path (order
+# ontology-layer-2-one-path): four messages of a furniture workshop with its
+# customers. The `layer-default-path` contract journey installs it and runs the
+# default commands; the C1-C6 contract tests read the same files. Neutral domain
+# on purpose: no word here comes from a test system.
+
+[corpus]
+id = "layer-mail"
+name = "Layer fixture: a workshop's mail with its customers"
+description = "Four messages: one order quoted and confirmed in a thread, one cancelled."
+license = "private"
+schema_version = 1
+mesh_sharing = false
+
+[acquire]
+type = "local_file"
+path = "messages"
+
+[extract]
+type = "email"
+max_body_bytes = 65536
+max_attachment_bytes = 0
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [
+  { name = "email", type = "text" },
+  { name = "employer", type = "ref", of = "company" },
+  { name = "name", type = "text", description = "The display name a header pairs with the address." },
+]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }, refs = { employer = { of = "company", reader = "domain" } } }
+
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" } }
+
+[[enrichment.ontology.types]]
+name = "order"
+kind = "entity"
+description = "one piece of work a customer asks the workshop to make"
+identity_criterion = "Two mentions are one order when they are about the same piece of work for the same customer, however it is worded and whoever writes."
+attributes = [
+  { name = "customer", type = "ref", of = "company", derived = "customer_of_order" },
+  { name = "stage", type = "text", values = ["asked", "quoted", "confirmed", "cancelled"], derived = "order_stage" },
+]
+
+[[enrichment.ontology.types]]
+name = "order_update"
+kind = "claim"
+description = "a statement of where an order stands: asked for, priced, agreed or called off"
+force = "assertive"
+subject = "order"
+attributes = [
+  { name = "stage", type = "text", values = ["asked", "quoted", "confirmed", "cancelled"] },
+  { name = "party", type = "ref", of = "company", derived = "party_of_message" },
+]
+
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id" }
+
+[[enrichment.ontology.sets]]
+id = "ours"
+type = "company"
+where = { domain = { suffix = "alderpine.example" } }
+
+[[enrichment.ontology.paths]]
+id = "outside_parties"
+path = "document / (from | to | cc) / employer [!ours]"
+
+[[enrichment.ontology.folds]]
+id = "party_of_message"
+by = "first"
+from = ["outside_parties"]
+
+[[enrichment.ontology.folds]]
+id = "customer_of_order"
+by = "most"
+from = ["^subject / party"]
+
+[[enrichment.ontology.folds]]
+id = "order_stage"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "stage"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "asked"
+claim_kind = "order_update"
+state = "asked"
+when = { stage = "asked" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "quoted"
+claim_kind = "order_update"
+state = "quoted"
+when = { stage = "quoted" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "confirmed"
+claim_kind = "order_update"
+state = "confirmed"
+when = { stage = "confirmed" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "cancelled"
+claim_kind = "order_update"
+state = "cancelled"
+when = { stage = "cancelled" }

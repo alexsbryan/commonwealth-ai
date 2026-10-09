@@ -349,6 +349,11 @@ fix_value() {
   # truth.json's `enumeration_probe.question`. Asked over a DECLARED atlas it
   # must classify as an enumeration of the author's `coin`, and the answer
   # carries `sceatta` because `sceatta specializes coin`.
+  # ── layer-default-path ─────────────────────────────────────────────────
+  # The mail-shaped ontology-layer fixture; its acquire path is relative to
+  # its own directory. {layer_corpus} is the id it declares.
+  layer_recipe) printf '%s' "${SOVEREIGN_JOURNEY_LAYER_RECIPE:-}" ;;
+  layer_corpus) printf '%s' "${SOVEREIGN_JOURNEY_LAYER_CORPUS:-layer-mail}" ;;
   ontology_question) printf '%s' "${SOVEREIGN_JOURNEY_ONTOLOGY_QUESTION:-Which coins are in this catalogue, and what metal is each?}" ;;
   spec)   printf '%s' "${SOVEREIGN_JOURNEY_SPEC:-}" ;;
   claims) printf '%s' "${SOVEREIGN_JOURNEY_CLAIMS:-}" ;;
