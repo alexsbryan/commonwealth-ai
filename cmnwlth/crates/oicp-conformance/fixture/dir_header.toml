@@ -1,0 +1,18 @@
+# The oicp-conformance fixture library, served from --fixture-dir on a local
+# host (OICP v0.5 §6.1): the same documents, written as files the host reads.
+[corpus]
+id = "{corpus_id}"
+name = "OICP conformance fixture library"
+description = "Three short documents and one planted misquote, installed by oicp-conformance."
+license = "CC0-1.0"
+mesh_sharing = false
+
+[acquire]
+type = "local_file"
+path = '{dir}'
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"

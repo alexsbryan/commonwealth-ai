@@ -1,0 +1,43 @@
+# The oicp-conformance fixture library (OICP v0.5 §6.1), and the spec's
+# normative example of a recipe that carries its documents inline. Rendered by
+# oicp-conformance from fixture/library.json; a test pins this file to it.
+[corpus]
+id = "oicp-conformance-fixture"
+name = "OICP conformance fixture library"
+description = "Three short documents and one planted misquote, installed by oicp-conformance."
+license = "CC0-1.0"
+mesh_sharing = false
+
+[acquire]
+type = "inline"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+
+[[document]]
+name = "okafor2019"
+text = '''Rivers that cross three borders keep their own counsel. No single ministry can speak for the water, and no treaty has yet persuaded a flood to wait for a signature.
+
+The basin agreements of the last century treated the river as a line on a map. They divided the flow by volume and the banks by sovereignty, and they assumed that what was measured at the gauge was what the farmers downstream would receive.
+
+The survey of eleven agreements finds the opposite. Where the gauges were shared, the disputes were settled in the commissions; where each state kept its own records, the disputes were settled by the dry season.
+'''
+metadata = '''{"id":"okafor2019","type":"article-journal","title":"Shared Gauges and the Dry Season","author":[{"family":"Okafor","given":"Adaeze"}],"issued":{"date-parts":[[2019]]}}'''
+
+[[document]]
+name = "lindqvist2021"
+text = '''An archive is a promise made to a reader who has not yet been born. The clerk who files a letter cannot know which sentence will matter, and so the whole letter is kept.
+
+The reading rooms of three municipal archives changed in the years after their catalogues went online. Requests for whole boxes fell by half while requests for single folios doubled, because readers had learned to ask for the page they already knew they wanted.
+'''
+metadata = '''{"id":"lindqvist2021","type":"chapter","title":"The Folio and the Box","author":[{"family":"Lindqvist","given":"Maren"}],"issued":{"date-parts":[[2021]]}}'''
+
+[[document]]
+name = "harbour-notes"
+text = '''Tuesday. The ferry ran late again, and the harbour master blamed the tide tables, which were printed in a year when the channel was deeper.
+
+Wednesday. Forty-one gulls stood on the breakwater at noon and none at dusk.
+'''

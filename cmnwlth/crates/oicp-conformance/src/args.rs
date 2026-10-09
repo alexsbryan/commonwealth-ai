@@ -10,8 +10,20 @@ pub struct Args {
     /// `--token <bearer>` — bearer token for a non-loopback host.
     pub token: Option<String>,
     /// `--fixture-recipe <id>` — a recipe id the host can install; unlocks the
-    /// `ingest.state_machine` and `ingest.recipe_test` checks.
+    /// `ingest.state_machine` check.
     pub fixture_recipe: Option<String>,
+    /// `--fixture-dir <dir>` — on a local host, write the fixture library's
+    /// documents here and install the recipe that reads them as files, in
+    /// place of the inline one (v0.5 §6.1).
+    pub fixture_dir: Option<String>,
+    /// `--named-token <bearer>` — a live named credential, which
+    /// `auth.named_client` expects admitted.
+    pub named_token: Option<String>,
+    /// `--revoked-token <bearer>` — a revoked one, which it expects a 401.
+    pub revoked_token: Option<String>,
+    /// `--bogus-token <bearer>` — an unissued credential in the host's form;
+    /// the reference host's form (`svrn_` + 64 hex) when absent.
+    pub bogus_token: Option<String>,
     /// `--report <path>` — write the JSON report artifact here.
     pub report: Option<String>,
     /// `--baseline <dir>` — diff against `<dir>/latest.json`; a regression fails.
@@ -25,7 +37,7 @@ pub struct Args {
 }
 
 pub const USAGE: &str = "\
-oicp-conformance — certify an OICP v0.4 host
+oicp-conformance — certify an OICP v0.4 / v0.5 host
 
 USAGE:
     oicp-conformance --host <url> [options]
@@ -33,7 +45,11 @@ USAGE:
 OPTIONS:
     --host <url>            OICP host base URL (required), e.g. http://127.0.0.1:9741
     --token <bearer>        Bearer token for a non-loopback host
-    --fixture-recipe <id>   Recipe id to exercise the ingest checks
+    --fixture-recipe <id>   Recipe id to exercise ingest.state_machine
+    --fixture-dir <dir>     Local host only: serve the fixture library as files in <dir>
+    --named-token <bearer>  A live named credential (auth.named_client: admitted)
+    --revoked-token <bearer>  A revoked credential (auth.named_client: 401)
+    --bogus-token <bearer>  An unissued credential in the host's form (default: svrn_ + 64 hex)
     --report <path>         Write the JSON report artifact to <path>
     --baseline <dir>        Diff against <dir>/latest.json; a regression fails the run
     --update-baseline       Write this run as the new baseline (dated + latest.json)
@@ -56,6 +72,10 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Result<Option<Args>, St
             "--host" => a.host = take("--host")?,
             "--token" => a.token = Some(take("--token")?),
             "--fixture-recipe" => a.fixture_recipe = Some(take("--fixture-recipe")?),
+            "--fixture-dir" => a.fixture_dir = Some(take("--fixture-dir")?),
+            "--named-token" => a.named_token = Some(take("--named-token")?),
+            "--revoked-token" => a.revoked_token = Some(take("--revoked-token")?),
+            "--bogus-token" => a.bogus_token = Some(take("--bogus-token")?),
             "--report" => a.report = Some(take("--report")?),
             "--baseline" => a.baseline = Some(take("--baseline")?),
             "--update-baseline" => a.update_baseline = true,
@@ -69,6 +89,12 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Result<Option<Args>, St
     }
     // Normalize: drop any trailing slash so URL joins are clean.
     a.host = a.host.trim_end_matches('/').to_string();
+    // The host reads the fixture's files from this disk, so it must be this
+    // machine; a remote host would fail the install for a reason that is not
+    // its own.
+    if a.fixture_dir.is_some() && !is_loopback(&a.host) {
+        return Err("--fixture-dir needs a loopback --host: the host reads the files".to_string());
+    }
     Ok(Some(a))
 }
 
@@ -114,6 +140,13 @@ mod tests {
         assert!(a.update_baseline);
         assert!(a.strict);
         assert_eq!(a.check_prefix.as_deref(), Some("manifest"));
+    }
+
+    #[test]
+    fn fixture_dir_is_refused_for_a_remote_host() {
+        assert!(args(&["--host", "http://127.0.0.1:9741", "--fixture-dir", "/tmp/f"]).is_ok());
+        let err = args(&["--host", "http://peer:9741", "--fixture-dir", "/tmp/f"]).unwrap_err();
+        assert!(err.contains("loopback"), "{err}");
     }
 
     #[test]
