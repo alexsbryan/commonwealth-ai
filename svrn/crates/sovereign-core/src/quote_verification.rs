@@ -69,8 +69,10 @@ pub struct VerificationResult {
 /// in addition to `source_chunks` so a verified verbatim span that
 /// happens to span a chunk boundary still passes.
 ///
-/// Normalisation: both the quote and the source are folded before
-/// substring comparison — whitespace runs collapse to a single space,
+/// Matching is the one aligner's exact mode ([`locate_verbatim`]): the
+/// quote verifies when it stands verbatim in some source. Normalisation
+/// (`norm_v0`): both sides are folded — NFC, whitespace runs collapse to a
+/// single space, words hyphenated across a line end are joined,
 /// typographic characters fold to ASCII (curly quotes/apostrophes,
 /// em/en dashes, `…`), and markdown emphasis markers (`*`, `` ` ``,
 /// `_`) are stripped. This handles markdown line breaks vs source
@@ -95,11 +97,10 @@ pub fn verify_quotes(
 ) -> VerificationResult {
     let mut result = VerificationResult::default();
 
-    // Pre-normalise the sources so we don't redo it per-quote.
-    let normalised_sources: Vec<String> = source_chunks
+    let sources: Vec<&str> = source_chunks
         .iter()
         .chain(extra_verbatim_spans.iter())
-        .map(|s| normalise_for_match(s))
+        .map(String::as_str)
         .collect();
 
     let mut out = String::with_capacity(answer.len());
@@ -117,11 +118,7 @@ pub fn verify_quotes(
             if let Some(close) = find_double_quote_close(&chars, i + 1) {
                 let inner: String = chars[i + 1..close].iter().collect();
                 if inner.chars().count() >= min_chars {
-                    let normalised_quote = trim_edge_ellipses(&normalise_for_match(&inner));
-                    let verified = !normalised_quote.is_empty()
-                        && normalised_sources
-                            .iter()
-                            .any(|src| src.contains(&normalised_quote));
+                    let verified = locate_verbatim(&inner, &sources).is_some();
                     if verified {
                         // Keep as-is: re-emit `"inner"`.
                         out.push(c);
@@ -257,63 +254,114 @@ pub fn verify_answer_against_turn_evidence(
     verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)
 }
 
-/// Fold text for substring comparison. Applied symmetrically to
-/// quotes and sources:
-/// - whitespace runs collapse to a single space;
-/// - typographic characters fold to ASCII: `‘ ’ ʼ` → `'`, `“ ”` → `"`,
-///   `– —` → `-`, `…` → `...` — models routinely restyle these when
-///   quoting, and Gutenberg sources use the typographic forms;
-/// - markdown emphasis markers `*`, `` ` ``, `_` are dropped: models
-///   bold spans inside quotes, and Gutenberg renders italics as
-///   `_underscores_`. Dropping them on BOTH sides keeps the
-///   comparison symmetric, so a source's literal `_` can still match
-///   a quote that omitted it.
-///
-/// Deliberately NOT folded: letter case (a case-mismatched "quote" is
-/// not verbatim) and interior punctuation (a spliced composite must
-/// keep failing).
-fn normalise_for_match(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut prev_was_space = false;
-    for c in s.chars() {
-        let mapped: Option<char> = match c {
-            '\u{2018}' | '\u{2019}' | '\u{02BC}' => Some('\''),
-            '\u{201C}' | '\u{201D}' => Some('"'),
-            '\u{2013}' | '\u{2014}' => Some('-'),
-            '*' | '`' | '_' => None,
-            '\u{2026}' => {
-                out.push_str("...");
-                prev_was_space = false;
-                continue;
-            }
-            c => Some(c),
-        };
-        match mapped {
-            Some(c) if c.is_whitespace() => {
-                if !prev_was_space {
-                    out.push(' ');
-                    prev_was_space = true;
-                }
-            }
-            Some(c) => {
-                out.push(c);
-                prev_was_space = false;
-            }
-            None => {}
+/// The aligner's knobs, compiled in from `quote-align/align.toml`; that
+/// crate's `the_shipped_file_loads` pins that they load, so `None` is a build
+/// defect. It fails closed: with no aligner no quote is verified, so every
+/// checked quote is demoted, and the error says why once.
+fn align_config() -> Option<&'static quote_align::AlignConfig> {
+    static CFG: std::sync::OnceLock<Option<quote_align::AlignConfig>> = std::sync::OnceLock::new();
+    CFG.get_or_init(|| match quote_align::AlignConfig::shipped() {
+        Ok(cfg) => Some(cfg),
+        Err(e) => {
+            tracing::error!(error = %e, "quote guard: the shipped align.toml does not load; no quote can be verified");
+            None
         }
-    }
-    out.trim().to_string()
+    })
+    .as_ref()
 }
 
-/// Trim leading/trailing ellipsis runs (plus surrounding whitespace)
-/// from a normalised quote. `"...the spectre took its crawl..."` is
-/// honest edge-elision, not a composite — the elided part is OUTSIDE
-/// the quoted span. Interior ellipses are untouched, so spliced
-/// composites keep failing verification.
-fn trim_edge_ellipses(s: &str) -> String {
-    s.trim_matches(|c: char| c == '.' || c.is_whitespace())
-        .trim()
-        .to_string()
+/// Where `quote` stands verbatim in `sources`, its edge ellipses trimmed
+/// first ([`trim_edge_ellipses`]): [`align_exact`] with case kept — a
+/// case-mismatched "quote" is not verbatim. An interior ellipsis the source
+/// does not have is not in the source, so a spliced composite never
+/// verifies.
+pub(crate) fn locate_verbatim(
+    quote: &str,
+    sources: &[&str],
+) -> Option<(usize, std::ops::Range<usize>)> {
+    align_exact(trim_edge_ellipses(quote), sources)
+}
+
+/// The one aligner (`quote_align::align`, ADDRESSED_TEXT §5.3) in exact
+/// mode: where `quote` stands verbatim in `sources`, as the first source in
+/// order and its code points. The aligner says where the quote stands; it
+/// stands there verbatim when its `norm_v0` form occurs in the source's
+/// `norm_v0` form overlapping that stretch, and the range returned is
+/// exactly that occurrence.
+///
+/// `norm_v0` is the fold this module used to spell itself (NFC; whitespace
+/// runs, curly quotes, dashes and `…` folded; `*` `` ` `` `_` dropped; case
+/// kept). Deciding on the folded strings, rather than on the aligner's
+/// differences, keeps what a substring test accepted: a quote that starts or
+/// ends inside a word, or quotes an ellipsis or a bracket the source itself
+/// has. The one class it loses is a quote with no exact word 3-gram to seed
+/// from (`every_stretch_of_a_source_is_located_where_it_stands` pins it).
+pub(crate) fn align_exact(
+    quote: &str,
+    sources: &[&str],
+) -> Option<(usize, std::ops::Range<usize>)> {
+    let needle = quote_align::norm_v0(quote);
+    let n = needle.len();
+    if n == 0 {
+        return None;
+    }
+    let mut found = quote_align::align(quote, sources, align_config()?).alignments;
+    found.sort_by_key(|a| (a.text, a.source.start));
+    let mut hay: Option<(usize, quote_align::NormText)> = None;
+    found.into_iter().find_map(|a| {
+        if hay.as_ref().map(|(text, _)| *text) != Some(a.text) {
+            hay = Some((a.text, quote_align::norm_v0(sources[a.text])));
+        }
+        let (_, hay) = hay.as_ref()?;
+        // An occurrence overlapping the aligned stretch lies within the quote's
+        // length of it either side, edge words the aligner left out included.
+        let from = norm_position(hay, a.source.start).saturating_sub(n);
+        let to = (norm_position(hay, a.source.end) + n).min(hay.len());
+        let at = hay.chars()[from..to]
+            .windows(n)
+            .position(|w| w == needle.chars())?;
+        Some((a.text, hay.origin(from + at..from + at + n)))
+    })
+}
+
+/// The first normalised position of `hay` made from input code point `at` or
+/// later (`hay.len()` when none is): `norm_v0`'s map back is in input order.
+fn norm_position(hay: &quote_align::NormText, at: usize) -> usize {
+    let (mut lo, mut hi) = (0, hay.len());
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if hay.origin(mid..mid + 1).start < at {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    lo
+}
+
+/// `quote` without its leading and trailing runs of `.` and whitespace, as
+/// `norm_v0` sees them (so `…` counts). `"...the spectre took its crawl..."`
+/// is honest edge-elision, not a composite — the elided part is OUTSIDE the
+/// quoted span. Interior ellipses are untouched. The cut is made on the
+/// quote's own characters through `norm_v0`'s map back to them.
+fn trim_edge_ellipses(quote: &str) -> &str {
+    let norm = quote_align::norm_v0(quote);
+    let kept = |c: &char| *c != '.' && *c != ' ';
+    let (Some(first), Some(last)) = (
+        norm.chars().iter().position(kept),
+        norm.chars().iter().rposition(kept),
+    ) else {
+        return "";
+    };
+    quote_align::code_point_slice(quote, norm.origin(first..last + 1)).unwrap_or("")
+}
+
+/// The fold this module once spelled itself, now `norm_v0`'s. Kept for the
+/// unmodified witness `normalise_for_match_folds`, which pins that the
+/// convergence folds exactly what the old one did on its cases.
+#[cfg(test)]
+fn normalise_for_match(s: &str) -> String {
+    quote_align::norm_v0(s).to_string()
 }
 
 /// `true` if `c` is a double-quote character that opens a span we
@@ -688,5 +736,50 @@ mod tests {
         let r = verify_answer_against_turn_evidence(answer, "", &["something".to_string()]);
         assert_eq!(r.rewritten, answer);
         assert_eq!(r.demoted_count, 0);
+    }
+
+    /// The convergence onto the aligner keeps what the substring test it
+    /// replaced accepted (ADDRESSED_TEXT §5.3, commit 1): every stretch of a
+    /// source at least `DEFAULT_MIN_QUOTE_CHARS` long, its edges inside words
+    /// and gaps the source itself has included, is located, at a range whose
+    /// fold is the stretch's fold.
+    ///
+    /// Save three, pinned so the list can only shrink. The aligner seeds on
+    /// exact word 3-grams inside one gap-free run; in these an edge cut
+    /// inside a word leaves the one three-word run with no exact 3-gram,
+    /// the `…` and `[sic]` split the rest, and nothing seeds. The substring
+    /// test accepted them. A quote cut at word edges always seeded here.
+    #[test]
+    fn every_stretch_of_a_source_is_located_where_it_stands() {
+        let other = "An unrelated passage about the sea, the ships upon it, and the men.";
+        let source = "Mr Verloc\u{2019}s shop\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  \
+                      stood in a street of \u{201C}grimy\u{201D} brick houses, long ere the \
+                      dawn... It was a square box of a place, with the front glazed in small \
+                      panes [the window], and the door remained closed all day.";
+        let chars: Vec<char> = source.chars().collect();
+        let (mut located, mut missed) = (0, Vec::new());
+        for len in (DEFAULT_MIN_QUOTE_CHARS..=DEFAULT_MIN_QUOTE_CHARS + 21).step_by(7) {
+            for start in 0..=chars.len() - len {
+                let quote: String = chars[start..start + len].iter().collect();
+                let needle = quote_align::norm_v0(trim_edge_ellipses(&quote)).to_string();
+                let Some((text, range)) = locate_verbatim(&quote, &[other, source]) else {
+                    missed.push(quote);
+                    continue;
+                };
+                assert_eq!(text, 1, "{quote:?}");
+                let at = quote_align::code_point_slice(source, range).expect("a range in it");
+                assert_eq!(quote_align::norm_v0(at).to_string(), needle, "{quote:?}");
+                located += 1;
+            }
+        }
+        assert_eq!(
+            missed,
+            [
+                "hop\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stoo",
+                "op\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stood",
+                "p\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stood ",
+            ]
+        );
+        assert!(located > 600, "the sweep ran: {located}");
     }
 }

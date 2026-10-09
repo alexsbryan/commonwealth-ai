@@ -12692,6 +12692,7 @@ dependencies = [
  "oicp-types",
  "oplog",
  "pdf-extract",
+ "quote-align",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
