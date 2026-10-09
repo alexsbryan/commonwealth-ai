@@ -1,7 +1,7 @@
 # Open Inference Capabilities Protocol (OICP) — v0.5
 
 **Version:** 0.5.0
-**Status:** Draft for the operator's approval (extends v0.4 additively; v0.4 remains the fallback path)
+**Status:** Approved by the operator 2026-10-09 (extends v0.4 additively; v0.4 remains the fallback path)
 **License:** CC0 (public domain dedication)
 
 ---
