@@ -331,3 +331,29 @@ statement whose fields alone link it, as today (they settled it before any quest
 **H2, registered with it, measured only after H1 is read.** With no precision read from any recipe, each
 system's measures hold within the bands above against the H1 treatment, and every source's estimate is
 within .1 of its gold-measured precision on every system.
+
+**Ring 2 H1 verdict (2026-10-09): refused.** Instrument first: two runs of the control binary on one uv copy
+gave different decisions with no model call (the similar-documents proposer summed f32 weights in HashMap
+order, so documents of one wording tied at 1.0 or a ulp under; fixed in f269735e1, watched failing). Both
+arms were rebuilt with that fix: control = eaf0f1a94 + f269735e1, treatment = b5b5b3053. The control then
+reproduced the baseline row exactly on all three (GVC `clustering.json` byte-identical; uv and ward decision
+for decision, and identical on a rerun). Data: `ring2-h1/`.
+
+| system | arm | B3 | CEAF-e | LEA | other | held | calls/doc |
+|---|---|---|---|---|---|---|---|
+| ward tune | control | | | | deals 9/39, stage served 2/47 | 0 | 1.07 |
+| ward tune | treatment | | | | deals 9/39, stage served 2/47 | 0 | 1.07 |
+| uv tune | control | .838 | .752 | .800 | | 0 | 0 |
+| uv tune | treatment | .838 | .752 | .800 | | 0 | 0 |
+| GVC dev | control | .624 | .492 | .440 | CoNLL .599, MUC .682 | 0 | 24.91 |
+| GVC dev | treatment | .629 | .492 | .436 | CoNLL .599, MUC .675 | 31 | 24.91 |
+
+Ward and uv equal, as predicted: on ward the proposed answer is the only source, and on uv thread, date and
+proposed answer never disagreed (235 weighed links, 0 held). GVC rises on B3 (+.005, band .000) and falls on
+LEA (-.004, band .001), so it falls. No system rises beyond band without falling; refused, and with it the
+order's stop condition (fails on two of three with gold-measured precision). GVC's 31 held statements are
+all model choice against proposed answer (one with the date too); the treatment also changed GVC's
+document order to the clock, so its delta is not combining alone. Order independence holds: under the
+treatment `--answer proposed` over `statements.py --salt ""` and `--salt 1` writes identical clusterings
+(the control's differ). GVC's RESOLVE answers do not replay: no replay answerer exists, and 332 of the
+treatment's 966 forced choices (.344) were even asked over the same candidate ids as the control's.

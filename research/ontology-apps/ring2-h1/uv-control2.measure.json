@@ -1,0 +1,4397 @@
+{
+ "run": "runs/uv-control2",
+ "atoms": "runs/uv-control2/data/indexes/uv-support/atlas/atoms.json",
+ "composition": {
+  "fold": "tune",
+  "source": "runs/uv-control2/data/indexes/uv-support/atlas/atoms.json",
+  "atlas_read": {
+   "claims": 298,
+   "documents_in_several_records": 8,
+   "records": 63
+  },
+  "membership_kind": "case_state",
+  "gold_cases": 83,
+  "gold_documents": 1489,
+  "ambiguous_excluded": 18,
+  "scored": 235,
+  "gold_unpredicted": 1254,
+  "membership_coverage": 0.158,
+  "ambiguous_predictions_excluded": 10,
+  "predictions_outside_fold": 0,
+  "no_case_documents": 152,
+  "no_case_documents_placed": 9,
+  "recovery_b_cubed": {
+   "precision": 0.771,
+   "recall": 0.029,
+   "f1": 0.056
+  },
+  "b_cubed": {
+   "precision": 0.828,
+   "recall": 0.848,
+   "f1": 0.838
+  },
+  "ceaf_e": {
+   "precision": 0.788,
+   "recall": 0.719,
+   "f1": 0.752
+  },
+  "lea": {
+   "precision": 0.805,
+   "recall": 0.796,
+   "f1": 0.8
+  },
+  "pairwise": {
+   "precision": 0.739,
+   "recall": 0.798,
+   "f1": 0.767
+  }
+ },
+ "locate_trace": {
+  "documents": 1596,
+  "lines": 6536
+ },
+ "cost": {
+  "documents_read": 1596,
+  "phase1_wall_s": 3909.745,
+  "s_per_document": 2.45,
+  "calls_by_phase": {
+   "document_passes_locate": 6536,
+   "document_passes_choose": 298
+  },
+  "model_s_by_phase": {
+   "document_passes_locate": 3684.2,
+   "document_passes_choose": 194.2
+  },
+  "calls_per_document": 4.3
+ },
+ "state_ladder": {
+  "n": 386,
+  "document_not_read": "judged",
+  "cases_matched": 45,
+  "tune_cases": 83,
+  "rungs": {
+   "no_case_state_claim": 232,
+   "hit": 79,
+   "wrong_state": 33,
+   "document_not_read": 25,
+   "record_not_matched": 17
+  },
+  "by_gold_state": {
+   "confirmed": {
+    "wrong_state": 10,
+    "no_case_state_claim": 46,
+    "document_not_read": 3,
+    "hit": 1
+   },
+   "declined": {
+    "hit": 13,
+    "no_case_state_claim": 5,
+    "document_not_read": 2,
+    "wrong_state": 1,
+    "record_not_matched": 2
+   },
+   "in_progress": {
+    "no_case_state_claim": 45,
+    "hit": 10,
+    "document_not_read": 2,
+    "wrong_state": 1
+   },
+   "reported": {
+    "no_case_state_claim": 93,
+    "hit": 23,
+    "document_not_read": 8,
+    "wrong_state": 6,
+    "record_not_matched": 12
+   },
+   "resolved": {
+    "no_case_state_claim": 43,
+    "hit": 32,
+    "wrong_state": 15,
+    "record_not_matched": 3,
+    "document_not_read": 10
+   }
+  },
+  "case_state_label": "A",
+  "states": [
+   {
+    "case": "case-e0d9b6ca83",
+    "state": "reported",
+    "document": "1331",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 33,
+     "best_p": 0.11
+    }
+   },
+   {
+    "case": "case-e0d9b6ca83",
+    "state": "reported",
+    "document": "1947283706",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 12,
+     "best_p": 0.06
+    }
+   },
+   {
+    "case": "case-e0d9b6ca83",
+    "state": "reported",
+    "document": "1947474809",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-266ce5a1a8",
+    "state": "reported",
+    "document": "1947477050",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 11,
+     "best_p": 0.25
+    }
+   },
+   {
+    "case": "case-e0d9b6ca83",
+    "state": "declined",
+    "document": "1951392133",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-e0d9b6ca83",
+    "state": "declined",
+    "document": "ev-11841003836",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-842c51e579",
+    "state": "reported",
+    "document": "1373",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 10,
+     "best_p": 0.29
+    }
+   },
+   {
+    "case": "case-842c51e579",
+    "state": "confirmed",
+    "document": "1947451522",
+    "rung": "wrong_state",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-842c51e579",
+    "state": "confirmed",
+    "document": "ev-11821895309",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.4
+    }
+   },
+   {
+    "case": "case-842c51e579",
+    "state": "in_progress",
+    "document": "ev-1373-xref-astral-sh/uv#1380-20240215T230927Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-842c51e579",
+    "state": "resolved",
+    "document": "ev-1373-merged-1380",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-842c51e579",
+    "state": "resolved",
+    "document": "ev-11822267689",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "reported",
+    "document": "1374",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "confirmed",
+    "document": "1947462642",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-b10aaddfa5",
+    "state": "reported",
+    "document": "1949465565",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "resolved",
+    "document": "2218077141",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "reported",
+    "document": "1395",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 4,
+     "best_p": 0.3
+    }
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "confirmed",
+    "document": "ev-11822510361",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "in_progress",
+    "document": "ev-1395-xref-astral-sh/uv#1433-20240216T051426Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "resolved",
+    "document": "ev-1395-merged-1433",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "resolved",
+    "document": "ev-11828529173",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "in_progress",
+    "document": "ev-1395-xref-astral-sh/uv#1493-20240216T143234Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "resolved",
+    "document": "ev-1395-merged-1493",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "reported",
+    "document": "1396",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.09
+    }
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "confirmed",
+    "document": "1951494565",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "in_progress",
+    "document": "1962788510",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "in_progress",
+    "document": "ev-1396-xref-astral-sh/uv#2000-20240227T015622Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "resolved",
+    "document": "ev-1396-merged-2000",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.27
+    }
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "resolved",
+    "document": "ev-11945281231",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-23ca389550",
+    "state": "reported",
+    "document": "1975082187",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-659f5d5183",
+    "state": "reported",
+    "document": "1401",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-e00b5b2dff",
+    "state": "reported",
+    "document": "1947899132",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-659f5d5183",
+    "state": "confirmed",
+    "document": "ev-11835579534",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-659f5d5183",
+    "state": "in_progress",
+    "document": "ev-1401-xref-astral-sh/uv#1662-20240218T180029Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-659f5d5183",
+    "state": "resolved",
+    "document": "ev-1401-merged-1662",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.2
+    }
+   },
+   {
+    "case": "case-1410d1ab46",
+    "state": "reported",
+    "document": "1963197113",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-659f5d5183",
+    "state": "resolved",
+    "document": "1963305366",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-659f5d5183",
+    "state": "resolved",
+    "document": "ev-11915541113",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "reported",
+    "document": "1418",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-72be8fef0a",
+    "state": "confirmed",
+    "document": "1947712396",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-fc2ef56c29",
+    "state": "reported",
+    "document": "1419",
+    "rung": "wrong_state",
+    "claimed": [
+     "confirmed"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-59b58b8eac",
+    "state": "reported",
+    "document": "2494620886",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 9,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-7deb0c78d4",
+    "state": "reported",
+    "document": "2586882839",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 19,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-c5fcc99842",
+    "state": "reported",
+    "document": "2621372373",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-c5fcc99842",
+    "state": "confirmed",
+    "document": "2621790836",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-7deb0c78d4",
+    "state": "resolved",
+    "document": "2848698821",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 9,
+     "best_p": 0.13
+    }
+   },
+   {
+    "case": "case-7deb0c78d4",
+    "state": "resolved",
+    "document": "2849420114",
+    "rung": "wrong_state",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-12dc668082",
+    "state": "reported",
+    "document": "2901658661",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 6,
+     "best_p": 0.17
+    }
+   },
+   {
+    "case": "case-7deb0c78d4",
+    "state": "resolved",
+    "document": "2958681115",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-12dc668082",
+    "state": "reported",
+    "document": "2961175198",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 8,
+     "best_p": 0.32
+    }
+   },
+   {
+    "case": "case-12dc668082",
+    "state": "confirmed",
+    "document": "2963279009",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-2384b2e04d",
+    "state": "reported",
+    "document": "1422",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.24
+    }
+   },
+   {
+    "case": "case-2384b2e04d",
+    "state": "declined",
+    "document": "3601404683",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-2384b2e04d",
+    "state": "declined",
+    "document": "ev-21302600714",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "reported",
+    "document": "1437",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "reported",
+    "document": "1472",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.39
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "confirmed",
+    "document": "ev-11829838219",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "confirmed",
+    "document": "1949639022",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "in_progress",
+    "document": "ev-1472-xref-astral-sh/uv#1824-20240221T184756Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.17
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "in_progress",
+    "document": "ev-1472-xref-astral-sh/uv#2548-20240319T190449Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "confirmed",
+    "document": "2406407798",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.24
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "confirmed",
+    "document": "2564384017",
+    "rung": "wrong_state",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "in_progress",
+    "document": "ev-1472-xref-astral-sh/uv#12910-20250415T215413Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "in_progress",
+    "document": "ev-1472-xref-astral-sh/uv#14309-20250627T100259Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.08
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "in_progress",
+    "document": "3033051920",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-452557a940",
+    "state": "reported",
+    "document": "3071811658",
+    "rung": "record_not_matched",
+    "claimed": [
+     "?",
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "resolved",
+    "document": "ev-1472-merged-14309",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.11
+    }
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "resolved",
+    "document": "ev-18688967564",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-188abdff2a",
+    "state": "reported",
+    "document": "1492",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-188abdff2a",
+    "state": "in_progress",
+    "document": "ev-1492-xref-astral-sh/uv-dev#1131-20260909T234053Z",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-580a7043be",
+    "state": "reported",
+    "document": "1501",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 43,
+     "best_p": 0.46
+    }
+   },
+   {
+    "case": "case-580a7043be",
+    "state": "confirmed",
+    "document": "ev-11830319548",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-580a7043be",
+    "state": "in_progress",
+    "document": "ev-1501-xref-astral-sh/uv#1504-20240216T160332Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-580a7043be",
+    "state": "resolved",
+    "document": "ev-1501-merged-1504",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-580a7043be",
+    "state": "resolved",
+    "document": "ev-11832544966",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "reported",
+    "document": "1526",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-c8ee0bfec6",
+    "state": "reported",
+    "document": "1950169432",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "in_progress",
+    "document": "1951387971",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.32
+    }
+   },
+   {
+    "case": "case-4d35e1ef52",
+    "state": "reported",
+    "document": "1951410311",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 22,
+     "best_p": 0.1
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "resolved",
+    "document": "1968192596",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "in_progress",
+    "document": "ev-1526-xref-astral-sh/uv#2046-20240228T161120Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "resolved",
+    "document": "ev-1526-merged-2046",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "resolved",
+    "document": "1969930462",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.17
+    }
+   },
+   {
+    "case": "case-3d0c6faa73",
+    "state": "reported",
+    "document": "1970061608",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-3d0c6faa73",
+    "state": "confirmed",
+    "document": "1970063002",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.06
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "resolved",
+    "document": "1976757027",
+    "rung": "record_not_matched",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "resolved",
+    "document": "ev-12000277906",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-277db908cd",
+    "state": "reported",
+    "document": "1981119717",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-277db908cd",
+    "state": "confirmed",
+    "document": "1981137743",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.11
+    }
+   },
+   {
+    "case": "case-ab4323c121",
+    "state": "reported",
+    "document": "2404929778",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-5c9bbcf56c",
+    "state": "reported",
+    "document": "1549",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 13,
+     "best_p": 0.15
+    }
+   },
+   {
+    "case": "case-5c9bbcf56c",
+    "state": "confirmed",
+    "document": "1949530658",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.49
+    }
+   },
+   {
+    "case": "case-5c9bbcf56c",
+    "state": "in_progress",
+    "document": "ev-1549-xref-astral-sh/uv#1694-20240219T142400Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.1
+    }
+   },
+   {
+    "case": "case-5c9bbcf56c",
+    "state": "resolved",
+    "document": "ev-1549-merged-1694",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.47
+    }
+   },
+   {
+    "case": "case-5c9bbcf56c",
+    "state": "resolved",
+    "document": "ev-11856546334",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "reported",
+    "document": "1550",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-659f5d5183",
+    "state": "reported",
+    "document": "1550",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-fc2ef56c29",
+    "state": "reported",
+    "document": "1550",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "reported",
+    "document": "1573",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 64,
+     "best_p": 0.31
+    }
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "confirmed",
+    "document": "1949645431",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "confirmed",
+    "document": "ev-11835494636",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "in_progress",
+    "document": "1950415549",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.36
+    }
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "in_progress",
+    "document": "ev-1573-xref-astral-sh/uv#1622-20240218T022855Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "resolved",
+    "document": "ev-1573-merged-1622",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "resolved",
+    "document": "ev-11847307446",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "reported",
+    "document": "1619",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 30,
+     "best_p": 0.08
+    }
+   },
+   {
+    "case": "case-ed1c4e3a2d",
+    "state": "reported",
+    "document": "1950702048",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "confirmed",
+    "document": "1950785962",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.09
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "in_progress",
+    "document": "ev-1619-xref-astral-sh/uv#2633-20240325T194142Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "resolved",
+    "document": "ev-1619-merged-2633",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "resolved",
+    "document": "2018860447",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.19
+    }
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "reported",
+    "document": "1624",
+    "rung": "wrong_state",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "confirmed",
+    "document": "ev-11838538028",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "confirmed",
+    "document": "1958579882",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "in_progress",
+    "document": "2014336605",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "in_progress",
+    "document": "ev-1624-xref-astral-sh/uv#2633-20240323T020414Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "in_progress",
+    "document": "2016315226",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "resolved",
+    "document": "ev-1624-merged-2633",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-a0ea7fd398",
+    "state": "resolved",
+    "document": "ev-12240368670",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-2384b2e04d",
+    "state": "reported",
+    "document": "1625",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-266ce5a1a8",
+    "state": "reported",
+    "document": "1625",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "reported",
+    "document": "1630",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "confirmed",
+    "document": "ev-11838443563",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.4
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "in_progress",
+    "document": "ev-1630-xref-astral-sh/uv#1650-20240218T143811Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.17
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "resolved",
+    "document": "ev-1630-merged-1650",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.07
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "resolved",
+    "document": "ev-11855224053",
+    "rung": "record_not_matched",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-266ce5a1a8",
+    "state": "reported",
+    "document": "1632",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-9284be3ec6",
+    "state": "reported",
+    "document": "1960559315",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 31,
+     "best_p": 0.33
+    }
+   },
+   {
+    "case": "case-46f7e2d70f",
+    "state": "reported",
+    "document": "1657",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 4,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-4b79de978d",
+    "state": "reported",
+    "document": "1951417445",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 37,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-46f7e2d70f",
+    "state": "declined",
+    "document": "2186976697",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-46f7e2d70f",
+    "state": "declined",
+    "document": "ev-13269043033",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-7b7e0e55d8",
+    "state": "reported",
+    "document": "1682",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 24,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-1a80962146",
+    "state": "reported",
+    "document": "1696",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-1a80962146",
+    "state": "confirmed",
+    "document": "1952714144",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-1a80962146",
+    "state": "resolved",
+    "document": "2372611058",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-1a80962146",
+    "state": "resolved",
+    "document": "ev-14390194749",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "reported",
+    "document": "1705",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 13,
+     "best_p": 0.18
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "resolved",
+    "document": "2090989396",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-bae1293595",
+    "state": "reported",
+    "document": "2809561809",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 20,
+     "best_p": 0.19
+    }
+   },
+   {
+    "case": "case-bae1293595",
+    "state": "declined",
+    "document": "2809569585",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-b1148435c3",
+    "state": "reported",
+    "document": "1712",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 12,
+     "best_p": 0.39
+    }
+   },
+   {
+    "case": "case-286c321d43",
+    "state": "reported",
+    "document": "1761",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-0c6dfd2d29",
+    "state": "reported",
+    "document": "1777",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 69,
+     "best_p": 0.26
+    }
+   },
+   {
+    "case": "case-2a09cfb097",
+    "state": "reported",
+    "document": "1804",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 10,
+     "best_p": 0.06
+    }
+   },
+   {
+    "case": "case-2a09cfb097",
+    "state": "declined",
+    "document": "1991834679",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-2a09cfb097",
+    "state": "declined",
+    "document": "ev-12090599016",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-2a09cfb097",
+    "state": "declined",
+    "document": "ev-12334752730",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-43f758c647",
+    "state": "reported",
+    "document": "1828",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 126,
+     "best_p": 0.29
+    }
+   },
+   {
+    "case": "case-43f758c647",
+    "state": "confirmed",
+    "document": "1959854660",
+    "rung": "hit",
+    "claimed": [
+     "confirmed"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-43f758c647",
+    "state": "resolved",
+    "document": "1962795960",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.18
+    }
+   },
+   {
+    "case": "case-43f758c647",
+    "state": "resolved",
+    "document": "ev-11912058266",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-43f758c647",
+    "state": "resolved",
+    "document": "1962817992",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "reported",
+    "document": "1831",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 19,
+     "best_p": 0.22
+    }
+   },
+   {
+    "case": "case-7b5b96fb42",
+    "state": "reported",
+    "document": "1863",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-266ce5a1a8",
+    "state": "reported",
+    "document": "1869",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 14,
+     "best_p": 0.08
+    }
+   },
+   {
+    "case": "case-46f7e2d70f",
+    "state": "reported",
+    "document": "1899",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-46f7e2d70f",
+    "state": "confirmed",
+    "document": "1960710778",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-eba0ecfce7",
+    "state": "reported",
+    "document": "2006",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-7d51bb3fd6",
+    "state": "reported",
+    "document": "2052",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 6,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-7d51bb3fd6",
+    "state": "confirmed",
+    "document": "ev-11957230705",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-7d51bb3fd6",
+    "state": "confirmed",
+    "document": "1970718029",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-7d51bb3fd6",
+    "state": "in_progress",
+    "document": "ev-2052-xref-astral-sh/uv#2108-20240301T112138Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.15
+    }
+   },
+   {
+    "case": "case-7d51bb3fd6",
+    "state": "resolved",
+    "document": "ev-2052-merged-2108",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.36
+    }
+   },
+   {
+    "case": "case-344e4cd41c",
+    "state": "reported",
+    "document": "1335",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-344e4cd41c",
+    "state": "in_progress",
+    "document": "1947330760",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-344e4cd41c",
+    "state": "resolved",
+    "document": "1947386576",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-344e4cd41c",
+    "state": "resolved",
+    "document": "ev-11821407954",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-344e4cd41c",
+    "state": "resolved",
+    "document": "1947524389",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.07
+    }
+   },
+   {
+    "case": "case-8620426971",
+    "state": "reported",
+    "document": "1360",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-8620426971",
+    "state": "confirmed",
+    "document": "1947384064",
+    "rung": "wrong_state",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-ea062485d8",
+    "state": "reported",
+    "document": "1951373250",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 12,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-ea062485d8",
+    "state": "confirmed",
+    "document": "1951392817",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.2
+    }
+   },
+   {
+    "case": "case-8620426971",
+    "state": "in_progress",
+    "document": "ev-1360-xref-astral-sh/uv#4791-20240703T222449Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.09
+    }
+   },
+   {
+    "case": "case-8620426971",
+    "state": "resolved",
+    "document": "ev-1360-merged-4791",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.26
+    }
+   },
+   {
+    "case": "case-8620426971",
+    "state": "resolved",
+    "document": "ev-13576450390",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-8620426971",
+    "state": "resolved",
+    "document": "ev-13576450422",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-6a60c3ba5e",
+    "state": "reported",
+    "document": "1432",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 41,
+     "best_p": 0.42
+    }
+   },
+   {
+    "case": "case-6a60c3ba5e",
+    "state": "declined",
+    "document": "1947771584",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-6a60c3ba5e",
+    "state": "declined",
+    "document": "ev-11824449652",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "1495",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 9,
+     "best_p": 0.07
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "confirmed",
+    "document": "1948527090",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "1949638853",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.22
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2059260713",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 31,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2180965727",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2375080411",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2392824868",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2504023386",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.22
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2514783450",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2541246853",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2629831612",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 14,
+     "best_p": 0.07
+    }
+   },
+   {
+    "case": "case-6cc0ec4e53",
+    "state": "reported",
+    "document": "2654515880",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2671880221",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2684967096",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2685959773",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.09
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2690860922",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 16,
+     "best_p": 0.14
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2726169908",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-efd9cf137b",
+    "state": "reported",
+    "document": "2726485796",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2733600064",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 4,
+     "best_p": 0.18
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2869148898",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.06
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2908884603",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "2908964234",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 6,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "confirmed",
+    "document": "2988640479",
+    "rung": "wrong_state",
+    "claimed": [
+     "?"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "confirmed",
+    "document": "3073552080",
+    "rung": "wrong_state",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "in_progress",
+    "document": "3073898354",
+    "rung": "wrong_state",
+    "claimed": [
+     "confirmed",
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "in_progress",
+    "document": "ev-1495-xref-astral-sh/uv#14628-20250715T145554Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.08
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "in_progress",
+    "document": "3073968309",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-d5e81e6fe4",
+    "state": "reported",
+    "document": "3239106973",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "3239405341",
+    "rung": "hit",
+    "claimed": [
+     "confirmed",
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "3573159999",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "3633789805",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "3646060412",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 10,
+     "best_p": 0.39
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "confirmed",
+    "document": "3651799441",
+    "rung": "wrong_state",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "3737585594",
+    "rung": "wrong_state",
+    "claimed": [
+     "confirmed"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-d5e81e6fe4",
+    "state": "reported",
+    "document": "3987775736",
+    "rung": "record_not_matched",
+    "claimed": [
+     "in_progress",
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "in_progress",
+    "document": "ev-1495-xref-astral-sh/uv#18214-20260310T201448Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.17
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "in_progress",
+    "document": "4087093324",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "resolved",
+    "document": "ev-1495-merged-18214",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-951538c4be",
+    "state": "reported",
+    "document": "1516",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-951538c4be",
+    "state": "confirmed",
+    "document": "1964550820",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-ffd37c658f",
+    "state": "reported",
+    "document": "2461062719",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-ffd37c658f",
+    "state": "resolved",
+    "document": "2461068863",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-9ce594ac7c",
+    "state": "reported",
+    "document": "1530",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 128,
+     "best_p": 0.2
+    }
+   },
+   {
+    "case": "case-9ce594ac7c",
+    "state": "confirmed",
+    "document": "2002281978",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-9ce594ac7c",
+    "state": "in_progress",
+    "document": "2005119568",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-9ce594ac7c",
+    "state": "in_progress",
+    "document": "ev-1530-xref-astral-sh/uv#2532-20240319T001419Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.48
+    }
+   },
+   {
+    "case": "case-9ce594ac7c",
+    "state": "resolved",
+    "document": "ev-1530-merged-2532",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.5
+    }
+   },
+   {
+    "case": "case-9ce594ac7c",
+    "state": "resolved",
+    "document": "ev-12161930812",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "reported",
+    "document": "1571",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 82,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "in_progress",
+    "document": "1949642298",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.16
+    }
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "confirmed",
+    "document": "1950300577",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-34a0fecf63",
+    "state": "reported",
+    "document": "1950300730",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "in_progress",
+    "document": "ev-1571-xref-astral-sh/uv#1707-20240219T165634Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.12
+    }
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "resolved",
+    "document": "ev-1571-merged-1707",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.08
+    }
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "resolved",
+    "document": "ev-11852727161",
+    "rung": "record_not_matched",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-01aeb0095f",
+    "state": "reported",
+    "document": "1578",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 21,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "reported",
+    "document": "1593",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "confirmed",
+    "document": "1954868923",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.07
+    }
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "in_progress",
+    "document": "ev-1593-xref-astral-sh/uv#1918-20240223T152944Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.08
+    }
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "resolved",
+    "document": "ev-1593-merged-1918",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.12
+    }
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "resolved",
+    "document": "ev-11906679715",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "confirmed",
+    "document": "1962101893",
+    "rung": "wrong_state",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "confirmed",
+    "document": "ev-11908914925",
+    "rung": "wrong_state",
+    "claimed": [
+     "?"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "in_progress",
+    "document": "ev-1593-xref-astral-sh/uv#1982-20240226T131848Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.15
+    }
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "resolved",
+    "document": "ev-1593-merged-1982",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "resolved",
+    "document": "ev-11976651688",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-fcd361e137",
+    "state": "reported",
+    "document": "1598",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-266ce5a1a8",
+    "state": "reported",
+    "document": "1950251818",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-266ce5a1a8",
+    "state": "confirmed",
+    "document": "1950259889",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "reported",
+    "document": "1609",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "confirmed",
+    "document": "1950289438",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-e720f415f7",
+    "state": "confirmed",
+    "document": "1950300500",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-7ad747d6f4",
+    "state": "reported",
+    "document": "1623",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-7ad747d6f4",
+    "state": "in_progress",
+    "document": "ev-1623-xref-astral-sh/uv#1667-20240218T211114Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-7ad747d6f4",
+    "state": "in_progress",
+    "document": "1951446442",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.16
+    }
+   },
+   {
+    "case": "case-7ad747d6f4",
+    "state": "resolved",
+    "document": "ev-1623-merged-1667",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.35
+    }
+   },
+   {
+    "case": "case-7ad747d6f4",
+    "state": "resolved",
+    "document": "1951681503",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-7ad747d6f4",
+    "state": "resolved",
+    "document": "ev-11885122486",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "reported",
+    "document": "1640",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 47,
+     "best_p": 0.34
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "confirmed",
+    "document": "1974193733",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "reported",
+    "document": "2349806090",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 27,
+     "best_p": 0.26
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "confirmed",
+    "document": "2368352600",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.42
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "confirmed",
+    "document": "2371625188",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.13
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "in_progress",
+    "document": "2427435444",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "in_progress",
+    "document": "ev-1640-xref-astral-sh/uv#8433-20241022T001651Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.09
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "in_progress",
+    "document": "2427968989",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "in_progress",
+    "document": "ev-1640-xref-astral-sh/uv#8481-20241022T231653Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "resolved",
+    "document": "ev-1640-merged-8481",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.21
+    }
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "resolved",
+    "document": "ev-15192480321",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-b3e210213c",
+    "state": "resolved",
+    "document": "2532843534",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-daa82edd3d",
+    "state": "reported",
+    "document": "1642",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-daa82edd3d",
+    "state": "resolved",
+    "document": "2124802413",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-daa82edd3d",
+    "state": "resolved",
+    "document": "ev-12894567474",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-daa82edd3d",
+    "state": "resolved",
+    "document": "2128154592",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-bb2e6724a7",
+    "state": "reported",
+    "document": "1652",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 19,
+     "best_p": 0.19
+    }
+   },
+   {
+    "case": "case-bb2e6724a7",
+    "state": "confirmed",
+    "document": "1951360487",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-bb2e6724a7",
+    "state": "declined",
+    "document": "1951363946",
+    "rung": "wrong_state",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-bb2e6724a7",
+    "state": "declined",
+    "document": "ev-11840547513",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-9c79388f57",
+    "state": "reported",
+    "document": "1663",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 4,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-9c79388f57",
+    "state": "in_progress",
+    "document": "ev-1663-xref-astral-sh/uv#6895-20240831T175421Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.16
+    }
+   },
+   {
+    "case": "case-9c79388f57",
+    "state": "resolved",
+    "document": "ev-1663-merged-6895",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.28
+    }
+   },
+   {
+    "case": "case-9c79388f57",
+    "state": "resolved",
+    "document": "ev-14133284810",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-9c79388f57",
+    "state": "resolved",
+    "document": "ev-14133285674",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-8847330acd",
+    "state": "reported",
+    "document": "1783",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 26,
+     "best_p": 0.13
+    }
+   },
+   {
+    "case": "case-8620426971",
+    "state": "reported",
+    "document": "1837",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 9,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "reported",
+    "document": "1840",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "in_progress",
+    "document": "1958422756",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.13
+    }
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "confirmed",
+    "document": "1958466961",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.16
+    }
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "in_progress",
+    "document": "ev-1840-xref-astral-sh/uv#1843-20240222T011058Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.1
+    }
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "resolved",
+    "document": "ev-1840-merged-1843",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.09
+    }
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "resolved",
+    "document": "ev-11884494463",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "resolved",
+    "document": "1958705695",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "reported",
+    "document": "1962306106",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a39dd06436",
+    "state": "resolved",
+    "document": "1962364918",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-a652ddc26a",
+    "state": "reported",
+    "document": "1943",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-a652ddc26a",
+    "state": "in_progress",
+    "document": "ev-1943-xref-astral-sh/uv#1947-20240224T033346Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.14
+    }
+   },
+   {
+    "case": "case-a652ddc26a",
+    "state": "resolved",
+    "document": "ev-1943-merged-1947",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.24
+    }
+   },
+   {
+    "case": "case-a652ddc26a",
+    "state": "resolved",
+    "document": "ev-11914480192",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-38e2493311",
+    "state": "reported",
+    "document": "2009",
+    "rung": "wrong_state",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-38e2493311",
+    "state": "confirmed",
+    "document": "1966758175",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-38e2493311",
+    "state": "in_progress",
+    "document": "ev-2009-xref-astral-sh/uv#2293-20240308T025103Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.23
+    }
+   },
+   {
+    "case": "case-38e2493311",
+    "state": "resolved",
+    "document": "ev-2009-merged-2293",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-38e2493311",
+    "state": "resolved",
+    "document": "ev-12057568249",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-d659cdb35e",
+    "state": "reported",
+    "document": "1397",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 4,
+     "best_p": 0.27
+    }
+   },
+   {
+    "case": "case-d659cdb35e",
+    "state": "declined",
+    "document": "3601394318",
+    "rung": "record_not_matched",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-d659cdb35e",
+    "state": "declined",
+    "document": "ev-21302542359",
+    "rung": "record_not_matched",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-36ea9ef651",
+    "state": "reported",
+    "document": "1404",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-36ea9ef651",
+    "state": "reported",
+    "document": "1503",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.15
+    }
+   },
+   {
+    "case": "case-36ea9ef651",
+    "state": "declined",
+    "document": "1948666403",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-36ea9ef651",
+    "state": "in_progress",
+    "document": "2015778851",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 21,
+     "best_p": 0.39
+    }
+   },
+   {
+    "case": "case-85fd123159",
+    "state": "reported",
+    "document": "1962967311",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-85fd123159",
+    "state": "resolved",
+    "document": "1962981713",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 6,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-85fd123159",
+    "state": "reported",
+    "document": "2830288768",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.36
+    }
+   },
+   {
+    "case": "case-85fd123159",
+    "state": "resolved",
+    "document": "2830297884",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-cc85d32dbf",
+    "state": "reported",
+    "document": "1994526097",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 18,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-35a0d9e9e3",
+    "state": "reported",
+    "document": "2437765791",
+    "rung": "record_not_matched",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-9c1e498ce6",
+    "state": "reported",
+    "document": "1448",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 39,
+     "best_p": 0.48
+    }
+   },
+   {
+    "case": "case-9c1e498ce6",
+    "state": "confirmed",
+    "document": "ev-11825417846",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-9c1e498ce6",
+    "state": "resolved",
+    "document": "1958573152",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-9c1e498ce6",
+    "state": "resolved",
+    "document": "ev-11885067839",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-e1a83e09ee",
+    "state": "reported",
+    "document": "1479",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-e1a83e09ee",
+    "state": "in_progress",
+    "document": "1948260075",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.49
+    }
+   },
+   {
+    "case": "case-e1a83e09ee",
+    "state": "confirmed",
+    "document": "ev-11828044958",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-e1a83e09ee",
+    "state": "in_progress",
+    "document": "ev-1479-xref-astral-sh/uv#1482-20240216T120314Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.12
+    }
+   },
+   {
+    "case": "case-e1a83e09ee",
+    "state": "resolved",
+    "document": "ev-1479-merged-1482",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.1
+    }
+   },
+   {
+    "case": "case-e1a83e09ee",
+    "state": "resolved",
+    "document": "ev-11829558601",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-12dcc53a09",
+    "state": "reported",
+    "document": "1948269799",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.07
+    }
+   },
+   {
+    "case": "case-9020237d5b",
+    "state": "reported",
+    "document": "1508",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 30,
+     "best_p": 0.46
+    }
+   },
+   {
+    "case": "case-9020237d5b",
+    "state": "confirmed",
+    "document": "ev-11830840010",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-9020237d5b",
+    "state": "resolved",
+    "document": "1949579441",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-9020237d5b",
+    "state": "resolved",
+    "document": "1949582617",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-9020237d5b",
+    "state": "resolved",
+    "document": "ev-11835143148",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-9020237d5b",
+    "state": "resolved",
+    "document": "1949604938",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.1
+    }
+   },
+   {
+    "case": "case-7bf7efb35b",
+    "state": "reported",
+    "document": "1572",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-7bf7efb35b",
+    "state": "resolved",
+    "document": "1949649874",
+    "rung": "wrong_state",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-7bf7efb35b",
+    "state": "resolved",
+    "document": "1957389869",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-7bf7efb35b",
+    "state": "resolved",
+    "document": "ev-11879753201",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-ccb240f687",
+    "state": "reported",
+    "document": "1950987873",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-ccb240f687",
+    "state": "resolved",
+    "document": "1953067446",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 3,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "reported",
+    "document": "1584",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 6,
+     "best_p": 0.12
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "reported",
+    "document": "2077",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "confirmed",
+    "document": "1971315709",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.06
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "in_progress",
+    "document": "ev-2077-xref-astral-sh/uv#2352-20240311T080627Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "reported",
+    "document": "2001960172",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "in_progress",
+    "document": "ev-1584-xref-astral-sh/uv#2352-20240421T105054Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "declined",
+    "document": "2151122471",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.46
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "declined",
+    "document": "2181846654",
+    "rung": "hit",
+    "claimed": [
+     "declined",
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "declined",
+    "document": "2310781041",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "declined",
+    "document": "2310832765",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "reported",
+    "document": "2665778940",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 13,
+     "best_p": 0.09
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "declined",
+    "document": "2665850856",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-33ad465e58",
+    "state": "declined",
+    "document": "ev-16357001464",
+    "rung": "hit",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a240d14db8",
+    "state": "reported",
+    "document": "1971579880",
+    "rung": "wrong_state",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-a240d14db8",
+    "state": "confirmed",
+    "document": "1972036241",
+    "rung": "wrong_state",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-f4a7b0ced8",
+    "state": "reported",
+    "document": "2666480162",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 7,
+     "best_p": 0.07
+    }
+   },
+   {
+    "case": "case-f4a7b0ced8",
+    "state": "confirmed",
+    "document": "2667150239",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.2
+    }
+   },
+   {
+    "case": "case-0d74913c02",
+    "state": "reported",
+    "document": "1588",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 90,
+     "best_p": 0.39
+    }
+   },
+   {
+    "case": "case-0d74913c02",
+    "state": "confirmed",
+    "document": "ev-11837123424",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-0d74913c02",
+    "state": "resolved",
+    "document": "1950371389",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-0d74913c02",
+    "state": "resolved",
+    "document": "ev-11837282327",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-2be81d7c5b",
+    "state": "reported",
+    "document": "1648",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 5,
+     "best_p": 0.0
+    }
+   },
+   {
+    "case": "case-2be81d7c5b",
+    "state": "confirmed",
+    "document": "1951349210",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 2,
+     "best_p": 0.02
+    }
+   },
+   {
+    "case": "case-2be81d7c5b",
+    "state": "in_progress",
+    "document": "ev-1648-xref-astral-sh/uv#1653-20240218T153133Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-2be81d7c5b",
+    "state": "resolved",
+    "document": "ev-1648-merged-1653",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.05
+    }
+   },
+   {
+    "case": "case-2be81d7c5b",
+    "state": "resolved",
+    "document": "ev-11841310734",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-f7d0ec2f11",
+    "state": "reported",
+    "document": "1678",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 10,
+     "best_p": 0.01
+    }
+   },
+   {
+    "case": "case-f7d0ec2f11",
+    "state": "in_progress",
+    "document": "ev-1678-xref-astral-sh/uv#1679-20240219T023722Z",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-f7d0ec2f11",
+    "state": "resolved",
+    "document": "ev-1678-merged-1679",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-f7d0ec2f11",
+    "state": "resolved",
+    "document": "1956732546",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-f7d0ec2f11",
+    "state": "resolved",
+    "document": "ev-11876969367",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-34a0fecf63",
+    "state": "reported",
+    "document": "1699",
+    "rung": "hit",
+    "claimed": [
+     "reported"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-ac48482c3c",
+    "state": "reported",
+    "document": "1810",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 18,
+     "best_p": 0.5
+    }
+   },
+   {
+    "case": "case-ac48482c3c",
+    "state": "in_progress",
+    "document": "ev-1810-xref-astral-sh/uv#1818-20240221T160253Z",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-ac48482c3c",
+    "state": "resolved",
+    "document": "ev-1810-merged-1818",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.03
+    }
+   },
+   {
+    "case": "case-ac48482c3c",
+    "state": "resolved",
+    "document": "ev-11879301449",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-ac48482c3c",
+    "state": "confirmed",
+    "document": "ev-11879306071",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-e8fcd428ce",
+    "state": "reported",
+    "document": "1868",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 19,
+     "best_p": 0.13
+    }
+   },
+   {
+    "case": "case-e8fcd428ce",
+    "state": "confirmed",
+    "document": "1975243171",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.06
+    }
+   },
+   {
+    "case": "case-e8fcd428ce",
+    "state": "confirmed",
+    "document": "ev-11991728632",
+    "rung": "no_case_state_claim",
+    "claimed": [],
+    "near": {
+     "documents": 1,
+     "lines": 1,
+     "best_p": 0.04
+    }
+   },
+   {
+    "case": "case-e8fcd428ce",
+    "state": "resolved",
+    "document": "2200359683",
+    "rung": "hit",
+    "claimed": [
+     "resolved"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-e8fcd428ce",
+    "state": "resolved",
+    "document": "ev-13352662722",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-abc576b673",
+    "state": "reported",
+    "document": "1870",
+    "rung": "document_not_read",
+    "claimed": [],
+    "near": null
+   },
+   {
+    "case": "case-abc576b673",
+    "state": "resolved",
+    "document": "1960335012",
+    "rung": "wrong_state",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-abc576b673",
+    "state": "in_progress",
+    "document": "2047660288",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-abc576b673",
+    "state": "in_progress",
+    "document": "2177309018",
+    "rung": "hit",
+    "claimed": [
+     "in_progress"
+    ],
+    "near": null
+   },
+   {
+    "case": "case-abc576b673",
+    "state": "resolved",
+    "document": "ev-13208285933",
+    "rung": "wrong_state",
+    "claimed": [
+     "declined"
+    ],
+    "near": null
+   }
+  ]
+ }
+}
