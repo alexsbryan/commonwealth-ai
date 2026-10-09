@@ -985,9 +985,9 @@ pub(crate) use read::choice_question;
 pub(crate) use select::{decision_call, LABELS, NONE};
 
 pub use answer::{cite_found, ProposalRule};
+use answer::{judge, prompt, Proposed, ProposedVerdict};
 pub use drive::{clock, resolve_in_clock_order};
 pub use weigh::Vote;
-use answer::{judge, prompt, Proposed, ProposedVerdict};
 
 #[cfg(test)]
 mod tests;
