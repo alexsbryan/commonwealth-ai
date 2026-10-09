@@ -210,6 +210,7 @@ pub mod internal_principal;
 pub mod mesh_principal_gate;
 /// The test that keeps `x-mesh-proof` to one minter and one reader.
 pub mod mesh_proof_header_gate;
+mod oicp_evidence;
 pub mod reshaping;
 pub mod routes_completions;
 pub mod routes_guest_ask;
@@ -217,7 +218,6 @@ pub mod routes_guest_session;
 pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_kinds;
-mod oicp_evidence;
 pub mod routes_knowledge;
 pub mod routes_oicp;
 pub mod routes_oicp_ingest;
