@@ -232,6 +232,13 @@ read through the hit's text name. `document.metadata` **supersedes** the v0.2
 a source declares. The field stays for compatibility, and the reference host
 leaves it empty. A peer that predates the field sends no `document`.
 
+A hit with no `document` names why in `document_absent`: `texts not stored`
+(its corpus was built before the text store), `text not stored` (its recipe
+opted out), or `document unreadable` (the text is stored and its record could
+not be served). A live host holds corpora of all three kinds, so absence is
+lawful. A hit that carries neither field names nothing, and conformance
+refuses it.
+
 Metadata is the extractor's, unless the recipe declares it for a source (§4.1).
 Declared metadata replaces the extractor's for that source. It is parsed for
 validity and returned verbatim.

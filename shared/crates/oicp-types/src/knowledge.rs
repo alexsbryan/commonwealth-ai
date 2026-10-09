@@ -117,12 +117,19 @@ pub struct KnowledgeResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peer_node_id: Option<String>,
     /// v0.5 §3: the stored text this hit was cut from, with its record and
-    /// metadata. Present on every hit when the host advertises
-    /// `knowledge:document`, and `document.metadata` then supersedes the
-    /// v0.2 `metadata` map, which the reference host leaves empty. `None`
-    /// from a host that predates the field or keeps no texts.
+    /// metadata. When the host advertises `knowledge:document`, every hit
+    /// carries it or names why not in [`Self::document_absent`], and
+    /// `document.metadata` supersedes the v0.2 `metadata` map, which the
+    /// reference host leaves empty. `None` from a host that predates the field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document: Option<crate::evidence::Document>,
+    /// v0.5 §3: why this hit carries no `document`, one of
+    /// [`crate::evidence::reasons::HIT_ABSENCES`]: a corpus built before the
+    /// text store (`texts not stored`), one that opted out (`text not
+    /// stored`), or a damaged record (`document unreadable`). `None` beside a
+    /// `document`, and from a host that predates the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_absent: Option<String>,
 }
 
 // -----------------------------------------------------------------
@@ -423,6 +430,7 @@ mod tests {
             peer_name: None,
             peer_node_id: None,
             document: None,
+            document_absent: None,
         };
         let json = serde_json::to_string(&modern).unwrap();
         let back: KnowledgeResult = serde_json::from_str(&json).unwrap();

@@ -228,8 +228,16 @@ async fn auth_local_peer_is_red_against_a_permissive_cors_layer() {
 #[test]
 fn typed_hits_need_their_document_when_knowledge_document_is_advertised() {
     let bare = serde_json::json!({"content": "x", "corpus_id": "c", "score": 0.5});
-    let failures = typed_hit_failures(&[bare]);
-    assert_eq!(failures, ["hit #0 carries no document"]);
+    let failures = typed_hit_failures(&[bare.clone()]);
+    assert_eq!(failures, ["hit #0 carries no document and names no reason"]);
+    let mut named = bare;
+    named["document_absent"] = serde_json::json!("texts not stored");
+    assert!(typed_hit_failures(&[named.clone()]).is_empty(), "a named absence is lawful");
+    named["document_absent"] = serde_json::json!("not today");
+    assert_eq!(
+        typed_hit_failures(&[named]),
+        ["hit #0 names an unknown absence `not today`"]
+    );
 }
 
 #[test]

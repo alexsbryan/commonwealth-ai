@@ -288,6 +288,7 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Json<Valu
             peer_name: None,
             peer_node_id: None,
             document: Some(f.record(s)),
+            document_absent: None,
         })
         .collect();
     Json(json!({"results": hits, "corpora_searched": [f.corpus]}))

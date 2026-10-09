@@ -74,14 +74,20 @@ pub fn record_failures(d: &Document) -> Vec<String> {
 
 /// `knowledge.search`'s typed half (§3): when the host advertises
 /// `knowledge:document`, every hit decodes as a `KnowledgeResult` carrying a
-/// well-formed `document`.
+/// well-formed `document`, or naming why not with one of
+/// [`reasons::HIT_ABSENCES`]. A live host holds corpora built before the
+/// text store, so absence is lawful there; silence about it is not.
 pub fn typed_hit_failures(results: &[Value]) -> Vec<String> {
     let mut f = Vec::new();
     for (i, v) in results.iter().enumerate() {
         match serde_json::from_value::<KnowledgeResult>(v.clone()) {
             Err(e) => f.push(format!("hit #{i} does not decode: {e}")),
             Ok(hit) => match &hit.document {
-                None => f.push(format!("hit #{i} carries no document")),
+                None => match hit.document_absent.as_deref() {
+                    Some(r) if reasons::HIT_ABSENCES.contains(&r) => {}
+                    Some(r) => f.push(format!("hit #{i} names an unknown absence `{r}`")),
+                    None => f.push(format!("hit #{i} carries no document and names no reason")),
+                },
                 Some(d) => f.extend(
                     record_failures(d)
                         .into_iter()

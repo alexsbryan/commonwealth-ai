@@ -269,6 +269,8 @@ pub(crate) async fn knowledge_results(
                 .map(|c| c.as_str().to_string()),
             grain: Some(r.provenance.grain().as_str().to_string()),
             document: r.chunk_id.and_then(|id| documents.remove(&id)),
+            // Worker D names the absence here (v0.5 §3), with readable_corpora.
+            document_absent: None,
             content: r.content,
             title: r.title,
             corpus_id: corpus_id.to_string(),

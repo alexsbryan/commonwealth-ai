@@ -37,6 +37,13 @@ pub mod reasons {
     /// corpora exist beyond its reach: the corpus-level twin of
     /// [`TEXT_NOT_HELD`].
     pub const CORPUS_NOT_HELD: &str = "corpus not held";
+    /// A hit's text is stored but its record could not be read or served:
+    /// a damaged store, named on the hit (`KnowledgeResult::document_absent`),
+    /// never an absent field.
+    pub const DOCUMENT_UNREADABLE: &str = "document unreadable";
+
+    /// Every reason a hit may give for carrying no `document` (§3).
+    pub const HIT_ABSENCES: [&str; 3] = [TEXTS_NOT_STORED, TEXT_NOT_STORED, DOCUMENT_UNREADABLE];
 }
 
 /// Context, in code points, a host puts on each side of a span or slice when
