@@ -43,6 +43,7 @@ mod client_token;
 mod corpus_collaborate;
 mod corpus_grant;
 mod corpus_ingest;
+mod corpus_install;
 mod corpus_queue;
 mod corpus_sync;
 mod enrichment_status;
@@ -60,10 +61,12 @@ pub use corpus_collaborate::{corpus_collaborate, corpus_eligible_peers, Collabor
 pub use corpus_grant::{corpus_grant_issue, corpus_grant_revoke};
 pub use corpus_ingest::{
     corpus_cancel, corpus_canonical_stream, corpus_expand, corpus_install, corpus_pause,
-    corpus_progress, corpus_status, spawn_corpus_expand, spawn_corpus_install,
-    spawn_corpus_install_with_parameters, CancelRequest, CancelResponse, CorpusStatusEntry,
-    CorpusStatusResponse, ExpandRequest, InstallRequest, InstallResponse, PauseResponse,
+    corpus_progress, corpus_status, spawn_corpus_expand, CancelRequest, CancelResponse,
+    CorpusStatusEntry, CorpusStatusResponse, ExpandRequest, PauseResponse,
     ProgressSnapshotResponse,
+};
+pub use corpus_install::{
+    spawn_corpus_install, spawn_corpus_install_with_parameters, InstallRequest, InstallResponse,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
 // The ring-sync wire body lives in the shared leaf both ends can name
