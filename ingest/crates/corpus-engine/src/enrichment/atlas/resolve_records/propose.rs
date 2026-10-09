@@ -366,7 +366,9 @@ mod tests {
     /// earliest seen wins a tie in every run (the sums run in one order).
     #[test]
     fn documents_of_one_wording_tie_exactly_and_the_earliest_is_offered() {
-        let words: Vec<String> = (0..60).map(|i| format!("w{i} ").repeat(i % 7 + 1)).collect();
+        let words: Vec<String> = (0..60)
+            .map(|i| format!("w{i} ").repeat(i % 7 + 1))
+            .collect();
         let body: &'static str = Box::leak(words.concat().into_boxed_str());
         let ids: Vec<String> = (0..40).map(|i| format!("d{i}")).collect();
         let mut p = SimilarDocuments::new(40, 40, 0.0);
@@ -376,7 +378,10 @@ mod tests {
         let got = p.propose(threaded("q", None, body));
         let sims: Vec<f32> = got.iter().map(Proposal::similarity).collect();
         assert_eq!(sims.len(), 40);
-        assert!(sims.windows(2).all(|w| w[0].to_bits() == w[1].to_bits()), "{sims:?}");
+        assert!(
+            sims.windows(2).all(|w| w[0].to_bits() == w[1].to_bits()),
+            "{sims:?}"
+        );
         assert_eq!(got[0].record, "r0");
     }
 
