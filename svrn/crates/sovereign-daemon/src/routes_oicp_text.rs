@@ -23,7 +23,7 @@ use oicp_types::evidence::{is_sha256_hex, reasons, TextSlice, DEFAULT_CONTEXT};
 use serde::Deserialize;
 use sovereign_contracts::principal::AttachedPrincipal;
 
-use crate::oicp_evidence::{absence_reason, readable_corpora, wire_document};
+use crate::oicp_evidence::{absence_reason, open_for_reading, readable_corpora, wire_document};
 use crate::routes_internal::ErrorBody;
 use crate::state::AppState;
 
@@ -156,7 +156,7 @@ async fn find(
     let mut hinted_absence = None;
     let mut unread: Vec<String> = Vec::new();
     for corpus_id in corpora {
-        let index = match engine.open_index_for_corpus(corpus_id).await {
+        let index = match open_for_reading(engine.as_ref(), corpus_id).await {
             Ok(i) => i,
             Err(e) => {
                 tracing::warn!(corpus = %corpus_id, error = %e, "text read: corpus did not open");

@@ -27,7 +27,7 @@ use oicp_types::evidence::{
 use quote_align::{code_point_slice, AlignConfig, QuoteAlignment, QuoteEdit, QuoteEditKind};
 use sovereign_contracts::principal::AttachedPrincipal;
 
-use crate::oicp_evidence::{absence_reason, readable_corpora, wire_document};
+use crate::oicp_evidence::{absence_reason, open_for_reading, readable_corpora, wire_document};
 use crate::routes_internal::ErrorBody;
 use crate::state::AppState;
 
@@ -200,8 +200,7 @@ async fn read_corpus(
     quote: &str,
     k: u32,
 ) -> Result<CorpusRead, String> {
-    let index = engine
-        .open_index_for_corpus(corpus_id)
+    let index = open_for_reading(engine, corpus_id)
         .await
         .map_err(|e| format!("corpus unreadable: {e}"))?;
     let digest = match engine.texts_digest(&index).await {

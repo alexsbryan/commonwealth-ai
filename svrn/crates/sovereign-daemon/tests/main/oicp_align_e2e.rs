@@ -171,6 +171,35 @@ fn cp(s: &str, a: u64, b: u64) -> String {
     s.chars().skip(a as usize).take((b - a) as usize).collect()
 }
 
+/// Align's candidates come from lexical search, which compares no vectors,
+/// so a corpus built at another embedding width than the loaded model's is
+/// aligned against like any other. Red while the route opened it through the
+/// query path, whose width gate listed it unavailable ("corpus unreadable").
+#[tokio::test]
+async fn a_corpus_built_at_another_embedding_width_is_aligned_against() {
+    let lib = library();
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    std::fs::create_dir_all(&indexes).unwrap();
+    install(&indexes, &lib.corpus_id, &lib.documents, true).await;
+    let embed: corpus_index::types::EmbedFn =
+        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; DIM]) }));
+    let engine = crate::common::reading_double(indexes.clone(), embed)
+        .on_texts_digest(digest_of)
+        .opening_indexes_at_embedding_width(DIM * 2);
+    let state =
+        AppState::new_with_platform_and_engine(NodeId::from_u128(1), Some(Arc::new(engine)));
+
+    let plant = &lib.plant;
+    let planted = plant.sentence.replacen(&plant.word, &plant.planted, 1);
+    let (status, body) = align(&state, serde_json::json!({ "quote": planted })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let resp: AlignResponse = serde_json::from_value(body.clone()).unwrap();
+    assert!(resp.corpora_unavailable.is_empty(), "{body}");
+    assert_eq!(resp.corpora.len(), 1, "{body}");
+    assert!(!resp.alignments.is_empty(), "the misquote aligns: {body}");
+}
+
 #[tokio::test]
 async fn one_changed_word_is_one_substitution_at_its_ranges() {
     let lib = library();

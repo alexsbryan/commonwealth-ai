@@ -737,6 +737,90 @@ async fn a_member_reads_only_the_texts_of_query_sharing_corpora() {
     );
 }
 
+/// A text read compares no vectors, so a corpus built at another embedding
+/// width than the loaded model's is read like any other: its text serves, a
+/// corpus from before texts were stored answers `texts not stored`, and a
+/// corpus that does not open at all is still a 503 that names it. Red while
+/// the route opened through the query path, whose width gate refused both
+/// real corpora (a 503 for every read).
+#[tokio::test]
+async fn a_corpus_built_at_another_embedding_width_still_serves_its_texts() {
+    use corpus_index::fs_source::FsIndexSource;
+    use corpus_index::ingest_port::double::IngestPortDouble;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    let doc = |text| {
+        [Doc {
+            source_id: "s",
+            text,
+            metadata: None,
+        }]
+    };
+    install(
+        &indexes,
+        "wide",
+        &doc("Words at another width."),
+        Some(true),
+    )
+    .await;
+    install(&indexes, "old", &doc("Words from before texts."), None).await;
+    let listed = FsIndexSource::new(indexes.clone())
+        .installed_indexes()
+        .await
+        .unwrap();
+    // The loaded model is twice as wide as these were built at.
+    let serve = |listed: Vec<corpus_index::types::IndexInfo>| {
+        let engine = IngestPortDouble::new()
+            .with_index_dir(indexes.clone())
+            .with_installed_indexes(listed)
+            .opening_indexes_at_embedding_width(DIM * 2)
+            .with_embed_fn(embed());
+        let state =
+            AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+                NodeId::from_u128(0xE6),
+                Some(Arc::new(engine)),
+                None,
+                Default::default(),
+                Default::default(),
+                NodeSeed::default(),
+            );
+        spawn_router(client_router(state))
+    };
+    let url = |addr: std::net::SocketAddr, words: &str, corpus: &str| {
+        format!(
+            "http://{addr}/oicp/v1/text/{}?corpus={corpus}",
+            Sha256Hash::of_str(words).to_hex()
+        )
+    };
+
+    let addr = serve(listed.clone()).await;
+    let (status, body) = get(&url(addr, "Words at another width.", "wide"), None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["text"], "Words at another width.");
+    let (status, body) = get(&url(addr, "Words from before texts.", "old"), None).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (404, Some("texts not stored")),
+        "{body}"
+    );
+
+    // Listed beside them, a corpus whose index is not there to open: it did
+    // not answer, and it is the one named.
+    let mut with_ghost = listed.clone();
+    let mut ghost = listed[0].clone();
+    ghost.corpus_id = "ghost".into();
+    ghost.path = indexes.join("ghost");
+    with_ghost.push(ghost);
+    let addr = serve(with_ghost).await;
+    let (status, body) = get(&url(addr, "Words nobody holds.", "wide"), None).await;
+    assert_eq!(status, 503, "{body}");
+    assert_eq!(
+        body["error"], "not found in what answered; these corpora did not: ghost",
+        "the corpus that did not open is named, and only it"
+    );
+}
+
 #[tokio::test]
 async fn the_manifest_advertises_the_text_read_and_documents_on_hits() {
     let tmp = tempfile::tempdir().unwrap();

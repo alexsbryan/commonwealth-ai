@@ -8,7 +8,9 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use corpus_index::corpus::Corpus;
 use corpus_index::index::{CorpusIndex, DocumentRecord, TextAbsence};
+use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::types::{IndexInfo, ScoredChunk};
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::{reasons, Document, SourceRef};
@@ -150,6 +152,23 @@ pub(crate) fn readable_corpora(
         "oicp read scope"
     );
     readable
+}
+
+/// `corpus_id`'s index, opened to read its texts and records and to search
+/// it lexically: [`Corpus::open`], the published noun's reader. Not the
+/// query-path opener (`open_index_for_corpus`): that one refuses an index
+/// built at another embedding width than the loaded model's, which is vector
+/// search's precondition (comparing vectors of two widths means nothing), and
+/// no read here compares a vector. It keeps no handle cache, so each read
+/// opens the index afresh. `Err` names why it did not open: a corpus that
+/// does not answer, never one that holds nothing.
+pub(crate) async fn open_for_reading(
+    engine: &dyn IngestPort,
+    corpus_id: &str,
+) -> Result<CorpusIndex, String> {
+    let corpus = Corpus::named(engine.index_dir(), corpus_id)
+        .ok_or_else(|| format!("`{corpus_id}` is not a corpus id"))?;
+    corpus.open().await.map_err(|e| e.to_string())
 }
 
 /// The record a hit names: the hit's own source's, at its lowest ordinal, or

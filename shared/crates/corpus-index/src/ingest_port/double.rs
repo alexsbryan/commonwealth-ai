@@ -188,6 +188,26 @@ impl IngestPortDouble {
         self
     }
 
+    /// Program [`CorpusReadPort::open_index_for_corpus`] as the engine's
+    /// query-path opener after an embed probe reported `dims`: the leaf's
+    /// [`FsIndexSource`] with that width armed, whose geometry gate refuses an
+    /// index built at any other. What a daemon on a swapped embed model does.
+    /// Needs [`Self::with_index_dir`] first.
+    pub fn opening_indexes_at_embedding_width(mut self, dims: usize) -> Self {
+        let dir = self
+            .index_dir
+            .clone()
+            .expect("IngestPortDouble: with_index_dir before opening_indexes_at_embedding_width");
+        let source = Arc::new(FsIndexSource::new(dir.clone()));
+        source.set_expected_embedding_dimensions(dims);
+        self.open_index_for_corpus = Some(Box::new(move |corpus_id| {
+            let source = Arc::clone(&source);
+            let path = dir.join(corpus_id);
+            Box::pin(async move { source.open_index(&path).await })
+        }));
+        self
+    }
+
     /// Program [`CorpusReadPort::installed_indexes`],
     /// [`IndexSource::usable_indexes`] and [`IndexSource::open_index`] to
     /// read `<index_dir>` with the leaf's own [`FsIndexSource`], the reader
