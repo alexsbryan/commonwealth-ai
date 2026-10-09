@@ -1,0 +1,360 @@
+# uv-support — the astral-sh/uv public issue tracker, as the real problems behind the reports.
+#
+# Source shape (assumed): a JSONL export of the tracker, one record per tracker item —
+# an issue's opening post, each comment, and each timeline event (labeled, assigned,
+# closed, reopened, marked as duplicate, cross-referenced by a pull request). Every
+# record carries the issue it belongs to, so a thread is one issue:
+#   { "id": "...", "issue_number": "1234", "item": "comment", "title": "...",
+#     "body": "...", "author": "login", "author_association": "MEMBER",
+#     "created_at": "2025-03-01T12:00:00Z" }
+# Timeline events are rendered to a sentence in `body` ("charliermarsh closed this as
+# completed in #1250").
+
+[corpus]
+id = "uv-support"
+name = "uv issue tracker (astral-sh/uv)"
+description = "Issues, comments and maintainer actions on the uv issue tracker, extracted as the underlying problems behind reports: which reports are the same problem, what each problem is, where it shows up, where it stands and what was decided or shipped."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "uv-issue-tracker"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This is the public issue tracker of uv, the Python package and project manager Astral
+builds in Rust. People open issues about crashes, wrong resolutions, slow installs,
+platform quirks, how a command should behave, and features they want; maintainers label,
+assign, link pull requests, close, reopen and mark duplicates. Many issues report the same
+underlying problem in different words, on different uv versions, operating systems and
+Python versions. Keep the issue (a report, known by its number) apart from the problem
+(the real defect, gap or misunderstanding behind one or more reports). A report can start
+as a question and turn out to be a bug, or start as a bug and turn out to be a
+misunderstanding: what a problem is, is what the latest maintainer diagnosis says. Record
+where each problem was seen (uv version, OS, architecture, Python version), what
+maintainers decided about it, and which pull request and release shipped the change.
+Error messages, tracebacks and version strings quoted in reports are evidence, not prose.
+"""
+must_not = [
+  "say a problem is fixed, or fixed in a release, unless a maintainer or a merged pull request says so",
+  "present a reporter's guess at the cause as the maintainers' diagnosis",
+  "treat an issue closed as a duplicate as a resolved problem",
+]
+
+# ── Shape: the things ─────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "issue"
+kind = "entity"
+label = "issue"
+description = "One report on the tracker, known by its number: a bug report, question, feature request or discussion as the reporter filed it."
+attributes = [
+  { name = "number", type = "text", description = "The GitHub issue number, digits only." },
+  { name = "title", type = "text" },
+  { name = "filed_as", type = "text", values = ["bug", "question", "feature-request", "documentation", "performance", "other"], description = "What the reporter filed it as, not what it turned out to be." },
+  { name = "opened", type = "time" },
+]
+identity = ["number"]
+source = { metadata = ["issue_number"], attributes = { number = "value" } }
+
+[[enrichment.ontology.types]]
+name = "problem"
+kind = "entity"
+label = "problem"
+description = "The real problem behind one or more issues: a defect, regression, performance problem, platform quirk, missing feature, documentation gap, or a misunderstanding of intended behaviour."
+attributes = [
+  { name = "summary", type = "text", description = "What the problem actually is, in one sentence." },
+  { name = "component", type = "ref", of = "component" },
+  { name = "nature", type = "text", values = ["bug", "regression", "performance", "platform-specific", "upstream", "missing-feature", "documentation-gap", "intended-behaviour", "user-error"] },
+  { name = "error_signature", type = "text", description = "The characteristic error message or failure, normalised (paths, versions and usernames removed)." },
+]
+identity_criterion = "Two mentions are one problem when one change to uv (or one upstream fix) would resolve both: the same faulty behaviour of the same code path, however differently it was worded and whatever uv version, OS or Python version it was seen on. Same error message alone is not enough (one message can have several causes); different symptoms can be one problem when maintainers trace them to one cause. An issue marked as a duplicate of another reports the same problem."
+
+[[enrichment.ontology.types]]
+name = "component"
+kind = "entity"
+description = "A part of uv a problem lives in: the resolver, installer, Python discovery and downloads, lockfile, workspaces, the pip interface, tools, the cache, the build backend, publishing, configuration, or a specific command such as `uv sync` or `uv pip compile`."
+attributes = [
+  { name = "area", type = "text", values = ["resolver", "installer", "python-management", "lockfile", "projects-workspaces", "pip-interface", "tools", "cache", "build", "publish", "configuration", "cli"] },
+  { name = "command", type = "text", description = "The uv command, when the component is one, e.g. `uv pip install`." },
+]
+identity_fallback = ["area", "command"]
+
+[[enrichment.ontology.types]]
+name = "package"
+kind = "entity"
+description = "A third-party Python package, index or build tool involved in a problem (torch, numpy, a private index, setuptools)."
+attributes = [
+  { name = "normalized_name", type = "text", description = "PEP 503 normalised name: lowercase, runs of -_. collapsed to -." },
+]
+identity = ["normalized_name"]
+
+[[enrichment.ontology.types]]
+name = "release"
+kind = "entity"
+description = "A uv release, known by its version (0.4.18, 0.5.0)."
+attributes = [
+  { name = "version", type = "text", description = "The version string without a leading v." },
+  { name = "released", type = "time" },
+]
+identity = ["version"]
+
+[[enrichment.ontology.types]]
+name = "platform"
+kind = "entity"
+description = "An operating environment a problem was seen on: OS, architecture and the detail that matters (distribution, libc, WSL, Docker image, CI runner)."
+attributes = [
+  { name = "os", type = "text", values = ["linux", "macos", "windows", "freebsd", "other"] },
+  { name = "arch", type = "text", values = ["x86_64", "aarch64", "i686", "other"] },
+  { name = "os_detail", type = "text", description = "e.g. Ubuntu 22.04 glibc, Alpine musl, WSL2, Windows ARM, GitHub Actions macos-14." },
+]
+identity_fallback = ["os", "arch", "os_detail"]
+
+[[enrichment.ontology.types]]
+name = "python_build"
+kind = "entity"
+description = "A Python interpreter a problem was seen with: implementation and version (3.12.4, 3.13t free-threaded, PyPy 3.10), and where it came from when it matters (uv-managed, system, conda, pyenv)."
+attributes = [
+  { name = "implementation", type = "text", values = ["cpython", "cpython-freethreaded", "pypy", "graalpy", "other"] },
+  { name = "version", type = "text" },
+  { name = "provenance", type = "text", values = ["uv-managed", "system", "conda", "pyenv", "homebrew", "other"] },
+]
+identity_fallback = ["implementation", "version", "provenance"]
+
+[[enrichment.ontology.types]]
+name = "pull_request"
+kind = "entity"
+description = "A pull request on astral-sh/uv (or upstream) linked to an issue."
+attributes = [
+  { name = "number", type = "text" },
+  { name = "repository", type = "text", description = "owner/name; astral-sh/uv unless stated." },
+  { name = "merged", type = "time" },
+]
+identity = ["repository", "number"]
+
+[[enrichment.ontology.types]]
+name = "github_user"
+kind = "entity"
+description = "A GitHub account that opened, commented on or acted on an issue."
+attributes = [
+  { name = "login", type = "text" },
+]
+identity = ["login"]
+source = { metadata = ["author"], attributes = { login = "value" } }
+
+[[enrichment.ontology.types]]
+name = "maintainer"
+kind = "entity"
+role_of = "github_user"
+description = "A uv maintainer or Astral team member acting on the tracker (author_association MEMBER or OWNER)."
+attributes = [{ name = "login", type = "text" }]
+identity = ["login"]
+
+[[enrichment.ontology.types]]
+name = "reporter"
+kind = "entity"
+role_of = "github_user"
+description = "Someone who opened an issue or reported seeing the problem."
+attributes = [{ name = "login", type = "text" }]
+identity = ["login"]
+
+# ── Relations ─────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "reports"
+kind = "relation"
+from = "issue"
+to = "problem"
+description = "The issue is a report of the problem."
+
+[[enrichment.ontology.types]]
+name = "duplicate_of"
+kind = "relation"
+from = "issue"
+to = "issue"
+description = "A maintainer marked the first issue a duplicate of the second."
+
+[[enrichment.ontology.types]]
+name = "addresses"
+kind = "relation"
+from = "pull_request"
+to = "problem"
+description = "The pull request fixes, works around or implements the problem."
+
+[[enrichment.ontology.types]]
+name = "shipped_in"
+kind = "relation"
+from = "pull_request"
+to = "release"
+
+[[enrichment.ontology.types]]
+name = "involves"
+kind = "relation"
+from = "problem"
+to = "package"
+description = "The problem shows up with, or is caused by, this package or index."
+
+# ── Events and states: how an issue got where it is ───────────────
+
+[[enrichment.ontology.types]]
+name = "triage_action"
+kind = "event"
+description = "Something a maintainer did to an issue: labeled, unlabeled, assigned, closed, reopened, marked duplicate, linked a pull request, transferred, locked."
+participants = { actor = "maintainer", issue = "issue" }
+attributes = [
+  { name = "action", type = "text", values = ["labeled", "unlabeled", "assigned", "closed", "reopened", "marked-duplicate", "linked-pr", "transferred", "locked"] },
+  { name = "label", type = "text", description = "The label added or removed, e.g. bug, needs-mre, question." },
+  { name = "close_reason", type = "text", values = ["completed", "not-planned", "duplicate"] },
+  { name = "at", type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "issue_state"
+kind = "state"
+of = "issue"
+description = "Whether the issue is open or closed, and under which labels, over time."
+
+[[enrichment.ontology.types]]
+name = "problem_state"
+kind = "state"
+of = "problem"
+description = "Where the problem stands: unconfirmed, confirmed, in progress, fixed, released, won't fix, upstream."
+
+# ── Assertion: what the tracker says about problems ───────────────
+
+[[enrichment.ontology.types]]
+name = "diagnosis"
+kind = "claim"
+force = "assertive"
+subject = "problem"
+label = "diagnosis"
+description = "What the problem actually is and why it happens. The latest maintainer diagnosis is what the problem is."
+grades = ["fix-merged", "maintainer-reproduced", "maintainer-assessment", "reporter-reproduced", "reporter-speculation"]
+attributes = [
+  { name = "nature", type = "text", values = ["bug", "regression", "performance", "platform-specific", "upstream", "missing-feature", "documentation-gap", "intended-behaviour", "user-error"] },
+  { name = "cause", type = "text", description = "The cause, as stated." },
+  { name = "component", type = "ref", of = "component" },
+  { name = "issue", type = "ref", of = "issue" },
+]
+
+[[enrichment.ontology.types]]
+name = "occurrence"
+kind = "claim"
+force = "assertive"
+subject = "problem"
+label = "sighting"
+description = "The problem was seen (or was not seen) in a given environment."
+grades = ["maintainer-reproduced", "reporter-reproduced-minimal", "reporter-report", "hearsay"]
+attributes = [
+  { name = "issue", type = "ref", of = "issue" },
+  { name = "uv_version", type = "ref", of = "release" },
+  { name = "platform", type = "ref", of = "platform" },
+  { name = "python", type = "ref", of = "python_build" },
+  { name = "seen", type = "text", values = ["reproduces", "does-not-reproduce"] },
+]
+
+[[enrichment.ontology.types]]
+name = "resolution"
+kind = "claim"
+force = "declaration"
+subject = "problem"
+label = "resolution"
+description = "A maintainer settles where a problem stands: fixed, won't fix, by design, upstream, duplicate, needs reproduction, reopened."
+attributes = [
+  { name = "outcome", type = "text", values = ["fixed", "partially-fixed", "wont-fix", "intended-behaviour", "upstream", "duplicate", "needs-reproduction", "cannot-reproduce", "reopened", "stale"] },
+  { name = "pull_request", type = "ref", of = "pull_request" },
+  { name = "fixed_in", type = "ref", of = "release" },
+  { name = "issue", type = "ref", of = "issue" },
+]
+
+[[enrichment.ontology.types]]
+name = "behaviour_decision"
+kind = "claim"
+force = "declaration"
+subject = "component"
+label = "decision"
+description = "A maintainer decides how a command or part of uv should behave (or that the current behaviour is intended), usually in answer to a question or feature request."
+attributes = [
+  { name = "decision", type = "text" },
+  { name = "issue", type = "ref", of = "issue" },
+  { name = "shipped_in", type = "ref", of = "release" },
+]
+
+[[enrichment.ontology.types]]
+name = "feature_request"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "problem"
+label = "request"
+description = "Someone asks uv to do something it does not do."
+attributes = [
+  { name = "asked", type = "text" },
+  { name = "issue", type = "ref", of = "issue" },
+]
+
+[[enrichment.ontology.types]]
+name = "commitment"
+kind = "claim"
+force = "commissive"
+subject = "problem"
+description = "A maintainer undertakes something: will fix, plans for a release, would accept a pull request."
+attributes = [
+  { name = "undertaking", type = "text", values = ["will-fix", "planned", "pr-welcome", "investigating"] },
+  { name = "target_release", type = "ref", of = "release" },
+]
+
+# ── Voices ────────────────────────────────────────────────────────
+
+[enrichment.ontology.voices]
+not_entities = ["the reporter", "the commenter", "the original poster", "github-actions", "bot"]
+attributed_to = ["maintainer", "reporter", "other-user", "bot"]
+
+# ── Change: what holds when ──────────────────────────────────────
+
+[enrichment.ontology.change]
+supersedes = { diagnosis = "document_date", resolution = "document_date", behaviour_decision = "document_date", commitment = "document_date" }
+document = { date = "created_at", thread = "issue_number", id = "id" }
+
+# ── Derivation: what no single comment says ──────────────────────
+
+[enrichment.ontology.tension]
+label = "conflict"
+between = ["diagnosis", "occurrence", "resolution", "behaviour_decision"]
+same = ["subject"]
+not_conflicts = [
+  "A problem that reproduces on one OS, architecture or Python version and not on another is a platform-specific problem, not a contradiction.",
+  "A report filed as a question and later diagnosed as a bug (or the reverse) is a reclassification; the later maintainer diagnosis replaces the earlier one.",
+  "A problem seen on a uv version older than the release that fixed it is consistent with the fix.",
+  "An issue closed as a duplicate while the problem stays open is not a resolution of the problem.",
+  "A reporter's guess at a cause that a maintainer later corrects is superseded, not in conflict.",
+]
+
+[[enrichment.ontology.patterns]]
+type = "circular_flow"
+name = "duplicate_cycles"
+description = "Issues marked duplicates of each other in a cycle, so no issue is the canonical one."
+min_entities = 2
+edge_types = ["duplicate_of"]

@@ -1,0 +1,268 @@
+# crm-ward — Kim Ward's gas-marketing mailbox (Enron, ~2000–2001), read as a book of business.
+
+[corpus]
+id = "crm-ward"
+name = "Kim Ward — gas marketing mailbox"
+description = "An Enron gas marketer's working mail, 2000–2001: customers, brokers and internal desks, extracted as deals, their terms, where each stands over time, and what is still owed."
+license = "Public record (Enron email release)"
+mesh_sharing = false
+schema_version = 1
+
+# A maildir / folder of RFC-5322 messages.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "gas-marketing"
+
+[enrichment.ontology]
+version = 1
+max_entities_per_section = 30
+guidance = """
+This is Kim Ward's mailbox as a natural-gas marketer on Enron's Houston trading floor,
+2000 into 2001. What matters is her book of business: deals to sell (occasionally buy)
+physical gas to customers — utilities, municipalities, industrial users — sometimes
+through brokers, worked out with people inside Enron in pricing, credit, contracts,
+scheduling and legal. A deal is gas at a delivery point for a period at a volume and a
+price (fixed, or an index such as Henry Hub, Inside FERC or Gas Daily plus or minus a
+basis). Terms are settled over a string of messages and phone calls that the mail only
+half records: read "per our conversation", recaps and confirmations as evidence of what
+was agreed, and an offer or indication as only an offer until someone accepts it. The
+same deal is called many things — a deal number, "the PG&E winter package", "the
+Feb baseload", "the city's storage deal" — and threads are forwarded and quoted, so a
+quoted earlier message speaks at its own date, not the forward's. Keep track of where
+each deal stands and how that changed, what was agreed, and what Kim still owes whom.
+Newsletters, market commentary, company announcements and personal notes are not deals;
+a price in a market report is not a deal term.
+"""
+must_not = [
+  "state a deal term as agreed when the mail only shows it offered, indicated or requested",
+  "treat a price from a newsletter or market report as a term of one of Kim's deals",
+  "present personal notes or company announcements as part of the book of business",
+]
+
+[enrichment.ontology.voices]
+self = "Kim Ward"
+attributed_to = ["Kim Ward", "customer", "broker", "Enron colleague", "newsletter"]
+not_entities = ["the sender", "the recipient", "the list", "all employees"]
+
+# ── who: companies and people, read from the headers without a model call ──
+
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+description = "An organization in the mail: a customer, a broker, a pipeline, Enron itself. Known by its email domain."
+attributes = [
+  { name = "domain", type = "text" },
+  { name = "sector", type = "text", values = ["utility", "municipality", "industrial", "broker", "pipeline", "producer", "marketer", "enron", "other"] },
+]
+identity = ["domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" } }
+
+[[enrichment.ontology.types]]
+name = "customer"
+kind = "entity"
+role_of = "company"
+description = "A company Kim sells gas to (or buys from) on a deal."
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+identity_fallback = ["name"]
+
+[[enrichment.ontology.types]]
+name = "broker"
+kind = "entity"
+role_of = "company"
+description = "A brokerage that arranges deals between Enron and a customer."
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+identity_fallback = ["name"]
+
+[[enrichment.ontology.types]]
+name = "correspondent"
+kind = "entity"
+description = "A person Kim writes with: a customer's buyer, a broker, or an Enron colleague in pricing, credit, contracts, scheduling or legal."
+attributes = [
+  { name = "email", type = "text" },
+  { name = "name", type = "text" },
+  { name = "company", type = "ref", of = "company" },
+  { name = "function", type = "text", values = ["gas buyer", "broker", "trader", "pricing", "credit", "contracts", "scheduling", "legal", "management", "other"] },
+]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }, refs = { company = { of = "company", reader = "domain" } } }
+
+# ── what: the deal and where gas moves ──
+
+[[enrichment.ontology.types]]
+name = "delivery_point"
+kind = "entity"
+description = "Where gas is delivered: a hub, a pipeline pool or zone, a citygate or plant meter (Henry Hub, a citygate on a named pipeline, meter #)."
+attributes = [
+  { name = "pipeline", type = "text" },
+  { name = "meter", type = "text" },
+]
+identity = ["meter"]
+identity_fallback = ["name", "pipeline"]
+
+[[enrichment.ontology.types]]
+name = "deal"
+kind = "entity"
+description = "One transaction in Kim's book: gas to or from a counterparty at a delivery point for a period, at a volume and a price."
+attributes = [
+  { name = "deal_number", type = "text", description = "Enron's deal or ticket number (Sitara, EnronOnline, confirm number) where one is given." },
+  { name = "counterparty", type = "ref", of = "customer" },
+  { name = "direction", type = "text", values = ["sale", "purchase"] },
+  { name = "delivery_point", type = "ref", of = "delivery_point" },
+  { name = "volume", type = "quantity", unit = "MMBtu/d" },
+  { name = "price", type = "text", description = "Fixed price in $/MMBtu, or index plus or minus basis." },
+  { name = "period", type = "time", range = true },
+  { name = "product", type = "text", values = ["baseload", "swing", "peaking", "storage", "transport", "index", "fixed-price", "basis", "option", "other"] },
+]
+identity = ["deal_number"]
+identity_fallback = ["counterparty", "delivery_point", "period"]
+identity_criterion = """
+Two mentions are one deal when they share a deal number; without one, when they are the
+same counterparty, the same direction, the same delivery point and an overlapping period.
+A deal re-priced, re-volumed or extended is still the same deal; a new period for the
+same customer at the same point after the old one ended is a new deal. Nicknames
+("the winter package", "the city deal") and forwards of the thread name the deal they
+were attached to.
+"""
+
+[[enrichment.ontology.types]]
+name = "deal_stage"
+kind = "state"
+of = "deal"
+description = "Where a deal stands at a time: inquiry, offered, negotiating, agreed, confirmed, flowing, amended, cancelled, lost, expired."
+
+[[enrichment.ontology.types]]
+name = "brokered"
+kind = "relation"
+from = "broker"
+to = "deal"
+description = "A broker arranged this deal."
+
+[[enrichment.ontology.types]]
+name = "call"
+kind = "event"
+description = "A phone call or meeting the mail refers to ('per our conversation', 'as discussed this morning')."
+participants = { marketer = "correspondent", counterpart = "correspondent" }
+attributes = [
+  { name = "deal", type = "ref", of = "deal" },
+  { name = "when", type = "time" },
+]
+
+# ── what the mail says about deals ──
+
+[[enrichment.ontology.types]]
+name = "inquiry"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "deal"
+description = "Someone asks for gas somewhere for some period, or for a price on it."
+attributes = [
+  { name = "requested_by", type = "ref", of = "correspondent" },
+  { name = "volume", type = "quantity", unit = "MMBtu/d" },
+  { name = "period", type = "time", range = true },
+]
+
+[[enrichment.ontology.types]]
+name = "offer"
+kind = "claim"
+force = "commissive"
+subject = "deal"
+description = "A price or terms offered or indicated by one side, open until accepted, withdrawn or expired."
+attributes = [
+  { name = "offered_by", type = "ref", of = "correspondent" },
+  { name = "price", type = "text" },
+  { name = "volume", type = "quantity", unit = "MMBtu/d" },
+  { name = "good_until", type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "agreed_terms"
+kind = "claim"
+force = "commissive"
+subject = "deal"
+label = "agreed terms"
+description = "Terms both sides have accepted, as they stand after this message: a recap, a confirmation, an acceptance, an amendment."
+grades = ["signed confirmation", "deal ticket or deal number", "written acceptance", "recap of a call", "secondhand mention"]
+attributes = [
+  { name = "price", type = "text" },
+  { name = "volume", type = "quantity", unit = "MMBtu/d" },
+  { name = "delivery_point", type = "ref", of = "delivery_point" },
+  { name = "period", type = "time", range = true },
+  { name = "other_terms", type = "text", description = "Swing, nomination, credit, payment or contract-form terms." },
+]
+
+[[enrichment.ontology.types]]
+name = "status_report"
+kind = "claim"
+force = "assertive"
+subject = "deal"
+description = "A statement of where a deal stands: waiting on credit, confirmed, flowing, dead, lost to a competitor."
+attributes = [
+  { name = "stage", type = "text", values = ["inquiry", "offered", "negotiating", "agreed", "confirmed", "flowing", "amended", "on hold", "cancelled", "lost", "expired"] },
+  { name = "waiting_on", type = "text", values = ["customer", "credit", "contracts", "legal", "pricing", "scheduling", "broker", "nobody"] },
+]
+
+[[enrichment.ontology.types]]
+name = "commitment"
+kind = "claim"
+force = "commissive"
+subject = "deal"
+description = "Someone undertakes to do something for someone: send a confirm, get a price, call back, fix a nomination, get credit approval. Kim's own are what she still owes."
+identity_fallback = ["subject", "owed_by", "owed_to", "action"]
+attributes = [
+  { name = "owed_by", type = "ref", of = "correspondent" },
+  { name = "owed_to", type = "ref", of = "correspondent" },
+  { name = "action", type = "text" },
+  { name = "due", type = "time" },
+  { name = "state", type = "text", values = ["open", "done", "released"] },
+]
+
+[[enrichment.ontology.types]]
+name = "requirement"
+kind = "claim"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "company"
+description = "A condition credit, contracts or legal puts on dealing with a company: a credit limit, a guaranty or letter of credit, a master agreement before trading, no deals past a tenor."
+attributes = [
+  { name = "set_by", type = "text", values = ["credit", "contracts", "legal", "management", "customer"] },
+  { name = "limit", type = "quantity", unit = "USD" },
+  { name = "valid", type = "time", range = true },
+]
+
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id" }
+supersedes = { agreed_terms = "document_date", offer = "document_date", status_report = "document_date", requirement = "valid" }
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["agreed_terms", "status_report"]
+# Same deal, any date: a confirm that disagrees with yesterday's recap is the thing to catch.
+same = ["subject"]
+not_conflicts = [
+  "a later amendment changing price, volume or period — that is a change, not a contradiction",
+  "an offer at one price and a deal agreed at another",
+  "an index price and its fixed-price equivalent for the same month",
+  "a volume per day and the same volume as a monthly or period total, or MMBtu versus Dth",
+  "the same deal called by a nickname in one message and a deal number in another",
+  "a quoted earlier message inside a forward restating terms that were later changed",
+]

@@ -1,0 +1,278 @@
+# Gun Violence Corpus (GVC) — an ontology-v1 recipe.
+#
+# English-language news articles about US gun violence incidents, gathered around
+# incidents listed in a public incident database, so that many articles describe the
+# same incident. The unit of interest is the INCIDENT, not the article: which articles
+# are about the same incident, what happened, where and when, who was involved and what
+# happened to each of them, and which source said what — especially where sources
+# disagree or a later report corrects an earlier one.
+
+[corpus]
+id = "gvc"
+name = "Gun Violence Corpus"
+description = "US news articles (local papers, TV station sites, wire stories) about gun violence incidents, several articles per incident, read as incidents, the people involved, and what each source reported when."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One JSON record per article: text, title, outlet, publication date, URL, and the
+# database incident the article was gathered for. Field names are assumed.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "jsonl"
+content_field = "text"
+title_field = "title"
+
+# News articles are short; large paragraph chunks keep "a man ... he was identified as"
+# inside one chunk.
+[chunk]
+type = "paragraph"
+max_chars = 3000
+overlap_chars = 300
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "gun-violence-news"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is news coverage of gun violence incidents in the United States. Several
+articles — from local newspapers, TV station websites and wire services — describe the
+same incident, written over days or weeks as police released details, so early and
+later reports differ. Track the incident, not the article: one shooting is one incident
+however many articles cover it. For each incident record when and where it happened, how
+many were killed and injured, and the people involved — shooters or suspects, victims,
+officers, witnesses — with what happened to each (killed, wounded, arrested, charged).
+Outlets describe the same person differently: one names the shooter, another says only
+"a man" or "a 23-year-old"; one names the street, another only the city. Every reported
+detail is a claim by a particular outlet on a particular date, usually attributed within
+the article to police, a prosecutor, a medical examiner, a witness or a family member.
+Keep who said what. A wire story reprinted by several outlets is one report, not
+independent confirmation. A later report that a wounded victim died, or that a suspect
+was arrested, updates the earlier one; reports that disagree about the same fact at the
+same stage are discrepancies to surface.
+"""
+must_not = [
+  "present a suspect identification, arrest or charge as a finding of guilt",
+  "fill in a detail (a name, an age, a toll, a street) that no source reported",
+  "resolve a disagreement between sources by silently choosing one version",
+]
+
+# ── Shape ───────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "entity"
+description = "One gun violence incident: a shooting at a time and place, however many articles describe it."
+attributes = [
+  { name = "occurred",     type = "time", description = "When the shooting happened (date, and time of day if given)." },
+  { name = "location",     type = "ref",  of = "location" },
+  { name = "city",         type = "text" },
+  { name = "state",        type = "text", description = "US state." },
+  { name = "killed",       type = "quantity", unit = "people" },
+  { name = "injured",      type = "quantity", unit = "people" },
+  { name = "circumstance", type = "text", values = ["dispute", "domestic", "robbery", "drive-by", "police-involved", "accidental", "self-defense", "self-inflicted", "mass shooting", "unknown"] },
+  { name = "weapon",       type = "text", description = "Firearm type as reported (handgun, rifle, shotgun)." },
+]
+identity_fallback = ["occurred", "city", "state"]
+identity_criterion = """
+Two mentions are the same incident when they describe a shooting on the same date
+(allowing "late Saturday" and "early Sunday" for the same night) in the same city, and
+what they say about the people involved and the place is compatible. Different precision
+is not a difference: a street address and "in Akron" can be the same incident. Two
+shootings in the same city on the same day are different incidents when their victims,
+locations or circumstances do not match. A follow-up story (an arrest, a funeral, a
+charge) is about the original incident, not a new one.
+"""
+
+[[enrichment.ontology.types]]
+name = "participant"
+kind = "entity"
+role_of = "person"
+description = "A person involved in an incident: shooter or suspect, victim, bystander, officer, witness."
+attributes = [
+  { name = "name",      type = "text" },
+  { name = "role",      type = "text", values = ["shooter", "suspect", "victim", "bystander", "officer", "witness"] },
+  { name = "age",       type = "quantity", unit = "years" },
+  { name = "gender",    type = "text", values = ["male", "female"] },
+  { name = "residence", type = "text", description = "Hometown or residence as reported." },
+  { name = "incident",  type = "ref",  of = "incident" },
+]
+identity_fallback = ["name", "incident"]
+identity_criterion = """
+Two mentions are the same person when they are in the same incident and play compatible
+parts there with compatible age and gender: "a 23-year-old man" who was shot in one
+article and the named 23-year-old victim of the same shooting in another are one person,
+as are "the suspect" and the man later charged. Mentions in different incidents are
+different people unless both give the same full name and a compatible age.
+"""
+
+[[enrichment.ontology.types]]
+name = "involved_in"
+kind = "relation"
+from = "participant"
+to = "incident"
+description = "A person's part in an incident: shot, shooting, responding, witnessing."
+
+[[enrichment.ontology.types]]
+name = "location"
+kind = "entity"
+specializes = "place"
+description = "Where an incident happened, at whatever precision a source gives: address, block, venue, neighborhood, city."
+attributes = [
+  { name = "street_address", type = "text", description = "Address, block or intersection." },
+  { name = "venue",          type = "text", description = "Named place (a bar, a school, an apartment complex)." },
+  { name = "neighborhood",   type = "text" },
+  { name = "city",           type = "text" },
+  { name = "county",         type = "text" },
+  { name = "state",          type = "text" },
+]
+identity_fallback = ["street_address", "city", "state"]
+
+[[enrichment.ontology.types]]
+name = "news_outlet"
+kind = "entity"
+specializes = "institution"
+description = "The publisher of an article: a local newspaper, a TV station's website, a wire service."
+attributes = [
+  { name = "name",        type = "text" },
+  { name = "outlet_type", type = "text", values = ["local newspaper", "tv station", "radio station", "wire service", "national outlet", "online-only"] },
+  { name = "city",        type = "text" },
+  { name = "state",       type = "text" },
+]
+identity = ["name"]
+source = { metadata = ["source"], attributes = { name = "value" } }
+
+[[enrichment.ontology.types]]
+name = "law_enforcement_agency"
+kind = "entity"
+specializes = "institution"
+description = "A police department, sheriff's office or state police releasing details or investigating."
+attributes = [
+  { name = "name",         type = "text" },
+  { name = "jurisdiction", type = "text" },
+]
+identity_fallback = ["name", "jurisdiction"]
+
+# ── Assertion: what each article reports ──────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "toll_report"
+kind = "claim"
+force = "assertive"
+subject = "incident"
+label = "report"
+description = "How many people a source says were killed and injured in the incident."
+attributes = [
+  { name = "killed",  type = "quantity", unit = "people" },
+  { name = "injured", type = "quantity", unit = "people" },
+]
+grades = ["official record", "on-record official", "named witness or family", "unnamed source", "unattributed"]
+
+[[enrichment.ontology.types]]
+name = "incident_account"
+kind = "claim"
+force = "assertive"
+subject = "incident"
+description = "What a source says happened: when, where, how, and why."
+attributes = [
+  { name = "occurred",        type = "time" },
+  { name = "location",        type = "ref",  of = "location" },
+  { name = "location_detail", type = "text", description = "The place exactly as this source states it." },
+  { name = "sequence",        type = "text", description = "What happened, in this source's telling." },
+  { name = "weapon",          type = "text" },
+  { name = "motive",          type = "text" },
+]
+grades = ["official record", "on-record official", "named witness or family", "unnamed source", "unattributed"]
+
+[[enrichment.ontology.types]]
+name = "identification"
+kind = "claim"
+force = "assertive"
+subject = "participant"
+description = "Who a source says a person is: name, age, gender, part played."
+attributes = [
+  { name = "name",   type = "text" },
+  { name = "age",    type = "quantity", unit = "years" },
+  { name = "gender", type = "text", values = ["male", "female"] },
+  { name = "role",   type = "text", values = ["shooter", "suspect", "victim", "bystander", "officer", "witness"] },
+]
+grades = ["official record", "on-record official", "named witness or family", "unnamed source", "unattributed"]
+
+[[enrichment.ontology.types]]
+name = "outcome_report"
+kind = "claim"
+force = "assertive"
+subject = "participant"
+description = "What a source says happened to a person physically: killed, wounded and how badly, unharmed."
+attributes = [
+  { name = "outcome", type = "text", values = ["killed", "critically injured", "seriously injured", "injured", "stable", "treated and released", "unharmed"] },
+  { name = "wound",   type = "text", description = "Where or how the person was hurt, as reported." },
+]
+grades = ["official record", "on-record official", "named witness or family", "unnamed source", "unattributed"]
+
+[[enrichment.ontology.types]]
+name = "suspect_status"
+kind = "claim"
+force = "assertive"
+subject = "participant"
+description = "What a source says about a shooter or suspect's legal situation."
+attributes = [
+  { name = "status", type = "text", values = ["sought", "at large", "detained", "arrested", "charged", "released", "not charged", "convicted", "deceased"] },
+  { name = "charge", type = "text", description = "The charge as reported." },
+]
+grades = ["official record", "on-record official", "named witness or family", "unnamed source", "unattributed"]
+
+[[enrichment.ontology.types]]
+name = "official_ruling"
+kind = "claim"
+force = "declaration"
+subject = "incident"
+description = "An official determination reported by a source: a medical examiner's manner of death, a prosecutor's ruling that a shooting was justified."
+attributes = [
+  { name = "ruling",   type = "text", values = ["homicide", "suicide", "accidental", "justified", "undetermined"] },
+  { name = "authority", type = "text", description = "Who made the ruling." },
+]
+grades = ["official record", "on-record official", "unnamed source", "unattributed"]
+
+# ── Voices ──────────────────────────────────────────────────────────────────
+
+[enrichment.ontology.voices]
+not_entities = ["the reporter", "the station", "the newsroom", "staff writer"]
+attributed_to = ["police", "prosecutor", "medical examiner", "court record", "hospital", "witness", "family member", "outlet"]
+
+# ── Change: later reports update earlier ones ─────────────────────────────────
+
+[enrichment.ontology.change]
+clock = "document_date"
+document = { date = "date_published", thread = "incident_id", id = "url" }
+
+[enrichment.ontology.change.supersedes]
+toll_report = "document_date"
+identification = "document_date"
+outcome_report = "document_date"
+suspect_status = "document_date"
+
+# ── Derivation: where sources disagree ───────────────────────────────────────
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["toll_report", "incident_account", "identification", "outcome_report", "suspect_status", "official_ruling"]
+same = ["subject"]
+not_conflicts = [
+  "A later report with a higher death toll than an earlier one because a wounded victim died: an update, not a contradiction.",
+  "One source naming the street or address and another giving only the neighborhood or city: different precision, same place.",
+  "One source naming a person and another calling them 'a man' or 'a 23-year-old': less detail, not disagreement.",
+  "A suspect sought or detained in one report and arrested or charged in a later one: the case moved on.",
+  "A time given as 'late Saturday' in one report and '11:45 p.m. Saturday' or 'shortly before midnight' in another.",
+  "The same wire story reprinted by several outlets: one report repeated, neither agreement nor disagreement.",
+]

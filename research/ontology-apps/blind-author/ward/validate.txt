@@ -1,0 +1,16 @@
+Validating recipe: recipe.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  tension selector: embedding top-k (k = 10, floor = 0.5) over agreed_terms, status_report — cross-document declared corpora select the embedding net; the classifier judges each pair
+  source: company ← document fields from, to, cc (domain: domain) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: company → domain (external key, strict merge)
+  identity: customer → domain (external key, strict merge)
+  identity: broker → domain (external key, strict merge)
+  source: correspondent ← document fields from, to, cc (email: address, name: display_name) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: correspondent → email (external key, strict merge)
+  identity: delivery_point → meter (external key, strict merge)
+  identity: deal → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  question shapes: enumerate [company, customer, broker, correspondent, delivery_point, deal]; relations [brokered]; events [call]; aggregate [inquiry by requested_by, offer by offered_by, agreed_terms by delivery_point, commitment by owed_by, commitment by owed_to]
+  document fields: document_date ← `date` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `thread_id`, document_id ← `message_id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted
