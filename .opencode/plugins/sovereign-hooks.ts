@@ -189,7 +189,7 @@ export const plugin: Plugin = async ({ directory }) => {
       }
       const scripts =
         tool === "Edit" || tool === "Write"
-          ? ["prior-art-warn.py", "intent-warn.py"]
+          ? ["prior-art-warn.py", "intent-warn.py", "euphemia-pre-edit.sh"]
           : ["prefer-code-intel.py"]
       for (const s of scripts) {
         const out = runHook(directory, s, envelope)
