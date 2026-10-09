@@ -132,7 +132,7 @@ Configures the optional enrichment pipeline. The new field model enrichment uses
 | `entity_types` | `Vec<EntityTypeDecl>` | no | type default | Entity types the investigation pipeline should extract from each chunk. Listed in the LLM extraction prompt so the model canonicalizes mentions to one of these typed shapes (e.g. `company`, `fund`, `person`). Empty when `enrichment_type != "investigation"`. |
 | `relationship_types` | `Vec<RelationshipTypeDecl>` | no | type default | Relationship types the investigation pipeline should extract (e.g. `revenue`, `investment`, `cloud_commitment`, `board_seat`). Each relationship has typed attributes the LLM is asked to populate (`amount_usd`, `date`, etc.). |
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph-level patterns to detect once the relationship graph is built. Built-in detectors cover cycle / role-overlap / threshold patterns; the recipe author chooses which to run. |
-| `reconciliation` | `Option<ReconciliationToml>` | no | type default | Architecture-over-Enron Phase 4: multi-origin reconciliation policy. `None` (the default) skips reconciliation entirely; pipelines that don't carry [`crate::enrichment::atlas::atoms::SignalProvenance`] on their entity atoms produce nothing to reconcile across anyway. Recipes that enable described-asset + email extractors set this block to tune the merger. |
+| `reconciliation` | `Option<ReconciliationToml>` | no | type default | Multi-origin reconciliation policy. `None` (the default) skips reconciliation entirely; pipelines that don't carry [`crate::enrichment::atlas::atoms::SignalProvenance`] on their entity atoms produce nothing to reconcile across anyway. Recipes that enable described-asset + email extractors set this block to tune the merger. |
 | `normalization` | `Option<NormalizationConfig>` | no | type default | Corpus-specific entity-name coalescing rules for the investigation pipeline. The engine supplies the *mechanism* (alias map, prefix / suffix / qualifier stripping, identity-by-attribute); this block supplies the *vocabulary*, so domain knowledge (US states, Air Force base aliases, disposition categories) lives in the recipe as data rather than hardcoded in the abstraction layer. `None` → names fold by case/punctuation only (the engine default). Consumed by [`crate::enrichment::investigation::normalize::Normalizer`]. |
 
 ## `NormalizationConfig`
@@ -569,7 +569,7 @@ Runtime-registered per-file extractor. The engine walks `source_path` collecting
 
 ### `type = "email"`
 
-Architecture-over-Enron Phase 2: RFC-5322 / MIME email extractor. Walks `source_path` recursively (maildir layout, raw `.eml` files), parses each through `mailparse`, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per message. Metadata carries the parsed headers + a `thread_id` derived from In-Reply-To / References. When the engine has an [`crate::asset_store::AssetStore`] + an [`crate::extractors::described_asset::AssetSubExtractorRegistry`] installed (the default after Phase 1), attachments dispatch through the described-asset substrate — raw bytes + parsed caches + Asset atom + Attaches edge land per attachment.
+RFC-5322 / MIME email extractor. Walks `source_path` recursively (maildir layout, raw `.eml` files), parses each through `mailparse`, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per message. Metadata carries the parsed headers + a `thread_id` derived from In-Reply-To / References. When the engine has an [`crate::asset_store::AssetStore`] + an [`crate::extractors::described_asset::AssetSubExtractorRegistry`] installed (the default after Phase 1), attachments dispatch through the described-asset substrate — raw bytes + parsed caches + Asset atom + Attaches edge land per attachment.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -578,7 +578,7 @@ Architecture-over-Enron Phase 2: RFC-5322 / MIME email extractor. Walks `source_
 
 ### `type = "described_asset"`
 
-Architecture-over-Enron AD-3: the described-asset dispatcher. Walks `source_path` (one mixed-binary folder), hashes each file, picks a sub-extractor from the engine's [`AssetSubExtractorRegistry`](crate::extractors::described_asset::AssetSubExtractorRegistry) by magic-bytes / extension, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per asset whose `content` is the description prose (always present — opaque-fallback at worst). The dispatcher writes raw bytes + optional typed parsed form to the engine's [`AssetStore`](crate::asset_store::AssetStore) and pre-forms the `Asset` atom + `Attaches` edge into the atlas sidecar so the next atlas write picks them up. Defaults: `xlsx` + `docx` + `plaintext` + `opaque` sub- extractors registered in-tree. `sovereign-tools` registers `pdf` at daemon startup the same way it does for the `Custom` PDF extractor today.
+The described-asset dispatcher. Walks `source_path` (one mixed-binary folder), hashes each file, picks a sub-extractor from the engine's [`AssetSubExtractorRegistry`](crate::extractors::described_asset::AssetSubExtractorRegistry) by magic-bytes / extension, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per asset whose `content` is the description prose (always present — opaque-fallback at worst). The dispatcher writes raw bytes + optional typed parsed form to the engine's [`AssetStore`](crate::asset_store::AssetStore) and pre-forms the `Asset` atom + `Attaches` edge into the atlas sidecar so the next atlas write picks them up. Defaults: `xlsx` + `docx` + `plaintext` + `opaque` sub- extractors registered in-tree. `sovereign-tools` registers `pdf` at daemon startup the same way it does for the `Custom` PDF extractor today.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -805,7 +805,7 @@ Allowed values:
 
 ## `EvidentialFieldDecl`
 
-A source of identity evidence and what its links were measured to be worth on the live rule: `{ evidence = "document_thread", right = 190, of = 210, measured_on = "…" }`. The source is a `change.document` stamp, `model_choice` (the forced choice's most probable candidate), `reasoned_choice` (the same, read after the model's own reasoning) or `proposed_answer` (threads, wording and similarity alone); `right` of `of` links were right where `measured_on` says.
+A source of identity evidence and what its links were measured to be worth on the live rule: `{ evidence = "document_thread", right = 18, of = 20, measured_on = "…" }`. The source is a `change.document` stamp, `model_choice` (the forced choice's most probable candidate), `reasoned_choice` (the same, read after the model's own reasoning) or `proposed_answer` (threads, wording and similarity alone); `right` of `of` links were right where `measured_on` says.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -963,7 +963,7 @@ Allowed values:
 |---|---|---|---|---|
 | `clock` | `Option<SupersessionClock>` | no | type default | The clock supersession folds on. Omit to derive `document_date`. |
 | `supersedes` | `BTreeMap<String, String>` | no | type default | Claim type → the clock it supersedes on: `"document_date"` or a time-family attribute of that type (`{ rule = "valid" }`). A later instance retires the earlier one for the same subject. |
-| `document` | `Option<DocumentFieldsDecl>` | no | type default | The metadata fields each document carries that place a claim in time and in its thread (`{ date = "date", thread = "thread_id", id = "message_id" }` for mail). Every claim is stamped from the ONE document its evidence lands in. Omit when documents carry no metadata. |
+| `document` | `Option<DocumentFieldsDecl>` | no | type default | The metadata fields each document carries that place a claim in time and in its thread (`{ date = "published", thread = "series", id = "report_no" }` for a run of hoard reports). Every claim is stamped from the ONE document its evidence lands in. Omit when documents carry no metadata. |
 
 ## `DocumentFieldsDecl`
 
@@ -1104,14 +1104,14 @@ The three declarations, as the policies carry them (Axis 5).
 
 ## `MetadataSourceDecl`
 
-`source = { metadata = [...], attributes = {...} }`: one entity atom per distinct value of the type's `identity` attribute seen in the named fields of any document, no model call. A model-extracted atom of the type carrying the same identity value merges into it (strict merge). Mail: `metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }`.
+`source = { metadata = [...], attributes = {...} }`: one entity atom per distinct value of the type's `identity` attribute seen in the named fields of any document, no model call. A model-extracted atom of the type carrying the same identity value merges into it (strict merge). A coin catalogue: `metadata = ["mint"], attributes = { name = "value" }`.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `metadata` | `Vec<String>` | **yes** | — | The document metadata fields read, by the corpus's own names. |
 | `attributes` | `BTreeMap<String, FieldReader>` | no | type default | Declared attribute name → the reader that fills it from each field. The type's `identity` attributes must be among them. |
-| `exclude` | `Vec<String>` | no | type default | Identity values never projected beyond the mailbox providers a `domain` reading already skips (a regional ISP the bundled list lacks), compared after the identity fold. |
-| `refs` | `BTreeMap<String, SourceRef>` | no | type default | Declared `ref` attribute → the sourced type it links to, and the reader whose value on the same mailbox is that type's identity value. Contact → Account: `employer = { of = "company", reader = "domain" }`. A value the target type excludes or never projects links nothing; a role, never an identity key (`ONTOLOGY_METHOD.md`). |
+| `exclude` | `Vec<String>` | no | type default | Identity values never projected beyond the mailbox providers a `domain` reading already skips (a provider the bundled list lacks), compared after the identity fold. |
+| `refs` | `BTreeMap<String, SourceRef>` | no | type default | Declared `ref` attribute → the sourced type it links to, and the reader whose value on the same document is that type's identity value. Scholar → museum: `affiliation = { of = "museum", reader = "domain" }`. A value the target type excludes or never projects links nothing; a role, never an identity key (`ONTOLOGY_METHOD.md`). |
 
 ## `SourceRef`
 
@@ -1407,14 +1407,14 @@ names are your extractor's, nothing is assumed. Every claim is stamped from
 the ONE document its evidence anchor lands in: `date` becomes
 `document_date` (RFC 2822 or ISO 8601, written as ISO 8601 — the clock
 supersession folds on), `thread` becomes `document_thread`, `id` becomes
-`document_id`. A section can hold several documents (a mail thread), so a
-claim whose anchor is in none of them, or in several, is left unstamped and
+`document_id`. A section can hold several documents (a bound volume of
+hoard reports), so a claim whose anchor is in none of them, or in several, is left unstamped and
 counted in `resolution_failures.json`, as is a field a document lacks or a
 date that does not parse. An unknown key inside `document` refuses at load.
 
 ```toml
 [enrichment.ontology.change]
-document = { date = "date", thread = "thread_id", id = "message_id" }
+document = { date = "published", thread = "series", id = "report_no" }
 ```
 
 `by = "protocol"` is the opt-in scalar fold. Its target attribute must be
@@ -1437,28 +1437,28 @@ copies remain in the decision history. A correction rule names a `corrects`
 field whose value must identify a prior transition; a newer timestamp alone
 does not correct one. Missing or undated inputs, mixed date precision, and
 unsupported partial report times stay pending. Incompatible states at the same
-report time conflict. Reopen and correction behavior is defined by recipe state
-values and rules, not by Rust state names.
+report time conflict. Withdrawal and correction behavior is defined by recipe
+state values and rules, not by Rust state names.
 
 ```toml
 [[enrichment.ontology.folds]]
-id = "record_state"
+id = "coin_status"
 by = "protocol"
 from = ["^subject"]
 
 [enrichment.ontology.folds.protocol]
-identity = "transition_id"
+identity = "ruling_id"
 effective_time = "effective_at"
 
 [[enrichment.ontology.folds.protocol.rules]]
-id = "qualified_resolution"
-claim_kind = "record_update"
-state = "resolved"
-when = { action = "resolved_by_authority", role = "maintainer", voice = "maintainer", polarity = "affirmative" }
+id = "editor_acceptance"
+claim_kind = "catalogue_ruling"
+state = "accepted"
+when = { action = "accepted_by_editor", role = "editor", voice = "editor", polarity = "affirmative" }
 ```
 
-The derived `record.state` attribute must be a closed text enum containing
-`resolved`; `record_update` declares the fields in `when`, `transition_id`, and
+The derived `coin.status` attribute must be a closed text enum containing
+`accepted`; `catalogue_ruling` declares the fields in `when`, `ruling_id`, and
 `effective_at`. `recipe validate` rejects unknown fields, claim types, state
 values, invalid paths, or a target not decided by RESOLVE.
 
@@ -1478,31 +1478,32 @@ at a mailbox provider is never projected, since an address there names no
 organization: the bundled list
 (`ingest/crates/sovereign-recipes/_assets/mailbox_providers.txt`,
 free-email-domains at a pinned commit) or a subdomain of a listed domain
-(`email.msn.com`), counted apart as `providers`. A listed parent covers its
-subdomains, so `espn.go.com` is read as `go.com`'s. `exclude` lists further
-identity values never projected, a regional ISP the list lacks. A field a
+(`mail.aol.com`), counted apart as `providers`. A listed parent covers its
+subdomains, so `uk.aol.com` is read as `aol.com`'s. `exclude` lists further
+identity values never projected, a provider the list lacks. A field a
 document lacks is counted; one that holds no
 address or a value no reader reads is recorded in `resolution_failures.json`.
 `file` and `metadata` are one or the other, and an unknown key or reader
 refuses at load. `refs` links a declared `ref` attribute to another sourced
-type: the reader's value on the same mailbox is that type's identity value
-(Contact -> Account below). A value the target excludes or never projects
-links nothing; the resolve output counts linked and unlinked per attribute.
+type: the reader's value on the same document is that type's identity value
+(scholar -> museum below, in a museum's correspondence archive). A value the
+target excludes or never projects links nothing; the resolve output counts
+linked and unlinked per attribute.
 
 ```toml
 [[enrichment.ontology.types]]
-name = "company"
+name = "museum"
 kind = "entity"
 attributes = [{ name = "domain", type = "text" }]
 identity = ["domain"]
-source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["pdq.net"] }
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["provider.example"] }
 
 [[enrichment.ontology.types]]
-name = "person"
+name = "scholar"
 kind = "entity"
-attributes = [{ name = "email", type = "text" }, { name = "employer", type = "ref", of = "company" }]
+attributes = [{ name = "email", type = "text" }, { name = "affiliation", type = "ref", of = "museum" }]
 identity = ["email"]
-source = { metadata = ["from", "to", "cc"], attributes = { email = "address" }, refs = { employer = { of = "company", reader = "domain" } } }
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address" }, refs = { affiliation = { of = "museum", reader = "domain" } } }
 ```
 
 `max_entities_per_section` raises how many entities Phase 1 may introduce in

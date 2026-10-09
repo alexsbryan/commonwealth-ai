@@ -370,7 +370,7 @@ impl OntologyV1 {
 }
 
 /// A source of identity evidence and what its links were measured to be worth
-/// on the live rule: `{ evidence = "document_thread", right = 190, of = 210,
+/// on the live rule: `{ evidence = "document_thread", right = 18, of = 20,
 /// measured_on = "…" }`. The source is a `change.document` stamp,
 /// `model_choice` (the forced choice's most probable candidate),
 /// `reasoned_choice` (the same, read after the model's own reasoning) or
@@ -685,8 +685,8 @@ pub struct ChangeDecl {
     #[serde(default)]
     pub supersedes: BTreeMap<String, String>,
     /// The metadata fields each document carries that place a claim in time
-    /// and in its thread (`{ date = "date", thread = "thread_id", id =
-    /// "message_id" }` for mail). Every claim is stamped from the ONE
+    /// and in its thread (`{ date = "published", thread = "series", id =
+    /// "report_no" }` for a run of hoard reports). Every claim is stamped from the ONE
     /// document its evidence lands in. Omit when documents carry no metadata.
     #[serde(default)]
     pub document: Option<DocumentFieldsDecl>,

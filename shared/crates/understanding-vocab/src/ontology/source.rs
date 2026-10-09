@@ -2,7 +2,7 @@
 //! `source` on a declared type: where its instances come from without a model
 //! call. Two forms, chosen by which key is present: a TABLE the corpus already
 //! holds (`file`), or the documents' OWN metadata fields (`metadata`), e.g.
-//! the address headers of mail or the author field of an issue tracker.
+//! the address headers of a letter archive or the mint field of a catalogue.
 //!
 //! The field names are the corpus's own and live only in the recipe. The one
 //! fixed vocabulary here is [`FieldReader`], what to read out of a field's
@@ -75,9 +75,8 @@ pub struct TableSourceDecl {
 /// `source = { metadata = [...], attributes = {...} }`: one entity atom per
 /// distinct value of the type's `identity` attribute seen in the named fields
 /// of any document, no model call. A model-extracted atom of the type
-/// carrying the same identity value merges into it (strict merge). Mail:
-/// `metadata = ["from", "to", "cc"], attributes = { email = "address", name =
-/// "display_name" }`.
+/// carrying the same identity value merges into it (strict merge). A coin
+/// catalogue: `metadata = ["mint"], attributes = { name = "value" }`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetadataSourceDecl {
@@ -88,13 +87,13 @@ pub struct MetadataSourceDecl {
     #[serde(default)]
     pub attributes: BTreeMap<String, FieldReader>,
     /// Identity values never projected beyond the mailbox providers a
-    /// `domain` reading already skips (a regional ISP the bundled list
+    /// `domain` reading already skips (a provider the bundled list
     /// lacks), compared after the identity fold.
     #[serde(default)]
     pub exclude: Vec<String>,
     /// Declared `ref` attribute → the sourced type it links to, and the reader
-    /// whose value on the same mailbox is that type's identity value. Contact
-    /// → Account: `employer = { of = "company", reader = "domain" }`. A value
+    /// whose value on the same document is that type's identity value. Scholar
+    /// → museum: `affiliation = { of = "museum", reader = "domain" }`. A value
     /// the target type excludes or never projects links nothing; a role, never
     /// an identity key (`ONTOLOGY_METHOD.md`).
     #[serde(default)]

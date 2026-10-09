@@ -324,7 +324,7 @@ overlap_chars = 256
 #    base kind the atlas already emits (person, concept, institution, work,
 #    place, initiative) — so `role_of = "person"` needs no `person`
 #    declaration, while a domain word like `mint` must be declared.
-#    Ten worked declarations ship as templates, one per PRIMITIVES §1 user:
+#    Ten worked declarations ship as templates, one per kind of user:
 #    `svrn recipe new --ontology list` names them and `--ontology <name>`
 #    scaffolds a complete recipe. Start from the closest one instead of
 #    writing from scratch. Omitting `version` keeps the older

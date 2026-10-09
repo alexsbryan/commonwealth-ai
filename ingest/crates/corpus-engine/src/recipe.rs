@@ -568,7 +568,7 @@ pub struct EnrichmentConfig {
     #[serde(default, rename = "patterns")]
     pub patterns: Vec<PatternDecl>,
 
-    /// Architecture-over-Enron Phase 4: multi-origin reconciliation
+    /// Multi-origin reconciliation
     /// policy. `None` (the default) skips reconciliation entirely;
     /// pipelines that don't carry [`crate::enrichment::atlas::atoms::SignalProvenance`]
     /// on their entity atoms produce nothing to reconcile across
@@ -1545,7 +1545,7 @@ pub enum ExtractorConfig {
         #[serde(default)]
         params: serde_json::Value,
     },
-    /// Architecture-over-Enron Phase 2: RFC-5322 / MIME email
+    /// RFC-5322 / MIME email
     /// extractor. Walks `source_path` recursively (maildir layout,
     /// raw `.eml` files), parses each through `mailparse`, and
     /// emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
@@ -1568,7 +1568,7 @@ pub enum ExtractorConfig {
         #[serde(default)]
         max_attachment_bytes: u64,
     },
-    /// Architecture-over-Enron AD-3: the described-asset dispatcher.
+    /// The described-asset dispatcher.
     /// Walks `source_path` (one mixed-binary folder), hashes each
     /// file, picks a sub-extractor from the engine's
     /// [`AssetSubExtractorRegistry`](crate::extractors::described_asset::AssetSubExtractorRegistry)
