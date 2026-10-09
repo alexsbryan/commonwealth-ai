@@ -1940,11 +1940,15 @@ impl Runtime {
             // any gap-check rewrite. Empty doc_context (parametric
             // path) is a no-op.
             let (full_text, verified_spans) = {
-                let v = crate::quote_verification::verify_answer_against_turn_evidence(
+                let v = crate::runtime::quote_surface::verify_against_turn(
+                    engine_for_ledger.as_ref(),
                     &full_text,
                     &doc_context,
                     &crate::runtime::evidence::chunk_texts_for_verification(&chunks),
-                );
+                    &crate::runtime::quote_surface::targets_of(&chunks),
+                )
+                .await
+                .verification;
                 if v.demoted_count > 0 {
                     tracing::warn!(
                         demoted = v.demoted_count,
@@ -3558,11 +3562,15 @@ impl Runtime {
             // retrieval) is a no-op. The refinement path
             // (collaboration.rs) re-verifies any gap-check rewrite.
             let (full_text, verified_spans) = {
-                let v = crate::quote_verification::verify_answer_against_turn_evidence(
+                let v = crate::runtime::quote_surface::verify_against_turn(
+                    engine_for_routes.as_ref(),
                     &full_text,
                     &evidence,
                     &crate::runtime::evidence::chunk_texts_for_verification(&kc.chunks),
-                );
+                    &crate::runtime::quote_surface::targets_of(&kc.chunks),
+                )
+                .await
+                .verification;
                 if v.demoted_count > 0 {
                     tracing::warn!(
                         demoted = v.demoted_count,

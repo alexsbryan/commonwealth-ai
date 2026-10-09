@@ -57,6 +57,21 @@ pub struct VerificationResult {
     /// Additive field: `rewritten` and both counts are byte-identical
     /// to the pre-field behaviour on every input.
     pub verified_spans: Vec<String>,
+    /// Where each span of `verified_spans` stood, in the same order: the
+    /// source it was found in and the code points of it the span covers.
+    /// Additive, like `verified_spans`.
+    pub verified: Vec<VerifiedQuote>,
+}
+
+/// A quoted span that verified, and where.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedQuote {
+    /// The span as the answer writes it.
+    pub span: String,
+    /// Index of the source it stands in, in the order verified against.
+    pub source: usize,
+    /// The code points of that source the span covers, half-open.
+    pub source_range: std::ops::Range<usize>,
 }
 
 /// Scan `answer` for quoted spans of `min_chars` or more, verify each
@@ -95,13 +110,19 @@ pub fn verify_quotes(
     extra_verbatim_spans: &[String],
     min_chars: usize,
 ) -> VerificationResult {
-    let mut result = VerificationResult::default();
-
     let sources: Vec<&str> = source_chunks
         .iter()
         .chain(extra_verbatim_spans.iter())
         .map(String::as_str)
         .collect();
+    verify_against(answer, &sources, min_chars)
+}
+
+/// [`verify_quotes`] over sources the caller holds as `&str`, in the order
+/// given: an earlier source wins where a quote stands in two, so a caller
+/// lists first the ones it wants a verified quote addressed into.
+fn verify_against(answer: &str, sources: &[&str], min_chars: usize) -> VerificationResult {
+    let mut result = VerificationResult::default();
     // No surface, no verdict: with every source blank there is nothing to
     // check a quote against, so the answer stands and nothing is demoted, as
     // every caller's comment promises (`attached_doc`'s failed prefetch).
@@ -130,13 +151,17 @@ pub fn verify_quotes(
             if let Some(close) = find_double_quote_close(&chars, i + 1) {
                 let inner: String = chars[i + 1..close].iter().collect();
                 if inner.chars().count() >= min_chars {
-                    let verified = locate_verbatim(&inner, &sources).is_some();
-                    if verified {
+                    if let Some((source, source_range)) = locate_verbatim(&inner, sources) {
                         // Keep as-is: re-emit `"inner"`.
                         out.push(c);
                         out.push_str(&inner);
                         out.push(chars[close]);
                         result.verified_count += 1;
+                        result.verified.push(VerifiedQuote {
+                            span: inner.clone(),
+                            source,
+                            source_range,
+                        });
                         result.verified_spans.push(inner);
                     } else {
                         // Demote. Strip ellipsis-bridged composites
@@ -264,6 +289,39 @@ pub fn verify_answer_against_turn_evidence(
     sources.push(evidence.to_string());
     sources.extend(chunks.iter().cloned());
     verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)
+}
+
+/// [`verify_answer_against_turn_evidence`], with the stored texts the turn's
+/// chunks were cut from as sources too (ADDRESSED_TEXT §5.3, convergence
+/// commit 2; `runtime::quote_surface` reads them).
+///
+/// A chunk is a re-joined, overlapped, title-headed cut of its document, so a
+/// quote from the same document past the chunk's edge is verbatim source
+/// text the chunks cannot see: the GR-19/20 class one level out. The texts
+/// are listed FIRST, so a quote standing in one is addressed into it
+/// ([`VerifiedQuote::source`] below `texts.len()`). The set is a superset of
+/// the old one, so this only removes demotions; a composite stays
+/// non-contiguous in a text as in a chunk. The empty-`evidence` guard is
+/// unchanged.
+pub fn verify_answer_against_turn_texts(
+    answer: &str,
+    evidence: &str,
+    chunks: &[String],
+    texts: &[&str],
+) -> VerificationResult {
+    if evidence.trim().is_empty() {
+        return VerificationResult {
+            rewritten: answer.to_string(),
+            ..VerificationResult::default()
+        };
+    }
+    let sources: Vec<&str> = texts
+        .iter()
+        .copied()
+        .chain(std::iter::once(evidence))
+        .chain(chunks.iter().map(String::as_str))
+        .collect();
+    verify_against(answer, &sources, DEFAULT_MIN_QUOTE_CHARS)
 }
 
 /// The aligner's knobs, compiled in from `quote-align/align.toml`; that

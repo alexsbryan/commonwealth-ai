@@ -95,6 +95,8 @@ workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hac
 
 [dev-dependencies]
 tokio = { workspace = true }
+# `runtime::quote_surface`'s test reads stored texts through the port double.
+corpus-index = { workspace = true, features = ["test-doubles"] }
 # The binder-replay harness installs a subscriber so the production `t5 binder`
 # stage timings are readable from the test run; without one they are discarded
 # and the harness can only report a total.

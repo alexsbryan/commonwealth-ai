@@ -341,6 +341,51 @@ fn empty_evidence_still_leaves_the_answer_alone() {
     assert_eq!(r.demoted_count, 0);
 }
 
+/// The GR-19/20 class one level out: a quote from the same document past
+/// the chunk's edge is in the stored text, so it verifies there, and is
+/// addressed into that text.
+#[test]
+fn a_quote_past_its_chunk_verifies_in_the_stored_text() {
+    let text = "The ledger was kept in a fair hand. Widow Hetch, who kept The Cold \
+                Lantern, gave her evidence at her own bar with her arms folded.";
+    let chunk = "The ledger was kept in a fair hand.".to_string();
+    let sentence = "Widow Hetch, who kept The Cold Lantern, gave her evidence at her own bar";
+    let answer = format!("Grounded in the source:\n  \"{sentence}\"");
+
+    let chunks_only = verify_answer_against_turn_evidence(&answer, &chunk, &[chunk.clone()]);
+    assert_eq!(
+        chunks_only.demoted_count, 1,
+        "the chunks alone cannot see it"
+    );
+
+    let with_text = verify_answer_against_turn_texts(&answer, &chunk, &[chunk.clone()], &[text]);
+    assert_eq!((with_text.verified_count, with_text.demoted_count), (1, 0));
+    let [v] = with_text.verified.as_slice() else {
+        panic!("one verified quote, addressed: {:?}", with_text.verified);
+    };
+    assert_eq!(v.source, 0, "addressed into the stored text, listed first");
+    assert_eq!(
+        quote_align::code_point_slice(text, v.source_range.clone()),
+        Some(sentence)
+    );
+}
+
+/// The widening does not reach composites: real fragments spliced with an
+/// interior ellipsis are no more contiguous in the whole text than in a
+/// chunk.
+#[test]
+fn a_composite_is_still_demoted_against_the_stored_texts() {
+    let text = "The ledger was kept in a fair hand. Many pages later, and after much \
+                else besides, the auditor came out from Saltern Cross.";
+    let answer = "As recorded: \"The ledger was kept in a fair hand ... the auditor \
+                  came out from Saltern Cross.\"";
+    let r = verify_answer_against_turn_texts(answer, text, &[], &[text]);
+    assert_eq!(
+        r.demoted_count, 1,
+        "a spliced quote is still a spliced quote"
+    );
+}
+
 /// Defect 6 (ADDRESSED_TEXT appendix): with no surface at all there is
 /// nothing a quote could be checked against, so nothing is demoted, as
 /// `attached_doc`'s failed-prefetch path always claimed.

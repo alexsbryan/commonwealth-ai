@@ -541,11 +541,15 @@ impl Runtime {
         // against that rendering demotes verbatim source text (graceful
         // no-op when knowledge_block is empty).
         let full_text = format!("{committed_prefix}{}", completion.text);
-        let verified = crate::quote_verification::verify_answer_against_turn_evidence(
+        let verified = crate::runtime::quote_surface::verify_against_turn(
+            self.corpus_engine.as_ref(),
             &full_text,
             &knowledge_block,
             &crate::runtime::evidence::chunk_texts_for_verification(&chunks),
-        );
+            &crate::runtime::quote_surface::targets_of(&chunks),
+        )
+        .await
+        .verification;
         if verified.demoted_count > 0 {
             tracing::warn!(
                 demoted = verified.demoted_count,
