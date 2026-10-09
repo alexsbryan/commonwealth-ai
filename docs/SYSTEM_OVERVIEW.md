@@ -700,8 +700,9 @@ question the pipeline asks about a type is a method on the resolved
   supplied statements (the gold-mention setting). The atlas build runs it after
   3b, which `enrich atlas-resolve` runs by default (`ResolvePhase::All`; `--phase 3a`
   is the only opt-out) (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
-  as the ONE decider of every entity type that declares an `identity_criterion`
-  and no `source` (`decides`): its statements are the claims of each kind whose
+  as the ONE decider of every entity or event type that declares an
+  `identity_criterion` and no `source` (`decides`; an event type's records are
+  event atoms): its statements are the claims of each kind whose
   `subject` is the type, placed by their anchor in the one document `locate`
   finds. Claims the reader gave one `subject_local_ref` in one document are one
   statement at the earliest span (`resolution_records/local_subjects.rs`), unless

@@ -505,7 +505,15 @@ impl OntologyTypeDecl {
                             }
                             Some(SourceDecl::Table(_)) => false,
                         };
-                        subject.kind == TypeKind::Entity && resolvable_subject
+                        // RESOLVE decides an entity or an event it identifies by
+                        // criterion; a metadata source projects entities only.
+                        match subject.kind {
+                            TypeKind::Entity => resolvable_subject,
+                            TypeKind::Event => {
+                                subject.source.is_none() && subject.identity_criterion.is_some()
+                            }
+                            _ => false,
+                        }
                     })
             })
     }

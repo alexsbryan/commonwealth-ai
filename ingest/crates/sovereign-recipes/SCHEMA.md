@@ -1345,9 +1345,9 @@ and carries attributes in four value families: `text` (optionally a closed
 name its `force`; the parser refuses one without it.
 
 How Phase 1 reads follows from the declaration, with no switch. When every
-claim type has a `force` and a `subject` naming either a type with an
-`identity_criterion` and no `source` or a metadata-sourced entity with declared
-identity fields, each document is read on its own by a fixed plan of small
+claim type has a `force` and a `subject` naming either an entity or event type
+with an `identity_criterion` and no `source` (RESOLVE decides its records) or a
+metadata-sourced entity with declared identity fields, each document is read on its own by a fixed plan of small
 closed questions generated from the declaration: which lines state each claim
 kind, then each closed-valued field. When no claim type qualifies, sections are
 read by the general extractor. A declaration that mixes the two is refused,

@@ -61,7 +61,10 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         .shape
         .types
         .iter()
-        .filter(|ty| ty.kind == TypeKind::Entity && subject_names.contains(ty.name.as_str()))
+        .filter(|ty| {
+            matches!(ty.kind, TypeKind::Entity | TypeKind::Event)
+                && subject_names.contains(ty.name.as_str())
+        })
         .map(|ty| {
             json!({
                 "name": ty.name,

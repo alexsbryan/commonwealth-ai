@@ -235,7 +235,7 @@ impl OntologyLanguage for V1 {
             .collect();
         if !unsupported.is_empty() && unsupported.len() < claims.len() {
             return Err(Error::Recipe(format!(
-                "ontology declared reading cannot silently omit unsupported declared claim type(s): {}. Each needs a declared force and a `subject` naming either a source-free entity type with an `identity_criterion` or a metadata-sourced entity type with declared identity fields",
+                "ontology declared reading cannot silently omit unsupported declared claim type(s): {}. Each needs a declared force and a `subject` naming either a source-free entity or event type with an `identity_criterion` or a metadata-sourced entity type with declared identity fields",
                 unsupported.join(", ")
             )));
         }

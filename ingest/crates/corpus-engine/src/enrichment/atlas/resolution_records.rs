@@ -22,7 +22,7 @@ use tracing::{debug, info};
 
 use super::atoms::{
     ArgumentReconstruction, AtomId, ChunkRef, Claim, Entity, Event, Opposition, Position, Relation,
-    SignalKind, SignalProvenance, State,
+    SectionPosition, SignalKind, SignalProvenance, State,
 };
 use super::edges::Edge;
 use super::resolution::Trajectory;
@@ -39,7 +39,7 @@ use super::resolve_records::{
 use crate::enrichment::ontology::{
     DocumentStamp, OntologyPolicies, OntologyTypeDecl, TypeIndex, TypeKind,
 };
-use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
     LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
 };
@@ -52,13 +52,16 @@ use local_subjects::{Assigned, Spot};
 /// The extractor id on a record's atom.
 const EXTRACTOR_ID: &str = "atlas/resolve";
 
-/// Whether RESOLVE decides `type_name`'s identity in the atlas build: an
-/// entity type that declares an `identity_criterion` and no metadata
-/// `source`. The one test: 3b leaves a claim's subject of such a type to
-/// RESOLVE, and [`resolve_declared_types`] decides it.
+/// Whether RESOLVE decides `type_name`'s identity in the atlas build: a type
+/// of a kind that is identified again (an entity or an event; PRIMITIVES §0:
+/// events are full subjects of claims) that declares an `identity_criterion`
+/// and no metadata `source`. The one test: 3b leaves a claim's subject of such
+/// a type to RESOLVE, and [`resolve_declared_types`] decides it.
 pub fn decides(index: &TypeIndex<'_>, type_name: &str) -> bool {
     index.get(type_name).is_some_and(|t| {
-        t.kind == TypeKind::Entity && t.identity_criterion.is_some() && t.source.is_none()
+        matches!(t.kind, TypeKind::Entity | TypeKind::Event)
+            && t.identity_criterion.is_some()
+            && t.source.is_none()
     })
 }
 
@@ -154,7 +157,7 @@ pub async fn resolve_declared_types(
             continue;
         }
         if !decides(&index, &t.name) {
-            let why = if t.kind == TypeKind::Entity {
+            let why = if t.source.is_some() {
                 "it declares a metadata source".to_string()
             } else {
                 format!("it is a {:?} type", t.kind)
@@ -165,7 +168,8 @@ pub async fn resolve_declared_types(
                 PhaseFailureKind::Other,
                 format!(
                     "`{}` declares an identity_criterion, but {why}: RESOLVE decides only entity \
-                     types with no source in the atlas build, so its atoms are decided as before",
+                     and event types with no source in the atlas build, so its atoms are decided \
+                     as before",
                     t.name
                 ),
             ));
@@ -210,7 +214,7 @@ async fn resolve_type(
         type_name: t.name.clone(),
         ..Default::default()
     };
-    let ty = EntityType::from_str_repr(&t.name);
+    let kind = t.kind;
     let kinds: BTreeSet<&str> = policies
         .shape
         .types
@@ -247,8 +251,15 @@ async fn resolve_type(
     let retired: BTreeSet<AtomId> = atoms
         .entities
         .iter()
-        .filter(|e| e.entity_type.as_str_repr() == t.name)
+        .filter(|e| kind == TypeKind::Entity && e.entity_type.as_str_repr() == t.name)
         .map(|e| e.id.clone())
+        .chain(
+            atoms
+                .events
+                .iter()
+                .filter(|e| kind == TypeKind::Event && e.event_type.as_str_repr() == t.name)
+                .map(|e| e.id.clone()),
+        )
         .collect();
     report.retired = retired.len();
     report.dropped = retire(atoms, &retired, &t.name, failures);
@@ -498,10 +509,9 @@ async fn resolve_type(
     )
     .await;
 
-    // Records become the type's atoms.
+    // Records become the type's atoms, in the type's own kind.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();
     for rec in resolver.records() {
-        let id = AtomId::exact_entity_content_hash(&rec.id, &ty, corpus_id);
         // A record is opened by a placed statement, so both are there; one
         // that is not is refused, never named or placed by a default.
         let (Some(e), Some(section)) = (rec.evidence.first(), section_of.get(&rec.id)) else {
@@ -518,6 +528,26 @@ async fn resolve_type(
         let (document, surface, section) = (e.document.clone(), e.surface.clone(), section.clone());
         let mut first = ChunkRef::new(section.clone(), Some(surface.clone()));
         first.source_doc_id = Some(document.clone());
+        if kind == TypeKind::Event {
+            let event_type = EventType::from_str_repr(&t.name);
+            let id = AtomId::event_content_hash(&rec.id, &event_type, &section, corpus_id);
+            debug!(r#type = %t.name, record = %rec.id, atom = %id.as_str(), statements = rec.statements.len(), "atlas/resolve: record becomes an event atom");
+            atom_of.insert(rec.id.as_str(), id.clone());
+            atoms.events.push(Event {
+                id,
+                description: surface,
+                event_type,
+                participants: Vec::new(),
+                evidence: vec![first],
+                section_position: SectionPosition::section(section),
+                causal_antecedents: Vec::new(),
+                attributes: Map::new(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+            });
+            continue;
+        }
+        let ty = EntityType::from_str_repr(&t.name);
+        let id = AtomId::exact_entity_content_hash(&rec.id, &ty, corpus_id);
         debug!(r#type = %t.name, record = %rec.id, atom = %id.as_str(), statements = rec.statements.len(), "atlas/resolve: record becomes an atom");
         atom_of.insert(rec.id.as_str(), id.clone());
         atoms.entities.push(Entity {
@@ -608,6 +638,7 @@ fn retire(
     };
     let mut gone: BTreeSet<AtomId> = retired.clone();
     atoms.entities.retain(|e| !retired.contains(&e.id));
+    atoms.events.retain(|e| !retired.contains(&e.id));
     for e in atoms.entities.iter_mut() {
         add("entity_participant", drop_ids(&mut e.participants, retired));
         add(

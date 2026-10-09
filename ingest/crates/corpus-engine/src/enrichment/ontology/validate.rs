@@ -677,7 +677,15 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         ));
     }
 
-    for t in p.shape.types.iter().filter(|t| t.kind == TypeKind::Entity) {
+    let decided = |name: &str| {
+        crate::enrichment::atlas::resolution_records::decides(&TypeIndex::from_policies(p), name)
+    };
+    for t in p
+        .shape
+        .types
+        .iter()
+        .filter(|t| t.kind == TypeKind::Entity || decided(&t.name))
+    {
         if let Some(SourceDecl::Metadata(s)) = &t.source {
             let read: Vec<String> = s
                 .attributes

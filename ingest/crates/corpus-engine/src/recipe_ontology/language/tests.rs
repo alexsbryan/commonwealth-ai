@@ -80,3 +80,32 @@ subject = "person"
     assert_eq!(commitment.force, Some(Force::Commissive));
     assert!(commitment.is_document_reading_eligible(&policies.shape.types));
 }
+
+/// PRIMITIVES §0: an event identified by its criterion is a subject the reader
+/// reads claims about, as a source-free entity is (RESOLVE decides both).
+#[test]
+fn v1_a_claim_about_an_event_with_a_criterion_is_read() {
+    let body: toml::Table = toml::from_str(
+        r#"
+[[types]]
+name = "happening"
+kind = "event"
+identity_criterion = "the same occurrence"
+
+[[types]]
+name = "report"
+kind = "claim"
+force = "assertive"
+subject = "happening"
+"#,
+    )
+    .unwrap();
+    let policies = OntologyLanguageRegistry::builtin()
+        .get(1)
+        .unwrap()
+        .parse(&body)
+        .unwrap();
+    let report = policies.type_decl("report").unwrap();
+    assert!(report.is_document_reading_eligible(&policies.shape.types));
+    assert!(policies.reads_documents());
+}
