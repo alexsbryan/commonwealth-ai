@@ -323,7 +323,16 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (embed, chat) = client.into_closures();
+    let (embed, chat) = match client.into_asked_closures(
+        corpus_engine::enrichment::asker::Asker::Daemon,
+        &super::paths::enrichment_root(&cfg.corpus_id),
+    ) {
+        Ok(ports) => ports,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
 
     // ── Step 4 (cont.): resolve into a STAGING dir ─────────────
     let staging_root = std::env::temp_dir().join(format!("sov-delta-{}-{suffix}", cfg.corpus_id));

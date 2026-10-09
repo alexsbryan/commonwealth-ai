@@ -18,6 +18,7 @@
 
 use std::path::{Path, PathBuf};
 
+use corpus_engine::enrichment::asker::Asker;
 use corpus_engine::enrichment::atlas::resolution_records::BuildAtoms;
 use corpus_engine::enrichment::atlas::{
     ann_store::AtlasSeeding, resolve_entities_and_events_with, resolve_step_3b_with, write_atlas,
@@ -102,7 +103,8 @@ pub async fn run(parsed: &ParsedResolve) -> Result<ResolveReport, String> {
     // used by `extract`.
     let client = DaemonInferenceClient::from_enrich_config(&cfg)
         .map_err(|e| format!("building daemon client: {e}"))?;
-    let (embed, chat) = client.into_closures();
+    let (embed, chat) =
+        client.into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id))?;
 
     // Resolve into the live atlas dir. The `enrich delta` command
     // calls `resolve_into_dir` directly with a staging tempdir; this
@@ -662,6 +664,7 @@ impl AtlasResolveTool {
         let report = run(&ParsedResolve {
             corpus_id: corpus.to_string(),
             phase,
+            asker: Asker::Daemon,
         })
         .await
         .map_err(|e| Error::Execution(format!("atlas_resolve: {e}")))?;
@@ -680,11 +683,15 @@ impl AtlasResolveTool {
 pub struct ParsedResolve {
     pub corpus_id: String,
     pub phase: ResolvePhase,
+    /// Where RESOLVE's answers and the build's embeddings come from
+    /// (`--asker`, `corpus_engine::enrichment::asker`); `daemon` records.
+    pub asker: Asker,
 }
 
 pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
     let mut corpus_id: Option<String> = None;
     let mut phase = ResolvePhase::All;
+    let mut asker = Asker::default();
 
     let mut i = 0;
     while i < args.len() {
@@ -695,6 +702,13 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
                     .get(i + 1)
                     .ok_or("--phase requires a value (3a|all)".to_string())?;
                 phase = ResolvePhase::parse(val)?;
+                i += 2;
+            }
+            "--asker" => {
+                let val = args
+                    .get(i + 1)
+                    .ok_or("--asker requires a value (daemon|replay|gold)".to_string())?;
+                asker = Asker::parse(val)?;
                 i += 2;
             }
             other if other.starts_with("--") => {
@@ -712,7 +726,11 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
     }
 
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
-    Ok(ParsedResolve { corpus_id, phase })
+    Ok(ParsedResolve {
+        corpus_id,
+        phase,
+        asker,
+    })
 }
 
 #[cfg(test)]

@@ -144,7 +144,9 @@ svrn enrich atlas-resolve my-orders      # stamps, RESOLVE, derived folds
 dated and threaded from its own document), `RESOLVE` per decided type (how
 many records its statements made, and how each was decided), and one
 `derived` line per declared fold. `--phase 3a` is the opt-in for entities
-and events alone. This sequence is the `layer-default-path` journey
+and events alone. Every model answer the two commands get is recorded in
+`enrichment/my-orders/answers.jsonl`; run both again with `--asker replay` and
+they answer from that file without the daemon and write the same records. This sequence is the `layer-default-path` journey
 (`svrn contract map`).
 
 ## Where it lives

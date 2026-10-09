@@ -379,6 +379,7 @@ pub(super) async fn run_step(
             let params = atlas_resolve::ParsedResolve {
                 corpus_id: corpus.to_string(),
                 phase: atlas_resolve::ResolvePhase::All,
+                asker: corpus_engine::enrichment::asker::Asker::Daemon,
             };
             match atlas_resolve::run(&params).await {
                 Ok(report) => Ok(StepOutcome::did(report.summary())),

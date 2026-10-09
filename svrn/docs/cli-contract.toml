@@ -1079,7 +1079,7 @@ classification = "daemon"
 path = "enrich extract"
 binary = "llm"
 classification = "daemon"
-flags = [{ name = "--chapters", takes_value = true }, { name = "--full" }, { name = "--terse" }]
+flags = [{ name = "--chapters", takes_value = true }, { name = "--full" }, { name = "--terse" }, { name = "--asker", takes_value = true }]
 [[command]]
 path = "enrich cluster"
 binary = "llm"
@@ -1090,7 +1090,7 @@ classification = "daemon"
 [[command]]
 path = "enrich resolve"
 binary = "llm"
-flags = [{ name = "--phase", takes_value = true }]
+flags = [{ name = "--phase", takes_value = true }, { name = "--asker", takes_value = true }]
 [[command]]
 path = "enrich tensions"
 binary = "llm"

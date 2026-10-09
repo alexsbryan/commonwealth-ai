@@ -203,9 +203,15 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // Probe daemon — fail fast if it's down, and name SLOW separately
     // from DOWN (order enrich-probe-timeout): a probe that timed out
     // must not tell the user to start a daemon that is serving.
-    if let Some(err) = daemon_probe_error(&cfg.base_url, probe_daemon_status(&cfg.base_url).await) {
-        eprintln!("{err}");
-        return 2;
+    // A replayed or gold read answers from its store and never reaches the
+    // daemon, so it is not probed: a replay runs with the daemon stopped.
+    if parsed.asker.needs_daemon() {
+        if let Some(err) =
+            daemon_probe_error(&cfg.base_url, probe_daemon_status(&cfg.base_url).await)
+        {
+            eprintln!("{err}");
+            return 2;
+        }
     }
 
     // Build the pipeline + runner.
@@ -233,13 +239,24 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // OICP features before the first request (OICP v0.4). No-op for a
     // Sovereign daemon (advertises constraint:json_schema); matters
     // when `base_url` points at another OICP host.
-    let client = client.discover_capabilities().await;
+    let client = if parsed.asker.needs_daemon() {
+        client.discover_capabilities().await
+    } else {
+        client
+    };
     // Phase D2 — grab the cumulative token ledger before consuming
     // the client into closures. The Arc<TokenUsageLedger> is shared
     // with the closures, so each chat call bumps it and the flusher
     // task below sees the running totals.
     let usage_ledger = client.usage_ledger();
-    let (embed, chat) = client.into_closures();
+    let (embed, chat) =
+        match client.into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id)) {
+            Ok(ports) => ports,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
 
     let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));

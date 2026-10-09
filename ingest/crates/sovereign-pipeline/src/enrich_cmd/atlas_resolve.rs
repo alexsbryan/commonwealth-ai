@@ -15,7 +15,9 @@ const HELP: Help = Help {
     command: "svrn enrich atlas-resolve",
     summary: "Resolve atlas atoms + edges from Phase 1 sketches.",
     sections: &[
-        HelpSection::Usage("svrn enrich atlas-resolve <corpus-id> [--phase 3a]"),
+        HelpSection::Usage(
+            "svrn enrich atlas-resolve <corpus-id> [--phase 3a] [--asker daemon|replay|gold]",
+        ),
         HelpSection::Flags(&[
             (
                 "--phase 3a",
@@ -27,6 +29,14 @@ const HELP: Help = Help {
                 "The default, spelled out: entities and events, then state / relation / \
                  claim / question atoms, the recipe's typed records (document stamps, \
                  RESOLVE, derived folds) and trajectories.json.",
+            ),
+            (
+                "--asker <daemon|replay|gold>",
+                "Where RESOLVE's answers and the build's embeddings come from. `daemon` (the default): the model answers \
+                 and every answer is recorded in the corpus's enrichment/<id>/answers.jsonl, \
+                 keyed by the question's content. `replay`: the recorded answers answer and \
+                 the daemon is never called, so a run replays with it stopped; a question \
+                 never recorded is refused. `gold`: answers.gold.jsonl answers, the same way.",
             ),
         ]),
         HelpSection::Examples(&[

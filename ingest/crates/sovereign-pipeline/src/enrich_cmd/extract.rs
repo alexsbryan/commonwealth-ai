@@ -18,7 +18,7 @@ const HELP: Help = Help {
     summary: "Run phase 1 (per-chapter question extraction) on a subset or the full corpus.",
     sections: &[
         HelpSection::Usage(
-            "svrn enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed] [--terse] [--dry-run]",
+            "svrn enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed] [--terse] [--dry-run] [--asker daemon|replay|gold]",
         ),
         HelpSection::Flags(&[
             ("--chapters <ids>", "Comma-separated chapter ids (e.g. sec_0001,sec_0003). Subset runs do NOT update the cache."),
@@ -53,6 +53,14 @@ const HELP: Help = Help {
                  and (when applicable) update cache/questions.json. Use after a long \
                  --resume sequence has covered every chapter — no LLM calls fired by this \
                  mode. Mutually exclusive with --chapters / --full / --retry-failed.",
+            ),
+            (
+                "--asker <daemon|replay|gold>",
+                "Where model answers come from. `daemon` (the default): the model answers \
+                 and every answer is recorded in the corpus's enrichment/<id>/answers.jsonl, \
+                 keyed by the question's content. `replay`: the recorded answers answer and \
+                 the daemon is never called, so a run replays with it stopped; a question \
+                 never recorded is refused. `gold`: answers.gold.jsonl answers, the same way.",
             ),
             (
                 "--dry-run",

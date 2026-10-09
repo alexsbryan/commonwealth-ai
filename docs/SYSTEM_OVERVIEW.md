@@ -637,6 +637,15 @@ question the pipeline asks about a type is a method on the resolved
   against the document (exact source verification is mandatory) and the section
   cache keeps; its rendered questions are part of the contract fingerprint
   (`schema::contract_value`, version 4). The one-shot reader is deleted.
+  The Asker (`enrichment/asker.rs`, ONTOLOGY_METHOD §Reading, campaign C5)
+  stands in front of the chat and embed ports of `enrich extract`,
+  `atlas-resolve` (and `enrich build`, `delta`, `resolve-statements`), built in
+  one place (`DaemonInferenceClient::into_asked_closures`): `--asker daemon`
+  (default) records every answer in `enrichment/<id>/answers.jsonl` keyed by the
+  hash of the whole prompt and per-call budget (or the text embedded), one answer
+  per question per run; `replay` answers from that store and never calls (or
+  probes) the daemon; `gold` reads `answers.gold.jsonl`. A question with no stored
+  answer is refused, never defaulted.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from the ONE document its evidence anchor lands in

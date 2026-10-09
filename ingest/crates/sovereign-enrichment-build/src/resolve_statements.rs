@@ -60,6 +60,9 @@ pub struct ParsedResolveStatements {
     pub rule: ProposalRule,
     pub answer: AnswerBy,
     pub limit: Option<usize>,
+    /// `--asker`: where RESOLVE's answers come from; the store is `out`'s
+    /// answers.jsonl (`corpus_engine::enrichment::asker`).
+    pub asker: corpus_engine::enrichment::asker::Asker,
 }
 
 pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
@@ -84,6 +87,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
             "--similar",
             "--answer",
             "--limit",
+            "--asker",
         ];
         let Some(&flag) = known.iter().find(|k| **k == name) else {
             return Err(format!("unknown argument `{}`", args[i]));
@@ -154,6 +158,11 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolveStatements, String> {
             .get("--limit")
             .map(|_| count("--limit", 0))
             .transpose()?,
+        asker: flags
+            .get("--asker")
+            .map(|v| corpus_engine::enrichment::asker::Asker::parse(v))
+            .transpose()?
+            .unwrap_or_default(),
     })
 }
 
@@ -351,7 +360,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
     let client = DaemonInferenceClient::new(&base, &p.model, "")
         .map_err(|e| format!("building the daemon client: {e}"))?;
     let ledger = client.usage_ledger();
-    let (_embed, infer) = client.into_closures();
+    let (_embed, infer) = client.into_asked_closures(p.asker, &p.out)?;
     let answerer = match p.answer {
         AnswerBy::Model => Answerer::Model(&infer),
         AnswerBy::Select => Answerer::Select(&infer),
