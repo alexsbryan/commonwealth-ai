@@ -1,0 +1,12 @@
+{
+ "about": "GVC's FOLD stage (ladder_gvc.py): the happening record's declared field, and the gold mention type each declared value names. Values are the frozen end-to-end recipe's own (baseline-3sys-20261009/recipes/cdcr-gvc-e2e.toml, attribute `kind`); gold types are cdcr/prepare.py's. A gold type listed as unfoldable has no declared value, so its fold is could-not-judge.",
+ "field": "kind",
+ "values": {
+  "the firing of a gun: shots fired, a gun going off": "firing_a_gun",
+  "a person being hit by a bullet": "hitting",
+  "a wound, an injury, or a person's medical condition after being hurt": "injuring",
+  "a death or a killing": "death",
+  "the incident as a whole": "bag_of_events"
+ },
+ "unfoldable_gold_types": [null, "other", "missing"]
+}

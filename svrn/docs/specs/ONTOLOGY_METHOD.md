@@ -141,7 +141,8 @@ reader's variance before trusting a small delta.
 Scaffold first (operator, 2026-10-09): the thinnest pipeline that runs read, resolve and fold through the
 default commands on all three examples with the six contracts holding, whatever its quality. Then extrude
 one refinement at a time inside it, where the stage ladders (read, place, fold, per example) show the
-loss, structure before model. A refinement is kept when its own tests and the contracts pass and no stage
+loss, structure before model. The ladders are one table from each run's own atlas and logs
+(`research/ontology-apps/ladder.py`); GVC's aligns the reader's cited lines to gold's token mentions. A refinement is kept when its own tests and the contracts pass and no stage
 gets worse without its residual read and classed; otherwise it is tuned or reverted alone, and the
 scaffold stays. Bars are tuning targets read on those runs, not gates on a build step. Research drives the
 core through recipes; it never reimplements the core with domain heuristics. Each example's own bars are

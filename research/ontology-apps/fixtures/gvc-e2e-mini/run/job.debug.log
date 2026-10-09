@@ -1,0 +1,36 @@
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG document_read/passes: located document=b27405f9afd055f54cdab7c68ccff13e line=1 kind="report" p=0.9 dist=A 0.90, 0 0.10 text=x
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG document_read/passes: located document=5a0c56265670498621b7cd2f71e53902 line=1 kind="report" p=0.9 dist=A 0.90, 0 0.10 text=x
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_locate model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_choose model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_choose model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_choose model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_choose model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_choose model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=document_passes_choose model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_read model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_read model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_read model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_read model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_select model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_select model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_select model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=resolve_select model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=phase_nobody_registered model=m elapsed_ms=10
+2026-10-09T00:00:00.000Z [extract:err] 2026-10-09T00:00:00.000000Z DEBUG sovereign_inference: POST /v1/chat/completions ok phase=phase_nobody_registered model=m elapsed_ms=10
