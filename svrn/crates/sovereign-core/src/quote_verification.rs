@@ -102,6 +102,18 @@ pub fn verify_quotes(
         .chain(extra_verbatim_spans.iter())
         .map(String::as_str)
         .collect();
+    // No surface, no verdict: with every source blank there is nothing to
+    // check a quote against, so the answer stands and nothing is demoted, as
+    // every caller's comment promises (`attached_doc`'s failed prefetch).
+    // Until ADDRESSED_TEXT's defect 6 this demoted every checked quote.
+    if sources.iter().all(|s| s.trim().is_empty()) {
+        tracing::debug!(
+            sources = sources.len(),
+            "quote_verification: no verification surface; the answer is left unchanged"
+        );
+        result.rewritten = answer.to_string();
+        return result;
+    }
 
     let mut out = String::with_capacity(answer.len());
     let chars: Vec<char> = answer.chars().collect();
@@ -735,6 +747,22 @@ mod tests {
         let r = verify_answer_against_turn_evidence(answer, "", &["something".to_string()]);
         assert_eq!(r.rewritten, answer);
         assert_eq!(r.demoted_count, 0);
+    }
+
+    /// Defect 6 (ADDRESSED_TEXT appendix): with no surface at all there is
+    /// nothing a quote could be checked against, so nothing is demoted, as
+    /// `attached_doc`'s failed-prefetch path always claimed.
+    #[test]
+    fn no_surface_demotes_nothing() {
+        let answer = "As the text says, \"this is a long enough quoted span to be checked\".";
+        for (chunks, spans) in [
+            (Vec::new(), Vec::new()),
+            (vec!["  \n".to_string()], vec![String::new()]),
+        ] {
+            let r = verify_quotes(answer, &chunks, &spans, DEFAULT_MIN_QUOTE_CHARS);
+            assert_eq!(r.rewritten, answer);
+            assert_eq!((r.verified_count, r.demoted_count), (0, 0));
+        }
     }
 
     /// The convergence onto the aligner keeps what the substring test it

@@ -8,7 +8,7 @@ id = "gr-2-verbatim_quote_against_evidence_passes"
 requirement = "GR-2"
 target = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find = "pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> VerificationResult {\n    if evidence.trim().is_empty() {\n        return VerificationResult {\n            rewritten: answer.to_string(),\n            ..VerificationResult::default()\n        };\n    }\n    let sources = [evidence.to_string()];\n    verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)\n}"
-replace = "pub fn verify_answer_against_evidence(answer: &str, _evidence: &str) -> VerificationResult {\n    // BUG: Ignores the evidence corpus entirely, violating GR-2\n    VerificationResult {\n        rewritten: answer.to_string(),\n        verified_count: 1,\n        demoted_count: 0,\n    }\n}"
+replace = "pub fn verify_answer_against_evidence(answer: &str, _evidence: &str) -> VerificationResult {\n    // BUG: Ignores the evidence corpus entirely, violating GR-2\n    VerificationResult {\n        rewritten: answer.to_string(),\n        verified_count: 1,\n        demoted_count: 0,\n        ..VerificationResult::default()\n    }\n}"
 mustFail = ["verbatim_quote_against_evidence_passes"]
 breaks = "**The evidence universe is the load-bearing design decision.** Verification MUST run against the *sealed corpus* \u2014 per-claim search over the source of record \u2014 not merely against the prompt's snapshot"
 expected = "CAUGHT"
