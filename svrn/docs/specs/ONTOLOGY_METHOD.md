@@ -51,8 +51,16 @@ in the recipe. Best-in-class results come through this architecture, not through
    its recall (how often the right record is among the candidates) is reported.
 4. **Every decision is traced and counted;** an answer code cannot verify (a passage not in the text, a
    distribution that does not parse) is counted as refused, never defaulted.
-5. **One table per loop over three different systems,** model calls per document beside the measures; a
-   change is adopted only if no example regresses.
+5. **Every change is read on all three systems,** stage by stage, model calls per document beside each
+   stage; a change that makes a stage worse on any system is tuned or reverted on its own, never kept on
+   another system's gain.
+
+Six contracts every component meets, each a test on fixtures of mail, issues and news (agreed
+2026-10-09): **C1** a model question asks only what declared structure leaves open, never a value a
+declared field, key, reference or derivation supplies; **C2** a model turn holds one document's text and
+no other stored document's; **C3** every value and link carries its source and that source's precision,
+saying whether the precision is declared or estimated on the corpus; **C4** records are the same in any
+document order; **C5** a run replays without the model, every answer recorded; **C6** is invariant 1.
 
 ## Identity (agreed 2026-10-06)
 
@@ -93,7 +101,8 @@ statement is one kind and at most three verified lines. Statements reach RESOLVE
 only once its precision is measured on the rule as it runs; until then its argmax is recorded for measurement,
 and below the bar it is unknown with its distribution attached. An answer code cannot verify refuses that
 question alone. Answers assemble into the stored claims RESOLVE already reads; the `Asker` that answers takes
-the daemon, a replay, or gold, so every question is an oracle at its own boundary. One mode at a time
+the daemon, a replay, or gold, so every question is an oracle at its own boundary (specified, not built:
+on 2026-10-09 the reader calls the daemon directly and no run replays; the scaffold builds it, C5). One mode at a time
 (`off | one_shot | passes`; `passes` is `document_reader`, built for Locate and Choose); the reader that loses on
 both examples is deleted. Why: every one-shot read
 failed the same way — the local model asked to find, label, name and cite at once (stage ~43%, party
@@ -129,8 +138,15 @@ reader's variance before trusting a small delta.
 
 ## The loop
 
-Instrument every decision; judge each against gold; let gold decide one class at a time through the same
-code to find its ceiling; name the piece that could fill it; write bars before data; run once on every
-example's tune fold, one table (B-cubed, CEAF-e, LEA, state); adopt or refuse (a refusal ships its data).
-Research drives the core through recipes; it never reimplements the core with domain heuristics. Each
-example's own bars are lagging checks. Open the held-out folds once per adopted design.
+Scaffold first (operator, 2026-10-09): the thinnest pipeline that runs read, resolve and fold through the
+default commands on all three examples with the six contracts holding, whatever its quality. Then extrude
+one refinement at a time inside it, where the stage ladders (read, place, fold, per example) show the
+loss, structure before model. A refinement is kept when its own tests and the contracts pass and no stage
+gets worse without its residual read and classed; otherwise it is tuned or reverted alone, and the
+scaffold stays. Bars are tuning targets read on those runs, not gates on a build step. Research drives the
+core through recipes; it never reimplements the core with domain heuristics. Each example's own bars are
+lagging checks. Open the held-out folds once, at the acceptance run.
+
+Until 2026-10-09 the loop was one hypothesis per ring with an adopt rule on a table, and it rejected
+structure it could not measure: Ring 2's decider was refused on a test where two of three examples had no
+decision for it to change (`research/ontology-apps/resolve-prereg.md`, Ring 2 H1 and its correction).

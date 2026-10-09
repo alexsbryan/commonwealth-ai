@@ -8,9 +8,12 @@
 #
 # The three systems are instruments. The predicate is about a BLIND author's
 # recipe: identity bars read the records that recipe gets through the default
-# commands, against the row our own frozen recipe got on 2026-10-09. A rung is
-# adopted on its order's own pre-registered rule (two of three systems beyond
-# band, none below), never on one system's row.
+# commands, against the row our own frozen recipe got on 2026-10-09.
+#
+# Operator 2026-10-09: the layer is built scaffold first and refined by
+# extrusion inside the scaffold. A component is accepted by its contract tests
+# (layer-invariants); every other bar is a tuning target read on the
+# scaffold's runs, never a gate on one build step and never on one system's row.
 id        = "ontology-layer"
 objective = "A user with a first-principles understanding of their domain and competency in the ontology syntax writes one recipe, runs the CLI's default commands, and gets typed, cited records on unlike systems: very similar records whoever wrote the recipe, with no number measured on data and no mechanism switch in it. The test systems (crm-ward mail, uv-support issues, GVC news) are instruments, and nothing is judged on one of them. Supersedes crm-proof's Ward-first ladder; crm-proof's bars stay declared as lagging checks."
 spec      = "svrn/docs/specs/ONTOLOGY_METHOD.md; svrn/docs/specs/ONTOLOGY_PRIMITIVES.md (sections 0, 4, 8); .sovereign/features/ontology-layer/campaign.md"
@@ -18,14 +21,14 @@ declared  = "2026-10-09"
 status    = "active"
 
 [predicate]
-statement = "On each test system, a recipe written blind from the domain description through the five-question interview, run by the default commands, gets identity at or above the 2026-10-09 baseline row and records close to our own recipe's, and no recipe carries a measured number or a mechanism switch: layer-identity-ward, layer-identity-uv, layer-identity-gvc, layer-no-tuning, layer-default-path and layer-author-gap each read met on their newest measurement row."
+statement = "On each test system, a recipe written blind from the domain description through the five-question interview, run by the default commands, gets identity at or above the 2026-10-09 baseline row and records close to our own recipe's, and no recipe carries a measured number or a mechanism switch, and the six contracts hold on all three: layer-identity-ward, layer-identity-uv, layer-identity-gvc, layer-no-tuning, layer-default-path, layer-author-gap and layer-invariants each read met on their newest measurement row."
 check     = '''python3 - <<'PY'
 import json, pathlib, sys
 p = pathlib.Path.home() / ".sovereign/comaintainer/bar-measurements.jsonl"
 rows = [json.loads(l) for l in p.read_text().splitlines() if l.strip()] if p.exists() else []
 ok = True
 for bar in ("layer-identity-ward", "layer-identity-uv", "layer-identity-gvc",
-            "layer-no-tuning", "layer-default-path", "layer-author-gap"):
+            "layer-no-tuning", "layer-default-path", "layer-author-gap", "layer-invariants"):
     mine = [r for r in rows if r.get("campaign") == "ontology-layer" and r.get("bar") == bar]
     met = bool(mine) and mine[-1].get("verdict") == "met"
     print(f"{bar}: {'met' if met else 'OPEN'}")
@@ -97,3 +100,12 @@ id           = "layer-author-gap"
 derives_from = "operator 2026-10-09: any new user with a first-principles understanding and the syntax gets very similar output"
 one_line     = "Per system, agreement (B3 between the two record partitions) of the records a blind author's recipe gets with the records our recipe gets, gold measures side by side; target set from the first blind measurement"
 status       = "open"
+
+[[bar]]
+id           = "layer-invariants"
+derives_from = "operator 2026-10-09: build the layer scaffold first and extrude each refinement inside it; the six invariants proposed in seat frame 79fa0e9b are every component's contract (campaign.md, The contract)"
+one_line     = "Of the six contracts (C1 questions only from what declared structure leaves open; C2 no other stored document's text in a model turn; C3 every value and link carries its source and that source's precision; C4 records independent of document order; C5 a run replays without the model; C6 renaming changes nothing but the names), how many have a contract test that passes on fixtures of all three systems"
+status       = "open"
+direction    = "higher_is_better"
+target       = 6
+goodhart     = "can reach 6 while the predicate is false if the fixtures are too small to exercise the stage a contract guards, or a contract is tested at one stage while another stage breaks it; read with the stage ladders on the three systems' tune folds"
