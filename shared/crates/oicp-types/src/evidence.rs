@@ -173,7 +173,7 @@ impl AlignRequest {
 pub struct AlignResponse {
     /// Best first. Empty when nothing reached the host's coverage floor.
     pub alignments: Vec<Alignment>,
-    /// The aligner's identity (`align/1 norm/0` on the reference host). It
+    /// The aligner's identity (`align/2 norm/0` on the reference host). It
     /// changes whenever the same input could align differently, so a client
     /// keys cached alignments on it.
     pub aligner: String,

@@ -89,3 +89,10 @@ quote: The river keeps nothing whatsoever back from anyone
 === unrelated
 text: The river keeps its own counsel, and the town keeps its own.
 quote: an entirely unrelated sentence about the tax code
+
+# A word cut at the quote's edge, and an ellipsis and a bracket the source
+# itself has: the one three-word run holds the cut word, so it has no exact
+# 3-gram; the two-word run between the gaps does.
+=== edge_cut_word_between_gaps
+text: Mr Verloc\u{2019}s shop\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stood in a street of \u{201C}grimy\u{201D} brick houses.
+quote: hop\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stoo

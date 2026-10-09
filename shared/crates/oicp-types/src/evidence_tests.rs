@@ -60,7 +60,7 @@ fn align_response_round_trips_with_every_field() {
             }],
             coverage: 0.875,
         }],
-        aligner: "align/1 norm/0".into(),
+        aligner: "align/2 norm/0".into(),
         corpora: vec![CorpusTexts {
             corpus_id: "fixture".into(),
             texts_digest: SHA.into(),
@@ -82,7 +82,7 @@ fn align_response_round_trips_with_every_field() {
 fn an_empty_unavailable_list_is_omitted_and_reads_back_empty() {
     let resp = AlignResponse {
         alignments: vec![],
-        aligner: "align/1 norm/0".into(),
+        aligner: "align/2 norm/0".into(),
         corpora: vec![],
         corpora_unavailable: vec![],
     };

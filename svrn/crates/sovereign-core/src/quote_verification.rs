@@ -294,8 +294,7 @@ pub(crate) fn locate_verbatim(
 /// kept). Deciding on the folded strings, rather than on the aligner's
 /// differences, keeps what a substring test accepted: a quote that starts or
 /// ends inside a word, or quotes an ellipsis or a bracket the source itself
-/// has. The one class it loses is a quote with no exact word 3-gram to seed
-/// from (`every_stretch_of_a_source_is_located_where_it_stands` pins it).
+/// has (`every_stretch_of_a_source_is_located_where_it_stands`).
 pub(crate) fn align_exact(
     quote: &str,
     sources: &[&str],
@@ -744,11 +743,10 @@ mod tests {
     /// and gaps the source itself has included, is located, at a range whose
     /// fold is the stretch's fold.
     ///
-    /// Save three, pinned so the list can only shrink. The aligner seeds on
-    /// exact word 3-grams inside one gap-free run; in these an edge cut
-    /// inside a word leaves the one three-word run with no exact 3-gram,
-    /// the `…` and `[sic]` split the rest, and nothing seeds. The substring
-    /// test accepted them. A quote cut at word edges always seeded here.
+    /// Under `align/1` three were missed ("hop—small, dim… and _quiet_
+    /// [sic]\n  stoo" and its two neighbours): the edge cut left the one
+    /// three-word run with no exact 3-gram, and shorter runs did not seed.
+    /// Since `align/2` every gap-free run seeds at its own length.
     #[test]
     fn every_stretch_of_a_source_is_located_where_it_stands() {
         let other = "An unrelated passage about the sea, the ships upon it, and the men.";
@@ -772,14 +770,7 @@ mod tests {
                 located += 1;
             }
         }
-        assert_eq!(
-            missed,
-            [
-                "hop\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stoo",
-                "op\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stood",
-                "p\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stood ",
-            ]
-        );
+        assert!(missed.is_empty(), "in the source, not located: {missed:?}");
         assert!(located > 600, "the sweep ran: {located}");
     }
 }

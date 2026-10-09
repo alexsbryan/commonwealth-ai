@@ -14,7 +14,8 @@ coverage_floor = 0.7
 # candidate texts. Read by the route, not by the aligner.
 candidate_k = 8
 
-# How many of the quote's rarest word 3-grams seed candidate windows.
+# How many of the quote's rarest word n-grams seed candidate windows (each
+# gap-free run of the quote's words seeds with its own length, capped at 3).
 seeds = 4
 
 # At most this many (3-gram, occurrence) anchors are aligned per request.

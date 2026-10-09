@@ -29,7 +29,8 @@ pub struct AlignConfig {
     pub coverage_floor: f32,
     /// Candidate chunks the route takes from lexical search.
     pub candidate_k: u32,
-    /// Rarest 3-grams that seed windows.
+    /// Rarest word n-grams (each gap-free run's own length, capped at 3) that
+    /// seed windows.
     pub seeds: usize,
     /// Most anchors aligned per request.
     pub max_anchors: usize,

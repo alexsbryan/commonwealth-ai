@@ -196,10 +196,13 @@ struct Anchor {
     token: usize,
 }
 
-/// Up to `cfg.seeds` of the quotation's rarest word n-grams (n = 3, or the
-/// longest gap-free run of words when that is shorter), and every
+/// Up to `cfg.seeds` of the quotation's rarest word n-grams, and every
 /// occurrence of each in the texts, rarest first, capped at
-/// `cfg.max_anchors`. Rarity is counted in the candidate texts themselves.
+/// `cfg.max_anchors`. Each gap-free run of words seeds with n-grams of its
+/// own length, capped at 3, so a run shorter than the longest still seeds:
+/// a quotation whose one long run holds a word cut at its edge is found
+/// through the runs between its gaps. Rarity is counted in the candidate
+/// texts themselves.
 fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
     // Words of each gap-free run of the quotation, as (item index, chars).
     let mut runs: Vec<Vec<(usize, &[char])>> = vec![Vec::new()];
@@ -214,15 +217,25 @@ fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
             Item::Gap { .. } => runs.push(Vec::new()),
         }
     }
-    let n = runs.iter().map(Vec::len).max().unwrap_or(0).min(3);
-    if n == 0 {
-        return Vec::new();
-    }
+    // The n-gram lengths in use, each a run's own length capped at 3. A key
+    // spells its length (its unused slots are empty, and a word never is), so
+    // grams of different lengths never collide.
+    let mut lengths: Vec<usize> = Vec::new();
     let mut grams: Vec<(Key, usize)> = Vec::new();
     for run in &runs {
+        let n = run.len().min(3);
+        if n == 0 {
+            continue;
+        }
+        if !lengths.contains(&n) {
+            lengths.push(n);
+        }
         for w in run.windows(n) {
             grams.push((key(w.iter().map(|(_, c)| *c)), w[0].0));
         }
+    }
+    if grams.is_empty() {
+        return Vec::new();
     }
     let mut by_key: HashMap<Key, Vec<usize>> = HashMap::new();
     for (g, (k, _)) in grams.iter().enumerate() {
@@ -233,11 +246,13 @@ fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
         let words: Vec<usize> = (0..src.tokens.len())
             .filter(|&t| src.tokens[t].word)
             .collect();
-        for w in words.windows(n) {
-            let k = key(w.iter().map(|&t| src.chars(&src.tokens[t])));
-            if let Some(gs) = by_key.get(&k) {
-                for &g in gs {
-                    hits[g].push((s, w[0]));
+        for &n in &lengths {
+            for w in words.windows(n) {
+                let k = key(w.iter().map(|&t| src.chars(&src.tokens[t])));
+                if let Some(gs) = by_key.get(&k) {
+                    for &g in gs {
+                        hits[g].push((s, w[0]));
+                    }
                 }
             }
         }

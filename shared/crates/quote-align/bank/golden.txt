@@ -1,4 +1,4 @@
-aligner: align/1 norm/0
+aligner: align/2 norm/0
 
 === verbatim
 anchors=4 below_floor=1
@@ -94,3 +94,11 @@ anchors=1 below_floor=1
 
 === unrelated
 anchors=0 below_floor=0
+
+=== edge_cut_word_between_gaps
+anchors=1 below_floor=0
+alignment text=0 source=[12, 46) coverage=0.7500 "shop—small, dim… and _quiet_ [sic]"
+  substituted quote=[0, 3) "hop" source=[12, 16) "shop"
+  elided quote=[14, 15) "…" source=[27, 28) "…"
+  bracketed quote=[28, 33) "[sic]" source=[41, 45) "[sic"
+  substituted quote=[36, 40) "stoo" source=[45, 46) "]"

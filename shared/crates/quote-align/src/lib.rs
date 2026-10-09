@@ -11,7 +11,8 @@
 //! 1. **Normalise** both sides with [`norm_v0`], which keeps a map from every
 //!    normalised character back to the input code points it came from.
 //! 2. **Seed** candidate windows at exact occurrences of the quotation's
-//!    rarest word 3-grams.
+//!    rarest word n-grams, each gap-free run of words seeding with n-grams of
+//!    its own length, capped at 3.
 //! 3. **Align** tokens inside each window by a weighted edit alignment that
 //!    may drift [`AlignConfig::band`] tokens off the seed's diagonal. An
 //!    ellipsis in the quotation is a free gap, reported as `Elided`; square
@@ -38,7 +39,7 @@ pub use norm::{norm_v0, NormText};
 /// algorithm and the normaliser. It changes whenever the same input could
 /// align differently, so a client keys cached alignments on it; the golden
 /// bank (`bank/golden.txt`) fails when the output changes and this does not.
-pub const ALIGNER_ID: &str = "align/1 norm/0";
+pub const ALIGNER_ID: &str = "align/2 norm/0";
 
 /// `s`'s code points `[range.start, range.end)`, or `None` when the range
 /// falls outside `s` or is reversed.

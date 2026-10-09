@@ -177,7 +177,7 @@ an error, never a default.
 - `coverage` is the quotation's tokens matched exactly over its tokens, in
   `[0, 1]`. A host returns only alignments at or above its own floor, best
   first.
-- `aligner` names the aligner and its normalisation (`align/1 norm/0` on the
+- `aligner` names the aligner and its normalisation (`align/2 norm/0` on the
   reference host). It changes whenever the same input could align
   differently, so a client keys cached alignments on it.
 - How a host picks candidate texts is its own (the reference host takes the
