@@ -13352,6 +13352,7 @@ dependencies = [
  "ignore",
  "image",
  "imageproc",
+ "kernel-types",
  "lettre",
  "libc",
  "mail-parser",

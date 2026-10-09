@@ -292,12 +292,20 @@ impl Iterator for JsonlIterator {
             // keys a document by its url when it has one, so the
             // record's own id survives only here, where a recipe's
             // `change.document.id` reads it.
+            let Some(source) = stated_source(&obj, &id) else {
+                continue;
+            };
             let metadata = match obj.as_object() {
                 Some(map) => {
                     let mut filtered = serde_json::Map::new();
                     for (k, v) in map {
                         match k.as_str() {
                             "content" | "title" | "url" | "text" => continue,
+                            STATED_SHA256 | STATED_EXTRACTOR
+                                if matches!(source, super::DocSource::Hashed { .. }) =>
+                            {
+                                continue
+                            }
                             _ => {
                                 filtered.insert(k.clone(), v.clone());
                             }
@@ -323,7 +331,44 @@ impl Iterator for JsonlIterator {
                 metadata,
                 source_file: Some(source_file),
                 embed_text: None,
+                source: source,
             });
+        }
+    }
+}
+
+use corpus_index::index::{
+    STAGED_EXTRACTOR as STATED_EXTRACTOR, STAGED_SOURCE_SHA256 as STATED_SHA256,
+};
+
+/// A line stating both keys is `Hashed`; a line stating neither is a
+/// `Record`. A line stating one, or a hash that is not 64 lowercase hex, is
+/// refused by name (`None`) rather than demoted to a record.
+fn stated_source(obj: &serde_json::Value, id: &str) -> Option<super::DocSource> {
+    let sha = obj.get(STATED_SHA256).and_then(|v| v.as_str());
+    let extractor = obj.get(STATED_EXTRACTOR).and_then(|v| v.as_str());
+    match (sha, extractor) {
+        (None, None) => Some(super::DocSource::Record),
+        (Some(sha), Some(extractor)) => match kernel_types::Sha256Hash::from_hex(sha) {
+            Some(sha256) => Some(super::DocSource::Hashed {
+                sha256,
+                extractor: extractor.to_string(),
+            }),
+            None => {
+                tracing::warn!(
+                    id,
+                    sha,
+                    "jsonl: stated source_sha256 is not a sha256; line refused"
+                );
+                None
+            }
+        },
+        _ => {
+            tracing::warn!(
+                id,
+                "jsonl: a line states only one of source_sha256 / extractor; refused"
+            );
+            None
         }
     }
 }
@@ -406,6 +451,7 @@ fn format_openalex_work(work: &OpenAlexWork) -> Option<ExtractedDoc> {
         })),
         source_file: None,
         embed_text: None,
+        source: super::DocSource::Record,
     })
 }
 
@@ -516,6 +562,44 @@ mod tests {
         assert_eq!(meta["id"], "ev-7");
         assert_eq!(meta["thread"], 1);
         assert!(meta.get("url").is_none() && meta.get("content").is_none());
+    }
+
+    /// A staged line stating its source is `Hashed`; one stating nothing is a
+    /// `Record`; one stating half, or a malformed hash, is refused, not demoted.
+    #[test]
+    fn a_stated_source_is_hashed_and_a_half_statement_is_refused() {
+        let sha = kernel_types::Sha256Hash::of(b"pdf bytes");
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("staged.jsonl");
+        let mut f = File::create(&file_path).unwrap();
+        let lines = [
+            format!(r#"{{"id":"a","content":"x","source_sha256":"{sha}","extractor":"s@1"}}"#),
+            r#"{"id":"b","content":"y"}"#.to_string(),
+            r#"{"id":"c","content":"z","source_sha256":"ABC","extractor":"s@1"}"#.to_string(),
+            r#"{"id":"d","content":"w","extractor":"s@1"}"#.to_string(),
+        ];
+        for l in &lines {
+            writeln!(f, "{l}").unwrap();
+        }
+        let docs: Vec<_> = JsonlExtractor::new()
+            .extract(&file_path)
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+        let ids: Vec<&str> = docs.iter().map(|d| d.source_id.as_str()).collect();
+        assert_eq!(ids, ["a", "b"], "c and d are refused by name");
+        let stated = super::super::DocSource::Hashed {
+            sha256: sha,
+            extractor: "s@1".into(),
+        };
+        assert_eq!(docs[0].source, stated);
+        assert!(docs[0]
+            .metadata
+            .as_ref()
+            .unwrap()
+            .get("source_sha256")
+            .is_none());
+        assert_eq!(docs[1].source, super::super::DocSource::Record);
     }
 
     #[test]

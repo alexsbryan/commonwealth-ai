@@ -27,7 +27,7 @@ pub use rows::{
 };
 pub use texts::{
     DocSource, DocumentInput, DocumentRecord, StoredText, TextAbsence, TextLookup, TextWriter,
-    DOCUMENTS_TABLE,
+    DOCUMENTS_TABLE, STAGED_EXTRACTOR, STAGED_SOURCE_SHA256,
 };
 
 use std::path::{Path, PathBuf};

@@ -787,6 +787,7 @@ fn process_article_line(
                 metadata: serde_json::to_value(&meta).ok(),
                 source_file: None,
                 embed_text: None,
+                source: super::DocSource::Record,
             });
         }
     }
@@ -908,6 +909,7 @@ fn extract_sections_json(
                 metadata: serde_json::to_value(&meta).ok(),
                 source_file: None,
                 embed_text: None,
+                source: super::DocSource::Record,
             });
         }
 

@@ -59,7 +59,14 @@ pub struct ExtractedDoc {
     /// which would silently truncate to the embedding model's context
     /// window. `None` for the common case.
     pub embed_text: Option<String>,
+    /// Where the bytes came from, as the stored text's record says it:
+    /// `File(path)` for one file the extractor read whole, `Hashed` when a
+    /// front door states the hash and its own extractor, `Record` for one
+    /// record among many in a file. Required, so every extractor decides.
+    pub source: DocSource,
 }
+
+pub use corpus_index::index::DocSource;
 
 /// Trait for extracting documents from source data.
 pub trait Extractor: Send + Sync {

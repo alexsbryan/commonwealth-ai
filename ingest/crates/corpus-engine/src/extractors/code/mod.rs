@@ -556,6 +556,7 @@ impl Extractor for CodeExtractor {
                             content: chunk.content,
                             source_file: None,
                             embed_text: None,
+                            source: super::DocSource::File(abs_path.clone()),
                         })
                     })
                     .collect::<Vec<_>>()

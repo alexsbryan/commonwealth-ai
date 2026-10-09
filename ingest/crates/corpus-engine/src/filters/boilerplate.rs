@@ -238,6 +238,7 @@ mod tests {
             metadata: None,
             source_file: None,
             embed_text: None,
+            source: crate::extractors::DocSource::Record,
         }
     }
 

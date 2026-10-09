@@ -166,6 +166,7 @@ fn build_doc(row: CatalogRow) -> ExtractedDoc {
         metadata: Some(serde_json::Value::Object(metadata)),
         source_file: None,
         embed_text: Some(embed),
+        source: super::DocSource::Record,
     }
 }
 

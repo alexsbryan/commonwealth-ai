@@ -89,6 +89,7 @@ fn process_text_file(
         metadata: None,
         source_file: None,
         embed_text: None,
+        source: super::DocSource::File(path.to_path_buf()),
     }))
 }
 

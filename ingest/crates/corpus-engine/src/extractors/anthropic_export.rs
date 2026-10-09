@@ -185,6 +185,7 @@ fn convert_conversation(c: RawConversation) -> Result<Option<ExtractedDoc>> {
         metadata: Some(meta),
         source_file: None,
         embed_text: None,
+        source: super::DocSource::Record,
     }))
 }
 

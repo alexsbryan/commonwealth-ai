@@ -19,6 +19,9 @@
 //!
 //! `id` and `title` are picked up by `JsonlExtractor`; everything else
 //! becomes chunk metadata (see `ingest/crates/corpus-engine/src/extractors/json.rs`).
+//! Each line also states `source_sha256` and `extractor` ([`stated_source`]):
+//! this staging read the bytes, so it says what they were, and the text
+//! store records the document as `DocSource::Hashed`.
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
@@ -41,6 +44,22 @@ struct StagedLine<'a> {
     title: &'a str,
     content: &'a str,
     source_path: &'a str,
+    /// `corpus_index::index::STAGED_SOURCE_SHA256`, pinned by a test.
+    source_sha256: &'a str,
+    /// `corpus_index::index::STAGED_EXTRACTOR`, pinned by a test.
+    extractor: &'a str,
+}
+
+/// What this staging states about a file it read itself: the sha256 of its
+/// bytes and its own extractor, `local-stage:<ext>@<version>` (`ocr` when the
+/// text came from OCR). The initial ingest writes it on the staged line and
+/// the watched-folder delta returns it with each fetch as
+/// `DocSource::Hashed`, so both paths store the same record.
+pub fn stated_source(path: &Path, ocr: bool) -> std::io::Result<(kernel_types::Sha256Hash, String)> {
+    let sha256 = kernel_types::Sha256Hash::of_reader(File::open(path)?)?;
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("none");
+    let kind = if ocr { "ocr".to_string() } else { ext.to_ascii_lowercase() };
+    Ok((sha256, format!("local-stage:{kind}@{}", env!("CARGO_PKG_VERSION"))))
 }
 
 /// Result of one staging run.
@@ -96,11 +115,15 @@ pub fn stage_blocking(
                 // never be delta-deleted, and same-named notes in
                 // different folders collided into one doc id.
                 let source_id = relative.clone();
+                let (sha, extractor) = stated_source(&meta.path, false)?;
+                let sha = sha.to_hex();
                 let line = StagedLine {
                     id: &source_id,
                     title: &meta.display_name,
                     content: &text,
                     source_path: &relative,
+                    source_sha256: &sha,
+                    extractor: &extractor,
                 };
                 let json = serde_json::to_string(&line)
                     .map_err(|e| std::io::Error::other(format!("serialize: {e}")))?;
@@ -762,11 +785,15 @@ pub async fn append_ocr_to_staging(
                 // never be delta-deleted, and same-named notes in
                 // different folders collided into one doc id.
                 let source_id = relative.clone();
+                let (sha, extractor) = stated_source(&meta.path, true)?;
+                let sha = sha.to_hex();
                 let line = StagedLine {
                     id: &source_id,
                     title: &meta.display_name,
                     content: &text,
                     source_path: &relative,
+                    source_sha256: &sha,
+                    extractor: &extractor,
                 };
                 let json = serde_json::to_string(&line)
                     .map_err(|e| std::io::Error::other(format!("serialize: {e}")))?;
@@ -802,6 +829,22 @@ pub use super::ocr::extract_pdf_via_ocr as ocr_extract_pdf;
 
 #[cfg(test)]
 mod tests {
+    /// The staged line's stated keys are the ones the JSONL extractor reads.
+    #[test]
+    fn the_staged_line_states_the_keys_the_jsonl_extractor_reads() {
+        let line = super::StagedLine {
+            id: "a",
+            title: "a",
+            content: "c",
+            source_path: "a",
+            source_sha256: "s",
+            extractor: "e",
+        };
+        let v = serde_json::to_value(&line).unwrap();
+        assert_eq!(v[corpus_index::index::STAGED_SOURCE_SHA256], "s");
+        assert_eq!(v[corpus_index::index::STAGED_EXTRACTOR], "e");
+    }
+
     use super::*;
     use std::fs;
     use tempfile::tempdir;

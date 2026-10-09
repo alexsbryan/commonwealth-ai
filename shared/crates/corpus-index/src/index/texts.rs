@@ -34,6 +34,12 @@ use crate::error::{Error, Result};
 /// The per-corpus record table, one row per stored text per document.
 pub const DOCUMENTS_TABLE: &str = "documents";
 
+/// The keys a front door that read a file itself states on a staged JSONL
+/// line (svrn's local-corpus staging). The JSONL extractor reads them as
+/// [`DocSource::Hashed`].
+pub const STAGED_SOURCE_SHA256: &str = "source_sha256";
+pub const STAGED_EXTRACTOR: &str = "extractor";
+
 /// Where an extracted document's bytes came from — what its record's
 /// `source_sha256` says. Required on every `ExtractedDoc`, so each extractor
 /// decides.

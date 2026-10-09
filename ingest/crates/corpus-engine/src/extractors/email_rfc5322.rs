@@ -142,7 +142,8 @@ impl Iterator for EmailIterator {
         loop {
             if let Some(stream) = self.mbox.as_mut() {
                 match stream.next_message() {
-                    Ok(Some((bytes, origin))) => match self.parse_message(&bytes, &origin) {
+                    // An mbox member is one record among many in its file.
+                    Ok(Some((bytes, origin))) => match self.parse_message(&bytes, &origin, super::DocSource::Record) {
                         Ok(Some(doc)) => return Some(Ok(doc)),
                         Ok(None) => continue,
                         Err(e) => return Some(Err(e)),
@@ -180,13 +181,18 @@ impl EmailIterator {
     fn parse_one(&self, path: &Path) -> Result<Option<ExtractedDoc>> {
         let bytes = fs::read(path)
             .map_err(|e| Error::Extraction(format!("email: read {}: {e}", path.display())))?;
-        self.parse_message(&bytes, path)
+        self.parse_message(&bytes, path, super::DocSource::File(path.to_path_buf()))
     }
 
     /// Parse ONE RFC-5322 message. `path` is the source file — or, for
     /// mbox members, a synthetic `<file>#<n>` label — used in error
     /// messages and the Message-ID fallback hash.
-    fn parse_message(&self, bytes: &[u8], path: &Path) -> Result<Option<ExtractedDoc>> {
+    fn parse_message(
+        &self,
+        bytes: &[u8],
+        path: &Path,
+        source: super::DocSource,
+    ) -> Result<Option<ExtractedDoc>> {
         if bytes.is_empty() {
             return Ok(None);
         }
@@ -290,6 +296,7 @@ impl EmailIterator {
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string()),
             embed_text: None,
+            source: source,
         }))
     }
 

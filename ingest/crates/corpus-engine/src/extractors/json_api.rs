@@ -290,6 +290,7 @@ impl Iterator for JsonApiIter {
                 metadata,
                 source_file: None,
                 embed_text: None,
+                source: super::DocSource::Record,
             }));
         }
     }

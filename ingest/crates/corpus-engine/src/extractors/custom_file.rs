@@ -83,6 +83,7 @@ impl Iterator for CustomFileIterator {
                             .and_then(|s| s.to_str())
                             .map(|s| s.to_string()),
                         embed_text: None,
+                        source: super::DocSource::File(path.clone()),
                     }))
                 }
                 Err(e) => {

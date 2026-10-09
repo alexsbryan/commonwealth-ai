@@ -115,6 +115,7 @@ impl Extractor for CsvExtractor {
                 metadata: None,
                 source_file: None,
                 embed_text: None,
+                source: super::DocSource::Record,
             }));
             row_counter += 1;
         }

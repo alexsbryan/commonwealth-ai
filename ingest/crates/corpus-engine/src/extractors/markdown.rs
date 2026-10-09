@@ -96,6 +96,7 @@ impl Extractor for MarkdownExtractor {
                     content: sec.content,
                     source_file: None,
                     embed_text: None,
+                    source: super::DocSource::File(source_path.to_path_buf()),
                 })
             })
             .collect();
