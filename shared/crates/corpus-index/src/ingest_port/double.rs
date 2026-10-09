@@ -112,6 +112,7 @@ pub struct IngestPortDouble {
     stranded_partitions: Option<Vec<String>>,
     pack_canonical: Option<Box<daemon::PackCanonicalFn>>,
     unpack_canonical: Option<Box<daemon::UnpackCanonicalFn>>,
+    texts_digest: Option<Box<daemon::TextsDigestFn>>,
     catalog_configs: Option<Vec<(String, CatalogConfig)>>,
     ingest_catalog_work: Option<Box<CatalogWorkFn>>,
     partition_path: Option<Box<CorpusFn<PathBuf>>>,

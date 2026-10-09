@@ -77,7 +77,7 @@ pub struct NodeSeed {
     /// svrn alone: the atlas routes name the absence.
     pub atlas: Option<Arc<dyn AtlasPort>>,
     /// The turn runtime's corpus resolver, which the OICP read surface asks
-    /// what a caller may read (`oicp_evidence::read_scope`). `None` when this
+    /// what a caller may read (`oicp_evidence::readable_corpora`). `None` when this
     /// daemon holds no runtime.
     pub corpus_principal: Option<Arc<dyn sovereign_contracts::traits::PrincipalResolver>>,
 }

@@ -3,13 +3,13 @@
 //! §2-§3): a stored text's record as the wire carries it, the published reason
 //! for each way a corpus cannot answer, the corpora a caller may read, and
 //! search hits carrying their document. The text route
-//! ([`crate::routes_oicp_text`]) and both knowledge routes read these, so none
-//! spells them a second time.
+//! ([`crate::routes_oicp_text`]), the align route ([`crate::routes_oicp_align`])
+//! and both knowledge routes read these, so none spells them a second time.
 
 use std::collections::{BTreeSet, HashMap};
 
 use corpus_index::index::{CorpusIndex, DocumentRecord, TextAbsence};
-use corpus_index::types::ScoredChunk;
+use corpus_index::types::{IndexInfo, ScoredChunk};
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::{reasons, Document, SourceRef};
 use oicp_types::KnowledgeResult;
@@ -51,12 +51,58 @@ pub(crate) fn absence_reason(absence: TextAbsence) -> &'static str {
     }
 }
 
-/// The corpora this caller may read on the OICP surface, decided by the
-/// turn's own decider: [`PrincipalScope`] over the daemon's corpus resolver
-/// (`KeyedOwners` on a keyed daemon, the local owner otherwise), keyed the way
-/// [`crate::api_keys::Caller::scope`] keys a conversation. A keyed daemon
-/// with no resolver attributes nobody, so its callers read nothing.
-pub(crate) fn read_scope(state: &AppState, principal: Option<&Principal>) -> PrincipalScope {
+/// Which installed corpora a caller's kind may read: one half of
+/// [`readable_corpora`]. Never wider than what that caller's
+/// `/v1/knowledge/search` reads, since a stored text is the same words as the
+/// chunks cut from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CorpusReach {
+    /// Every installed corpus: the owner's own processes, and a client
+    /// presenting a credential. A keyed daemon's grant narrows a credential
+    /// through the other half, [`PrincipalScope`].
+    Every,
+    /// The corpora whose recipe declares `query_sharing`: a mesh member reads
+    /// what was declared shared with the mesh, as a federated search does.
+    Shared,
+    /// Nothing: a guest, or a caller whose identity could not be verified.
+    Nothing,
+}
+
+impl CorpusReach {
+    /// The reach of the request's attached principal. `None` (no principal
+    /// attached: the route was mounted outside `client_auth`) reaches nothing.
+    ///
+    /// `Anonymous` reaches every corpus because `client_auth` admits a caller
+    /// that presented nothing only when it is a local process on a listener
+    /// that trusts one (a remote one is a 401 before any handler), and that
+    /// is the owner's own tool: the desktop, `svrn`, a local OICP client.
+    pub(crate) fn of(principal: Option<&Principal>) -> Self {
+        match principal {
+            Some(Principal::LocalOwner { .. })
+            | Some(Principal::Anonymous)
+            | Some(Principal::RemoteClient { .. })
+            | Some(Principal::Asserted { .. }) => Self::Every,
+            Some(Principal::Member { .. }) => Self::Shared,
+            Some(Principal::Guest { .. }) | Some(Principal::Unverified) | None => Self::Nothing,
+        }
+    }
+
+    /// Whether this reach admits `info`'s corpus.
+    pub(crate) fn admits(self, info: &IndexInfo) -> bool {
+        match self {
+            Self::Every => true,
+            Self::Shared => info.query_sharing,
+            Self::Nothing => false,
+        }
+    }
+}
+
+/// The turn's own decider over this caller: [`PrincipalScope`] over the
+/// daemon's corpus resolver (`KeyedOwners` on a keyed daemon, the local owner
+/// otherwise), keyed the way [`crate::api_keys::Caller::scope`] keys a
+/// conversation. A keyed daemon with no resolver attributes nobody, so its
+/// callers read nothing. The other half of [`readable_corpora`].
+fn read_scope(state: &AppState, principal: Option<&Principal>) -> PrincipalScope {
     let id = match principal {
         Some(Principal::Asserted { sub, .. }) => {
             crate::api_keys::Caller::Keyed { sub: sub.clone() }.scope("")
@@ -64,7 +110,7 @@ pub(crate) fn read_scope(state: &AppState, principal: Option<&Principal>) -> Pri
         _ => String::new(),
     };
     let node = &state.inner.node;
-    let scope = match node.corpus_principal.as_deref() {
+    match node.corpus_principal.as_deref() {
         None if node.named_client_tokens.is_keyed() => {
             tracing::warn!(
                 "oicp read scope: a keyed daemon holds no corpus resolver; nothing is readable"
@@ -72,9 +118,38 @@ pub(crate) fn read_scope(state: &AppState, principal: Option<&Principal>) -> Pri
             PrincipalScope::Unresolved
         }
         resolver => PrincipalScope::from_resolver(resolver, &id),
-    };
-    tracing::debug!(principal = ?principal.map(Principal::label), ?scope, "oicp read scope");
-    scope
+    }
+}
+
+/// The installed corpora this caller may read on the OICP surface, sorted and
+/// deduplicated: the one answer the text, align and knowledge routes read. A
+/// corpus is readable only when both deciders admit it: the caller's kind
+/// ([`CorpusReach`]: a member reaches the `query_sharing` corpora, a guest or
+/// an unverified caller nothing) and the turn's own scope ([`read_scope`]:
+/// keyed attribution and the corpus grant).
+pub(crate) fn readable_corpora(
+    state: &AppState,
+    principal: Option<&Principal>,
+    installed: &[IndexInfo],
+) -> Vec<String> {
+    let reach = CorpusReach::of(principal);
+    let scope = read_scope(state, principal);
+    let mut readable: Vec<String> = installed
+        .iter()
+        .filter(|i| reach.admits(i) && scope.admits(&i.corpus_id))
+        .map(|i| i.corpus_id.clone())
+        .collect();
+    readable.sort();
+    readable.dedup();
+    tracing::debug!(
+        principal = ?principal.map(Principal::label),
+        ?reach,
+        ?scope,
+        installed = installed.len(),
+        readable = readable.len(),
+        "oicp read scope"
+    );
+    readable
 }
 
 /// The record a hit names: the hit's own source's, at its lowest ordinal, or
@@ -264,6 +339,28 @@ mod tests {
         assert_eq!(
             absence_reason(TextAbsence::TextNotStored),
             "text not stored"
+        );
+    }
+
+    #[test]
+    fn reach_is_the_principal_s_and_nothing_wider() {
+        let owner = Principal::LocalOwner { sub_identity: None };
+        assert_eq!(CorpusReach::of(Some(&owner)), CorpusReach::Every);
+        assert_eq!(
+            CorpusReach::of(Some(&Principal::Anonymous)),
+            CorpusReach::Every,
+            "an anonymous caller past client_auth is a local process"
+        );
+        let member = Principal::Member {
+            node_id: kernel_types::NodeId::from_u128(7),
+        };
+        assert_eq!(CorpusReach::of(Some(&member)), CorpusReach::Shared);
+        let guest = Principal::Guest { grant: "g".into() };
+        assert_eq!(CorpusReach::of(Some(&guest)), CorpusReach::Nothing);
+        assert_eq!(CorpusReach::of(None), CorpusReach::Nothing);
+        assert_eq!(
+            CorpusReach::of(Some(&Principal::Unverified)),
+            CorpusReach::Nothing
         );
     }
 }

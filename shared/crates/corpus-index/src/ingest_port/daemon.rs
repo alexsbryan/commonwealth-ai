@@ -21,8 +21,9 @@ use super::cancel::CancellationRegistry;
 use super::merge::PartitionMergePort;
 use super::newsworthy::NewsworthyHost;
 use super::{CatalogIngestPort, LocalCorpusPort, ProgressCallback};
-use crate::index::CorpusIndex;
+use crate::index::{CorpusIndex, TextLookup};
 use crate::Result;
+use kernel_types::Sha256Hash;
 
 // ─── Ingest Result ──────────────────────────────────────
 
@@ -326,6 +327,10 @@ pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
     async fn diagnose_indexes(&self) -> String;
     /// Retry `index`'s recorded field-skeleton failures: `(retried, fixed)`.
     fn reprocess_skeleton_failures(&self, index: &CorpusIndex) -> Result<(usize, usize)>;
+    /// `index`'s library digest (OICP v0.5 §2.4), or the absence that stops
+    /// it. The engine derives it (through `oicp_types`, which this crate does
+    /// not name), so the daemon's align route asks for it here.
+    async fn texts_digest(&self, index: &CorpusIndex) -> Result<TextLookup<Sha256Hash>>;
     /// Stream `canonical_path` as a zstd tar at `compression_level`; the
     /// bytes read.
     fn pack_canonical(

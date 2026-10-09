@@ -180,16 +180,19 @@ async fn apply_v04_enrichment(
             test_endpoint: Some("/oicp/v1/recipe/test".into()),
         }
     });
-    // v0.5 §2.2 stored texts, read by name, on the same condition: the
-    // feature and `knowledge.evidence` are derived together or not at all.
+    // v0.5 §2.2-2.3 stored texts, read by name and aligned against, on the
+    // same condition: each feature and its endpoint are derived together or
+    // not at all. `evidence:align` requires `evidence:text`: an alignment's
+    // span is only checkable by reading its text back.
     let evidence = state.inner.node.corpus_engine.is_some().then(|| {
         feats.push(features::EVIDENCE_TEXT.to_string());
+        feats.push(features::EVIDENCE_ALIGN.to_string());
         // §3: every local hit carries its text's record
         // (`oicp_evidence::knowledge_results`).
         feats.push(features::KNOWLEDGE_DOCUMENT.to_string());
         EvidenceEndpoints {
             text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
-            align_endpoint: None,
+            align_endpoint: Some("/oicp/v1/align".into()),
         }
     });
     manifest.features = feats;
@@ -211,7 +214,7 @@ async fn apply_v04_enrichment(
     // daemon at bootstrap; a client reconstructs bit-compatible query
     // embeddings from it for federated search.
     let embed_model = state.local_embed_model().await?;
-    if embed_model.is_some() || ingest.is_some() {
+    if embed_model.is_some() || ingest.is_some() || evidence.is_some() {
         match &mut manifest.knowledge {
             Some(k) => {
                 if embed_model.is_some() {

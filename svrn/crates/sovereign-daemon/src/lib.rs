@@ -134,6 +134,7 @@ pub mod meshapp_http;
 pub mod newsworthy_host;
 pub mod notes_http;
 pub mod ocr_install;
+pub(crate) mod oicp_evidence;
 pub mod openai_http;
 pub mod peer_origin;
 /// svrn's posture, the distribution's choice of which of svrn's own surfaces
@@ -210,7 +211,6 @@ pub mod internal_principal;
 pub mod mesh_principal_gate;
 /// The test that keeps `x-mesh-proof` to one minter and one reader.
 pub mod mesh_proof_header_gate;
-mod oicp_evidence;
 pub mod reshaping;
 pub mod routes_completions;
 pub mod routes_guest_ask;
@@ -220,6 +220,7 @@ pub mod routes_internal;
 pub mod routes_kinds;
 pub mod routes_knowledge;
 pub mod routes_oicp;
+pub mod routes_oicp_align;
 pub mod routes_oicp_ingest;
 pub mod routes_oicp_text;
 pub mod routes_ollama;

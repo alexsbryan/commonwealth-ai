@@ -17,7 +17,10 @@
 //! - cut the slice one code point long and
 //!   `a_text_reads_back_by_its_name_in_code_points` goes red;
 //! - read every installed corpus regardless of the caller and
-//!   `a_text_held_only_outside_the_callers_scope_is_not_held` goes red.
+//!   `a_text_held_only_outside_the_callers_scope_is_not_held` goes red;
+//! - decide the read by the turn's `PrincipalScope` alone, the caller's kind
+//!   unasked, and `a_member_reads_only_the_texts_of_query_sharing_corpora`
+//!   goes red.
 
 use std::borrow::Cow;
 use std::path::Path;
@@ -60,13 +63,25 @@ struct Doc<'a> {
 /// cut into one chunk per paragraph that names it. `store` is the recipe's
 /// `store_texts`; `None` writes no store at all (an index from before it).
 async fn install(indexes: &Path, id: &str, docs: &[Doc<'_>], store: Option<bool>) {
-    let idx = CorpusIndex::create(
+    install_sharing(indexes, id, docs, store, None).await;
+}
+
+/// [`install`], with the recipe's `query_sharing` (`None`: undeclared).
+async fn install_sharing(
+    indexes: &Path,
+    id: &str,
+    docs: &[Doc<'_>],
+    store: Option<bool>,
+    query_sharing: Option<bool>,
+) {
+    let idx = CorpusIndex::create_with_sharing(
         &indexes.join(id),
         id,
         id,
         "qwen3-embedding-0.6b",
         DIM,
         true,
+        query_sharing,
         "CC0",
     )
     .await
@@ -542,15 +557,19 @@ async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
     )
     .await;
     let dir = client_tokens_dir(tmp.path());
-    // A keyed daemon: the key is minted under a declared `none`, as
-    // `svrn daemon key --add` does on an on-prem install.
-    let posture = LoopbackPosture {
-        loopback: Loopback::None,
-        declared: true,
-    };
-    ClientTokenStore::load(Some(dir.clone()), posture)
+    // As `svrn daemon key --add` writes it, declared `none`; the daemon then
+    // reads the keys on disk with no declaration of its own.
+    let installer = ClientTokenStore::load(
+        Some(dir.clone()),
+        LoopbackPosture {
+            loopback: Loopback::None,
+            declared: true,
+        },
+    );
+    installer
         .mint("it", &[KEY_ADMIN_GROUP.to_string()], IT.to_string())
         .unwrap();
+    let posture = LoopbackPosture::resolve(None, Some(&dir)).unwrap();
     let seed = NodeSeed {
         named_client_tokens: Arc::new(ClientTokenStore::load(Some(dir), posture)),
         corpus_principal: Some(Arc::new(KeyedOwners {
@@ -577,6 +596,70 @@ async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
         (status, body["error"].as_str()),
         (404, Some("text not held")),
         "a hint grants nothing: {body}"
+    );
+}
+
+/// A mesh member reads the texts of the corpora declared shared with the mesh
+/// (`query_sharing`) and no others, the reach its federated search has; the
+/// owner reads both. Red against a read scope that asks only the turn's
+/// `PrincipalScope`, which admits every corpus on an unkeyed daemon.
+#[tokio::test]
+async fn a_member_reads_only_the_texts_of_query_sharing_corpora() {
+    use axum::extract::{Path as UrlPath, Query, State};
+    use axum::Extension;
+    use sovereign_contracts::principal::{AttachedPrincipal, Principal};
+    use sovereign_daemon::routes_oicp_text::{text, TextQuery};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    for (id, words, shared) in [
+        ("open", "Shared words.", true),
+        ("own", "Private words.", false),
+    ] {
+        let doc = [Doc {
+            source_id: "s",
+            text: words,
+            metadata: None,
+        }];
+        install_sharing(&indexes, id, &doc, Some(true), Some(shared)).await;
+    }
+    let state = state_over(indexes, NodeSeed::default());
+    let read = |who: Principal, words: &str| {
+        let state = state.clone();
+        let name = Sha256Hash::of_str(words).to_hex();
+        async move {
+            let attached = Some(Extension(AttachedPrincipal(who)));
+            let resp = text(
+                State(state),
+                attached,
+                UrlPath(name),
+                Query(TextQuery::default()),
+            )
+            .await;
+            let status = resp.status().as_u16();
+            let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+                .await
+                .unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            (status, body["error"].as_str().map(str::to_string))
+        }
+    };
+    let member = || Principal::Member {
+        node_id: NodeId::from_u128(7),
+    };
+    let owner = || Principal::LocalOwner { sub_identity: None };
+
+    assert_eq!(read(member(), "Shared words.").await, (200, None));
+    assert_eq!(
+        read(member(), "Private words.").await,
+        (404, Some("text not held".into())),
+        "a corpus not shared with the mesh is not held for a member"
+    );
+    assert_eq!(read(owner(), "Private words.").await, (200, None));
+    assert_eq!(
+        read(Principal::Unverified, "Shared words.").await,
+        (404, Some("text not held".into())),
+        "an identity the node could not verify reads nothing"
     );
 }
 

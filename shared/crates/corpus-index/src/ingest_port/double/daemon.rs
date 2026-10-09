@@ -15,7 +15,7 @@ use sovereign_contracts::daemon_wire::{RecipeDryRunReport, RecipeParameterSchema
 
 use super::{refuse, unprogrammed, IngestPortDouble};
 use crate::corpus::Corpus;
-use crate::index::CorpusIndex;
+use crate::index::{CorpusIndex, DocumentRecord, TextLookup};
 use crate::ingest_port::cancel::CancellationRegistry;
 use crate::ingest_port::daemon::{
     ArticleStats, CorpusDiskStatus, HarnessRunCardView, IndexOpener, IngestPort, IngestResult,
@@ -24,6 +24,7 @@ use crate::ingest_port::daemon::{
 };
 use crate::ingest_port::ProgressCallback;
 use crate::Result;
+use kernel_types::Sha256Hash;
 
 fn io_refuse(method: &str) -> std::io::Error {
     std::io::Error::other(unprogrammed(method))
@@ -35,6 +36,7 @@ pub(super) type PackCanonicalFn =
     dyn Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync;
 pub(super) type UnpackCanonicalFn =
     dyn Fn(Box<dyn std::io::Read + Send>, &Path) -> Result<u64> + Send + Sync;
+pub(super) type TextsDigestFn = dyn Fn(&[DocumentRecord]) -> Sha256Hash + Send + Sync;
 pub(super) type PrepareInstallFn =
     dyn Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync;
 pub(super) type PrepareRecipeInstallFn =
@@ -139,6 +141,16 @@ impl IngestPortDouble {
         f: impl Fn(Box<dyn std::io::Read + Send>, &Path) -> Result<u64> + Send + Sync + 'static,
     ) -> Self {
         self.unpack_canonical = Some(Box::new(f));
+        self
+    }
+
+    /// Program `texts_digest`: the double reads the index's records itself
+    /// and `f` hashes them, so the absences the index names pass through.
+    pub fn on_texts_digest(
+        mut self,
+        f: impl Fn(&[DocumentRecord]) -> Sha256Hash + Send + Sync + 'static,
+    ) -> Self {
+        self.texts_digest = Some(Box::new(f));
         self
     }
 
@@ -376,6 +388,14 @@ impl IngestPort for IngestPortDouble {
             Some(f) => f(reader, dest),
             None => Err(refuse("unpack_canonical")),
         }
+    }
+
+    async fn texts_digest(&self, index: &CorpusIndex) -> Result<TextLookup<Sha256Hash>> {
+        self.record("texts_digest");
+        let Some(f) = &self.texts_digest else {
+            return Err(refuse("texts_digest"));
+        };
+        Ok(index.documents().await?.map(|(_, rows)| f(&rows)))
     }
 
     fn set_yield_hook(&self, _hook: Arc<dyn YieldHook>) {

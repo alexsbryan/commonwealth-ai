@@ -32,6 +32,11 @@ pub mod reasons {
     pub const TEXT_NOT_STORED: &str = "text not stored";
     /// `start`/`end` fall outside the text, or `start > end`.
     pub const RANGE_OUTSIDE_TEXT: &str = "range outside text";
+    /// A requested corpus the caller may not read, or that the host does not
+    /// hold. One answer for both, so a reply never tells a caller which
+    /// corpora exist beyond its reach: the corpus-level twin of
+    /// [`TEXT_NOT_HELD`].
+    pub const CORPUS_NOT_HELD: &str = "corpus not held";
 }
 
 /// Context, in code points, a host puts on each side of a span or slice when

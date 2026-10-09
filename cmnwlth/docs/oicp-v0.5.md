@@ -215,10 +215,13 @@ opaque. The constants are in `oicp_types::evidence::reasons`.
 | `texts not stored` | 404 | the corpus keeps no texts (built before, or opted out) |
 | `text not stored` | 404 | this document's text was not stored |
 | `range outside text` | 400 | `start > end`, or `end` past the text's length |
+| `corpus not held` | — | in `corpora_unavailable`: a requested corpus the caller may not read, or the host does not hold |
 
 In an align reply, a requested corpus that cannot be read is listed in
-`corpora_unavailable` with its reason (`texts not stored`, for one) rather than
-failing the request.
+`corpora_unavailable` with its reason (`corpus not held` or `texts not stored`,
+for two) rather than failing the request. `corpus not held` is one answer for
+both of its cases, so a reply never tells a caller which corpora exist beyond
+its reach.
 
 ## 3. Documents on search hits
 

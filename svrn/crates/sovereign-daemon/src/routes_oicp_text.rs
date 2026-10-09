@@ -4,7 +4,7 @@
 //!
 //! Ranges are half-open code points; with none the reply is the whole text.
 //! Only the corpora the caller may read are consulted
-//! ([`crate::oicp_evidence::read_scope`]), in `corpus_id` order, so the
+//! ([`crate::oicp_evidence::readable_corpora`]), in `corpus_id` order, so the
 //! record served is the lowest `(corpus_id, source.id, ordinal)` the caller
 //! may read and a text held only outside that set is `text not held`. The
 //! `corpus` hint names where the client found the name; when nothing the
@@ -23,7 +23,7 @@ use oicp_types::evidence::{is_sha256_hex, reasons, TextSlice, DEFAULT_CONTEXT};
 use serde::Deserialize;
 use sovereign_contracts::principal::AttachedPrincipal;
 
-use crate::oicp_evidence::{absence_reason, read_scope, wire_document};
+use crate::oicp_evidence::{absence_reason, readable_corpora, wire_document};
 use crate::routes_internal::ErrorBody;
 use crate::state::AppState;
 
@@ -81,7 +81,6 @@ pub async fn text(
         );
     };
     let principal = attached.as_ref().map(|Extension(AttachedPrincipal(p))| p);
-    let scope = read_scope(&state, principal);
     let installed = match engine.installed_indexes().await {
         Ok(i) => i,
         Err(e) => {
@@ -92,13 +91,7 @@ pub async fn text(
             );
         }
     };
-    let mut corpora: Vec<String> = installed
-        .into_iter()
-        .map(|i| i.corpus_id)
-        .filter(|c| scope.admits(c))
-        .collect();
-    corpora.sort();
-    corpora.dedup();
+    let corpora = readable_corpora(&state, principal, &installed);
 
     let found = match find(&engine, &corpora, &sha, query.corpus.as_deref()).await {
         Ok(f) => f,

@@ -243,6 +243,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 "/oicp/v1/text/{text_sha256}",
                 get(crate::routes_oicp_text::text),
             )
+            // OICP v0.5 §2.3: align a quotation against the stored texts the
+            // caller may read. Advertised as `evidence:align` beside
+            // `knowledge.evidence.align_endpoint` (`routes_oicp`).
+            .route("/oicp/v1/align", post(crate::routes_oicp_align::align))
             // Ollama-native /api/* compatibility shim. Pure translation over the
             // OpenAI handlers above — no new inference/routing logic. Chat +
             // generate carry the same peer-admission gate as /v1/chat/completions

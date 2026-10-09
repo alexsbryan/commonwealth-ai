@@ -454,6 +454,13 @@ impl IngestPort for CorpusEngine {
         crate::reprocess_skeleton_failures(index)
     }
 
+    async fn texts_digest(
+        &self,
+        index: &CorpusIndex,
+    ) -> crate::error::Result<corpus_index::index::TextLookup<kernel_types::Sha256Hash>> {
+        crate::text_store::texts_digest(index).await
+    }
+
     fn pack_canonical(
         &self,
         canonical_path: &Path,
