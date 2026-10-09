@@ -78,6 +78,12 @@ does not depend on it keeps running. `ralph.py unpark <row>` (or deleting the
 package) releases it with its counters reset. HUMAN- rows and rows outside a
 frozen scope (`scope_file`) are held the same way.
 
+A detached run that will overrun its budget through no fault of its own (a
+slow row on a loaded host) can be given more time instead of being ended
+and struck: `ralph.py extend <unit> <duration>` writes `<control>/extend/<unit>`,
+and the loop adds it to the run's budget on its next tick, logs it, and
+removes the file. The extended deadline binds as the first one did.
+
 ## The precondition guard
 
 Before every dispatch the loop checks, in order: the queue parses (a

@@ -1044,6 +1044,25 @@ class IncidentTests(unittest.TestCase):
         self.assertEqual(rig.entry("a"), {})           # done: its counters go with it
         self.assertEqual((rig.wd / "shared.txt").read_text(), "both\n")
 
+    def test_an_operator_extension_keeps_a_run_past_its_first_budget(self):
+        # A detached run the operator expects to overrun (ersilia's battery on
+        # a loaded host, 2026-10-09) gets more time, logged, not killed; the
+        # extended deadline still binds.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        rig.procs.sessions += [lambda s: s.result("await", "60", "--", "true") and 0]
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.AWAITING)
+        ralph.request_extension(ralph.Paths(rig.wd), "a", "2m")   # what `extend a 2m` writes
+        rig.tick(3)
+        self.assertIs(rig.state("a"), U.AWAITING)        # past 60s, inside 60s + 120s
+        self.assertEqual(rig.procs.killed, [])
+        self.assertEqual(rig.entry("a")["run"]["budget_s"], 180)
+        self.assertFalse((rig.wd / "ralph/extend/a").exists())   # applied once
+        rig.tick(4)
+        self.assertEqual(len(rig.procs.killed), 1)       # the extended deadline still binds
+        self.assertIn("passed its 3m00s budget", rig.entry("a")["strike_why"][0])
+
     def test_a_red_merge_check_sends_the_lane_back_unmerged(self):
         # The project's own pre-merge check (ralph/merge-check, optional) runs
         # in the lane before its branch lands. Red is a strike carrying the

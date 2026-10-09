@@ -25,6 +25,7 @@ Subcommands:
   stop       an operator stop (--drain: let running sessions finish)
   start      clear the operator stop and start the installed job
   unpark     release a row the loop parked for the operator
+  extend     give an awaiting unit's detached run more time (applied on the next tick)
   watch      the watchdog: the loop is down, or its heartbeat is stale
   models     show or set the models a queue runs on
   plan       print the queue's head and the model it routes to
@@ -1030,6 +1031,7 @@ class Paths:
     needs_human: str = "ralph/NEEDS_HUMAN.md"
     waiting: str = "ralph/waiting"
     parked: str = "ralph/parked"          # one <row-id>.md package per row waiting on the operator
+    extend: str = "ralph/extend"          # one <unit> file per operator extension of a run's budget
     models: str = "ralph/models.env"
     heartbeat: str = "ralph/.heartbeat"
     charter: str = "ralph/CHARTER.md"
@@ -1055,6 +1057,7 @@ class Paths:
         return {"control_dir": control_dir, "done": f"{control_dir}/DONE",
                 "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
                 "waiting": f"{control_dir}/waiting", "parked": f"{control_dir}/parked",
+                "extend": f"{control_dir}/extend",
                 "heartbeat": f"{control_dir}/.heartbeat",
                 "director_commits": f"{control_dir}/.director-commits",
                 "log_dir": f"{control_dir}/log"}
@@ -2143,6 +2146,13 @@ class Loop:
         for unit in self.units_in(U.AWAITING):
             entry = self.ledger.units[unit]
             r = entry["run"]
+            ext = self._take_extension(unit)
+            if ext:
+                r["budget_s"] += ext
+                r["deadline"] += ext
+                say(f"unit {unit}: the operator extended its run's budget by {fmt_secs(ext)} "
+                    f"to {fmt_secs(r['budget_s'])}")
+                self.ledger.save()
             proc = Proc(r["pid"], r["started"])
             code = self._exit_code(r)
             if code is None:
@@ -2780,6 +2790,19 @@ class Loop:
             return None
         return t if r["begun"] <= t <= self.clock() else None
 
+    def _take_extension(self, unit):
+        """An operator's `extend`: seconds to add to the unit's run budget, read
+        once and removed; 0 when there is none, or it does not parse (named)."""
+        f = self.paths.p(self.paths.extend) / unit
+        if not f.exists():
+            return 0
+        text = f.read_text().strip()
+        f.unlink(missing_ok=True)
+        if not text.isdigit():
+            say(f"unit {unit}: extension {f} ignored — {text!r} is not a number of seconds")
+            return 0
+        return int(text)
+
     def _do_run_over_budget(self, unit, entry):
         r = entry["run"]
         why = (f"background run {r['argv']} passed its {fmt_secs(r['budget_s'])} budget and the "
@@ -3291,7 +3314,7 @@ def state_dir_for(paths, label):
     return d
 
 
-RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md", "ralph/parked/",
+RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md", "ralph/parked/", "ralph/extend/",
                    "ralph/.heartbeat", "ralph/waiting", "ralph/models.env",
                    "ralph/log.txt", "ralph/.director-commits")
 
@@ -3768,6 +3791,30 @@ def cmd_start(args):
     return 0
 
 
+def request_extension(paths, unit, duration):
+    """`extend`: more time for a unit's detached run. One file per unit under
+    the control dir; the running loop adds it to the run's budget on its next
+    tick, logs it, and removes the file. Seconds requested, or ValueError."""
+    secs = parse_duration(duration)
+    if not secs:
+        raise ValueError(f"{duration!r} is not a duration (60, 30m, 2h)")
+    d = paths.p(paths.extend)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / unit).write_text(f"{secs}\n")
+    return secs
+
+
+def cmd_extend(args):
+    try:
+        secs = request_extension(paths_for(args), args.unit, args.duration)
+    except ValueError as e:
+        print(f"extend: {e}", file=sys.stderr)
+        return 2
+    say(f"extend: {args.unit} — {fmt_secs(secs)} more for its detached run, applied on the "
+        "loop's next tick")
+    return 0
+
+
 def cmd_unpark(args):
     paths = paths_for(args)
     pkg = paths.p(paths.parked) / f"{args.row}.md"
@@ -4063,6 +4110,12 @@ def build_parser():
     queue_flag(p)
     p.add_argument("row")
     p.set_defaults(fn=cmd_unpark)
+
+    p = sub.add_parser("extend", help="give an awaiting unit's detached run more time")
+    queue_flag(p)
+    p.add_argument("unit")
+    p.add_argument("duration")
+    p.set_defaults(fn=cmd_extend)
 
     p = sub.add_parser("models")
     queue_flag(p, label_default="")
