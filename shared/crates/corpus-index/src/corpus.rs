@@ -209,12 +209,12 @@ pub fn corpus_chunk_count(dir: &Path) -> Option<(usize, &'static str)> {
 /// back as `source_recipe_sha256`.
 pub const RECIPE_STAMP_FILENAME: &str = "_recipe.sha256";
 
-/// The sha256 of a recipe's TOML text, lowercase hex: THE one spelling of a
-/// recipe's identity, stamped by the install and compared by the install
-/// route, so the two cannot disagree.
+/// The sha256 of a recipe's TOML text in the published encoding
+/// (`kernel_types::Sha256Hash`, D3): THE one spelling of a recipe's identity,
+/// stamped by the install and compared by the install route, so the two
+/// cannot disagree.
 pub fn recipe_sha256(recipe_toml: &str) -> String {
-    use sha2::Digest;
-    format!("{:x}", sha2::Sha256::digest(recipe_toml.as_bytes()))
+    kernel_types::Sha256Hash::of_str(recipe_toml).to_hex()
 }
 
 impl Corpus {
@@ -235,13 +235,11 @@ impl Corpus {
     pub fn recipe_sha256_in(dir: impl AsRef<Path>) -> Option<String> {
         let path = Self::recipe_stamp_in(dir);
         let raw = std::fs::read_to_string(&path).ok()?;
-        let sha = raw.trim();
-        let hex = |b: u8| b.is_ascii_digit() || (b'a'..=b'f').contains(&b);
-        if sha.len() == 64 && sha.bytes().all(hex) {
-            return Some(sha.to_string());
+        let parsed = kernel_types::Sha256Hash::from_hex(raw.trim());
+        if parsed.is_none() {
+            tracing::warn!(path = %path.display(), "corpus: recipe stamp is not a sha256, ignored");
         }
-        tracing::warn!(path = %path.display(), "corpus: recipe stamp is not a sha256, ignored");
-        None
+        parsed.map(|h| h.to_hex())
     }
 
     /// Stamp `sha` as the recipe this corpus was installed from, by
