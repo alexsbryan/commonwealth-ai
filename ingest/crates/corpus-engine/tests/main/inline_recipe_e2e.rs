@@ -125,6 +125,28 @@ fn dir_recipe(dir: &Path) -> String {
     out
 }
 
+#[test]
+fn the_conformance_fixture_recipe_loads_unmodified() {
+    let r = Recipe::from_toml(FIXTURE).expect("the normative example loads");
+    assert!(matches!(
+        r.acquire,
+        corpus_engine::recipe::AcquirerConfig::Inline
+    ));
+    let docs = documents();
+    let names: Vec<&str> = docs.iter().map(|(n, _, _)| n.as_str()).collect();
+    assert_eq!(names, ["okafor2019", "lindqvist2021", "harbour-notes"]);
+    assert!(docs[0].1.starts_with("Rivers that cross three borders"));
+    assert!(
+        docs[0]
+            .2
+            .as_deref()
+            .is_some_and(|m| m.starts_with(r#"{"id":"okafor2019","type":"article-journal""#)),
+        "metadata is kept as the recipe wrote it: {:?}",
+        docs[0].2
+    );
+    assert_eq!(docs[2].2, None, "harbour-notes declares none");
+}
+
 #[tokio::test]
 async fn the_inline_fixture_and_its_file_form_store_the_same_library() {
     let inline_dir = tempfile::tempdir().unwrap();

@@ -4,10 +4,6 @@
 use super::*;
 use kernel_types::Sha256Hash;
 
-/// The normative example (oicp-v0.5.md §6.1), unmodified.
-const FIXTURE: &str =
-    include_str!("../../../../cmnwlth/crates/oicp-conformance/fixture/library.recipe.toml");
-
 fn recipe(acquire: &str, documents: &str) -> std::result::Result<Recipe, String> {
     let toml = format!(
         "[corpus]\nid = \"c\"\nname = \"C\"\ndescription = \"d\"\nlicense = \"MIT\"\n\
@@ -20,34 +16,12 @@ fn recipe(acquire: &str, documents: &str) -> std::result::Result<Recipe, String>
 const INLINE: &str = "type = \"inline\"";
 const FILES: &str = "type = \"local_file\"\npath = \"/tmp/x\"";
 
-#[test]
-fn the_conformance_fixture_recipe_loads_unmodified() {
-    let r = Recipe::from_toml(FIXTURE).expect("the normative example loads");
-    assert!(matches!(r.acquire, AcquirerConfig::Inline));
-    let names: Vec<&str> = r
-        .documents
-        .iter()
-        .map(|d| match d {
-            DeclaredDocument::Inline { name, .. } => name.as_str(),
-            DeclaredDocument::File { source, .. } => source.as_str(),
-        })
-        .collect();
-    assert_eq!(names, ["okafor2019", "lindqvist2021", "harbour-notes"]);
-    let DeclaredDocument::Inline { metadata, text, .. } = &r.documents[0] else {
-        panic!("inline");
-    };
-    assert!(text.starts_with("Rivers that cross three borders"));
-    assert!(
-        metadata
-            .as_deref()
-            .is_some_and(|m| m.starts_with(r#"{"id":"okafor2019","type":"article-journal""#)),
-        "metadata is kept as the recipe wrote it: {metadata:?}"
-    );
-    let DeclaredDocument::Inline { metadata, .. } = &r.documents[2] else {
-        panic!("inline");
-    };
-    assert_eq!(metadata, &None, "harbour-notes declares none");
-}
+/// Two inline documents, one declaring metadata. The conformance fixture
+/// (the normative example) is loaded by `tests/main/inline_recipe_e2e.rs`:
+/// a package's `src/` embeds nothing outside its crate (boundary-gate 3b).
+const TWO: &str = "[[document]]\nname = \"folio\"\ntext = \"An archive.\"\n\
+                   metadata = '{\"title\":\"The Folio and the Box\"}'\n\
+                   [[document]]\nname = \"notes\"\ntext = \"Tuesday.\"\n";
 
 #[test]
 fn a_block_carries_text_or_source_never_both_never_neither() {
@@ -118,7 +92,7 @@ fn a_recipe_without_blocks_serializes_as_before() {
     let r = recipe(FILES, "").unwrap();
     assert!(r.documents.is_empty());
     assert!(!toml::to_string(&r).unwrap().contains("[[document]]"));
-    let r = Recipe::from_toml(FIXTURE).unwrap();
+    let r = recipe(INLINE, TWO).unwrap();
     let again = Recipe::from_toml(&toml::to_string(&r).unwrap()).unwrap();
     assert_eq!(again.documents, r.documents, "the blocks round-trip");
 }
@@ -153,17 +127,17 @@ fn declared_metadata_replaces_the_extractors_for_its_source_only() {
 
 #[test]
 fn an_inline_documents_metadata_is_found_by_its_name() {
-    let r = Recipe::from_toml(FIXTURE).unwrap();
+    let r = recipe(INLINE, TWO).unwrap();
     let declared = DeclaredMetadata::of(&r, None);
     let stated = DocSource::Hashed {
         sha256: Sha256Hash::of_str("x"),
         extractor: "plaintext@0".into(),
     };
-    let got = declared.input("t", "lindqvist2021", 0, &stated, None);
+    let got = declared.input("t", "folio", 0, &stated, None);
     assert!(got
         .metadata
         .as_deref()
         .is_some_and(|m| m.contains("The Folio and the Box")));
-    let got = declared.input("t", "harbour-notes", 0, &stated, None);
+    let got = declared.input("t", "notes", 0, &stated, None);
     assert_eq!(got.metadata, None);
 }
