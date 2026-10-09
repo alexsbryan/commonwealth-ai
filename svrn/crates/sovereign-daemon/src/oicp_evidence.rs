@@ -188,24 +188,39 @@ fn record_for<'a>(
     })
 }
 
+/// Why a hit carries no document, as one of `reasons::HIT_ABSENCES` (v0.5
+/// §3): what a text-store absence means for a chunk that named its text. A
+/// chunk naming a text its corpus holds no record of is a damaged store, not
+/// one that holds nothing.
+fn hit_absence(absence: TextAbsence) -> &'static str {
+    match absence {
+        TextAbsence::TextsNotStored => reasons::TEXTS_NOT_STORED,
+        TextAbsence::TextNotStored => reasons::TEXT_NOT_STORED,
+        TextAbsence::NotHeld => reasons::DOCUMENT_UNREADABLE,
+    }
+}
+
 /// The document each hit was cut from, by chunk id (v0.5 §3), read through
-/// the chunk's text name. A hit without one — a pre-v4 chunk, a corpus that
-/// keeps no texts — is absent from the map, and why is traced.
+/// the chunk's text name, or why it has none: every hit with a chunk id is in
+/// the map, as `Ok(document)` or `Err(reason)` with the reason one of
+/// `reasons::HIT_ABSENCES`, and each kind is counted in the trace.
 async fn hit_documents(
     index: &CorpusIndex,
     corpus_id: &str,
     hits: &[ScoredChunk],
-) -> HashMap<u64, Document> {
-    let mut out = HashMap::new();
+) -> HashMap<u64, Result<Document, &'static str>> {
     let ids: Vec<u64> = hits.iter().filter_map(|h| h.chunk_id).collect();
     if ids.is_empty() {
-        return out;
+        return HashMap::new();
     }
+    let all = |reason: &'static str| -> HashMap<u64, Result<Document, &'static str>> {
+        ids.iter().map(|&id| (id, Err(reason))).collect()
+    };
     let names = match index.chunk_text_sha256s(&ids).await {
         Ok(n) => n,
         Err(e) => {
-            tracing::warn!(corpus = corpus_id, error = %e, "knowledge hits: chunk text names unread; hits carry no document");
-            return out;
+            tracing::warn!(corpus = corpus_id, error = %e, "knowledge hits: chunk text names unread; every hit names its document unreadable");
+            return all(reasons::DOCUMENT_UNREADABLE);
         }
     };
     let wanted: Vec<Sha256Hash> = names
@@ -215,50 +230,64 @@ async fn hit_documents(
         .into_iter()
         .collect();
     let records = match index.documents_for(&wanted).await {
-        Ok(Ok(r)) => r,
+        Ok(Ok(r)) => Ok(r),
         Ok(Err(absence)) => {
             tracing::debug!(
                 corpus = corpus_id,
-                reason = absence_reason(absence),
-                "knowledge hits: no records; hits carry no document"
+                reason = hit_absence(absence),
+                "knowledge hits: no records; each hit names why"
             );
-            return out;
+            Err(hit_absence(absence))
         }
         Err(e) => {
-            tracing::warn!(corpus = corpus_id, error = %e, "knowledge hits: records unread; hits carry no document");
-            return out;
+            tracing::warn!(corpus = corpus_id, error = %e, "knowledge hits: records unread; every hit naming a text names it unreadable");
+            Err(reasons::DOCUMENT_UNREADABLE)
         }
     };
+    let mut out = HashMap::new();
+    let (mut unnamed, mut unread) = (0usize, 0usize);
     for hit in hits {
         let Some(id) = hit.chunk_id else { continue };
         let Some(name) = names.get(&id) else {
-            tracing::debug!(
-                corpus = corpus_id,
-                chunk = id,
-                "knowledge hits: the chunk names no text"
-            );
+            // Written before the text store, or by a recipe that stores
+            // none: the chunk names no text.
+            unnamed += 1;
+            out.insert(id, Err(reasons::TEXTS_NOT_STORED));
             continue;
+        };
+        let records = match &records {
+            Ok(r) => r,
+            Err(reason) => {
+                out.insert(id, Err(*reason));
+                continue;
+            }
         };
         let Some(rec) = records
             .get(name)
             .and_then(|recs| record_for(recs, hit.source_doc_id.as_deref()))
         else {
             tracing::warn!(corpus = corpus_id, chunk = id, %name, "knowledge hits: the chunk names a text with no record");
+            unread += 1;
+            out.insert(id, Err(reasons::DOCUMENT_UNREADABLE));
             continue;
         };
         match wire_document(rec) {
             Ok(d) => {
-                out.insert(id, d);
+                out.insert(id, Ok(d));
             }
             Err(e) => {
-                tracing::error!(corpus = corpus_id, chunk = id, error = %e, "knowledge hits: record not served")
+                tracing::error!(corpus = corpus_id, chunk = id, error = %e, "knowledge hits: record not served");
+                unread += 1;
+                out.insert(id, Err(reasons::DOCUMENT_UNREADABLE));
             }
         }
     }
     tracing::debug!(
         corpus = corpus_id,
         hits = hits.len(),
-        with_document = out.len(),
+        with_document = out.values().filter(|d| d.is_ok()).count(),
+        naming_no_text = unnamed,
+        unreadable = unread,
         "knowledge hits: documents read"
     );
     out
@@ -276,30 +305,39 @@ pub(crate) async fn knowledge_results(
 ) -> Vec<KnowledgeResult> {
     let mut documents = hit_documents(index, corpus_id, &hits).await;
     hits.into_iter()
-        .map(|r| KnowledgeResult {
-            // Provenance the SERVING index stamped, forwarded rather than
-            // dropped (TOPOLOGY §10 rung 9.1). `stamped_custody` and not
-            // `custody` so "this index recorded no class" stays ABSENT on the
-            // wire rather than becoming the string "unknown" — the requester
-            // joins absence into a refusal.
-            custody: r
-                .provenance
-                .stamped_custody()
-                .map(|c| c.as_str().to_string()),
-            grain: Some(r.provenance.grain().as_str().to_string()),
-            document: r.chunk_id.and_then(|id| documents.remove(&id)),
-            // Worker D names the absence here (v0.5 §3), with readable_corpora.
-            document_absent: None,
-            content: r.content,
-            title: r.title,
-            corpus_id: corpus_id.to_string(),
-            url: r.url,
-            score: r.score,
-            metadata: HashMap::new(),
-            chunk_id: r.chunk_id,
-            source_doc_id: r.source_doc_id,
-            peer_name: None,
-            peer_node_id: None,
+        .map(|r| {
+            // Every hit carries its document or names why not (v0.5 §3). A
+            // hit with no stable chunk id names no text.
+            let (document, document_absent) = match r.chunk_id.and_then(|id| documents.remove(&id))
+            {
+                Some(Ok(d)) => (Some(d), None),
+                Some(Err(reason)) => (None, Some(reason.to_string())),
+                None => (None, Some(reasons::TEXTS_NOT_STORED.to_string())),
+            };
+            KnowledgeResult {
+                // Provenance the SERVING index stamped, forwarded rather than
+                // dropped (TOPOLOGY §10 rung 9.1). `stamped_custody` and not
+                // `custody` so "this index recorded no class" stays ABSENT on the
+                // wire rather than becoming the string "unknown" — the requester
+                // joins absence into a refusal.
+                custody: r
+                    .provenance
+                    .stamped_custody()
+                    .map(|c| c.as_str().to_string()),
+                grain: Some(r.provenance.grain().as_str().to_string()),
+                document,
+                document_absent,
+                content: r.content,
+                title: r.title,
+                corpus_id: corpus_id.to_string(),
+                url: r.url,
+                score: r.score,
+                metadata: HashMap::new(),
+                chunk_id: r.chunk_id,
+                source_doc_id: r.source_doc_id,
+                peer_name: None,
+                peer_node_id: None,
+            }
         })
         .collect()
 }

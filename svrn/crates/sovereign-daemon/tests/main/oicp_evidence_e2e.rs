@@ -821,6 +821,46 @@ async fn a_corpus_built_at_another_embedding_width_still_serves_its_texts() {
     );
 }
 
+/// Every hit carries its document or names why not (v0.5 §3): a hit from a
+/// corpus built before the text store says `texts not stored`, and one from a
+/// corpus that stores its texts carries the document and no absence. Red
+/// while every hit left `document_absent` empty.
+#[tokio::test]
+async fn a_hit_from_before_the_text_store_says_texts_not_stored() {
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    for (id, words, store) in [
+        ("old", "Words from before texts.", None),
+        ("new", "Words from after texts.", Some(true)),
+    ] {
+        let doc = [Doc {
+            source_id: "s",
+            text: words,
+            metadata: None,
+        }];
+        install(&indexes, id, &doc, store).await;
+    }
+    let addr = spawn_router(client_router(state_over(indexes, NodeSeed::default()))).await;
+    let base = format!("http://{addr}");
+
+    let (raw, hits) = search(&base, "Words", "old", None).await;
+    let [hit] = hits.as_slice() else {
+        panic!("one hit: {raw}")
+    };
+    assert!(hit.document.is_none(), "{raw}");
+    assert_eq!(
+        hit.document_absent.as_deref(),
+        Some("texts not stored"),
+        "{raw}"
+    );
+    let (raw, hits) = search(&base, "Words", "new", None).await;
+    let [hit] = hits.as_slice() else {
+        panic!("one hit: {raw}")
+    };
+    assert!(hit.document.is_some(), "{raw}");
+    assert_eq!(hit.document_absent, None, "{raw}");
+}
+
 #[tokio::test]
 async fn the_manifest_advertises_the_text_read_and_documents_on_hits() {
     let tmp = tempfile::tempdir().unwrap();
