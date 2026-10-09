@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 mod cache;
-mod citations;
 mod passes;
 mod projection;
 mod runner_support;
@@ -116,7 +115,3 @@ pub enum DocumentReadField {
 #[cfg(test)]
 #[path = "document_read_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "document_read/contract_tests.rs"]
-mod contract_tests;

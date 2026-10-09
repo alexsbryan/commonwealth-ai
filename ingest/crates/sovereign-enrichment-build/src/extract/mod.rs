@@ -158,7 +158,7 @@ pub async fn run_extract(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        let chapters = if policies.document_reading {
+        let chapters = if policies.reads_documents() {
             match rebuild_corpus_state(&cfg) {
                 Ok((chapters, _)) => chapters,
                 Err(error) => {

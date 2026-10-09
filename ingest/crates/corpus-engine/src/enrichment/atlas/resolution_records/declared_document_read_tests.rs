@@ -30,7 +30,6 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
     ];
     let documents = SectionDocuments::from_chunk_rows([("sec_1", &[41u64, 42][..])], &rows);
     let mut policies = OntologyPolicies::default();
-    policies.document_reading = true;
     policies.shape.types = vec![
         OntologyTypeDecl {
             name: "case".into(),
@@ -503,7 +502,6 @@ fn local_subject_fixture() -> (
         row(52, "label-event", "Label compatibility added to #1373."),
     ];
     let mut policies = OntologyPolicies::default();
-    policies.document_reading = true;
     policies.shape.types = vec![
         OntologyTypeDecl {
             name: "case".into(),

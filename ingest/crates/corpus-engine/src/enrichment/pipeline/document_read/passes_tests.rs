@@ -4,7 +4,6 @@ use serde_json::{json, Value};
 
 use super::super::tests::{input_chapter, policies, row};
 use super::*;
-use crate::enrichment::ontology::DocumentReader;
 
 fn scripted(answers: Vec<Value>) -> (InferenceFn, Arc<Mutex<Vec<ChatPrompt>>>) {
     let seen = Arc::new(Mutex::new(Vec::new()));
@@ -21,9 +20,7 @@ fn scripted(answers: Vec<Value>) -> (InferenceFn, Arc<Mutex<Vec<ChatPrompt>>>) {
 }
 
 fn passes_policies() -> OntologyPolicies {
-    let mut p = policies();
-    p.document_reader = DocumentReader::Passes;
-    p
+    policies()
 }
 
 fn none() -> Value {
@@ -189,14 +186,4 @@ async fn a_refused_locate_call_is_never_a_located_line() {
     let envelope = read(&chapter, &p, &infer).await.unwrap();
     let outcome: Value = serde_json::from_str(&envelope).unwrap();
     assert_eq!(outcome["documents"][0]["status"], "could_not_judge");
-}
-
-#[test]
-fn the_contract_fingerprint_keeps_the_two_readers_apart() {
-    let one_shot = policies();
-    let passes = passes_policies();
-    assert_ne!(
-        super::super::contract_fingerprint(&one_shot),
-        super::super::contract_fingerprint(&passes)
-    );
 }

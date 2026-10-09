@@ -1,6 +1,6 @@
 use super::*;
 use crate::enrichment::ontology::Force;
-use serde_json::{json, Value};
+use serde_json::json;
 
 #[test]
 fn document_read_accepts_every_declared_claim_force() {
@@ -42,24 +42,6 @@ fn document_read_preserves_commissive_force_without_licensing_an_act() {
         .force = Some(Force::Commissive);
     assert_ne!(assertive_contract, contract_fingerprint(&policies));
 
-    let prompt = compose(&chapter, &policies, "commissive-test");
-    assert!(prompt
-        .system
-        .contains("not permission or authorization for this system"));
-    let schema = prompt.response_schema.unwrap();
-    let read = schema["properties"]["documents"]["items"]["oneOf"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|branch| branch["properties"]["status"]["const"] == "read")
-        .unwrap();
-    let kinds: Vec<Value> = read["properties"]["claims"]["items"]["oneOf"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|branch| branch["properties"]["kind"]["const"].clone())
-        .collect();
-    assert_eq!(kinds, vec![json!("membership"), json!("reported_status")]);
     assert_eq!(
         super::super::schema::contract_value(&policies)["claim_types"][0]["force"],
         "commissive"

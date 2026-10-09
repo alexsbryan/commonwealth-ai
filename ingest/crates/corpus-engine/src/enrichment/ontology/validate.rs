@@ -90,6 +90,12 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         ));
     }
 
+    for (key, instead) in crate::recipe_ontology::language::retired_keys(&block.body) {
+        out.warnings.push(format!(
+            "[enrichment.ontology] `{key}` is retired and ignored: {instead}. Remove the key."
+        ));
+    }
+
     let labels_set = policies.derivation.tension.label.is_some()
         || policies.shape.types.iter().any(|t| t.label.is_some());
     if block.body.contains_key("vocabulary") && labels_set {

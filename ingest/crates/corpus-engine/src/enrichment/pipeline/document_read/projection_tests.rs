@@ -22,7 +22,6 @@ type = "atlas"
 domain = "declared records"
 [enrichment.ontology]
 version = 1
-document_reading = true
 
 [[enrichment.ontology.types]]
 name = "issue"

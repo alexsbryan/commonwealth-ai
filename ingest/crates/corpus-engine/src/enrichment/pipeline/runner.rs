@@ -26,7 +26,6 @@ use super::run_output::RunOutputWriter;
 use super::trait_def::Pipeline;
 use super::types::*;
 use super::vector_clustering::cluster_vectors;
-use crate::enrichment::ontology::DocumentReader;
 use crate::error::{Error, Result};
 use crate::types::EmbedFn;
 
@@ -795,7 +794,7 @@ impl PhaseRunner {
         // runs with an empty bank (no few-shot context) the first time
         // through.
         let policies = self.pipeline.declaration();
-        let document_reading = policies.document_reading;
+        let document_reading = policies.reads_documents();
         let exemplar_path = self.exemplar_path(PipelinePhase::Questions);
         let bank =
             runner_load_exemplar_bank(document_reading, targets.len(), &exemplar_path, &self.embed)
@@ -1002,10 +1001,10 @@ impl PhaseRunner {
 
             let chat_result: Result<String> = if let Some(cached) = cached_response {
                 Ok(cached)
-            } else if document_reading && policies.document_reader == DocumentReader::Passes {
-                // The passes reader asks many small questions through the
-                // same chat port and returns the one-shot reader's envelope,
-                // so the parse, validation and cache below are shared.
+            } else if document_reading {
+                // The one reader of a declaration (ONTOLOGY_METHOD §Reading):
+                // many small questions through the chat port, answered into
+                // the envelope the parse, validation and cache below read.
                 tracing::debug!(chapter_id = %chapter.chapter_id, "phase1.document_read_passes");
                 super::document_read::read_passes(chapter, &policies, &self.chat).await
             } else {

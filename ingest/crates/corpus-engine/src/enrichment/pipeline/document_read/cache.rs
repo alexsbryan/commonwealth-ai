@@ -35,14 +35,14 @@ pub fn phase1_cache_matches(
     output: &Phase1Output,
     policies: &OntologyPolicies,
 ) -> std::result::Result<(), String> {
-    if !policies.document_reading {
+    if !policies.reads_documents() {
         if output.questions_by_chapter.iter().any(|chapter| {
             chapter
                 .section_extraction
                 .as_ref()
                 .is_some_and(|section| section.document_read.is_some())
         }) {
-            return Err("cached Phase-1 output was produced with document_reading enabled".into());
+            return Err("cached Phase-1 output was produced by a declared reading this declaration no longer asks for".into());
         }
         return Ok(());
     }
@@ -84,7 +84,7 @@ pub fn checkpoint_processed_ids(
     chapters: &[ChapterInput],
     policies: &OntologyPolicies,
 ) -> HashSet<String> {
-    if !policies.document_reading {
+    if !policies.reads_documents() {
         let read_successes: BTreeSet<String> = entries
             .iter()
             .filter_map(|entry| match entry {
@@ -137,7 +137,7 @@ pub fn validate_checkpoint(
     chapters: &[ChapterInput],
     policies: &OntologyPolicies,
 ) -> std::result::Result<(), String> {
-    if !policies.document_reading {
+    if !policies.reads_documents() {
         if entries.iter().any(|entry| match entry {
             Phase1CheckpointEntry::Success { extracted, .. } => extracted
                 .section_extraction
@@ -146,7 +146,7 @@ pub fn validate_checkpoint(
             Phase1CheckpointEntry::Failure { .. } => false,
         }) {
             return Err(
-                "checkpoint contains declared document reads but document_reading is disabled"
+                "checkpoint contains declared document reads but this declaration reads no documents"
                     .into(),
             );
         }

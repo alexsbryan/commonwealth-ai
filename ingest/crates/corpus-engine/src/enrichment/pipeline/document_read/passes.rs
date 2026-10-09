@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The passes reader (svrn/docs/specs/ONTOLOGY_METHOD.md §Reading): a fixed
-//! plan of small closed questions generated from the contract, each answered
-//! as a distribution over single-token labels in one forward pass through
-//! ingest's census funnel (`decision_call`). The one-shot reader asks the
-//! local model to find, label, name and cite at once, and fails at it (stage
-//! label .43, party .24-.44; crm-proof loops 7-12).
+//! The reader of a declaration (svrn/docs/specs/ONTOLOGY_METHOD.md §Reading):
+//! a fixed plan of small closed questions generated from the contract, each
+//! answered as a distribution over single-token labels in one forward pass
+//! through ingest's census funnel (`decision_call`). It replaced a one-shot
+//! reader that asked the local model to find, label, name and cite at once and
+//! failed at it (stage label .43, party .24-.44; crm-proof loops 7-12).
 //!
 //! **Locate** asks every non-empty line, off the document prefilled with its
 //! numbered lines, which declared claim kind it states; consecutive lines of
@@ -14,8 +14,7 @@
 //! folded body it was measured on. A field this plan cannot ask yet (a
 //! reference, a quantity, a time, open text) is unknown with that reason,
 //! never guessed. The answers assemble into the `{"documents": [...]}`
-//! envelope the one-shot reader's model returns, so parsing, validation, the
-//! section cache and everything downstream are shared.
+//! envelope that parsing, validation and the section cache read.
 //!
 //! No field's read precision is declared yet, so its argmax decides, as
 //! RESOLVE's Ring 0 does, so it can be measured; "none of them" or a refused

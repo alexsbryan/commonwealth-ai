@@ -1,11 +1,8 @@
 use super::*;
 
 #[test]
-fn v1_document_reading_is_a_registered_persisted_policy() {
-    let body: toml::Table = toml::from_str(
-        r#"
-document_reading = true
-
+fn v1_retired_reader_keys_are_known_ignored_and_never_persisted() {
+    let declared = r#"
 [[types]]
 name = "case"
 kind = "entity"
@@ -16,37 +13,36 @@ name = "membership"
 kind = "claim"
 force = "assertive"
 subject = "case"
-"#,
-    )
-    .unwrap();
+"#;
     let registry = OntologyLanguageRegistry::builtin();
-
-    assert!(
-        registry.unknown_keys(&body).is_empty(),
-        "the V1 registry must recognize the opt-in key"
-    );
     let language = registry.get(1).unwrap();
-    let policies = language.parse(&body).unwrap();
-    assert_eq!(
-        serde_json::to_value(policies).unwrap()["document_reading"],
-        true,
-        "the parsed policy carrier must retain the opt-in"
-    );
+    let plain: toml::Table = toml::from_str(declared).unwrap();
+    let keyed: toml::Table = toml::from_str(&format!(
+        "document_reading = false\ndocument_reader = \"one_shot\"\n{declared}"
+    ))
+    .unwrap();
     assert!(
-        serde_json::to_value(OntologyPolicies::default())
-            .unwrap()
-            .get("document_reading")
-            .is_none(),
-        "default-off policies must preserve legacy serialized bytes"
+        registry.unknown_keys(&keyed).is_empty(),
+        "a retired key is named as retired, never as a typo"
     );
+    assert_eq!(
+        retired_keys(&keyed)
+            .iter()
+            .map(|(k, _)| *k)
+            .collect::<Vec<_>>(),
+        ["document_reading", "document_reader"]
+    );
+    let policies = language.parse(&keyed).unwrap();
+    assert_eq!(policies, language.parse(&plain).unwrap());
+    assert!(policies.reads_documents());
+    let wire = serde_json::to_value(&policies).unwrap();
+    assert!(wire.get("document_reading").is_none() && wire.get("document_reader").is_none());
 }
 
 #[test]
 fn v1_document_reading_supports_a_commissive_metadata_subject() {
     let body: toml::Table = toml::from_str(
         r#"
-document_reading = true
-
 [[types]]
 name = "case"
 kind = "entity"

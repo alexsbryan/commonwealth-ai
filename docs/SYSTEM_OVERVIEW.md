@@ -617,28 +617,26 @@ question the pipeline asks about a type is a method on the resolved
   schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
   the navigation map; a relation declared with both ends also gets one focused
   Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`).
-  Opt-in `document_reading = true` adds an accountable Phase-1 read over the
-  hydrated source documents for every declared claim kind whose subject is a
-  source-free entity with `identity_criterion` or a metadata-sourced entity
-  with declared identity fields, preserving its declared force. Metadata-backed
-  subjects bind to existing projected entities by exact identity and are never
-  re-extracted. V1 validation names and refuses unsupported claim kinds.
-  `DocumentRead` outcomes, evidence and `subject_local_ref`s travel through
-  `SectionExtraction` cache/checkpoints, keyed by the read contract and source
-  context; generic questions are skipped on this path, and accountable source
-  identity and subject fields flow to RESOLVE. Its decoder selects document-scoped
-  source-citation handles; validation expands them to exact source quotes and
-  rebuilds the qualified claim projection before caching. Unknown or foreign
-  handles refuse the claim; exact source verification remains mandatory. `false` preserves the default
-  path. `document_reader = "passes"` (default `one_shot`, refused without
-  `document_reading`) asks the same declared reading as small forced choices
-  instead (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading): Locate asks
-  every numbered line which declared claim kind it states, then Choose asks
-  each closed-valued field of the claim and of its subject RESOLVE's READ
-  question through the census funnel (`decision_call`); a field it cannot ask
-  yet (reference, quantity, time, open text) is Unknown with that reason. It
-  returns the one-shot envelope, so parsing, validation and the section cache
-  are shared, and its rendered questions are part of the contract fingerprint.
+  A declaration whose claim kinds all have a force and a `subject` that is a
+  source-free type with an `identity_criterion` or a metadata-sourced entity with
+  declared identity fields is read document by document, with no switch
+  (`OntologyPolicies::reads_documents`; a mix refuses at parse; the retired
+  `document_reading` / `document_reader` keys load, are ignored and are named,
+  `V1_RETIRED_KEYS`). Metadata-backed subjects bind to existing projected
+  entities by exact identity and are never re-extracted. `DocumentRead`
+  outcomes, evidence and `subject_local_ref`s travel through `SectionExtraction`
+  cache/checkpoints, keyed by the read contract and source context; generic
+  questions are skipped on this path, and accountable source identity and
+  subject fields flow to RESOLVE. One reader asks: the passes reader
+  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). Locate asks every
+  numbered line which declared claim kind it states, then Choose asks each
+  closed-valued field of the claim and of its subject RESOLVE's READ question
+  through the census funnel (`decision_call`); a field it cannot ask yet
+  (reference, quantity, time, open text) is Unknown with that reason. Its
+  answers assemble into the `DocumentRead` envelope that validation checks
+  against the document (exact source verification is mandatory) and the section
+  cache keeps; its rendered questions are part of the contract fingerprint
+  (`schema::contract_value`, version 4). The one-shot reader is deleted.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from the ONE document its evidence anchor lands in

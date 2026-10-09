@@ -12,13 +12,9 @@ use crate::enrichment::pipeline::types::ChapterInput;
 #[path = "document_read/claim_check_tests.rs"]
 mod claim_check_tests;
 
-#[path = "document_read/citation_tests.rs"]
-mod citation_tests;
-
 pub(super) fn policies() -> OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
         r#"
-document_reading = true
 guidance = "Read issue and case assertions."
 
 [[types]]
@@ -132,19 +128,60 @@ fn response(documents: Value) -> String {
     json!({"documents": documents}).to_string()
 }
 
-fn one_document_read() -> String {
-    response(json!([{
-        "document_id":"doc-a",
-        "status":"read",
-        "claims":[claim(
-            "membership",
-            "case-842",
-            "Case 842",
-            "Issue 842 was closed by pull request #1380.",
-            "unknown"
-        )]
-    }]))
+/// A model for the passes reader: Locate answers the first declared kind for a
+/// line holding `needle` and "none of them" otherwise; Choose answers the first
+/// value. Every prompt is kept, and every call counted.
+fn passes_model(
+    needle: &'static str,
+    calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    prompts: std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
+) -> crate::types::InferenceFn {
+    std::sync::Arc::new(move |prompt, _| {
+        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        prompts.lock().unwrap().push(prompt.clone());
+        let labels: Vec<String> = prompt.response_schema.as_ref().unwrap()["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l.as_str().unwrap().to_string())
+            .collect();
+        let locate = prompt.phase_id.as_deref() == Some("document_passes_locate");
+        let asked_line = prompt.user.split("\n\nLine ").nth(1).unwrap_or("");
+        let pick = if locate && !asked_line.contains(needle) {
+            labels.last().unwrap().clone()
+        } else {
+            labels[0].clone()
+        };
+        let dist: serde_json::Map<String, Value> = labels
+            .iter()
+            .map(|l| {
+                (
+                    l.clone(),
+                    json!(if *l == pick {
+                        0.9
+                    } else {
+                        0.1 / labels.len() as f64
+                    }),
+                )
+            })
+            .collect();
+        let answer = Value::Object(dist).to_string();
+        Box::pin(async move { Ok(answer) })
+    })
 }
+
+fn counted(
+    needle: &'static str,
+) -> (
+    crate::types::InferenceFn,
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) {
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let model = passes_model(needle, calls.clone(), Default::default());
+    (model, calls)
+}
+
+const CLOSED: &str = "closed by pull request";
 
 fn reader_runner(
     root: &std::path::Path,
@@ -201,15 +238,7 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
     let policies = policies();
     let calls = Arc::new(AtomicUsize::new(0));
     let prompts = Arc::new(Mutex::new(Vec::new()));
-    let called = calls.clone();
-    let captured = prompts.clone();
-    let answer = one_document_read();
-    let chat: crate::types::InferenceFn = Arc::new(move |prompt, _| {
-        called.fetch_add(1, Ordering::SeqCst);
-        captured.lock().unwrap().push(prompt.clone());
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let chat = passes_model(CLOSED, calls.clone(), prompts.clone());
     let temp = tempfile::tempdir().unwrap();
     let runner = reader_runner(temp.path(), &policies, chat, false);
     let result = runner
@@ -221,11 +250,9 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .await
         .unwrap();
 
-    assert_eq!(
-        calls.load(Ordering::SeqCst),
-        1,
-        "one chapter batch is one provider call"
-    );
+    // One Locate per line, then one Choose per closed-valued field the
+    // located kind and its subject declare (`project`; `number` is open).
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
     assert!(result.output.questions_by_chapter[0].questions.is_empty());
     let read = result.output.questions_by_chapter[0]
         .section_extraction
@@ -246,35 +273,15 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         "metadata.author is not substituted for quoted speaker"
     );
     let prompts = prompts.lock().unwrap();
-    let prompt = &prompts[0];
-    assert_eq!(
-        prompt.response_schema_name.as_deref(),
-        Some("declared_document_read")
-    );
-    assert_eq!(
-        prompt.response_schema.as_ref().unwrap()["properties"]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
-        ["documents"],
-        "dedicated schema carries no generic atlas facets"
-    );
+    let phases: Vec<&str> = prompts
+        .iter()
+        .map(|p| p.phase_id.as_deref().unwrap_or(""))
+        .collect();
+    assert_eq!(phases, ["document_passes_locate", "document_passes_choose"]);
     assert!(
-        !prompt
-            .response_schema
-            .as_ref()
-            .unwrap()
-            .to_string()
-            .contains("author"),
-        "metadata-source entities are reference context only"
+        prompts.iter().all(|p| !p.user.contains("Alice")),
+        "a metadata-sourced author is never asked about"
     );
-    assert!(prompt.user.contains("\"author\": \"Alice\""));
-    assert!(prompt.user.contains("metadata_source_references"));
-    assert!(prompt
-        .system
-        .contains("Metadata-sourced entities are reference context"));
     assert!(phase1_cache_matches(&[chapter.clone()], &result.output, &policies).is_ok());
     let default_policy = OntologyPolicies::default();
     assert!(phase1_cache_matches(&[], &result.output, &default_policy).is_err());
@@ -349,14 +356,7 @@ async fn cached_document_read_replays_without_calling_inference() {
     let chapter = input_chapter(&rows);
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let calls = Arc::new(AtomicUsize::new(0));
-    let called = calls.clone();
-    let answer = one_document_read();
-    let first_chat: crate::types::InferenceFn = Arc::new(move |_, _| {
-        called.fetch_add(1, Ordering::SeqCst);
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first_chat, calls) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first_chat, true)
         .phase_1_extract_questions(
             &[chapter.clone()],
@@ -365,7 +365,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         )
         .await
         .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
 
     let panic_chat: crate::types::InferenceFn =
         Arc::new(|_, _| panic!("identical accountable read must use the section cache"));
@@ -374,7 +374,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
 
     let mut identity_policy = policies.clone();
     identity_policy
@@ -392,7 +392,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
@@ -405,11 +405,7 @@ async fn changed_author_does_not_reuse_a_cached_document_read() {
     let changed = [row(1, "doc-a", body, r#"{"author":"Bob"}"#)];
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let answer = one_document_read();
-    let first: crate::types::InferenceFn = Arc::new(move |_, _| {
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first, _) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[input_chapter(&original)],
@@ -450,11 +446,7 @@ async fn changed_body_does_not_reuse_a_cached_document_read() {
     )];
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let answer = one_document_read();
-    let first: crate::types::InferenceFn = Arc::new(move |_, _| {
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first, _) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[input_chapter(&original)],
@@ -489,11 +481,7 @@ async fn changed_read_contract_does_not_reuse_a_cached_document_read() {
     let chapter = input_chapter(&rows);
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let answer = one_document_read();
-    let first: crate::types::InferenceFn = Arc::new(move |_, _| {
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first, _) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[chapter.clone()],

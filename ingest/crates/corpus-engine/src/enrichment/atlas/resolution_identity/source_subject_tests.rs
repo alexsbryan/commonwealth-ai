@@ -12,7 +12,7 @@ use super::super::super::resolution_sources::project_source_atoms;
 use super::super::super::writer::write_atlas_full;
 use crate::enrichment::ontology::OntologyV1;
 use crate::enrichment::pipeline::document_read::{
-    compose, parse_response, validate_and_stamp, DocumentReadField,
+    parse_response, validate_and_stamp, DocumentReadField,
 };
 use crate::enrichment::pipeline::types::{ChapterInput, PhaseFailureKind};
 use crate::types::EmbedFn;
@@ -24,7 +24,6 @@ const CARRIER_EMAIL: &str = "review@example.test";
 fn policies() -> crate::enrichment::ontology::OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
         r#"
-document_reading = true
 
 [[types]]
 name = "person"
@@ -127,9 +126,6 @@ fn section(
         }]
     })
     .to_string();
-    let prompt = compose(chapter, policies, "source-subject-test");
-    assert!(prompt.user.contains("metadata_source_references"));
-    assert!(prompt.user.contains(ALICE_EMAIL));
     let mut parsed = parse_response(&raw, policies).unwrap();
     let mut section = parsed.section_extraction.take().unwrap();
     section.section_id = chapter.chapter_id.clone();

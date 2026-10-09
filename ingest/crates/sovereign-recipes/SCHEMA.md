@@ -794,8 +794,6 @@ Allowed values:
 | `vocabulary` | `Option<OntologyVocabulary>` | no | type default | Version-0 term overrides, still honoured. In version 1 prefer `label` on a type and `tension.label`; `validate` warns when both are set. |
 | `must_not` | `Vec<String>` | no | type default | Things the corpus must never be used for ("give dosing advice"). Read by the extraction prompt and the answer gate. Block-level. |
 | `types` | `Vec<OntologyTypeDecl>` | no | type default | The declared types (`[[enrichment.ontology.types]]`), each specializing one atom kind. |
-| `document_reading` | `bool` | no | type default | Opt in at `[enrichment.ontology]` with `document_reading = true` to read claims whose subjects are either source-free records with an `identity_criterion` or metadata-sourced entities with declared identity fields, preserving each type's force. Validation refuses and names unsupported declarations. Default false preserves the shared Phase-1 prompt and output bytes. |
-| `document_reader` | `DocumentReader` | no | type default | How that reading asks: `"passes"` (small forced choices) or the default `"one_shot"`. |
 | `max_entities_per_section` | `Option<usize>` | no | type default | How many entities one section may introduce in Phase 1. Absent takes the shipped schema's cap of 15 — raise it for a corpus whose sections enumerate (a data table, a list of recipients). Outside `MIN_ENTITIES_PER_SECTION`..=`MAX_ENTITIES_PER_SECTION` (5..=60) the recipe refuses at load rather than clamping. |
 | `voices` | `VoicesDecl` | no | type default | Who speaks in the corpus, and which speakers are not subject matter. |
 | `change` | `ChangeDecl` | no | type default | What holds when: the clock and which claim types supersede. |
@@ -1328,7 +1326,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `document_reading`, `document_reader`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
@@ -1345,6 +1343,16 @@ and carries attributes in four value families: `text` (optionally a closed
 `values` set), `quantity` (optionally a `unit`), `time` (optionally a
 `range`), `ref` (an instance of the declared type `of`). A claim type must
 name its `force`; the parser refuses one without it.
+
+How Phase 1 reads follows from the declaration, with no switch. When every
+claim type has a `force` and a `subject` naming either a type with an
+`identity_criterion` and no `source` or a metadata-sourced entity with declared
+identity fields, each document is read on its own by a fixed plan of small
+closed questions generated from the declaration: which lines state each claim
+kind, then each closed-valued field. When no claim type qualifies, sections are
+read by the general extractor. A declaration that mixes the two is refused,
+naming the claim types the plan cannot read. The old `document_reading` and
+`document_reader` keys are ignored, and `recipe validate` names them.
 
 ```toml
 [enrichment.ontology]
@@ -1541,7 +1549,7 @@ hops = 2
 budget = 8
 ```
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `document_reading`,
+Keys: `guidance`, `vocabulary`, `must_not`, `types`,
 `max_entities_per_section`, `voices`, `change`, `tension`, `derive`,
 `patterns`, `navigation`, `paths`, `sets`, `folds`. `recipe validate` checks that every
 `specializes`, `role_of`, `from`, `to`, `participants`, `of`, `subject` and

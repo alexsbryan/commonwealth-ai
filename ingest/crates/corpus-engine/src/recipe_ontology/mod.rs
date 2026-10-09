@@ -209,7 +209,7 @@ type = "atlas"
     }
 
     #[test]
-    fn declared_document_reading_recipe_roundtrips_and_requires_a_record_type() {
+    fn reading_is_chosen_by_the_declaration_and_the_retired_keys_change_nothing() {
         let recipe = r#"
 [corpus]
 id = "document-read"
@@ -227,7 +227,6 @@ type = "atlas"
 domain = "issue records"
 [enrichment.ontology]
 version = 1
-document_reading = true
 
 [[enrichment.ontology.types]]
 name = "case"
@@ -244,42 +243,48 @@ kind = "claim"
 force = "assertive"
 subject = "case"
 "#;
-        let parsed = Recipe::from_toml(recipe).expect("the opt-in recipe parses");
+        let parsed = Recipe::from_toml(recipe).expect("a reading declaration parses");
         let spec = parsed
             .custom_atlas_spec()
             .expect("custom atlas policy persists");
-        assert!(spec.policies().document_reading);
+        assert!(spec.policies().reads_documents());
         let wire = serde_json::to_vec(&spec).unwrap();
         let restored: crate::enrichment::pipeline::CustomAtlasSpec =
             serde_json::from_slice(&wire).unwrap();
         assert_eq!(restored, spec);
-        assert!(restored.policies().document_reading);
+        assert!(restored.policies().reads_documents());
 
-        let invalid = recipe.replace("identity_criterion = \"same issue identifier\"\n", "");
-        let error = Recipe::from_toml(&invalid).unwrap_err().to_string();
-        assert!(error.contains("document_reading"), "{error}");
+        // The retired keys load, change nothing and are named by validate.
+        for retired in [
+            "document_reading = false\n",
+            "document_reading = true\ndocument_reader = \"one_shot\"\n",
+        ] {
+            let keyed = recipe.replace("version = 1\n", &format!("version = 1\n{retired}"));
+            let keyed_spec = Recipe::from_toml(&keyed)
+                .expect("a retired key never refuses")
+                .custom_atlas_spec()
+                .expect("custom atlas policy persists");
+            assert_eq!(keyed_spec.policies(), spec.policies(), "{retired}");
+        }
 
-        // `document_reader` says how the declared reading asks: it round-trips
-        // beside `document_reading`, and alone it is refused, never ignored.
-        let passes = recipe.replace(
-            "document_reading = true\n",
-            "document_reading = true\ndocument_reader = \"passes\"\n",
-        );
-        let spec = Recipe::from_toml(&passes)
-            .expect("the passes recipe parses")
+        // No claim kind the reader can read: no reading, no refusal.
+        let unread = recipe.replace("identity_criterion = \"same issue identifier\"\n", "");
+        let unread = Recipe::from_toml(&unread).expect("an unread declaration parses");
+        assert!(!unread
             .custom_atlas_spec()
-            .expect("custom atlas policy persists");
-        assert_eq!(
-            spec.policies().document_reader,
-            crate::enrichment::ontology::DocumentReader::Passes
+            .unwrap()
+            .policies()
+            .reads_documents());
+
+        // A mix is refused, naming the kind the reader cannot read.
+        let mixed = format!(
+            "{recipe}\n[[enrichment.ontology.types]]\nname = \"aside\"\nkind = \"claim\"\nforce = \"assertive\"\n"
         );
-        let wire = serde_json::to_vec(&spec).unwrap();
-        let restored: crate::enrichment::pipeline::CustomAtlasSpec =
-            serde_json::from_slice(&wire).unwrap();
-        assert_eq!(restored, spec);
-        let alone = passes.replace("document_reading = true\n", "");
-        let error = Recipe::from_toml(&alone).unwrap_err().to_string();
-        assert!(error.contains("document_reader"), "{error}");
+        let error = Recipe::from_toml(&mixed).unwrap_err().to_string();
+        assert!(
+            error.contains("cannot silently omit") && error.contains("aside"),
+            "{error}"
+        );
     }
 
     /// The Ward recipe's shape (`research/ontology-apps/ward/recipe.toml`):
@@ -289,7 +294,7 @@ subject = "case"
     /// recipe is validated by `sovereign recipe validate` and the reader
     /// trial, which run over the actual file.
     #[test]
-    fn a_commissive_commitment_about_a_sourced_person_opts_in() {
+    fn a_commissive_commitment_about_a_sourced_person_is_read() {
         let recipe = r#"
 [corpus]
 id = "ward-shape"
@@ -333,11 +338,7 @@ kind = "claim"
 force = "assertive"
 subject = "deal"
 "#;
-        let opt_in = recipe.replace(
-            "[enrichment.ontology]\nversion = 1\n",
-            "[enrichment.ontology]\nversion = 1\ndocument_reading = true\n",
-        );
-        let parsed = Recipe::from_toml(&opt_in).expect("the opt-in Ward-shaped recipe validates");
+        let parsed = Recipe::from_toml(recipe).expect("the Ward-shaped recipe validates");
         let policies = parsed
             .custom_atlas_spec()
             .expect("a declared ontology makes a custom atlas")
@@ -348,7 +349,7 @@ subject = "deal"
             .iter()
             .find(|ty| ty.name == "commitment")
             .expect("the declared commitment remains present");
-        assert!(policies.document_reading);
+        assert!(policies.reads_documents());
         assert_eq!(
             commitment.force,
             Some(crate::enrichment::ontology::Force::Commissive)

@@ -350,8 +350,6 @@
       "vocabulary",
       "must_not",
       "types",
-      "document_reading",
-      "document_reader",
       "max_entities_per_section",
       "voices",
       "change",
