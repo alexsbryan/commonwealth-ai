@@ -393,6 +393,23 @@ pub(crate) fn align_exact(
     })
 }
 
+/// `s` lowercased one code point at a time, keeping any character whose
+/// lowercase is not exactly one code point. Every code point stays where it
+/// was, so a range [`align_exact`] reports in folded copies is the same range
+/// of the originals. For a caller that matches case-insensitively: case is
+/// the caller's call, and the aligner keeps it.
+pub(crate) fn fold_case(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            let mut lower = c.to_lowercase();
+            match (lower.next(), lower.next()) {
+                (Some(l), None) => l,
+                _ => c,
+            }
+        })
+        .collect()
+}
+
 /// The first normalised position of `hay` made from input code point `at` or
 /// later (`hay.len()` when none is): `norm_v0`'s map back is in input order.
 fn norm_position(hay: &quote_align::NormText, at: usize) -> usize {
