@@ -419,7 +419,7 @@ Acquirer → Extractor → Filter → Chunker → Embedder → Index
 
 | Stage | Built-ins |
 |---|---|
-| Acquirer | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`, `web_crawl`, `custom` (runtime-registered seam) |
+| Acquirer | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`, `web_crawl`, `inline` (the recipe's own `[[document]]` texts, OICP v0.5 §4.1), `custom` (runtime-registered seam) |
 | Extractor | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `json`, `markdown`, `xml_sections`, `wikipedia_jsonl`, `wikipedia_structured`, `wikipedia_catalog`, `wikipedia_api_article`, `gutenberg_catalog`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email`, `anthropic_export` / `chatgpt_export`, `alignment_workspace`, `custom`, `described_asset`, `tabular_atoms`. `ExtractorConfig` in `recipe.rs` is the SSOT. `column_aware` is an *enrichment-time* extractor, not a recipe `type =` value |
 | Filter | `pageview_rank`, `title_list`, `knowledge_density`, `boilerplate`, composed via `[[filter]]` (`Any` / `All`) |
 | Chunker | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet`, `threaded_turns` |
@@ -487,6 +487,17 @@ every input had one (`text_store::carry_texts`), a snapshot captures
 sha256 of `oicp_types::evidence::texts_digest_preimage` over the records
 (`text_store::texts_digest`). Published names are `kernel_types::Sha256Hash`;
 `ContentHash` stays BLAKE3 and nothing converts between them.
+
+**`[[document]]` blocks** (`recipe_documents.rs`, OICP v0.5 §4.1). A block
+carries `name` + `text` (an inline document, read by `[acquire] type =
+"inline"`) or `source` (metadata for one file under the source root), never
+both; `Recipe::from_toml` refuses anything else. The inline acquirer writes
+each text to `_downloads/<corpus>/inline/<name>` and `InlineExtractor` runs
+the recipe's `[extract]` over each file alone, stating the result as source id
+`name` and `DocSource::Hashed` (the sha256 of the text's UTF-8). `metadata` is
+JSON text, validated at load and stored verbatim; `DeclaredMetadata::input`
+builds every `store_document` input, and is the one place declared metadata
+replaces the extractor's.
 
 **Three readiness questions, three accessors — do not conflate them.** A
 directory under `indexes/` is not an installed corpus; an ingest in flight

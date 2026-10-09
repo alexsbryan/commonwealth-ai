@@ -63,6 +63,7 @@ Optional pre-built index block. When present, the engine can download a pre-buil
 | `parameters` | `BTreeMap<String, ParameterSpec>` | no | type default | Install-time parameters declared by the recipe. Concrete values are supplied by the user at `corpus install` time and interpolate into the `[acquire]` block via `{name}` placeholders. Lets a financial journalist (for example) ship one `sec-filings` recipe and let downstream users plug in their own entity list / form types / date range. See [`ParameterSpec`] and [`Recipe::resolve_parameters`]. |
 | `display` | `Option<DisplayMeta>` | no | type default | Presentation hints for UI surfaces (Atlas View rail grouping, Settings → Knowledge tile icons, etc.). Pure UI metadata — retrieval and ingest ignore this block. Drives the "Conversations" group in the Atlas View when corpora declare `category = "conversation"`. `#[serde(default)]` so recipes pre-dating this block still parse — see the back-compat policy at the top of this module. |
 | `retrieval` | `RetrievalConfig` | no | type default | Retrieval-time behaviour hints (see [`RetrievalConfig`]). Unlike `[display]`, the runtime *reads* this when retrieving from the corpus. `#[serde(default)]` so recipes pre-dating the block parse. |
+| `document` | `Vec<crate::recipe_documents::DeclaredDocument>` | no | type default | `[[document]]` blocks: inline documents, or metadata declared for the files the acquirer yields ([`crate::recipe_documents`]). |
 
 ## `RetrievalConfig`
 
@@ -368,6 +369,12 @@ Generic REST API acquirer. Replaces the never-implemented `api_paginated` stub w
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `path` | `String` | **yes** | — |  |
+
+### `type = "inline"`
+
+The recipe carries its documents as `[[document]]` blocks with `name` and `text` (OICP v0.5 §4.1), so a host that shares no disk with the client can install it. See [`crate::recipe_documents`].
+
+_No fields._
 
 ### `type = "huggingface_dataset"`
 

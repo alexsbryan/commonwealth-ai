@@ -124,7 +124,10 @@ pub struct DocumentInput<'a> {
     pub source_id: &'a str,
     pub ordinal: u32,
     pub source: &'a DocSource,
-    pub metadata: Option<&'a serde_json::Value>,
+    /// The record's metadata as JSON text, stored exactly as given: the
+    /// recipe's declared text verbatim, or the extractor's value serialized.
+    /// corpus-engine decides which (`recipe_documents::DeclaredMetadata`).
+    pub metadata: Option<std::borrow::Cow<'a, str>>,
 }
 
 /// The one writer of texts and their records for one index directory.
@@ -216,7 +219,7 @@ impl TextWriter {
             source_id: doc.source_id.to_string(),
             source_sha256,
             ordinal: doc.ordinal,
-            metadata: doc.metadata.map(|m| m.to_string()),
+            metadata: doc.metadata.map(std::borrow::Cow::into_owned),
             text_stored: self.store_texts,
         });
         Ok(Some(text_sha256))

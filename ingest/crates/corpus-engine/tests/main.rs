@@ -52,6 +52,8 @@ mod http_api_pagination_e2e;
 mod index_cache_residency;
 #[path = "main/ingest_failure_modes.rs"]
 mod ingest_failure_modes;
+#[path = "main/inline_recipe_e2e.rs"]
+mod inline_recipe_e2e;
 #[path = "main/investigation_pipeline_e2e.rs"]
 mod investigation_pipeline_e2e;
 #[path = "main/newsworthy_integration.rs"]

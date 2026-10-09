@@ -260,6 +260,11 @@ pub struct Recipe {
     /// corpus. `#[serde(default)]` so recipes pre-dating the block parse.
     #[serde(default)]
     pub retrieval: RetrievalConfig,
+
+    /// `[[document]]` blocks: inline documents, or metadata declared for the
+    /// files the acquirer yields ([`crate::recipe_documents`]).
+    #[serde(default, rename = "document", skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<crate::recipe_documents::DeclaredDocument>,
 }
 
 // The settings the index persists are DEFINED in the `corpus-index` leaf and
@@ -1162,6 +1167,11 @@ pub enum AcquirerConfig {
     },
     #[serde(rename = "local_file")]
     LocalFile { path: String },
+    /// The recipe carries its documents as `[[document]]` blocks with `name`
+    /// and `text` (OICP v0.5 §4.1), so a host that shares no disk with the
+    /// client can install it. See [`crate::recipe_documents`].
+    #[serde(rename = "inline")]
+    Inline,
     /// Download all parquet shards for a public HuggingFace dataset.
     /// Uses the HF dataset API to enumerate shards, then downloads each
     /// with resume support, returning a directory of parquet files.
@@ -1799,6 +1809,9 @@ impl Recipe {
     ///    refused with the valid set listed, instead of being run as
     ///    `field_model` by one site and `tiered` by another.
     ///    See [`check_enrichment_type`](crate::recipe_parsing::check_enrichment_type).
+    /// 6. Document gate — each `[[document]]` carries `text` or `source`,
+    ///    never both, and an inline recipe only inline ones
+    ///    ([`check_documents`](crate::recipe_documents::check_documents)).
     ///
     /// This is the ONE recipe load boundary: [`Self::from_file`],
     /// the bundled recipe source, and the desktop recipe author's validate
@@ -1811,6 +1824,7 @@ impl Recipe {
                 crate::recipe_parsing::check_ontology_block(&recipe)?;
                 crate::recipe_parsing::check_enrichment_type(&recipe)?;
                 crate::recipe_parsing::check_enrichment_domain(&recipe)?;
+                crate::recipe_documents::check_documents(&recipe)?;
                 Ok(recipe)
             }
             Err(e) => Err(translate_parse_error(e)),

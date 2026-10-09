@@ -80,6 +80,7 @@ pub fn derive_stability(
         }
         AcquirerConfig::HttpApi { .. } => (Stability::Versioned, "acquire=http_api"),
         AcquirerConfig::LocalFile { .. } => (Stability::Versioned, "acquire=local_file"),
+        AcquirerConfig::Inline => (Stability::Versioned, "acquire=inline"),
         AcquirerConfig::WebCrawl { .. } => (Stability::Versioned, "acquire=web_crawl"),
         AcquirerConfig::Custom { .. } => (Stability::Versioned, "acquire=custom"),
     };

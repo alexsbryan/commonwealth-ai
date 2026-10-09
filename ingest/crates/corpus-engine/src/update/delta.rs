@@ -22,7 +22,8 @@ use tokio::sync::mpsc;
 
 use crate::engine::CorpusEngine;
 use crate::error::Result;
-use crate::index::{DocumentInput, TextWriter};
+use crate::index::TextWriter;
+use crate::recipe_documents::DeclaredMetadata;
 use corpus_index::ingest_port::FetchedDoc;
 
 // ─── VersionManifest ─────────────────────────────────────────────────────────
@@ -583,13 +584,22 @@ impl CorpusUpdater {
             .await?;
         let tag = crate::text_store::extractor_tag(&recipe.extract);
         let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
+        // A delta's sources are stated, never files, so no file declaration
+        // matches; an inline document's would, by its name.
+        let declared = DeclaredMetadata::of(&recipe, None);
 
         for (i, doc_id) in diff.updated_documents.iter().enumerate() {
             if log.updated_ids.contains(doc_id) {
                 continue;
             }
             let fetched = fetch_content(doc_id).await?;
-            let raw_chunks = stored_chunks(&self.engine, &recipe, &mut texts, doc_id, &fetched)?;
+            let raw_chunks = stored_chunks(
+                &self.engine,
+                &recipe,
+                (&mut texts, &declared),
+                doc_id,
+                &fetched,
+            )?;
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
             // Delete-first: the fresh chunks carry the SAME
@@ -637,13 +647,22 @@ impl CorpusUpdater {
             .await?;
         let tag = crate::text_store::extractor_tag(&recipe.extract);
         let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
+        // A delta's sources are stated, never files, so no file declaration
+        // matches; an inline document's would, by its name.
+        let declared = DeclaredMetadata::of(&recipe, None);
 
         for (i, doc_id) in diff.new_documents.iter().enumerate() {
             if log.added_ids.contains(doc_id) {
                 continue;
             }
             let fetched = fetch_content(doc_id).await?;
-            let raw_chunks = stored_chunks(&self.engine, &recipe, &mut texts, doc_id, &fetched)?;
+            let raw_chunks = stored_chunks(
+                &self.engine,
+                &recipe,
+                (&mut texts, &declared),
+                doc_id,
+                &fetched,
+            )?;
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
             texts.replace_source(&index, doc_id).await?;
@@ -675,19 +694,12 @@ impl CorpusUpdater {
 fn stored_chunks(
     engine: &CorpusEngine,
     recipe: &crate::recipe::Recipe,
-    texts: &mut TextWriter,
+    (texts, declared): (&mut TextWriter, &DeclaredMetadata),
     doc_id: &str,
     fetched: &FetchedDoc,
 ) -> Result<Vec<crate::index::InsertChunk>> {
     let text = crate::engine::normalize_content(&fetched.content);
-    let input = DocumentInput {
-        text: &text,
-        source_id: doc_id,
-        ordinal: 0,
-        source: &fetched.source,
-        metadata: None,
-    };
-    let name = texts.store_document(input)?;
+    let name = texts.store_document(declared.input(&text, doc_id, 0, &fetched.source, None))?;
     let mut chunks = engine.chunk_document(recipe, &text)?;
     stamp_doc_identity(&mut chunks, doc_id, name);
     Ok(chunks)

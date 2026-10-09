@@ -10,7 +10,7 @@ use chrono::Utc;
 use crate::error::{Error, Result};
 use crate::extractors::ExtractedDoc;
 use crate::filters::build_filter_pipeline;
-use crate::index::{CorpusIndex, DocumentInput, InsertChunk, TextWriter};
+use crate::index::{CorpusIndex, InsertChunk, TextWriter};
 use crate::progress::{IngestProgress, ProgressCallback, SourceFileManifest, SourceFileStatus};
 use crate::recipe::{AcquirerConfig, ExtractorConfig, Recipe};
 use crate::types::{CorpusSpec, IngestResult};
@@ -592,7 +592,7 @@ impl CorpusEngine {
         let source_path = self.acquire_source(recipe, &download_dir, progress).await?;
 
         // Step 2: Extract documents.
-        let extractor = self.make_extractor(&recipe.extract, &recipe.corpus.id);
+        let extractor = self.recipe_extractor(recipe);
         let doc_iter = extractor.extract(&source_path)?;
 
         // Step 2.5: Apply document-level filters (recipe scope).
@@ -1053,6 +1053,7 @@ impl CorpusEngine {
         // position among its source's texts.
         let tag = crate::text_store::extractor_tag(&recipe.extract);
         let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
+        let declared = crate::recipe_documents::DeclaredMetadata::of(recipe, Some(&source_path));
         let mut ordinals = SourceOrdinals::default();
 
         // ── Embed-side dedup gate ───────────────────────────────
@@ -1285,13 +1286,13 @@ impl CorpusEngine {
             // chunks name the text they were cut from (`chunk_doc` is the
             // same transform, for the authoring-harness runner).
             let text = normalize_content(&doc.content);
-            let text_sha256 = texts.store_document(DocumentInput {
-                text: &text,
-                source_id: source_doc_id.as_deref().unwrap_or_default(),
+            let text_sha256 = texts.store_document(declared.input(
+                &text,
+                source_doc_id.as_deref().unwrap_or_default(),
                 ordinal,
-                source: &doc.source,
-                metadata: doc.metadata.as_ref(),
-            })?;
+                &doc.source,
+                doc.metadata.as_ref(),
+            ))?;
             let chunk_texts = chunk_text(chunker.as_ref(), doc.title.as_deref(), &text);
 
             // `doc.embed_text` is honored only when the configured chunker

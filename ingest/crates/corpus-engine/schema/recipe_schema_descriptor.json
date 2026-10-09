@@ -24,6 +24,10 @@
       ]
     },
     {
+      "key": "inline",
+      "required": []
+    },
+    {
       "key": "huggingface_dataset",
       "required": [
         "repo"

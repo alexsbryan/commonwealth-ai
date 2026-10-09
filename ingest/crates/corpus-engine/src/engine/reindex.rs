@@ -365,18 +365,18 @@ impl CorpusEngine {
         // Each document's canonical text is stored through the one writer and
         // its chunks cut from that same string, as in the main loop.
         let index = CorpusIndex::open(&index_path).await?;
-        let mut store = self
+        let (mut store, declared) = self
             .reindex_text_writer(&index, corpus_id, extractor_config)
             .await?;
         for (ordinal, doc) in docs.iter().enumerate() {
             let text = super::normalize_content(&doc.content);
-            let name = store.store_document(crate::index::DocumentInput {
-                text: &text,
-                source_id: source_doc_id,
-                ordinal: ordinal as u32,
-                source: &doc.source,
-                metadata: doc.metadata.as_ref(),
-            })?;
+            let name = store.store_document(declared.input(
+                &text,
+                source_doc_id,
+                ordinal as u32,
+                &doc.source,
+                doc.metadata.as_ref(),
+            ))?;
             for piece in chunker.chunk(&text) {
                 let metadata_json = if is_portal_bullet {
                     // Replace section-scoped outgoing_links with the
@@ -613,23 +613,32 @@ fn rescope_outgoing_links_for_bullet(
 }
 
 impl CorpusEngine {
-    /// The text writer for a reindex: the corpus recipe's `store_texts`, or the
-    /// default (stored) when the corpus has no recipe, said at debug.
+    /// The text writer for a reindex, and the recipe's declared metadata: the
+    /// corpus recipe's `store_texts` and declarations, or the default (stored,
+    /// none declared) when the corpus has no recipe, said at debug. The staged
+    /// source is a temp file, so no file declaration matches it.
     async fn reindex_text_writer(
         &self,
         index: &CorpusIndex,
         corpus_id: &str,
         extract: &ExtractorConfig,
-    ) -> Result<crate::index::TextWriter> {
-        let store_texts = match self.load_recipe(corpus_id).await {
-            Ok(recipe) => recipe.index.store_texts,
+    ) -> Result<(
+        crate::index::TextWriter,
+        crate::recipe_documents::DeclaredMetadata,
+    )> {
+        let (store_texts, declared) = match self.load_recipe(corpus_id).await {
+            Ok(recipe) => (
+                recipe.index.store_texts,
+                crate::recipe_documents::DeclaredMetadata::of(&recipe, None),
+            ),
             Err(e) => {
-                tracing::debug!(corpus_id, error = %e, "reindex: no recipe; texts stored (the default)");
-                true
+                tracing::debug!(corpus_id, error = %e, "reindex: no recipe; texts stored (the default), no metadata declared");
+                (true, Default::default())
             }
         };
         let tag = crate::text_store::extractor_tag(extract);
-        crate::index::TextWriter::open(index, tag, store_texts).await
+        let writer = crate::index::TextWriter::open(index, tag, store_texts).await?;
+        Ok((writer, declared))
     }
 }
 

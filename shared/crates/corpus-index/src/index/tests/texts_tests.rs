@@ -57,10 +57,12 @@ async fn a_stored_text_reads_back_by_its_name_with_its_record() {
         .unwrap();
     assert!(w.is_active(), "an empty index begins a store");
 
-    let meta = serde_json::json!({"k": "v"});
+    // Stored as given, spacing and key order included: the writer never
+    // re-serializes what it is handed.
+    let meta = r#"{"k": "v",  "a": 1}"#;
     let source = DocSource::File(file.clone());
     let mut doc = input("the text", "a.txt", 0, &source);
-    doc.metadata = Some(&meta);
+    doc.metadata = Some(meta.into());
     let name = w.store_document(doc).unwrap().expect("named");
     assert_eq!(name, Sha256Hash::of_str("the text"));
     assert_eq!(
@@ -77,7 +79,7 @@ async fn a_stored_text_reads_back_by_its_name_with_its_record() {
     assert_eq!(rec.extractor, "plaintext@0.8.0");
     assert_eq!(rec.source_id, "a.txt");
     assert_eq!(rec.source_sha256, Some(Sha256Hash::of(b"raw source bytes")));
-    assert_eq!(rec.metadata.as_deref(), Some(r#"{"k":"v"}"#));
+    assert_eq!(rec.metadata.as_deref(), Some(meta));
     assert!(rec.text_stored);
 }
 
