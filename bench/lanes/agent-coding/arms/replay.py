@@ -143,7 +143,9 @@ def run(a) -> int:
                        "calls": [s["name"] for s in reply["calls"].values()],
                        "content_chars": len(reply["content"]), "reasoning_chars": reply["reasoning_chars"],
                        "usage": reply["usage"], "first_delta_ms": reply["first_delta_ms"],
-                       "total_ms": reply["total_ms"], "content_tail": reply["content"][-300:]}
+                       "total_ms": reply["total_ms"], "content_tail": reply["content"][-300:],
+                       # over the whole content: a reasoning leak sits at the head, past the tail
+                       "think_tags": sum(reply["content"].count(t) for t in ("<think>", "</think>"))}
                 log.write(json.dumps(rec) + "\n")
                 log.flush()
                 print(f"{a.arm} {os.path.basename(path)} #{rep} {v} {why} "

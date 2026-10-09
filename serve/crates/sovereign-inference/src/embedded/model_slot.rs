@@ -3714,43 +3714,45 @@ impl ModelSlot {
         // default. `the_mtp_target_context_is_still_initialised_unmasked` is
         // the tripwire for the vendored precondition.
         let tail_logits_only = mtp_prefill_tail_logits_only();
-        let last_idx = tokens.len().saturating_sub(1);
-        for (i, &tok) in tokens[prefix_base..].iter().enumerate() {
-            let pos = prefix_base + i;
-            let want_logits = !tail_logits_only || pos == last_idx;
-            prefill
-                .add(tok, pos as i32, &[0], want_logits)
-                .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
+        // A re-pin splits the prefill at its `pin_len`: the state is saved
+        // there, then the generation prompt's tail is decoded.
+        let cut = repin.map_or(prefix_base, |r| r.pin_len);
+        for (start, end) in [(prefix_base, cut), (cut, tokens.len())] {
+            if start == end {
+                continue;
+            }
+            prefill.clear();
+            for (pos, &tok) in tokens.iter().enumerate().take(end).skip(start) {
+                let want_logits = !tail_logits_only || pos + 1 == end;
+                prefill
+                    .add(tok, pos as i32, &[0], want_logits)
+                    .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
+            }
+            session
+                .target_context_mut()
+                .decode(&mut prefill)
+                .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
+            super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
+            // `process(&prefill)` after every target decode is what injects
+            // target's pre-norm h into the draft side; skipping it makes the
+            // draft run uncalibrated and acceptance collapses.
+            session
+                .process(&prefill)
+                .map_err(|e| Error::Inference(format!("MTP process(prefill) failed: {e:?}")))?;
+            super::ffi_trace::record(super::ffi_trace::FfiCall::SessionProcess);
+            if let Some(r) = repin.filter(|_| end == cut) {
+                let rows = if tail_logits_only { 1 } else { end - start };
+                let ctx = session.target_context();
+                super::prefix_pin::repin(ctx, prefix_state, r, &tokens, rows, model_id, "MTP");
+            }
         }
-        session
-            .target_context_mut()
-            .decode(&mut prefill)
-            .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
-        super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
-
-        // `process(&prefill)` after every target decode is what injects
-        // target's pre-norm h into the draft side. `begin(seq_id,
-        // &tokens)` then resets per-seq pending-h state for THIS
-        // request (the session itself persists across requests). Both
-        // calls are load-bearing: skipping either makes the draft run
-        // uncalibrated and acceptance collapses.
-        session
-            .process(&prefill)
-            .map_err(|e| Error::Inference(format!("MTP process(prefill) failed: {e:?}")))?;
-        super::ffi_trace::record(super::ffi_trace::FfiCall::SessionProcess);
+        // `begin(seq_id, &tokens)` resets per-seq pending-h state for THIS
+        // request (the session itself persists across requests); it is as
+        // load-bearing as `process`.
         session
             .begin(0, &tokens)
             .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::SessionBegin);
-        if let Some(key) = repin {
-            let rows = if tail_logits_only {
-                1
-            } else {
-                tokens.len() - prefix_base
-            };
-            let ctx = session.target_context();
-            super::prefix_pin::repin(ctx, prefix_state, key, &tokens, rows, model_id, "MTP");
-        }
 
         // Sample the first token from prefill's last logit position.
         // Use ConstrainedSampler::Explore — no JSON-schema mask is
@@ -4787,11 +4789,20 @@ impl ModelSlot {
             }
         }
 
+        let tail_start = super::prefix_pin::prefill_to_pin(
+            ctx,
+            prefix_state,
+            repin,
+            tokens,
+            lcp,
+            n_batch,
+            model_id,
+        )?;
         let mut batch = LlamaBatch::new(n_batch, 1);
-        let tail = &tokens[lcp..];
+        let tail = &tokens[tail_start..];
         let last_idx = tail.len() - 1;
         for (j, &token) in tail.iter().enumerate() {
-            let absolute_pos = (lcp + j) as i32;
+            let absolute_pos = (tail_start + j) as i32;
             batch
                 .add(token, absolute_pos, &[0], j == last_idx)
                 .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
@@ -4803,7 +4814,7 @@ impl ModelSlot {
         tracing::info!(
             cache_hit_tokens = lcp,
             raw_lcp,
-            new_prefill_tokens = tail.len(),
+            new_prefill_tokens = tokens.len() - lcp,
             new_prompt_len = tokens.len(),
             cached_len_at_entry,
             batch_n_tokens = batch.n_tokens(),
@@ -4826,9 +4837,6 @@ impl ModelSlot {
                 "prefix_cache: decode failed — state at failure"
             );
             return Err(Error::Inference(format!("Prompt decode failed: {e}")));
-        }
-        if let Some(key) = repin {
-            super::prefix_pin::repin(ctx, prefix_state, key, tokens, 1, model_id, "single-token");
         }
         // Decode succeeded — record the new cached sequence so the
         // next call can compute its LCP against this one. The decode

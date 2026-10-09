@@ -11,6 +11,40 @@ fn next_turn(prev: &[LlamaToken], seed: i32, n: usize) -> Vec<LlamaToken> {
     v
 }
 
+/// What the slot does with a re-pin: save `tokens[..pin_len]` under its key.
+fn pin(cache: &mut PrefixStateCache, repin: Option<Repin>, tokens: &[LlamaToken]) -> u64 {
+    let Repin { key, pin_len } = repin.expect("the planner asked for a re-pin");
+    let pinned = tokens[..pin_len].to_vec();
+    let path = cache.repin_path(key, &pinned);
+    cache.commit(key, pinned, path);
+    key
+}
+
+/// The 2026-10-08 replay defect (arm B2): the next turn renders this
+/// turn's generation prompt again, but not as the same tokens — Qwen3.8's
+/// prompt ends `<think>\n` (198), a reply without reasoning renders back
+/// `<think>\n\n</think>` (271). A whole-prompt pin missed every such turn
+/// by one token and the turn was a full prefill.
+#[test]
+fn a_turn_that_retokenizes_the_generation_prompt_still_extends_the_pin() {
+    let mut cache = PrefixStateCache::new_for_test(200);
+    let turn1 = toks(1, &(0..600).collect::<Vec<i32>>());
+    let (_, repin) = cache.plan_conversation(&turn1);
+    let key = pin(&mut cache, repin, &turn1);
+
+    let mut turn2 = turn1[..turn1.len() - 1].to_vec();
+    turn2.push(LlamaToken(271));
+    let turn2 = next_turn(&turn2, 2, 500);
+    assert_eq!(
+        cache.plan_conversation(&turn2).0,
+        PrefixPlan::Restore {
+            key,
+            prefix_len: turn1.len() - CONVERSATION_PIN_TAIL
+        },
+        "the pin stops short of the generation prompt, so the re-tokenized tail is prefilled"
+    );
+}
+
 /// The 2026-10-08 battery defect: `plan` pinned turn 1 and restored that
 /// pin for the whole task while the prompt grew 23k → 39k. The
 /// conversation planner's restored prefix must follow the conversation.
@@ -20,22 +54,26 @@ fn a_conversation_pin_follows_the_conversation() {
     let turn1 = toks(1, &(0..600).collect::<Vec<i32>>());
     let (plan, repin) = cache.plan_conversation(&turn1);
     assert_eq!(plan, PrefixPlan::Pass, "turn 1 has nothing to restore");
-    let key = repin.expect("turn 1 is pinned whole after its prefill");
-    cache.commit(key, turn1.clone(), cache.repin_path(key, &turn1));
+    let key = pin(&mut cache, repin, &turn1);
+    let tail = CONVERSATION_PIN_TAIL;
 
     let turn2 = next_turn(&turn1, 2, 500);
+    let (plan, repin) = cache.plan_conversation(&turn2);
     assert_eq!(
-        cache.plan_conversation(&turn2),
+        (plan, repin),
         (
             PrefixPlan::Restore {
                 key,
-                prefix_len: turn1.len()
+                prefix_len: turn1.len() - tail
             },
-            Some(key)
+            Some(Repin {
+                key,
+                pin_len: turn2.len() - tail
+            })
         ),
-        "turn 2 restores all of turn 1 and re-pins itself"
+        "turn 2 restores turn 1 short of its generation prompt and re-pins itself"
     );
-    cache.commit(key, turn2.clone(), cache.repin_path(key, &turn2));
+    pin(&mut cache, repin, &turn2);
 
     let turn3 = next_turn(&turn2, 3, 100);
     assert_eq!(
@@ -43,7 +81,7 @@ fn a_conversation_pin_follows_the_conversation() {
         (
             PrefixPlan::Restore {
                 key,
-                prefix_len: turn2.len()
+                prefix_len: turn2.len() - tail
             },
             None
         ),
@@ -55,9 +93,12 @@ fn a_conversation_pin_follows_the_conversation() {
         (
             PrefixPlan::Restore {
                 key,
-                prefix_len: turn2.len()
+                prefix_len: turn2.len() - tail
             },
-            Some(key)
+            Some(Repin {
+                key,
+                pin_len: turn4.len() - tail
+            })
         ),
         "growth accumulated past min_pin since the entry re-pins"
     );
@@ -71,14 +112,13 @@ fn a_conversation_pin_follows_the_conversation() {
 /// The battery's second defect: four tasks share the agent's system head,
 /// so the probe key collides across tasks. `plan` re-learned at the shared
 /// head (1,099 tokens) and every later task restored only that. A new task
-/// is a full prefill pinned whole, so its own next turn extends it.
+/// is a full prefill, pinned, so its own next turn extends it.
 #[test]
 fn a_new_task_under_the_same_system_head_is_pinned_whole_not_at_the_head() {
     let mut cache = PrefixStateCache::new_for_test(200);
     let task_a = shape(300, 1, 400, 0);
     let (_, repin) = cache.plan_conversation(&task_a);
-    let key = repin.unwrap();
-    cache.commit(key, task_a.clone(), cache.repin_path(key, &task_a));
+    let key = pin(&mut cache, repin, &task_a);
 
     let task_b = shape(300, 2, 900, 0);
     assert_eq!(
@@ -100,17 +140,15 @@ fn a_new_task_under_the_same_system_head_is_pinned_whole_not_at_the_head() {
         },
         "fixture: the sighting planner pins only the shared head"
     );
-    assert_eq!(
-        cache.plan_conversation(&task_b),
-        (PrefixPlan::Pass, Some(key))
-    );
-    cache.commit(key, task_b.clone(), cache.repin_path(key, &task_b));
+    let (plan, repin) = cache.plan_conversation(&task_b);
+    assert_eq!(plan, PrefixPlan::Pass);
+    pin(&mut cache, repin, &task_b);
     let b2 = next_turn(&task_b, 1, 50);
     assert_eq!(
         cache.plan_conversation(&b2).0,
         PrefixPlan::Restore {
             key,
-            prefix_len: task_b.len()
+            prefix_len: task_b.len() - CONVERSATION_PIN_TAIL
         },
         "task B's second turn restores all of task B's first"
     );
@@ -124,8 +162,9 @@ fn a_refused_repin_leaves_the_previous_pin_serving() {
     let mut cache = PrefixStateCache::new_for_test(200);
     cache.max_bytes = 1_000;
     let turn1 = toks(1, &(0..600).collect::<Vec<i32>>());
-    let key = cache.plan_conversation(&turn1).1.unwrap();
-    assert!(cache.commit_sized(key, turn1.clone(), cache.repin_path(key, &turn1), 600));
+    let key = cache.plan_conversation(&turn1).1.unwrap().key;
+    let pin1 = turn1[..turn1.len() - CONVERSATION_PIN_TAIL].to_vec();
+    assert!(cache.commit_sized(key, pin1.clone(), cache.repin_path(key, &pin1), 600));
 
     let turn2 = next_turn(&turn1, 2, 500);
     assert_ne!(cache.repin_path(key, &turn2), cache.repin_path(key, &turn1));
@@ -138,7 +177,7 @@ fn a_refused_repin_leaves_the_previous_pin_serving() {
         cache.plan_conversation(&turn3).0,
         PrefixPlan::Restore {
             key,
-            prefix_len: turn1.len()
+            prefix_len: pin1.len()
         },
         "the refused re-pin did not take turn 1's pin with it"
     );

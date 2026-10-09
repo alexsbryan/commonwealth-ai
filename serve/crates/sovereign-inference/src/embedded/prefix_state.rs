@@ -162,6 +162,25 @@ fn pin_with_tail(lcp: usize, len: usize) -> usize {
     lcp.min(len.saturating_sub(PIN_TAIL_MARGIN))
 }
 
+/// Tokens a conversation re-pin leaves out at the prompt's end. The pin
+/// is restored by the NEXT turn, which renders this turn's generation
+/// prompt again but need not tokenize it the same way: Qwen3.8's prompt
+/// ends `<think>\n` (198), and a reply with no reasoning renders back as
+/// `<think>\n\n</think>` (271, `\n\n` merged) — a whole-prompt pin missed
+/// every such turn by its last token and fell to a full prefill (measured
+/// 2026-10-08, replay arm B2: 7,743-token pin, next turn shares 7,742).
+/// llama-server checkpoints the same distance before each prompt's end
+/// (`checkpoint_offsets`, `server-context.cpp` at 035e227).
+pub(crate) const CONVERSATION_PIN_TAIL: usize = 4;
+
+/// A conversation re-pin: once `tokens[..pin_len]` is prefilled, save
+/// the state there and file it under `key`.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub(crate) struct Repin {
+    pub(crate) key: u64,
+    pub(crate) pin_len: usize,
+}
+
 /// Per-slot entry cap. Distinct request families per slot in practice:
 /// synthesis primary/fast variants, gate verifier, gap check, router
 /// coarse, title — six covers the live set with headroom. Directed
@@ -552,8 +571,9 @@ impl PrefixStateCache {
     }
 
     /// Plan for one turn of an external client's conversation
-    /// (`PromptShape::Conversation`): the restore half, plus the family key
-    /// to RE-PIN the whole prompt under once it has been prefilled.
+    /// (`PromptShape::Conversation`): the restore half, plus the re-pin —
+    /// the prompt short of its last [`CONVERSATION_PIN_TAIL`] tokens, which
+    /// the next turn re-renders and may re-tokenize.
     ///
     /// [`plan`] freezes a family at the boundary its first two sightings
     /// share, which for a conversation is turn 1: measured 2026-10-08 on the
@@ -561,7 +581,8 @@ impl PrefixStateCache {
     /// whole task while prompts grew to 39k, and turns ran 280 s for ~100
     /// output tokens. A conversation is append-only — each prompt is the
     /// last one plus the reply and the new turn (the 9,657-token pin was ALL
-    /// of turn 1's prompt) — so the pin should follow it. This is
+    /// of turn 1's prompt), up to the generation prompt's tail — so the pin
+    /// should follow it. This is
     /// llama-server's semantics on hybrid models: it checkpoints the memory
     /// a few tokens before each prompt's end and restores the newest one
     /// the next prompt still extends (`server-context.cpp`, the
@@ -571,14 +592,19 @@ impl PrefixStateCache {
     /// prompt has grown `min_pin` tokens past the entry;
     /// below that the entry is restored and the short suffix prefilled. A
     /// prompt the entry does not prefix (a new task under the same system
-    /// head, an edited history) is a full prefill and then re-pinned whole —
+    /// head, an edited history) is a full prefill and then re-pinned —
     /// never [`plan`]'s re-learn at the shared head, which would pin the
     /// head and prefill everything after it on every later turn.
-    pub(crate) fn plan_conversation(&mut self, tokens: &[LlamaToken]) -> (PrefixPlan, Option<u64>) {
+    pub(crate) fn plan_conversation(
+        &mut self,
+        tokens: &[LlamaToken],
+    ) -> (PrefixPlan, Option<Repin>) {
         if !self.enabled || tokens.len() < self.min_pin.max(PROBE_TOKENS) + 8 {
             return (PrefixPlan::Pass, None);
         }
         let key = Self::key(tokens);
+        // The floor above keeps this past every probe.
+        let pin_len = tokens.len() - CONVERSATION_PIN_TAIL;
         let entry_len = self.entries.get(&key).map(|e| e.tokens.len());
         // The same strict-prefix test as `plan`: the tail carries the
         // logits the sampler needs, and a state file carries none.
@@ -590,7 +616,8 @@ impl PrefixStateCache {
         if let Some(prefix_len) = extended {
             self.touch(key);
             let grown = tokens.len() - prefix_len;
-            let repin = (grown >= self.min_pin).then_some(key);
+            let repin =
+                (grown >= self.min_pin && pin_len > prefix_len).then_some(Repin { key, pin_len });
             tracing::debug!(
                 target: "prefix_state",
                 key = format_args!("{key:016x}"),
@@ -608,9 +635,10 @@ impl PrefixStateCache {
             key = format_args!("{key:016x}"),
             prompt_tokens = tokens.len(),
             entry_tokens = entry_len,
-            "prefix_state: conversation turn has no pin it extends — full prefill, then pin it whole"
+            pin_len,
+            "prefix_state: conversation turn has no pin it extends — full prefill, then pin it"
         );
-        (PrefixPlan::Pass, Some(key))
+        (PrefixPlan::Pass, Some(Repin { key, pin_len }))
     }
 
     /// Path a `Learn` plan should save the state file to.

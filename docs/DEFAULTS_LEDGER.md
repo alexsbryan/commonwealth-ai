@@ -3062,6 +3062,19 @@ it is an experiment (then it should not be default-on). Resolve it with the
   2.5 s (median, n=23 vs 576); 409 re-pins, median save 461 ms, ~21 KB a
   token (2.75 GB at 131k). The default `_MAX_MB=2048` refuses a 35B pin
   past ~102k tokens (21,008 bytes a token); the battery ran at 8192.
+- **Correction: the re-pin stops 4 tokens short (2026-10-08).** "Whole
+  prompt" held on that battery only because opencode echoed non-empty
+  reasoning back. A history turn with empty reasoning renders
+  `<think>\n\n</think>`, and the prompt's closing `<think>\n` (198)
+  re-tokenizes as `\n\n` (271), so a whole-prompt pin missed every such
+  turn by one token: 27B replay arm B2, 0 hits in 4 turns, first delta
+  91.6 s against llama-server's 34.9 s. The pin is now the prompt short
+  of `CONVERSATION_PIN_TAIL` (4), llama-server's own checkpoint offset;
+  the prefill splits there. Replay arm B3 (38 captured agent requests,
+  one run): 28 restores, 10 full prefills (4 first turns, 6 jumps back
+  to a shorter history, which llama-server serves from an older
+  checkpoint and the daemon's one pin per family cannot); median first
+  delta 7.9 s against llama-server's 5.7 s.
 - **What a restore costs, measured.** Greedy A/B on 12 battery request
   pairs, each prompt once by full prefill and once restored from the
   previous turn's pin, with a full-vs-full control

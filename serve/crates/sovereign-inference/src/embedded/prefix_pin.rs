@@ -7,14 +7,17 @@
 
 use std::time::Instant;
 
-use super::prefix_state::{PrefixPlan, PrefixStateCache};
+use super::prefix_state::{PrefixPlan, PrefixStateCache, Repin};
+use super::prompt_helpers::ensure_batch_decodable;
 use crate::llama::cpp::context::LlamaContext;
+use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::{AddBos, LlamaModel};
 use crate::llama::cpp::token::LlamaToken;
+use sovereign_contracts::error::Error;
 use sovereign_contracts::types::{CompletionRequest, PromptShape};
 
-/// The plan for this request, and the family key to re-pin under once the
-/// prompt is prefilled (conversations only — pass it to [`repin`]).
+/// The plan for this request, and the re-pin to take once the prompt is
+/// prefilled to its `pin_len` (conversations only — pass it to [`repin`]).
 ///
 /// The planner is picked by what the request declares about itself: a
 /// declared `stable_prefix_len` takes `plan_directed`, an external client's
@@ -30,7 +33,7 @@ pub(super) fn plan_for(
     tokens: &[LlamaToken],
     partial_keep_ok: bool,
     prefix_state: &mut PrefixStateCache,
-) -> (PrefixPlan, Option<u64>) {
+) -> (PrefixPlan, Option<Repin>) {
     if let Some(pin) = directed_pin_tokens(model, request, full_prompt, tokens) {
         return (prefix_state.plan_directed(tokens, pin), None);
     }
@@ -49,21 +52,24 @@ pub(super) fn plan_for(
 }
 
 /// Save the prefilled prompt's state and file it as the family's pin — the
-/// re-pin [`plan_for`] asked for. `ctx` must hold exactly `tokens`, and
-/// `output_rows` is how many positions the prefill flagged for logits: the
-/// state file carries the output buffer (~1 MB per row at this model
-/// family's 248k vocabulary), so a prefill that flagged more than its last
-/// position is not saved. A save that fails or that the byte budget refuses
+/// re-pin [`plan_for`] asked for. `ctx` must hold exactly
+/// `tokens[..repin.pin_len]` (the prefill stops there, saves, then decodes
+/// the tail), and `output_rows` is how many positions that stage flagged
+/// for logits: the state file carries the output buffer (~1 MB per row at
+/// this model family's 248k vocabulary), so a stage that flagged more than
+/// its last position is not saved. A save that fails or that the byte budget refuses
 /// leaves the previous pin serving (`repin_path` never collides with it).
 pub(super) fn repin(
     ctx: &LlamaContext<'_>,
     prefix_state: &mut PrefixStateCache,
-    key: u64,
+    repin: Repin,
     tokens: &[LlamaToken],
     output_rows: usize,
     model_id: &str,
     path: &str,
 ) {
+    let Repin { key, pin_len } = repin;
+    let tokens = &tokens[..pin_len];
     if output_rows > 1 {
         tracing::info!(
             target: "prefix_state",
@@ -107,9 +113,38 @@ pub(super) fn repin(
             pinned_tokens = tokens.len(),
             bytes,
             save_ms,
-            "prefix_state: REPINNED — conversation turn pinned whole ({path} path)"
+            "prefix_state: REPINNED — conversation turn pinned short of its generation prompt ({path} path)"
         );
     }
+}
+
+/// The single-token path's first prefill stage under a re-pin: decode
+/// `tokens[from..pin_len]` with no outputs, save the pin there, and return
+/// where the rest of the prefill starts (`from` with no re-pin). A stage that fails to decode is
+/// the request's error, as a failed whole prefill is.
+pub(super) fn prefill_to_pin(
+    ctx: &mut LlamaContext<'_>,
+    prefix_state: &mut PrefixStateCache,
+    pin: Option<Repin>,
+    tokens: &[LlamaToken],
+    from: usize,
+    n_batch: usize,
+    model_id: &str,
+) -> Result<usize, Error> {
+    let Some(pin) = pin.filter(|p| p.pin_len > from) else {
+        return Ok(from);
+    };
+    ensure_batch_decodable(pin.pin_len - from, n_batch, "re-pin prefill stage")?;
+    let mut stage = LlamaBatch::new(n_batch, 1);
+    for (pos, &tok) in tokens.iter().enumerate().take(pin.pin_len).skip(from) {
+        stage
+            .add(tok, pos as i32, &[0], false)
+            .map_err(|e| Error::Inference(format!("re-pin stage batch add failed: {e}")))?;
+    }
+    ctx.decode(&mut stage)
+        .map_err(|e| Error::Inference(format!("re-pin stage prefill decode failed: {e}")))?;
+    repin(ctx, prefix_state, pin, tokens, 0, model_id, "single-token");
+    Ok(pin.pin_len)
 }
 
 /// Map a caller-declared stable-prefix byte length (over the RAW user
