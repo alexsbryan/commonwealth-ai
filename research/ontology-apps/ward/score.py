@@ -294,31 +294,34 @@ def score(g, ent, claims, scope):
     # cannot name as a gold file (the instrument could not judge it, apart from a message gold does not place)
     served_hit, missed = 0, dict.fromkeys(("unmatched_deal", "wrong_stage", "unbacked", "unplaced",
                                            "provenance_unmapped", "no_decision"), 0)
+    served_by_deal = {}  # each current deal's outcome, "served" or its miss reason: the counts below, per deal
     for d in current_deals:
         subject = stage_subject.get(d["id"])
         if subject is None:
-            missed["unmatched_deal"] += 1
-            continue
-        served = (ent[subject].get("attributes") or {}).get("stage")
-        decision = ent[subject].get("_stage")
-        if served is None:
-            why = decision["outcome"] if decision else "no_decision"
-            missed[why] = missed.get(why, 0) + 1
-            continue
-        if served != gold_current[d["id"]]:
-            missed["wrong_stage"] += 1
-            continue
-        placed = {s["file"] for s in updates_by_deal[d["id"]] if s["stage"] == served}
-        if not decision:
-            missed["no_decision"] += 1
-        elif decision["outcome"] != "decided" or decision["values"] != [served] or not decision["files"]:
-            missed["unbacked"] += 1
-        elif None in decision["files"]:
-            missed["provenance_unmapped"] += 1
-        elif set(decision["files"]) <= placed:
+            why = "unmatched_deal"
+        else:
+            served = (ent[subject].get("attributes") or {}).get("stage")
+            decision = ent[subject].get("_stage")
+            placed = {s["file"] for s in updates_by_deal[d["id"]] if s["stage"] == served}
+            if served is None:
+                why = decision["outcome"] if decision else "no_decision"
+            elif served != gold_current[d["id"]]:
+                why = "wrong_stage"
+            elif not decision:
+                why = "no_decision"
+            elif decision["outcome"] != "decided" or decision["values"] != [served] or not decision["files"]:
+                why = "unbacked"
+            elif None in decision["files"]:
+                why = "provenance_unmapped"
+            elif set(decision["files"]) <= placed:
+                why = "served"
+            else:
+                why = "unplaced"
+        served_by_deal[d["id"]] = why
+        if why == "served":
             served_hit += 1
         else:
-            missed["unplaced"] += 1
+            missed[why] = missed.get(why, 0) + 1
     gc = [c for c in g["commitments"] if c["file"] in scope]
     ch = sum(1 for k in gc if any(c.get("claim_kind") == "commitment" and k["file"] in c["_files"]
                                   and c.get("subject") in {person_atom.get(k["person"]), person_atom.get(k["person"] + "#name")} - {None}
@@ -335,7 +338,8 @@ def score(g, ent, claims, scope):
             "deals": r(len(deal_atom), len(gd)), "master_agreements": r(len(master_atom), len(gm)),
             "deal_atoms_unmatched": len(deals) - len(used),
             "deal_matches": {"transactions": deal_atom, "master_agreements": master_atom},
-            "stage_served": r(served_hit, len(current_deals)), "stage_served_missed": missed, "stage": r(sh, len(gs)),
+            "stage_served": r(served_hit, len(current_deals)), "stage_served_missed": missed,
+            "stage_served_by_deal": served_by_deal, "stage": r(sh, len(gs)),
             "commitments": r(ch, len(gc)), "made_up": made_up,
             "person_atoms_unmatched": sum(1 for e in persons if e["id"] not in set(person_atom.values()))}
 
