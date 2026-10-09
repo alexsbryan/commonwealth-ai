@@ -31,7 +31,9 @@ use oicp_types::{features, KnowledgeResult, ProviderManifest};
 use sovereign_contracts::daemon_wire::mesh::MemberStatus;
 use sovereign_contracts::traits::MeshKnowledgeSource;
 use sovereign_daemon::api_keys::{self, KeyedOwners};
-use sovereign_daemon::client_tokens::{client_tokens_dir, keys, ClientTokenStore, KEY_ADMIN_GROUP};
+use sovereign_daemon::client_tokens::{
+    client_tokens_dir, ClientTokenStore, Loopback, LoopbackPosture, KEY_ADMIN_GROUP,
+};
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::{AppState, NodeSeed};
 
@@ -540,9 +542,17 @@ async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
     )
     .await;
     let dir = client_tokens_dir(tmp.path());
-    keys::add_key(&dir, "it", &[KEY_ADMIN_GROUP.to_string()], IT).unwrap();
+    // A keyed daemon: the key is minted under a declared `none`, as
+    // `svrn daemon key --add` does on an on-prem install.
+    let posture = LoopbackPosture {
+        loopback: Loopback::None,
+        declared: true,
+    };
+    ClientTokenStore::load(Some(dir.clone()), posture)
+        .mint("it", &[KEY_ADMIN_GROUP.to_string()], IT.to_string())
+        .unwrap();
     let seed = NodeSeed {
-        named_client_tokens: Arc::new(ClientTokenStore::load(Some(dir))),
+        named_client_tokens: Arc::new(ClientTokenStore::load(Some(dir), posture)),
         corpus_principal: Some(Arc::new(KeyedOwners {
             grant: vec!["firm-docs".into()],
         })),
