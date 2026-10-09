@@ -128,6 +128,7 @@ class Tap(BaseHTTPRequestHandler):
     log = None
     dump_dir = None
     dump_all = False
+    log_every_post = False  # engine_proxy.py logs embeddings and rerank too
 
     def log_message(self, *_):
         pass
@@ -137,6 +138,26 @@ class Tap(BaseHTTPRequestHandler):
 
     def do_POST(self):
         self.forward()
+
+    def rewrite(self, body: bytes, rec: dict, is_chat: bool) -> bytes:
+        """The body the server sees. Here: the injected chat_template_kwargs.
+        A subclass that translates a client's wire (engine_proxy.py) overrides
+        this; whatever it changes it records in `rec`."""
+        if not (is_chat and INJECT_KWARGS):
+            return body
+        # Client-side model knob, stamped by the tap so a client that
+        # cannot send the extension field still gets it. Glassbox: the
+        # injected keys land in the log row too — a reader of the tap log
+        # sees exactly what the server saw.
+        try:
+            req = json.loads(body or b"{}")
+            kw = req.setdefault("chat_template_kwargs", {})
+            kw.update(INJECT_KWARGS)
+            rec["injected_chat_template_kwargs"] = dict(INJECT_KWARGS)
+            return json.dumps(req).encode()
+        except (ValueError, AttributeError):
+            rec["injected_chat_template_kwargs"] = "failed: unparsable body"
+            return body
 
     def forward(self):
         t0 = time.monotonic()
@@ -151,19 +172,8 @@ class Tap(BaseHTTPRequestHandler):
         path = (up.path.rstrip("/") + self.path) if up.path not in ("", "/") else self.path
         rec = {"seq": seq, "arm": self.arm, "ts": time.time(), "method": self.command, "path": self.path}
         is_chat = self.command == "POST" and self.path.rstrip("/").endswith("/chat/completions")
-        if is_chat and INJECT_KWARGS:
-            # Client-side model knob, stamped by the tap so a client that
-            # cannot send the extension field still gets it. Glassbox: the
-            # injected keys land in the log row too — a reader of the tap log
-            # sees exactly what the server saw.
-            try:
-                req = json.loads(body or b"{}")
-                kw = req.setdefault("chat_template_kwargs", {})
-                kw.update(INJECT_KWARGS)
-                body = json.dumps(req).encode()
-                rec["injected_chat_template_kwargs"] = dict(INJECT_KWARGS)
-            except (ValueError, AttributeError):
-                rec["injected_chat_template_kwargs"] = "failed: unparsable body"
+        if self.command == "POST":
+            body = self.rewrite(body, rec, is_chat)
         if is_chat:
             rec.update(request_shape(body))
         tally = Tally(t0)
@@ -224,7 +234,7 @@ class Tap(BaseHTTPRequestHandler):
         self.write_log(rec, is_chat)
 
     def write_log(self, rec: dict, is_chat: bool):
-        if not is_chat and rec.get("status") and rec["status"] < 400:
+        if not (is_chat or self.log_every_post) and rec.get("status") and rec["status"] < 400:
             return  # /v1/models polls and health checks are not turns
         line = json.dumps(rec, separators=(",", ":"))
         with LOCK:
