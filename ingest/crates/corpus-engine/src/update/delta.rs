@@ -22,6 +22,8 @@ use tokio::sync::mpsc;
 
 use crate::engine::CorpusEngine;
 use crate::error::Result;
+use crate::index::{DocumentInput, TextWriter};
+use corpus_index::ingest_port::FetchedDoc;
 
 // ─── VersionManifest ─────────────────────────────────────────────────────────
 
@@ -173,7 +175,7 @@ impl CorpusUpdater {
         fetch_content: impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let mut log = self
@@ -533,7 +535,7 @@ impl CorpusUpdater {
         _fetch_content: &impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let total = diff.deleted_documents.len();
@@ -541,12 +543,14 @@ impl CorpusUpdater {
             .engine
             .open_index_for_corpus_transient(corpus_id)
             .await?;
+        let mut texts = TextWriter::open(&index, "", true).await?;
 
         for (i, doc_id) in diff.deleted_documents.iter().enumerate() {
             if log.deleted_ids.contains(doc_id) {
                 continue;
             }
             index.delete_chunks_by_source_doc(doc_id).await?;
+            texts.replace_source(&index, doc_id).await?; // no records left: its texts go
             log.deleted_ids.push(doc_id.clone());
             self.engine.save_update_progress(corpus_id, log)?;
             self.emit(UpdateProgress {
@@ -568,7 +572,7 @@ impl CorpusUpdater {
         fetch_content: &impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let total = diff.updated_documents.len();
@@ -577,14 +581,15 @@ impl CorpusUpdater {
             .engine
             .open_index_for_corpus_transient(corpus_id)
             .await?;
+        let tag = crate::text_store::extractor_tag(&recipe.extract);
+        let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
 
         for (i, doc_id) in diff.updated_documents.iter().enumerate() {
             if log.updated_ids.contains(doc_id) {
                 continue;
             }
-            let content = fetch_content(doc_id).await?;
-            let mut raw_chunks = self.engine.chunk_document(&recipe, &content)?;
-            stamp_doc_identity(&mut raw_chunks, doc_id);
+            let fetched = fetch_content(doc_id).await?;
+            let raw_chunks = stored_chunks(&self.engine, &recipe, &mut texts, doc_id, &fetched)?;
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
             // Delete-first: the fresh chunks carry the SAME
@@ -597,6 +602,7 @@ impl CorpusUpdater {
             // both ops, so a crash between delete and insert re-runs
             // this doc from fetch on resume (delete is idempotent).
             index.delete_chunks_by_source_doc(doc_id).await?;
+            texts.replace_source(&index, doc_id).await?;
             index.insert_chunks(&embedded).await?;
 
             log.updated_ids.push(doc_id.clone());
@@ -620,7 +626,7 @@ impl CorpusUpdater {
         fetch_content: &impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let total = diff.new_documents.len();
@@ -629,16 +635,18 @@ impl CorpusUpdater {
             .engine
             .open_index_for_corpus_transient(corpus_id)
             .await?;
+        let tag = crate::text_store::extractor_tag(&recipe.extract);
+        let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
 
         for (i, doc_id) in diff.new_documents.iter().enumerate() {
             if log.added_ids.contains(doc_id) {
                 continue;
             }
-            let content = fetch_content(doc_id).await?;
-            let mut raw_chunks = self.engine.chunk_document(&recipe, &content)?;
-            stamp_doc_identity(&mut raw_chunks, doc_id);
+            let fetched = fetch_content(doc_id).await?;
+            let raw_chunks = stored_chunks(&self.engine, &recipe, &mut texts, doc_id, &fetched)?;
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
+            texts.replace_source(&index, doc_id).await?;
             index.insert_chunks(&embedded).await?;
 
             log.added_ids.push(doc_id.clone());
@@ -661,6 +669,30 @@ impl CorpusUpdater {
     }
 }
 
+/// The delta's document -> chunks transform, the main loop's in one place:
+/// store the canonical text, then chunk that same string and stamp each chunk
+/// with the document's identity and the text's name.
+fn stored_chunks(
+    engine: &CorpusEngine,
+    recipe: &crate::recipe::Recipe,
+    texts: &mut TextWriter,
+    doc_id: &str,
+    fetched: &FetchedDoc,
+) -> Result<Vec<crate::index::InsertChunk>> {
+    let text = crate::engine::normalize_content(&fetched.content);
+    let input = DocumentInput {
+        text: &text,
+        source_id: doc_id,
+        ordinal: 0,
+        source: &fetched.source,
+        metadata: None,
+    };
+    let name = texts.store_document(input)?;
+    let mut chunks = engine.chunk_document(recipe, &text)?;
+    stamp_doc_identity(&mut chunks, doc_id, name);
+    Ok(chunks)
+}
+
 /// Stamp document identity onto delta-produced chunks.
 /// `CorpusEngine::chunk_document` is document-agnostic (it sees only
 /// the content string), so without this stamp every updated/added doc
@@ -673,7 +705,11 @@ impl CorpusUpdater {
 /// (`tiered_group_key` requires `source_doc_id`). 2026-06-10 obsidian
 /// audit. The title is the doc id's file stem — display-grade only;
 /// an existing chunker-provided title is never overwritten.
-fn stamp_doc_identity(chunks: &mut [crate::index::InsertChunk], doc_id: &str) {
+fn stamp_doc_identity(
+    chunks: &mut [crate::index::InsertChunk],
+    doc_id: &str,
+    text_sha256: Option<kernel_types::Sha256Hash>,
+) {
     let title = std::path::Path::new(doc_id)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -681,6 +717,7 @@ fn stamp_doc_identity(chunks: &mut [crate::index::InsertChunk], doc_id: &str) {
         .to_string();
     for c in chunks.iter_mut() {
         c.source_doc_id = Some(doc_id.to_string());
+        c.text_sha256 = text_sha256;
         if c.title.is_none() {
             c.title = Some(title.clone());
         }

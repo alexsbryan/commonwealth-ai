@@ -171,7 +171,7 @@ async fn apply(
     }
     let mut chunks = Vec::new();
     for doc in update.updated_documents.iter().chain(&update.new_documents) {
-        chunks.push(chunk(doc, doc, &fetch(doc).await?));
+        chunks.push(chunk(doc, doc, &fetch(doc).await?.content));
     }
     insert(&index, embed, chunks).await.map(drop)
 }

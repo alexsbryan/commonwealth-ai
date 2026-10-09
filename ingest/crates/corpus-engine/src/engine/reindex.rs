@@ -353,17 +353,31 @@ impl CorpusEngine {
         let is_portal_bullet = matches!(chunker_config, ChunkerConfig::PortalEventBullet { .. });
 
         let t = Instant::now();
-        let mut chunk_records: Vec<(
+        // (content, per_chunk_metadata_json, doc_title, doc_url, text name)
+        type Rec = (
             String,
             Option<serde_json::Value>,
             Option<String>,
             Option<String>,
-        )> = Vec::new();
-        // (content, per_chunk_metadata_json, doc_title, doc_url)
+        );
+        let mut chunk_records: Vec<(Rec, Option<kernel_types::Sha256Hash>)> = Vec::new();
 
-        for doc in &docs {
-            let pieces = chunker.chunk(&doc.content);
-            for piece in pieces {
+        // Each document's canonical text is stored through the one writer and
+        // its chunks cut from that same string, as in the main loop.
+        let index = CorpusIndex::open(&index_path).await?;
+        let mut store = self
+            .reindex_text_writer(&index, corpus_id, extractor_config)
+            .await?;
+        for (ordinal, doc) in docs.iter().enumerate() {
+            let text = super::normalize_content(&doc.content);
+            let name = store.store_document(crate::index::DocumentInput {
+                text: &text,
+                source_id: source_doc_id,
+                ordinal: ordinal as u32,
+                source: &doc.source,
+                metadata: doc.metadata.as_ref(),
+            })?;
+            for piece in chunker.chunk(&text) {
                 let metadata_json = if is_portal_bullet {
                     // Replace section-scoped outgoing_links with the
                     // links that actually appear in this bullet.
@@ -371,19 +385,21 @@ impl CorpusEngine {
                 } else {
                     doc.metadata.clone()
                 };
-                chunk_records.push((
+                let rec = (
                     piece.content,
                     metadata_json,
                     doc.title.clone(),
                     doc.url.clone(),
-                ));
+                );
+                chunk_records.push((rec, name));
             }
         }
 
-        let index = CorpusIndex::open(&index_path).await?;
         // Delete first — brief query gap is acceptable; duplicate
-        // chunks from a half-applied refresh are not.
+        // chunks from a half-applied refresh are not. The records follow
+        // the chunks: this source's are replaced by the ones just stored.
         index.delete_chunks_by_source_doc(source_doc_id).await?;
+        store.replace_source(&index, source_doc_id).await?;
 
         if chunk_records.is_empty() {
             // Glassbox: a silent 0-chunk return looks identical to
@@ -412,7 +428,7 @@ impl CorpusEngine {
         // Batched embed — one call per article.
         let texts: Vec<&str> = chunk_records
             .iter()
-            .map(|(c, _, _, _)| c.as_str())
+            .map(|((c, _, _, _), _)| c.as_str())
             .collect();
         let embeddings = self.batch_embed_texts(&texts).await?;
         if embeddings.len() != chunk_records.len() {
@@ -426,7 +442,7 @@ impl CorpusEngine {
         let insert_pairs: Vec<(InsertChunk, Vec<f32>)> = chunk_records
             .into_iter()
             .zip(embeddings)
-            .map(|((content, metadata, title, url), emb)| {
+            .map(|(((content, metadata, title, url), text_sha256), emb)| {
                 let content_hash = kernel_types::ContentHash::of_str(&content).to_hex();
                 let code = code_meta_from_json(metadata.as_ref());
                 let insert = InsertChunk {
@@ -439,7 +455,7 @@ impl CorpusEngine {
                     source_file: None,
                     code,
                     unit_id: None,
-                    text_sha256: None,
+                    text_sha256,
                 };
                 (insert, emb)
             })
@@ -594,6 +610,27 @@ fn rescope_outgoing_links_for_bullet(
     );
 
     Some(meta)
+}
+
+impl CorpusEngine {
+    /// The text writer for a reindex: the corpus recipe's `store_texts`, or the
+    /// default (stored) when the corpus has no recipe, said at debug.
+    async fn reindex_text_writer(
+        &self,
+        index: &CorpusIndex,
+        corpus_id: &str,
+        extract: &ExtractorConfig,
+    ) -> Result<crate::index::TextWriter> {
+        let store_texts = match self.load_recipe(corpus_id).await {
+            Ok(recipe) => recipe.index.store_texts,
+            Err(e) => {
+                tracing::debug!(corpus_id, error = %e, "reindex: no recipe; texts stored (the default)");
+                true
+            }
+        };
+        let tag = crate::text_store::extractor_tag(extract);
+        crate::index::TextWriter::open(index, tag, store_texts).await
+    }
 }
 
 #[cfg(test)]

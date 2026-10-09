@@ -119,6 +119,8 @@ mod local_corpus_port_parity;
 mod source_tree;
 #[path = "main/svrn_recipe_shapes.rs"]
 mod svrn_recipe_shapes;
+#[path = "main/text_store_e2e.rs"]
+mod text_store_e2e;
 #[path = "main/tiered_entity_extractor_seam.rs"]
 mod tiered_entity_extractor_seam;
 #[path = "main/watcher_e2e.rs"]

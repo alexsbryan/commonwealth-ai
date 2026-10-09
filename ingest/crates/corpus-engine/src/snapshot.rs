@@ -803,9 +803,12 @@ fn lance_datasets_under(index_dir: &Path) -> Vec<PathBuf> {
         p.is_dir() && p.join("_versions").is_dir()
     }
     let mut out = Vec::new();
-    let chunks = index_dir.join("chunks.lance");
-    if is_dataset(&chunks) {
-        out.push(chunks);
+    // The chunk table and the text store's record table sit at the top.
+    for name in ["chunks.lance", "documents.lance"] {
+        let dataset = index_dir.join(name);
+        if is_dataset(&dataset) {
+            out.push(dataset);
+        }
     }
     let atlas = index_dir.join(crate::enrichment::atlas::ATLAS_DIRNAME);
     if let Ok(rd) = std::fs::read_dir(&atlas) {
@@ -826,7 +829,9 @@ fn lance_datasets_under(index_dir: &Path) -> Vec<PathBuf> {
 /// node-local working state, not part of the canonical corpus a downloader
 /// restores.
 fn is_ephemeral_artifact(name: &str) -> bool {
-    name.ends_with(".orig") || name == "_phase1_checkpoint.jsonl"
+    // `.<sha256>.tmp`: a text store write interrupted before its rename.
+    let text_tmp = name.starts_with('.') && name.ends_with(".tmp");
+    name.ends_with(".orig") || name == "_phase1_checkpoint.jsonl" || text_tmp
 }
 
 /// Recursively append a directory subtree, skipping [`is_ephemeral_artifact`]

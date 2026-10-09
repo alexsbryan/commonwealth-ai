@@ -32,7 +32,7 @@ fn stamp_doc_identity_sets_doc_id_and_stem_title() {
             text_sha256: None,
         },
     ];
-    stamp_doc_identity(&mut chunks, "notes/daily/2026-06-10.md");
+    stamp_doc_identity(&mut chunks, "notes/daily/2026-06-10.md", None);
     for c in &chunks {
         assert_eq!(
             c.source_doc_id.as_deref(),

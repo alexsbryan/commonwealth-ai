@@ -660,6 +660,7 @@ _No fields._
 | `vector` | `bool` | no | `default_true()` |  |
 | `embedding_model` | `String` | no | `default_embedding_model()` |  |
 | `embedding_dimensions` | `usize` | no | `default_embedding_dimensions()` |  |
+| `store_texts` | `bool` | no | `default_true()` | Keep each document's canonical text in the corpus's `texts/` store, readable by its sha256. `false` keeps only the documents' records, and their texts answer `text not stored`. |
 
 ## `OntologyBlock`
 

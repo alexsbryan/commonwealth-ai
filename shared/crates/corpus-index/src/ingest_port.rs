@@ -210,9 +210,18 @@ pub enum WatchedUpdateStage {
     Additions,
 }
 
-/// Fetch one document's text by doc_id, for a watched update.
+/// One document a watched update fetched: its text, and where the bytes came
+/// from — the same statement the initial ingest's staging makes, so both
+/// paths store the same record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FetchedDoc {
+    pub content: String,
+    pub source: crate::index::DocSource,
+}
+
+/// Fetch one document by doc_id, for a watched update.
 pub type DocFetchFn =
-    Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<String>> + Send>> + Send + Sync>;
+    Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<FetchedDoc>> + Send>> + Send + Sync>;
 
 /// Progress of a watched update: `(stage, done, total)`.
 pub type WatchedUpdateProgressFn = Box<dyn Fn(WatchedUpdateStage, usize, usize) + Send + Sync>;

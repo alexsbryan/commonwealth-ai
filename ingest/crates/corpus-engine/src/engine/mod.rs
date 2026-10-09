@@ -21,7 +21,7 @@ pub mod status;
 pub use article_stats::ArticleStats;
 pub use atlas_port::IngestAtlas;
 pub use cancel::{CancellationFlag, CancellationRegistry};
-pub(crate) use ingest_helpers::chunk_doc;
+pub(crate) use ingest_helpers::{chunk_doc, normalize_content};
 pub use status::{
     corpus_chunk_count, corpus_readiness, scan_corpus_rows, CorpusReadiness, CorpusStatusRow,
 };

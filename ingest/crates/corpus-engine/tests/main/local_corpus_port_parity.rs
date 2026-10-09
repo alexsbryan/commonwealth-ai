@@ -247,7 +247,11 @@ async fn apply(
         let text = texts.get(doc).cloned();
         let doc = doc.to_string();
         Box::pin(async move {
-            text.ok_or_else(|| corpus_index::Error::Recipe(format!("no text for {doc}")))
+            text.map(|content| corpus_index::ingest_port::FetchedDoc {
+                content,
+                source: corpus_index::index::DocSource::Record,
+            })
+            .ok_or_else(|| corpus_index::Error::Recipe(format!("no text for {doc}")))
         })
     });
     Arc::clone(engine)

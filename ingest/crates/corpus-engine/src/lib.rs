@@ -67,6 +67,7 @@ mod snapshot_restore;
 pub mod sovereign_config;
 pub mod stream_axes;
 pub mod testing;
+pub mod text_store;
 pub mod types;
 pub mod update;
 // yield_hook extracted to the corpus-engine-yield leaf crate (watchers

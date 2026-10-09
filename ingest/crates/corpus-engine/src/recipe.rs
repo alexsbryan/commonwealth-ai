@@ -1732,6 +1732,11 @@ pub struct IndexConfig {
     pub embedding_model: String,
     #[serde(default = "default_embedding_dimensions")]
     pub embedding_dimensions: usize,
+    /// Keep each document's canonical text in the corpus's `texts/` store,
+    /// readable by its sha256. `false` keeps only the documents' records, and
+    /// their texts answer `text not stored`.
+    #[serde(default = "default_true")]
+    pub store_texts: bool,
 }
 
 impl Default for IndexConfig {
@@ -1741,6 +1746,7 @@ impl Default for IndexConfig {
             vector: default_true(),
             embedding_model: default_embedding_model(),
             embedding_dimensions: default_embedding_dimensions(),
+            store_texts: default_true(),
         }
     }
 }

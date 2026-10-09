@@ -19,7 +19,8 @@ use std::sync::Arc;
 use sovereign_core::error::{Error, Result};
 
 use corpus_index::ingest_port::{
-    DocFetchFn, LocalCorpusPort, WatchedUpdate, WatchedUpdateProgressFn, WatchedUpdateStage,
+    DocFetchFn, FetchedDoc, LocalCorpusPort, WatchedUpdate, WatchedUpdateProgressFn,
+    WatchedUpdateStage,
 };
 
 use super::diff::WatchedDiff;
@@ -29,6 +30,15 @@ use super::walker::WalkSnapshot;
 use crate::local_corpus::config::LocalCorpusConfig;
 use crate::local_corpus::extract_stage;
 use crate::local_corpus::ocr::OcrCtx;
+
+/// A fetched document with the same source statement the initial ingest's
+/// staging writes ([`extract_stage::stated_source`]), so the delta stores the
+/// record the first ingest did.
+fn fetched(content: String, path: &std::path::Path, ocr: bool) -> corpus_index::Result<FetchedDoc> {
+    let (sha256, extractor) = extract_stage::stated_source(path, ocr)?;
+    let source = corpus_index::index::DocSource::Hashed { sha256, extractor };
+    Ok(FetchedDoc { content, source })
+}
 
 /// Apply a watched-folder diff through the engine's three-phase
 /// updater. Emits `PhaseProgress` events on `sink` as the updater
@@ -156,7 +166,7 @@ pub async fn apply_watched_diff(
                     path = %path.display(),
                     "watched_folder:ocr_fallback"
                 );
-                return crate::local_corpus::ocr::extract_pdf_via_ocr(
+                let content = crate::local_corpus::ocr::extract_pdf_via_ocr(
                     &path, &ctx, &display, 1, 1, None,
                 )
                 .await
@@ -164,14 +174,18 @@ pub async fn apply_watched_diff(
                     corpus_index::error::Error::Extraction(format!(
                         "watched_folder: ocr '{id}': {e}"
                     ))
-                });
+                })?;
+                return fetched(content, &path, true);
             }
 
-            Ok(extracted)
+            fetched(extracted, &path, false)
         };
         Box::pin(fut)
             as Pin<
-                Box<dyn std::future::Future<Output = corpus_index::error::Result<String>> + Send>,
+                Box<
+                    dyn std::future::Future<Output = corpus_index::error::Result<FetchedDoc>>
+                        + Send,
+                >,
             >
     });
 

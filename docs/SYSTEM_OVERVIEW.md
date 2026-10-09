@@ -446,7 +446,9 @@ full index or a shard.
 ~/.svrnmesh/indexes/<corpus>/
 ├── _corpus_meta.json        # authoritative metadata
 ├── chapters.json            # sections + the chunk_ids join
-├── chunks.lance/
+├── chunks.lance/            # each chunk names its stored text (text_sha256, schema v4)
+├── documents.lance/         # one record per stored text per document
+├── texts/<sha256>           # each document's canonical text, named by its sha256
 ├── assets/                  # content-addressed asset store (raw + parsed + ledger)
 └── atlas/
     ├── atoms.json           # AtomsFile — the canonical export
@@ -467,6 +469,24 @@ seed table is REQUIRED, not an optimisation: seeding has two sources, the ANN
 table and name-matching over an atom bag, and a wiki store has no bag.
 
 `(corpus_id, chunk_id)` is the citation handle and is structurally unique.
+
+**Stored texts** (ADDRESSED_TEXT §3). Every ingest path — the
+main loop, the watched-folder delta, reindex — writes through one writer,
+`corpus_index::index::TextWriter::store_document`. A text is
+`normalize_content(doc.content)`, the string the chunks are cut from, written
+once to `texts/<sha256>` (`Corpus::texts_dir`); its record (extractor, source
+id, source sha256 or none for a record inside a file of many, ordinal,
+metadata) goes to `documents.lance`, and every chunk carries the name. Reads
+(`CorpusIndex::text`, `documents_for`, `documents`) answer a named
+`TextAbsence` rather than an empty result: not held; texts not stored (an
+index that held chunks before the store began, or a merge with an input that
+had none); text not stored (`[index] store_texts = false`). The directory's
+lifecycle carries the store: promote renames it, merges union it only when
+every input had one (`text_store::carry_texts`), a snapshot captures
+`documents.lance` transactionally, removal deletes it. The library digest is
+sha256 of `oicp_types::evidence::texts_digest_preimage` over the records
+(`text_store::texts_digest`). Published names are `kernel_types::Sha256Hash`;
+`ContentHash` stays BLAKE3 and nothing converts between them.
 
 **Three readiness questions, three accessors — do not conflate them.** A
 directory under `indexes/` is not an installed corpus; an ingest in flight
