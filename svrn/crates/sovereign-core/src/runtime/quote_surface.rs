@@ -23,6 +23,7 @@ use kernel_types::Sha256Hash;
 
 use crate::quote_verification::{verify_answer_against_turn_texts, VerificationResult};
 use crate::types::CitationTarget;
+use sovereign_contracts::types::{AnswerSegment, QuoteAddress};
 
 /// What the quote guard read for a turn: its verdict, and the stored texts it
 /// verified against, in the order `verification.verified[..].source` indexes
@@ -178,6 +179,87 @@ pub(crate) async fn evidence_texts(
     out
 }
 
+/// Each verified quotation that stands in a stored text, as a
+/// [`QuoteAddress`] on the display segment holding its first byte
+/// (ADDRESSED_TEXT §5.2's second user: a reader opens a quote where it
+/// stands, through the text read, not a chunk window).
+///
+/// `released` is the string the segments were computed over. The guard ran on
+/// an earlier binding of the answer and later passes may rewrite it (the
+/// lesson transform, the authority guard), so each quotation is found again
+/// in `released`, in answer order, as the guard re-emitted it ([`quoted_at`]).
+/// A quotation the released text no longer holds, or that verified against
+/// the prompt's evidence or a chunk rather than a text, gets no address, and
+/// the trace counts each by name: nothing is placed by guess.
+pub(crate) fn address_quotes(
+    segments: &mut [AnswerSegment],
+    released: &str,
+    turn: &TurnVerification,
+) {
+    let (mut addressed, mut not_released, mut not_in_a_text, mut outside_text, mut no_segment) =
+        (0usize, 0usize, 0usize, 0usize, 0usize);
+    let mut from = 0usize;
+    for v in &turn.verification.verified {
+        let Some(at) = quoted_at(released, &v.span, from) else {
+            not_released += 1;
+            continue;
+        };
+        from = at + v.span.len();
+        let Some(text) = turn.texts.get(v.source) else {
+            not_in_a_text += 1;
+            continue;
+        };
+        let Some(exact) = quote_align::code_point_slice(&text.text, v.source_range.clone()) else {
+            outside_text += 1;
+            continue;
+        };
+        let Some(segment) = segments.iter_mut().find(|s| s.text_range.contains(&at)) else {
+            no_segment += 1;
+            continue;
+        };
+        segment.quotes.push(QuoteAddress {
+            answer_range: at..from,
+            corpus_id: text.corpus_id.clone(),
+            text_sha256: text.text_sha256,
+            start: v.source_range.start as u64,
+            end: v.source_range.end as u64,
+            exact: exact.to_string(),
+        });
+        addressed += 1;
+    }
+    tracing::debug!(
+        verified = turn.verification.verified.len(),
+        addressed,
+        not_in_released_text = not_released,
+        verified_outside_the_texts = not_in_a_text,
+        range_outside_text = outside_text,
+        in_no_segment = no_segment,
+        "quote guard: verified quotations addressed onto the answer's segments"
+    );
+}
+
+/// The byte where `span` stands in `released`, at or after `from`, as the
+/// quote guard re-emits a verified span: right after a double quote mark
+/// (`quote_verification::is_double_quote_open`, the guard's own test). The
+/// same words written outside quotation marks are not the quotation.
+fn quoted_at(released: &str, span: &str, from: usize) -> Option<usize> {
+    if span.is_empty() {
+        return None;
+    }
+    let mut at = from;
+    loop {
+        let pos = at + released.get(at..)?.find(span)?;
+        if released[..pos]
+            .chars()
+            .next_back()
+            .is_some_and(crate::quote_verification::is_double_quote_open)
+        {
+            return Some(pos);
+        }
+        at = pos + released[pos..].chars().next().map_or(1, char::len_utf8);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -186,6 +268,8 @@ mod tests {
     use corpus_index::ingest_port::double::IngestPortDouble;
 
     use super::*;
+    use crate::quote_verification::VerifiedQuote;
+    use crate::runtime::native_grounding::segments::segments_for_display;
 
     const DIM: usize = 4;
 
@@ -279,5 +363,78 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A verified quotation lands on the segment holding its first byte, at
+    /// its address in the stored text it verified against: the text's name,
+    /// the code points it covers and those code points exactly. A quotation
+    /// that verified against a chunk, not a text, gets no address, and
+    /// neither does one the released text no longer holds.
+    #[test]
+    fn a_verified_quotation_is_addressed_on_its_segment() {
+        let text = "Before the storm. Widow Hetch, who kept The Cold Lantern, gave her \
+                    evidence at her own bar with her arms folded.";
+        let quoted = "Widow Hetch, who kept The Cold Lantern, gave her evidence at her own bar";
+        let chunk_only = "a sentence the chunk holds and no stored text holds at all";
+        let gone = "a sentence a later pass took out of the released answer text";
+        let released = format!("First. Then \u{201C}{quoted}\u{201D} and \"{chunk_only}\".");
+        let start = text.find("Widow").unwrap();
+        let turn = TurnVerification {
+            verification: VerificationResult {
+                verified: vec![
+                    VerifiedQuote {
+                        span: quoted.into(),
+                        source: 0,
+                        source_range: start..start + quoted.chars().count(),
+                    },
+                    VerifiedQuote {
+                        span: gone.into(),
+                        source: 0,
+                        source_range: 0..10,
+                    },
+                    VerifiedQuote {
+                        span: chunk_only.into(),
+                        source: 2,
+                        source_range: 0..10,
+                    },
+                ],
+                ..VerificationResult::default()
+            },
+            texts: vec![EvidenceText {
+                corpus_id: "kept".into(),
+                text_sha256: Sha256Hash::of_str(text),
+                text: text.into(),
+            }],
+        };
+        let mut segments = segments_for_display(&released, &[]);
+        address_quotes(&mut segments, &released, &turn);
+        let at = released.find(quoted).unwrap();
+        let holding: Vec<_> = segments.iter().filter(|s| !s.quotes.is_empty()).collect();
+        assert_eq!(holding.len(), 1, "{segments:?}");
+        assert!(holding[0].text_range.contains(&at));
+        assert_eq!(
+            holding[0].quotes,
+            vec![QuoteAddress {
+                answer_range: at..at + quoted.len(),
+                corpus_id: "kept".into(),
+                text_sha256: Sha256Hash::of_str(text),
+                start: start as u64,
+                end: (start + quoted.chars().count()) as u64,
+                exact: quoted.into(),
+            }]
+        );
+    }
+
+    /// The quotation is the span the guard re-emitted inside quotation
+    /// marks: the same words earlier in the answer, unquoted, are not it.
+    #[test]
+    fn a_quotation_is_found_inside_its_quotation_marks() {
+        let span = "the same words twice over";
+        let released = format!("As {span} says, \"{span}\".");
+        assert_eq!(
+            quoted_at(&released, span, 0),
+            Some(released.rfind(span).unwrap())
+        );
+        assert_eq!(quoted_at(&released, span, released.len()), None);
     }
 }

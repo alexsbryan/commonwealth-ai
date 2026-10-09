@@ -139,6 +139,10 @@ pub fn segments_for_display(released: &str, chunks: &[String]) -> Vec<AnswerSegm
                 // did not port. `None` says "not scored", which is true;
                 // a 0.0 would say "scored, and badly".
                 margin: None,
+                // Filled by the caller from the quote guard's verdict
+                // (`quote_surface::address_quotes`); this module has only
+                // the texts it was handed.
+                quotes: Vec::new(),
             }
         })
         .collect()

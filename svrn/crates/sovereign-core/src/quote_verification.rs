@@ -452,7 +452,7 @@ fn normalise_for_match(s: &str) -> String {
 
 /// `true` if `c` is a double-quote character that opens a span we
 /// should verify.
-fn is_double_quote_open(c: char) -> bool {
+pub(crate) fn is_double_quote_open(c: char) -> bool {
     c == '"' || c == '\u{201C}' || c == '\u{201D}'
 }
 
