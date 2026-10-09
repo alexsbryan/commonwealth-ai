@@ -4,15 +4,11 @@
 //! under its declared type's identity criterion and against the candidates a
 //! proposer offered. GROUP and JOIN are one step; novelty is the "none" answer.
 //!
-//! Identity is decided by declared fields (§Invariants 2): equality on a key
-//! the type declares sufficient (`identity`) links, a differing necessary
-//! value forbids, and otherwise every evidential source is weighed together
-//! (`weigh.rs`, Ring 2): link at the bar, a new record where nothing raised a
-//! candidate, held where the sources leave it unsettled. The partition
-//! answerer (`Answerer::Model`) instead cites a passage code must find.
-//! Candidates only bound what the model is shown. An answer code cannot
-//! verify refuses its statement, counted and traced, never defaulted to a new
-//! record or to the nearest one (§4).
+//! Identity (§Invariants 2): a sufficient key links, a differing necessary
+//! value forbids, otherwise every evidential source is weighed (`weigh.rs`):
+//! link at the bar, open where nothing raised a candidate, else held.
+//! Candidates only bound what the model is shown. An unverifiable answer
+//! refuses its statement, counted and traced, never defaulted (§4).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
