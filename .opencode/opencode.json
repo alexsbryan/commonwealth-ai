@@ -32,7 +32,8 @@
       "type": "remote",
       "url": "http://localhost:9741/mcp",
       "headers": {
-        "x-svrn-corpus": "commonwealth-ai"
+        "x-svrn-corpus": "commonwealth-ai",
+        "Authorization": "Bearer {env:SVRN_OPENCODE_KEY}"
       }
     }
   },
