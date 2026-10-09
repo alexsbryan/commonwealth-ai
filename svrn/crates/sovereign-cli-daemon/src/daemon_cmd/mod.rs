@@ -58,7 +58,14 @@ use sovereign_daemon::bootstrap;
 ///                                    the explicit `run` token.
 /// - `svrn daemon <known>`     → start/stop/restart/reload/status as
 ///                                    before.
+/// - `svrn daemon key ...`     → routed ahead of this verb's own help,
+///                                    since `wants_help` matches a help
+///                                    token anywhere and `key --help` must
+///                                    print `key`'s flags, not these.
 pub async fn run(launch: &Launch, args: &[String]) -> i32 {
+    if args.first().map(String::as_str) == Some("key") {
+        return key::cmd_key(&args[1..]).await;
+    }
     if sovereign_cli_shared::help::wants_help(args) {
         sovereign_cli_shared::help::print(&HELP);
         return 0;
@@ -70,7 +77,6 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
         Some("restart") => after_ready(restart_daemon(&args[1..]).await),
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
-        Some("key") => key::cmd_key(&args[1..]).await,
         // Sizing, not lifecycle: what VRAM would a loadout need, and which
         // card holds it. Lives under `daemon` because it answers the same
         // question the serving boot's preflight asks (`sovereign_compute::preflight`),
