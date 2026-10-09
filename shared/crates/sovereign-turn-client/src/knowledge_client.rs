@@ -218,6 +218,8 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
                     source_doc_id: r.source_doc_id,
                     custody,
                     grain,
+                    // The text's record, metadata included, kept as served.
+                    document: r.document,
                 }
             })
             .collect();

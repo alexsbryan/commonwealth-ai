@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! OICP v0.5's evidence reads over real listeners on 127.0.0.1
-//! (ADDRESSED_TEXT §5.2): `GET /oicp/v1/text/{sha}`.
+//! (ADDRESSED_TEXT §5.2, §5.4): `GET /oicp/v1/text/{sha}` and the
+//! `document` every search hit carries, locally and from a peer.
 //!
 //! The indexes are written the way ingest writes them — one
 //! `TextWriter::store_document` per document, its chunks stamped with the
-//! name.
+//! name — and the declared metadata is the conformance fixture's, as its
+//! recipe declares it (corpus-engine's `inline_recipe_e2e` proves ingest
+//! stores those bytes; this proves the wire returns them).
 //!
 //! The named failing inputs, each watched red:
+//! - empty the document in `oicp_evidence::knowledge_results` and
+//!   `a_hit_carries_its_declared_metadata_byte_for_byte` goes red;
+//! - empty it on the peer route only and
+//!   `a_peer_served_hit_keeps_its_catalog_metadata` goes red;
 //! - cut the slice one code point long and
 //!   `a_text_reads_back_by_its_name_in_code_points` goes red;
 //! - read every installed corpus regardless of the caller and
@@ -20,15 +27,20 @@ use corpus_index::index::{CorpusIndex, DocSource, DocumentInput, InsertChunk, Te
 use corpus_index::types::EmbedFn;
 use kernel_types::{NodeId, Sha256Hash};
 use oicp_types::evidence::TextSlice;
-use oicp_types::{features, ProviderManifest};
+use oicp_types::{features, KnowledgeResult, ProviderManifest};
+use sovereign_contracts::daemon_wire::mesh::MemberStatus;
+use sovereign_contracts::traits::MeshKnowledgeSource;
 use sovereign_daemon::api_keys::{self, KeyedOwners};
 use sovereign_daemon::client_tokens::{client_tokens_dir, keys, ClientTokenStore, KEY_ADMIN_GROUP};
-use sovereign_daemon::server::client_router;
+use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::{AppState, NodeSeed};
 
 use crate::common::{self, spawn_router};
+use crate::knowledge_fanout_e2e::caps_with_hosted;
 
 const DIM: usize = 8;
+const FIXTURE: &str =
+    include_str!("../../../../../cmnwlth/crates/oicp-conformance/fixture/library.recipe.toml");
 const EXTRACTOR: &str = "plaintext@test";
 
 fn embed() -> EmbedFn {
@@ -104,6 +116,39 @@ async fn install(indexes: &Path, id: &str, docs: &[Doc<'_>], store: Option<bool>
     idx.mark_ingestion_complete().unwrap();
 }
 
+/// The fixture's documents: `(name, text, declared metadata)`, read from the
+/// committed recipe exactly as it declares them.
+fn fixture() -> Vec<(String, String, Option<String>)> {
+    let recipe: toml::Value = toml::from_str(FIXTURE).unwrap();
+    recipe["document"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| {
+            (
+                d["name"].as_str().unwrap().to_string(),
+                d["text"].as_str().unwrap().to_string(),
+                d.get("metadata")
+                    .and_then(|m| m.as_str())
+                    .map(str::to_string),
+            )
+        })
+        .collect()
+}
+
+async fn install_fixture(indexes: &Path, id: &str) {
+    let docs = fixture();
+    let docs: Vec<Doc<'_>> = docs
+        .iter()
+        .map(|(n, t, m)| Doc {
+            source_id: n,
+            text: t,
+            metadata: m.as_deref(),
+        })
+        .collect();
+    install(indexes, id, &docs, Some(true)).await;
+}
+
 fn state_over(indexes: std::path::PathBuf, seed: NodeSeed) -> AppState {
     AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         NodeId::from_u128(0xE5),
@@ -115,6 +160,31 @@ fn state_over(indexes: std::path::PathBuf, seed: NodeSeed) -> AppState {
     )
 }
 
+async fn search(
+    base: &str,
+    query: &str,
+    corpus: &str,
+    bearer: Option<&str>,
+) -> (String, Vec<KnowledgeResult>) {
+    let mut req = reqwest::Client::new()
+        .post(format!("{base}/v1/knowledge/search"))
+        .json(&serde_json::json!({
+            "query_embedding": vec![0.0_f32; DIM],
+            "query_text": query,
+            "corpora": [corpus],
+            "limit": 10,
+        }));
+    if let Some(b) = bearer {
+        req = req.bearer_auth(b);
+    }
+    let resp = req.send().await.unwrap();
+    assert_eq!(resp.status(), 200);
+    let raw = resp.text().await.unwrap();
+    let body: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let hits = serde_json::from_value(body["results"].clone()).unwrap();
+    (raw, hits)
+}
+
 async fn get(url: &str, bearer: Option<&str>) -> (u16, serde_json::Value) {
     let mut req = reqwest::Client::new().get(url);
     if let Some(b) = bearer {
@@ -123,6 +193,135 @@ async fn get(url: &str, bearer: Option<&str>) -> (u16, serde_json::Value) {
     let resp = req.send().await.unwrap();
     let status = resp.status().as_u16();
     (status, resp.json().await.unwrap_or(serde_json::Value::Null))
+}
+
+#[tokio::test]
+async fn a_hit_carries_its_declared_metadata_byte_for_byte() {
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    install_fixture(&indexes, "fixture").await;
+    let addr = spawn_router(client_router(state_over(indexes, NodeSeed::default()))).await;
+    let base = format!("http://{addr}");
+
+    for (name, text, metadata) in fixture() {
+        let (raw, hits) = search(&base, &text[..40], "fixture", None).await;
+        let own: Vec<&KnowledgeResult> = hits
+            .iter()
+            .filter(|h| h.source_doc_id.as_deref() == Some(name.as_str()))
+            .collect();
+        assert!(!own.is_empty(), "`{name}` is found: {raw}");
+        for hit in &own {
+            let doc = hit
+                .document
+                .as_ref()
+                .unwrap_or_else(|| panic!("`{name}`'s hit carries no document: {raw}"));
+            assert_eq!(doc.text_sha256, Sha256Hash::of_str(&text).to_hex());
+            assert_eq!(doc.source.id, name);
+            assert_eq!(doc.source.sha256, Some(Sha256Hash::of_str(&text).to_hex()));
+            assert_eq!(doc.extractor, EXTRACTOR);
+            assert!(hit.metadata.is_empty(), "the v0.2 map stays empty");
+        }
+        match metadata {
+            Some(m) => assert!(
+                raw.contains(&format!("\"metadata\":{m}")),
+                "`{name}`'s declared metadata reaches the wire byte for byte: {m} not in {raw}"
+            ),
+            None => assert!(own
+                .iter()
+                .all(|h| h.document.as_ref().unwrap().metadata.is_none())),
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_peer_served_hit_keeps_its_catalog_metadata() {
+    // A catalog corpus on the founder: its extractor's metadata, the shape
+    // `gutenberg_catalog` gives (author, title, date).
+    let catalog = r#"{"title":"Persuasion","author":"Austen, Jane","date":"1817","language":"en"}"#;
+    let text =
+        "Persuasion is the last novel Jane Austen completed.\n\nAnne Elliot is twenty-seven.";
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes_a = tmp.path().join("a");
+    install(
+        &indexes_a,
+        "catalog",
+        &[Doc {
+            source_id: "pg105",
+            text,
+            metadata: Some(catalog),
+        }],
+        Some(true),
+    )
+    .await;
+    let id_a = NodeId::from_u128(0xA5);
+    let state_a = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        id_a,
+        Some(Arc::new(common::reading_double(indexes_a, embed()))),
+        None,
+        sovereign_daemon::state::FabricSeed {
+            peer_transport: sovereign_daemon::double::address_transport(),
+            ..Default::default()
+        },
+    );
+    let addr_a = spawn_router(internal_router(state_a)).await;
+
+    let id_b = NodeId::from_u128(0xB5);
+    let state_b = common::state_over_roster(
+        id_b,
+        "evidence-fanout",
+        vec![
+            common::peer_row(
+                id_b,
+                "Joiner",
+                MemberStatus::Online,
+                caps_with_hosted(&[]),
+                vec!["127.0.0.1:0".parse().unwrap()],
+            ),
+            common::peer_row(
+                id_a,
+                "Founder",
+                MemberStatus::Online,
+                caps_with_hosted(&["catalog"]),
+                vec![addr_a],
+            ),
+        ],
+    );
+    let addr_b = spawn_router(client_router(state_b)).await;
+    let base_b = format!("http://{addr_b}");
+
+    let (raw, hits) = search(&base_b, "Jane Austen", "catalog", None).await;
+    assert!(!hits.is_empty(), "the peer served the corpus: {raw}");
+    for hit in &hits {
+        assert_eq!(
+            hit.peer_name.as_deref(),
+            Some("Founder"),
+            "served by the peer"
+        );
+        let doc = hit
+            .document
+            .as_ref()
+            .unwrap_or_else(|| panic!("a peer's hit lost its document: {raw}"));
+        assert_eq!(doc.source.id, "pg105");
+    }
+    assert!(
+        raw.contains(&format!("\"metadata\":{catalog}")),
+        "byte for byte across the peer: {raw}"
+    );
+
+    // The turn's own seam, which used to drop it a third time.
+    let client = sovereign_turn_client::knowledge_client::MeshKnowledgeClient::new(base_b).unwrap();
+    let corpora = vec!["catalog".to_string()];
+    let outcome = client
+        .search("Jane Austen", &vec![0.0_f32; DIM], 10, Some(&corpora))
+        .await;
+    assert!(!outcome.chunks.is_empty());
+    for chunk in &outcome.chunks {
+        let doc = chunk
+            .document
+            .as_ref()
+            .expect("the mesh client keeps the document");
+        assert_eq!(serde_json::to_string(&doc.metadata).unwrap(), catalog);
+    }
 }
 
 #[tokio::test]
@@ -372,7 +571,7 @@ async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
 }
 
 #[tokio::test]
-async fn the_manifest_advertises_the_text_read() {
+async fn the_manifest_advertises_the_text_read_and_documents_on_hits() {
     let tmp = tempfile::tempdir().unwrap();
     let addr = spawn_router(client_router(state_over(
         tmp.path().join("indexes"),
@@ -386,6 +585,7 @@ async fn the_manifest_advertises_the_text_read() {
         .await
         .unwrap();
     assert!(m.has_feature(features::EVIDENCE_TEXT));
+    assert!(m.has_feature(features::KNOWLEDGE_DOCUMENT));
     let ev = m
         .knowledge
         .as_ref()

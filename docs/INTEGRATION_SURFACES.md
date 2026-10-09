@@ -54,11 +54,14 @@ presented named credential decides, from any address.
 standalone certifier you
 can lift wholesale to test your own implementation. The v0.5 draft
 ([cmnwlth/docs/oicp-v0.5.md](../cmnwlth/docs/oicp-v0.5.md)) adds the
-evidence extension, and the reference host serves its text read:
+evidence extension, and the reference host serves two of its rows:
 `GET /oicp/v1/text/{text_sha256}` (`evidence:text`) reads a stored text by
 the sha256 of its bytes, whole or as a code-point range with context, from
 the corpora the caller may read, and refuses by name (`text not held`,
-`texts not stored`, `text not stored`, `range outside text`). Recipes may carry their documents inline
+`texts not stored`, `text not stored`, `range outside text`); and every
+knowledge-search hit carries `document`, its text's record with the
+metadata the extractor or the recipe declared (`knowledge:document`),
+local and peer-served alike. Recipes may carry their documents inline
 (`[acquire] type = "inline"`) so a host that shares no disk with you can
 install them.
 

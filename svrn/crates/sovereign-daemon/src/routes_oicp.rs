@@ -184,6 +184,9 @@ async fn apply_v04_enrichment(
     // feature and `knowledge.evidence` are derived together or not at all.
     let evidence = state.inner.node.corpus_engine.is_some().then(|| {
         feats.push(features::EVIDENCE_TEXT.to_string());
+        // §3: every local hit carries its text's record
+        // (`oicp_evidence::knowledge_results`).
+        feats.push(features::KNOWLEDGE_DOCUMENT.to_string());
         EvidenceEndpoints {
             text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
             align_endpoint: None,
