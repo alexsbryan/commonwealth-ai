@@ -120,6 +120,81 @@ class GvcFixture(unittest.TestCase):
         self.assertTrue(r["detail"]["fold"].startswith("could_not_judge"))
 
 
+REPLAY_MARK = "2026-10-09T00:00:01.000Z === step replay_extract start: svrn-ingest enrich extract cdcr-gvc --asker replay"
+
+
+def scaffold_leg(root, debug_recorded=None, job_recorded=None):
+    """A run shaped like a runs/scaffold-3sys leg, built from fixtures/gvc-e2e-mini: the recorded atlas in
+    recorded/ with its records as Event atoms (an event type's records since 4314b062f), a different replay atlas in
+    the atlas dir, and logs whose replay half (after run_step.py's `=== step replay_extract start`) repeats the
+    reader's lines with no model call."""
+    atoms = json.loads((FIX / "run/data/indexes/cdcr-gvc/atlas/atoms.json").read_text())["atoms"]
+    for a in atoms:
+        if a["atom_type"] == "Entity":
+            d = a["data"]
+            a["atom_type"] = "Event"
+            a["data"] = {"id": d["id"], "description": "x", "event_type": d.pop("entity_type"), "participants": [],
+                         "evidence": [], "attributes": d["attributes"]}
+    (root / "recorded").mkdir(parents=True)
+    (root / "recorded/atoms.json").write_text(json.dumps({"atoms": atoms}))
+    atlas = root / "data/indexes/cdcr-gvc/atlas"
+    atlas.mkdir(parents=True)
+    (atlas / "atoms.json").write_text(json.dumps({"atoms": [a for a in atoms if a["atom_type"] != "Claim"]}))
+    dbg = (FIX / "run/job.debug.log").read_text() if debug_recorded is None else debug_recorded
+    job = (FIX / "run/job.log").read_text() if job_recorded is None else job_recorded
+    located = "".join(x + "\n" for x in (FIX / "run/job.debug.log").read_text().splitlines() if "located" in x)
+    (root / "job.debug.log").write_text(dbg + REPLAY_MARK + "\n" + located)
+    (root / "job.log").write_text(job + REPLAY_MARK + "\n" + (FIX / "run/job.log").read_text())
+    return root
+
+
+class ScaffoldLeg(unittest.TestCase):
+    """A scaffold leg: the ladder reads the recorded half, atlas and logs, and says so."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.r = G.measure(scaffold_leg(pathlib.Path(cls.tmp.name) / "leg"), gold=FIX / "gold.json", corpus=FIX / "corpus")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_event_atoms_are_records(self):
+        # the same claims as the Entity fixture align the same way when the records are events
+        self.assertEqual(self.r["alignment"], {"claims": 10, "claims_aligned": 6, "claims_anchor_ambiguous": 1,
+                                               "claims_anchor_absent": 1, "claims_document_not_in_gold": 1,
+                                               "claims_not_about_a_record": 1})
+        self.assertEqual((self.r["ladder"]["n"], self.r["ladder"]["hit"]), (26, 3))
+
+    def test_the_recorded_atlas_is_read_and_named(self):
+        self.assertEqual(self.r["read"]["half"], "recorded")
+        self.assertTrue(self.r["atoms"].endswith("recorded/atoms.json"), self.r["atoms"])
+
+    def test_the_trace_stops_at_the_first_replay_step(self):
+        self.assertEqual(self.r["ladder"]["documents_read"], 2)
+        self.assertEqual(self.r["ladder"]["stages"]["read"]["calls"]["Locate"], {"calls": 18, "per_document": 9.0})
+        self.assertIn("replay_extract", self.r["read"]["logs"])
+        _, cost = L.trace(pathlib.Path(self.tmp.name) / "leg")
+        self.assertEqual(cost["patterns"], {"LOCATED": 2, "READ_LINE": 1, "CALL": 34})
+
+    def test_a_pattern_that_matches_nothing_is_could_not_judge_never_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = scaffold_leg(pathlib.Path(tmp) / "leg", debug_recorded="", job_recorded="")
+            _, cost = L.trace(run)
+            s = L.summarize([L.Facts(True, True, True)], cost)
+        self.assertIsNone(cost["documents_read"])
+        self.assertIsNone(cost["calls_by_phase"])
+        self.assertEqual(s["stages"]["read"]["calls"], "could_not_judge")
+
+    def test_a_kept_recorded_dir_without_its_atoms_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = scaffold_leg(pathlib.Path(tmp) / "leg")
+            (run / "recorded/atoms.json").unlink()
+            r = G.measure(run, gold=FIX / "gold.json", corpus=FIX / "corpus")
+        self.assertEqual(r["status"], "never-ran", r.get("reason"))
+
+
 class Verdict(unittest.TestCase):
     def judged(self, s):
         return {"system": s, "status": "judged", "ladder": {"n": 1}}

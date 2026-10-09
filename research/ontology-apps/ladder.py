@@ -12,6 +12,8 @@ Every gold item (a Ward deal's current stage, a uv case state, a GVC event menti
 
 Beside each stage, the run's model calls per document read, per question kind (QUESTION_KINDS). It is an
 instrument, not a gate: nothing here decides a build. A system with no run reads never-ran, never zero.
+On a scaffold leg (a recorded run, then its `--asker replay` rerun over the same atlas and logs) every ladder reads
+the recorded half, through one accessor (run_atlas, trace), and its `read` entry says which half it read.
 
 The systems' own finer rungs (the baseline's) are kept beside the stages; both are computed from one set of
 per-item facts (`Facts`), so the two views cannot disagree about an item. Defaults are the 2026-10-09 baseline
@@ -43,32 +45,104 @@ QUESTION_KINDS = {
 }
 
 # ---------------------------------------------------------------- the run's own logs (was trace_common.py)
+# Checked against the frozen scaffold binary's own logs (runs/scaffold-3sys/gvc, 984427884, 2026-10-09): the passes
+# reader's `located` DEBUG line, its `chapter read` INFO line, and inference_client's `ok` line. A pattern that
+# matches nothing in a run makes its reading could-not-judge (None), never zero: `cost["patterns"]` says which.
 LOCATED = re.compile(r'located document="?([^" ]+)"? line=(\d+) kind="([^"]+)" p=(\S+) dist=(.*?) text=')
 READ_LINE = re.compile(r"chapter read chapter=(\S+) documents=(\d+) claims=(\d+) calls=(\d+)")
 CALL = re.compile(r"/v1/chat/completions ok phase=(\S+) .*?elapsed_ms=(\d+)")
 
+# A scaffold leg (runs/scaffold-3sys/job.sh) copies its atlas to recorded/ after the recorded run, then reruns the
+# same steps with `--asker replay` into the same atlas dir and the same logs; run_step.py marks each step
+# "=== step <name> start", and the replay's steps are named replay_*. The ladder reads the recorded half.
+RECORDED = "recorded"
+REPLAY_STEP = re.compile(r"=== step (replay_\S+) start")
+
+
+def recorded_half(path):
+    """(the lines of `path` before the first replay step's marker, that marker's step name or None)."""
+    out = []
+    with open(path, errors="replace") as f:
+        for raw in f:
+            m = REPLAY_STEP.search(raw)
+            if m:
+                return out, m.group(1)
+            out.append(raw)
+    return out, None
+
+
+def run_atlas(run):
+    """The one accessor for a run's atlas: {"dir", "half", "index"}, or why there is none (a str).
+    recorded/ when the run kept one (a scaffold leg); else the run's one data/indexes/*/atlas, refused when the
+    logs show a replay ran over it. `index` is the atlas's corpus index dir (data/indexes/<corpus>), when single."""
+    run = pathlib.Path(run)
+    found = sorted(run.glob("data/indexes/*/atlas/atoms.json"))
+    index = found[0].parent.parent if len(found) == 1 else None
+    rec = run / RECORDED
+    if rec.is_dir():
+        if not (rec / "atoms.json").exists():
+            return f"{rec} holds no atoms.json: the recorded atlas was not kept, and the atlas dir may be the replay's"
+        return {"dir": rec, "half": "recorded", "index": index}
+    if len(found) != 1:
+        return f"{run} holds {len(found)} atlases (data/indexes/*/atlas/atoms.json); want one"
+    if (run / "job.log").exists() and recorded_half(run / "job.log")[1]:
+        return f"{run}'s logs hold a replay step but no {RECORDED}/: its atlas dir is the replay's"
+    return {"dir": found[0].parent, "half": "the run's one atlas (no replay)", "index": index}
+
+
+def run_trace(run):
+    """trace(run) when the run kept both logs, else ({}, None): the one way a ladder reads a run's logs."""
+    run = pathlib.Path(run)
+    return trace(run) if (run / "job.debug.log").exists() and (run / "job.log").exists() else ({}, None)
+
+
+def what_was_read(atlas, cost):
+    """The `read` entry every ladder reports: which atlas and which half of the logs it measured."""
+    return {"atlas": str(atlas["dir"]), "half": atlas["half"], "logs": cost["log_half"] if cost else "no logs kept"}
+
+
+# The atom kinds a declared type's records are written as, each with the field naming its declared type: RESOLVE
+# writes an entity type's records as Entity atoms and an event type's as Event atoms (4314b062f).
+RECORD_ATOMS = {"Entity": "entity_type", "Event": "event_type"}
+
+
+def records_of(atoms):
+    """{atom id: its data, plus `record_type`} for every atom a declared type's records are written as."""
+    return {a["data"]["id"]: {**a["data"], "record_type": a["data"].get(RECORD_ATOMS[a["atom_type"]])}
+            for a in atoms if a.get("atom_type") in RECORD_ATOMS}
+
 
 def trace(run):
-    """({document: [(line, kind, {label: p})]}, cost) from run/job.debug.log, run/job.log, run/_tokens.json."""
+    """({document: [(line, kind, {label: p})]}, cost) from the recorded half of run/job.debug.log and run/job.log,
+    and run/_tokens.json. `cost["log_half"]` names where the reading stopped; `cost["patterns"]` counts each pattern's
+    matches, and a reading whose pattern matched nothing is None."""
     lines = collections.defaultdict(list)
     calls, ms = collections.Counter(), collections.Counter()
-    with open(run / "job.debug.log", errors="replace") as log:
-        for raw in log:
-            m = LOCATED.search(raw)
-            if m:
-                dist = dict(x.rsplit(" ", 1) for x in m.group(5).split(", "))
-                lines[m.group(1)].append((int(m.group(2)), m.group(3), {k: float(v) for k, v in dist.items()}))
-                continue
-            c = CALL.search(raw)
-            if c:
-                calls[c.group(1)] += 1
-                ms[c.group(1)] += int(c.group(2))
-    docs = sum(int(m.group(2)) for m in READ_LINE.finditer((run / "job.log").read_text(errors="replace")))
+    debug, replay_d = recorded_half(run / "job.debug.log")
+    for raw in debug:
+        m = LOCATED.search(raw)
+        if m:
+            dist = dict(x.rsplit(" ", 1) for x in m.group(5).split(", "))
+            lines[m.group(1)].append((int(m.group(2)), m.group(3), {k: float(v) for k, v in dist.items()}))
+            continue
+        c = CALL.search(raw)
+        if c:
+            calls[c.group(1)] += 1
+            ms[c.group(1)] += int(c.group(2))
+    job, replay_j = recorded_half(run / "job.log")
+    reads = [m for raw in job for m in [READ_LINE.search(raw)] if m]
+    patterns = {"LOCATED": sum(len(v) for v in lines.values()), "READ_LINE": len(reads), "CALL": sum(calls.values())}
+    docs = sum(int(m.group(2)) for m in reads) if reads else None
     tok = json.loads((run / "_tokens.json").read_text()) if (run / "_tokens.json").exists() else {}
     wall = (tok.get("updated_at_ms", 0) - tok.get("started_at_ms", 0)) / 1000 if tok else None
+    stop = replay_d or replay_j
     cost = {"documents_read": docs, "phase1_wall_s": wall, "s_per_document": round(wall / docs, 2) if wall and docs else None,
-            "calls_by_phase": dict(calls), "model_s_by_phase": {k: round(v / 1000, 1) for k, v in ms.items()},
-            "calls_per_document": round(sum(calls.values()) / docs, 1) if docs else None}
+            "calls_by_phase": dict(calls) if calls else None,
+            "model_s_by_phase": {k: round(v / 1000, 1) for k, v in ms.items()} if calls else None,
+            "calls_per_document": round(sum(calls.values()) / docs, 1) if docs and calls else None,
+            "patterns": patterns,
+            "could_not_judge": [k for k, n in patterns.items() if not n],
+            "log_half": f"recorded: stopped at step {stop}'s start marker" if stop else "the whole log (no replay step)"}
     return lines, cost
 
 
@@ -85,7 +159,10 @@ def near(lines, documents, label):
 
 
 def calls_by_question(cost):
-    """{stage or "unstaged": {question kind: {calls, per_document}}} from trace()'s cost."""
+    """{stage or "unstaged": {question kind: {calls, per_document}}} from trace()'s cost; None when no call line
+    matched (could-not-judge, never zero calls)."""
+    if cost.get("calls_by_phase") is None:
+        return None
     docs = cost.get("documents_read") or 0
     out = {s.value: {} for s in Stage}
     for phase, n in sorted((cost.get("calls_by_phase") or {}).items()):
@@ -175,10 +252,11 @@ def summarize(facts, cost):
         else:
             lost[s.value] += 1
     calls = calls_by_question(cost) if cost else None
+    unseen = "could_not_judge" if cost and calls is None else None  # logs kept, but no call line matched
     return {"n": len(facts), "hit": hit,
             "stages": {s.value: {"lost": lost[s.value], "could_not_judge": unjudged[s.value],
-                                 "calls": calls.get(s.value, {}) if calls else None} for s in Stage},
-            "unstaged_calls": calls.get("unstaged") if calls else None,
+                                 "calls": calls.get(s.value, {}) if calls else unseen} for s in Stage},
+            "unstaged_calls": calls.get("unstaged") if calls else unseen,
             "documents_read": cost.get("documents_read") if cost else None}
 
 
@@ -229,6 +307,8 @@ def reproduce():
 
 # ---------------------------------------------------------------- the table
 def fmt_calls(calls):
+    if isinstance(calls, str):
+        return calls
     return ", ".join(f"{k} {v['per_document']}" for k, v in calls.items()) if calls else "-"
 
 
@@ -241,6 +321,7 @@ def table(results):
         lad = r["ladder"]
         out.append(f"{r['system']:5} {r['population']}: n {lad['n']}, hit {lad['hit']}, "
                    f"{lad['documents_read']} documents read; run {r['run']}")
+        out.append(f"      read: atlas {r['read']['half']}; logs {r['read']['logs']}")
         for s in Stage:
             st = lad["stages"][s.value]
             cnj = f" (+{st['could_not_judge']} could not judge)" if st["could_not_judge"] else ""

@@ -1,6 +1,7 @@
 """GVC's stage ladder from one end-to-end run: the reader's line-level statements aligned to gold's token mentions.
 
-    RUN holds data/indexes/<corpus>/atlas/atoms.json (exactly one), and job.log, job.debug.log for the trace
+    RUN holds recorded/atoms.json (a scaffold leg) or data/indexes/<corpus>/atlas/atoms.json (exactly one), and
+    job.log, job.debug.log for the trace (their recorded half; ladder.run_atlas, ladder.trace)
 
 The end-to-end reader states a claim over whole lines (passes.rs: a statement is a run of located lines, its
 evidence the raw text from the first line's start to the last's end); gold marks event mentions as token spans
@@ -17,8 +18,9 @@ record's declared field (cdcr/fold_values.json) names the chain's gold type. A c
 declared value, a value the map does not name, or a run whose records carry no such field is could-not-judge.
 Identity: mention -> record for mentions covered on exactly one record, through support/score.py's er_score.
 
-Never run on a real end-to-end run: none existed when this was written (2026-10-09); it is tested on the
-fixture in fixtures/gvc-e2e-mini, built from gold.json and the raw documents.
+A record is any atom a declared type's records are written as (ladder.records_of): the happening type is an
+event type, so its records are Event atoms. Tested on fixtures/gvc-e2e-mini (built from gold.json and the raw
+documents) and on that fixture shaped as a scaffold leg (test_ladder.scaffold_leg).
 """
 import bisect, collections, json, pathlib, re, sys
 
@@ -112,7 +114,7 @@ def cited(span, lines):
 
 def statements(atoms, bodies, keys):
     """[{doc, start, end, record, kind}] for every claim about a record that aligns, and the counts of those that don't."""
-    records = {a["data"]["id"]: a["data"] for a in atoms if a.get("atom_type") == "Entity"}
+    records = L.records_of(atoms)
     lines = {d: line_spans(b) for d, b in bodies.items()}
     out, counts = [], collections.Counter()
     for a in atoms:
@@ -136,7 +138,7 @@ def statements(atoms, bodies, keys):
         counts["claims_aligned"] += 1
         s, e = cited(at, lines[doc])
         out.append({"i": len(out), "doc": doc, "start": s, "end": e, "record": c["subject"], "kind": c.get("claim_kind"),
-                    "record_type": records[c["subject"]].get("entity_type")})
+                    "record_type": records[c["subject"]]["record_type"]})
     return out, records, dict(counts)
 
 
@@ -199,23 +201,19 @@ def identity(mentions, cover):
             "several_records": sum(len({s["record"] for s in ss}) > 1 for ss in cover.values())}
 
 
-def atoms_of(run):
-    found = sorted(pathlib.Path(run).glob("data/indexes/*/atlas/atoms.json"))
-    return found[0] if len(found) == 1 else found
-
-
 def measure(run, atoms=None, gold=GOLD, corpus=CORPUS, spec=FOLD_VALUES):
     run = pathlib.Path(run)
-    atoms = pathlib.Path(atoms) if atoms else atoms_of(run)
-    if isinstance(atoms, list):
-        return L.never_ran("gvc", f"{run} holds {len(atoms)} atlases (data/indexes/*/atlas/atoms.json); want one")
+    atlas = L.run_atlas(run)
+    if isinstance(atlas, str):
+        return L.never_ran("gvc", atlas)
+    atoms = pathlib.Path(atoms) if atoms else atlas["dir"] / "atoms.json"
     spec = json.loads(pathlib.Path(spec).read_text())
     mentions, bodies, keys = load_gold(gold, corpus)
     stmts, records, counts = statements(json.loads(atoms.read_text())["atoms"], bodies, keys)
-    have_logs = (run / "job.debug.log").exists() and (run / "job.log").exists()
-    locate, cost = L.trace(run) if have_logs else ({}, None)
+    locate, cost = L.run_trace(run)
     facts, rows, cover, detail = items(mentions, stmts, records, spec, locate, keys)
     return {"system": "gvc", "status": "judged", "run": str(run), "atoms": str(atoms),
+            "read": L.what_was_read(atlas, cost),
             "population": "gold event mentions (gold.json)",
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
             "identity": identity(mentions, cover), "alignment": counts, "detail": detail, "cost": cost, "items": rows}

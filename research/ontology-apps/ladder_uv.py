@@ -1,6 +1,7 @@
 """uv-support's stage ladder, tune fold, from one run directory (moved from the baseline's measure_uv.py).
 
-    RUN holds data/indexes/uv-support/atlas/atoms.json, job.log, job.debug.log, _tokens.json
+    RUN holds recorded/atoms.json (a scaffold leg) or its one data/indexes/*/atlas/atoms.json (ladder.run_atlas),
+    and job.log, job.debug.log, _tokens.json (their recorded half: ladder.trace)
 
 Identity is support/score.py --fold tune --atlas, unchanged (`svrn bench er-score` underneath). The items are the
 tune gold case states. A gold case's record is the one its member documents share most with, one to one
@@ -60,7 +61,10 @@ def items(atoms_path, locate):
 
 def measure(run, atoms=None):
     run = pathlib.Path(run)
-    atoms = pathlib.Path(atoms) if atoms else run / "data/indexes/uv-support/atlas/atoms.json"
+    atlas = L.run_atlas(run)
+    if isinstance(atlas, str):
+        return L.never_ran("uv", atlas)
+    atoms = pathlib.Path(atoms) if atoms else atlas["dir"] / "atoms.json"
     if not atoms.exists():
         return L.never_ran("uv", f"{atoms} does not exist")
     r = subprocess.run([sys.executable, str(HERE / "support/score.py"), "--fold", "tune", "--atlas", str(atoms)],
@@ -68,13 +72,13 @@ def measure(run, atoms=None):
     if r.returncode != 0:
         sys.exit(f"support/score.py could not judge (exit {r.returncode}): {r.stderr.strip()[-400:]}")
     comp = json.loads(r.stdout)
-    have_logs = (run / "job.debug.log").exists() and (run / "job.log").exists()
-    locate, cost = L.trace(run) if have_logs else ({}, None)
+    locate, cost = L.run_trace(run)
     # The reader logs a document by its url, gold names it by id; raw/documents.jsonl holds both, one to one.
     url_id = {d["url"]: str(d["id"]) for d in map(json.loads, filter(str.strip, (U.ROOT / "raw/documents.jsonl").read_text().splitlines()))}
     locate = {url_id.get(k, k): v for k, v in locate.items()}
     facts, rows, detail = items(atoms, locate)
     return {"system": "uv", "status": "judged", "run": str(run), "atoms": str(atoms),
+            "read": L.what_was_read(atlas, cost),
             "population": "tune gold case states",
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
             "identity": {"b_cubed": comp["b_cubed"]["f1"], "ceaf_e": comp["ceaf_e"]["f1"], "lea": comp["lea"]["f1"],

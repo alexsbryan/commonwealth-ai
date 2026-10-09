@@ -1,6 +1,7 @@
 """crm-ward's stage ladder, tune scope, from one run directory (moved from the baseline's measure_ward.py).
 
-    RUN holds data/indexes/crm-ward/{atlas,chapters.json,chunks.lance}, job.log, job.debug.log, _tokens.json
+    RUN holds data/indexes/crm-ward/{atlas,chapters.json,chunks.lance} (the atlas read is recorded/ when a scaffold
+    leg kept one: ladder.run_atlas), job.log, job.debug.log, _tokens.json (their recorded half: ladder.trace)
 
 The bars are ward/score.py's score() (ward-score-v3), unchanged, and so is the record matching: score() matches
 gold deals to deal records by evidence and party (deal_matches). The items are the tune gold deals with a current
@@ -123,10 +124,12 @@ def items(g, claims, res, locate, label):
 
 def measure(run):
     run = pathlib.Path(run)
-    index = run / "data/indexes/crm-ward"
-    atlas = index / "atlas"
-    if not (atlas / "atoms.json").exists():
-        return L.never_ran("ward", f"{atlas / 'atoms.json'} does not exist")
+    found = L.run_atlas(run)
+    if isinstance(found, str):
+        return L.never_ran("ward", found)
+    if found["index"] is None:
+        return L.never_ran("ward", f"{run} holds no single data/indexes/*/atlas: its sections cannot be mapped to files")
+    index, atlas = found["index"], found["dir"]
     secfiles = S.section_files(str(index))  # an absolute path: section_files joins it under ~/.svrnmesh/indexes
     for e in json.loads((S.WARD / "manifest.json").read_text()):
         try:
@@ -138,12 +141,12 @@ def measure(run):
     atoms = json.loads((atlas / "atoms.json").read_text())["atoms"]
     ent, claims = S.load_atlas(atoms, secfiles, S.load_decisions(atlas / "derived_decisions.jsonl"))
     res = S.score(g, ent, claims, tune_files)
-    have_logs = (run / "job.debug.log").exists() and (run / "job.log").exists()
-    locate, cost = L.trace(run) if have_logs else ({}, None)
+    locate, cost = L.run_trace(run)
     label = L.kind_label(locate, "stage_update")
     facts, rows, cross = items(g, claims, res, locate, label)
     idn = identity(g, atoms, tune_files)
     return {"system": "ward", "status": "judged", "run": str(run), "instrument_version": S.INSTRUMENT_VERSION,
+            "read": L.what_was_read(found, cost),
             "population": "tune gold deals with a current stage",
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
             "identity": {"b_cubed": idn["b_cubed"]["f1"], "ceaf_e": idn["ceaf_e"]["f1"], "lea": idn["lea"]["f1"],
