@@ -41,11 +41,36 @@ export type SegmentKindWire =
   | { kind: "inference" }
   | { kind: "unverified" };
 
+/** Wire shape of `QuoteAddress`: a verified quotation inside a segment, and
+ *  where it stands in a stored text (ADDRESSED_TEXT §5.2). `start`/`end` are
+ *  CODE POINTS into the text named `text_sha256`; `exact` is that range, so
+ *  a reader checks what it opened by comparing strings. */
+export interface QuoteAddressWire {
+  answer_range: { start: number; end: number };
+  corpus_id: string;
+  text_sha256: string;
+  start: number;
+  end: number;
+  exact: string;
+}
+
 /** Wire shape of `AnswerSegment`. */
 export interface AnswerSegmentWire {
   text_range: { start: number; end: number };
   kind: SegmentKindWire;
   margin?: number | null;
+  /** Absent on a turn whose runtime predates it, and when the segment
+   *  quotes nothing that verified. */
+  quotes?: QuoteAddressWire[];
+}
+
+/** A verified quotation the reader can open where it stands. */
+export interface QuoteAddress {
+  corpusId: string;
+  textSha256: string;
+  start: number;
+  end: number;
+  exact: string;
 }
 
 /** One row of the provenance strip, ready to render. */
@@ -64,6 +89,33 @@ export interface ProvenanceRow {
    *  grounded row means "found in your sources, nowhere to send you" —
    *  rendered as an un-openable badge, never as a link to a guess. */
   address: { corpusId: string; chunkId: number } | null;
+  /** Verified quotations in this stretch, each openable at its address
+   *  in a stored text. A malformed entry is dropped, never repaired. */
+  quotes: QuoteAddress[];
+}
+
+/** One wire quote as a `QuoteAddress`, or `null` when it is malformed. */
+export function readQuoteAddress(q: unknown): QuoteAddress | null {
+  const w = q as Partial<QuoteAddressWire> | null;
+  if (
+    !w ||
+    typeof w.corpus_id !== "string" ||
+    typeof w.text_sha256 !== "string" ||
+    !/^[0-9a-f]{64}$/.test(w.text_sha256) ||
+    typeof w.start !== "number" ||
+    typeof w.end !== "number" ||
+    w.start > w.end ||
+    typeof w.exact !== "string"
+  ) {
+    return null;
+  }
+  return {
+    corpusId: w.corpus_id,
+    textSha256: w.text_sha256,
+    start: w.start,
+    end: w.end,
+    exact: w.exact,
+  };
 }
 
 export interface AnswerProvenance {
@@ -117,6 +169,11 @@ export function readAnswerProvenance(
         addr && typeof addr.corpus_id === "string" && typeof addr.chunk_id === "number"
           ? { corpusId: addr.corpus_id, chunkId: addr.chunk_id }
           : null,
+      quotes: Array.isArray(s?.quotes)
+        ? s.quotes
+            .map(readQuoteAddress)
+            .filter((q): q is QuoteAddress => q !== null)
+        : [],
     });
   }
   const grounded = rows.filter((r) => r.kind === "grounded");

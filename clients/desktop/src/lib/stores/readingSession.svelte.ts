@@ -20,8 +20,40 @@
 // the existing chat store.
 
 import { invoke } from "../invoke";
+import type { QuoteAddress } from "../components/answerProvenance";
 
 // ─── Types ────────────────────────────────────────────────────────
+
+/// OICP v0.5 §2.2's `Document`: one stored text and where it came from.
+export interface TextDocument {
+  text_sha256: string;
+  extractor: string;
+  source: { id: string; sha256: string | null };
+  metadata?: unknown;
+}
+
+/// OICP v0.5 §2.2's `TextSlice`: a stored text's `[start, end)` in code
+/// points, with up to `context` code points either side.
+export interface TextSlice {
+  document: TextDocument;
+  start: number;
+  end: number;
+  text: string;
+  before: string;
+  after: string;
+}
+
+/// A quotation opened where it stands: the slice read at its address, and
+/// whether the words there are still the words the answer quoted. A
+/// mismatch is shown, never smoothed over — the address is the claim.
+export interface TextReading {
+  quote: QuoteAddress;
+  slice: TextSlice;
+  matches: boolean;
+}
+
+/// Code points of the stored text shown either side of an opened quote.
+export const QUOTE_CONTEXT = 400;
 
 export interface AtomSpan {
   atom_id: string;
@@ -79,7 +111,7 @@ export interface NeighborWindow {
 }
 
 export interface BreadcrumbStep {
-  kind: "question" | "chunk" | "atom-jump";
+  kind: "question" | "chunk" | "atom-jump" | "quote";
   label: string;
   // Targets are recorded so a click on a breadcrumb item can
   // restore that step's reading state. PR4 wires the click action;
@@ -154,6 +186,7 @@ export interface AtomPanelState {
 // ─── Internal state ───────────────────────────────────────────────
 
 let _currentReading = $state<NeighborWindow | null>(null);
+let _currentText = $state<TextReading | null>(null);
 let _trail = $state<BreadcrumbStep[]>([]);
 let _focusedPassage = $state<FocusedPassage | null>(null);
 let _loading = $state(false);
@@ -184,6 +217,29 @@ async function fetchNeighbors(
     console.warn("readingSession.fetchNeighbors failed:", e);
     return null;
   }
+}
+
+/// The breadcrumb label for an opened quote: the document's declared title
+/// when its metadata carries one, else its source id.
+export function quoteLabel(slice: TextSlice): string {
+  const meta = slice.document.metadata as { title?: unknown } | null | undefined;
+  return typeof meta?.title === "string" && meta.title.trim() !== ""
+    ? meta.title
+    : slice.document.source.id;
+}
+
+/// Read a stored text at an address through the daemon's
+/// `GET {text_endpoint}/{sha}` (OICP v0.5 §2.2), via the Tauri side — the
+/// webview never fetches the daemon. A refusal arrives as its published
+/// reason (`text not held`, `texts not stored`, …) and is rethrown as is.
+async function fetchTextSlice(quote: QuoteAddress): Promise<TextSlice> {
+  return invoke<TextSlice>("read_text_slice", {
+    textSha256: quote.textSha256,
+    start: quote.start,
+    end: quote.end,
+    context: QUOTE_CONTEXT,
+    corpus: quote.corpusId,
+  });
 }
 
 async function fetchAtomCard(
@@ -234,9 +290,14 @@ export const readingSession = {
   get error(): string | null {
     return _error;
   },
+  /// A quotation opened at its address in a stored text, when that is
+  /// what the reading column shows.
+  get currentText(): TextReading | null {
+    return _currentText;
+  },
   /// Convenience derived flag — true when the reading column is open.
   get isOpen(): boolean {
-    return _currentReading != null;
+    return _currentReading != null || _currentText != null;
   },
   get atomPanel(): AtomPanelState | null {
     return _atomPanel;
@@ -274,8 +335,34 @@ export const readingSession = {
         target: { corpusId, chunkId },
       },
     ];
+    _currentText = null;
     _currentReading = window;
     _focusedPassage = { corpusId, chunkId, title };
+  },
+
+  /// Open a verified quotation where it stands: its address in a stored
+  /// text, read through the daemon's text endpoint rather than a chunk
+  /// window (ADDRESSED_TEXT §5.2). The slice is checked against the quote's
+  /// own `exact`, and a mismatch is kept visible.
+  async openQuote(quote: QuoteAddress, originLabel: string): Promise<void> {
+    _loading = true;
+    _error = null;
+    let slice: TextSlice;
+    try {
+      slice = await fetchTextSlice(quote);
+    } catch (e) {
+      _loading = false;
+      _error = `Could not open the quotation: ${e instanceof Error ? e.message : String(e)}`;
+      return;
+    }
+    _loading = false;
+    if (_trail.length === 0) {
+      _trail = [{ kind: "question", label: originLabel }];
+    }
+    _trail = [..._trail, { kind: "quote", label: quoteLabel(slice) }];
+    _currentReading = null;
+    _atomPanel = null;
+    _currentText = { quote, slice, matches: slice.text === quote.exact };
   },
 
   /// Replace the current reading with a new chunk (e.g., the user
@@ -305,6 +392,7 @@ export const readingSession = {
         target: { corpusId, chunkId },
       },
     ];
+    _currentText = null;
     _currentReading = window;
     _focusedPassage = { corpusId, chunkId, title };
     _atomPanel = null;
@@ -360,6 +448,7 @@ export const readingSession = {
   /// the passage). Use `clearFocus()` to drop both.
   closeReading(): void {
     _currentReading = null;
+    _currentText = null;
     _trail = [];
     _atomPanel = null;
   },
@@ -392,6 +481,7 @@ export const readingSession = {
       _onOpenConversation(conversationId);
     }
     _currentReading = null;
+    _currentText = null;
     _trail = [];
     _atomPanel = null;
     _focusedPassage = null;

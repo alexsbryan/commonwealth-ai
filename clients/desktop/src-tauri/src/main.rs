@@ -715,6 +715,7 @@ fn main() -> ExitCode {
                 commands::read_get_chunk_neighbors,
                 commands::read_get_atom_card,
                 commands::read_get_atom_elsewhere,
+                commands::read_text_slice,
                 atlas_commands::atlas_list_corpora,
                 atlas_commands::atlas_build_report,
                 atlas_commands::atlas_list_members,

@@ -30,6 +30,7 @@
       case "question": return "❓";
       case "chunk": return "▶";
       case "atom-jump": return "↳";
+      case "quote": return "❝";
     }
   }
 </script>

@@ -709,6 +709,7 @@
       answerText={proseText}
       onOpenCitation={(corpusId, chunkId) =>
         void readingSession.openCitation(corpusId, chunkId, originLabel)}
+      onOpenQuote={(quote) => void readingSession.openQuote(quote, originLabel)}
     />
   {/if}
 
