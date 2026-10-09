@@ -36,6 +36,11 @@ loopback-only: it exposes local dev tooling, not a remote service. A web
 page is not a local caller. A request carrying another origin's `Origin` or
 `Sec-Fetch-Site`, or addressed to a `Host` that is not loopback, is refused,
 as MCP's transport requires ("Servers MUST validate the `Origin` header").
+`/mcp` sits behind the same credential layer as the rest of `:9741`: a
+harness that presents a named credential (`svrn daemon key --add
+claude-code`, sent as `Authorization: Bearer svrn_…`) has its calls named
+in the tool's context and svrn's call log; one that presents nothing is the
+local owner, as before.
 
 **OICP** — `GET /oicp/v1/capabilities` plus the ingest extension. The
 spec ([cmnwlth/docs/oicp-v0.4.md](../cmnwlth/docs/oicp-v0.4.md),

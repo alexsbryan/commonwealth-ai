@@ -133,3 +133,49 @@ impl ClientSurface {
         }
     }
 }
+
+/// The operator listener's finished router: the client router, then `/mcp`
+/// and every family a serving daemon mounts after it — each of those behind
+/// the same auth layer, so a presented credential decides on it too and its
+/// handlers read the one principal (ADDRESSED_TEXT §5.5 rules 1 and 3). Until
+/// 2026-10-08 the later routers answered outside it: `/mcp` with no
+/// principal, and the turn, document and admin families with only their own
+/// loopback guards, which a bogus bearer from loopback passed. Their guards
+/// stay; this adds the credential check. Moved out of `daemon.rs`, which is
+/// over its arch-gate pin.
+///
+/// A sealed posture withholds `/mcp` by name; the mount stays for
+/// `notes_store()` (phase-b-87). The keyed seal (`api_keys::seal`) goes on
+/// the result, after every merge, because a layer wraps only the routes
+/// present when it is applied.
+pub(crate) fn operator_listener_router(
+    state: &crate::state::AppState,
+    mcp_mount: Option<crate::daemon_services::McpMount>,
+    posture: crate::posture::Posture,
+    mounted: Vec<axum::Router>,
+) -> axum::Router {
+    let operator = ClientSurface::Operator.auth_policy();
+    let behind = |router| crate::client_auth::behind(router, state, operator);
+    let mut router = crate::server::client_router(state.clone());
+    match (mcp_mount, posture.withheld()) {
+        (Some(_), Some(_)) => {
+            router = router.merge(behind(crate::posture::mcp_withheld_router()));
+        }
+        // A fresh `McpNotifier` with no producer is fine: the daemon drives
+        // no list-changed notifications (the per-project serve does).
+        (Some(m), None) => {
+            router = router.merge(behind(crate::mcp_router::mcp_router(
+                m.tools,
+                m.notes,
+                m.session_id,
+                m.code,
+                crate::mcp_router::McpNotifier::new(),
+            )));
+        }
+        (None, _) => {}
+    }
+    for family in mounted {
+        router = router.merge(behind(family));
+    }
+    crate::api_keys::seal(router, state)
+}

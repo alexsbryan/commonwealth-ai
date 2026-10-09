@@ -109,6 +109,32 @@ use axum::Json;
 use crate::client_principal::{Presentation, Verified};
 use crate::state::AppState;
 use host_kit::locality::{cross_origin_refusal, RequestLocality};
+use tracing::Instrument;
+
+pub mod owner;
+pub use owner::{is_owner, owner_only};
+
+/// Put `router` behind [`client_auth_layer`] under `policy`: THE one way a
+/// client-port router is mounted inside the auth layer, used by
+/// `server::client_router_for` for the general surface and by the daemon for
+/// every router it merges after it (`/mcp`, the turn, document and admin
+/// families). axum's `.layer` wraps only the routes present when it is
+/// applied, so a router merged after the client router answered with no
+/// principal and no credential check until 2026-10-08 (ADDRESSED_TEXT §5.5
+/// rule 3).
+pub fn behind<S>(
+    router: axum::Router<S>,
+    state: &AppState,
+    policy: ClientAuthPolicy,
+) -> axum::Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router.layer(axum::middleware::from_fn_with_state(
+        ClientAuthState::new(state.clone(), policy),
+        client_auth_layer,
+    ))
+}
 
 /// Per-listener auth posture. See the module docs: the daemon binds the
 /// client router more than once, and the binds differ only in whether a
@@ -227,10 +253,34 @@ pub async fn client_auth_layer(
     // resolving a second time; the internal router, which carries no
     // `client_auth_layer`, keeps its `AdmissionHost::resolve` fallback.
     let (principal, presentation) = state.resolve_presented(request.headers(), Some(peer), policy);
+    // ONE span per request, at the edge, carrying who is asking: every event
+    // the request raises below it (a tool call, a refusal, a turn) names its
+    // principal without re-resolving it (ADDRESSED_TEXT §5.5 rule 3). The
+    // label is non-secret by construction (`Principal::label`).
+    let span = tracing::info_span!(
+        "client_request",
+        principal = %principal.label(),
+        method = %request.method(),
+        path = %request.uri().path(),
+    );
     let mut request = request;
     request
         .extensions_mut()
-        .insert(crate::admission::AttachedPrincipal(principal.clone()));
+        .insert(crate::admission::AttachedPrincipal(principal));
+    decide(state, policy, peer, presentation, request, next)
+        .instrument(span)
+        .await
+}
+
+/// [`client_auth_layer`]'s decision, run inside the request's span.
+async fn decide(
+    state: AppState,
+    policy: ClientAuthPolicy,
+    peer: SocketAddr,
+    presentation: Presentation,
+    request: Request,
+    next: Next,
+) -> Response {
     let locality = RequestLocality::of(&peer, request.headers());
     let path = request.uri().path().to_string();
 

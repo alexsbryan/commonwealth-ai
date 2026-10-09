@@ -115,6 +115,7 @@ pub async fn call_registry_tool(
         tool = %name,
         agent_session_token = %token_redacted,
         corpus_scope = ?ctx.corpus,
+        caller = ?ctx.caller,
         "mcp:tool_call dispatched"
     );
 
@@ -126,6 +127,7 @@ pub async fn call_registry_tool(
         agent_session_token: Some(agent_session_token),
         turn_index: 0,
         corpus_scope: ctx.corpus.clone(),
+        caller: ctx.caller.clone(),
         ..Default::default()
     };
 

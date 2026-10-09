@@ -28,6 +28,13 @@ use crate::locality::RequestLocality;
 /// claims by it).
 const AGENT_SESSION_HEADER: &str = "x-agent-session";
 
+/// Who asked, as the mounting host's auth layer resolved it: a request
+/// extension the host attaches before this framing runs, copied into
+/// [`McpRequestContext::caller`]. An extension and never a header, so a
+/// client cannot type it; a host with no auth layer attaches none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpCaller(pub String);
+
 /// Broadcast surface for server-initiated MCP notifications.
 ///
 /// MCP defines `notifications/tools/list_changed` as a server-pushed signal
@@ -131,6 +138,7 @@ async fn mcp_sse(
 async fn mcp_handle<H: McpRequestHandler + 'static>(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(handler): Extension<Arc<H>>,
+    caller: Option<Extension<McpCaller>>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
@@ -151,7 +159,7 @@ async fn mcp_handle<H: McpRequestHandler + 'static>(
         )
             .into_response();
     }
-    let ctx = match request_context(&headers) {
+    let ctx = match request_context(&headers, caller.map(|Extension(c)| c.0)) {
         Ok(ctx) => ctx,
         Err(why) => {
             tracing::debug!(reason = %why, "mcp: request refused at the edge");
@@ -172,7 +180,10 @@ async fn mcp_handle<H: McpRequestHandler + 'static>(
 /// this framing does not know is refused, never read as no cap: a typo in a
 /// read-only client's config must not hand it the write tools. Which corpora
 /// exist is the tool host's to judge ([`super::McpToolHost::admit`]).
-fn request_context(headers: &HeaderMap) -> Result<McpRequestContext, String> {
+fn request_context(
+    headers: &HeaderMap,
+    caller: Option<String>,
+) -> Result<McpRequestContext, String> {
     let text = |name: &str| -> Result<Option<String>, String> {
         headers
             .get(name)
@@ -197,10 +208,12 @@ fn request_context(headers: &HeaderMap) -> Result<McpRequestContext, String> {
         agent_session: text(AGENT_SESSION_HEADER).ok().flatten(),
         corpus: text(MCP_CORPUS_HEADER)?,
         read_only,
+        caller,
     };
     if ctx.corpus.is_some() || ctx.read_only {
         tracing::debug!(corpus = ?ctx.corpus, read_only = ctx.read_only, "mcp: connection scope");
     }
+    tracing::debug!(caller = ?ctx.caller, "mcp: request caller");
     Ok(ctx)
 }
 

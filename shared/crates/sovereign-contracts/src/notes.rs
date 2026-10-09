@@ -40,6 +40,10 @@ pub struct ToolCallLogRow {
     pub outcome: String,
     /// Unix timestamp of the call.
     pub called_at: i64,
+    /// Who made the call, as the transport's auth layer resolved it (a
+    /// principal label). `None` for a row written with no caller known, and
+    /// from a store that does not record one (code's `notes.db`).
+    pub caller: Option<String>,
 }
 
 /// The agent working-memory port. Implemented once, over the real store, by

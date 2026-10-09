@@ -13,6 +13,10 @@
 //! router does not serve them at all. Read that module's header before
 //! changing which surface carries these; the reasoning is decided once, there.
 //!
+//! The listener is not the whole guard: `server.rs` mounts these behind
+//! `crate::client_auth::owner_only`, because a named client on loopback is a
+//! client, not the owner (ADDRESSED_TEXT §5.5 rule 3).
+//!
 //! [`Scope`]: sovereign_grants::Scope
 //! [`ClientSurface::Operator`]: crate::server::ClientSurface::Operator
 

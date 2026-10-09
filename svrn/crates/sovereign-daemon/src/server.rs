@@ -97,11 +97,12 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // the iroh acceptor is admitted by the loopback arm before any
     // credential is read.
     let operator_routes: Router<AppState> = if surface.serves_operator_routes() {
-        routes_internal::client_token_routes()
-            .route(
-                "/internal/inference/warmup",
-                post(routes_internal::inference_warmup),
-            )
+        // Minting a credential and issuing a guest grant are the OWNER's: the
+        // listener is not the whole guard, because a named client on loopback
+        // is a client (`client_auth::owner`, ADDRESSED_TEXT §5.5 rule 3).
+        let owner_only =
+            axum::middleware::from_fn_with_state(state.clone(), crate::client_auth::owner_only);
+        let credentials = routes_internal::client_token_routes()
             .route(
                 "/internal/guest/grant",
                 post(routes_internal::guest_grant_issue),
@@ -114,6 +115,11 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 "/internal/guest/grant/list",
                 get(routes_internal::guest_grant_list),
             )
+            .route_layer(owner_only);
+        credentials.route(
+            "/internal/inference/warmup",
+            post(routes_internal::inference_warmup),
+        )
     } else {
         Router::new()
     };
@@ -308,19 +314,11 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         Router::new()
     };
 
-    general
-        .merge(rail)
-        .merge(guest_ask)
-        // OUTERMOST layer: bearer-token auth for non-loopback callers.
-        // Wraps the whole client surface (including the per-route
-        // admission gates), so authentication runs BEFORE load-shedding
-        // and before any handler work. Loopback callers and the
-        // `AUTH_EXEMPT_PATHS` (federation/health) pass through. See
-        // `crate::client_auth`.
-        .layer(axum::middleware::from_fn_with_state(
-            crate::client_auth::ClientAuthState::new(state.clone(), auth_policy),
-            crate::client_auth::client_auth_layer,
-        ))
+    // OUTERMOST layer: the credential check. Wraps the whole client surface
+    // (including the per-route admission gates), so authentication runs
+    // BEFORE load-shedding and before any handler work. See
+    // `crate::client_auth`.
+    crate::client_auth::behind(general.merge(rail).merge(guest_ask), &state, auth_policy)
         // Outermost frontdoor: bound request-body size + slow-dribble time
         // before any handler or auth work runs.
         .body_limits(MAX_REQUEST_BODY_BYTES, REQUEST_BODY_READ_TIMEOUT)

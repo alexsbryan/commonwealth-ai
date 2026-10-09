@@ -47,6 +47,12 @@ Three zones, from most to least trusted:
   A bearer not in that form from a local process is read as no credential,
   so `OPENAI_API_KEY=local` (`docs/INTEROP.md` §1) keeps working. Until
   2026-10-08 a loopback caller was admitted before its bearer was read.
+  A named client on loopback is a client, not the owner: minting a
+  credential and issuing a guest grant need the owner, a local process
+  presenting nothing (`[daemon] loopback = "owner"`) or an `admin`-group
+  credential (`svrn/crates/sovereign-daemon/src/client_auth/owner.rs`). Until
+  then any caller that passed `client_auth` on the operator bind could mint,
+  including a remote holder of the shared token on a non-loopback bind.
 - **The mesh perimeter.** In trusted-network mode a Commonwealth mesh runs
   on a network you control — a tailnet, WireGuard, or a LAN behind a
   firewall. Inside that perimeter, nodes that hold the join key are peers.

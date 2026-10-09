@@ -158,6 +158,10 @@ async fn apply_v04_enrichment(
     .iter()
     .map(|s| s.to_string())
     .collect();
+    // v0.5 §5.1: a presented named credential decides, from any address, on
+    // every route `client_auth` guards (`client_principal::presented`).
+    // Structural on this daemon, so unconditional.
+    feats.push(features::AUTH_NAMED_CLIENT.to_string());
 
     // §5 ingest surface — advertised iff a corpus engine is wired on this
     // node (the routes 503 without one). The `knowledge.ingest` endpoints

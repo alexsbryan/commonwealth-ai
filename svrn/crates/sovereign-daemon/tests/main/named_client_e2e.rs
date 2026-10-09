@@ -164,3 +164,179 @@ async fn a_named_token_from_loopback_is_logged_by_name() {
         "a log line carried the secret:\n{lines}"
     );
 }
+
+/// POST `/internal/client/token` from loopback, minting `name`, presenting
+/// `bearer` when given.
+async fn mint_from_loopback(state: AppState, bearer: Option<&str>, name: &str) -> StatusCode {
+    let mut b = Request::post("/internal/client/token")
+        .header("host", "127.0.0.1:9741")
+        .header("content-type", "application/json");
+    if let Some(t) = bearer {
+        b = b.header(axum::http::header::AUTHORIZATION, format!("Bearer {t}"));
+    }
+    let mut req = b
+        .body(Body::from(format!(r#"{{"name":"{name}"}}"#)))
+        .unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(LOOPBACK.parse::<SocketAddr>().unwrap()));
+    client_router(state).oneshot(req).await.unwrap().status()
+}
+
+/// A named client on loopback is a client, not the owner: it may not mint a
+/// credential (ADDRESSED_TEXT §5.5 rule 3, appendix defect 5). The owner, a
+/// local process presenting nothing, still may. Red before the owner check:
+/// the harness minted (200).
+#[tokio::test]
+async fn a_named_client_minting_a_token_is_403() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (state, tokens) = state(tmp.path());
+    let harness = generate_bearer_token().unwrap();
+    tokens.mint("claude-code", &[], harness.clone()).unwrap();
+    assert_eq!(
+        mint_from_loopback(state.clone(), Some(&harness), "smuggled").await,
+        StatusCode::FORBIDDEN,
+        "a named client minted a credential"
+    );
+    assert!(
+        tokens.list().iter().all(|r| r.name != "smuggled"),
+        "and the credential exists"
+    );
+    assert_eq!(
+        mint_from_loopback(state, None, "laptop").await,
+        StatusCode::OK,
+        "the owner lost minting"
+    );
+}
+// ── /mcp behind the one auth layer ───────────────────────────────
+
+/// An svrn tool that answers with the caller its `ToolContext` names.
+struct EchoCaller;
+
+#[async_trait::async_trait]
+impl sovereign_contracts::traits::Tool for EchoCaller {
+    fn descriptor(&self) -> sovereign_contracts::types::ToolDescriptor {
+        use sovereign_contracts::types::{Effect, Idempotency, Latency, Scope};
+        sovereign_contracts::types::ToolDescriptor {
+            // An id svrn's MCP surface exposes, so the call runs and is logged.
+            id: "corpus_search".into(),
+            name: "corpus_search".into(),
+            description: "echoes the caller".into(),
+            parameters: serde_json::json!({"type": "object", "properties": {}}),
+            examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: None,
+        }
+    }
+    async fn execute(
+        &self,
+        _args: &serde_json::Value,
+        ctx: &sovereign_contracts::types::ToolContext,
+    ) -> Result<sovereign_contracts::types::StepOutput, sovereign_contracts::Error> {
+        Ok(sovereign_contracts::types::StepOutput::Text(format!(
+            "caller={:?}",
+            ctx.caller
+        )))
+    }
+    fn required_permissions(&self) -> Vec<sovereign_contracts::types::Permission> {
+        Vec::new()
+    }
+}
+
+/// `/mcp` as the daemon mounts it: behind `client_auth` on the operator
+/// policy, with svrn's own store as its call log.
+fn mounted_mcp(
+    state: &AppState,
+    notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
+) -> axum::Router {
+    let mut registry = sovereign_contracts::ToolRegistry::new();
+    registry.register(Box::new(EchoCaller));
+    sovereign_daemon::client_auth::behind(
+        sovereign_daemon::mcp_router::mcp_router(
+            Arc::new(registry),
+            notes,
+            "named-client".into(),
+            None,
+            sovereign_daemon::mcp_router::McpNotifier::new(),
+        ),
+        state,
+        sovereign_daemon::server::ClientSurface::Operator.auth_policy(),
+    )
+}
+
+async fn mcp_call(router: axum::Router, bearer: Option<&str>) -> axum::response::Response {
+    let mut b = Request::post("/mcp")
+        .header("host", "127.0.0.1:9741")
+        .header("content-type", "application/json")
+        .header("accept", "application/json, text/event-stream");
+    if let Some(t) = bearer {
+        b = b.header(axum::http::header::AUTHORIZATION, format!("Bearer {t}"));
+    }
+    let mut req = b
+        .body(Body::from(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"corpus_search","arguments":{}}}"#,
+        ))
+        .unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(LOOPBACK.parse::<SocketAddr>().unwrap()));
+    router.oneshot(req).await.unwrap()
+}
+
+/// A named client's MCP call carries its name into `ToolContext` and into
+/// svrn's call log (ADDRESSED_TEXT §5.5 rule 3). Watched red against a
+/// framing that ignores the caller: the tool saw `None` and the row named no
+/// one.
+#[tokio::test]
+async fn a_named_clients_mcp_call_carries_its_name_to_the_tool_and_the_log() {
+    use sovereign_contracts::notes::AgentNotes;
+    let tmp = tempfile::tempdir().unwrap();
+    let (state, tokens) = state(tmp.path());
+    let token = generate_bearer_token().unwrap();
+    tokens.mint("claude-code", &[], token.clone()).unwrap();
+    let notes = Arc::new(
+        sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap(),
+    );
+    let resp = mcp_call(mounted_mcp(&state, Arc::clone(&notes)), Some(&token)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), 1 << 20)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let text = body["result"]["content"][0]["text"].as_str().unwrap_or("");
+    assert_eq!(
+        text, r#"caller=Some("asserted:claude-code")"#,
+        "the tool's context did not name the client: {body}"
+    );
+    // The log write is fire-and-forget; give it its turn.
+    let mut rows = Vec::new();
+    for _ in 0..50 {
+        rows = notes.tool_call_log_rows(0, 10).await.unwrap();
+        if !rows.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(rows.len(), 1, "one call, one row: {rows:?}");
+    assert_eq!(rows[0].caller.as_deref(), Some("asserted:claude-code"));
+}
+
+/// `/mcp` sits behind the same layer: a credential of ours that verifies
+/// nothing is refused there too, and the owner's own MCP client, presenting
+/// nothing, is still served.
+#[tokio::test]
+async fn mcp_refuses_a_bogus_credential_of_ours_and_still_serves_the_owner() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (state, _) = state(tmp.path());
+    let notes = Arc::new(
+        sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap(),
+    );
+    let bogus = format!("svrn_{}", "ab".repeat(32));
+    let refused = mcp_call(mounted_mcp(&state, Arc::clone(&notes)), Some(&bogus)).await;
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+    let owner = mcp_call(mounted_mcp(&state, notes), None).await;
+    assert_eq!(owner.status(), StatusCode::OK);
+}

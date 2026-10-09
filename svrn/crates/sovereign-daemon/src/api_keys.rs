@@ -169,8 +169,17 @@ pub async fn keyed_auth_layer(
     request
         .extensions_mut()
         .insert(AttachedPrincipal(principal.clone()));
+    request.extensions_mut().insert(KeySealed);
     next.run(request).await
 }
+
+/// Marks a request [`keyed_auth_layer`] admitted. Only a keyed daemon's
+/// callers are owned by their key ([`Caller::Keyed`]): since 2026-10-08 the
+/// client auth layer attaches `Principal::Asserted` for a named client on an
+/// `owner` daemon too, and reading that alone would let a remote named client
+/// past the turn and document families' loopback guard.
+#[derive(Debug, Clone, Copy)]
+struct KeySealed;
 
 /// 401 for a caller that presented no key, or a bearer that is not one.
 fn key_required(presented: bool) -> Response {
@@ -198,6 +207,7 @@ pub async fn local_or_keyed(request: Request, next: Next) -> Response {
 }
 
 fn asserted_sub(ext: &axum::http::Extensions) -> Option<String> {
+    ext.get::<KeySealed>()?;
     match ext.get::<AttachedPrincipal>() {
         Some(AttachedPrincipal(Principal::Asserted { sub, .. })) => Some(sub.clone()),
         _ => None,

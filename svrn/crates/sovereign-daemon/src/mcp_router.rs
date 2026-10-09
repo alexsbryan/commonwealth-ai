@@ -26,13 +26,14 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{Json, Router};
 use host_kit::locality::RequestLocality;
+use host_kit::mcp::http::McpCaller;
 use host_kit::mcp::{
     McpCallLog, McpMountedTools, McpRequestContext, McpRequestHandler, ToolOutcome,
 };
 use serde_json::Value;
 
-use sovereign_contracts::notes::AgentNotes;
 use sovereign_core::registry::ToolRegistry;
+use sovereign_store::sqlite::SqliteStateStore;
 
 // ─── JSON-RPC 2.0 envelope ────────────────────────────────────
 //
@@ -56,30 +57,55 @@ pub use host_kit::mcp::http::McpNotifier;
 
 /// svrn's call log: the kit's call-log port over svrn's own store
 /// (pb-notes-memory), so svrn's calls land beside its other memory and
-/// code's `svrn reflect` reads only code's. Fire-and-forget: a log failure
-/// never touches the answer.
+/// code's `svrn reflect` reads only code's. Each row names who made the call,
+/// as the auth layer resolved it (ADDRESSED_TEXT §5.5 rule 3; until
+/// 2026-10-08 this ignored the request context). Fire-and-forget: a log
+/// failure never touches the answer.
 struct SvrnCallLog {
-    store: Arc<dyn AgentNotes>,
+    store: Arc<SqliteStateStore>,
     session_id: Arc<String>,
 }
 
 impl McpCallLog for SvrnCallLog {
-    fn record(&self, tool: &str, outcome: &ToolOutcome, _ctx: &McpRequestContext) {
+    fn record(&self, tool: &str, outcome: &ToolOutcome, ctx: &McpRequestContext) {
         let Some(tag) = sovereign_contracts::mcp_host::call_log_tag(outcome) else {
             tracing::debug!(tool, "mcp: no tool executed, nothing logged");
             return;
         };
-        let (store, session, tool) = (
+        tracing::debug!(tool, outcome = tag, caller = ?ctx.caller, "mcp: tool called");
+        let (store, session, tool, caller) = (
             Arc::clone(&self.store),
             Arc::clone(&self.session_id),
             tool.to_string(),
+            ctx.caller.clone(),
         );
         tokio::spawn(async move {
-            if let Err(e) = store.log_tool_call(&session, &tool, tag).await {
+            if let Err(e) = store
+                .log_tool_call_by(&session, &tool, tag, caller.as_deref())
+                .await
+            {
                 tracing::debug!(tool = %tool, error = %e, "mcp: svrn's call-log write failed");
             }
         });
     }
+}
+
+/// Hand the kit's framing the caller the auth layer resolved: the principal
+/// label `client_auth` attached, as an [`McpCaller`] extension the framing
+/// copies into `McpRequestContext::caller`. Never a header, so a client
+/// cannot name itself.
+async fn name_the_caller(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let caller = request
+        .extensions()
+        .get::<sovereign_contracts::principal::AttachedPrincipal>()
+        .map(|p| p.0.label());
+    if let Some(label) = caller {
+        request.extensions_mut().insert(McpCaller(label));
+    }
+    next.run(request).await
 }
 
 /// The daemon's own method dispatch behind the kit's HTTP framing: svrn's
@@ -122,7 +148,7 @@ impl McpRequestHandler for DaemonMcp {
 /// idle until something publishes.
 pub fn mcp_router(
     tools: Arc<ToolRegistry>,
-    notes: Arc<dyn AgentNotes>,
+    notes: Arc<SqliteStateStore>,
     session_id: String,
     code: Option<Arc<dyn McpMountedTools>>,
     notifier: McpNotifier,
@@ -155,6 +181,9 @@ pub fn mcp_router(
         // (observed 2026-10-08).
         .localhost_only()
         .layer(Extension(tools))
+        // Inside the auth layer the daemon mounts this behind
+        // (`client_surface::operator_listener_router`), outside the framing.
+        .layer(axum::middleware::from_fn(name_the_caller))
 }
 
 /// GET /mcp/stats — svrn's tool call counts since server start.

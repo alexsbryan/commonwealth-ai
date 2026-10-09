@@ -93,6 +93,9 @@ fn to_port_log_row(r: ToolCallLogRow) -> PortToolCallLogRow {
         tool_name: r.tool_name,
         outcome: r.outcome,
         called_at: r.called_at,
+        // `notes.db` records no caller: that log is code's, and the caller
+        // reaches code's tools through `ToolContext::caller` instead.
+        caller: None,
     }
 }
 

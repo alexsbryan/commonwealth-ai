@@ -775,9 +775,6 @@ impl Executor {
                 let tool_ctx = ToolContext {
                     conversation_id: task.conversation_id.clone(),
                     task_id: Some(task.id.clone()),
-                    working_directory: None,
-                    in_reasoning_loop: false,
-                    agent_session_token: None,
                     turn_index: 0,
                     // The turn's question, so a tool declared
                     // AUTHORITATIVE over it can check in code that what
@@ -788,6 +785,8 @@ impl Executor {
                     // A plan step's tools answer about every corpus: the
                     // runtime's own retrieval decides which to read.
                     corpus_scope: None,
+                    // In-process: no working directory, session or caller.
+                    ..Default::default()
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
