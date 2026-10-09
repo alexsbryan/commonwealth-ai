@@ -530,10 +530,11 @@ async fn a_text_several_documents_share_is_served_with_the_lowest_record() {
 
 const IT: &str = "it-key-000000000000000000000000000000000000000000000000000000000";
 
-#[tokio::test]
-async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
-    let tmp = tempfile::tempdir().unwrap();
-    let indexes = tmp.path().join("indexes");
+/// A keyed daemon holding `firm-docs` and `secret`, whose one key (`IT`, in
+/// the admin group) is granted `firm-docs` only: its sealed client router's
+/// base URL.
+async fn keyed_over_a_grant(tmp: &Path) -> String {
+    let indexes = tmp.join("indexes");
     install(
         &indexes,
         "firm-docs",
@@ -556,7 +557,7 @@ async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
         Some(true),
     )
     .await;
-    let dir = client_tokens_dir(tmp.path());
+    let dir = client_tokens_dir(tmp);
     // As `svrn daemon key --add` writes it, declared `none`; the daemon then
     // reads the keys on disk with no declaration of its own.
     let installer = ClientTokenStore::load(
@@ -579,7 +580,13 @@ async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
     };
     let state = state_over(indexes, seed);
     let addr = spawn_router(api_keys::seal(client_router(state.clone()), &state)).await;
-    let base = format!("http://{addr}/oicp/v1/text");
+    format!("http://{addr}")
+}
+
+#[tokio::test]
+async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = format!("{}/oicp/v1/text", keyed_over_a_grant(tmp.path()).await);
 
     let granted = Sha256Hash::of_str("Granted words.").to_hex();
     let (status, body) = get(&format!("{base}/{granted}"), Some(IT)).await;
@@ -597,6 +604,73 @@ async fn a_text_held_only_outside_the_callers_scope_is_not_held() {
         (404, Some("text not held")),
         "a hint grants nothing: {body}"
     );
+}
+
+/// The client search reads through the same decider as the text route: a
+/// key's search of a corpus outside its grant finds nothing there, and names
+/// the corpus unavailable, as it would one nobody holds. Red while the search
+/// read every installed corpus.
+#[tokio::test]
+async fn a_keyed_search_reads_only_its_grant() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = keyed_over_a_grant(tmp.path()).await;
+    let (_, hits) = search(&base, "Granted", "firm-docs", Some(IT)).await;
+    assert_eq!(hits.len(), 1, "the granted corpus is searched");
+    let (raw, hits) = search(&base, "Secret", "secret", Some(IT)).await;
+    assert!(hits.is_empty(), "outside the grant: {raw}");
+    let body: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(body["corpora_unavailable"], serde_json::json!(["secret"]));
+}
+
+/// The peer route reads through the same decider: a member's unscoped search
+/// reaches the corpora declared `query_sharing` and no others, an identity
+/// the node could not verify reaches none, and a local caller that claimed
+/// nothing reaches both. Red while the peer route searched every installed
+/// corpus for any caller.
+#[tokio::test]
+async fn a_member_s_peer_search_reaches_only_query_sharing_corpora() {
+    use axum::extract::State;
+    use axum::{Extension, Json};
+    use sovereign_contracts::principal::{AttachedPrincipal, Principal};
+    use sovereign_daemon::routes_internal::knowledge_search;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    for (id, words, shared) in [
+        ("open", "Shared words.", true),
+        ("own", "Private words.", false),
+    ] {
+        let doc = [Doc {
+            source_id: "s",
+            text: words,
+            metadata: None,
+        }];
+        install_sharing(&indexes, id, &doc, Some(true), Some(shared)).await;
+    }
+    let state = state_over(indexes, NodeSeed::default());
+    let corpora_for = |who: Principal| {
+        let state = state.clone();
+        async move {
+            let request = serde_json::from_value(serde_json::json!({
+                "query_embedding": vec![0.0_f32; DIM],
+                "query_text": "words",
+                "limit": 10,
+            }))
+            .unwrap();
+            let attached = Some(Extension(AttachedPrincipal(who)));
+            let (_, Json(resp)) = knowledge_search(State(state), attached, Json(request)).await;
+            let mut corpora: Vec<String> = resp.results.into_iter().map(|r| r.corpus_id).collect();
+            corpora.sort();
+            corpora.dedup();
+            corpora
+        }
+    };
+    let member = Principal::Member {
+        node_id: NodeId::from_u128(7),
+    };
+    assert_eq!(corpora_for(member).await, ["open"]);
+    assert!(corpora_for(Principal::Unverified).await.is_empty());
+    assert_eq!(corpora_for(Principal::Anonymous).await, ["open", "own"]);
 }
 
 /// A mesh member reads the texts of the corpora declared shared with the mesh
