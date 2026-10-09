@@ -716,6 +716,34 @@ pub fn install_status(
     }
 }
 
+/// POST /internal/corpus/install — start (or resume) a corpus ingest.
+///
+/// Thin entry point to [`CorpusEngine::ingest`]. Desktop's Tauri
+/// `install_corpus` command and the daemon's auto-collaborate loop
+/// both call this so there is exactly one place where an ingest gets
+/// spawned on this node: the shared helper
+/// [`spawn_corpus_install`]. That helper owns `active_ingests`
+/// bookkeeping and the `corpus_progress` map, so the
+/// `/internal/corpus/progress` route and the `/internal/corpus/cancel`
+/// route have consistent views of what is running.
+///
+/// Idempotent: a second call while the same corpus is already in
+/// `active_ingests` returns `spawned: false` without starting a new
+/// task. That's the "dual-path guard" — clicking Install in Desktop
+/// while the daemon is already working on this corpus just no-ops.
+pub async fn corpus_install(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    axum::Json(req): axum::Json<InstallRequest>,
+) -> Result<axum::Json<InstallResponse>, (axum::http::StatusCode, axum::Json<super::ErrorBody>)> {
+    // The one outcome-to-status mapping, shared with the OICP route.
+    let outcome = spawn_corpus_install_outcome(state, req.corpus_id.clone(), req.parameters).await;
+    let spawned = install_status(outcome, &req.corpus_id)?;
+    Ok(axum::Json(InstallResponse {
+        corpus_id: req.corpus_id,
+        spawned,
+    }))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct InstallRequest {
     pub corpus_id: String,

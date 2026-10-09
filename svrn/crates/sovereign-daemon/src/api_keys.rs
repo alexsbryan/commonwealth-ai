@@ -265,6 +265,44 @@ impl Caller {
     }
 }
 
+/// The turn's owner resolver and mesh knowledge leg, by the loopback posture
+/// the node seed also reads (`client_tokens::loopback_grants_nothing`). Where
+/// loopback grants nothing, a conversation is owned by the `{sub}:` prefix its
+/// key wrote, every key's grant is `[retrieval] corpora`, and the mesh leg is
+/// not wired — it dials this daemon's own `/v1/knowledge/search`, whose hits
+/// fold in past the ceiling. `start_daemon` refuses a keyed store over an
+/// unkeyed Runtime. Moved out of `daemon_cmd/boot.rs`, which is in its size
+/// band, unchanged but for the posture it reads.
+#[allow(clippy::type_complexity)]
+pub fn turn_ownership(
+    config: &sovereign_core::setup_config::SetupConfig,
+    data_dir: &std::path::Path,
+) -> Result<
+    (
+        std::sync::Arc<dyn sovereign_core::traits::PrincipalResolver>,
+        Option<std::sync::Arc<dyn sovereign_core::traits::MeshKnowledgeSource>>,
+    ),
+    crate::client_tokens::UnknownLoopback,
+> {
+    let keyed =
+        crate::client_tokens::loopback_grants_nothing(config.daemon.loopback.as_deref(), data_dir)?;
+    if keyed {
+        tracing::info!(
+            grant = ?config.retrieval.corpora,
+            "daemon: loopback = none — turns are owned by key and bounded by [retrieval] corpora; no mesh knowledge leg"
+        );
+        let grant = config.retrieval.corpora.clone();
+        return Ok((std::sync::Arc::new(KeyedOwners { grant }), None));
+    }
+    Ok((
+        std::sync::Arc::new(crate::principal::LocalOwnerPrincipal),
+        sovereign_turn_client::knowledge_client::daemon_knowledge_source(&format!(
+            "http://127.0.0.1:{}",
+            config.daemon.client_port
+        )),
+    ))
+}
+
 /// The turn's `PrincipalResolver` on a keyed daemon: the owner is the
 /// `{sub}:` prefix [`Caller::scope`] wrote, and `[retrieval] corpora` is the
 /// corpus grant every owner gets. An id with no prefix is unattributed, so its

@@ -925,41 +925,16 @@ pub(super) async fn run_daemon(
              ambient retrieval"
         );
     }
-    // A KEYED daemon (on-prem API keys, `crate::api_keys`): a conversation is
-    // owned by the `{sub}:` prefix its key wrote, every key's grant is
-    // `[retrieval] corpora`, and the mesh leg is not wired — it dials this
-    // daemon's own `/v1/knowledge/search`, whose hits fold in past the
-    // ceiling. `start_daemon` refuses a keyed store over an unkeyed Runtime.
-    let keyed = match crate::client_tokens::loopback_grants_nothing(
-        config.daemon.loopback.as_deref(),
-        &data_dir,
-    ) {
-        Ok(keyed) => keyed,
-        Err(e) => {
-            tracing::error!("daemon: {e}");
-            eprintln!("{e}");
-            return 2;
-        }
-    };
-    let (corpus_principal, mesh_knowledge): (
-        Arc<dyn sovereign_core::traits::PrincipalResolver>,
-        _,
-    ) = if keyed {
-        tracing::info!(
-            grant = ?config.retrieval.corpora,
-            "daemon: API keys present — turns are owned by key and bounded by [retrieval] corpora; no mesh knowledge leg"
-        );
-        let grant = config.retrieval.corpora.clone();
-        (Arc::new(crate::api_keys::KeyedOwners { grant }), None)
-    } else {
-        (
-            Arc::new(crate::principal::LocalOwnerPrincipal),
-            sovereign_turn_client::knowledge_client::daemon_knowledge_source(&format!(
-                "http://127.0.0.1:{}",
-                config.daemon.client_port
-            )),
-        )
-    };
+    // Who owns a turn, by the loopback posture (`api_keys::turn_ownership`).
+    let (corpus_principal, mesh_knowledge) =
+        match crate::api_keys::turn_ownership(&config, &data_dir) {
+            Ok(owners) => owners,
+            Err(e) => {
+                tracing::error!("daemon: {e}");
+                eprintln!("{e}");
+                return 2;
+            }
+        };
     let runtime = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
         sensitive_corpora,
         corpus_principal: Some(corpus_principal),

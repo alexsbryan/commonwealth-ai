@@ -18,49 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
-use super::corpus_install::{
-    install_status, spawn_corpus_install_outcome, InstallRequest, InstallResponse,
-};
+use super::corpus_install::InstallResponse;
 use super::ErrorBody;
-
-/// POST /internal/corpus/install — start (or resume) a corpus ingest.
-///
-/// Thin entry point to [`CorpusEngine::ingest`]. Desktop's Tauri
-/// `install_corpus` command and the daemon's auto-collaborate loop
-/// both call this so there is exactly one place where an ingest gets
-/// spawned on this node: the shared helper
-/// [`spawn_corpus_install`]. That helper owns `active_ingests`
-/// bookkeeping and the `corpus_progress` map, so the
-/// `/internal/corpus/progress` route and the `/internal/corpus/cancel`
-/// route have consistent views of what is running.
-///
-/// Idempotent: a second call while the same corpus is already in
-/// `active_ingests` returns `spawned: false` without starting a new
-/// task. That's the "dual-path guard" — clicking Install in Desktop
-/// while the daemon is already working on this corpus just no-ops.
-pub async fn corpus_install(
-    State(state): State<AppState>,
-    Json(req): Json<InstallRequest>,
-) -> Result<Json<InstallResponse>, (StatusCode, Json<ErrorBody>)> {
-    if state.inner.node.corpus_engine.is_none() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorBody {
-                error: crate::hosted_ingest::NO_INGEST.into(),
-            }),
-        ));
-    }
-    // Map the typed outcome to an HTTP status (`install_status`, shared with
-    // the OICP route). A recipe that can't be resolved or parameters that
-    // don't validate are real failures the caller must see (4xx) — NOT a
-    // `spawned:false` masquerading as success behind a 200.
-    let outcome = spawn_corpus_install_outcome(state, req.corpus_id.clone(), req.parameters).await;
-    let spawned = install_status(outcome, &req.corpus_id)?;
-    Ok(Json(InstallResponse {
-        corpus_id: req.corpus_id,
-        spawned,
-    }))
-}
 
 /// GET /internal/corpus/progress — snapshot of the latest progress
 /// event observed for every corpus currently in
