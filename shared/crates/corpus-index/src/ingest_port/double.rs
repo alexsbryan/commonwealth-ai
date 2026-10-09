@@ -116,6 +116,7 @@ pub struct IngestPortDouble {
     ingest_catalog_work: Option<Box<CatalogWorkFn>>,
     partition_path: Option<Box<CorpusFn<PathBuf>>>,
     prepare_registry_install: Option<Box<daemon::PrepareInstallFn>>,
+    prepare_recipe_install: Option<Box<daemon::PrepareRecipeInstallFn>>,
     corpus_disk_status: Option<Box<CorpusFn<super::daemon::CorpusDiskStatus>>>,
     cached_article_stats: Option<Box<CorpusFn<Option<super::daemon::ArticleStats>>>>,
     compute_article_stats: Option<Box<CorpusFn<Option<super::daemon::ArticleStats>>>>,

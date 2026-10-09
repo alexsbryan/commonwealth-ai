@@ -361,6 +361,15 @@ pub async fn run_workflow_in_process(
                 k,
                 sovereign_contracts::setup_config::client_credential(),
             )
+        })
+        .map(|inst| {
+            // An authored recipe goes only to a host that said it takes one.
+            let takes_recipes = manifest.as_ref().is_some_and(|m| {
+                m.features
+                    .iter()
+                    .any(|f| f == sovereign_contracts::oicp::features::INGEST_RECIPE)
+            });
+            inst.accepting_recipes(takes_recipes)
         }) {
         Some(inst) => {
             tracing::info!(

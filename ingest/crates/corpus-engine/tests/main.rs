@@ -115,6 +115,8 @@ mod daemon_port_parity;
 mod install_lifecycle_port_parity;
 #[path = "main/local_corpus_port_parity.rs"]
 mod local_corpus_port_parity;
+#[path = "main/recipe_install_port.rs"]
+mod recipe_install_port;
 #[path = "main/source_tree.rs"]
 mod source_tree;
 #[path = "main/svrn_recipe_shapes.rs"]

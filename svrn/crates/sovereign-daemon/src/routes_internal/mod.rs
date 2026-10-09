@@ -66,7 +66,8 @@ pub use corpus_ingest::{
     ProgressSnapshotResponse,
 };
 pub use corpus_install::{
-    spawn_corpus_install, spawn_corpus_install_with_parameters, InstallRequest, InstallResponse,
+    install_status, spawn_corpus_install, spawn_install, InstallRequest, InstallResponse,
+    InstallSource,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
 // The ring-sync wire body lives in the shared leaf both ends can name

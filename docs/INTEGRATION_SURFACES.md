@@ -44,7 +44,12 @@ local owner, as before.
 
 **OICP** — `GET /oicp/v1/capabilities` plus the ingest extension. The
 spec ([cmnwlth/docs/oicp-v0.4.md](../cmnwlth/docs/oicp-v0.4.md),
-v0.3 as fallback) is CC0 — implement it freely on either side.
+v0.3 as fallback) is CC0 — implement it freely on either side. Under
+`ingest:recipe` (v0.5), `POST /oicp/v1/corpus/install` takes the recipe
+itself as `recipe_toml` and answers its `recipe_sha256`: the same recipe
+twice is `spawned: false`, a different one reingests, and a recipe that
+does not load is a 400. The host advertises `auth:named_client` too: a
+presented named credential decides, from any address.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you
 can lift wholesale to test your own implementation.

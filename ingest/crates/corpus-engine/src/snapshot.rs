@@ -259,57 +259,9 @@ pub fn default_snapshot_filename(manifest: &SnapshotManifest) -> String {
     )
 }
 
-/// Look up an existing index's `_corpus_meta.json` on disk and produce
-/// the subset of fields the snapshot manifest needs. Helper used by
-/// the publisher; not part of the manifest itself.
-pub fn read_local_index_meta(index_dir: &Path) -> Result<LocalIndexMetaSummary> {
-    let meta_path = crate::corpus::Corpus::meta_in(&index_dir);
-    let bytes = std::fs::read(&meta_path)?;
-    let raw: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|e| Error::Serialization(format!("parse {}: {e}", meta_path.display())))?;
-    Ok(LocalIndexMetaSummary {
-        corpus_id: raw
-            .get("corpus_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string(),
-        corpus_name: raw
-            .get("corpus_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string(),
-        embedding_model: raw
-            .get("embedding_model")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string(),
-        embedding_dimensions: raw
-            .get("embedding_dimensions")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize,
-        canonical_fingerprint: raw
-            .get("canonical_fingerprint")
-            .and_then(|v| v.as_str())
-            .map(str::to_string),
-        filter_signature: raw
-            .pointer("/scope/filter_signature")
-            .and_then(|v| v.as_str())
-            .map(str::to_string),
-    })
-}
-
-/// Subset of `IndexMeta` the publisher reads back to populate the
-/// snapshot manifest. Kept narrow so the snapshot module doesn't pin
-/// itself to every field of the private `IndexMeta` struct.
-#[derive(Debug, Clone)]
-pub struct LocalIndexMetaSummary {
-    pub corpus_id: String,
-    pub corpus_name: String,
-    pub embedding_model: String,
-    pub embedding_dimensions: usize,
-    pub canonical_fingerprint: Option<String>,
-    pub filter_signature: Option<String>,
-}
+#[path = "snapshot_meta.rs"]
+mod meta;
+pub use meta::{read_local_index_meta, LocalIndexMetaSummary};
 
 // ─── Publisher ───────────────────────────────────────────────────────────────
 
@@ -341,7 +293,8 @@ pub struct PublishOptions {
     pub residual_gap_pct: Option<f32>,
     /// Free-form publisher notes.
     pub notes: Option<String>,
-    /// SHA-256 of the source `recipe.toml`, hex-encoded.
+    /// SHA-256 of the source `recipe.toml`, hex-encoded. `None` falls back
+    /// to the corpus's own recipe stamp, when it has one.
     pub source_recipe_sha256: Option<String>,
     /// `sovereign-cli` version string, e.g. `"sovereign-cli/0.1.0"`.
     pub producer_version: String,
@@ -438,7 +391,13 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     );
     manifest.filter_signature = index_meta.filter_signature.clone();
     manifest.canonical_fingerprint = index_meta.canonical_fingerprint.clone();
-    manifest.source_recipe_sha256 = opts.source_recipe_sha256.clone();
+    // The caller's value, else the stamp the install wrote (ADDRESSED_TEXT
+    // §5.6): until 2026-10-08 nothing ever filled this, so every published
+    // manifest carried `None`.
+    manifest.source_recipe_sha256 = opts
+        .source_recipe_sha256
+        .clone()
+        .or_else(|| index_meta.recipe_sha256.clone());
     manifest.residual_gap_pct = opts.residual_gap_pct;
     manifest.notes = opts.notes.clone();
     manifest.embed_quirks = opts.embed_quirks.clone();

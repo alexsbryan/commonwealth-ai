@@ -55,6 +55,13 @@ pub struct HttpCorpusInstaller {
     /// Hard cap on the poll before we return "installing" (the install still
     /// runs in the background; this just bounds the step's wait).
     poll_timeout: Duration,
+    /// Authored recipe TOML by corpus id: an install of one of these ids
+    /// carries the recipe itself (OICP v0.5 `ingest:recipe`) rather than
+    /// naming a registry id.
+    recipes: BTreeMap<String, String>,
+    /// The host advertised `ingest:recipe`. A recipe for a host that did not
+    /// is refused here, never sent to be ignored and installed by id.
+    accepts_recipes: bool,
 }
 
 impl Default for HttpCorpusInstaller {
@@ -95,7 +102,46 @@ impl HttpCorpusInstaller {
             wire: ProgressWire::Internal,
             client: default_client(),
             poll_timeout: Duration::from_secs(30 * 60),
+            recipes: BTreeMap::new(),
+            accepts_recipes: false,
         }
+    }
+
+    /// Install `corpus_id` from this authored recipe TOML instead of a
+    /// registry id (ADDRESSED_TEXT §5.6). Only the OICP wire carries one, and
+    /// only to a host that advertised `ingest:recipe` ([`Self::accepting_recipes`]).
+    pub fn with_recipe(mut self, corpus_id: &str, recipe_toml: String) -> Self {
+        self.recipes.insert(corpus_id.to_string(), recipe_toml);
+        self
+    }
+
+    /// Whether the host advertised `ingest:recipe` (its manifest's features).
+    pub fn accepting_recipes(mut self, yes: bool) -> Self {
+        self.accepts_recipes = yes;
+        self
+    }
+
+    /// The install body for `id`: `{corpus_id, parameters}`, plus the
+    /// authored recipe when one is held for it. A held recipe the wire or the
+    /// host cannot carry is refused by name rather than dropped, which would
+    /// install whatever the registry has under that id.
+    fn install_body(
+        &self,
+        id: &str,
+        params: &BTreeMap<String, String>,
+    ) -> Result<serde_json::Value> {
+        let mut body = serde_json::json!({ "corpus_id": id, "parameters": params });
+        if let Some(toml) = self.recipes.get(id) {
+            let carried = matches!(self.wire, ProgressWire::Oicp) && self.accepts_recipes;
+            if !carried {
+                return Err(Error::Execution(format!(
+                    "recipe `{id}`: an authored recipe installs only over OICP to a host \
+                     advertising `ingest:recipe`, and this host or path does not"
+                )));
+            }
+            body["recipe_toml"] = serde_json::Value::String(toml.clone());
+        }
+        Ok(body)
     }
 
     /// OICP v0.4 §5 path: install against the ingest endpoints a host
@@ -118,6 +164,8 @@ impl HttpCorpusInstaller {
             wire: ProgressWire::Oicp,
             client: default_client(),
             poll_timeout: Duration::from_secs(30 * 60),
+            recipes: BTreeMap::new(),
+            accepts_recipes: false,
         })
     }
 
@@ -175,8 +223,9 @@ impl CorpusInstaller for HttpCorpusInstaller {
     ) -> Result<InstallOutcome> {
         // 1. Fire the install (fire-and-forget; the daemon spawns the
         //    mesh-coordinated task). Same body shape on both wires:
-        //    `{corpus_id, parameters}`.
-        let body = serde_json::json!({ "corpus_id": id, "parameters": params });
+        //    `{corpus_id, parameters}`, plus `recipe_toml` for an authored
+        //    recipe over OICP.
+        let body = self.install_body(id, params)?;
         let mut req = self.client.post(&self.install_url).json(&body);
         if let Some(tok) = &self.bearer {
             req = req.bearer_auth(tok);
@@ -273,6 +322,31 @@ mod tests {
             inst.progress_url,
             "http://peer:9741/oicp/v1/corpus/progress"
         );
+    }
+
+    /// An authored recipe rides the OICP install to a host that accepts one,
+    /// and is refused by name on a path that would drop it.
+    #[test]
+    fn an_authored_recipe_rides_the_oicp_install_and_is_refused_elsewhere() {
+        let toml = "[corpus]\nid = \"notes\"\n".to_string();
+        let params = BTreeMap::new();
+        let oicp =
+            HttpCorpusInstaller::from_manifest("http://peer:9741", &manifest_with_ingest(), None)
+                .unwrap()
+                .with_recipe("notes", toml.clone())
+                .accepting_recipes(true);
+        let body = oicp.install_body("notes", &params).unwrap();
+        assert_eq!(body["recipe_toml"], toml);
+        assert!(oicp.install_body("other", &params).unwrap()["recipe_toml"].is_null());
+        let v04_host =
+            HttpCorpusInstaller::from_manifest("http://peer:9741", &manifest_with_ingest(), None)
+                .unwrap()
+                .with_recipe("notes", toml.clone());
+        assert!(v04_host.install_body("notes", &params).is_err());
+        let internal = HttpCorpusInstaller::new()
+            .with_recipe("notes", toml)
+            .accepting_recipes(true);
+        assert!(internal.install_body("notes", &params).is_err());
     }
 
     #[test]

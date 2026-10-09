@@ -13,7 +13,7 @@
 //! Plus parameter discovery (`GET /internal/corpus/recipes/{id}/
 //! parameters`) so the UI can render an install-time form for
 //! parameterized recipes (SEC EDGAR entity list, date ranges, …) before
-//! posting to `/internal/corpus/install`.
+//! posting to the published `/oicp/v1/corpus/install`.
 //!
 //! Both crossed the wire on 2026-09-11 (thin-desktop order). Until then
 //! this file held a `CorpusEngine` of its own to run the validation
@@ -44,7 +44,7 @@ use crate::state::AppState;
 pub struct InstallWithParametersRequest {
     pub corpus_id: String,
     /// Map of parameter name → value (string, number, or string
-    /// array). Forwarded to the daemon's `/internal/corpus/install`
+    /// array). Forwarded to the daemon's `/oicp/v1/corpus/install`
     /// endpoint as-is.
     #[serde(default)]
     pub parameters: BTreeMap<String, serde_json::Value>,
@@ -95,12 +95,15 @@ pub async fn corpus_install_with_parameters(
     state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
     request: InstallWithParametersRequest,
 ) -> Result<(), String> {
+    // The published install (OICP `POST /oicp/v1/corpus/install` on the
+    // client port), not the internal port's route: the same outcome mapping
+    // (an invalid parameter is a 400 naming it), and the call any OICP client
+    // makes (ADDRESSED_TEXT §5.6).
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let daemon = state.internal_base_url();
-    let url = format!("{daemon}/internal/corpus/install");
+    let url = format!("{}/oicp/v1/corpus/install", state.client_base_url());
     let resp = client
         .post(&url)
         .json(&serde_json::json!({
@@ -109,12 +112,12 @@ pub async fn corpus_install_with_parameters(
         }))
         .send()
         .await
-        .map_err(|e| format!("POST /internal/corpus/install: {e}"))?;
+        .map_err(|e| format!("POST /oicp/v1/corpus/install: {e}"))?;
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
         return Err(format!(
-            "daemon /internal/corpus/install returned {status}: {body}"
+            "daemon /oicp/v1/corpus/install returned {status}: {body}"
         ));
     }
 

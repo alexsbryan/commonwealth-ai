@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::state::AppState;
 
 use super::corpus_install::{
-    spawn_corpus_install_outcome, InstallOutcome, InstallRequest, InstallResponse,
+    install_status, spawn_corpus_install_outcome, InstallRequest, InstallResponse,
 };
 use super::ErrorBody;
 
@@ -50,38 +50,16 @@ pub async fn corpus_install(
             }),
         ));
     }
-    // Map the typed outcome to an HTTP status. A recipe that can't be
-    // resolved or parameters that don't validate are real failures the
-    // caller must see (4xx) — NOT a `spawned:false` masquerading as
-    // success behind a 200. Only "already in flight" is a benign no-op.
-    match spawn_corpus_install_outcome(state, req.corpus_id.clone(), req.parameters).await {
-        InstallOutcome::Spawned => Ok(Json(InstallResponse {
-            corpus_id: req.corpus_id,
-            spawned: true,
-        })),
-        InstallOutcome::AlreadyActive => Ok(Json(InstallResponse {
-            corpus_id: req.corpus_id,
-            spawned: false,
-        })),
-        InstallOutcome::NoEngine => Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorBody {
-                error: crate::hosted_ingest::NO_INGEST.into(),
-            }),
-        )),
-        InstallOutcome::RecipeNotFound(reason) => Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                error: format!("cannot install '{}': {reason}", req.corpus_id),
-            }),
-        )),
-        InstallOutcome::InvalidParameters(reason) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                error: format!("invalid parameters for '{}': {reason}", req.corpus_id),
-            }),
-        )),
-    }
+    // Map the typed outcome to an HTTP status (`install_status`, shared with
+    // the OICP route). A recipe that can't be resolved or parameters that
+    // don't validate are real failures the caller must see (4xx) — NOT a
+    // `spawned:false` masquerading as success behind a 200.
+    let outcome = spawn_corpus_install_outcome(state, req.corpus_id.clone(), req.parameters).await;
+    let spawned = install_status(outcome, &req.corpus_id)?;
+    Ok(Json(InstallResponse {
+        corpus_id: req.corpus_id,
+        spawned,
+    }))
 }
 
 /// GET /internal/corpus/progress — snapshot of the latest progress

@@ -171,6 +171,8 @@ async fn apply_v04_enrichment(
     let ingest = state.inner.node.corpus_engine.is_some().then(|| {
         feats.push(features::INGEST_V1.to_string());
         feats.push(features::INGEST_RECIPE_TEST.to_string());
+        // v0.5 §4: install accepts `recipe_toml` (`routes_oicp_ingest`).
+        feats.push(features::INGEST_RECIPE.to_string());
         IngestEndpoints {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),

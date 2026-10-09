@@ -124,8 +124,26 @@ async fn gather_peer_atlas_advice(
         &peer_views,
     )
 }
+
+/// Where an install's recipe comes from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstallSource {
+    /// The registry resolves the recipe by the corpus id.
+    Registry,
+    /// The caller supplied the recipe TOML (OICP v0.5 `ingest:recipe`,
+    /// ADDRESSED_TEXT §5.6): installed under the corpus id it must name,
+    /// and stamped with the sha256 of these bytes.
+    Recipe(String),
+}
+
+/// `true` only when a new task was spawned: the projection the mesh
+/// auto-ingest and auto-resume callers want. Every HTTP caller maps the full
+/// [`InstallOutcome`] through [`install_status`] instead.
 pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
-    spawn_corpus_install_with_parameters(state, corpus_id, std::collections::BTreeMap::new()).await
+    matches!(
+        spawn_corpus_install_outcome(state, corpus_id, std::collections::BTreeMap::new()).await,
+        InstallOutcome::Spawned
+    )
 }
 
 /// Like [`spawn_corpus_install`] but threads recipe parameters and
@@ -145,6 +163,22 @@ pub async fn spawn_corpus_install_outcome(
     state: AppState,
     corpus_id: String,
     parameters: std::collections::BTreeMap<String, serde_json::Value>,
+) -> InstallOutcome {
+    spawn_install(state, corpus_id, parameters, InstallSource::Registry).await
+}
+
+/// [`spawn_corpus_install_outcome`] from either [`InstallSource`].
+///
+/// A supplied recipe is idempotent by its bytes: the same `(corpus_id,
+/// recipe_sha256)` as the stamp on an installed corpus is
+/// [`InstallOutcome::AlreadyInstalled`], and a different one reingests the
+/// corpus — validated first, so a recipe that does not load never costs the
+/// installed corpus.
+pub async fn spawn_install(
+    state: AppState,
+    corpus_id: String,
+    parameters: std::collections::BTreeMap<String, serde_json::Value>,
+    source: InstallSource,
 ) -> InstallOutcome {
     let Some(engine) = state.inner.node.corpus_engine.clone() else {
         tracing::warn!(
@@ -169,35 +203,64 @@ pub async fn spawn_corpus_install_outcome(
         active.insert(corpus_id.clone());
     }
 
+    // What is installed under this id now, and from which recipe bytes.
+    let installed = corpus_index::corpus::Corpus::named(engine.index_dir(), &corpus_id);
+    let installed = installed.filter(|c| c.is_installed());
+    if let InstallSource::Recipe(toml) = &source {
+        let sha = corpus_index::corpus::recipe_sha256(toml);
+        let stamped = installed
+            .as_ref()
+            .and_then(|c| corpus_index::corpus::Corpus::recipe_sha256_in(c.root()));
+        tracing::debug!(corpus = %corpus_id, %sha, stamped = ?stamped, "spawn_corpus_install: recipe install");
+        if stamped.as_deref() == Some(sha.as_str()) {
+            release(&state, &corpus_id).await;
+            return InstallOutcome::AlreadyInstalled;
+        }
+    }
+
     clear_stale_failure(&state, &corpus_id).await;
 
     // Resolve the recipe + apply parameters BEFORE spawning the
     // background task so a parameter mismatch surfaces as a
     // synchronous failure instead of a silent crash later. The port
-    // fetches, coerces and resolves in that order and names which step
-    // refused.
-    let prepared = match engine
-        .clone()
-        .prepare_registry_install(&corpus_id, &parameters)
-        .await
-    {
+    // loads (a supplied recipe) or fetches (by id), coerces and resolves
+    // in that order and names which step refused.
+    let prepared = match &source {
+        InstallSource::Registry => {
+            engine
+                .clone()
+                .prepare_registry_install(&corpus_id, &parameters)
+                .await
+        }
+        InstallSource::Recipe(toml) => {
+            engine
+                .clone()
+                .prepare_recipe_install(&corpus_id, toml, &parameters)
+                .await
+        }
+    };
+    let prepared = match prepared {
         Ok(p) => p,
         Err(refusal) => {
             // Roll back the active_ingests insert so a subsequent
             // retry isn't blocked.
-            state
-                .inner
-                .ingest
-                .active_ingests
-                .write()
-                .await
-                .remove(&corpus_id);
+            release(&state, &corpus_id).await;
             return match refusal {
                 InstallRefusal::RecipeNotFound(e) => InstallOutcome::RecipeNotFound(e),
                 InstallRefusal::InvalidParameters(e) => InstallOutcome::InvalidParameters(e),
+                InstallRefusal::InvalidRecipe(e) => InstallOutcome::InvalidRecipe(e),
             };
         }
     };
+    // A different recipe for an installed corpus reingests it: the new one
+    // validated above, so only now is the old index removed.
+    if let (InstallSource::Recipe(_), Some(old)) = (&source, &installed) {
+        tracing::info!(corpus = %old, "spawn_corpus_install: a different recipe, reingesting");
+        if let Err(e) = engine.remove_corpus_everything(&corpus_id) {
+            release(&state, &corpus_id).await;
+            return InstallOutcome::ReplaceFailed(e.to_string());
+        }
+    }
 
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
@@ -600,20 +663,57 @@ pub async fn spawn_corpus_install_outcome(
     InstallOutcome::Spawned
 }
 
-/// Bool projection of [`spawn_corpus_install_outcome`]: `true` only when
-/// a new task was spawned, `false` for every no-op or failure. Kept for
-/// the mesh auto-ingest / OICP callers that only need "did we start
-/// work?" and don't map failures to HTTP status codes. The HTTP install
-/// handler uses the outcome variant directly so it can surface 4xx.
-pub async fn spawn_corpus_install_with_parameters(
-    state: AppState,
-    corpus_id: String,
-    parameters: std::collections::BTreeMap<String, serde_json::Value>,
-) -> bool {
-    matches!(
-        spawn_corpus_install_outcome(state, corpus_id, parameters).await,
-        InstallOutcome::Spawned
-    )
+/// Take `corpus_id` back out of `active_ingests` on a path that spawned
+/// nothing, so a retry is not blocked.
+async fn release(state: &AppState, corpus_id: &str) {
+    state
+        .inner
+        .ingest
+        .active_ingests
+        .write()
+        .await
+        .remove(corpus_id);
+}
+
+/// THE mapping from an install's outcome to its HTTP answer, shared by the
+/// internal and the OICP install routes: `Ok(spawned)` for a start or a
+/// benign no-op, and a named 4xx/5xx for everything that is a failure.
+/// Until 2026-10-08 the OICP route projected the outcome to a `bool`, so an
+/// invalid recipe or parameters answered 200 `spawned: false`
+/// (ADDRESSED_TEXT appendix defect 2; OICP v0.4 §5.1 requires the 400).
+pub fn install_status(
+    outcome: InstallOutcome,
+    corpus_id: &str,
+) -> Result<bool, (axum::http::StatusCode, axum::Json<super::ErrorBody>)> {
+    use axum::http::StatusCode;
+    let refuse = |status: StatusCode, error: String| {
+        tracing::info!(corpus = %corpus_id, %status, %error, "install: refused");
+        Err((status, axum::Json(super::ErrorBody { error })))
+    };
+    match outcome {
+        InstallOutcome::Spawned => Ok(true),
+        InstallOutcome::AlreadyActive | InstallOutcome::AlreadyInstalled => Ok(false),
+        InstallOutcome::NoEngine => refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            crate::hosted_ingest::NO_INGEST.into(),
+        ),
+        InstallOutcome::RecipeNotFound(reason) => refuse(
+            StatusCode::NOT_FOUND,
+            format!("cannot install '{corpus_id}': {reason}"),
+        ),
+        InstallOutcome::InvalidParameters(reason) => refuse(
+            StatusCode::BAD_REQUEST,
+            format!("invalid parameters for '{corpus_id}': {reason}"),
+        ),
+        InstallOutcome::InvalidRecipe(reason) => refuse(
+            StatusCode::BAD_REQUEST,
+            format!("invalid recipe for '{corpus_id}': {reason}"),
+        ),
+        InstallOutcome::ReplaceFailed(reason) => refuse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("could not remove the installed '{corpus_id}' to reingest it: {reason}"),
+        ),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -659,4 +759,12 @@ pub enum InstallOutcome {
     /// Supplied parameters failed JSON→TOML coercion or schema
     /// validation against the recipe's `[recipe.parameters]` block.
     InvalidParameters(String),
+    /// The corpus is installed from these exact recipe bytes already: the
+    /// same `(corpus_id, recipe_sha256)` twice is a no-op.
+    AlreadyInstalled,
+    /// A supplied recipe did not load, or names another corpus.
+    InvalidRecipe(String),
+    /// A different recipe validated, and the installed index it replaces
+    /// would not remove.
+    ReplaceFailed(String),
 }

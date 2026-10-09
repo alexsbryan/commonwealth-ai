@@ -216,6 +216,10 @@ pub enum InstallRefusal {
     RecipeNotFound(String),
     /// The parameters did not coerce or did not validate against the recipe.
     InvalidParameters(String),
+    /// A supplied recipe TOML did not load (`Recipe::from_toml`, the one load
+    /// boundary), or names another corpus than the one it was asked to
+    /// install as.
+    InvalidRecipe(String),
 }
 
 /// One registry ingest, started by [`PreparedInstall::run`].
@@ -367,6 +371,16 @@ pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
     async fn prepare_registry_install(
         self: Arc<Self>,
         corpus_id: &str,
+        parameters: &BTreeMap<String, serde_json::Value>,
+    ) -> std::result::Result<PreparedInstall, InstallRefusal>;
+    /// Load `recipe_toml` (it must name `corpus_id`), resolve `parameters`
+    /// against it, and hand back the ingest to run. The run writes the recipe
+    /// into the local registry, ingests it, and stamps `recipe_sha256` of
+    /// its text on the corpus (`Corpus::stamp_recipe_sha256`).
+    async fn prepare_recipe_install(
+        self: Arc<Self>,
+        corpus_id: &str,
+        recipe_toml: &str,
         parameters: &BTreeMap<String, serde_json::Value>,
     ) -> std::result::Result<PreparedInstall, InstallRefusal>;
 

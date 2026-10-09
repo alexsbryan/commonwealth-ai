@@ -25,9 +25,11 @@ use sovereign_contracts::daemon_wire::{
 
 use crate::engine::CorpusEngine;
 use crate::recipe::ParameterKind;
+#[path = "install_prep.rs"]
+mod install_prep;
 use crate::testing::{TestOptions, TestReport};
-use crate::types::CorpusSpec;
 use crate::Recipe;
+use install_prep::{prepared, with_parameters, Stamp};
 
 /// THE projection from the engine's `TestReport` onto the wire. Both arms
 /// of the route answer through this one function, so a sampled run and a
@@ -528,40 +530,36 @@ impl IngestPort for CorpusEngine {
                 return Err(InstallRefusal::RecipeNotFound(e.to_string()));
             }
         };
-        let toml_params = match json_params_to_toml(parameters) {
-            Ok(m) => m,
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %corpus_id,
-                    error = %e,
-                    "spawn_corpus_install: parameter coercion failed"
-                );
-                return Err(InstallRefusal::InvalidParameters(e));
-            }
+        let recipe = with_parameters(corpus_id, recipe, parameters)?;
+        Ok(prepared(self, recipe, None))
+    }
+
+    async fn prepare_recipe_install(
+        self: Arc<Self>,
+        corpus_id: &str,
+        recipe_toml: &str,
+        parameters: &BTreeMap<String, serde_json::Value>,
+    ) -> std::result::Result<PreparedInstall, InstallRefusal> {
+        // The one load boundary. A recipe that does not load is the caller's
+        // to fix, a 400, never a registry miss (ADDRESSED_TEXT §5.6).
+        let recipe = Recipe::from_toml(recipe_toml).map_err(|e| {
+            tracing::warn!(corpus = %corpus_id, error = %e, "install: the recipe does not load");
+            InstallRefusal::InvalidRecipe(e.to_string())
+        })?;
+        if recipe.corpus.id != corpus_id {
+            return Err(InstallRefusal::InvalidRecipe(format!(
+                "the recipe declares [corpus] id = '{}', and was asked to install as \
+                 '{corpus_id}': one corpus, one name",
+                recipe.corpus.id
+            )));
+        }
+        let declared = recipe.clone();
+        let recipe = with_parameters(corpus_id, recipe, parameters)?;
+        let stamp = Stamp {
+            declared,
+            text: recipe_toml.to_string(),
         };
-        let resolved = match recipe.resolve_parameters(&toml_params) {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %corpus_id,
-                    error = %e,
-                    "spawn_corpus_install: parameter validation failed"
-                );
-                return Err(InstallRefusal::InvalidParameters(e.to_string()));
-            }
-        };
-        let recipe = recipe.with_resolved_parameters(resolved);
-        let opts_out_of_auto_enrichment = recipe.opts_out_of_auto_enrichment();
-        let engine = self;
-        Ok(PreparedInstall {
-            opts_out_of_auto_enrichment,
-            run: Box::new(move |progress| {
-                Box::pin(async move {
-                    let spec = CorpusSpec::Inline(Box::new(recipe));
-                    engine.ingest(&spec, progress).await
-                })
-            }),
-        })
+        Ok(prepared(self, recipe, Some(stamp)))
     }
 
     async fn recipe_sharing(&self, corpus_id: &str) -> crate::error::Result<RecipeSharing> {

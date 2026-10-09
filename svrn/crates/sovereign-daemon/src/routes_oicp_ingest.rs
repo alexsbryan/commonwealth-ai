@@ -22,35 +22,43 @@ use oicp_types::{
     IngestPhase, RecipeTestReport, RecipeTestRequest,
 };
 
-use crate::routes_internal::{progress_fraction, spawn_corpus_install_with_parameters, ErrorBody};
+use crate::routes_internal::{
+    install_status, progress_fraction, spawn_install, ErrorBody, InstallSource,
+};
 use crate::state::AppState;
 
 /// Default per-run sample when the client doesn't cap it — small enough to
 /// stay a quick dry run, large enough to exercise extraction + chunking.
 const DEFAULT_TEST_SAMPLE: u32 = 20;
 
-/// `POST /oicp/v1/corpus/install` (§5.1). Idempotent: a second call while
-/// the corpus is already installing returns `spawned: false`. Wraps the
-/// internal `spawn_corpus_install_with_parameters` helper 1:1 — the wire
-/// request shape is identical, so this is pure protocol re-framing.
+/// `POST /oicp/v1/corpus/install` (§5.1; v0.5 §4 with `recipe_toml`).
+///
+/// By id, the registry resolves the recipe. With `recipe_toml`, that recipe
+/// is installed under `corpus_id`, validated by the one load boundary
+/// (`Recipe::from_toml`), and the reply carries its `recipe_sha256`.
+/// Idempotent: a second call while the corpus is installing, or with the
+/// same recipe bytes as the installed corpus's stamp, is `spawned: false`; a
+/// different recipe reingests. An invalid recipe or invalid parameters are a
+/// 400 and an unknown id a 404, never a 200 `spawned: false`
+/// (`install_status`, the mapping the internal route shares).
 pub async fn corpus_install(
     State(state): State<AppState>,
     Json(req): Json<CorpusInstallRequest>,
 ) -> Result<Json<CorpusInstallResponse>, (StatusCode, Json<ErrorBody>)> {
-    if state.inner.node.corpus_engine.is_none() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorBody {
-                error: crate::hosted_ingest::NO_INGEST.into(),
-            }),
-        ));
-    }
-    let spawned =
-        spawn_corpus_install_with_parameters(state, req.corpus_id.clone(), req.parameters).await;
+    let recipe_sha256 = req
+        .recipe_toml
+        .as_deref()
+        .map(corpus_index::corpus::recipe_sha256);
+    let source = match req.recipe_toml {
+        Some(toml) => InstallSource::Recipe(toml),
+        None => InstallSource::Registry,
+    };
+    let outcome = spawn_install(state, req.corpus_id.clone(), req.parameters, source).await;
+    let spawned = install_status(outcome, &req.corpus_id)?;
     Ok(Json(CorpusInstallResponse {
         corpus_id: req.corpus_id,
         spawned,
-        recipe_sha256: None,
+        recipe_sha256,
     }))
 }
 

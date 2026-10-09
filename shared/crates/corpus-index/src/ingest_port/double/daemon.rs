@@ -37,6 +37,8 @@ pub(super) type UnpackCanonicalFn =
     dyn Fn(Box<dyn std::io::Read + Send>, &Path) -> Result<u64> + Send + Sync;
 pub(super) type PrepareInstallFn =
     dyn Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync;
+pub(super) type PrepareRecipeInstallFn =
+    dyn Fn(&str, &str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync;
 pub(super) type SliceIngestFn =
     dyn Fn(SliceIngest) -> super::BoxFuture<Result<IngestResult>> + Send + Sync;
 
@@ -147,6 +149,19 @@ impl IngestPortDouble {
         f: impl Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync + 'static,
     ) -> Self {
         self.prepare_registry_install = Some(Box::new(f));
+        self
+    }
+
+    /// Program `prepare_recipe_install`; `f` gets the corpus id and the
+    /// recipe TOML (the parameters are not replayed).
+    pub fn on_prepare_recipe_install(
+        mut self,
+        f: impl Fn(&str, &str) -> std::result::Result<PreparedInstall, InstallRefusal>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.prepare_recipe_install = Some(Box::new(f));
         self
     }
 
@@ -428,6 +443,21 @@ impl IngestPort for IngestPortDouble {
             Some(f) => f(corpus_id),
             None => Err(InstallRefusal::RecipeNotFound(unprogrammed(
                 "prepare_registry_install",
+            ))),
+        }
+    }
+
+    async fn prepare_recipe_install(
+        self: Arc<Self>,
+        corpus_id: &str,
+        recipe_toml: &str,
+        _parameters: &BTreeMap<String, serde_json::Value>,
+    ) -> std::result::Result<PreparedInstall, InstallRefusal> {
+        self.record("prepare_recipe_install");
+        match &self.prepare_recipe_install {
+            Some(f) => f(corpus_id, recipe_toml),
+            None => Err(InstallRefusal::InvalidRecipe(unprogrammed(
+                "prepare_recipe_install",
             ))),
         }
     }
