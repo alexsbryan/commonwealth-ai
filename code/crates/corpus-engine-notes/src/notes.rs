@@ -47,7 +47,7 @@ pub use crate::note::{
     is_ephemeral_kind, Note, NoteScope, NoteSource, ScopeFilter, EPHEMERAL_KINDS,
 };
 use crate::notes_schema::{
-    MIGRATION_V1, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V2, MIGRATION_V3,
+    MIGRATION_V1, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V2, MIGRATION_V3,
     MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
 };
 
@@ -872,6 +872,16 @@ impl NoteStore {
         if version < 12 {
             conn.execute_batch(MIGRATION_V12).map_err(|e| {
                 Error::Io(std::io::Error::other(format!("NoteStore migrate v12: {e}")))
+            })?;
+        }
+
+        // v12 → v13: the call log names its caller (ADDRESSED_TEXT §5.5).
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 13 {
+            conn.execute_batch(MIGRATION_V13).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v13: {e}")))
             })?;
         }
 
@@ -5010,7 +5020,7 @@ mod tests {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 12);
+        assert_eq!(v, 13, "chain head");
         let cols: Vec<String> = conn
             .prepare("PRAGMA table_info(notes)")
             .unwrap()
@@ -5113,7 +5123,7 @@ mod tests {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 12);
+        assert_eq!(v, 13, "chain head");
         let emb: i64 = conn
             .query_row("SELECT COUNT(*) FROM note_embeddings", [], |r| r.get(0))
             .unwrap();

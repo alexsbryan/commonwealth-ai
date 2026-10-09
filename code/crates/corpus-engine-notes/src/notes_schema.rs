@@ -832,6 +832,20 @@ PRAGMA user_version = 12;
 COMMIT;
 ";
 
+/// Applied to databases at `user_version = 12`. Code's tool-call log names
+/// who called, as svrn's already does: the principal label the host's auth
+/// layer resolved (`asserted:claude-code`), NULL when none was resolved
+/// (stdio, rows written before v13). Plain ADD COLUMN, additive only.
+pub(crate) const MIGRATION_V13: &str = "
+BEGIN;
+
+ALTER TABLE tool_call_log ADD COLUMN caller TEXT;
+
+PRAGMA user_version = 13;
+
+COMMIT;
+";
+
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
 //     postmortem_pointer, redteam_finding) ─────────────────────────────────
 

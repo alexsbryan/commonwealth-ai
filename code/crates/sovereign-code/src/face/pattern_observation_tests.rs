@@ -172,3 +172,60 @@ async fn blast_then_build_writes_observed_note_via_live_mcp_wire() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
+
+/// ADDRESSED_TEXT §5.5's second user: a named client's MCP call is logged by
+/// its name. The caller is what the host's auth layer resolved
+/// (`McpRequestContext::caller`), never a header the client typed.
+#[tokio::test]
+async fn a_named_clients_call_is_logged_by_its_name() {
+    use host_kit::mcp::{CallAudit, McpCallLog, McpRequestContext, ToolOutcome};
+
+    let dir = tempfile::tempdir().unwrap();
+    let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).expect("notes open"));
+    let log = CodeCallLog {
+        notes: Arc::clone(&notes),
+        session_id: Arc::new("named-session".into()),
+        matcher: Arc::new(
+            corpus_engine_notes::mining::patterns::ToolPatternMatcher::new(Arc::clone(&notes)),
+        ),
+    };
+    let outcome = ToolOutcome {
+        audit: Some(CallAudit {
+            effect: Effect::Read,
+            empty_result: false,
+        }),
+        ..ToolOutcome::answer("ok", None)
+    };
+    let named = McpRequestContext {
+        caller: Some("asserted:claude-code".into()),
+        ..Default::default()
+    };
+    log.record("blast", &outcome, &named);
+    log.record("build", &outcome, &McpRequestContext::default());
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        let rows = notes.tool_call_log_rows(0, 10).await.unwrap();
+        if rows.len() == 2 {
+            let by = |tool: &str| {
+                rows.iter()
+                    .find(|r| r.tool_name == tool)
+                    .map(|r| r.caller.clone())
+                    .unwrap()
+            };
+            assert_eq!(by("blast").as_deref(), Some("asserted:claude-code"));
+            assert_eq!(
+                by("build"),
+                None,
+                "no one resolved is NULL, never a default"
+            );
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "call log holds {} rows",
+            rows.len()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}

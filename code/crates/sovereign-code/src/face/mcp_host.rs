@@ -76,7 +76,7 @@ pub struct CodeCallLog {
 }
 
 impl McpCallLog for CodeCallLog {
-    fn record(&self, tool: &str, outcome: &ToolOutcome, _ctx: &McpRequestContext) {
+    fn record(&self, tool: &str, outcome: &ToolOutcome, ctx: &McpRequestContext) {
         let Some(tag) = call_log_tag(outcome) else {
             tracing::debug!(tool, "mcp: no tool executed, nothing logged");
             return;
@@ -85,8 +85,12 @@ impl McpCallLog for CodeCallLog {
         let notes = Arc::clone(&self.notes);
         let session = Arc::clone(&self.session_id);
         let matcher = Arc::clone(&self.matcher);
+        let caller = ctx.caller.clone();
         tokio::spawn(async move {
-            if let Err(e) = notes.log_tool_call(&session, &tool, tag).await {
+            if let Err(e) = notes
+                .log_tool_call_by(&session, &tool, tag, caller.as_deref())
+                .await
+            {
                 tracing::debug!(tool = %tool, error = %e, "mcp: tool_call_log write failed");
             }
             matcher.observe_and_record(session.as_str(), None).await;
