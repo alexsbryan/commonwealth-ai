@@ -140,3 +140,13 @@ What this run can claim (n=1 per task per arm):
   run per task cannot separate the servers from sampling noise (the 35B's
   own run-to-run spread is unmeasured); a difference is never called a
   result from this run alone.
+
+### Amendment 2026-10-09 — context at the model's trained length
+
+Operator: 131072 was an inherited constraint, not a choice. The model trains
+at 262144 (`n_ctx_train`, daemon load log), and the first run of the
+appendix (`ab35-A0-ldaptor`, 65/114) ended on ContextWindowExceeded at 148
+turns, so it measured the cap. Both arms now run at ctx 262144; everything
+else in the appendix stands. Run ids are `ab262-<arm>-<task>`. The one
+completed 131k row and the partial B ldaptor run (46 requests, stopped)
+stay on the record and are not mixed in.
