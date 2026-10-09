@@ -242,6 +242,13 @@ fn argmax(labels: &[&str], dist: &BTreeMap<String, f64>) -> (usize, f64) {
         })
 }
 
+/// A line as a trace shows it: at most 160 characters, cut at a character.
+fn excerpt(text: &str) -> &str {
+    text.char_indices()
+        .nth(160)
+        .map_or(text, |(at, _)| &text[..at])
+}
+
 fn render(dist: &BTreeMap<String, f64>) -> String {
     dist.iter()
         .map(|(label, p)| format!("{label} {p:.2}"))
@@ -290,12 +297,21 @@ async fn read_document(
             Ok(dist) => {
                 let (best, p) = argmax(&labels, &dist);
                 let kind = (best < plan.kinds.len()).then_some(best);
-                if let Some(k) = kind {
-                    debug!(document = %id, line = line.n, kind = %plan.kinds[k].decl.name, p, "document_read/passes: located");
-                }
+                // Every line's answer, located or not, so a missed statement
+                // shows how near it came (crm-proof baseline, 2026-10-09).
+                debug!(
+                    document = %id,
+                    line = line.n,
+                    kind = kind.map_or("none", |k| plan.kinds[k].decl.name.as_str()),
+                    p,
+                    dist = %render(&dist),
+                    text = %excerpt(&raw[line.start..line.end]),
+                    "document_read/passes: located"
+                );
                 located.push(kind);
             }
-            Err(_) => {
+            Err(refusal) => {
+                debug!(document = %id, line = line.n, ?refusal, "document_read/passes: locate refused");
                 refused += 1;
                 located.push(None);
             }
@@ -433,15 +449,18 @@ impl Ask<'_> {
             Ok(dist) => match argmax(&labels, &dist) {
                 (best, p) if best < attr.values.len() => {
                     let value = &attr.values[best];
-                    debug!(document = self.document, statement = self.statement, field = %attr.name, %value, p, "document_read/passes: chose");
+                    debug!(document = self.document, statement = self.statement, field = %attr.name, %value, p, dist = %render(&dist), "document_read/passes: chose");
                     DocumentReadField::Supported {
                         value: Value::String(value.clone()),
                         evidence: self.evidence.to_string(),
                     }
                 }
-                _ => DocumentReadField::Unknown {
-                    reason: format!("the reader chose none of the values: {}", render(&dist)),
-                },
+                (_, p) => {
+                    debug!(document = self.document, statement = self.statement, field = %attr.name, p, dist = %render(&dist), "document_read/passes: chose none of the values");
+                    DocumentReadField::Unknown {
+                        reason: format!("the reader chose none of the values: {}", render(&dist)),
+                    }
+                }
             },
         };
         (attr.name.clone(), read)
