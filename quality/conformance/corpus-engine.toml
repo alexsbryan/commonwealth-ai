@@ -35,14 +35,14 @@ asserts = 2
 requirement = "EN-5"
 test = "corpus-engine::main::tiered_entity_extractor_seam::ner_runs_before_the_provider_so_a_provider_failure_still_leaves_entities"
 file = "ingest/crates/corpus-engine/tests/main/tiered_entity_extractor_seam.rs"
-line = 209
+line = 210
 asserts = 2
 
 [[claim]]
 requirement = "EN-5"
 test = "corpus-engine::main::tiered_entity_extractor_seam::the_injected_entity_extractor_is_called_once_per_conversation_with_its_own_chunks"
 file = "ingest/crates/corpus-engine/tests/main/tiered_entity_extractor_seam.rs"
-line = 139
+line = 140
 asserts = 9
 
 [[claim]]
@@ -77,19 +77,19 @@ asserts = 4
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_allows_model_mismatch_with_warning"
 file = "ingest/crates/corpus-engine/src/engine/mod.rs"
-line = 2643
+line = 2622
 asserts = 1
 
 [[claim]]
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_fails_closed_on_a_geometry_mismatch"
 file = "ingest/crates/corpus-engine/src/engine/mod.rs"
-line = 2677
+line = 2656
 asserts = 4
 
 [[claim]]
 requirement = "ST-9"
 test = "corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models"
 file = "ingest/crates/corpus-engine/src/sharding.rs"
-line = 1923
+line = 1922
 asserts = 1
