@@ -258,6 +258,28 @@ subject = "case"
         let invalid = recipe.replace("identity_criterion = \"same issue identifier\"\n", "");
         let error = Recipe::from_toml(&invalid).unwrap_err().to_string();
         assert!(error.contains("document_reading"), "{error}");
+
+        // `document_reader` says how the declared reading asks: it round-trips
+        // beside `document_reading`, and alone it is refused, never ignored.
+        let passes = recipe.replace(
+            "document_reading = true\n",
+            "document_reading = true\ndocument_reader = \"passes\"\n",
+        );
+        let spec = Recipe::from_toml(&passes)
+            .expect("the passes recipe parses")
+            .custom_atlas_spec()
+            .expect("custom atlas policy persists");
+        assert_eq!(
+            spec.policies().document_reader,
+            crate::enrichment::ontology::DocumentReader::Passes
+        );
+        let wire = serde_json::to_vec(&spec).unwrap();
+        let restored: crate::enrichment::pipeline::CustomAtlasSpec =
+            serde_json::from_slice(&wire).unwrap();
+        assert_eq!(restored, spec);
+        let alone = passes.replace("document_reading = true\n", "");
+        let error = Recipe::from_toml(&alone).unwrap_err().to_string();
+        assert!(error.contains("document_reader"), "{error}");
     }
 
     /// The Ward recipe's shape (`research/ontology-apps/ward/recipe.toml`):

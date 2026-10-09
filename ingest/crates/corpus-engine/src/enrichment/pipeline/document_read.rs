@@ -8,6 +8,7 @@ use serde_json::Value;
 
 mod cache;
 mod citations;
+mod passes;
 mod projection;
 mod runner_support;
 mod schema;
@@ -17,6 +18,7 @@ pub use cache::{
     cache_matches_chapter, checkpoint_processed_ids, context_fingerprint, contract_fingerprint,
     phase1_cache_matches, validate_checkpoint,
 };
+pub use passes::read as read_passes;
 pub use projection::parse_response;
 pub(super) use runner_support::{
     cache_text as runner_cache_text, load_exemplar_bank as runner_load_exemplar_bank,

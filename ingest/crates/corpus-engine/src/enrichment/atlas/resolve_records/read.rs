@@ -14,7 +14,7 @@ use oicp_types::forced_choice;
 use tracing::{debug, warn};
 
 use super::select::{decision_call, LABELS, NONE};
-use super::{marked_context, Criterion, Document, NecessaryAttr, Statement};
+use super::{marked_context, ClosedAttr, Criterion, Document, Statement};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
 
@@ -90,7 +90,15 @@ pub(super) async fn read(
                 .copied()
                 .chain([NONE])
                 .collect();
-            let prompt = question(criterion, necessary, &labels, doc, s);
+            let prompt = choice_question(
+                &criterion.type_name,
+                &criterion.description,
+                necessary,
+                &labels,
+                doc.body,
+                s.start..s.end,
+                "resolve_read",
+            );
             out.calls += 1;
             let dist = match decision_call(infer, &prompt, &labels, doc.id, &s.id).await {
                 Ok(dist) => dist,
@@ -129,18 +137,21 @@ pub(super) async fn read(
 }
 
 /// The one-attribute question: the type and the attribute, each with its
-/// declared description, the attribute's values, and the statement marked in
-/// its passage.
-fn question(
-    criterion: &Criterion,
-    attr: &NecessaryAttr,
+/// declared description, the attribute's values, and the statement at `span`
+/// of `body` marked in its passage. RESOLVE asks it as `resolve_read`; the
+/// passes reader asks the same question of claim fields under its own phase.
+pub(crate) fn choice_question(
+    type_name: &str,
+    type_description: &str,
+    attr: &ClosedAttr,
     labels: &[&str],
-    doc: Document<'_>,
-    s: &Statement,
+    body: &str,
+    span: std::ops::Range<usize>,
+    phase: &str,
 ) -> ChatPrompt {
-    let mut u = format!("Type: {}", criterion.type_name);
-    if !criterion.description.is_empty() {
-        u.push_str(&format!(" ({})", criterion.description));
+    let mut u = format!("Type: {type_name}");
+    if !type_description.is_empty() {
+        u.push_str(&format!(" ({type_description})"));
     }
     u.push_str(&format!("\nAttribute: {}", attr.name));
     if !attr.description.is_empty() {
@@ -148,7 +159,7 @@ fn question(
     }
     u.push_str(&format!(
         "\n\nStatement, its words in [[ ]]: \"…{}…\"\n\nWhich {} do the words in [[ ]] refer to?\n",
-        marked_context(doc.body, s.start, s.end),
+        marked_context(body, span.start, span.end),
         attr.name
     ));
     for (v, l) in attr.values.iter().zip(labels) {
@@ -159,6 +170,6 @@ fn question(
     ));
     ChatPrompt::new(SYSTEM, u)
         .with_response_schema("read", forced_choice::schema(labels))
-        .with_phase_id("resolve_read")
+        .with_phase_id(phase)
         .with_temperature(0.0)
 }

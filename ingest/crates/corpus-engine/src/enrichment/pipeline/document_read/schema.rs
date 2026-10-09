@@ -3,7 +3,9 @@ use std::collections::BTreeSet;
 use serde_json::{json, Map, Value};
 
 use crate::enrichment::atlas::SourceDocument;
-use crate::enrichment::ontology::{AttrDecl, OntologyPolicies, SourceDecl, TypeIndex, TypeKind};
+use crate::enrichment::ontology::{
+    AttrDecl, DocumentReader, OntologyPolicies, SourceDecl, TypeIndex, TypeKind,
+};
 use crate::enrichment::pipeline::pipelines::ontology_schema::attribute_schema;
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 
@@ -104,7 +106,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
             _ => None,
         })
         .collect();
-    json!({
+    let mut contract = json!({
         "contract_version": CONTRACT_VERSION,
         "system_prompt": SYSTEM,
         "response_schema": schema_for_ids(&[], policies),
@@ -114,7 +116,13 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         "claim_types": eligible_claims,
         "subject_types": subjects,
         "metadata_sources": metadata_sources,
-    })
+    });
+    // Reads from the two readers never answer for each other in a cache; the
+    // one-shot contract keeps its bytes, so its cached reads stay valid.
+    if policies.document_reader == DocumentReader::Passes {
+        contract["passes"] = super::passes::contract_value(policies);
+    }
+    contract
 }
 
 fn attrs_value(attrs: Vec<&AttrDecl>) -> Vec<Value> {

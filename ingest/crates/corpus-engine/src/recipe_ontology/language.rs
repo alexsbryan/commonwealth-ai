@@ -31,7 +31,7 @@ use crate::recipe_parsing::translate_parse_error;
 use understanding_vocab::ontology::decl::{
     Force, OntologyV1, TypeKind, MAX_ENTITIES_PER_SECTION, MIN_ENTITIES_PER_SECTION,
 };
-use understanding_vocab::ontology::OntologyPolicies;
+use understanding_vocab::ontology::{DocumentReader, OntologyPolicies};
 
 // ── The trait and its registry ──────────────────────────────────────────────
 
@@ -166,6 +166,7 @@ const V1_KEYS: &[&str] = &[
     "must_not",
     "types",
     "document_reading",
+    "document_reader",
     "max_entities_per_section",
     "voices",
     "change",
@@ -189,6 +190,12 @@ impl OntologyLanguage for V1 {
 
     fn parse(&self, body: &toml::Table) -> Result<OntologyPolicies> {
         let v1: OntologyV1 = body.clone().try_into().map_err(translate_parse_error)?;
+        if v1.document_reader != DocumentReader::OneShot && !v1.document_reading {
+            return Err(Error::Recipe(
+                "ontology `document_reader` chooses how declared document reading asks; it requires `document_reading = true`"
+                    .into(),
+            ));
+        }
         if v1.document_reading {
             let claims: Vec<_> = v1
                 .types

@@ -29,11 +29,11 @@ const SYSTEM: &str = include_str!("../resolve_select_prompt.md");
 
 /// Candidate labels, single tokens on the tokenizers in use; `NONE` answers
 /// "none of them". At most `LABELS.len()` candidates are shown, a cost cap.
-pub(super) const LABELS: [&str; 25] = [
+pub(crate) const LABELS: [&str; 25] = [
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
     "T", "U", "V", "W", "X", "Y",
 ];
-pub(super) const NONE: &str = "0";
+pub(crate) const NONE: &str = "0";
 
 /// What a candidate is: an open record a proposer offered, or a record an
 /// earlier statement of this document opened (its position in `asked`).
@@ -239,7 +239,7 @@ pub(super) fn gate_plans(
 /// caller in `DocumentResolution::calls`. An answer that is not a
 /// distribution over every asked label is a refusal, never a default: a label
 /// left out is not read as probability 0 (`cargo xtask judge-funnel-gate`).
-pub(super) async fn decision_call(
+pub(crate) async fn decision_call(
     infer: &InferenceFn,
     prompt: &ChatPrompt,
     labels: &[&str],
@@ -249,10 +249,11 @@ pub(super) async fn decision_call(
     let started = Instant::now();
     let out = infer(prompt, None).await;
     let ms = started.elapsed().as_millis() as u64;
+    let phase = &prompt.phase_id;
     match out {
         Ok(raw) => match forced_choice::parse(&raw) {
             Some(d) if labels.iter().all(|l| d.contains_key(*l)) => {
-                debug!(document, statement, ms, distribution = ?d, "atlas/resolve: decision call");
+                debug!(document, statement, ?phase, ms, distribution = ?d, "atlas/resolve: decision call");
                 Ok(d)
             }
             Some(d) => {
@@ -264,6 +265,7 @@ pub(super) async fn decision_call(
                 warn!(
                     document,
                     statement,
+                    ?phase,
                     ms,
                     ?missing,
                     "atlas/resolve: decision call left labels out"
@@ -274,14 +276,14 @@ pub(super) async fn decision_call(
             }
             None => {
                 let head: String = raw.chars().take(120).collect();
-                warn!(document, statement, ms, %head, "atlas/resolve: decision call answered no distribution");
+                warn!(document, statement, ?phase, ms, %head, "atlas/resolve: decision call answered no distribution");
                 Err(Refusal::NoAnswer {
                     reason: format!("not a forced-choice distribution: {head:?}"),
                 })
             }
         },
         Err(e) => {
-            warn!(document, statement, ms, error = %e, "atlas/resolve: decision call failed");
+            warn!(document, statement, ?phase, ms, error = %e, "atlas/resolve: decision call failed");
             Err(Refusal::NoAnswer {
                 reason: format!("call failed: {e:#}"),
             })

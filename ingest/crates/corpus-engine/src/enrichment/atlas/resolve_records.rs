@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use super::resolution_documents::fold_ws;
-use crate::enrichment::ontology::{AttrFamily, DocumentStamp, OntologyTypeDecl};
+use crate::enrichment::ontology::{AttrDecl, AttrFamily, DocumentStamp, OntologyTypeDecl};
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 use crate::InferenceFn;
 
@@ -56,12 +56,14 @@ pub struct Criterion {
     /// `None`: it decides nothing in a forced-choice run.
     pub proposed_answer: Option<f64>,
     /// The attributes whose supplied or read values must agree.
-    pub necessary: Vec<NecessaryAttr>,
+    pub necessary: Vec<ClosedAttr>,
 }
 
-/// A necessary attribute as READ asks it.
+/// A closed-valued attribute as READ asks it: one forced choice over its
+/// declared values. RESOLVE asks it of identity-necessary attributes, the
+/// passes reader of every closed-valued field it reads.
 #[derive(Debug, Clone)]
-pub struct NecessaryAttr {
+pub struct ClosedAttr {
     pub name: String,
     /// The author's words for what it holds, shown beside its name; empty
     /// when the recipe declares none. Declared value meanings lifted stage
@@ -69,6 +71,25 @@ pub struct NecessaryAttr {
     pub description: String,
     /// The declared closed set, one single-token label each.
     pub values: Vec<String>,
+}
+
+impl ClosedAttr {
+    /// The attribute as one forced choice, when it declares 1..=25 values
+    /// (one single-token label each); `None` for any other attribute.
+    pub fn of(attr: &AttrDecl) -> Option<Self> {
+        match &attr.family {
+            AttrFamily::Text { values }
+                if !values.is_empty() && values.len() <= MAX_READ_VALUES =>
+            {
+                Some(Self {
+                    name: attr.name.clone(),
+                    description: attr.description.clone(),
+                    values: values.clone(),
+                })
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Criterion {
@@ -97,20 +118,8 @@ impl Criterion {
             .map(|n| {
                 decl.attributes
                     .iter()
-                    .find_map(|a| match &a.family {
-                        AttrFamily::Text { values }
-                            if a.name == *n
-                                && !values.is_empty()
-                                && values.len() <= MAX_READ_VALUES =>
-                        {
-                            Some(NecessaryAttr {
-                                name: n.clone(),
-                                description: a.description.clone(),
-                                values: values.clone(),
-                            })
-                        }
-                        _ => None,
-                    })
+                    .find(|a| a.name == *n)
+                    .and_then(ClosedAttr::of)
                     .ok_or_else(|| {
                         format!(
                             "type `{}`: necessary attribute `{n}` declares no values, or more than \
@@ -969,6 +978,9 @@ mod fields;
 pub mod propose;
 mod read;
 mod select;
+
+pub(crate) use read::choice_question;
+pub(crate) use select::{decision_call, LABELS, NONE};
 
 pub use answer::{cite_found, ProposalRule};
 use answer::{judge, prompt, Proposed, ProposedVerdict};

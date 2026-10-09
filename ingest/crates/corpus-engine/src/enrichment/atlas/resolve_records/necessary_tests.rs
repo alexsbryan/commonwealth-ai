@@ -4,7 +4,7 @@ use super::*;
 
 fn necessary(keys: &[&str]) -> Criterion {
     let mut c = criterion(keys);
-    c.necessary = vec![NecessaryAttr {
+    c.necessary = vec![ClosedAttr {
         name: "kind".into(),
         description: String::new(),
         values: ["firing", "death"]

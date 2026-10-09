@@ -94,7 +94,8 @@ only once its precision is measured on the rule as it runs; until then its argma
 and below the bar it is unknown with its distribution attached. An answer code cannot verify refuses that
 question alone. Answers assemble into the stored claims RESOLVE already reads; the `Asker` that answers takes
 the daemon, a replay, or gold, so every question is an oracle at its own boundary. One mode at a time
-(`off | one_shot | passes`); the reader that loses on both examples is deleted. Why: every one-shot read
+(`off | one_shot | passes`; `passes` is `document_reader`, built for Locate and Choose); the reader that loses on
+both examples is deleted. Why: every one-shot read
 failed the same way — the local model asked to find, label, name and cite at once (stage ~43%, party
 .24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c).
 

@@ -53,6 +53,30 @@ in `research/ontology-apps/TASK_MODEL.md` §Hypotheses and §Implementation orde
 
 **Review by 2026-10-31.**
 
+### `[enrichment.ontology].document_reader = "passes"` — `one_shot` unless a recipe opts in (2026-10-08)
+
+**What ships.** With `document_reading = true`, a recipe may set
+`document_reader = "passes"`: the declared reading is asked as small forced
+choices (Locate per numbered line, then Choose per closed-valued field through
+RESOLVE's READ question) and emits the one-shot reader's `DocumentRead`, so
+validation, the section cache and everything downstream are shared. Reference,
+quantity, time and open-text fields are Unknown with that reason (Pick and Point
+are not built). Choose's argmax decides until a read precision is declared.
+
+**Why off.** Locate per line was refused on the Ward tune fold (crm-proof loop
+15, `~/.svrnmesh/bench-corpora/crm-loop15-locate-20261008/results-L0.json`):
+stage_update statement recall .426 (43/101), precision .427, 33/60 gold messages
+with any located line. Choose on gold statements reads .663 (loop 13, C2).
+
+**Flip condition.** A recipe opts in when its Locate arm meets loop 16's
+preregistered bars on its tune fold (statement recall >= .85 and precision >= .60,
+or message recall >= .85 with >= .70 of empty messages quiet) and a build through
+this reader moves crm-stage on the Ward holdout above its floor with no other crm
+bar regressing. Settled by crm-proof loops 16 onward
+(`~/.svrnmesh/bench-corpora/crm-loop16-locate-units-20261008/prereg.json`).
+
+**Review by 2026-10-31.**
+
 ### Recipe-declared qualified scalar protocol fold — off unless a recipe opts in (2026-10-07)
 
 **What ships.** A version-1 ontology may declare one `by = "protocol"` fold for

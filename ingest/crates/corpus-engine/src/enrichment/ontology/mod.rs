@@ -65,7 +65,7 @@ pub use understanding_vocab::ontology::decl::{
 };
 pub use understanding_vocab::ontology::derived;
 pub use understanding_vocab::ontology::{
-    AssertionPolicy, ChangePolicy, DerivationPolicy, DocumentStamp, IdentityPolicy,
+    AssertionPolicy, ChangePolicy, DerivationPolicy, DocumentReader, DocumentStamp, IdentityPolicy,
     NavigationPolicy, OntologyPolicies, ProsePolicy, QuestionKind, SeedPolicy, ShapePolicy,
     WalkPolicy, DOCUMENT_COUNT_ATTR, DOCUMENT_DATE_ATTR, DOCUMENT_ID_ATTR, DOCUMENT_THREAD_ATTR,
 };

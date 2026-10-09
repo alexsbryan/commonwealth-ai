@@ -61,6 +61,26 @@ fn is_false(value: &bool) -> bool {
     !value
 }
 
+/// How declared document reading asks its model (ONTOLOGY_METHOD §Reading).
+/// Both readers emit the same `DocumentRead`, so validation, the section
+/// cache and everything downstream are shared; only the asking differs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DocumentReader {
+    /// One generation per chapter: find, label, name and cite at once.
+    #[default]
+    OneShot,
+    /// A fixed plan of small closed questions generated from the contract,
+    /// each answered as a distribution in one forward pass.
+    Passes,
+}
+
+impl DocumentReader {
+    fn is_one_shot(&self) -> bool {
+        *self == Self::OneShot
+    }
+}
+
 /// Everything the pipeline reads from a declared ontology. Every field has a
 /// default; the default of the whole is "no ontology" (`is_empty`), and a
 /// prose-only version-0 block differs from it in `prose` alone.
@@ -74,6 +94,9 @@ pub struct OntologyPolicies {
     /// Default false preserves the existing reader.
     #[serde(default, skip_serializing_if = "is_false")]
     pub document_reading: bool,
+    /// How that reading asks; meaningful only with `document_reading`.
+    #[serde(default, skip_serializing_if = "DocumentReader::is_one_shot")]
+    pub document_reader: DocumentReader,
     /// What a source says: who speaks, and what the corpus must never do.
     /// Per-claim-type facets (force, deontic, subject, grades, anchors, scope)
     /// live on the [`OntologyTypeDecl`] of kind `claim` — see

@@ -26,6 +26,7 @@ use super::run_output::RunOutputWriter;
 use super::trait_def::Pipeline;
 use super::types::*;
 use super::vector_clustering::cluster_vectors;
+use crate::enrichment::ontology::DocumentReader;
 use crate::error::{Error, Result};
 use crate::types::EmbedFn;
 
@@ -1001,6 +1002,12 @@ impl PhaseRunner {
 
             let chat_result: Result<String> = if let Some(cached) = cached_response {
                 Ok(cached)
+            } else if document_reading && policies.document_reader == DocumentReader::Passes {
+                // The passes reader asks many small questions through the
+                // same chat port and returns the one-shot reader's envelope,
+                // so the parse, validation and cache below are shared.
+                tracing::debug!(chapter_id = %chapter.chapter_id, "phase1.document_read_passes");
+                super::document_read::read_passes(chapter, &policies, &self.chat).await
             } else {
                 match retry_mode {
                     Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {

@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 
 pub use super::source::{FieldReader, MetadataSourceDecl, SourceDecl, SourceRef, TableSourceDecl};
 use super::{
-    AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
-    OntologyPolicies, ProsePolicy, ShapePolicy,
+    AssertionPolicy, ChangePolicy, DerivationPolicy, DocumentReader, IdentityPolicy,
+    NavigationPolicy, OntologyPolicies, ProsePolicy, ShapePolicy,
 };
 
 fn is_false(value: &bool) -> bool {
@@ -243,14 +243,16 @@ pub struct OntologyV1 {
     /// specializing one atom kind.
     #[serde(default)]
     pub types: Vec<OntologyTypeDecl>,
-    /// Opt in at `[enrichment.ontology]` with `document_reading = true` to read
-    /// claims whose subjects are either source-free records with an
-    /// `identity_criterion` or metadata-sourced entities with declared identity
-    /// fields, preserving each type's force. Validation refuses and names
-    /// unsupported declarations. Default false preserves the shared Phase-1
-    /// prompt and output bytes.
+    /// Opt in at `[enrichment.ontology]` with `document_reading = true` to read claims whose
+    /// subjects are either source-free records with an `identity_criterion` or metadata-sourced
+    /// entities with declared identity fields, preserving each type's force. Validation refuses and
+    /// names unsupported declarations. Default false preserves the shared Phase-1 prompt and output
+    /// bytes.
     #[serde(default, skip_serializing_if = "is_false")]
     pub document_reading: bool,
+    /// How that reading asks: `"passes"` (small forced choices) or the default `"one_shot"`.
+    #[serde(default)]
+    pub document_reader: DocumentReader,
     /// How many entities one section may introduce in Phase 1. Absent takes
     /// the shipped schema's cap of 15 — raise it for a corpus whose sections
     /// enumerate (a data table, a list of recipients). Outside
@@ -327,6 +329,7 @@ impl OntologyV1 {
                 max_entities_per_section: self.max_entities_per_section,
             },
             document_reading: self.document_reading,
+            document_reader: self.document_reader,
             assertion: AssertionPolicy {
                 voices: self.voices,
                 must_not: self.must_not,

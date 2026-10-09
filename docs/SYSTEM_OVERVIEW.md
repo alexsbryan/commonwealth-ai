@@ -596,7 +596,15 @@ question the pipeline asks about a type is a method on the resolved
   source-citation handles; validation expands them to exact source quotes and
   rebuilds the qualified claim projection before caching. Unknown or foreign
   handles refuse the claim; exact source verification remains mandatory. `false` preserves the default
-  path.
+  path. `document_reader = "passes"` (default `one_shot`, refused without
+  `document_reading`) asks the same declared reading as small forced choices
+  instead (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading): Locate asks
+  every numbered line which declared claim kind it states, then Choose asks
+  each closed-valued field of the claim and of its subject RESOLVE's READ
+  question through the census funnel (`decision_call`); a field it cannot ask
+  yet (reference, quantity, time, open text) is Unknown with that reason. It
+  returns the one-shot envelope, so parsing, validation and the section cache
+  are shared, and its rendered questions are part of the contract fingerprint.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from the ONE document its evidence anchor lands in
