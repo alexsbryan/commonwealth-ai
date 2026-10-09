@@ -429,6 +429,8 @@ StackExchange XML data dump extractor. Supports two extraction shapes (`mode`): 
 
 ### `type = "jsonl"`
 
+One document per line of a JSON Lines file. Its text is the record's `content_field` (else `content`, else `text`); a record with none is skipped. Metadata: every other field of the record under its own key, except `content`, `title`, `url` and `text`; `id` is kept. Those keys are the names `change.document` and `source.metadata` read; `recipe validate --corpus <path>` lists them for a real file.
+
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `content_field` | `Option<String>` | no | type default |  |
@@ -438,7 +440,7 @@ StackExchange XML data dump extractor. Supports two extraction shapes (`mode`): 
 
 ### `type = "json"`
 
-JSON-API extractor. Reads a single JSON file (typically the per-page response persisted by the `http_api` acquirer when `[acquire.follow]` is absent), runs `document_path` over it as JSONPath, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per matching object using `content_field` for the body text. See [`crate::extractors::json_api::JsonApiExtractor`].
+JSON-API extractor. Reads a single JSON file (typically the per-page response persisted by the `http_api` acquirer when `[acquire.follow]` is absent), runs `document_path` over it as JSONPath, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per matching object using `content_field` for the body text. Metadata: every other field of the object under its own key, except the fields `content_field`, `title_field`, `url_field` and `id_field` name. See [`crate::extractors::json_api::JsonApiExtractor`].
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -478,6 +480,8 @@ Section-aware HTML extractor: emits one [`ExtractedDoc`](crate::extractors::Extr
 | `title_selector` | `Option<String>` | no | type default |  |
 
 ### `type = "csv"`
+
+One document per row, its text the `content_column` cell; a row with an empty cell is skipped. Metadata: none, so a recipe over a CSV declares no `change.document` or `source.metadata` field.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -569,7 +573,7 @@ Runtime-registered per-file extractor. The engine walks `source_path` collecting
 
 ### `type = "email"`
 
-RFC-5322 / MIME email extractor. Walks `source_path` recursively (maildir layout, raw `.eml` files), parses each through `mailparse`, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per message. Metadata carries the parsed headers + a `thread_id` derived from In-Reply-To / References. When the engine has an [`crate::asset_store::AssetStore`] + an [`crate::extractors::described_asset::AssetSubExtractorRegistry`] installed (the default after Phase 1), attachments dispatch through the described-asset substrate — raw bytes + parsed caches + Asset atom + Attaches edge land per attachment.
+RFC-5322 / MIME email extractor. Walks `source_path` recursively (maildir layout, raw `.eml` files), parses each through `mailparse`, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per message. Metadata fields: `message_id`, `thread_id` (derived from In-Reply-To / References), `from`, `to`, `cc`, `bcc`, `date`, `subject`, `in_reply_to`, `references`, `doc_type`, `body_was_truncated`, `attachments`, `source_path`. When the engine has an [`crate::asset_store::AssetStore`] + an [`crate::extractors::described_asset::AssetSubExtractorRegistry`] installed (the default after Phase 1), attachments dispatch through the described-asset substrate — raw bytes + parsed caches + Asset atom + Attaches edge land per attachment.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -1416,6 +1420,13 @@ date that does not parse. An unknown key inside `document` refuses at load.
 [enrichment.ontology.change]
 document = { date = "published", thread = "series", id = "report_no" }
 ```
+
+Each extractor's metadata fields are listed under its `type` in the field
+reference. To see the ones your documents actually carry, run
+`svrn recipe validate <recipe> --corpus <path>`: it reads `<path>` with the
+recipe's extractor, lists every field with how many documents carry it, and
+fails on a field `change.document` or a `source.metadata` names that none of
+them carries.
 
 `by = "protocol"` is the opt-in scalar fold. Its target attribute must be
 closed `text` with `values`; every rule names a declared claim type, one of

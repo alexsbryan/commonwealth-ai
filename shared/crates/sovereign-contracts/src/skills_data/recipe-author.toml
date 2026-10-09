@@ -375,11 +375,14 @@ overlap_chars = 256
 #     contradiction but isn't?"         (→ tension, patterns, derive)
 # Asking these IS the work, not stalling — but keep it focused (not a survey),
 # and skip any the charter already answers. Write the answers as declared types
-# via recipe_write_structured, then RUN `svrn recipe validate <path>` and READ
-# THE DERIVED FACETS BACK to the partner: it prints the clock, the tension
-# selector, the identity criterion each type resolved to, and the question
-# shapes the corpus will answer. Those are inferences — when one is wrong the
-# fix is a declaration, not a retry. If the partner can't or won't specify a
+# via recipe_write_structured, then RUN `svrn recipe validate <path> --corpus
+# <material>` and READ THE DERIVED FACETS BACK to the partner: it prints the
+# clock, the tension selector, the identity criterion each type resolved to,
+# and the question shapes the corpus will answer. Those are inferences — when
+# one is wrong the fix is a declaration, not a retry. `--corpus` also reads the
+# material with the recipe's extractor and lists every metadata field its
+# documents carry: a `change.document` or `source.metadata` field none of them
+# carries fails, so pick field names from that list, never from a guess. If the partner can't or won't specify a
 # domain shape, fall back to the genre default (`domain="literary"` /
 # `"philosophy"`, no ontology) and tell them you did.
 #

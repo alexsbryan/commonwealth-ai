@@ -1306,6 +1306,12 @@ pub enum ExtractorConfig {
         #[serde(default)]
         tag_filter: Option<Vec<String>>,
     },
+    /// One document per line of a JSON Lines file. Its text is the record's
+    /// `content_field` (else `content`, else `text`); a record with none is
+    /// skipped. Metadata: every other field of the record under its own key,
+    /// except `content`, `title`, `url` and `text`; `id` is kept. Those keys
+    /// are the names `change.document` and `source.metadata` read; `recipe
+    /// validate --corpus <path>` lists them for a real file.
     #[serde(rename = "jsonl")]
     Jsonl {
         #[serde(default)]
@@ -1322,6 +1328,9 @@ pub enum ExtractorConfig {
     /// `[acquire.follow]` is absent), runs `document_path` over it as
     /// JSONPath, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
     /// per matching object using `content_field` for the body text.
+    /// Metadata: every other field of the object under its own key, except
+    /// the fields `content_field`, `title_field`, `url_field` and `id_field`
+    /// name.
     /// See [`crate::extractors::json_api::JsonApiExtractor`].
     #[serde(rename = "json")]
     Json {
@@ -1403,6 +1412,9 @@ pub enum ExtractorConfig {
         #[serde(default)]
         title_selector: Option<String>,
     },
+    /// One document per row, its text the `content_column` cell; a row
+    /// with an empty cell is skipped. Metadata: none, so a recipe over a CSV
+    /// declares no `change.document` or `source.metadata` field.
     #[serde(rename = "csv")]
     Csv {
         content_column: String,
@@ -1549,8 +1561,10 @@ pub enum ExtractorConfig {
     /// extractor. Walks `source_path` recursively (maildir layout,
     /// raw `.eml` files), parses each through `mailparse`, and
     /// emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
-    /// per message. Metadata carries the parsed headers + a
-    /// `thread_id` derived from In-Reply-To / References. When the
+    /// per message. Metadata fields: `message_id`, `thread_id` (derived
+    /// from In-Reply-To / References), `from`, `to`, `cc`, `bcc`, `date`,
+    /// `subject`, `in_reply_to`, `references`, `doc_type`,
+    /// `body_was_truncated`, `attachments`, `source_path`. When the
     /// engine has an [`crate::asset_store::AssetStore`] + an
     /// [`crate::extractors::described_asset::AssetSubExtractorRegistry`]
     /// installed (the default after Phase 1), attachments dispatch

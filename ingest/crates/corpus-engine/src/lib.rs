@@ -51,6 +51,7 @@ pub use ::oplog;
 pub mod pii;
 pub mod progress;
 pub mod recipe;
+pub mod recipe_corpus_fields;
 pub mod recipe_documents;
 pub mod recipe_install;
 pub mod recipe_ontology;
