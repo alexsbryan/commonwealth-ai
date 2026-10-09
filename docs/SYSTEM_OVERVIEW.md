@@ -83,7 +83,9 @@ on-prem distributions hand it in, and cmnwlth links no knowledge crate.
 ```
 
 Two protocols cross that boundary. **OICP** is declared in
-`cmnwlth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively), types in
+`cmnwlth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively; the draft
+`cmnwlth/docs/oicp-v0.5.md` adds the evidence extension over it, each part
+behind its own feature string), types in
 `shared/crates/oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp` and
 `commonwealth_core::oicp` — downstream crates use the re-exports.
 **`EmbedFn` / `InferenceFn`** are closures `corpus-engine` accepts from any
@@ -162,7 +164,7 @@ cmnwlth/crates/
 ├── commonwealth-state             # MeshStore — KV (pure-Rust in-memory; SQLite file store behind `sqlite`); a local PROJECTION of the ring rail
 ├── commonwealth-transport         # PeerTransport seam — (peer, traffic class) → endpoints
 ├── commonwealth-work              # The WORK PLANE on the rail — WorkAct codec, unit seal, lease predicate
-├── oicp-conformance               # Standalone OICP v0.4 host conformance tester
+├── oicp-conformance               # Standalone OICP v0.4/v0.5 host conformance tester; each v0.5 check watched red against a host fake (src/fake_host.rs)
 ├── sovereign-cli-mesh             # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
 └── sovereign-pods                 # Compute's remote isolation — leasing a rented machine; `sovereign-pod-worker`, the pod's worker-mode binary
 ```
@@ -176,7 +178,7 @@ deleted; `-knowledge` became `sovereign-grants`; `-app` became
 `-test-harness` became `sovereign-mesh-test-harness` (since deleted);
 `oicp-conformance` moved to a repo-root sibling, then back here and into
 cmnwlth's package with the top-level-programs move. Beside the crates:
-`cmnwlth/docs/` (OICP v0.2 to v0.4), `cmnwlth/apps/` (ring-doc,
+`cmnwlth/docs/` (OICP v0.2 to v0.4, and the v0.5 draft), `cmnwlth/apps/` (ring-doc,
 ring-runtime), `cmnwlth/deploy/mesh/`, `cmnwlth/BOUNDARY.md`.
 
 ### ingest — the recipe pipeline
@@ -321,6 +323,7 @@ shared/crates/
 ├── oicp-client                    # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-types                     # OICP wire types — no other deps
 ├── oplog                          # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
+├── quote-align                    # The one quote aligner — norm_v0 + seeded token alignment over `&str` texts, ALIGNER_ID pinned by a golden bank (std + unicode-normalization only)
 ├── oplog-types                    # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
 ├── serving-policy-core            # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── sovereign-cli-base             # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)
