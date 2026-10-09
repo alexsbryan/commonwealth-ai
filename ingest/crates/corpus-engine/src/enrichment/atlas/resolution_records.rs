@@ -269,17 +269,19 @@ async fn resolve_type(
         }
     }
 
-    // One decider: the Phase-1 atoms of the type go first, whatever follows.
+    // One decider: the Phase-1 atoms of the type go first, whatever follows,
+    // in either kind a sketch may have named it (the reader's compatibility
+    // projection names an event type's subjects as entities).
     let retired: BTreeSet<AtomId> = atoms
         .entities
         .iter()
-        .filter(|e| kind == TypeKind::Entity && e.entity_type.as_str_repr() == t.name)
+        .filter(|e| e.entity_type.as_str_repr() == t.name)
         .map(|e| e.id.clone())
         .chain(
             atoms
                 .events
                 .iter()
-                .filter(|e| kind == TypeKind::Event && e.event_type.as_str_repr() == t.name)
+                .filter(|e| e.event_type.as_str_repr() == t.name)
                 .map(|e| e.id.clone()),
         )
         .collect();

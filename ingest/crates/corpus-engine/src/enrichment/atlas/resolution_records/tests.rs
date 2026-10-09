@@ -359,7 +359,9 @@ async fn an_event_type_is_decided_and_its_records_are_events() {
     assert!(decides(&TypeIndex::from_policies(&p), "deal"));
     let (reports, _, seen) = b.resolve_with(&p).await;
     assert_eq!(seen, ["deal:m1", "deal:m2", "deal:m3"]);
-    assert_eq!((reports[0].records, reports[0].retired), (2, 1));
+    // Both Phase-1 atoms named `deal` go: the event, and the entity a sketch
+    // named it as (the reader's compatibility projection does exactly that).
+    assert_eq!((reports[0].records, reports[0].retired), (2, 2));
     let deals: Vec<&Event> = b
         .events
         .iter()
@@ -367,8 +369,7 @@ async fn an_event_type_is_decided_and_its_records_are_events() {
         .collect();
     assert_eq!(deals.len(), 2, "{:?}", b.events);
     assert!(deals.iter().all(|e| e.id.as_str() != "event-0001"));
-    // The Phase-1 entity named `deal` is no atom of an event type: it stays.
-    assert!(b.entities.iter().any(|e| e.id.as_str() == "entity-0001"));
+    assert!(b.entities.iter().all(|e| e.id.as_str() != "entity-0001"));
     // The partition is the entity type's: claims 1 and 2 one record, 3 another.
     let (one, two, three) = (
         b.subject("claim-0001"),
