@@ -143,11 +143,13 @@ impl Iterator for EmailIterator {
             if let Some(stream) = self.mbox.as_mut() {
                 match stream.next_message() {
                     // An mbox member is one record among many in its file.
-                    Ok(Some((bytes, origin))) => match self.parse_message(&bytes, &origin, super::DocSource::Record) {
-                        Ok(Some(doc)) => return Some(Ok(doc)),
-                        Ok(None) => continue,
-                        Err(e) => return Some(Err(e)),
-                    },
+                    Ok(Some((bytes, origin))) => {
+                        match self.parse_message(&bytes, &origin, super::DocSource::Record) {
+                            Ok(Some(doc)) => return Some(Ok(doc)),
+                            Ok(None) => continue,
+                            Err(e) => return Some(Err(e)),
+                        }
+                    }
                     Ok(None) => {
                         self.mbox = None;
                         continue;

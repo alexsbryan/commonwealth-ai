@@ -55,11 +55,21 @@ struct StagedLine<'a> {
 /// text came from OCR). The initial ingest writes it on the staged line and
 /// the watched-folder delta returns it with each fetch as
 /// `DocSource::Hashed`, so both paths store the same record.
-pub fn stated_source(path: &Path, ocr: bool) -> std::io::Result<(kernel_types::Sha256Hash, String)> {
+pub fn stated_source(
+    path: &Path,
+    ocr: bool,
+) -> std::io::Result<(kernel_types::Sha256Hash, String)> {
     let sha256 = kernel_types::Sha256Hash::of_reader(File::open(path)?)?;
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("none");
-    let kind = if ocr { "ocr".to_string() } else { ext.to_ascii_lowercase() };
-    Ok((sha256, format!("local-stage:{kind}@{}", env!("CARGO_PKG_VERSION"))))
+    let kind = if ocr {
+        "ocr".to_string()
+    } else {
+        ext.to_ascii_lowercase()
+    };
+    Ok((
+        sha256,
+        format!("local-stage:{kind}@{}", env!("CARGO_PKG_VERSION")),
+    ))
 }
 
 /// Result of one staging run.
