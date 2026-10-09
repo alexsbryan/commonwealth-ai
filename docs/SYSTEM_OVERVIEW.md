@@ -323,7 +323,7 @@ shared/crates/
 ├── oicp-client                    # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-types                     # OICP wire types — no other deps
 ├── oplog                          # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
-├── quote-align                    # The one quote aligner — norm_v0 + seeded token alignment over `&str` texts, ALIGNER_ID pinned by a golden bank (std + unicode-normalization only); asked by `POST /oicp/v1/align` and, in exact mode, by the post-synthesis quote guard (`sovereign-core::quote_verification`)
+├── quote-align                    # The one quote aligner — norm_v0 + seeded token alignment over `&str` texts, ALIGNER_ID pinned by a golden bank (std + unicode-normalization only); asked by `POST /oicp/v1/align` and, in exact mode, by the post-synthesis quote guard (`sovereign-core::quote_verification`); case-folded, by the span resolver's locator (`native_grounding::span_resolver`) and the citation gate's quote match (`grounding::citation::quote_match`, whose six-word run is read off the aligner's differences). `kernel_types::Seal::locate` stays a plain containment check: it is handed a slice already cut from the member it checks
 ├── oplog-types                    # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
 ├── serving-policy-core            # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── sovereign-cli-base             # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)

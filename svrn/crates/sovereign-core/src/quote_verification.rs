@@ -328,7 +328,7 @@ pub fn verify_answer_against_turn_texts(
 /// crate's `the_shipped_file_loads` pins that they load, so `None` is a build
 /// defect. It fails closed: with no aligner no quote is verified, so every
 /// checked quote is demoted, and the error says why once.
-fn align_config() -> Option<&'static quote_align::AlignConfig> {
+pub(crate) fn align_config() -> Option<&'static quote_align::AlignConfig> {
     static CFG: std::sync::OnceLock<Option<quote_align::AlignConfig>> = std::sync::OnceLock::new();
     CFG.get_or_init(|| match quote_align::AlignConfig::shipped() {
         Ok(cfg) => Some(cfg),
