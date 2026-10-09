@@ -355,12 +355,12 @@ discovers the new mesh peer automatically and routes Phase 1 over OICP:
 ```bash
 # Single article (smoke test)
 sovereign enrich extract sep-hegel --full
-sovereign enrich resolve sep-hegel --phase all
+sovereign enrich resolve sep-hegel
 
 # Parallel batch — fan out as wide as your peer's primary_copies allows
 cat /tmp/sep_tier2_remaining.txt | xargs -P 6 -I {} sh -c '
   sovereign enrich extract sep-{} --full && \
-  sovereign enrich resolve sep-{} --phase all
+  sovereign enrich resolve sep-{}
 '
 ```
 

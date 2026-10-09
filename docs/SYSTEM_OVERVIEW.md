@@ -700,7 +700,8 @@ question the pipeline asks about a type is a method on the resolved
   defaulted. Records keep the passage around each statement, which is
   what later calls compare. `svrn enrich resolve-statements` runs it alone over
   supplied statements (the gold-mention setting). The atlas build runs it after
-  3b (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
+  3b, which `enrich atlas-resolve` runs by default (`ResolvePhase::All`; `--phase 3a`
+  is the only opt-out) (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
   as the ONE decider of every entity type that declares an `identity_criterion`
   and no `source` (`decides`): its statements are the claims of each kind whose
   `subject` is the type, placed by their anchor in the one document `locate`

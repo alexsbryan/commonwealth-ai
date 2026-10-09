@@ -4,18 +4,17 @@
 //!
 //! Reads the cached `Phase1Output` (section-level sketches),
 //! resolves entity + event sketches into canonical atoms with
-//! `Involves` edges (Step 3a), and — when `--phase 3b` or
-//! `--phase all` is in effect — extends resolution with
-//! state/relation/claim/question atoms + Transition/Grounds edges +
-//! a populated trajectories index (Step 3b).
+//! `Involves` edges (Step 3a), and — by default — extends resolution
+//! with state/relation/claim/question atoms + Transition/Grounds edges,
+//! the recipe's typed records (document stamps, RESOLVE, derived folds)
+//! and a populated trajectories index (Step 3b). `--phase 3a` is the
+//! explicit opt-in for entities and events alone.
 //!
 //! Idempotent: the writer overwrites atomically. Re-running on the
 //! same cache reproduces the same atoms (modulo embedding
 //! non-determinism, which the daemon's embed slot does not
-//! introduce). `--phase all` runs 3a and 3b in one shot and writes
-//! the union; `--phase 3b` assumes a prior `--phase 3a` but
-//! recomputes 3a internally so the atom ids remain consistent
-//! across the two passes.
+//! introduce). The default runs 3a and 3b in one shot and writes the
+//! union; 3a is recomputed every time so atom ids stay consistent.
 
 use std::path::{Path, PathBuf};
 
@@ -127,7 +126,7 @@ pub async fn run(parsed: &ParsedResolve) -> Result<ResolveReport, String> {
 ///
 /// Behaviour for the live-dir caller is identical to the pre-refactor
 /// in-lined body: 3a always runs; 3b/typed extensions run when
-/// `phase` is `P3b`/`All`; the writer overwrites atomically; failures
+/// `phase` is `All`; the writer overwrites atomically; failures
 /// are always persisted (even empty) so the aggregator can tell
 /// "ran cleanly" from "never ran".
 ///
@@ -152,7 +151,7 @@ pub enum ResolveReport {
         failures: usize,
         sources: SourceCounts,
     },
-    /// `--phase 3b` or `all`: 3a plus the typed extensions.
+    /// The default (`All`): 3a plus the typed extensions.
     Full {
         entities: usize,
         events: usize,
@@ -288,7 +287,7 @@ pub async fn resolve_into_dir(
         }
     }
 
-    let want_3b = matches!(phase, ResolvePhase::P3b | ResolvePhase::All);
+    let want_3b = matches!(phase, ResolvePhase::All);
     // Collect structured drops across both resolution phases so the
     // aggregator (`svrn enrich errors`) can surface them grouped
     // by kind. Empty in the clean-run case.
@@ -530,7 +529,7 @@ pub async fn resolve_into_dir(
         println!("  ✓ wrote {}", written.trajectories_path.display());
     } else {
         println!(
-            "  ✓ wrote {} (empty — --phase 3b or all populates it)",
+            "  ✓ wrote {} (empty — --phase 3a skips it; the default populates it)",
             written.trajectories_path.display()
         );
     }
@@ -582,11 +581,30 @@ fn atlas_dir_for(corpus_id: &str) -> PathBuf {
     paths::index_root(corpus_id).join(ATLAS_DIRNAME)
 }
 
+/// What one resolve run does. ONE decider for it: `All` is the default
+/// everywhere (the verb, `enrich build`, the workflow leaf, `enrich
+/// delta`), and `P3a` is an explicit opt-in. The old `P3b` behaved
+/// exactly as `All` and was deleted (order ontology-layer-2-one-path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResolvePhase {
     P3a,
-    P3b,
     All,
+}
+
+impl ResolvePhase {
+    /// Parse a `--phase` / `phase` value. `3b` names the phase that was
+    /// folded into the default; it refuses with that said rather than
+    /// running as a silent synonym.
+    pub fn parse(val: &str) -> Result<Self, String> {
+        match val {
+            "3a" => Ok(ResolvePhase::P3a),
+            "all" => Ok(ResolvePhase::All),
+            "3b" => Err("phase `3b` was removed: the default runs the whole layer; \
+                 drop --phase, or pass --phase 3a for entities and events alone"
+                .to_string()),
+            other => Err(format!("unknown phase `{other}`; expected 3a or all")),
+        }
+    }
 }
 
 /// `atlas_resolve` — literary-atlas **Phase 3a/3b** as a workflow leaf: resolve
@@ -630,14 +648,9 @@ impl AtlasResolveTool {
             .ok_or_else(|| Error::Execution("atlas_resolve: missing required `corpus`".into()))?;
         // Parse the phase up front (pure) so a bad value fails before any IO.
         let phase = match params.get("phase").and_then(|v| v.as_str()) {
-            Some("3a") => ResolvePhase::P3a,
-            Some("3b") => ResolvePhase::P3b,
-            Some("all") | None => ResolvePhase::All,
-            Some(other) => {
-                return Err(Error::Execution(format!(
-                    "atlas_resolve: unknown phase `{other}` (expected 3a|3b|all)"
-                )))
-            }
+            None => ResolvePhase::All,
+            Some(v) => ResolvePhase::parse(v)
+                .map_err(|e| Error::Execution(format!("atlas_resolve: {e}")))?,
         };
 
         // Calls the same `run` the CLI verb calls. This block used to be
@@ -671,7 +684,7 @@ pub struct ParsedResolve {
 
 pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
     let mut corpus_id: Option<String> = None;
-    let mut phase = ResolvePhase::P3a;
+    let mut phase = ResolvePhase::All;
 
     let mut i = 0;
     while i < args.len() {
@@ -680,17 +693,8 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
             "--phase" => {
                 let val = args
                     .get(i + 1)
-                    .ok_or("--phase requires a value (3a|3b|all)".to_string())?;
-                phase = match val.as_str() {
-                    "3a" => ResolvePhase::P3a,
-                    "3b" => ResolvePhase::P3b,
-                    "all" => ResolvePhase::All,
-                    other => {
-                        return Err(format!(
-                            "unknown phase `{other}`; expected one of 3a, 3b, all"
-                        ));
-                    }
-                };
+                    .ok_or("--phase requires a value (3a|all)".to_string())?;
+                phase = ResolvePhase::parse(val)?;
                 i += 2;
             }
             other if other.starts_with("--") => {
@@ -717,10 +721,10 @@ mod tests {
     use sovereign_contracts::traits::Tool;
 
     #[test]
-    fn parse_args_defaults_to_phase_3a() {
+    fn parse_args_defaults_to_the_whole_layer() {
         let p = parse_args(&["brothers_karamazov".into()]).unwrap();
         assert_eq!(p.corpus_id, "brothers_karamazov");
-        assert_eq!(p.phase, ResolvePhase::P3a);
+        assert_eq!(p.phase, ResolvePhase::All);
     }
 
     #[test]
@@ -730,15 +734,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_accepts_phase_3b_and_all_at_parse_time() {
-        // The command refuses to run these today (they're not
-        // implemented), but the parser accepts them so the error
-        // path is reachable — we want the operator to see a clear
-        // "not yet implemented" message, not a parse failure.
-        let p = parse_args(&["bk".into(), "--phase".into(), "3b".into()]).unwrap();
-        assert_eq!(p.phase, ResolvePhase::P3b);
+    fn parse_args_accepts_all_and_refuses_the_removed_3b_by_name() {
         let p = parse_args(&["bk".into(), "--phase".into(), "all".into()]).unwrap();
         assert_eq!(p.phase, ResolvePhase::All);
+        let err = parse_args(&["bk".into(), "--phase".into(), "3b".into()]).unwrap_err();
+        assert!(err.contains("`3b` was removed"), "got: {err}");
     }
 
     #[test]

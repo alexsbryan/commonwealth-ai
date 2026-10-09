@@ -15,34 +15,28 @@ const HELP: Help = Help {
     command: "svrn enrich atlas-resolve",
     summary: "Resolve atlas atoms + edges from Phase 1 sketches.",
     sections: &[
-        HelpSection::Usage("svrn enrich atlas-resolve <corpus-id> [--phase 3a|3b|all]"),
+        HelpSection::Usage("svrn enrich atlas-resolve <corpus-id> [--phase 3a]"),
         HelpSection::Flags(&[
             (
                 "--phase 3a",
-                "Entity + event atoms + Involves edges only. Fast; no LLM calls. \
-                 Default when --phase is omitted.",
-            ),
-            (
-                "--phase 3b",
-                "Adds state / relation / claim / question atoms + Transition + Grounds \
-                 edges + populates trajectories.json. Implies 3a (entities + events \
-                 are re-resolved so atom ids stay consistent).",
+                "Entity + event atoms + Involves edges only; writes no claims and no \
+                 typed records. Opt-in; the default runs the whole layer.",
             ),
             (
                 "--phase all",
-                "Synonym for --phase 3b — runs the full structural pass. Phase 5 \
-                 LLM-enriched grounding is a separate subcommand that will land in a \
-                 later step.",
+                "The default, spelled out: entities and events, then state / relation / \
+                 claim / question atoms, the recipe's typed records (document stamps, \
+                 RESOLVE, derived folds) and trajectories.json.",
             ),
         ]),
         HelpSection::Examples(&[
             (
                 "svrn enrich atlas-resolve brothers_karamazov",
-                "Default (Phase 3a) — resolve entities + events from the cached sketches.",
+                "The whole layer — every atom type, the typed records, trajectories.json.",
             ),
             (
-                "svrn enrich atlas-resolve bk --phase all",
-                "Full structural pass — every atom type + trajectories.json populated.",
+                "svrn enrich atlas-resolve bk --phase 3a",
+                "Entities and events alone, from the cached sketches.",
             ),
         ]),
         HelpSection::Notes(

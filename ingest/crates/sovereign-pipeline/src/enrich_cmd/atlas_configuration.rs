@@ -21,7 +21,7 @@ const HELP: Help = Help {
             "Summarise atlas → prompt the configured pipeline's Phase 8 → write configurations.json.",
         )]),
         HelpSection::Notes(
-            "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all`. \
+            "Requires a prior `svrn enrich atlas-resolve <corpus>`. \
              Opt-in: only pipelines whose `runs_configuration_phase()` returns true \
              (`literary_atlas`, future `philosophy_atlas`) actually dispatch an LLM call. \
              Produces `~/.svrnmesh/indexes/<corpus>/atlas/configurations.json` and \

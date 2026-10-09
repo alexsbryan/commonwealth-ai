@@ -21,7 +21,7 @@ const HELP: Help = Help {
             "Scan atoms.json, enumerate entity-overlap candidate pairs, write tension_candidates.json.",
         )]),
         HelpSection::Notes(
-            "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all` so the \
+            "Requires a prior `svrn enrich atlas-resolve <corpus>` so the \
              atlas directory exists. Produces \
              `~/.svrnmesh/indexes/<corpus>/atlas/tension_candidates.json`. Does NOT call \
              the LLM — the classifier that promotes candidates to real Tension edges lands \
