@@ -79,6 +79,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
         1,
     ),
     ("svrn/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs", Class::LocalDaemon, 3),
+    // `svrn daemon key` (b2a3c99a5): with a daemon listening, one client
+    // asks its owner-only routes at `http://127.0.0.1:<port>/internal/client/
+    // token` (`key.rs` `online`). Loopback to this host's own daemon only.
+    ("svrn/crates/sovereign-cli-daemon/src/daemon_cmd/key.rs", Class::LocalDaemon, 1),
     ("svrn/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs", Class::LocalDaemon, 2),
     ("svrn/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs", Class::LocalDaemon, 1),
     ("svrn/crates/sovereign-cli-daemon/src/model_cmd.rs", Class::LocalDaemon, 1),
