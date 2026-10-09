@@ -99,7 +99,11 @@ fn a_stamp_some_documents_lack_is_a_warning_and_a_source_field_is_not() {
     let dir = tempfile::tempdir().unwrap();
     let path = corpus(dir.path());
     // `author` is both the thread stamp here and the writer's source field.
-    let r = check(&engine(dir.path()), &recipe(&path, "created", "author"), &path);
+    let r = check(
+        &engine(dir.path()),
+        &recipe(&path, "created", "author"),
+        &path,
+    );
     assert!(
         r.warnings
             .iter()
@@ -112,7 +116,11 @@ fn a_stamp_some_documents_lack_is_a_warning_and_a_source_field_is_not() {
         "{:?}",
         r.warnings
     );
-    assert!(!r.errors.iter().any(|e| e.contains("`author`")), "{:?}", r.errors);
+    assert!(
+        !r.errors.iter().any(|e| e.contains("`author`")),
+        "{:?}",
+        r.errors
+    );
 }
 
 #[test]
@@ -172,7 +180,11 @@ fn records_without_the_named_content_field_are_named_as_the_cause() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("docs.jsonl");
     std::fs::write(&path, "{\"id\":\"1\",\"prose\":\"words\"}\n").unwrap();
-    let r = check(&engine(dir.path()), &recipe(&path, "created", "thread"), &path);
+    let r = check(
+        &engine(dir.path()),
+        &recipe(&path, "created", "thread"),
+        &path,
+    );
     assert!(
         r.errors
             .iter()

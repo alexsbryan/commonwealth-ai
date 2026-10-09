@@ -163,7 +163,12 @@ fn content_key(extract: &ExtractorConfig) -> Option<(&'static str, &str)> {
 
 /// The verdicts over documents already read: pure, so it is tested without an
 /// extractor.
-fn judge(p: &OntologyPolicies, docs: &[Map<String, Value>], corpus: &str, out: &mut CorpusFieldReport) {
+fn judge(
+    p: &OntologyPolicies,
+    docs: &[Map<String, Value>],
+    corpus: &str,
+    out: &mut CorpusFieldReport,
+) {
     let n = docs.len();
     if n == 0 {
         out.errors.push(format!(

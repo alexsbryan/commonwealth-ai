@@ -469,7 +469,8 @@ async fn cmd_validate(args: &[String]) -> i32 {
             if let Some(corpus) = &corpus {
                 match Recipe::from_file(&recipe_path) {
                     Ok(recipe) => {
-                        let f = corpus_engine::recipe_corpus_fields::check(&engine, &recipe, corpus);
+                        let f =
+                            corpus_engine::recipe_corpus_fields::check(&engine, &recipe, corpus);
                         report.validation.errors.extend(f.errors);
                         report.validation.warnings.extend(f.warnings);
                         report.validation.notes.extend(f.notes);
