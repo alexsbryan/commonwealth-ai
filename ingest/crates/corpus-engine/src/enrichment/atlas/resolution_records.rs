@@ -65,6 +65,28 @@ pub fn decides(index: &TypeIndex<'_>, type_name: &str) -> bool {
     })
 }
 
+/// The types RESOLVE decides ([`decides`]) that no declared claim kind names as
+/// its `subject`: RESOLVE would have no statement of them, and their Phase-1
+/// atoms would be decided by 3a's merge instead. The build refuses such a
+/// declaration (`enrich extract`); `recipe validate` names it.
+pub fn types_without_statements(policies: &OntologyPolicies) -> Vec<String> {
+    let index = TypeIndex::from_policies(policies);
+    policies
+        .shape
+        .types
+        .iter()
+        .filter(|t| decides(&index, &t.name))
+        .filter(|t| {
+            !policies
+                .shape
+                .types
+                .iter()
+                .any(|c| c.kind == TypeKind::Claim && c.subject.as_deref() == Some(t.name.as_str()))
+        })
+        .map(|t| t.name.clone())
+        .collect()
+}
+
 /// Every atom vector of a build that can name an entity. Retiring one
 /// touches each; questions name claims only, and no claim is retired.
 pub struct BuildAtoms<'a> {

@@ -408,3 +408,20 @@ fn resolve_decides_entity_types_with_a_criterion_and_no_source() {
         "a sourced type"
     );
 }
+
+/// The trap order ontology-layer-2-one-path step 6 names: a type only RESOLVE
+/// decides, with no claim kind about it, has no statements, so a build would
+/// leave it to 3a's merge. It is named so the build can refuse it.
+#[test]
+fn a_decided_type_with_no_claim_kind_about_it_is_named() {
+    let p = policies();
+    assert!(types_without_statements(&p).is_empty());
+    let mut orphaned = p.clone();
+    orphaned
+        .shape
+        .types
+        .retain(|t| t.subject.as_deref() != Some("deal"));
+    assert_eq!(types_without_statements(&orphaned), ["deal"]);
+    orphaned.shape.types[0].kind = TypeKind::Event;
+    assert_eq!(types_without_statements(&orphaned), ["deal"]);
+}

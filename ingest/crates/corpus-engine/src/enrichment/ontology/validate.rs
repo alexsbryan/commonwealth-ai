@@ -90,6 +90,19 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         ));
     }
 
+    let orphans = crate::enrichment::atlas::resolution_records::types_without_statements(&policies);
+    if !orphans.is_empty() {
+        out.warnings.push(format!(
+            "RESOLVE decides {} by its identity_criterion, but no claim kind names it as its \
+             `subject`: `enrich extract` refuses to build this, since no statement of it would be \
+             read. Declare a claim kind about it.",
+            orphans
+                .iter()
+                .map(|t| format!("`{t}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
     for (key, instead) in crate::recipe_ontology::language::retired_keys(&block.body) {
         out.warnings.push(format!(
             "[enrichment.ontology] `{key}` is retired and ignored: {instead}. Remove the key."

@@ -1351,7 +1351,9 @@ metadata-sourced entity with declared identity fields, each document is read on 
 closed questions generated from the declaration: which lines state each claim
 kind, then each closed-valued field. When no claim type qualifies, sections are
 read by the general extractor. A declaration that mixes the two is refused,
-naming the claim types the plan cannot read. The old `document_reading` and
+naming the claim types the plan cannot read. A type RESOLVE decides needs a claim
+kind whose `subject` it is: with none, nothing of it would be read, so `enrich
+extract` refuses the build and `recipe validate` says why. The old `document_reading` and
 `document_reader` keys are ignored, and `recipe validate` names them.
 
 ```toml

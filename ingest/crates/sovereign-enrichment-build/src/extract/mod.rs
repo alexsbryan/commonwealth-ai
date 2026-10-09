@@ -180,6 +180,26 @@ pub async fn run_extract(args: &[String]) -> i32 {
         return cmd_finalize(&cfg, &checkpoint_path).await;
     }
 
+    // A type only RESOLVE decides, with no claim kind about it, has no
+    // statements: building would leave it to 3a's merge, quietly. Refuse first.
+    if let Some(policies) = cfg.ontology.as_ref().map(|spec| spec.policies()) {
+        let orphans =
+            corpus_engine::enrichment::atlas::resolution_records::types_without_statements(
+                &policies,
+            );
+        if !orphans.is_empty() {
+            tracing::warn!(types = ?orphans, "extract: refused, a decided type has no claim kind");
+            eprintln!(
+                "error: RESOLVE decides {} by its identity_criterion, but no claim kind names it as \
+                 its `subject`, so no statement of it would be read. Declare a claim kind about it \
+                 (kind = \"claim\", a force, subject = \"{}\").",
+                orphans.join(", "),
+                orphans[0]
+            );
+            return 2;
+        }
+    }
+
     // Probe daemon — fail fast if it's down, and name SLOW separately
     // from DOWN (order enrich-probe-timeout): a probe that timed out
     // must not tell the user to start a daemon that is serving.
