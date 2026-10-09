@@ -34,8 +34,8 @@ asserts = 1
 [[claim]]
 requirement = "GR-19"
 test = "sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"
-file = "svrn/crates/sovereign-core/src/quote_verification.rs"
-line = 653
+file = "svrn/crates/sovereign-core/src/quote_verification/tests.rs"
+line = 245
 asserts = 5
 
 [[claim]]
@@ -48,15 +48,15 @@ asserts = 3
 [[claim]]
 requirement = "GR-20"
 test = "sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"
-file = "svrn/crates/sovereign-core/src/quote_verification.rs"
-line = 653
+file = "svrn/crates/sovereign-core/src/quote_verification/tests.rs"
+line = 245
 asserts = 5
 
 [[claim]]
 requirement = "GR-21"
 test = "sovereign-core::quote_verification::tests::a_composite_quote_is_still_demoted_against_the_full_chunks"
-file = "svrn/crates/sovereign-core/src/quote_verification.rs"
-line = 728
+file = "svrn/crates/sovereign-core/src/quote_verification/tests.rs"
+line = 320
 asserts = 2
 
 [[claim]]
