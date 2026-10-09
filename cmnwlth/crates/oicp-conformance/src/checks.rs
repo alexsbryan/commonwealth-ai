@@ -13,8 +13,8 @@ use serde_json::json;
 
 use crate::args::{self, Args};
 use crate::fixture::Library;
-use crate::{auth_checks, evidence_checks, ingest_checks};
 use crate::report::{Check, Level};
+use crate::{auth_checks, evidence_checks, ingest_checks};
 
 /// A thin HTTP client bound to one host + optional bearer.
 pub struct Host {
@@ -249,7 +249,11 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
                 "evidence.text",
                 "evidence.align",
             ] {
-                out.push(Check::fail(id, Level::Feature, format!("the fixture library: {e}")));
+                out.push(Check::fail(
+                    id,
+                    Level::Feature,
+                    format!("the fixture library: {e}"),
+                ));
             }
         }
     }
@@ -613,7 +617,11 @@ async fn check_knowledge_search(host: &Host, m: &ProviderManifest) -> Check {
     }
     // v0.5 §3: with knowledge:document, every hit is typed and carries its
     // text's record.
-    let hits = v.get("results").and_then(|x| x.as_array()).cloned().unwrap_or_default();
+    let hits = v
+        .get("results")
+        .and_then(|x| x.as_array())
+        .cloned()
+        .unwrap_or_default();
     if m.has_feature(features::KNOWLEDGE_DOCUMENT) {
         let bad = evidence_checks::typed_hit_failures(&hits);
         if !bad.is_empty() {

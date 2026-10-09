@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use super::*;
 use oicp_types::{
-    CapabilityClaim, CapabilityHint, IngestEndpoints, KnowledgeManifest, LatencyClass,
-    ModelStatus, ProviderModel,
+    CapabilityClaim, CapabilityHint, IngestEndpoints, KnowledgeManifest, LatencyClass, ModelStatus,
+    ProviderModel,
 };
 
 fn model(id: &str, ctx: u32, claims: Vec<CapabilityClaim>) -> ProviderModel {
