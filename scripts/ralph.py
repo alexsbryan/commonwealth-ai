@@ -1034,6 +1034,7 @@ class Paths:
     heartbeat: str = "ralph/.heartbeat"
     charter: str = "ralph/CHARTER.md"
     conflicts: str = "ralph/conflicts.txt"
+    merge_check: str = "ralph/merge-check"   # optional: run in the lane before it lands
     heavy: str = "ralph/heavy.txt"
     queue: str = ""                       # the --queue name; "" on a legacy launch line
     control_dir: str = "ralph"            # a queue's own: ralph/next/<name>/ctl
@@ -1351,6 +1352,7 @@ class E(enum.Enum):
     MERGE_CLEAN = "merge-clean"
     MERGE_CONFLICT = "merge-conflict"
     MERGE_UNCOMMITTED = "merge-uncommitted"  # merged, but the loop's own done commit failed
+    MERGE_CHECK_FAILED = "merge-check-failed"  # the project's own pre-merge check was red in the lane
     # the operator
     OPERATOR_STOP = "operator-stop"
 
@@ -1407,6 +1409,7 @@ TRANSITIONS = {
 
     (U.MERGING, E.MERGE_CLEAN): (U.DONE, None),
     (U.MERGING, E.MERGE_CONFLICT): (U.READY, "strike"),
+    (U.MERGING, E.MERGE_CHECK_FAILED): (U.READY, "strike"),
     (U.MERGING, E.MERGE_UNCOMMITTED): (U.HELD, "park_unmarked"),
     # A merge runs inside one tick; a stop lets it finish.
     (U.MERGING, E.OPERATOR_STOP): (U.MERGING, None),
@@ -1444,7 +1447,8 @@ def _impossible():
                 out[(state, event)] = _NO_SESSION
             elif event in (E.RUN_ENDED, E.RUN_OVER_BUDGET):
                 out[(state, event)] = _NO_RUN
-            elif event in (E.MERGE_CLEAN, E.MERGE_CONFLICT, E.MERGE_UNCOMMITTED):
+            elif event in (E.MERGE_CLEAN, E.MERGE_CONFLICT, E.MERGE_UNCOMMITTED,
+                           E.MERGE_CHECK_FAILED):
                 out[(state, event)] = _NO_MERGE
             elif event in dispatch_events:
                 out[(state, event)] = _NOT_READY
@@ -1814,6 +1818,7 @@ def cmd_result(args):
 # The loop.
 
 TICK_S = 30
+MERGE_CHECK_TIMEOUT_S = 900    # a pre-merge check is the fast rows; a slow one is a finding
 DEFAULT_SESSION_TIMEOUT = 3600
 MAX_STRIKES = 3
 DIRECTOR_MAX = 2                # director sessions per unit, reset when it is done or unparked
@@ -2222,6 +2227,10 @@ class Loop:
         wt, branch = self.mech.lane_root / unit, f"ralph/{unit}"
         git = self.mech.git
         if git("merge-base", "--is-ancestor", branch, "HEAD").returncode != 0:
+            refused = self.mech.merge_check(unit, wt)
+            if refused is not None:
+                self.fire(unit, E.MERGE_CHECK_FAILED, why=refused)
+                return
             refused = self.mech.renumber_decisions(unit, wt, branch)
             if refused is not None:
                 self.fire(unit, E.MERGE_CONFLICT, why=refused)
@@ -2943,6 +2952,39 @@ class Lanes:
                 pass          # a tracked path the checkout does not hold (a submodule)
         say(f"lane {unit} target cloned from {src}; {touched} tracked files touched "
             "— the workspace crates rebuild once, external deps stay warm")
+
+    def merge_check(self, unit, wt):
+        """The project's own pre-merge check: `ralph/merge-check`, run in the
+        lane before its branch lands on the base. A project without one
+        merges as before. None when it passed (or is absent); otherwise why
+        it refused, in the check's own last lines, because "done" was the only
+        guard and ersilia merged r12-step-instruction with its lint and
+        discovery rows red on main (2026-10-09). The lane's cargo lock and job
+        share apply, as they do to the lane's sessions."""
+        script = wt / self.paths.merge_check
+        if not script.is_file() or not os.access(script, os.X_OK):
+            return None
+        env = dict(os.environ, SVRN_CARGO_LOCK_DIR=f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}")
+        jobs_file = wt / LANE_JOBS_FILE
+        if jobs_file.is_file():
+            env.update(line.split("=", 1) for line in jobs_file.read_text().splitlines()
+                       if "=" in line)
+        say(f"unit {unit}: merge check {self.paths.merge_check} in {wt}")
+        t0 = time.monotonic()
+        try:
+            r = subprocess.run([str(script)], cwd=wt, env=env, capture_output=True, text=True,
+                               timeout=MERGE_CHECK_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            return (f"the merge check ({self.paths.merge_check}) did not finish in "
+                    f"{fmt_secs(MERGE_CHECK_TIMEOUT_S)}; it is meant to be fast, so the lane "
+                    "was not merged — make it pass quickly, or ask the operator")
+        secs = time.monotonic() - t0
+        if r.returncode == 0:
+            say(f"unit {unit}: merge check passed in {secs:.0f}s")
+            return None
+        tail = [l.strip() for l in (r.stdout + "\n" + r.stderr).splitlines() if l.strip()][-4:]
+        return (f"the merge check ({self.paths.merge_check}) exited {r.returncode} in "
+                f"{secs:.0f}s, so the lane was not merged: " + " / ".join(tail)[:600])
 
     def renumber_decisions(self, unit, wt, branch):
         """Lanes in one wave each mint `<campaign>-<max+1>` from the same tree,

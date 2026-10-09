@@ -1044,6 +1044,41 @@ class IncidentTests(unittest.TestCase):
         self.assertEqual(rig.entry("a"), {})           # done: its counters go with it
         self.assertEqual((rig.wd / "shared.txt").read_text(), "both\n")
 
+    def test_a_red_merge_check_sends_the_lane_back_unmerged(self):
+        # The project's own pre-merge check (ralph/merge-check, optional) runs
+        # in the lane before its branch lands. Red is a strike carrying the
+        # check's own words, and the base never sees the lane: ersilia merged
+        # r12-step-instruction with its lint and discovery rows red on main
+        # (2026-10-09) because "done" was the only guard.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", lane_mode=True, lanes=1)
+        check = write(rig.wd, "ralph/merge-check",
+                      "#!/bin/sh\n[ -f fixed.txt ] && exit 0\n"
+                      "echo 'row lint failed: fmt diff in cluster.rs:700'\nexit 1\n")
+        check.chmod(0o755)
+        git(rig.wd, "add", "ralph/merge-check")
+        git(rig.wd, "commit", "-q", "-m", "a merge check")
+
+        def done_but_red(s):
+            s.commit("work.txt", "lane\n")
+            s.result("done")
+
+        def fix(s):
+            self.assertIn("ralph/merge-check", s.prompt)
+            self.assertIn("fmt diff in cluster.rs:700", s.prompt)
+            s.commit("fixed.txt", "fixed\n")
+            s.result("done")
+
+        rig.procs.sessions += [done_but_red, fix]
+        rig.tick()
+        rig.tick()
+        self.assertIs(rig.state("a"), U.RUNNING)          # struck, back to its lane at once
+        self.assertEqual(rig.entry("a")["strikes"], 1)
+        self.assertFalse((rig.wd / "work.txt").exists())   # the base never saw the red lane
+        rig.tick()
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertTrue((rig.wd / "work.txt").exists())
+        self.assertTrue((rig.wd / "fixed.txt").exists())
+
     def test_a_run_that_fails_resumes_its_lane_with_the_code_and_the_log(self):
         rig = Rig(self.tmp.name, "- [ ] r12-release-preview — depends []\n",
                   lane_mode=True, lanes=1)
