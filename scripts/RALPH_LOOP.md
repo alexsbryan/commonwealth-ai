@@ -64,8 +64,9 @@ There is one path: retry, then strikes, then the director, then held. A unit
 strikes when a session ends with no result and no commit, when it continues
 more than `MAX_LANE_CONTINUATIONS` times in a row, when a run passes its
 budget, when its merge conflicts, or when the project's own pre-merge check
-(`ralph/merge-check`, optional, run in the lane before it lands; red sends it
-back unmerged with the check's last lines) fails. At `--max-stall` (serial) or
+(`ralph/merge-check`, optional: the base's copy, run in the lane before it
+lands, so a lane cannot weaken its own gate; red sends it back unmerged with
+the check's last lines) fails. At `--max-stall` (serial) or
 `--max-lane-failures` (pool) strikes, a queue with a charter
 (`ralph/CHARTER.md`, or the manifest's) sends the director: a session on
 `RESOLVE_MODEL` that decides the forks the charter covers and records each

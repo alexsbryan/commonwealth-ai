@@ -1060,9 +1060,17 @@ class IncidentTests(unittest.TestCase):
 
         def done_but_red(s):
             s.commit("work.txt", "lane\n")
+            # A lane that weakens its own check does not merge on it: the
+            # check that governs a landing is the base's.
+            p = write(s.cwd, "ralph/merge-check", "#!/bin/sh\nexit 0\n")
+            p.chmod(0o755)
+            git(s.cwd, "commit", "-q", "-am", "weaken the check")
             s.result("done")
 
         def fix(s):
+            write(s.cwd, "ralph/merge-check",
+                  (rig.wd / "ralph/merge-check").read_text())
+            git(s.cwd, "commit", "-q", "-am", "the check restored")
             self.assertIn("ralph/merge-check", s.prompt)
             self.assertIn("fmt diff in cluster.rs:700", s.prompt)
             s.commit("fixed.txt", "fixed\n")

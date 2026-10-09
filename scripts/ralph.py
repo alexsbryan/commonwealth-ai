@@ -2959,9 +2959,11 @@ class Lanes:
         merges as before. None when it passed (or is absent); otherwise why
         it refused, in the check's own last lines, because "done" was the only
         guard and ersilia merged r12-step-instruction with its lint and
-        discovery rows red on main (2026-10-09). The lane's cargo lock and job
-        share apply, as they do to the lane's sessions."""
-        script = wt / self.paths.merge_check
+        discovery rows red on main (2026-10-09). The check is the BASE's copy,
+        run in the lane: a lane that weakens its own check does not land on
+        it. The lane's cargo lock and job share apply, as they do to the
+        lane's sessions."""
+        script = self.paths.p(self.paths.merge_check)
         if not script.is_file() or not os.access(script, os.X_OK):
             return None
         env = dict(os.environ, SVRN_CARGO_LOCK_DIR=f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}")
