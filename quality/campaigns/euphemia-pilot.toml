@@ -7,123 +7,137 @@
 # questions and the product north star's four guardrails. Orders under it
 # `serves: euphemia-pilot <bar-id ...>`.
 #
-# STAGED 2026-10-09. The bars were drafted in euphemia.toml the same day and
-# moved here by the operator's choice of a child campaign over a cap of 12
-# (the A52 precedent: new campaign files rather than rungs on a capped one).
+# STAGED 2026-10-09; the bars were drafted in euphemia.toml the same day and
+# moved here by the operator's choice of a child campaign over a cap of 12.
 #
-# THRESHOLDS ARE OWED, AND THEY ARE THE OPERATOR'S. The plan registers the
-# pilot's bars "before it runs" and the product north star says "Each guardrail
-# gets a floor or a ceiling before the pilot runs"; neither gives a number, and
-# none is invented here. Each bar carries no floor and no target, and its
-# instrument line is commented, because co-lineage refuses an instrument with
-# neither. Opening the rung is one commit, made before any pilot session is
-# counted: every threshold registered, every instrument line uncommented,
-# status = "active". A threshold that appears after a bar's first row is a
-# result, not a bar (ARCH 7).
+# OPENED 2026-10-09, before any pilot session was counted, by the operator's
+# direction: numeric floors and ceilings on these would "make something
+# subjective objective", so each bar is one question asked of the operator,
+# and the recorded answer is the verdict. Yes reads 1 (met), no reads 0
+# (failed), unsure reads could-not-judge; floor 1.0 is structural, not a
+# tuned number. The seat asks after about a week of real sessions on both
+# machines, or when the operator calls it, with `euphemia stats` and the
+# pilot's session count beside each question; the answer and its note are
+# recorded by `pilot.sh record` and committed in ~/dev/euphemia. A question
+# reworded after its first answer is a new bar, not an edit (ARCH 7).
 id        = "euphemia-pilot"
 parent    = "euphemia"
 objective = "The operator's real sessions say whether euphemia is worth building further: people identify the related work a brief shows, retrieve lessons another session recorded, tell rules from proposals and recover handoffs, while the brief stays precise, cheap and right about collisions, and sessions actually record"
 spec      = "~/dev/svrn-docs at e7ea8fe: COMMONS_BUILD_PLAN.md 'The pilot'; COMMONS_UX_NORTH_STAR.md 'Proof by experience'; COMMONS_PRODUCT_NORTH_STAR.md (metric, inputs, guardrails, 'What would prove it wrong'). Parent brief: .sovereign/features/euphemia/campaign.md"
 declared  = "2026-10-09"
-status    = "staged"
+status    = "active"
 
 [predicate]
-statement = "Over the pilot's real sessions, every bar below is met at the threshold registered before the first pilot session was counted"
+statement = "Over the pilot's real sessions, the operator answers yes to every question below"
 check     = "\"$HOME/dev/euphemia/scripts/pilot.sh\" predicate"
-# pilot.sh's `predicate` read mirrors svrngs-e0's e0_demo.py: exit 0 TRUE, 1
-# FALSE, 2 while any bar cannot be judged, 3 until the pilot layer exists.
-# S14 owes it beside the `value` read.
+# exit 0 every bar's latest committed answer is yes, 1 any no, 2 any unsure
+# or unasked.
 
-# ── PILOT BARS: the UX north star's four questions ──────────────────────────
-# Reported as passed / failed / could-not-judge / never-ran per question, from
-# `euphemia stats` and the pilot instrument (build plan, "The pilot").
+# ── The UX north star's four questions ──────────────────────────────────────
 
 [[bar]]
 id           = "eu-pilot-related-work"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-related-work" — held until its threshold is registered
-# floor/target = OWED: registered at the start of the pilot rung, before any pilot session is counted
+question     = "When a brief showed related work (a claim from another worktree, repository or machine), could you tell what it was and how it related to yours?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-related-work"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09: ask the questions, no numeric thresholds)"
+direction    = "higher_is_better"
 demo         = "The pilot: the operator's real sessions across the four repositories, both machines through the git exchange"
 rung         = "a-pilot"
 one_line     = "CLAIM: in the pilot's real sessions, people correctly identify the related work a brief shows (UX question 1)"
 derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 1; COMMONS_BUILD_PLAN.md 'The pilot'; COMMONS_PRODUCT_NORTH_STAR.md: related work counts as used only when this question shows people identified it correctly."
-direction    = "higher_is_better"
-goodhart     = "this can read high while the predicate is false if 'identified' is inferred from the record instead of asked of the person, which the product north star forbids for related work"
+goodhart     = "this can read 1 while the predicate is false if the answer rests on one memorable session rather than the pilot's sessions, or if briefs showed almost no related work; the seat asks with the session count and stats' related-work lines beside it"
 status       = "open"
 
 [[bar]]
 id           = "eu-pilot-lesson-retrieval"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-lesson-retrieval" — held until its threshold is registered
-# floor/target = OWED: registered at the start of the pilot rung
+question     = "Did a session get a relevant lesson that a different session had recorded, at the point it needed it?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-lesson-retrieval"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09)"
+direction    = "higher_is_better"
 rung         = "a-pilot"
 one_line     = "CLAIM: in the pilot's real sessions, people retrieve the relevant lesson recorded by a different session (UX question 2)"
 derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 2; COMMONS_BUILD_PLAN.md 'The pilot'; COMMONS_PRODUCT_NORTH_STAR.md north star metric (a lesson counts as used when the receiving session cites, confirms or corrects it)."
-direction    = "higher_is_better"
-goodhart     = "this can read high while the predicate is false if the retrieving session is the one that wrote the lesson; the metric counts only items carried from a different worktree, repository, machine or person"
+goodhart     = "this can read 1 while the predicate is false if the retrieving session is the one that wrote the lesson; only a lesson carried from a different worktree, repository, machine or person counts, and stats' carried-lesson line is set beside the question"
 status       = "open"
 
 [[bar]]
 id           = "eu-pilot-rules-vs-proposals"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-rules-vs-proposals" — held until its threshold is registered
-# floor/target = OWED: registered at the start of the pilot rung
+question     = "In what briefs showed from canon, could you tell current rules from proposals?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-rules-vs-proposals"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09)"
+direction    = "higher_is_better"
 rung         = "a-pilot"
 one_line     = "CLAIM: in the pilot's real sessions, people distinguish current rules from proposals in what the brief shows (UX question 3)"
 derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 3; COMMONS_BUILD_PLAN.md 'The pilot': served by the brief's read-only canon section, with proposals made with canon directly until E8."
-direction    = "higher_is_better"
-goodhart     = "this can read high while the predicate is false if no proposal was pending in any target canon during the pilot, so there was nothing to tell apart; the run records how many proposals were pending"
+goodhart     = "this can read 1 while the predicate is false if no proposal was pending in any canon during the pilot, so there was nothing to tell apart; then the answer is unsure, not yes"
 status       = "open"
 
 [[bar]]
 id           = "eu-pilot-handoff-recovery"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-handoff-recovery" — held until its threshold is registered
-# floor/target = OWED: registered at the start of the pilot rung
+question     = "Did a successor session pick up from a handoff (objective, state, open decisions, verification) without re-reading the transcript or the repository?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-handoff-recovery"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09)"
+direction    = "higher_is_better"
 rung         = "a-pilot"
 one_line     = "CLAIM: in the pilot's real sessions, a successor session recovers a handoff: objective, state, open decisions and verification (UX question 4)"
 derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 4, and law U4 ('the handoff carries the work, not the transcript'); COMMONS_BUILD_PLAN.md 'The pilot', E5.4."
-direction    = "higher_is_better"
-goodhart     = "this can read high while the predicate is false if the successor resumed by re-reading the transcript or the repository rather than from the handoff (U4 refuses transcript archaeology)"
+goodhart     = "this can read 1 while the predicate is false if the successor resumed from the session frame or the transcript rather than from euphemia's handoff (U4 refuses transcript archaeology)"
 status       = "open"
 
-# ── PILOT BARS: the product guardrail named as the stop condition ───────────
+# ── The product guardrails, asked the same way ──────────────────────────────
 
 [[bar]]
 id           = "eu-pilot-precision"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-precision" — held until its floor is registered
-# floor = OWED: registered at the start of the pilot rung ("Each guardrail gets a floor or a ceiling before the pilot runs")
-rung         = "a-pilot"
-one_line     = "CLAIM: in the pilot, the share of items shown in briefs that the receiving session then used stays at or above its floor"
-derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('Precision: the share of shown items that get used. Low precision is the campaign's stop condition') and 'What would prove it wrong'; COMMONS_BUILD_PLAN.md 'The pilot'; E5.5 (`stats` computes it)."
+question     = "Were the items briefs showed mostly ones the session went on to use, rather than noise?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-precision"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09)"
 direction    = "higher_is_better"
-goodhart     = "this can read high while the predicate is false if 'used' is inferred from the record for related work (only question 1 may count it), or if briefs showed so little that a high share means nothing; it is read beside the withheld line and capture"
+rung         = "a-pilot"
+one_line     = "CLAIM: in the pilot, what briefs show is mostly used by the receiving session (the guardrail whose failure is the campaign's stop condition)"
+derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('Precision: the share of shown items that get used. Low precision is the campaign's stop condition') and 'What would prove it wrong'; E5.5 (`stats` computes its share, set beside the question)."
+goodhart     = "this can read 1 while the predicate is false if briefs showed so little that nothing could be noise; it is asked beside stats' withheld line and the capture question"
 status       = "open"
-
-# ── PILOT BARS: the other three guardrails ──────────────────────────────────
 
 [[bar]]
 id           = "eu-pilot-false-collisions"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-false-collisions" — held until its ceiling is registered
+question     = "Were the collision warnings right: none, or too few to matter, about work that did not actually overlap?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-false-collisions"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09)"
+direction    = "higher_is_better"
 rung         = "a-pilot"
-one_line     = "CLAIM: in the pilot, collision warnings that named work which did not in fact overlap stay at or below their ceiling"
-derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('False collision warnings'); COMMONS_UX_NORTH_STAR.md 'Proof by experience' (capture false collision warnings); COMMONS_BUILD_PLAN.md 'The pilot'."
-direction    = "lower_is_better"
-goodhart     = "this can read low while the predicate is false if overlap was rarely shown at all (warnings suppressed rather than accurate); it is read beside question 1"
+one_line     = "CLAIM: in the pilot, collision warnings that named work which did not in fact overlap are rare enough not to matter"
+derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('False collision warnings'); COMMONS_UX_NORTH_STAR.md 'Proof by experience'; COMMONS_BUILD_PLAN.md 'The pilot'."
+goodhart     = "this can read 1 while the predicate is false if overlap was rarely shown at all (warnings suppressed rather than accurate); it is asked beside the related-work question"
 status       = "open"
 
 [[bar]]
 id           = "eu-pilot-brief-cost"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-brief-cost" — held until its ceiling is registered
+question     = "Was each brief cheap enough, in tokens and in the delay at session start, that you would keep it on?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-brief-cost"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09)"
+direction    = "higher_is_better"
 rung         = "a-pilot"
-one_line     = "CLAIM: in the pilot, tokens per brief and the delay added at session start stay at or below their ceilings"
-derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('Brief cost: tokens per brief, and the delay added at session start'); design §7 (the brief's budget of about 1,500 tokens, which names anything it cuts). OWED with the ceiling: whether this is one bar or two, since the guardrail names two quantities."
-direction    = "lower_is_better"
-goodhart     = "this can read low while the predicate is false if the brief stays cheap by cutting what sessions needed; truncation is named in the brief and read beside the four questions"
+one_line     = "CLAIM: in the pilot, the brief's tokens and the delay it adds at session start are worth keeping it on"
+derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('Brief cost: tokens per brief, and the delay added at session start'); design §7 (the brief's budget of about 1,500 tokens, which names anything it cuts). One question covers both quantities."
+goodhart     = "this can read 1 while the predicate is false if the brief stays cheap by cutting what sessions needed; its truncation line is set beside the question, and the four UX questions read with it"
 status       = "open"
 
 [[bar]]
 id           = "eu-pilot-capture-rate"
-# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-capture-rate" — held until its floor is registered
-rung         = "a-pilot"
-one_line     = "CLAIM: in the pilot, the share of sessions that record a claim or a lesson stays at or above its floor"
-derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'The inputs that move it' ('Capture rate ... If it stays near zero, nothing compounds') and 'What would prove it wrong' ('sessions do not capture'); COMMONS_BUILD_PLAN.md 'The pilot' (listed with the guardrails); E5.5."
+question     = "Did sessions actually record claims and lessons, often enough for later sessions to gain from them?"
+instrument   = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-capture-rate"
+floor        = 1.0
+floor_basis  = "structural: the operator's recorded answer, yes 1 and no 0 (operator 2026-10-09)"
 direction    = "higher_is_better"
-goodhart     = "this can read high while the predicate is false if hooks or agents record by rote, so captures nobody uses count; it is read beside precision"
+rung         = "a-pilot"
+one_line     = "CLAIM: in the pilot, sessions record claims and lessons often enough that something compounds"
+derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'The inputs that move it' ('Capture rate ... If it stays near zero, nothing compounds') and 'What would prove it wrong' ('sessions do not capture'); E5.5 (stats' capture share, set beside the question)."
+goodhart     = "this can read 1 while the predicate is false if hooks or agents record by rote, so captures nobody uses count; it is asked beside the precision question"
 status       = "open"
