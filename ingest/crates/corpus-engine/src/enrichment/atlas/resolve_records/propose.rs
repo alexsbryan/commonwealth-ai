@@ -3,7 +3,7 @@
 //! it was offered for (ONTOLOGY_METHOD.md §Invariants 3). A proposer never
 //! decides; the caller measures its recall against gold.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use tracing::debug;
 
@@ -132,7 +132,12 @@ pub struct SimilarDocuments {
 #[derive(Debug)]
 struct Seen {
     id: String,
-    tf: HashMap<String, f32>,
+    /// Ordered, so every sum over it runs in one order: f32 addition is not
+    /// associative, and summed in a HashMap's per-process order two documents
+    /// of one wording scored 1.0 against each other in one run and a ulp under
+    /// in the next, flipping which neighbours were offered (uv-support,
+    /// 2026-10-09: the same build gave different records on two runs).
+    tf: BTreeMap<String, f32>,
     records: Vec<String>,
 }
 
@@ -213,7 +218,7 @@ impl SimilarDocuments {
         });
     }
 
-    fn weigh(&self, tf: &HashMap<String, f32>) -> HashMap<String, f32> {
+    fn weigh(&self, tf: &BTreeMap<String, f32>) -> BTreeMap<String, f32> {
         let n = self.seen.len() as f32 + 1.0;
         tf.iter()
             .map(|(t, c)| {
@@ -224,8 +229,8 @@ impl SimilarDocuments {
     }
 }
 
-fn term_counts(doc: Document<'_>) -> HashMap<String, f32> {
-    let mut tf = HashMap::new();
+fn term_counts(doc: Document<'_>) -> BTreeMap<String, f32> {
+    let mut tf = BTreeMap::new();
     let text = doc.title.into_iter().chain([doc.body]);
     for part in text {
         for t in part
@@ -238,7 +243,7 @@ fn term_counts(doc: Document<'_>) -> HashMap<String, f32> {
     tf
 }
 
-fn norm(v: &HashMap<String, f32>) -> f32 {
+fn norm(v: &BTreeMap<String, f32>) -> f32 {
     v.values().map(|w| w * w).sum::<f32>().sqrt()
 }
 
@@ -355,6 +360,24 @@ mod tests {
         assert!(p
             .propose(threaded("q", None, "Install fails on Linux."))
             .is_empty());
+    }
+
+    /// Documents of one wording score exactly alike against a query, so the
+    /// earliest seen wins a tie in every run (the sums run in one order).
+    #[test]
+    fn documents_of_one_wording_tie_exactly_and_the_earliest_is_offered() {
+        let words: Vec<String> = (0..60).map(|i| format!("w{i} ").repeat(i % 7 + 1)).collect();
+        let body: &'static str = Box::leak(words.concat().into_boxed_str());
+        let ids: Vec<String> = (0..40).map(|i| format!("d{i}")).collect();
+        let mut p = SimilarDocuments::new(40, 40, 0.0);
+        for (i, id) in ids.iter().enumerate() {
+            p.observe(threaded(id, None, body), &resolved(id, &[&format!("r{i}")]));
+        }
+        let got = p.propose(threaded("q", None, body));
+        let sims: Vec<f32> = got.iter().map(Proposal::similarity).collect();
+        assert_eq!(sims.len(), 40);
+        assert!(sims.windows(2).all(|w| w[0].to_bits() == w[1].to_bits()), "{sims:?}");
+        assert_eq!(got[0].record, "r0");
     }
 
     #[test]
