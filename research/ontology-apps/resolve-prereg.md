@@ -322,6 +322,12 @@ a model choice and a proposed answer that name different records, or a record it
 names, are held where today the more precise decided. So H1 can adopt only if uv rises too, which these
 predictions do not expect; a refusal here is the order's stop condition ("combining is not the lever").
 
+*Amended before any data, same day:* **no link** is when no candidate's posterior rises above its share
+with no evidence (1/K), not when no source names one: a source below 1/K (GVC's date, 1 of 13) naming a
+record is evidence against it, and alone it opens a record as it does today rather than holding. A link
+also needs its candidate strictly ahead of every other (a tie is unsettled). The model is not asked for a
+statement whose fields alone link it, as today (they settled it before any question).
+
 **H2, registered with it, measured only after H1 is read.** With no precision read from any recipe, each
 system's measures hold within the bands above against the H1 treatment, and every source's estimate is
 within .1 of its gold-measured precision on every system.
