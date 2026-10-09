@@ -48,12 +48,18 @@ id           = "layer-identity-ward"
 derives_from = "rung 1: Ward's deals fail on identity (19 of 47 deals have no record with their party; a perfect reader serves at most 10)"
 one_line     = "Ward deal identity (B3 F1 over deal records, CEAF-e and LEA beside) of a blind author's recipe through the default commands on the tune fold, against the frozen recipe's 2026-10-09 baseline row (target filled from measure_ward.py on that row)"
 status       = "open"
+direction    = "higher_is_better"
+target       = 0.875
+goodhart     = "can reach target while the predicate is false because the baseline row is the all-singletons floor (92 stage_update claims opened 77 deal records; none of the 18 scored messages shares a record, pairwise 0), so a recipe that places fewer or different messages moves B3 without one correct link; read with LEA (.556), membership coverage (.367) and the scored count"
 
 [[bar]]
 id           = "layer-identity-uv"
 derives_from = "rung 1: uv's thread settles links within a thread; its identity headroom is cases that span threads"
 one_line     = "uv-support case identity (B3, CEAF-e, LEA) of a blind author's recipe through the default commands on the tune fold, against the frozen recipe's 2026-10-09 baseline row (target filled from measure_uv.py on that row)"
 status       = "open"
+direction    = "higher_is_better"
+target       = 0.838
+goodhart     = "can reach target while the predicate is false if the recipe places fewer documents: B3 scores only the 235 tune documents a case_state claim placed (membership coverage .158, recovery B3 F1 .056), so read with coverage and recovery B3"
 
 [[bar]]
 id           = "layer-estimator"
