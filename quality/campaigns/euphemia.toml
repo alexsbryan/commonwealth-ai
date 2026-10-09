@@ -1,0 +1,221 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# euphemia Stage A: the tool for the operator's four repositories and a friend
+# — the tracer, D0, D1, then the pilot. The build plan (svrn-docs
+# COMMONS_BUILD_PLAN.md, "Stage A tasks", "The predicate, the first commons and
+# the demos", "Stage A schedule") is the spec; its demos table is what this
+# campaign is judged on. The code lands in a separate repository, ~/dev/euphemia;
+# this file is the work queue for it. Orders under it
+# `serves: euphemia <bar-id ...>` (.sovereign/features/eu-*/order.md).
+#
+# PRE-REGISTERED 2026-10-09 by the seat, before any euphemia code exists and
+# before any row ran. The project was named cw-commons in the docs as read
+# (svrn-docs 78710d1); the operator renamed it euphemia the same day, and only
+# the product name changed (crates commons-*, commons.toml, refs/commons/... and
+# the commons_ MCP prefix keep the domain noun).
+id        = "euphemia"
+objective = "No agent works blind, and no lesson is learned twice: every agent session in the operator's group starts knowing what the other sessions are doing and what they have already learned, with the evidence and nothing it does not need — shown first in one repository (D0), then across two repositories and a friend's install (D1), then measured on the operator's real sessions by a pilot whose bars are registered before it runs, which decides whether Stages B and C are built at all"
+spec      = "~/dev/svrn-docs at 78710d1: COMMONS_BUILD_PLAN.md (Stage A: S1-S17, E1-E7, the pilot rung, the Stage A rung predicate, demos Tracer/D0/D1, schedule waves 0-4, the operator-only steps); COMMONS_TECH_DESIGN.md §0-§12; COMMONS_TECH_SOURCES.md blocks A.1-A.7; COMMONS_PRODUCT_NORTH_STAR.md (metric, inputs, guardrails, 'What would prove it wrong') and COMMONS_UX_NORTH_STAR.md ('Proof by experience') for the pilot bars. Campaign brief: .sovereign/features/euphemia/campaign.md"
+declared  = "2026-10-09"
+status    = "active"
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# The campaign predicate, quoted from the build plan, "unchanged". It closes in
+# Stage B. Stage A's rung predicate (D0 and D1 through the released binary;
+# every Stage A control watched red; the pilot's verdict on every
+# pre-registered bar) is carried by the bars below and by campaign.md.
+[predicate]
+statement = "The six-step acceptance scenario (COMMONS_COORDINATION_DESIGN.md, 'The first end-to-end proof') runs through the released binary, in two repositories on two machines in one commons, and every control goes red when its mechanism is removed"
+check     = "\"$HOME/dev/euphemia/scripts/acceptance.sh\""
+# OWED: no Stage A task builds scripts/acceptance.sh — S14 names four scripts
+# (demo-tracer, demo-d0, demo-d1, pilot) and the plan closes this predicate in
+# Stage B. Until it exists the check exits 127 and co-lineage reads the
+# objective COULD-NOT-RUN, never TRUE (ARCH 5, ARCH 6).
+
+# ── INSTRUMENTS ──────────────────────────────────────────────────────────────
+# Every instrument points into ~/dev/euphemia. Before that repository exists
+# each one exits 127 (could-not-judge: instrument-missing); once S14 lands each
+# exits 3 (could-not-judge: artifact-absent) until its layer lands — the
+# svrngs-e0 precedent the build plan names ("Every instrument exits 3 until its
+# layer lands"). The interface S14 owes, mirrored from svrngs-e0's
+# `e0_demo.py value <bar>`: a `value` read of the script's last recorded run,
+# answering inside co-lineage's read-tier cap (READ_TIER_TIMEOUT_S, 10 s), whose
+# last stdout line is {"value": N, "commit": "<euphemia sha>", "artifact":
+# "<path>"} (scripts/co-lineage.py, "Instrument contract").
+#
+# ── THE CAP, AND WHAT IT HOLDS BACK ──────────────────────────────────────────
+# Twelve bars were drafted: four build bars (tracer, D0, D1, controls) and the
+# eight pilot bars the plan registers (the UX north star's four questions; the
+# product guardrails precision, false collision warnings, brief cost and capture
+# rate). co-lineage.py refuses more than 9 (MAX_BARS) unless the OPERATOR
+# accepts a `[cap]` table under a ralph/DECISIONS.md entry (A56) — a campaign
+# cannot accept its own growth. So nine are declared, and the three pilot
+# guardrails that are not named as the campaign's stop condition are written
+# out, commented, at the end of this file: false collision warnings, brief cost,
+# capture rate. Capture still wakes the operator through campaign.md's stop
+# conditions ("sessions do not capture"). OWED, the operator's, before the pilot
+# rung opens: accept a cap of 12 here, or move the pilot bars to a child
+# campaign (the A52 precedent).
+#
+# ── PILOT THRESHOLDS ARE OWED ────────────────────────────────────────────────
+# The plan registers the pilot's bars "before it runs" and the product north
+# star says "Each guardrail gets a floor or a ceiling before the pilot runs";
+# neither gives a number. No threshold is invented here. Each pilot bar carries
+# no floor and no target, and its instrument line is commented, because
+# co-lineage refuses an instrument with neither (a value nothing judges). The
+# thresholds are registered at the START of the pilot rung, before any pilot
+# session is counted; at that moment the instrument lines are uncommented.
+
+# ── BARS ─────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id           = "eu-tracer"
+instrument   = "\"$HOME/dev/euphemia/scripts/demo-tracer.sh\" value"
+demo         = "Tracer: a claim made in one clone appears in another clone's held set, through a local bare remote"
+rung         = "a-wave-0"
+one_line     = "CLAIM: a claim made in clone A is durable, `sync` pushes it, and clone B's held set contains it, checked by digest, through a local bare remote"
+derives_from = "COMMONS_BUILD_PLAN.md S15 (design §3, §5, §6) and the demos table row 'Tracer'; lands with order eu-s1-skeleton (wave 0)."
+floor        = 1.0
+floor_basis  = "structural: 1 iff clone B's held-set digest after `sync` covers the claim clone A appended; anything else is 0"
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "this can read 1.0 while the predicate is false if clone B reads clone A's journal from a shared local state directory instead of receiving it through the bare remote; the two clones need separate local state and the bare remote as the only path between them"
+status       = "open"
+
+[[bar]]
+id           = "eu-d0-one-repository"
+instrument   = "\"$HOME/dev/euphemia/scripts/demo-d0.sh\" value"
+demo         = "D0 · one repository: two worktrees of commonwealth-ai; B's brief shows A's claim, A's lesson and A's handoff; an unrelated checkout with the same paths and `main` shows nothing"
+rung         = "a-wave-2"
+one_line     = "CLAIM: through the released binary and the README quickstart's commands, run literally, worktree B's brief shows A's claim as 'same repository, other worktree, branch other' with its intent and age, A's lesson whose git reference `git show` opens, and A's handoff on that scope; and an unrelated checkout with the same paths and `main` shows nothing"
+derives_from = "COMMONS_BUILD_PLAN.md demos table row 'D0 · one repository', S13 (the README quickstart, which demo-d0.sh runs literally), E5.7 (complete demo-d0), and the Stage A rung predicate ('D0 and D1 pass through the released binary'); design §4 (relations, lessons, handoffs) and §7 (the brief)."
+floor        = 1.0
+floor_basis  = "structural: 1 iff every clause holds on one run through the released binary; any clause false is 0"
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "this can read 1.0 while the predicate is false if the run used a development build rather than the released binary, or commands other than the README quickstart's; the recorded run names the binary's version and its SHA256SUMS line, and the commands it ran"
+status       = "open"
+
+[[bar]]
+id           = "eu-d1-two-repositories"
+instrument   = "\"$HOME/dev/euphemia/scripts/demo-d1.sh\" value"
+demo         = "D1 · two repositories: a friend-style install and `join`; zoracite's brief shows ersilia's oicp lesson and open claim as shared contract; svrngs stays quiet; a new repository waits for a person's `canon approve`"
+rung         = "a-wave-3"
+one_line     = "CLAIM: after `curl … install.sh | sh` and `join`, zoracite's brief shows ersilia's `oicp` lesson and ersilia's open claim as 'shared contract'; svrngs, not on that contract, stays quiet and counts what was withheld; a new repository reads 'registration pending' until a person runs `canon approve`, and an approval under an agent label leaves it pending"
+derives_from = "COMMONS_BUILD_PLAN.md demos table row 'D1 · two repositories', E7.4 (complete demo-d1, including the installer's canon step), E7 Flips ('D1, together with E6'), and the Stage A rung predicate; design §3 (registry and canon), §4 (SharedContract), §6 (canon adapter), §8 (installer)."
+floor        = 1.0
+floor_basis  = "structural: 1 iff every clause holds on one run through the released binary; any clause false is 0"
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "this can read 1.0 while the predicate is false if svrngs is quiet because its view was unavailable rather than filtered (design §7: 'No related work' prints only when every peer was received), or if the script itself runs the person's `canon approve` under a human label it chose, when the plan makes every `canon approve` in the demos an operator step"
+status       = "open"
+
+[[bar]]
+id           = "eu-controls-watched-red"
+instrument   = "cd \"$HOME/dev/euphemia\" && cargo xtask controls value"
+rung         = "a-wave-3"
+one_line     = "CLAIM: every Stage A control named in the build plan's E1-E7 Flips is registered in quality/controls.toml and has been watched red with its mechanism removed, with its receipt"
+derives_from = "COMMONS_BUILD_PLAN.md Stage A's gates ('Control registry (S14): each control watched red, with its receipt'), S14 (`xtask controls`), the E1-E7 Flips lists, and the Stage A rung predicate ('every Stage A control has been watched red'); design §11 'Controls' (ARCH 5)."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of the Stage A controls with a watched-red receipt; the rung predicate says every one, so 1.0 or the bar is not met"
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "this can read 1.0 while the predicate is false if the registry lists fewer controls than the Flips name (an unregistered control is never counted, so the denominator is the Flips list), or if a receipt records a red watched with the mechanism still present"
+status       = "open"
+
+# ── PILOT BARS: the UX north star's four questions ──────────────────────────
+# Reported as passed / failed / could-not-judge / never-ran per question, from
+# `euphemia stats` and the pilot instrument (build plan, "The pilot").
+
+[[bar]]
+id           = "eu-pilot-related-work"
+# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-related-work" — held until its threshold is registered
+# floor/target = OWED: registered at the start of the pilot rung, before any pilot session is counted
+demo         = "The pilot: the operator's real sessions across the four repositories, both machines through the git exchange"
+rung         = "a-pilot"
+one_line     = "CLAIM: in the pilot's real sessions, people correctly identify the related work a brief shows (UX question 1)"
+derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 1; COMMONS_BUILD_PLAN.md 'The pilot'; COMMONS_PRODUCT_NORTH_STAR.md: related work counts as used only when this question shows people identified it correctly."
+direction    = "higher_is_better"
+goodhart     = "this can read high while the predicate is false if 'identified' is inferred from the record instead of asked of the person, which the product north star forbids for related work"
+status       = "open"
+
+[[bar]]
+id           = "eu-pilot-lesson-retrieval"
+# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-lesson-retrieval" — held until its threshold is registered
+# floor/target = OWED: registered at the start of the pilot rung
+rung         = "a-pilot"
+one_line     = "CLAIM: in the pilot's real sessions, people retrieve the relevant lesson recorded by a different session (UX question 2)"
+derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 2; COMMONS_BUILD_PLAN.md 'The pilot'; COMMONS_PRODUCT_NORTH_STAR.md north star metric (a lesson counts as used when the receiving session cites, confirms or corrects it)."
+direction    = "higher_is_better"
+goodhart     = "this can read high while the predicate is false if the retrieving session is the one that wrote the lesson; the metric counts only items carried from a different worktree, repository, machine or person"
+status       = "open"
+
+[[bar]]
+id           = "eu-pilot-rules-vs-proposals"
+# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-rules-vs-proposals" — held until its threshold is registered
+# floor/target = OWED: registered at the start of the pilot rung
+rung         = "a-pilot"
+one_line     = "CLAIM: in the pilot's real sessions, people distinguish current rules from proposals in what the brief shows (UX question 3)"
+derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 3; COMMONS_BUILD_PLAN.md 'The pilot': served by the brief's read-only canon section, with proposals made with canon directly until E8."
+direction    = "higher_is_better"
+goodhart     = "this can read high while the predicate is false if no proposal was pending in any target canon during the pilot, so there was nothing to tell apart; the run records how many proposals were pending"
+status       = "open"
+
+[[bar]]
+id           = "eu-pilot-handoff-recovery"
+# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-handoff-recovery" — held until its threshold is registered
+# floor/target = OWED: registered at the start of the pilot rung
+rung         = "a-pilot"
+one_line     = "CLAIM: in the pilot's real sessions, a successor session recovers a handoff: objective, state, open decisions and verification (UX question 4)"
+derives_from = "COMMONS_UX_NORTH_STAR.md 'Proof by experience', question 4, and law U4 ('the handoff carries the work, not the transcript'); COMMONS_BUILD_PLAN.md 'The pilot', E5.4."
+direction    = "higher_is_better"
+goodhart     = "this can read high while the predicate is false if the successor resumed by re-reading the transcript or the repository rather than from the handoff (U4 refuses transcript archaeology)"
+status       = "open"
+
+# ── PILOT BARS: the product guardrail named as the stop condition ───────────
+
+[[bar]]
+id           = "eu-pilot-precision"
+# instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-precision" — held until its floor is registered
+# floor = OWED: registered at the start of the pilot rung ("Each guardrail gets a floor or a ceiling before the pilot runs")
+rung         = "a-pilot"
+one_line     = "CLAIM: in the pilot, the share of items shown in briefs that the receiving session then used stays at or above its floor"
+derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('Precision: the share of shown items that get used. Low precision is the campaign's stop condition') and 'What would prove it wrong'; COMMONS_BUILD_PLAN.md 'The pilot'; E5.5 (`stats` computes it)."
+direction    = "higher_is_better"
+goodhart     = "this can read high while the predicate is false if 'used' is inferred from the record for related work (only question 1 may count it), or if briefs showed so little that a high share means nothing; it is read beside the withheld line and capture"
+status       = "open"
+
+# ── HELD BY THE CAP — written out, not declared ─────────────────────────────
+# Uncomment these three only after the operator accepts a [cap] of 12 here (or
+# move all eight pilot bars to a child campaign). Their thresholds are OWED at
+# the start of the pilot rung, like the bars above.
+#
+# [[bar]]
+# id           = "eu-pilot-false-collisions"
+# # instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-false-collisions"
+# rung         = "a-pilot"
+# one_line     = "CLAIM: in the pilot, collision warnings that named work which did not in fact overlap stay at or below their ceiling"
+# derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('False collision warnings'); COMMONS_UX_NORTH_STAR.md 'Proof by experience' (capture false collision warnings); COMMONS_BUILD_PLAN.md 'The pilot'."
+# direction    = "lower_is_better"
+# goodhart     = "this can read low while the predicate is false if overlap was rarely shown at all (warnings suppressed rather than accurate); it is read beside question 1"
+# status       = "open"
+#
+# [[bar]]
+# id           = "eu-pilot-brief-cost"
+# # instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-brief-cost"
+# rung         = "a-pilot"
+# one_line     = "CLAIM: in the pilot, tokens per brief and the delay added at session start stay at or below their ceilings"
+# derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'Guardrails' ('Brief cost: tokens per brief, and the delay added at session start'); design §7 (the brief's budget of about 1,500 tokens, which names anything it cuts). OWED with the ceiling: whether this is one bar or two, since the guardrail names two quantities."
+# direction    = "lower_is_better"
+# goodhart     = "this can read low while the predicate is false if the brief stays cheap by cutting what sessions needed; truncation is named in the brief and read beside the four questions"
+# status       = "open"
+#
+# [[bar]]
+# id           = "eu-pilot-capture-rate"
+# # instrument = "\"$HOME/dev/euphemia/scripts/pilot.sh\" value eu-pilot-capture-rate"
+# rung         = "a-pilot"
+# one_line     = "CLAIM: in the pilot, the share of sessions that record a claim or a lesson stays at or above its floor"
+# derives_from = "COMMONS_PRODUCT_NORTH_STAR.md 'The inputs that move it' ('Capture rate ... If it stays near zero, nothing compounds') and 'What would prove it wrong' ('sessions do not capture'); COMMONS_BUILD_PLAN.md 'The pilot' (listed with the guardrails); E5.5."
+# direction    = "higher_is_better"
+# goodhart     = "this can read high while the predicate is false if hooks or agents record by rote, so captures nobody uses count; it is read beside precision"
+# status       = "open"
