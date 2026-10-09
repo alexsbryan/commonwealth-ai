@@ -1822,6 +1822,7 @@ def cmd_result(args):
 
 TICK_S = 30
 MERGE_CHECK_TIMEOUT_S = 900    # a pre-merge check is the fast rows; a slow one is a finding
+MERGE_CHECK_RETRY_S = 600      # a check the host could not finish is retried after this
 DEFAULT_SESSION_TIMEOUT = 3600
 MAX_STRIKES = 3
 DIRECTOR_MAX = 2                # director sessions per unit, reset when it is done or unparked
@@ -2237,10 +2238,21 @@ class Loop:
         wt, branch = self.mech.lane_root / unit, f"ralph/{unit}"
         git = self.mech.git
         if git("merge-base", "--is-ancestor", branch, "HEAD").returncode != 0:
-            refused = self.mech.merge_check(unit, wt)
-            if refused is not None:
-                self.fire(unit, E.MERGE_CHECK_FAILED, why=refused)
+            now = self.clock()
+            if entry.get("merge_check_retry_at", 0) > now:
                 return
+            verdict, why = self.mech.merge_check(unit, wt)
+            if verdict == "could_not_judge":
+                # The host, not the lane: no strike, and the base waits.
+                entry["merge_check_retry_at"] = now + MERGE_CHECK_RETRY_S
+                self.ledger.save()
+                say(f"unit {unit}: merge check could not judge — {why}; no strike, "
+                    f"retried in {fmt_secs(MERGE_CHECK_RETRY_S)}")
+                return
+            if verdict == "failed":
+                self.fire(unit, E.MERGE_CHECK_FAILED, why=why)
+                return
+            entry.pop("merge_check_retry_at", None)
             refused = self.mech.renumber_decisions(unit, wt, branch)
             if refused is not None:
                 self.fire(unit, E.MERGE_CONFLICT, why=refused)
@@ -2985,10 +2997,12 @@ class Lanes:
         discovery rows red on main (2026-10-09). The check is the BASE's copy,
         run in the lane: a lane that weakens its own check does not land on
         it. The lane's cargo lock and job share apply, as they do to the
-        lane's sessions."""
+        lane's sessions. (verdict, why): `passed` (or no check), `failed` (red:
+        a strike), or `could_not_judge` (it did not finish: the host, not the
+        lane — retried, never struck)."""
         script = self.paths.p(self.paths.merge_check)
         if not script.is_file() or not os.access(script, os.X_OK):
-            return None
+            return "passed", "no merge check"
         env = dict(os.environ, SVRN_CARGO_LOCK_DIR=f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}")
         jobs_file = wt / LANE_JOBS_FILE
         if jobs_file.is_file():
@@ -3000,16 +3014,15 @@ class Lanes:
             r = subprocess.run([str(script)], cwd=wt, env=env, capture_output=True, text=True,
                                timeout=MERGE_CHECK_TIMEOUT_S)
         except subprocess.TimeoutExpired:
-            return (f"the merge check ({self.paths.merge_check}) did not finish in "
-                    f"{fmt_secs(MERGE_CHECK_TIMEOUT_S)}; it is meant to be fast, so the lane "
-                    "was not merged — make it pass quickly, or ask the operator")
+            return "could_not_judge", (f"{self.paths.merge_check} did not finish in "
+                                       f"{fmt_secs(MERGE_CHECK_TIMEOUT_S)}")
         secs = time.monotonic() - t0
         if r.returncode == 0:
             say(f"unit {unit}: merge check passed in {secs:.0f}s")
-            return None
+            return "passed", ""
         tail = [l.strip() for l in (r.stdout + "\n" + r.stderr).splitlines() if l.strip()][-4:]
-        return (f"the merge check ({self.paths.merge_check}) exited {r.returncode} in "
-                f"{secs:.0f}s, so the lane was not merged: " + " / ".join(tail)[:600])
+        return "failed", (f"the merge check ({self.paths.merge_check}) exited {r.returncode} in "
+                          f"{secs:.0f}s, so the lane was not merged: " + " / ".join(tail)[:600])
 
     def renumber_decisions(self, unit, wt, branch):
         """Lanes in one wave each mint `<campaign>-<max+1>` from the same tree,

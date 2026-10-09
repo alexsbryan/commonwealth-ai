@@ -66,7 +66,9 @@ more than `MAX_LANE_CONTINUATIONS` times in a row, when a run passes its
 budget, when its merge conflicts, or when the project's own pre-merge check
 (`ralph/merge-check`, optional: the base's copy, run in the lane before it
 lands, so a lane cannot weaken its own gate; red sends it back unmerged with
-the check's last lines) fails. At `--max-stall` (serial) or
+the check's last lines) fails. A check that does not finish in its bound is
+`could_not_judge`, the host's and not the lane's: no strike, the unit stays
+merging, and the check is retried after a cool-down. At `--max-stall` (serial) or
 `--max-lane-failures` (pool) strikes, a queue with a charter
 (`ralph/CHARTER.md`, or the manifest's) sends the director: a session on
 `RESOLVE_MODEL` that decides the forks the charter covers and records each

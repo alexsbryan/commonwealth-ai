@@ -1044,6 +1044,38 @@ class IncidentTests(unittest.TestCase):
         self.assertEqual(rig.entry("a"), {})           # done: its counters go with it
         self.assertEqual((rig.wd / "shared.txt").read_text(), "both\n")
 
+    def test_a_merge_check_that_cannot_finish_is_retried_not_struck(self):
+        # ersilia's first checked landing took 695s of a 900s bound at load 87
+        # (2026-10-09): a check that cannot finish is could_not_judge — the
+        # host, not the lane — so the unit stays merging, unstruck and
+        # unmerged, and retries after a cool-down.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", lane_mode=True, lanes=1)
+        check = write(rig.wd, "ralph/merge-check", "#!/bin/sh\nsleep 5\n")
+        check.chmod(0o755)
+        git(rig.wd, "add", "ralph/merge-check")
+        git(rig.wd, "commit", "-q", "-m", "a slow merge check")
+
+        def done(s):
+            s.commit("work.txt", "lane\n")
+            s.result("done")
+
+        rig.procs.sessions += [done]
+        with mock.patch.object(ralph, "MERGE_CHECK_TIMEOUT_S", 1):
+            rig.tick()
+            rig.tick()
+        self.assertIs(rig.state("a"), U.MERGING)
+        self.assertEqual(rig.entry("a").get("strikes", 0), 0)
+        self.assertFalse((rig.wd / "work.txt").exists())
+        # The host recovers; inside the cool-down nothing is retried.
+        write(rig.wd, "ralph/merge-check", "#!/bin/sh\nexit 0\n")
+        git(rig.wd, "commit", "-q", "-am", "the check is fast again")
+        rig.tick()
+        self.assertIs(rig.state("a"), U.MERGING)
+        rig.clock.advance(ralph.MERGE_CHECK_RETRY_S)
+        rig.tick()
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertTrue((rig.wd / "work.txt").exists())
+
     def test_an_operator_extension_keeps_a_run_past_its_first_budget(self):
         # A detached run the operator expects to overrun (ersilia's battery on
         # a loaded host, 2026-10-09) gets more time, logged, not killed; the
