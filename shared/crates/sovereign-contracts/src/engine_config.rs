@@ -208,6 +208,26 @@ pub struct EngineSection {
     /// ignored, and `svrn setup --hosted anthropic` writes `tool-use-forced`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structured_output: Option<StructuredOutputMode>,
+    /// Who prepares `remote`'s embed inputs: the instruction prefix and the
+    /// EOS an instruction-aware embedder was trained with. Unset is `server`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embed_inputs: Option<EmbedInputs>,
+}
+
+/// Who turns text into the input an embedding model expects. A property of
+/// the embedding SERVER, like [`StructuredOutputMode`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EmbedInputs {
+    /// The server does: a Sovereign daemon's embed slot applies the family's
+    /// instruction and EOS itself, so the client sends text as given.
+    #[default]
+    Server,
+    /// The client does, because the server sends text to the model as
+    /// given (llama-server, vLLM). Without it a Qwen3-Embedding query lands
+    /// at cosine 0.84 from the daemon's vector for the same query
+    /// (bench/lanes/engine-swap/embed_parity.py, 2026-10-09).
+    Client,
 }
 
 fn default_engine_context_size() -> u32 {
@@ -240,6 +260,7 @@ impl Default for EngineSection {
             embed_path: None,
             extra_params: None,
             structured_output: None,
+            embed_inputs: None,
         }
     }
 }

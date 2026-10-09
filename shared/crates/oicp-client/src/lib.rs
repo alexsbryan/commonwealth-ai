@@ -245,6 +245,11 @@ pub struct RemoteApiProvider {
     /// path bit-identical to the embedded one. See
     /// `ModelsManifest::embed_query_instruction`.
     query_instruction: String,
+    /// The embed family's whole input preparation (instruction AND EOS), for
+    /// a host that does none of its own: llama-server, vLLM. `None` sends
+    /// text as given, which is right for a Sovereign daemon, whose embed slot
+    /// prepares inputs itself. Set by `[engine] embed_inputs = "client"`.
+    input_prep: Option<sovereign_contracts::embed_quirks::EmbedQuirks>,
     /// How this provider's host is asked for schema-shaped output.
     structured_output_mode: StructuredOutputMode,
     /// Operator-set vendor fields merged into every body last (OpenRouter's
@@ -305,9 +310,11 @@ impl RemoteApiProvider {
     async fn embed_many_one_request(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let admitted = self.outbound(Payload::Texts)?;
         let url = format!("{}/embeddings", self.endpoint.resolve().await?);
+        let inputs: Vec<std::borrow::Cow<'_, str>> =
+            texts.iter().map(|t| self.document_input(t)).collect();
         let body = serde_json::json!({
             "model": &self.model_id,
-            "input": texts,
+            "input": inputs,
         });
 
         // Deliberately NOT routed through `send_honouring_shed`: this site's
@@ -400,6 +407,7 @@ impl RemoteApiProvider {
             // `with_query_instruction`; chat providers and document-embed
             // (`embed`, which ignores the prefix) leave it empty.
             query_instruction: String::new(),
+            input_prep: None,
             structured_output_mode: StructuredOutputMode::default(),
             extra_params: None,
             json_schema_refused: std::sync::atomic::AtomicBool::new(false),
@@ -490,6 +498,62 @@ impl RemoteApiProvider {
     pub fn with_query_instruction(mut self, query_instruction: String) -> Self {
         self.query_instruction = query_instruction;
         self
+    }
+
+    /// Prepare every embed input here, as the embed slot does in process:
+    /// `prepare_document` for `embed`/`embed_batch`, `prepare_query` for
+    /// `embed_query`. For a host that sends the text to the model as given.
+    pub fn with_input_prep(
+        mut self,
+        quirks: sovereign_contracts::embed_quirks::EmbedQuirks,
+    ) -> Self {
+        self.input_prep = Some(quirks);
+        self
+    }
+
+    /// One `/embeddings` call on `text` exactly as given: no preparation.
+    async fn embed_as_given(&self, text: &str) -> Result<Vec<f32>> {
+        let admitted = self.outbound(Payload::Texts)?;
+        let url = format!("{}/embeddings", self.endpoint.resolve().await?);
+        let body = serde_json::json!({
+            "model": &self.model_id,
+            "input": text,
+        });
+
+        let response = self
+            .send_honouring_shed(|| admitted.post(&url).json(&body), "Embedding request")
+            .await?;
+
+        #[derive(Deserialize)]
+        struct EmbedResponse {
+            data: Vec<EmbedData>,
+        }
+        #[derive(Deserialize)]
+        struct EmbedData {
+            embedding: Vec<f32>,
+        }
+
+        let embed_response: EmbedResponse = response
+            .json()
+            .await
+            .map_err(|e| Error::Inference(format!("Failed to parse embedding response: {e}")))?;
+
+        embed_response
+            .data
+            .into_iter()
+            .next()
+            .map(|d| d.embedding)
+            .ok_or(Error::Inference(
+                "No embedding data in response".to_string(),
+            ))
+    }
+
+    /// A document-side input as this host must receive it.
+    fn document_input<'a>(&self, text: &'a str) -> std::borrow::Cow<'a, str> {
+        match &self.input_prep {
+            Some(q) => std::borrow::Cow::Owned(q.prepare_document(text)),
+            None => std::borrow::Cow::Borrowed(text),
+        }
     }
 
     fn build_request(&self, request: &CompletionRequest) -> serde_json::Value {
@@ -1188,39 +1252,7 @@ impl InferenceProvider for RemoteApiProvider {
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        let admitted = self.outbound(Payload::Texts)?;
-        let url = format!("{}/embeddings", self.endpoint.resolve().await?);
-        let body = serde_json::json!({
-            "model": &self.model_id,
-            "input": text,
-        });
-
-        let response = self
-            .send_honouring_shed(|| admitted.post(&url).json(&body), "Embedding request")
-            .await?;
-
-        #[derive(Deserialize)]
-        struct EmbedResponse {
-            data: Vec<EmbedData>,
-        }
-        #[derive(Deserialize)]
-        struct EmbedData {
-            embedding: Vec<f32>,
-        }
-
-        let embed_response: EmbedResponse = response
-            .json()
-            .await
-            .map_err(|e| Error::Inference(format!("Failed to parse embedding response: {e}")))?;
-
-        embed_response
-            .data
-            .into_iter()
-            .next()
-            .map(|d| d.embedding)
-            .ok_or(Error::Inference(
-                "No embedding data in response".to_string(),
-            ))
+        self.embed_as_given(&self.document_input(text)).await
     }
 
     /// The rerank kind's client method (`rerank.rs`).
@@ -1281,6 +1313,9 @@ impl InferenceProvider for RemoteApiProvider {
     /// the model declares no query instruction (chat / non-embedding ids), the
     /// prefix is empty and this is exactly `embed()` — no behaviour change.
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        if let Some(q) = &self.input_prep {
+            return self.embed_as_given(&q.prepare_query(query)).await;
+        }
         if self.query_instruction.is_empty() {
             return self.embed(query).await;
         }

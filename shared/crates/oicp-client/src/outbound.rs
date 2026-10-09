@@ -321,6 +321,10 @@ pub enum EngineEmbed {
         endpoint_v1: String,
         /// The model it embeds with.
         model_id: String,
+        /// The embed family's input preparation, when the server does none
+        /// of its own (`[engine] embed_inputs = "client"`). `None` sends text
+        /// as given: right for a Sovereign daemon, whose embed slot prepares.
+        input_prep: Option<sovereign_contracts::embed_quirks::EmbedQuirks>,
     },
     /// A model in this process (`[engine] embed_path`): the small embedding
     /// GGUF, so a hosted engine embeds on this machine with no second server.
@@ -372,9 +376,22 @@ impl SplitInferenceProvider {
             EngineEmbed::Remote {
                 endpoint_v1,
                 model_id,
+                input_prep,
             } => {
-                let half = half(&endpoint_v1, &model_id)?;
-                let at = format!("{endpoint_v1} ({:?})", half.far_end());
+                let prepared_here = input_prep.is_some();
+                let half = match input_prep {
+                    Some(quirks) => half(&endpoint_v1, &model_id)?.with_input_prep(quirks),
+                    None => half(&endpoint_v1, &model_id)?,
+                };
+                let at = format!(
+                    "{endpoint_v1} ({:?}, inputs prepared {})",
+                    half.far_end(),
+                    if prepared_here {
+                        "here"
+                    } else {
+                        "by the server"
+                    }
+                );
                 (std::sync::Arc::new(half), model_id, at)
             }
             EngineEmbed::Local { provider, model_id } => {

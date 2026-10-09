@@ -12,6 +12,7 @@ fn a_hosted_engine_advertises_its_vendor_model_and_vendor_features() {
     let embed = EngineEmbed::Remote {
         endpoint_v1: "http://127.0.0.1:8001/v1".into(),
         model_id: "embed".into(),
+        input_prep: None,
     };
     let engine = SplitInferenceProvider::engine(
         "https://api.example.com/v1",

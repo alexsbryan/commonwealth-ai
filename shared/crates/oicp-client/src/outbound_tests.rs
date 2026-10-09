@@ -127,6 +127,7 @@ fn an_engine_off_this_machine_is_a_third_party() {
         let embed = EngineEmbed::Remote {
             endpoint_v1: embed.into(),
             model_id: "e".into(),
+            input_prep: None,
         };
         SplitInferenceProvider::engine(
             chat,
@@ -333,4 +334,71 @@ async fn an_engine_told_tool_use_forced_sends_schemas_as_a_function_call() {
         .expect("the vendor was asked");
     assert!(body.get("response_format").is_none(), "{body}");
     assert_eq!(body["tool_choice"]["function"]["name"], "atoms", "{body}");
+}
+
+/// `[engine] embed_inputs = "client"`: the remote embed half sends each input
+/// prepared as the in-process embed slot prepares it, on every embed path,
+/// and sends text as given when the server prepares. The server here keeps
+/// every `input` it receives, so the assertion is on the wire.
+#[tokio::test]
+async fn a_client_prepared_engine_sends_the_embed_slots_inputs() {
+    use sovereign_contracts::embed_quirks::EmbedQuirks;
+    let inputs = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let seen = inputs.clone();
+    let embeddings = move |axum::Json(body): axum::Json<Value>| {
+        let n = body["input"].as_array().map_or(1, Vec::len);
+        seen.lock().unwrap().push(body["input"].clone());
+        let data: Vec<Value> = (0..n)
+            .map(|i| json!({"embedding": [0.0], "index": i}))
+            .collect();
+        async move { axum::Json(json!({"data": data})) }
+    };
+    let app = axum::Router::new().route("/v1/embeddings", axum::routing::post(embeddings));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/v1", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    let engine = |input_prep: Option<EmbedQuirks>| {
+        let embed = EngineEmbed::Remote {
+            endpoint_v1: url.clone(),
+            model_id: "Qwen3-Embedding-0.6B-Q8_0".into(),
+            input_prep,
+        };
+        SplitInferenceProvider::engine(
+            &url,
+            embed,
+            None,
+            "c".into(),
+            None,
+            8192,
+            None,
+            Default::default(),
+        )
+        .unwrap()
+    };
+    let q = EmbedQuirks::qwen3_embedding();
+
+    let prepared = engine(Some(q.clone()));
+    prepared.embed("doc").await.unwrap();
+    prepared
+        .embed_batch(&["a".into(), "b".into()])
+        .await
+        .unwrap();
+    prepared.embed_query("q").await.unwrap();
+    let raw = engine(None);
+    raw.embed("doc").await.unwrap();
+
+    let got = inputs.lock().unwrap().clone();
+    assert_eq!(
+        got,
+        vec![
+            json!(q.prepare_document("doc")),
+            json!([q.prepare_document("a"), q.prepare_document("b")]),
+            json!(q.prepare_query("q")),
+            json!("doc"),
+        ]
+    );
+    assert!(
+        q.prepare_query("q").ends_with("<|endoftext|>"),
+        "the EOS is part of the input"
+    );
 }

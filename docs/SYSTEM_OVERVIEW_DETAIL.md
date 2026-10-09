@@ -3967,6 +3967,16 @@ had no key that could say otherwise.
   constructor was missing). `embed_endpoint` without `embed_model_id` is
   refused, not guessed. Operator-facing walkthrough:
   [`docs/USE_YOUR_OWN_INFERENCE_SERVER.md`](USE_YOUR_OWN_INFERENCE_SERVER.md).
+- **`[engine] embed_inputs` (2026-10-09)** says who prepares the remote
+  embed half's inputs: the family's query instruction and its EOS.
+  - `server` (the default) sends text as given, which is right for a daemon,
+    whose embed slot prepares.
+  - `client` resolves `EmbedQuirks::for_model_stem` on the embed model id
+    (`engine_factory::remote_embed_input_prep`, which refuses an unplaced
+    id). `RemoteApiProvider::with_input_prep` then applies `prepare_document`
+    on `embed`/`embed_batch` and `prepare_query` on `embed_query`.
+  - Found by the engine-swap probe (`bench/lanes/engine-swap/embed_parity.py`):
+    unprepared query vectors sat at cosine 0.84 from the daemon's.
 - **Proven live 2026-08-30**: a second daemon on `kind = "remote"` with
   deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
   (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file

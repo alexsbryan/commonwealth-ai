@@ -30,6 +30,29 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `[engine] embed_inputs` — `server` unless the operator says `client` (2026-10-09)
+
+**What ships.** A remote engine's embed half prepares inputs (instruction
+prefix and EOS, `EmbedQuirks`) only with `embed_inputs = "client"`. The
+default, `server`, sends text as given.
+
+**Why `server`.** Every deployed remote engine today points at a Sovereign
+daemon, whose embed slot already prepares inputs. Preparing on both sides
+would double the EOS.
+
+**Measured.** In `bench/lanes/engine-swap/embed_parity.py` (2026-10-09), with
+llama-server as the embed server:
+- **Unprepared:** query vectors had minimum cosine 0.836 against the daemon's,
+  and chunk vectors 0.990.
+- **Prepared:** both were 0.9996 or closer.
+
+**Flip condition.** Make `client` the default when a remote engine can tell a
+preparing host from a bare one without the operator saying so. For example,
+an OICP manifest could advertise who prepares inputs, defaulting to `client`
+when a host advertises nothing.
+
+**Review by 2026-11-09.**
+
 ### `[enrichment.ontology].document_reading` — false unless a recipe opts in (2026-10-07)
 
 **What ships.** In a version-1 recipe, `[enrichment.ontology]` may set
