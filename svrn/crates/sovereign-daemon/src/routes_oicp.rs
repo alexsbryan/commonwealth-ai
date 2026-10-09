@@ -8,8 +8,9 @@ use kernel_types::NodeId;
 use oicp_types::features::{self, EMBEDDED_FEATURES};
 use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
-    FederatedMeshDescriptor, FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass,
-    ModelStatus, ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
+    EvidenceEndpoints, FederatedMeshDescriptor, FederationManifest, IngestEndpoints,
+    KnowledgeManifest, LatencyClass, ModelStatus, ProviderInfo, ProviderManifest, ProviderModel,
+    ProviderType, OICP_VERSION,
 };
 
 use crate::state::AppState;
@@ -179,6 +180,15 @@ async fn apply_v04_enrichment(
             test_endpoint: Some("/oicp/v1/recipe/test".into()),
         }
     });
+    // v0.5 §2.2 stored texts, read by name, on the same condition: the
+    // feature and `knowledge.evidence` are derived together or not at all.
+    let evidence = state.inner.node.corpus_engine.is_some().then(|| {
+        feats.push(features::EVIDENCE_TEXT.to_string());
+        EvidenceEndpoints {
+            text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
+            align_endpoint: None,
+        }
+    });
     manifest.features = feats;
 
     // §6 per-model fingerprints (leave any already set by the source).
@@ -207,6 +217,9 @@ async fn apply_v04_enrichment(
                 if ingest.is_some() {
                     k.ingest = ingest;
                 }
+                if evidence.is_some() {
+                    k.evidence = evidence;
+                }
             }
             None => {
                 manifest.knowledge = Some(KnowledgeManifest {
@@ -214,7 +227,7 @@ async fn apply_v04_enrichment(
                     search_endpoint: "/v1/knowledge/search".into(),
                     embed_model,
                     ingest,
-                    evidence: None,
+                    evidence,
                 });
             }
         }

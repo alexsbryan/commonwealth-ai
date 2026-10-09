@@ -34,6 +34,8 @@ sovereign-contracts = { workspace = true }
 host-kit = { workspace = true, features = ["shell", "http", "task", "jobs", "panic_hook", "memory"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
+# `code_point_slice`, the one code-point slicer the evidence routes cut with.
+quote-align = { workspace = true }
 # The HTTP client to serve and to a terminal's entry node
 # (`SplitInferenceProvider`, a package leaf; pb-serve-distributes repointed it
 # from `sovereign_inference::remote`, which re-exported this crate).

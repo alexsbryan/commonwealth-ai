@@ -120,6 +120,9 @@ Response: TextSlice { document: Document, start: u64, end: u64,
 - `corpus` is a hint for where to look. Without it, the host searches every
   corpus the caller may read. A text held only outside what the caller may
   read is `text not held`, the same answer as a text held nowhere.
+- Several documents can share one text: identical texts from different
+  sources share a name. `TextSlice.document` is the record with the lowest
+  `(corpus_id, source.id, ordinal)` among those the caller may read.
 - The route is guarded like every other client route (§5).
 
 A client checks a read by hashing: `sha256(whole text) == text_sha256`.

@@ -52,7 +52,15 @@ does not load is a 400. The host advertises `auth:named_client` too: a
 presented named credential decides, from any address.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you
-can lift wholesale to test your own implementation.
+can lift wholesale to test your own implementation. The v0.5 draft
+([cmnwlth/docs/oicp-v0.5.md](../cmnwlth/docs/oicp-v0.5.md)) adds the
+evidence extension, and the reference host serves its text read:
+`GET /oicp/v1/text/{text_sha256}` (`evidence:text`) reads a stored text by
+the sha256 of its bytes, whole or as a code-point range with context, from
+the corpora the caller may read, and refuses by name (`text not held`,
+`texts not stored`, `text not stored`, `range outside text`). Recipes may carry their documents inline
+(`[acquire] type = "inline"`) so a host that shares no disk with you can
+install them.
 
 **Recipes** — the corpus-ingestion TOML format. The schema reference
 ([ingest/crates/sovereign-recipes/SCHEMA.md](../ingest/crates/sovereign-recipes/SCHEMA.md)) is

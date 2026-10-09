@@ -1165,6 +1165,8 @@ impl EmbeddedDaemon {
         // Ingest's atlas port, when the distribution composed ingest here
         // (pb-ingest-dial-daemon); the atlas routes name its absence.
         node_seed.atlas = self.atlas().cloned();
+        // What an OICP caller may read is the turn's own corpus decider.
+        node_seed.corpus_principal = self.runtime().and_then(|r| r.corpus_principal.clone());
         // Fabric's part is constructed before `AppState` and held on the
         // daemon, so it survives `stop_inner` (DC §4.1; DC §4.2 "Construction
         // is staged, and parts are total"). The membership operations that

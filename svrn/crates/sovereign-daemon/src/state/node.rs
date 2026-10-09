@@ -76,6 +76,10 @@ pub struct NodeSeed {
     /// process (`process::HostedIngest`, pb-ingest-dial-daemon). `None` is
     /// svrn alone: the atlas routes name the absence.
     pub atlas: Option<Arc<dyn AtlasPort>>,
+    /// The turn runtime's corpus resolver, which the OICP read surface asks
+    /// what a caller may read (`oicp_evidence::read_scope`). `None` when this
+    /// daemon holds no runtime.
+    pub corpus_principal: Option<Arc<dyn sovereign_contracts::traits::PrincipalResolver>>,
 }
 
 impl NodeSeed {
@@ -172,6 +176,8 @@ impl NodeSeed {
             posture: crate::posture::Posture::Open,
             // Handed in by the daemon from what ingest's composition mounted.
             atlas: None,
+            // Handed in by the daemon from its turn runtime.
+            corpus_principal: None,
         })
     }
 }
@@ -244,6 +250,8 @@ pub struct NodePart {
     pub posture: crate::posture::Posture,
     /// Ingest's atlas port; `None` is svrn alone ([`NodeSeed::atlas`]).
     pub atlas: Option<Arc<dyn AtlasPort>>,
+    /// The turn's corpus resolver ([`NodeSeed::corpus_principal`]).
+    pub corpus_principal: Option<Arc<dyn sovereign_contracts::traits::PrincipalResolver>>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via

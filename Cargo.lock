@@ -12744,6 +12744,7 @@ dependencies = [
  "oicp-client",
  "oicp-types",
  "oplog",
+ "quote-align",
  "rand 0.9.4",
  "reqwest 0.12.28",
  "serde",

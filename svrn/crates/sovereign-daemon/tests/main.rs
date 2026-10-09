@@ -115,6 +115,8 @@ mod named_client_e2e;
 mod ner_one_load_census;
 #[path = "main/no_engine_census.rs"]
 mod no_engine_census;
+#[path = "main/oicp_evidence_e2e.rs"]
+mod oicp_evidence_e2e;
 #[path = "main/oicp_install_recipe_e2e.rs"]
 mod oicp_install_recipe_e2e;
 #[path = "main/onprem_keys_e2e.rs"]

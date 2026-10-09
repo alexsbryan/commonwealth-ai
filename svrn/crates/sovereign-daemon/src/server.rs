@@ -237,6 +237,12 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 "/oicp/v1/recipe/test",
                 post(routes_oicp_ingest::recipe_test),
             )
+            // OICP v0.5 §2.2: a stored text, read by its name. Advertised as
+            // `knowledge.evidence.text_endpoint` with `evidence:text`.
+            .route(
+                "/oicp/v1/text/{text_sha256}",
+                get(crate::routes_oicp_text::text),
+            )
             // Ollama-native /api/* compatibility shim. Pure translation over the
             // OpenAI handlers above — no new inference/routing logic. Chat +
             // generate carry the same peer-admission gate as /v1/chat/completions
