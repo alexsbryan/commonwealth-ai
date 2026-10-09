@@ -1,0 +1,20 @@
+{
+ "posteriors_reproduced_within": 1.6653345369377348e-16,
+ "counts": {
+  "held": 31,
+  "sources_agree": 1,
+  "rule_right": 14,
+  "model_right": 16,
+  "neither_named_record_right": 12,
+  "model_vs_proposed": 30,
+  "rule_wrong": 17,
+  "model_wrong": 15
+ },
+ "agreement_rows": [
+  {
+   "statement": "533dc1a9518e4defd149a1e1c2a40766/s9t8-9",
+   "posterior": 0.419,
+   "posterior_without_date": 0.812
+  }
+ ]
+}

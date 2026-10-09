@@ -357,3 +357,13 @@ document order to the clock, so its delta is not combining alone. Order independ
 treatment `--answer proposed` over `statements.py --salt ""` and `--salt 1` writes identical clusterings
 (the control's differ). GVC's RESOLVE answers do not replay: no replay answerer exists, and 332 of the
 treatment's 966 forced choices (.344) were even asked over the same candidate ids as the control's.
+
+*Corrected by the seat the same day:* "all model choice against proposed answer (one with the date too)" is
+wrong for one of the 31. Thirty are the model's choice against the proposed answer. In the 31st all three
+sources name one record, and the date, declared 0 of 11, counts against it: posterior .419, .812 without the
+date. Against gold (`ring2-h1/held_vs_gold.py`, a record read by its members' majority gold cluster, the
+logged posteriors reproduced first): the control's rule applied to these sources takes the proposed answer,
+right in 14 of the 31 and wrong in 17; the model is right in 16; neither names the right record in 12. Three
+limits on this verdict, none of them measured away: Ward and uv could not move (no decision differed), so
+two of three rising was unreachable before any data; GVC's bands are one pair of runs (line 24); and holding
+was measured without any step that resolves what it holds.
