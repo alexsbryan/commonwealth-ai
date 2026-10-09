@@ -291,7 +291,7 @@ fn rebuild_corpus_state_from_corpus(
 
 /// Hydrate chapter text and accountable source documents from the same index
 /// rows. `SectionDocuments` is the single document assembler used by RESOLVE.
-fn hydrate_corpus_chapters_from_rows(
+pub(crate) fn hydrate_corpus_chapters_from_rows(
     manifest: &ChapterManifest,
     chunks: &[corpus_index::index::EnrichmentChunkRow],
 ) -> Vec<ChapterInput> {

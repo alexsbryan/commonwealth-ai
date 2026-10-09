@@ -714,7 +714,9 @@ fn source_field_value(
         .map_err(|error| format!("DocumentRead qualification is malformed: {error}"))?;
     match field {
         DocumentReadField::Unknown { reason } => Err(format!("source field is unknown: {reason}")),
-        DocumentReadField::Supported { value, evidence } => {
+        DocumentReadField::Supported {
+            value, evidence, ..
+        } => {
             if evidence.trim().is_empty() {
                 return Err("supported field has no field evidence".into());
             }

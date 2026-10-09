@@ -108,8 +108,17 @@ pub struct DocumentReadClaim {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DocumentReadField {
-    Supported { value: Value, evidence: String },
-    Unknown { reason: String },
+    Supported {
+        value: Value,
+        evidence: String,
+        /// What chose the value and its precision (C3). Reads cached before
+        /// 2026-10-09 carry none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        by: Option<crate::enrichment::atlas::precision::SourcePrecision>,
+    },
+    Unknown {
+        reason: String,
+    },
 }
 
 #[cfg(test)]

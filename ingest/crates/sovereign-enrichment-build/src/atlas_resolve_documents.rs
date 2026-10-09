@@ -51,6 +51,26 @@ pub(crate) fn load(
     policies: &OntologyPolicies,
     stamps: bool,
 ) -> Result<DocumentInputs, String> {
+    from_documents(
+        || {
+            super::corpus_io::section_documents(cfg)
+                .map_err(|e| format!("loading section documents: {e}"))
+        },
+        policies,
+        &cfg.corpus_id,
+        stamps,
+    )
+}
+
+/// [`load`] over documents the caller supplies: the corpus's own rows on the
+/// CLI path, a fixture's in the contract tests (`layer_contract_tests`).
+/// `documents` is called only when the declaration reads them.
+pub(crate) fn from_documents(
+    documents: impl FnOnce() -> Result<SectionDocuments, String>,
+    policies: &OntologyPolicies,
+    corpus_id: &str,
+    stamps: bool,
+) -> Result<DocumentInputs, String> {
     let sourced = policies
         .shape
         .types
@@ -70,10 +90,9 @@ pub(crate) fn load(
             participants: Participants::new(),
         });
     }
-    let documents = super::corpus_io::section_documents(cfg)
-        .map_err(|e| format!("loading section documents: {e}"))?;
+    let documents = documents()?;
     let mut projection = if sourced {
-        Some(project_source_atoms(&documents, policies, &cfg.corpus_id)?)
+        Some(project_source_atoms(&documents, policies, corpus_id)?)
     } else {
         None
     };

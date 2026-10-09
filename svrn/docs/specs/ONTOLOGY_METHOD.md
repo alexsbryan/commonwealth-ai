@@ -60,7 +60,11 @@ Six contracts every component meets, each a test on fixtures of mail, issues and
 declared field, key, reference or derivation supplies; **C2** a model turn holds one document's text and
 no other stored document's; **C3** every value and link carries its source and that source's precision,
 saying whether the precision is declared or estimated on the corpus; **C4** records are the same in any
-document order; **C5** a run replays without the model, every answer recorded; **C6** is invariant 1.
+document order; **C5** a run replays without the model, every answer recorded; **C6** is invariant 1. The
+tests: `sovereign-enrichment-build/src/layer_contract_tests/contracts.rs`, over the default path's own code on
+`tests/fixtures/layer/{mail,issues,news}` with a scripted oracle that reads no declared name. Meeting C2, a RESOLVE
+question shows a candidate record by its counts and declared values, never by its documents' text; meeting C3,
+each link, read field and derived value carries `by` (`atlas/precision.rs`: declared, estimated or unmeasured).
 
 ## Identity (agreed 2026-10-06)
 

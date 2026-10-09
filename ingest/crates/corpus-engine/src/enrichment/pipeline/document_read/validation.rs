@@ -302,7 +302,9 @@ pub(super) fn validate_fields(
     }
     for attr in attrs.into_iter().filter(|attr| attr.derived.is_none()) {
         match &fields[&attr.name] {
-            DocumentReadField::Supported { value, evidence } => {
+            DocumentReadField::Supported {
+                value, evidence, ..
+            } => {
                 if evidence.trim().is_empty() || !value_matches(&attr.family, value) {
                     return Err(Error::Serialization(format!(
                         "{context} field `{}` has an unsupported value or no field evidence",

@@ -135,6 +135,10 @@ pub struct DerivedValue {
     /// Rule, source, and assignment lineage for a protocol fold.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<DerivedProtocolAudit>,
+    /// The derivation as the value's source (C3). Code computes it from the
+    /// declared path and fold, over inputs whose own precisions they carry;
+    /// no precision of the fold's output is declared or estimated yet.
+    pub by: crate::enrichment::atlas::precision::SourcePrecision,
 }
 
 /// Per attribute, what one stage did.
@@ -231,6 +235,10 @@ pub fn derive_attributes(
                 excluded: excluded.into_iter().collect(),
                 replaced,
                 protocol,
+                by: crate::enrichment::atlas::precision::SourcePrecision::new(
+                    format!("derived:{id}"),
+                    crate::enrichment::atlas::precision::Precision::Unmeasured,
+                ),
             });
         }
         info!(r#type = type_name, attribute = attr, derived = id, ?stage, atoms = tally.atoms, outcomes = ?tally.outcomes, excluded = tally.excluded, unjudged = tally.unjudged, "atlas/derive: attribute done");

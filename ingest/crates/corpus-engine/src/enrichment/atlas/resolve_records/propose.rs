@@ -268,6 +268,7 @@ mod tests {
                         cite: None,
                     }),
                     choice: None,
+                    by: Vec::new(),
                 })
                 .collect(),
         }

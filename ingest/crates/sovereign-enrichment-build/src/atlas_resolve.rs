@@ -240,6 +240,28 @@ pub async fn resolve_into_dir(
     target_atlas_dir: &Path,
     phase: ResolvePhase,
 ) -> Result<ResolveReport, String> {
+    let policies = cfg
+        .ontology
+        .as_ref()
+        .map(|spec| spec.policies())
+        .unwrap_or_default();
+    let want_3b = matches!(phase, ResolvePhase::All);
+    let inputs = super::atlas_resolve_documents::load(cfg, &policies, want_3b)?;
+    resolve_with_inputs(cfg, sections, inputs, embed, infer, target_atlas_dir, phase).await
+}
+
+/// [`resolve_into_dir`] with the documents' own inputs already loaded: the
+/// one body both the CLI (the corpus's rows) and the contract tests (a
+/// fixture's rows) run.
+pub(crate) async fn resolve_with_inputs(
+    cfg: &EnrichConfig,
+    sections: &[SectionExtraction],
+    mut inputs: super::atlas_resolve_documents::DocumentInputs,
+    embed: &EmbedFn,
+    infer: &InferenceFn,
+    target_atlas_dir: &Path,
+    phase: ResolvePhase,
+) -> Result<ResolveReport, String> {
     // The declared ontology, read once. Every resolver pass that reads it is
     // inert when nothing is declared, so a version-0 corpus (and every
     // prebuilt one) resolves through exactly the code it always did.
@@ -296,7 +318,6 @@ pub async fn resolve_into_dir(
     let mut resolution_failures: Vec<corpus_engine::enrichment::pipeline::PhaseFailure> =
         Vec::new();
 
-    let mut inputs = super::atlas_resolve_documents::load(cfg, &policies, want_3b)?;
     let sources = inputs
         .projection
         .as_ref()
@@ -734,78 +755,5 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use sovereign_contracts::traits::Tool;
-
-    #[test]
-    fn parse_args_defaults_to_the_whole_layer() {
-        let p = parse_args(&["brothers_karamazov".into()]).unwrap();
-        assert_eq!(p.corpus_id, "brothers_karamazov");
-        assert_eq!(p.phase, ResolvePhase::All);
-    }
-
-    #[test]
-    fn parse_args_accepts_explicit_phase_3a() {
-        let p = parse_args(&["bk".into(), "--phase".into(), "3a".into()]).unwrap();
-        assert_eq!(p.phase, ResolvePhase::P3a);
-    }
-
-    #[test]
-    fn parse_args_accepts_all_and_refuses_the_removed_3b_by_name() {
-        let p = parse_args(&["bk".into(), "--phase".into(), "all".into()]).unwrap();
-        assert_eq!(p.phase, ResolvePhase::All);
-        let err = parse_args(&["bk".into(), "--phase".into(), "3b".into()]).unwrap_err();
-        assert!(err.contains("`3b` was removed"), "got: {err}");
-    }
-
-    #[test]
-    fn parse_args_rejects_unknown_phase() {
-        let err = parse_args(&["bk".into(), "--phase".into(), "42".into()]).unwrap_err();
-        assert!(err.contains("unknown phase"), "got: {err}");
-    }
-
-    #[test]
-    fn parse_args_requires_corpus_id() {
-        let err = parse_args(&[]).unwrap_err();
-        assert!(err.contains("corpus-id"), "got: {err}");
-    }
-
-    /// The `atlas_resolve` workflow leaf validates its params before any IO: a
-    /// missing `corpus`, a bogus `phase`, and an unknown corpus all fail loudly.
-    /// (The happy path needs the daemon + a resolved Phase-1 cache — exercised by
-    /// the integration run, not a unit test.)
-    #[tokio::test]
-    async fn atlas_resolve_leaf_validates_params() {
-        let ctx = ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        };
-        assert!(AtlasResolveTool
-            .declared()
-            .execute(&serde_json::json!({}), &ctx)
-            .await
-            .is_err());
-        assert!(AtlasResolveTool
-            .declared()
-            .execute(
-                &serde_json::json!({ "corpus": "x", "phase": "bogus" }),
-                &ctx
-            )
-            .await
-            .is_err());
-        assert!(AtlasResolveTool
-            .declared()
-            .execute(
-                &serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }),
-                &ctx
-            )
-            .await
-            .is_err());
-    }
-}
+#[path = "atlas_resolve_tests.rs"]
+mod tests;

@@ -204,13 +204,10 @@ async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
         "{}",
         prompts[0].user
     );
-    assert!(
-        prompts[1]
-            .user
-            .contains("- r0 (document similarity 1.00), said as \"shot\", \"shooting\"; cited: \"shot in Salisbury on Sunday\" | \"The shooting\"\n    \"…A man was shot in Salisbury on Sunday. The shooting left him dead.…\""),
-        "{}",
-        prompts[1].user
-    );
+    // C2: shown by what it holds, never by the earlier document's text.
+    let shown = "- r0 (document similarity 1.00), 2 statement(s) in 1 document(s); ";
+    let u = &prompts[1].user;
+    assert!(u.contains(shown) && !u.contains("A man was shot"), "{u}");
     assert_eq!(
         prompts[1].response_schema.as_ref().unwrap()["properties"]["particulars"]["items"]
             ["properties"]["same_as"]["enum"],

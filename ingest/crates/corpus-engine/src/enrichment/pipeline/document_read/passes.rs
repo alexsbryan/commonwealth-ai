@@ -28,6 +28,7 @@ use serde_json::{json, Value};
 use tracing::{debug, info};
 
 use super::{DocumentReadClaim, DocumentReadField, DocumentReadOutcome, DocumentReadStatus};
+use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolve_records::{
     choice_question, decision_call, ClosedAttr, LABELS, NONE,
 };
@@ -449,9 +450,12 @@ impl Ask<'_> {
                 (best, p) if best < attr.values.len() => {
                     let value = &attr.values[best];
                     debug!(document = self.document, statement = self.statement, field = %attr.name, %value, p, dist = %render(&dist), "document_read/passes: chose");
+                    // No read precision is declared yet: the argmax decides
+                    // so that it can be measured (module doc).
                     DocumentReadField::Supported {
                         value: Value::String(value.clone()),
                         evidence: self.evidence.to_string(),
+                        by: Some(SourcePrecision::new("reader_choose", Precision::Unmeasured)),
                     }
                 }
                 (_, p) => {

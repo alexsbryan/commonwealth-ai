@@ -46,6 +46,7 @@ pub use understanding_vocab::edges;
 pub mod ingestion;
 pub mod migrate_ids;
 pub mod ontology_coverage;
+pub mod precision;
 pub mod registry;
 pub mod resolution;
 pub mod resolution_derived;

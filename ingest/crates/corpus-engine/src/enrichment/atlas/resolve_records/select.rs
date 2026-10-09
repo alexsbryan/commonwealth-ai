@@ -18,12 +18,12 @@ use std::time::Instant;
 use oicp_types::forced_choice;
 use tracing::{debug, warn};
 
-use super::answer::{describe, reasons, Proposed, ProposedVerdict};
+use super::answer::{describe, describe_opened, reasons, Proposed, ProposedVerdict};
 use super::fields::FieldVote;
 use super::weigh::{weigh, Vote, Zone};
 use super::{
-    context, marked_context, Choice, Criterion, Document, Evidence, Held, Plan, Proposal, Record,
-    Refusal, Statement,
+    context, marked_context, Choice, Criterion, Document, Held, Plan, Proposal, Record, Refusal,
+    Statement,
 };
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
@@ -632,22 +632,10 @@ fn question(
             Candidate::Opened(g) => {
                 let o = &statements[asked[g]];
                 // Asked spans were checked readable in `resolve_document`.
-                let surface = &doc.body[o.start..o.end];
-                let opened = Record {
-                    id: o.id.clone(),
-                    handle: String::new(),
-                    statements: vec![],
-                    keys: Default::default(),
-                    fields: Default::default(),
-                    evidence: vec![Evidence {
-                        document: doc.id.to_string(),
-                        title: None,
-                        surface: surface.to_string(),
-                        cite: None,
-                        context: context(doc.body, o.start, o.end),
-                    }],
-                };
-                describe(&opened, "opened earlier in this document")
+                describe_opened(
+                    &doc.body[o.start..o.end],
+                    &context(doc.body, o.start, o.end),
+                )
             }
         };
         u.push_str(&format!("{label} {line}"));

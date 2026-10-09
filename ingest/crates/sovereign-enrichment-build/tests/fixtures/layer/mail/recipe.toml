@@ -12,14 +12,16 @@ license = "private"
 schema_version = 1
 mesh_sharing = false
 
+# The messages as the mail extractor's fields: every field the jsonl extractor
+# does not consume passes through as document metadata.
 [acquire]
 type = "local_file"
-path = "messages"
+path = "documents.jsonl"
 
 [extract]
-type = "email"
-max_body_bytes = 65536
-max_attachment_bytes = 0
+type = "jsonl"
+content_field = "body"
+title_field = "subject"
 
 [chunk]
 type = "paragraph"
@@ -43,17 +45,17 @@ kind = "entity"
 attributes = [
   { name = "email", type = "text" },
   { name = "employer", type = "ref", of = "company" },
-  { name = "name", type = "text", description = "The display name a header pairs with the address." },
+  { name = "full_name", type = "text", description = "The display name a header pairs with the address." },
 ]
 identity = ["email"]
-source = { metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }, refs = { employer = { of = "company", reader = "domain" } } }
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address", full_name = "display_name" }, refs = { employer = { of = "company", reader = "domain" } } }
 
 [[enrichment.ontology.types]]
 name = "company"
 kind = "entity"
-attributes = [{ name = "domain", type = "text" }]
-identity = ["domain"]
-source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" } }
+attributes = [{ name = "web_domain", type = "text" }]
+identity = ["web_domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { web_domain = "domain" } }
 
 [[enrichment.ontology.types]]
 name = "order"
@@ -77,12 +79,12 @@ attributes = [
 ]
 
 [enrichment.ontology.change]
-document = { date = "date", thread = "thread_id", id = "message_id" }
+document = { date = "date", thread = "thread_id", id = "id" }
 
 [[enrichment.ontology.sets]]
 id = "ours"
 type = "company"
-where = { domain = { suffix = "alderpine.example" } }
+where = { web_domain = { suffix = "alderpine.example" } }
 
 [[enrichment.ontology.paths]]
 id = "outside_parties"

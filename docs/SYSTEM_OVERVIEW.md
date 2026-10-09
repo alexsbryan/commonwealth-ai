@@ -679,7 +679,9 @@ question the pipeline asks about a type is a method on the resolved
   `identity_criterion`, the candidates the proposers offered
   (`resolve_records/propose.rs`: the records of the document's declared
   thread, `change.document.thread`, then TF-IDF over documents already
-  resolved; each candidate shown with its `Reason`s) and the answer threads,
+  resolved; each candidate shown with its `Reason`s and, never another
+  document's text (C2), its statement and document counts and the values
+  declared structure gave it, `answer::describe`) and the answer threads,
   wording and similarity alone propose (`ProposalRule`), partitions the
   document's statements into particulars, each the same as one candidate or
   none, with a passage per statement code must find in the document.
@@ -704,7 +706,9 @@ question the pipeline asks about a type is a method on the resolved
   `--answer reason` reads the same choice after the model's own bounded
   reasoning (`reasoned_choice`). `Decision` is `Key | Cited | Selected |
   Weighed | Opened`; anything else is a counted `Refusal` or `Held`, never
-  defaulted. Records keep the passage around each statement, which is
+  defaulted. A link carries `by`, each source with its `Precision`
+  (`atlas/precision.rs`: declared, estimated on the corpus, or unmeasured), as
+  do the reader's chosen fields (`reader_choose`) and each derived value (C3). Records keep the passage around each statement, which is
   what later calls compare. `svrn enrich resolve-statements` runs it alone over
   supplied statements (the gold-mention setting). The atlas build runs it after
   3b, which `enrich atlas-resolve` runs by default (`ResolvePhase::All`; `--phase 3a`

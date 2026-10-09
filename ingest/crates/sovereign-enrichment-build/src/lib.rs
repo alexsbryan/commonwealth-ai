@@ -75,6 +75,8 @@ pub mod source_loader;
 /// a visibility bug.
 #[cfg(test)]
 mod integration_tests;
+#[cfg(test)]
+mod layer_contract_tests;
 
 /// The process-wide `HOME` lock shared with `sovereign-cli-llm`'s test
 /// modules. Behind a feature so it costs a normal build nothing.

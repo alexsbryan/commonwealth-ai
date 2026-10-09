@@ -10,6 +10,7 @@
 //! Candidates only bound what the model is shown. An unverifiable answer
 //! refuses its statement, counted and traced, never defaulted (§4).
 
+use super::precision::SourcePrecision;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
@@ -320,6 +321,9 @@ impl Outcome {
 pub struct StatementOutcome {
     pub statement: String,
     pub outcome: Outcome,
+    /// The link's sources and their precisions (C3, `by.rs`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub by: Vec<SourcePrecision>,
     /// What a forced choice answered for it, when one was asked.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub choice: Option<Choice>,
@@ -808,6 +812,7 @@ impl Resolver {
             );
             outcomes[i] = Some(StatementOutcome {
                 statement: statements[i].id.clone(),
+                by: outcome.by(criterion),
                 outcome,
                 choice: choices[i].take(),
             });
@@ -928,48 +933,10 @@ fn key_edges(asked: &[usize], keys: &[Vec<(String, String)>]) -> Vec<(usize, usi
     edges
 }
 
-/// `CONTEXT_BYTES` of `body` either side of a span, cut back to whitespace so
-/// no word is split: the bounds of a statement's passage.
-fn window(body: &str, start: usize, end: usize) -> (usize, usize) {
-    let mut lo = start.saturating_sub(CONTEXT_BYTES);
-    while !body.is_char_boundary(lo) {
-        lo -= 1;
-    }
-    let mut hi = (end + CONTEXT_BYTES).min(body.len());
-    while !body.is_char_boundary(hi) {
-        hi += 1;
-    }
-    if lo > 0 {
-        if let Some(cut) = body[lo..start].find(char::is_whitespace) {
-            lo += cut;
-        }
-    }
-    if hi < body.len() {
-        if let Some(cut) = body[end..hi].rfind(char::is_whitespace) {
-            hi = end + cut;
-        }
-    }
-    (lo, hi)
-}
-
-/// A statement's passage, whitespace folded.
-fn context(body: &str, start: usize, end: usize) -> String {
-    let (lo, hi) = window(body, start, end);
-    fold_ws(&body[lo..hi])
-}
-
-/// A statement's passage with its own words in `[[` `]]`.
-fn marked_context(body: &str, start: usize, end: usize) -> String {
-    let (lo, hi) = window(body, start, end);
-    fold_ws(&format!(
-        "{}[[{}]]{}",
-        &body[lo..start],
-        &body[start..end],
-        &body[end..hi]
-    ))
-}
-
 mod answer;
+mod by;
+mod passage;
+use passage::{context, marked_context};
 mod drive;
 mod fields;
 pub mod propose;

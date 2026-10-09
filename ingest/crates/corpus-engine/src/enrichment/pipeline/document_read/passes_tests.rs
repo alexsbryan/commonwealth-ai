@@ -117,7 +117,11 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         claim.fields["status"],
         DocumentReadField::Supported {
             value: json!("closed"),
-            evidence: "The case   is closed now.".into()
+            evidence: "The case   is closed now.".into(),
+            by: Some(crate::enrichment::atlas::precision::SourcePrecision::new(
+                "reader_choose",
+                crate::enrichment::atlas::precision::Precision::Unmeasured
+            )),
         }
     );
     assert!(

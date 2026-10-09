@@ -1,0 +1,61 @@
+# A news-shaped fixture for the ontology layer's default path (order
+# ontology-layer-2-one-path): two reports of one incident, one of which also
+# reports a second, separate one. Neutral domain. Read by the C1-C6 contract tests.
+
+[corpus]
+id = "layer-news"
+name = "Layer fixture: two local news reports"
+description = "Two reports of a warehouse fire, the second also mentioning a separate bakery fire."
+license = "private"
+schema_version = 1
+mesh_sharing = false
+
+[acquire]
+type = "local_file"
+path = "documents.jsonl"
+
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "happening"
+kind = "event"
+description = "something that happens: an action, an occurrence, or a change of state"
+identity_criterion = "Two mentions are one happening when they refer to the same real-world occurrence: the same kind of action or change, by or to the same participants, at the same time and place, however differently it is worded."
+identity_necessary = ["what"]
+attributes = [
+  { name = "what", type = "text", values = [
+    "a fire starting or burning",
+    "a person being hurt or treated",
+    "people being moved away from danger",
+    "the incident as a whole",
+  ] },
+]
+
+[[enrichment.ontology.types]]
+name = "report"
+kind = "claim"
+description = "a statement that a happening took place"
+force = "assertive"
+subject = "happening"
+
+[enrichment.ontology.change]
+document = { date = "created_at", id = "id" }

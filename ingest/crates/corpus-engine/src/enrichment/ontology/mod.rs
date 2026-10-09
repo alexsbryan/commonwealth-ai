@@ -45,6 +45,7 @@ pub use understanding_atlas::enrichment::ontology::clock;
 pub use understanding_atlas::enrichment::ontology::type_index;
 mod validate;
 mod validate_derived;
+mod validate_layer;
 
 pub use understanding_atlas::enrichment::ontology::clock::{metadata_date, section_date};
 pub use understanding_atlas::enrichment::ontology::type_index::TypeIndex;
