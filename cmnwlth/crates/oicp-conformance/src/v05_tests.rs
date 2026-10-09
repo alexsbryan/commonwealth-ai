@@ -232,7 +232,10 @@ fn typed_hits_need_their_document_when_knowledge_document_is_advertised() {
     assert_eq!(failures, ["hit #0 carries no document and names no reason"]);
     let mut named = bare;
     named["document_absent"] = serde_json::json!("texts not stored");
-    assert!(typed_hit_failures(&[named.clone()]).is_empty(), "a named absence is lawful");
+    assert!(
+        typed_hit_failures(&[named.clone()]).is_empty(),
+        "a named absence is lawful"
+    );
     named["document_absent"] = serde_json::json!("not today");
     assert_eq!(
         typed_hit_failures(&[named]),
