@@ -1,0 +1,86 @@
+{
+ "blind-r2-e2e": {
+  "b_cubed": 0.781,
+  "ceaf_e": 0.569,
+  "conll_f1": 0.763,
+  "gold_unlinked_singletons": 5,
+  "kind": "e2e",
+  "lea": 0.742,
+  "muc": 0.938,
+  "placed": 375,
+  "run": "runs/blind-r2/gvc",
+  "units": 977
+ },
+ "blind-r2-resolve-alone": {
+  "b_cubed": 0.793,
+  "ceaf_e": 0.335,
+  "conll_f1": 0.683,
+  "gold_unlinked_singletons": 44,
+  "kind": "resolve-alone",
+  "lea": 0.733,
+  "muc": 0.922,
+  "placed": 977,
+  "run": "runs/blind-r2/gvc-resolve-alone",
+  "units": 977
+ },
+ "blind-r3-e2e": {
+  "b_cubed": 0.777,
+  "ceaf_e": 0.562,
+  "conll_f1": 0.758,
+  "gold_unlinked_singletons": 4,
+  "kind": "e2e",
+  "lea": 0.735,
+  "muc": 0.936,
+  "placed": 354,
+  "run": "runs/blind-r3/gvc",
+  "units": 977
+ },
+ "blind-r3-resolve-alone": {
+  "b_cubed": 0.814,
+  "ceaf_e": 0.361,
+  "conll_f1": 0.701,
+  "gold_unlinked_singletons": 44,
+  "kind": "resolve-alone",
+  "lea": 0.757,
+  "muc": 0.927,
+  "placed": 977,
+  "run": "runs/blind-r3/gvc-resolve-alone",
+  "units": 977
+ },
+ "ours-e2e-c2": {
+  "b_cubed": 0.599,
+  "ceaf_e": 0.299,
+  "conll_f1": 0.604,
+  "gold_unlinked_singletons": 14,
+  "kind": "e2e",
+  "lea": 0.553,
+  "muc": 0.913,
+  "placed": 793,
+  "run": "runs/c2-lines/gvc",
+  "units": 977
+ },
+ "ours-e2e-e4": {
+  "b_cubed": 0.667,
+  "ceaf_e": 0.331,
+  "conll_f1": 0.641,
+  "gold_unlinked_singletons": 18,
+  "kind": "e2e",
+  "lea": 0.623,
+  "muc": 0.924,
+  "placed": 803,
+  "run": "runs/e4-locate-values/gvc",
+  "units": 977
+ },
+ "ours-resolve-alone": {
+  "b_cubed": 0.328,
+  "ceaf_e": 0.139,
+  "conll_f1": 0.403,
+  "gold_unlinked_singletons": 44,
+  "kind": "resolve-alone",
+  "lea": 0.217,
+  "muc": 0.742,
+  "placed": 977,
+  "run": "runs/c2-lines-gvc-resolve-alone",
+  "units": 977
+ }
+}

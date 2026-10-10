@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Blind round 2's difference classes (order ontology-layer-3-any-author step 9), written AFTER reading the residual.
 
-    r2_classes.py DIFFERENCES.jsonl OUT_CLASSES.json
+    r2_classes.py DIFFERENCES.jsonl OUT_CLASSES.json [BLIND_RUNS OURS_RUNS]
+
+BLIND_RUNS and OURS_RUNS (default runs/blind-r2 and runs/c2-lines) name the two job runs the rows came from; round 3
+reuses the rules unchanged on its own runs.
 
 Reads agreement.py's unclassed difference rows and the two runs behind them, finds the fact that explains each row,
 and writes one rule per unit ({system, unit, class, why}) for agreement.py --classes. The fact is code, below; the
@@ -107,6 +110,9 @@ def side_rule(claims, record_type, scored_type):
 
 
 def main():
+    global BLIND, OURS
+    if len(sys.argv) == 5:
+        BLIND, OURS = pathlib.Path(sys.argv[3]).resolve(), pathlib.Path(sys.argv[4]).resolve()
     rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
     rules = []
     by = collections.defaultdict(list)

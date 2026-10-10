@@ -380,14 +380,14 @@ class AuthorGap(Tmp):
 
 
 class RealAuthorGap(unittest.TestCase):
-    """The committed data: the r2-e4 reading over the committed reference."""
+    """The committed data: round 3 (the newest round) read against ours over the committed reference."""
 
-    def test_the_committed_reading_is_r2_e4_at_586(self):
-        if not (B.RUNS / "e4-locate-values").is_dir():
-            self.skipTest("runs/e4-locate-values is not on this host")
+    def test_the_committed_reading_is_r3_at_595(self):
+        if not (B.RUNS / "blind-r3").is_dir() or not (B.HOME / "blind-author-20261010-r3").is_dir():
+            self.skipTest("runs/blind-r3 or its round is not on this host")
         row, _ = run_quiet(B.author_gap)
-        self.assertEqual(row["value"], 0.586)
-        self.assertTrue(row["artifact"].endswith("blind-author/r2-e4/agreement.json"))
+        self.assertEqual(row["value"], 0.595)
+        self.assertTrue(row["artifact"].endswith("blind-author/r3/agreement.json"))
 
 
 class Exits(unittest.TestCase):
