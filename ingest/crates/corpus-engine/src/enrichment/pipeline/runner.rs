@@ -627,7 +627,7 @@ impl PhaseRunner {
     }
 
     /// The corpus's body-word floor for Phase 1 (`min_section_body_words`);
-    /// `0` sends every section.
+    /// `0` sends every section. The passes reader is never floored.
     pub fn with_min_body_words(mut self, words: usize) -> Self {
         self.min_body_words = words;
         self
@@ -861,8 +861,9 @@ impl PhaseRunner {
             // schema-template echo — not a real analysis. Register the
             // skip as a failure so the run file surfaces it rather
             // than silently caching `"..."`.
+            // The passes reader asks per line and has no floor (abfe32a14: it skipped 12 uv states).
             let words = approx_word_count(&chapter.text);
-            if words < self.min_body_words {
+            if !document_reading && words < self.min_body_words {
                 let floor = self.min_body_words;
                 tracing::debug!(
                     chapter = %chapter.chapter_id,

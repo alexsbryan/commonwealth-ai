@@ -111,7 +111,9 @@ reference field targets and no exhaustive source covers, then per statement **Ch
 field (the subject's identity fields included) as a distribution over its declared values and "not stated",
 **Pick** each reference field from candidates code proposes (identity keys derivable from the document's
 fields, plus located mentions, less any declared exclusion set), and **Point** at each open-valued field. A
-statement is one kind and at most three verified lines. Statements reach RESOLVE ungrouped. A choice decides
+statement is one kind and at most three verified lines. Statements reach RESOLVE ungrouped. Every document of a selected section is read, whatever its
+length: the body-word floor (`min_section_body_words`) guards the general extractor from heading-only book
+sections and never applies to documents. A choice decides
 only once its precision is measured on the rule as it runs; until then its argmax is recorded for measurement,
 and below the bar it is unknown with its distribution attached. An answer code cannot verify refuses that
 question alone. Answers assemble into the stored claims RESOLVE already reads; the `Asker` that answers takes
