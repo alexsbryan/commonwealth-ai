@@ -567,7 +567,10 @@ pub(super) async fn choose(
             criterion.bar,
             weighed.zone,
         );
-        debug!(document = doc.id, statement = %statements[i].id, alternatives = ?alts, comparisons = ?comps, zone = ?weighed.zone, "atlas/resolve: the sources weighed");
+        // Each alternative by its record id beside its comparison, so the
+        // estimate can be read against gold pair by pair (layer-estimator).
+        let named: Vec<String> = alts.iter().map(|&a| id_of(a)).collect();
+        debug!(document = doc.id, statement = %statements[i].id, alternatives = ?named, comparisons = ?comps, zone = ?weighed.zone, "atlas/resolve: the sources weighed");
         let decided = match weighed.zone {
             Zone::Link(at, posterior) => match alts[at] {
                 Alt::Record(record) => Plan::Weighed {

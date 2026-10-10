@@ -64,6 +64,11 @@ pub struct SourceWeight {
     pub precision: f64,
     /// Pairs it spoke on.
     pub spoke: u32,
+    /// Sources that agreed and disagreed exactly as this one on every pair:
+    /// fitted as one source and counted once (`Estimate::evidence`), since
+    /// the same evidence under three names is not three sources.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub with: Vec<String>,
 }
 
 /// The weights estimated from `Pairs`.
@@ -74,6 +79,40 @@ pub struct Estimate {
     pub prior: f64,
     pub sources: BTreeMap<String, SourceWeight>,
     pub iterations: u32,
+}
+
+/// Sources whose say is identical on every pair seen, as groups of two or
+/// more, each sorted; the first names the group.
+fn identical(pairs: &Pairs) -> Vec<Vec<String>> {
+    let names: Vec<&str> = {
+        let mut n: Vec<&str> = pairs
+            .patterns
+            .keys()
+            .flat_map(|p| p.iter().map(|(s, _)| s.as_str()))
+            .collect();
+        n.sort_unstable();
+        n.dedup();
+        n
+    };
+    let say = |pattern: &[(String, bool)], s: &str| {
+        pattern.iter().find(|(x, _)| x == s).map(|(_, a)| *a)
+    };
+    let mut grouped: Vec<Vec<String>> = Vec::new();
+    for (i, a) in names.iter().enumerate() {
+        if grouped.iter().any(|g| g.iter().any(|x| x == a)) {
+            continue;
+        }
+        let mut group = vec![a.to_string()];
+        for b in &names[i + 1..] {
+            if pairs.patterns.keys().all(|p| say(p, a) == say(p, b)) {
+                group.push(b.to_string());
+            }
+        }
+        if group.len() > 1 {
+            grouped.push(group);
+        }
+    }
+    grouped
 }
 
 /// Where EM starts. Only which optimum it climbs to depends on these, never
@@ -93,7 +132,23 @@ impl Estimate {
     /// Fit by EM. Each rate is a posterior mean under a uniform prior (one
     /// pseudo-agreement and one pseudo-disagreement), so a source seen on few
     /// pairs, or none, weighs close to nothing rather than without bound.
-    pub fn fit(pairs: &Pairs) -> Self {
+    pub fn fit(observed: &Pairs) -> Self {
+        let groups = identical(observed);
+        if !groups.is_empty() {
+            debug!(?groups, "atlas/resolve estimate: sources identical on every pair are fitted as one");
+        }
+        // The pairs with each group's members after the first dropped.
+        let mut folded = Pairs::default();
+        for (pattern, &n) in &observed.patterns {
+            let kept: Vec<(String, bool)> = pattern
+                .iter()
+                .filter(|(s, _)| !groups.iter().any(|g| g[1..].contains(s)))
+                .cloned()
+                .collect();
+            *folded.patterns.entry(kept).or_default() += n;
+            folded.total += n;
+        }
+        let pairs = &folded;
         let mut sources: BTreeMap<&str, (f64, f64)> = BTreeMap::new();
         for pattern in pairs.patterns.keys() {
             for (s, _) in pattern {
@@ -139,8 +194,15 @@ impl Estimate {
                 prior = next_prior;
                 for (s, rates) in sources.iter_mut() {
                     let e = seen.get(s).copied().unwrap_or_default();
-                    let m = clamp((e[0] + 1.0) / (e[1] + 2.0));
-                    let u = clamp((e[2] + 1.0) / (e[3] + 2.0));
+                    let mut m = clamp((e[0] + 1.0) / (e[1] + 2.0));
+                    let mut u = clamp((e[2] + 1.0) / (e[3] + 2.0));
+                    // Agreeing is never evidence of two particulars: a
+                    // source that agrees less often on matches than on
+                    // non-matches is fitted as carrying nothing.
+                    if m < u {
+                        let pooled = clamp((e[0] + e[2] + 1.0) / (e[1] + e[3] + 2.0));
+                        (m, u) = (pooled, pooled);
+                    }
                     moved = moved.max((m - rates.0).abs()).max((u - rates.1).abs());
                     *rates = (m, u);
                 }
@@ -167,25 +229,30 @@ impl Estimate {
             }
         }
         let mut spoke: BTreeMap<&str, u32> = BTreeMap::new();
-        for (pattern, &n) in &pairs.patterns {
+        for (pattern, &n) in &observed.patterns {
             for (s, _) in pattern {
                 *spoke.entry(s.as_str()).or_default() += n;
             }
         }
-        let sources = sources
-            .into_iter()
-            .map(|(s, (m, u))| {
+        let mut out: BTreeMap<String, SourceWeight> = BTreeMap::new();
+        for (s, (m, u)) in sources {
+            let group = groups.iter().find(|g| g[0] == s);
+            for member in group.cloned().unwrap_or_else(|| vec![s.to_string()]) {
                 let w = SourceWeight {
                     m,
                     u,
                     agree: (m / u).ln(),
                     disagree: ((1.0 - m) / (1.0 - u)).ln(),
                     precision: prior * m / (prior * m + (1.0 - prior) * u),
-                    spoke: spoke.get(s).copied().unwrap_or(0),
+                    spoke: spoke.get(member.as_str()).copied().unwrap_or(0),
+                    with: group
+                        .map(|g| g.iter().filter(|x| **x != member).cloned().collect())
+                        .unwrap_or_default(),
                 };
-                (s.to_string(), w)
-            })
-            .collect();
+                out.insert(member, w);
+            }
+        }
+        let sources = out;
         let estimate = Self {
             pairs: pairs.total,
             prior,
@@ -205,6 +272,15 @@ impl Estimate {
     /// agree or disagree weight. A source with no estimate yet weighs 0.
     pub fn evidence(&self, c: &Comparison) -> f64 {
         c.iter()
+            // A source fitted as one with others counts once: skip it when
+            // a member of its group named before it spoke on this pair.
+            .filter(|(s, _)| {
+                self.sources.get(*s).is_none_or(|w| {
+                    !w.with
+                        .iter()
+                        .any(|x| x.as_str() < s.as_str() && c.contains_key(x))
+                })
+            })
             .filter_map(|(s, &agree)| {
                 self.sources
                     .get(s)

@@ -146,3 +146,37 @@ fn evidence_sums_each_speaking_sources_weight() {
     let c: Comparison = [("unseen".to_string(), true)].into_iter().collect();
     assert_eq!(e.evidence(&c), 0.0);
 }
+
+#[test]
+fn a_source_that_agrees_less_on_matches_weighs_nothing_never_against() {
+    let mut sources = THREE.to_vec();
+    sources.push(("necessary:term", 0.6, 0.9, 1.0));
+    let (pairs, _) = synthetic(6000, 0.12, &sources, 17);
+    let w = &Estimate::fit(&pairs).sources["necessary:term"];
+    assert_eq!((w.agree, w.disagree), (0.0, 0.0), "{w:?}");
+}
+
+#[test]
+fn sources_identical_on_every_pair_are_fitted_as_one_and_counted_once() {
+    let (base, _) = synthetic(6000, 0.12, &THREE, 7);
+    // `document_id` says exactly what `thread` says, on every pair.
+    let mut twin = Pairs::default();
+    for (pattern, &n) in &base.patterns {
+        let mut c: Comparison = pattern.iter().cloned().collect();
+        if let Some(&a) = c.get("thread") {
+            c.insert("document_id".into(), a);
+        }
+        for _ in 0..n {
+            twin.add(&c);
+        }
+    }
+    let one = Estimate::fit(&base);
+    let two = Estimate::fit(&twin);
+    assert_eq!(two.sources["document_id"].with, ["thread"]);
+    assert!((two.sources["thread"].agree - one.sources["thread"].agree).abs() < 1e-9);
+    let c: Comparison = [("thread".to_string(), true), ("document_id".to_string(), true)]
+        .into_iter()
+        .collect();
+    let alone: Comparison = [("thread".to_string(), true)].into_iter().collect();
+    assert!((two.evidence(&c) - one.evidence(&alone)).abs() < 1e-9);
+}
