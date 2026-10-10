@@ -224,9 +224,14 @@ pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
         }
     );
     let mut shown: Vec<String> = Vec::new();
+    let mut withheld = 0usize;
     for e in rec.evidence.iter().filter(|e| e.document != this_document) {
         let quote = fold_ws(&e.surface);
-        if shown.len() == SHOWN_SURFACES || shown.contains(&quote) {
+        if shown.contains(&quote) {
+            continue;
+        }
+        if shown.len() == SHOWN_SURFACES {
+            withheld += 1;
             continue;
         }
         match &e.title {
@@ -235,6 +240,12 @@ pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
         }
         shown.push(quote);
     }
+    debug!(
+        record = %rec.id,
+        quoted = shown.len(),
+        withheld,
+        "atlas/resolve: a candidate's spans from other documents, quoted up to SHOWN_SURFACES"
+    );
     out
 }
 
