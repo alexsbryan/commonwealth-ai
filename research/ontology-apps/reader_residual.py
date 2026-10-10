@@ -3,6 +3,7 @@
 
     reader_residual.py --join-check     # step 1: the two runs' traces joined per document; no gold row is read
     reader_residual.py                  # step 2: every gold state classed; writes reader-residual/{rows.jsonl,summary.json}
+    reader_residual.py --other RUN --out DIR   # the same classing with RUN in the `blind` slot (E4: our reader after a change)
 
 Order ontology-layer-8-reader-residual. Both runs are read through ladder_uv.measure on the same 132 gold states (ours
 on its own sections.ids, the blind run restricted to ours with `sections_of`), so the per-state rungs are the ladder's
@@ -298,7 +299,12 @@ def classify(o, b, runs, doc_kind, gold_state):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--join-check", action="store_true")
+    # E4 (order 9): the same classing of our reader after a change, read in the `blind` slot against the old run
+    ap.add_argument("--other", type=pathlib.Path, help="the run read in the `blind` slot (default runs/blind-r2/uv-third)")
+    ap.add_argument("--out", type=pathlib.Path, help="where rows.jsonl and summary.json go (default reader-residual/)")
     a = ap.parse_args()
+    global BLIND, OUT
+    BLIND, OUT = a.other or BLIND, a.out or OUT
     runs, docs, raw, _ = load()
     if a.join_check:
         print(json.dumps({"causes": CAUSES, "join": join_check(runs, docs)}, indent=1))
