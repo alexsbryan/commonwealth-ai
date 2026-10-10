@@ -457,6 +457,7 @@ async fn resolve_type(
                 start,
                 end,
                 keys,
+                read: BTreeMap::new(),
             });
         } else if let Some(statement) = placed[k].statements.iter_mut().find(|s| s.id == id) {
             for (key, value) in keys {
@@ -489,6 +490,26 @@ async fn resolve_type(
         statement_of.push((i, id));
     }
     placed.retain(|p| !p.statements.is_empty());
+    // The document reader's subject fields are its Choose answers: a model's
+    // read, so a necessary value among them is weighed (`necessary:<attr>`),
+    // never forbidding outright as a value a declared field supplies does
+    // (campaign E2). A sufficient key stays a key.
+    let mut moved = 0usize;
+    for p in placed.iter_mut() {
+        for s in p.statements.iter_mut() {
+            for n in t
+                .identity_necessary
+                .iter()
+                .filter(|n| !criterion.keys.contains(n))
+            {
+                if let Some(v) = s.keys.remove(n) {
+                    s.read.insert(n.clone(), v);
+                    moved += 1;
+                }
+            }
+        }
+    }
+    debug!(r#type = %t.name, moved, "atlas/resolve: the reader's necessary values are reads, weighed");
     for p in placed.iter_mut() {
         p.statements.sort_by_key(|s| (s.start, s.end));
     }

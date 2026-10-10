@@ -194,6 +194,58 @@ async fn c3_every_link_and_value_carries_its_source_and_precision() {
     assert!(judged.len() >= 2, "C3 judged only {judged:?}");
 }
 
+/// C3 for the values identity rests on: RESOLVE says where each necessary
+/// value it used came from (a declared field, the reader's Choose, its own
+/// READ), and one a model chose never forbids a candidate outright. News, its
+/// `what` chosen by the reader, the oracle spreading its Choose over values so
+/// two documents' statements disagree, or there would be nothing to forbid.
+#[tokio::test]
+async fn c3_a_necessary_value_says_its_source_and_a_readers_never_forbids() {
+    let f = Fixture::load("news");
+    let store = tempfile::tempdir().unwrap();
+    let run = run_choosing(&f, Asker::Daemon, store.path(), Choose::Spread).await;
+    let picks: BTreeSet<usize> = run
+        .prompts
+        .iter()
+        .filter(|p| p.phase_id.as_deref() == Some("document_passes_choose"))
+        .filter(|p| chosen(p).1 == "what")
+        .map(|p| {
+            let labels = p.response_schema.as_ref().unwrap()["enum"]
+                .as_array()
+                .unwrap()
+                .len();
+            spread_pick(p, labels)
+        })
+        .collect();
+    assert!(
+        picks.len() > 1,
+        "news: the reader chose one value for every statement: {picks:?}"
+    );
+    let (mut by, mut vetoed) = (BTreeMap::<String, u64>::new(), 0);
+    for d in run.lines(DECISIONS_FILE) {
+        vetoed += d["vetoed"].as_u64().unwrap();
+        let necessary = d["necessary"].as_object().unwrap_or_else(|| {
+            panic!("news: RESOLVE does not say where its necessary values came from: {d}")
+        });
+        for (origin, n) in necessary {
+            *by.entry(origin.clone()).or_default() += n.as_u64().unwrap();
+        }
+    }
+    assert!(
+        by.get("reader").copied().unwrap_or(0) > 0,
+        "news: no value from the reader: {by:?}"
+    );
+    assert_eq!(
+        by.get("supplied").copied().unwrap_or(0),
+        0,
+        "news: a model's choice labelled supplied: {by:?}"
+    );
+    assert_eq!(
+        vetoed, 0,
+        "news: a reader-chosen value forbade a candidate outright ({by:?})"
+    );
+}
+
 /// What C4 and C6 compare: per decided type, the records by their names and
 /// the sets of statements (document and anchor) they hold, each with the
 /// derived values of its attributes. Atom and claim ids are left out: claim ids count in

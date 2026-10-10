@@ -134,8 +134,23 @@ impl Run {
     }
 }
 
+/// How the oracle answers a Choose: the first value, or (`Spread`) a value
+/// picked from the question's own bytes, so statements of different
+/// documents get different values while the oracle still reads no name.
+#[derive(Clone, Copy, PartialEq)]
+enum Choose {
+    First,
+    Spread,
+}
+
+/// The value a `Spread` Choose picks among `labels` (the last is "none").
+fn spread_pick(prompt: &ChatPrompt, labels: usize) -> usize {
+    let sum: usize = prompt.user.bytes().map(usize::from).sum();
+    sum % (labels - 1).max(1)
+}
+
 /// The scripted oracle (module doc), recording every question it is asked.
-fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> InferenceFn {
+fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
     Arc::new(move |prompt: &ChatPrompt, _| {
         asked.lock().unwrap().push(prompt.clone());
         let labels: Vec<String> = prompt
@@ -164,6 +179,9 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> InferenceFn {
                     } else {
                         labels.len() - 1
                     }
+                }
+                "document_passes_choose" if choose == Choose::Spread => {
+                    spread_pick(prompt, labels.len())
                 }
                 _ => 0,
             };
@@ -216,6 +234,10 @@ fn config(corpus_id: &str, spec: CustomAtlasSpec) -> EnrichConfig {
 /// `asker` (the oracle under `daemon`, the store under `replay`), its store in
 /// `store`.
 async fn run_with(fixture: &Fixture, asker: Asker, store: &Path) -> Run {
+    run_choosing(fixture, asker, store, Choose::First).await
+}
+
+async fn run_choosing(fixture: &Fixture, asker: Asker, store: &Path, choose: Choose) -> Run {
     let spec = fixture.spec();
     let corpus_id = "layer-fixture";
     let cfg = config(corpus_id, spec.clone());
@@ -232,7 +254,8 @@ async fn run_with(fixture: &Fixture, asker: Asker, store: &Path) -> Run {
     );
 
     let asked = Arc::new(Mutex::new(Vec::new()));
-    let (embed, chat) = answering(asker, store, embedder(), oracle(Arc::clone(&asked))).unwrap();
+    let (embed, chat) =
+        answering(asker, store, embedder(), oracle(Arc::clone(&asked), choose)).unwrap();
     let work = tempfile::tempdir().unwrap();
     let pipeline = super::pipeline_resolve::resolve_pipeline(&cfg).unwrap();
     let runner = PhaseRunner::new(

@@ -66,6 +66,7 @@ fn stmt(id: &str, body: &str, surface: &str, nth: usize, keys: &[(&str, &str)]) 
         .expect("surface in body")
         .0;
     Statement {
+        read: Default::default(),
         id: id.into(),
         start,
         end: start + surface.len(),
@@ -371,6 +372,7 @@ async fn no_criterion_asks_nothing_and_a_failed_call_refuses_the_batch() {
 async fn a_span_outside_the_body_is_unreadable() {
     let (infer, _) = scripted(vec![]);
     let s = Statement {
+        read: Default::default(),
         id: "a".into(),
         start: 4,
         end: 99,

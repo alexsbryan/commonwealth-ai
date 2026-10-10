@@ -144,6 +144,10 @@ pub struct Statement {
     pub end: usize,
     #[serde(default)]
     pub keys: BTreeMap<String, String>,
+    /// Necessary values a reader chose for it (a model's read): weighed as a
+    /// source, never forbidding a candidate as a supplied `keys` value does.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub read: BTreeMap<String, String>,
 }
 
 /// An open record and what has been folded into it.
@@ -372,6 +376,11 @@ pub struct DocumentResolution {
     pub vetoed: u32,
     /// Necessary READs that returned none of their declared values or were refused.
     pub unread: u32,
+    /// The necessary values RESOLVE used, by where each came from (C3):
+    /// `supplied` (a declared field: forbids outright when it differs),
+    /// `reader` (the document reader's Choose) and `resolve_read` (RESOLVE's
+    /// own READ), both model reads, weighed.
+    pub necessary: BTreeMap<&'static str, u32>,
     pub outcomes: Vec<StatementOutcome>,
 }
 
@@ -464,8 +473,20 @@ impl Resolver {
             .collect();
         let key_hits = select::key_hits(&self.by_key, &folded_keys);
         let field_named = fields::named(doc, &self.by_field);
-        let supplied = read::provided(criterion, doc, statements);
+        let supplied = read::provided(criterion, doc, statements, |s| &s.keys);
+        let chosen = read::provided(criterion, doc, statements, |s| &s.read);
+        let mut necessary: BTreeMap<&'static str, u32> = BTreeMap::new();
         let mut read_of = supplied.clone();
+        for ((known, by_reader), given) in read_of.iter_mut().zip(chosen).zip(&supplied) {
+            *necessary.entry("supplied").or_default() += given.len() as u32;
+            for (attr, values) in by_reader {
+                if known.contains_key(&attr) {
+                    continue;
+                }
+                *necessary.entry("reader").or_default() += 1;
+                known.insert(attr, values);
+            }
+        }
         let mut seen: Vec<Comparison> = Vec::new();
         let (mut calls, mut unread, mut vetoed) = (0, 0, 0);
 
@@ -487,6 +508,7 @@ impl Resolver {
             let read = read::read(criterion, doc, statements, &to_read, &read_of, infer).await;
             calls += read.calls;
             unread += read.unknown;
+            *necessary.entry("resolve_read").or_default() += read.calls - read.unknown;
             for (&i, values) in to_read.iter().zip(&read.values) {
                 read_of[i] = values.clone();
             }
@@ -645,12 +667,14 @@ impl Resolver {
                 Err(refusal) => vec![Plan::Refuse(refusal); asked.len()],
             }
         };
+        let reads_weighed = read_infer.is_some();
         let gated = select::gate_plans(
             criterion,
             statements,
             &asked,
-            &supplied,
+            if reads_weighed { &supplied } else { &read_of },
             &self.records,
+            reads_weighed,
             decided,
             doc.id,
             &mut vetoed,
@@ -807,6 +831,7 @@ impl Resolver {
             calls,
             vetoed,
             unread,
+            necessary,
             outcomes: outcomes.into_iter().flatten().collect(),
         };
         info!(

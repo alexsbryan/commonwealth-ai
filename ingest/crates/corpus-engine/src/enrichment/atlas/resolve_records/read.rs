@@ -28,17 +28,19 @@ pub(super) struct Read {
     pub unknown: u32,
 }
 
-/// Necessary values explicitly supplied with a statement are evidence only
-/// when they belong to the attribute's declared closed set.
+/// Necessary values given with a statement (`of` picks which: supplied
+/// `keys`, or a reader's `read`) are evidence only when they belong to the
+/// attribute's declared closed set.
 pub(super) fn provided(
     criterion: &Criterion,
     doc: Document<'_>,
     statements: &[Statement],
+    of: impl Fn(&Statement) -> &BTreeMap<String, String>,
 ) -> Vec<BTreeMap<String, BTreeSet<String>>> {
     let mut out: Vec<BTreeMap<String, BTreeSet<String>>> = vec![BTreeMap::new(); statements.len()];
     for (i, statement) in statements.iter().enumerate() {
         for attr in &criterion.necessary {
-            let Some(value) = statement.keys.get(&attr.name) else {
+            let Some(value) = of(statement).get(&attr.name) else {
                 continue;
             };
             if attr.values.contains(value) {

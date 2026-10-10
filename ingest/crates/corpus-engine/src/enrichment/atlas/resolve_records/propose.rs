@@ -259,6 +259,7 @@ mod tests {
             calls: 0,
             vetoed: 0,
             unread: 0,
+            necessary: Default::default(),
             outcomes: records
                 .iter()
                 .map(|r| StatementOutcome {

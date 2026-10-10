@@ -504,3 +504,43 @@ attributes = [{ name = "kind", type = "text", description = "firing: shots fired
     );
     assert_eq!(users[0].replacen(shown, "", 1), users[1]);
 }
+
+/// A necessary value the document reader chose (`Statement::read`) is a read:
+/// it is weighed, and never forbids a candidate as a supplied one does.
+#[tokio::test]
+async fn necessary_identity_a_readers_value_is_weighed_never_a_veto() {
+    let criterion = necessary(&[]);
+    let mut resolver = Resolver::default();
+    let first = "A death was reported.";
+    let mut seed = stmt("source", first, "death", 0, &[]);
+    seed.read.insert("kind".into(), "death".into());
+    resolver
+        .resolve_document(
+            &criterion,
+            doc("d0", first),
+            &[seed],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    let second = "A firing was reported.";
+    let mut later = stmt("later", second, "firing", 0, &[]);
+    later.read.insert("kind".into(), "firing".into());
+    let (infer, seen) = scripted(vec![json!({"A": 0.9, "0": 0.1})]);
+    let result = resolver
+        .resolve_document(
+            &criterion,
+            doc("d1", second),
+            &[later],
+            &[prop("source")],
+            Answerer::Select(&infer),
+        )
+        .await;
+    // Offered and asked (no READ call: the reader already chose), nothing vetoed.
+    assert_eq!(
+        (result.vetoed, result.calls, seen.lock().unwrap().len()),
+        (0, 1, 1)
+    );
+    assert!(resolver.records()[0].supplied.is_empty());
+    assert_eq!(resolver.records()[0].fields["kind"], values(&["death"]));
+}

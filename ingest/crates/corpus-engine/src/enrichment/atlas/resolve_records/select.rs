@@ -177,13 +177,17 @@ pub(super) fn settle_field(
 }
 
 /// Recheck every answerer join and every same-document opened group against
-/// supplied necessary values before fold.
+/// necessary values before fold: supplied ones when the answerer is a forced
+/// choice, whose decider weighed every read value already; supplied and READ
+/// ones (`values`, and a record's `fields`) under a partition answerer, which
+/// weighs no source, so a read value can only be honoured as a constraint.
 pub(super) fn gate_plans(
     criterion: &Criterion,
     statements: &[Statement],
     asked: &[usize],
     supplied: &[BTreeMap<String, BTreeSet<String>>],
     records: &[Record],
+    reads_weighed: bool,
     decided: Vec<Plan>,
     document: &str,
     vetoed: &mut u32,
@@ -199,7 +203,12 @@ pub(super) fn gate_plans(
             Plan::Open { .. } | Plan::Held(_) | Plan::Refuse(_) => None,
         };
         if let Some(record) = target {
-            if !necessary_compatible(criterion, &supplied[i], &records[record].supplied) {
+            let held = if reads_weighed {
+                &records[record].supplied
+            } else {
+                &records[record].fields
+            };
+            if !necessary_compatible(criterion, &supplied[i], held) {
                 *vetoed += 1;
                 debug!(
                     document,
