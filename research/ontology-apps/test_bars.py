@@ -36,12 +36,12 @@ def leg(runs, run, name, corpus, recipe, sections=50, resolve_exit=0, age=0):
     return d
 
 
-def judged(identity=0.5):
+def judged(identity=0.5, left_out=0):
     seen = []
 
     def judge(system, lg):
         seen.append(lg["name"])
-        return {"system": system, "status": "judged", "identity": {"b_cubed": identity}}
+        return {"system": system, "status": "judged", "identity": {"b_cubed": identity, "gold_left_out": left_out}}
     return judge, seen
 
 
@@ -121,6 +121,16 @@ class IdentityLegs(Tmp):
         judge, seen = judged(0.91)
         row, _ = run_quiet(B.identity_leg, "uv", self.runs, self.home, judge)
         self.assertEqual((row["value"], seen), (0.91, ["uv-tune"]))
+
+    def test_a_blind_slice_leg_is_never_the_bar_row(self):
+        # uv's fixed third: a slice of the tune fold, its identity leaves gold units out (ladder gold_left_out)
+        leg(self.runs, "r", "uv-third", "uv-support", self.blind("blind-author-20261009-r2", "uv"), sections=61)
+        with self.assertRaises(B.CannotJudge):
+            run_quiet(B.identity_leg, "uv", self.runs, self.home, judged(0.9, left_out=1001)[0])
+        with self.assertRaises(B.CannotJudge):  # a ladder that does not say is not the population either
+            run_quiet(B.identity_leg, "uv", self.runs, self.home, judged(0.9, left_out=None)[0])
+        row, _ = run_quiet(B.identity_leg, "uv", self.runs, self.home, judged(0.9, left_out=0)[0])
+        self.assertEqual(row["value"], 0.9)
 
     def test_a_blind_leg_whose_resolve_failed_cannot_be_judged(self):
         leg(self.runs, "r", "ward-tune", "crm-ward", self.blind("blind-author-20261010", "ward"), resolve_exit=1)

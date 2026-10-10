@@ -322,5 +322,59 @@ class Reproduction(unittest.TestCase):
         self.assertTrue(ok, out.getvalue())
 
 
+class Vocabulary(unittest.TestCase):
+    """A blind run is read through the evaluator's frozen map (ladder.translate), ours through the identity."""
+    VOCAB = {"types": {"deal": "deal", "contact": "person"}, "attributes": {"deal": {"status": "stage"}},
+             "values": {"deal.status": {"agreed": "won", "flowing": "won"}},
+             "kinds": {"deal_step": {"as": "stage_update", "attributes": {"step": "stage"},
+                                     "values": {"step": {"offer": "proposal", "correction": None}}},
+                       "report": {"as": "case_state", "set": {"state": "reported"}}}}
+    ATOMS = [{"atom_type": "Entity", "data": {"id": "d1", "entity_type": "deal", "attributes": {"status": ["agreed", "ended"], "price": "4"}}},
+             {"atom_type": "Entity", "data": {"id": "o1", "entity_type": "open_item", "attributes": {}}},
+             {"atom_type": "Claim", "data": {"id": "k1", "claim_kind": "deal_step", "subject": "d1",
+                                             "attributes": {"step": "offer", "document_id": "m1"}}},
+             {"atom_type": "Claim", "data": {"id": "k2", "claim_kind": "deal_step", "subject": "d1", "attributes": {"step": "correction"}}},
+             {"atom_type": "Claim", "data": {"id": "k3", "claim_kind": "commitment", "subject": "o1", "attributes": {}}},
+             {"atom_type": "Claim", "data": {"id": "k4", "claim_kind": "report", "subject": "d1", "attributes": {}}}]
+
+    def test_the_identity_changes_nothing(self):
+        atoms, decs, counts = L.translate(self.ATOMS, [{"type": "deal"}], None)
+        self.assertEqual((atoms, decs, counts), (self.ATOMS, [{"type": "deal"}], None))
+
+    def test_names_values_and_constants_map_and_the_rest_can_never_meet_ours(self):
+        atoms, decs, counts = L.translate(self.ATOMS, [{"type": "deal", "attribute": "status", "atom": "d1", "values": ["flowing"]}], self.VOCAB)
+        d = {a["data"]["id"]: a["data"] for a in atoms}
+        self.assertEqual(d["d1"]["attributes"], {"stage": ["won", "unmapped:ended"], "price": "4"})
+        self.assertEqual(d["o1"]["entity_type"], "blind:open_item")
+        self.assertEqual((d["k1"]["claim_kind"], d["k1"]["attributes"]), ("stage_update", {"stage": "proposal", "document_id": "m1"}))
+        self.assertEqual(d["k2"]["attributes"], {"stage": "unmapped:correction"})
+        self.assertEqual(d["k3"]["claim_kind"], "blind:commitment")
+        self.assertEqual((d["k4"]["claim_kind"], d["k4"]["attributes"]), ("case_state", {"state": "reported"}))
+        self.assertEqual(decs, [{"type": "deal", "attribute": "stage", "atom": "d1", "values": ["won"]}])
+        self.assertEqual(counts["values_unmapped"], 2)
+        self.assertEqual(self.ATOMS[0]["data"]["attributes"]["status"], ["agreed", "ended"])  # the input is not touched
+
+    def test_a_run_finds_its_map_by_its_recipes_round_and_refuses_without_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = pathlib.Path(tmp)
+            home, maps, run = t / "home", t / "maps", t / "run"
+            for p in (home / "blind-author-20261009-r2/ward", maps, run):
+                p.mkdir(parents=True)
+            rec = home / "blind-author-20261009-r2/ward/recipe.toml"
+            rec.write_text("")
+            (run / "job.log").write_text(f"x job start: name=w corpus=crm-ward recipe={rec} (ab) bin=cd\n")
+            self.assertIsInstance(L.run_vocabulary(run, home, maps), str)  # no map: could-not-judge
+            (maps / "r2-mapping.json").write_text(json.dumps({"round": "blind-author-20261009-r2", "systems": {"ward": {"types": {}}}}))
+            v = L.run_vocabulary(run, home, maps)
+            self.assertEqual((v["round"], v["system"]), ("blind-author-20261009-r2", "ward"))
+            (run / "job.log").write_text("x job start: name=w corpus=crm-ward recipe=/elsewhere/crm-ward.toml (ab) bin=cd\n")
+            self.assertIsNone(L.run_vocabulary(run, home, maps))  # our recipe: the identity
+
+    def test_the_committed_r2_map_parses_and_names_the_three_systems(self):
+        m = json.loads((HERE / "blind-author/r2-mapping.json").read_text())
+        self.assertEqual(sorted(m["systems"]), ["gvc", "uv", "ward"])
+        self.assertEqual(m["systems"]["gvc"]["resolve_type"], "incident")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -65,7 +65,8 @@ def identity(g, atoms, tune_files):
     pred = {f: next(iter(rs)) for f, rs in votes.items() if len(rs) == 1}
     r = U.er_score({f: c for f, c in pred.items() if f in gold or f in noise}, gold)
     pick = lambda m: {k: round(r[m][k], 3) for k in ("precision", "recall", "f1")}  # noqa: E731
-    return {"atlas_read": dict(counts), "gold_deals": len(set(gold.values())), "gold_files": len(gold),
+    return {"placements": {f: [gold[f], pred.get(f)] for f in sorted(gold)},  # unit -> [gold, its one record or None]
+            "atlas_read": dict(counts), "gold_deals": len(set(gold.values())), "gold_files": len(gold),
             "ambiguous_excluded": len(ambiguous), "scored": r["b_cubed"]["n_aligned"],
             "membership_coverage": round(len(set(gold) & set(pred)) / len(gold), 3) if gold else None,
             "ambiguous_predictions_excluded": len(set(pred) & ambiguous),
@@ -131,7 +132,7 @@ def measure(run):
         return L.never_ran("ward", found)
     if found["index"] is None:
         return L.never_ran("ward", f"{run} holds no single data/indexes/*/atlas: its sections cannot be mapped to files")
-    index, atlas = found["index"], found["dir"]
+    index = found["index"]
     sliced = L.run_documents(run, found)
     if isinstance(sliced, str):
         return L.could_not_judge("ward", sliced)
@@ -143,27 +144,38 @@ def measure(run):
             pass
     g = S.load_gold(S.WARD / "gold")
     tune_files = {f for f in g["files"] if f.split("/", 1)[0] in TUNE}
-    atoms = json.loads((atlas / "atoms.json").read_text())["atoms"]
-    ent, claims = S.load_atlas(atoms, secfiles, S.load_decisions(atlas / "derived_decisions.jsonl"))
+    view = L.atlas_view(run, found)
+    if isinstance(view, str):
+        return L.could_not_judge("ward", view)
+    atoms = view["atoms"]
+    ent, claims = S.load_atlas(atoms, secfiles, view["decisions"])
     total = len(S.score(g, ent, claims, tune_files)["stage_served_by_deal"])
     if sliced is not None:  # the fold's files on the run's sections' documents: bars, items and identity alike
         unnamed = {d for d in sliced["documents"] if d not in S.DOC_FILES}
         if unnamed:
             return L.could_not_judge("ward", f"{len(unnamed)} of the sections' documents name no manifest file")
         tune_files = tune_files & {S.DOC_FILES[d] for d in sliced["documents"]}
+    # identity's gold units the run's sections leave out: tune files gold places in a deal, outside them
+    in_deal = {f for d in g["deals"] for f in d["files"] if f.split("/", 1)[0] in TUNE}
+    identity_left_out = len(in_deal - tune_files)
     res = S.score(g, ent, claims, tune_files)
     locate, cost = L.run_trace(run)
     label = L.kind_label(locate, "stage_update")
     facts, rows, cross = items(g, claims, res, locate, label)
     idn = identity(g, atoms, tune_files)
+    placements = idn.pop("placements")
     return {"system": "ward", "status": "judged", "run": str(run), "instrument_version": S.INSTRUMENT_VERSION,
             "read": L.what_was_read(found, cost),
             "population": L.population("tune gold deals with a current stage", sliced),
             "scope": L.scope(sliced, total, len(rows)),
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
             "identity": {"b_cubed": idn["b_cubed"]["f1"], "ceaf_e": idn["ceaf_e"]["f1"], "lea": idn["lea"]["f1"],
-                         "scored": idn["scored"], "coverage": idn["membership_coverage"]},
-            "bars": {k: res[k] for k in KEEP}, "deal_identity": idn, "reading_x_record": cross,
+                         "scored": idn["scored"], "coverage": idn["membership_coverage"],
+                         "gold_left_out": identity_left_out},
+            "vocabulary": view["vocabulary"],
+            "bars": {k: ({"could_not_judge": view["unjudged"][k]} if k in view["unjudged"] else res[k]) for k in KEEP},
+            "deal_identity": idn, "placements": {"unit": "tune gold file in one deal", "items": placements},
+            "reading_x_record": cross,
             "claims": dict(collections.Counter(c.get("claim_kind") for c in claims)),
             "deal_records": sum(1 for e in ent.values() if e.get("entity_type") == "deal"),
             "tune_gold_files": len(tune_files),

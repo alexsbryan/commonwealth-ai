@@ -29,6 +29,7 @@ import ladder as L
 
 HERE = pathlib.Path(__file__).resolve().parent
 CORPUS = pathlib.Path.home() / ".svrnmesh/bench-corpora/gvc"
+EVENT_TYPE = "happening"  # cdcr/recipe-gvc-e2e.toml
 GOLD = L.BASELINE / "gvc/statements/gold.json"
 FOLD_VALUES = HERE / "cdcr/fold_values.json"
 U = L.load_module("support_score", HERE / "support/score.py")
@@ -115,9 +116,13 @@ def cited(span, lines):
 
 def statements(atoms, bodies, keys):
     """[{doc, start, end, record, kind}] for every claim about a record that aligns, and the counts of those that don't."""
-    records = L.records_of(atoms)
+    # our end-to-end recipe's one event type; a blind run's other record types (named `blind:`) are not the event
+    records = {k: r for k, r in L.records_of(atoms).items() if r["record_type"] == EVENT_TYPE}
+    counts, other = collections.Counter(), len(L.records_of(atoms)) - len(records)
+    if other:
+        counts["records_of_other_types"] = other
     lines = {d: line_spans(b) for d, b in bodies.items()}
-    out, counts = [], collections.Counter()
+    out = []
     for a in atoms:
         c = a.get("data") or {}
         if a.get("atom_type") != "Claim":
@@ -191,6 +196,12 @@ def items(mentions, stmts, records, spec, locate, keys):
     return facts, rows, cover, detail
 
 
+def placements(mentions, cover):
+    """mention -> [its gold chain, its one record (the identity's prediction) or None when no or several cover it]."""
+    return {mid: [mentions[mid]["chain"], next(iter(rs)) if len(rs := {s["record"] for s in cover[mid]}) == 1 else None]
+            for mid in sorted(mentions)}
+
+
 def identity(mentions, cover):
     pred = {mid: next(iter(rs)) for mid, ss in cover.items() if len(rs := {s["record"] for s in ss}) == 1}
     gold = {mid: m["chain"] for mid, m in mentions.items()}
@@ -218,12 +229,16 @@ def measure(run, atoms=None, gold=GOLD, corpus=CORPUS, spec=FOLD_VALUES):
     if sliced is not None:  # the mentions on the run's sections' documents: items, alignment and identity alike
         docs = {keys[k] for k in sliced["documents"] if k in keys}
         mentions = {mid: m for mid, m in mentions.items() if m["doc"] in docs}
-    stmts, records, counts = statements(json.loads(atoms.read_text())["atoms"], bodies, keys)
+    view = L.atlas_view(run, atlas, atoms)
+    if isinstance(view, str):
+        return L.could_not_judge("gvc", view)
+    stmts, records, counts = statements(view["atoms"], bodies, keys)
     locate, cost = L.run_trace(run)
     facts, rows, cover, detail = items(mentions, stmts, records, spec, locate, keys)
     return {"system": "gvc", "status": "judged", "run": str(run), "atoms": str(atoms),
-            "read": L.what_was_read(atlas, cost),
+            "read": L.what_was_read(atlas, cost), "vocabulary": view["vocabulary"],
             "population": L.population("gold event mentions (gold.json)", sliced),
             "scope": L.scope(sliced, total, len(mentions)),
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
-            "identity": identity(mentions, cover), "alignment": counts, "detail": detail, "cost": cost, "items": rows}
+            "identity": identity(mentions, cover), "alignment": counts,
+            "placements": {"unit": "gold event mention", "items": placements(mentions, cover)}, "detail": detail, "cost": cost, "items": rows}

@@ -15,6 +15,10 @@ instrument, not a gate: nothing here decides a build. A system with no run reads
 On a scaffold leg (a recorded run, then its `--asker replay` rerun over the same atlas and logs) every ladder reads
 the recorded half, through one accessor (run_atlas, trace), and its `read` entry says which half it read.
 
+Every ladder reads gold through our recipes' names. A run made with a blind author's recipe is read through the
+evaluator's frozen map from its names onto ours (blind-author/<tag>-mapping.json; translate, atlas_view), and each
+ladder reports its identity's per-unit `placements`, which blind-author/agreement.py compares between two runs.
+
 The systems' own finer rungs (the baseline's) are kept beside the stages; both are computed from one set of
 per-item facts (`Facts`), so the two views cannot disagree about an item. Defaults are the 2026-10-09 baseline
 runs (~/.svrnmesh/bench-corpora/baseline-3sys-20261009); GVC has no end-to-end run there.
@@ -93,7 +97,16 @@ def run_atlas(run):
 def run_trace(run):
     """trace(run) when the run kept both logs, else ({}, None): the one way a ladder reads a run's logs."""
     run = pathlib.Path(run)
-    return trace(run) if (run / "job.debug.log").exists() and (run / "job.log").exists() else ({}, None)
+    if not ((run / "job.debug.log").exists() and (run / "job.log").exists()):
+        return {}, None
+    lines, cost = trace(run)
+    vocab = run_vocabulary(run)
+    if not isinstance(vocab, dict):
+        return lines, cost
+    # a blind run's Locate names its own claim kinds: read them in ours (its labels are letters, kept as they are;
+    # where several blind kinds map onto one of ours, `near` reads the most common one's letter: a diagnostic only)
+    name = lambda k: (vocab.get("kinds", {}).get(k) or {}).get("as", f"{BLIND_PREFIX}{k}")  # noqa: E731
+    return {d: [(ln, name(k), dist) for ln, k, dist in v] for d, v in lines.items()}, cost
 
 
 # A run that read a subset of its corpus names the sections it read in sections.ids beside its atlas (comma-separated,
@@ -159,6 +172,142 @@ def records_of(atoms):
     """{atom id: its data, plus `record_type`} for every atom a declared type's records are written as."""
     return {a["data"]["id"]: {**a["data"], "record_type": a["data"].get(RECORD_ATOMS[a["atom_type"]])}
             for a in atoms if a.get("atom_type") in RECORD_ATOMS}
+
+
+# ---------------------------------------------------------------- a run's vocabulary (blind authors)
+# The ladders read gold through our recipes' names (types, claim kinds, attributes, values). A run made with a blind
+# author's recipe is read through the evaluator's frozen map from that recipe's names onto ours
+# (blind-author/<tag>-mapping.json, its "round" naming the round dir), here and nowhere else; our runs read through
+# the identity. A blind run with no map is could-not-judge, never read under our names.
+ROUND = re.compile(r"^blind-author-(\d{8})(?:-r(\d+))?$")
+SYSTEMS = ("gvc", "ward", "uv")
+MAPPINGS = HERE / "blind-author"
+JOB_START = re.compile(r"job start: name=(\S+) corpus=(\S+) recipe=(\S+)")
+BLIND_PREFIX, UNMAPPED = "blind:", "unmapped:"
+
+
+def blind_of(recipe, home=None):
+    """(round dir name, system) when `recipe` lies under ~/blind-author-<round>/<system>/, else None: the one decider."""
+    home = pathlib.Path(home or pathlib.Path.home())
+    try:
+        rel = pathlib.Path(recipe).expanduser().resolve().relative_to(home.resolve())
+    except ValueError:
+        return None
+    parts = rel.parts
+    if len(parts) >= 3 and ROUND.match(parts[0]) and parts[1] in SYSTEMS:
+        return parts[0], parts[1]
+    return None
+
+
+def run_recipe(run):
+    """The recipe a run was made with: its job.log's `job start` line (a job leg), else resolve/summary.json's."""
+    run = pathlib.Path(run)
+    log = run / "job.log"
+    if log.exists():
+        with open(log, errors="replace") as f:
+            m = next((m for line in f for m in [JOB_START.search(line)] if m), None)
+        if m:
+            return m.group(3)
+    s = run / "resolve/summary.json"
+    return json.loads(s.read_text()).get("recipe") if s.exists() else None
+
+
+def run_vocabulary(run, home=None, mappings=MAPPINGS):
+    """None (our recipe: the identity), {"round", "system", **map} for a blind run, or why not (a str)."""
+    recipe = run_recipe(run)
+    found = blind_of(recipe, home) if recipe else None
+    if found is None:
+        return None
+    rnd, system = found
+    maps = [p for p in sorted(pathlib.Path(mappings).glob("*-mapping.json"))
+            if json.loads(p.read_text()).get("round") == rnd]
+    if len(maps) != 1:
+        return f"{run} ran blind recipe {recipe}; {len(maps)} of {mappings}/*-mapping.json name round {rnd}, want one"
+    block = json.loads(maps[0].read_text())["systems"].get(system)
+    if block is None:
+        return f"{maps[0]} maps no {system}"
+    return {"round": rnd, "system": system, "file": str(maps[0]), **block}
+
+
+def _value(v, table, counts):
+    if table is None:
+        return v
+    if isinstance(v, list):
+        return [_value(x, table, counts) for x in v]
+    if v is None:
+        return v
+    to = table.get(str(v))
+    if to is None:
+        counts["values_unmapped"] += 1
+        return f"{UNMAPPED}{v}"
+    return to
+
+
+def _attrs(attrs, renames, values, prefix, counts):
+    out = {}
+    for k, v in (attrs or {}).items():
+        out[renames.get(k, k)] = _value(v, values.get(f"{prefix}.{k}"), counts)
+    return out
+
+
+def translate(atoms, decisions, vocab):
+    """(atoms, decisions, counts) renamed into our names by a run's vocabulary; the identity when vocab is None.
+    Types and claim kinds the map does not name keep their name prefixed `blind:`; an attribute it does not name is
+    kept as is (a document stamp, a ref); a mapped attribute's value it does not name becomes `unmapped:<value>`."""
+    if vocab is None:
+        return atoms, list(decisions), None
+    counts = collections.Counter()
+    types, kinds = vocab.get("types", {}), vocab.get("kinds", {})
+    tattrs, values = vocab.get("attributes", {}), vocab.get("values", {})
+    tname = lambda t: types.get(t, f"{BLIND_PREFIX}{t}") if t else t  # noqa: E731
+    out = []
+    for a in atoms:
+        d = dict(a.get("data") or {})
+        if a.get("atom_type") in RECORD_ATOMS:
+            field = RECORD_ATOMS[a["atom_type"]]
+            t = d.get(field)
+            d["attributes"] = _attrs(d.get("attributes"), tattrs.get(t, {}), values, t, counts)
+            d[field] = tname(t)
+            counts["records_mapped" if t in types else "records_prefixed"] += 1
+        elif a.get("atom_type") == "Claim":
+            k = d.get("claim_kind")
+            rule = kinds.get(k)
+            if rule is None:
+                d["claim_kind"] = f"{BLIND_PREFIX}{k}"
+                counts["claims_prefixed"] += 1
+            else:
+                vals = {f"{k}.{a_}": t for a_, t in (rule.get("values") or {}).items()}
+                d["attributes"] = {**_attrs(d.get("attributes"), rule.get("attributes") or {}, vals, k, counts),
+                                   **(rule.get("set") or {})}
+                d["claim_kind"] = rule["as"]
+                counts["claims_mapped"] += 1
+        out.append({**a, "data": d})
+    decs = []
+    for x in decisions:
+        x = dict(x)
+        t, attr = x.get("type"), x.get("attribute")
+        if attr is not None:
+            x["values"] = _value(x.get("values"), values.get(f"{t}.{attr}"), counts)
+            x["attribute"] = tattrs.get(t, {}).get(attr, attr)
+        x["type"] = tname(t)
+        decs.append(x)
+    return out, decs, dict(counts)
+
+
+def atlas_view(run, atlas, atoms_path=None):
+    """The one way a ladder loads a run's atlas: {"atoms", "decisions", "vocabulary"} in our names (translate), or
+    why not (a str). `atoms_path` overrides the atlas's atoms.json (decisions are then the atlas's, if any)."""
+    vocab = run_vocabulary(run)
+    if isinstance(vocab, str):
+        return vocab
+    p = pathlib.Path(atoms_path) if atoms_path else atlas["dir"] / "atoms.json"
+    atoms = json.loads(p.read_text())["atoms"]
+    dp = atlas["dir"] / "derived_decisions.jsonl"
+    decisions = [json.loads(l) for l in dp.read_text().splitlines() if l.strip()] if dp.exists() else []
+    atoms, decisions, counts = translate(atoms, decisions, vocab)
+    named = "identity (our recipe)" if vocab is None else f"{vocab['file']} ({vocab['round']}/{vocab['system']})"
+    return {"atoms": atoms, "decisions": decisions, "unjudged": (vocab or {}).get("unjudged", {}),
+            "vocabulary": {"map": named, "translated": counts}}
 
 
 def trace(run):

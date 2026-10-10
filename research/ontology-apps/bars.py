@@ -41,6 +41,9 @@ Per bar:
                        "recipe" qualifies for gvc; value = conll_f1 of the er-score.json in its parent dir.
   layer-identity-ward  the newest job run holding a qualifying non-smoke ward (uv) leg, that run's chosen
   layer-identity-uv    qualifying leg; value = ladder identity B3 F1 (resolve_exit must be 0, ladder judged).
+                       The bar is defined on the tune fold: a leg whose sections leave out any of the
+                       identity's gold units (ladder identity.gold_left_out != 0, e.g. uv's fixed third) is
+                       could-not-judge, never read as the bar row.
   layer-estimator      per system, the newest runs/**/score_resolve.json carrying an `estimator` block (system
                        read through its "run"'s summary.json recipe); value = the greatest largest_gap over
                        the three systems, as score_resolve.py decided each. Any system missing: exit 3.
@@ -60,7 +63,10 @@ HOME = pathlib.Path.home()
 
 SYSTEMS = ("gvc", "ward", "uv")
 CORPUS_SYSTEM = {"cdcr-gvc": "gvc", "crm-ward": "ward", "uv-support": "uv"}
-ROUND = re.compile(r"^blind-author-(\d{8})(?:-r(\d+))?$")
+sys.path.insert(0, str(HERE))
+import ladder  # noqa: E402  (the one decider for blind rounds, runs and ladders)
+
+ROUND = ladder.ROUND
 JOB_START = re.compile(r"job start: name=(\S+) corpus=(\S+) recipe=(\S+)")
 RECIPE_CANDIDATES = ("recipe.toml", "recipe-author.toml")
 TUNING_KEYS = ("document_reading", "document_reader")
@@ -99,15 +105,9 @@ def blind_rounds(home=HOME):
 
 
 def blind_system(recipe, home=HOME):
-    """The system a recipe path belongs to when it lies under a blind round, else None."""
-    try:
-        rel = pathlib.Path(recipe).expanduser().resolve().relative_to(home.resolve())
-    except ValueError:
-        return None
-    parts = rel.parts
-    if len(parts) >= 3 and ROUND.match(parts[0]) and parts[1] in SYSTEMS:
-        return parts[1]
-    return None
+    """The system a recipe path belongs to when it lies under a blind round, else None (ladder.blind_of decides)."""
+    found = ladder.blind_of(recipe, home)
+    return found[1] if found else None
 
 
 def system_of(recipe, home=HOME, corpus=None):
@@ -178,8 +178,6 @@ def choose_leg(legs):
 
 def judge_leg(system, leg):
     """ladder.run_system over a leg: the one accessor for a system's ladder."""
-    sys.path.insert(0, str(HERE))
-    import ladder  # noqa: PLC0415
     return ladder.run_system(system, leg["path"].resolve())
 
 
@@ -217,6 +215,10 @@ def identity_leg(system, runs=RUNS, home=HOME, judge=judge_leg):
         r = judge(system, leg)
         if r.get("status") != "judged":
             raise CannotJudge(f"{leg['path']}: ladder {r.get('status')}: {r.get('reason')}")
+        left = (r.get("identity") or {}).get("gold_left_out")
+        if left != 0:
+            raise CannotJudge(f"{leg['path']}: its sections are not the bar's population (the tune fold): "
+                              f"{left} of the identity's gold units lie outside them; a slice is never the bar row")
         emit(r["identity"]["b_cubed"], leg["path"], head_of(leg["path"], runs))
         return
     raise Absent(f"no {system} job leg under {runs} ran a blind author's recipe (~/blind-author-<round>/{system}/)")
