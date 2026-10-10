@@ -52,8 +52,13 @@ Per bar:
                        per document_reading / document_reader key, at any depth. (The floor's 13 over the
                        three frozen baseline recipes: 9 entries + 4 keys; test_bars.py proves the unit.)
 
-layer-author-gap has no reader: the bar declares neither floor nor target, and co-lineage refuses an
-instrument nothing judges.
+  layer-author-gap     agreement.py outputs under blind-author/. The reference is reference/agreement.json (our
+                       recipe against itself across two builds; both sides ours, else could-not-judge). The reading
+                       is the */agreement.json whose blind side ran the newest blind round and whose ours side is
+                       ours, newest by the latest DONE of its ours runs. Per row (gvc, ward, uv, gvc-resolve-alone)
+                       ratio = reading B3 F1 / reference B3 F1; value = the least ratio. A row unjudged on either
+                       side, or a zero reference, is could-not-judge naming the row; no reference or no reading of
+                       the newest round is absent.
 """
 import json, pathlib, re, subprocess, sys, time, tomllib
 
@@ -75,6 +80,7 @@ CONTRACT = re.compile(r"(?:^|::)contracts::c([1-6])_")
 CONTRACT_TEST = ["scripts/with-cargo-lock.sh", "scripts/sovereign-test.sh",
                  "--package", "sovereign-enrichment-build", "--filter", "layer_contract_tests"]
 CARGO_JSONL = REPO / "target/sovereign-test/latest/cargo.jsonl"
+AUTHOR_GAP_ROWS = ("gvc", "ward", "uv", "gvc-resolve-alone")
 
 
 class Absent(Exception):
@@ -364,6 +370,80 @@ def invariants(jsonl=CARGO_JSONL, cmd=CONTRACT_TEST):
     emit(n, jsonl)
 
 
+def run_path(p, repo=REPO):
+    p = pathlib.Path(p)
+    return p if p.is_absolute() else repo / p
+
+
+def agreement_rows(path):
+    """{row: (b3 f1, both_placed)} for every row of an agreement.json, a str where the row was not judged."""
+    doc = json.loads(path.read_text())
+    out = {}
+    for row in AUTHOR_GAP_ROWS:
+        a = doc.get(row, {}).get("agreement") if isinstance(doc.get(row), dict) else None
+        f = a.get("b_cubed", {}).get("f1") if isinstance(a, dict) else None
+        out[row] = (f, a.get("both_placed")) if isinstance(f, (int, float)) else str(a or "absent")
+    return doc, out
+
+
+def sides(doc, side):
+    return {row: run_path(doc[row][side]["run"]) for row in AUTHOR_GAP_ROWS
+            if isinstance(doc.get(row), dict) and isinstance(doc[row].get(side), dict) and doc[row][side].get("run")}
+
+
+def round_of(runs, home):
+    """The one blind round every run was made under, None when any run is ours, or why not (a str)."""
+    found = {ladder.blind_of(r, home) if r else None for r in (ladder.run_recipe(p) for p in runs.values())}
+    rounds = {f[0] if f else None for f in found}
+    return next(iter(rounds)) if len(rounds) == 1 else f"runs span {sorted(map(str, rounds))}"
+
+
+def author_gap(blind_author=HERE / "blind-author", home=HOME):
+    ref_path = blind_author / "reference/agreement.json"
+    if not ref_path.is_file():
+        raise Absent(f"no reference {ref_path} (agreement.py, our recipe against itself across two builds)")
+    rounds = blind_rounds(home)
+    if not rounds:
+        raise Absent(f"no blind round (~/blind-author-<YYYYMMDD>[-rN]/) under {home}")
+    newest = rounds[-1].name
+    readings = []
+    for p in sorted(blind_author.glob("*/agreement.json")):
+        if p == ref_path:
+            continue
+        doc = json.loads(p.read_text())
+        rnd = round_of(sides(doc, "blind"), home)
+        if rnd != newest:
+            note(f"{p}: blind side {rnd or 'is ours'}, not the newest round {newest}; skipped")
+            continue
+        ours = sides(doc, "ours")
+        if round_of(ours, home) is not None:
+            note(f"{p}: its ours side is not our recipe; skipped")
+            continue
+        dones = [d / "DONE" for d in ours.values()]
+        if not dones or not all(d.is_file() for d in dones):
+            raise CannotJudge(f"{p}: an ours run has no DONE ({[str(d) for d in dones if not d.is_file()]})")
+        readings.append((max(d.stat().st_mtime for d in dones), p))
+    if not readings:
+        raise Absent(f"no blind-author/*/agreement.json reads round {newest} against our runs")
+    _, path = max(readings)
+    ref_doc, ref = agreement_rows(ref_path)
+    if round_of(sides(ref_doc, "blind"), home) is not None or round_of(sides(ref_doc, "ours"), home) is not None:
+        raise CannotJudge(f"{ref_path}: the reference holds a blind run; it must be ours against ours")
+    _, got = agreement_rows(path)
+    ratios = {}
+    for row in AUTHOR_GAP_ROWS:
+        if isinstance(ref[row], str) or not ref[row][0]:
+            raise CannotJudge(f"{row}: the reference {ref_path} reads {ref[row]}, no denominator")
+        if isinstance(got[row], str):
+            raise CannotJudge(f"{row}: {path} reads {got[row]}")
+        ratios[row] = got[row][0] / ref[row][0]
+        note(f"{row}: blind-vs-ours B3 {got[row][0]} ({got[row][1]} units) / ours-vs-ours {ref[row][0]} "
+             f"({ref[row][1]} units) = {ratios[row]:.3f}")
+    least = min(ratios, key=ratios.get)
+    note(f"least: {least}")
+    emit(round(ratios[least], 3), path, head_of(sides(json.loads(path.read_text()), "ours")["gvc"]))
+
+
 READERS = {
     "layer-default-path": default_path,
     "layer-invariants": invariants,
@@ -372,6 +452,7 @@ READERS = {
     "layer-identity-uv": lambda: identity_leg("uv"),
     "layer-estimator": estimator,
     "layer-no-tuning": no_tuning,
+    "layer-author-gap": author_gap,
 }
 
 

@@ -104,9 +104,14 @@ instrument   = "python3 research/ontology-apps/bars.py layer-default-path"
 [[bar]]
 id           = "layer-author-gap"
 derives_from = "operator 2026-10-09: any new user with a first-principles understanding and the syntax gets very similar output"
-one_line     = "Per system, agreement (B3 between the two record partitions) of the records a blind author's recipe gets with the records our recipe gets, gold measures side by side; target set from the first blind measurement"
+one_line     = "The least, over gvc end to end, Ward, uv and GVC RESOLVE alone, of (blind-vs-ours partition B3 F1: the newest blind round's records against our newest kept runs') divided by (ours-vs-ours partition B3 F1: our recipe against itself across two builds, runs/scaffold-3sys against runs/c2-lines), both by blind-author/agreement.py over the units both runs placed"
 status       = "open"
-# no instrument: the bar declares neither floor nor target, and co-lineage refuses an instrument nothing judges
+direction    = "higher_is_better"
+floor        = 0.586
+floor_basis  = "2026-10-10 first reading: blind round 2 (runs/blind-r2) against runs/e4-locate-values and runs/c2-lines-gvc-resolve-alone (blind-author/r2-e4), over the reference runs/scaffold-3sys against runs/c2-lines and c2-lines-gvc-resolve-alone (blind-author/reference): gvc .914/.720 = 1.269, Ward 1.0/1.0, uv .987/.975 = 1.012, RESOLVE alone .438/.748 = .586"
+target       = 1.0
+goodhart     = "can reach 1.0 while the predicate is false if both partitions agree because both place few units (B3 is over units both placed; read both_placed beside it), and Ward's row rests on 10 units both placed (18 in the reference), so its 1.0 says little; read with the identity bars, which score against gold"
+instrument   = "python3 research/ontology-apps/bars.py layer-author-gap"
 
 [[bar]]
 id           = "layer-invariants"

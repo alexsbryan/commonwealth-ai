@@ -282,6 +282,114 @@ class Invariants(unittest.TestCase):
             self.assertEqual(row["value"], 5)
 
 
+class AuthorGap(Tmp):
+    """Readings and the reference are agreement.py outputs; runs are legs whose job.log names the recipe."""
+    ROWS = ("gvc", "ward", "uv", "gvc-resolve-alone")
+
+    def setUp(self):
+        super().setUp()
+        self.ba = self.root / "blind-author"
+        self.ba.mkdir()
+
+    def runset(self, run, blind_round=None, age=0):
+        """{row: run dir}: four legs of one run, blind (recipes under ~/<round>/) or ours (frozen recipes)."""
+        out = {}
+        for row, system, corpus in (("gvc", "gvc", "cdcr-gvc"), ("ward", "ward", "crm-ward"),
+                                    ("uv", "uv", "uv-support"), ("gvc-resolve-alone", "gvc", "cdcr-gvc")):
+            recipe = self.blind(blind_round, system) if blind_round else self.frozen
+            out[row] = leg(self.runs, run, row, corpus, recipe, age=age)
+        return out
+
+    def agreement(self, name, blind, ours, b3, drop=()):
+        d = self.ba / name
+        d.mkdir()
+        doc = {"classes": {}}
+        for row in self.ROWS:
+            if row in drop:
+                continue
+            a = b3.get(row, 0.9)
+            doc[row] = {"blind": {"status": "judged", "run": str(blind[row])},
+                        "ours": {"status": "judged", "run": str(ours[row])},
+                        "agreement": a if isinstance(a, str) else {"b_cubed": {"f1": a}, "both_placed": 10}}
+        (d / "agreement.json").write_text(json.dumps(doc))
+        return d / "agreement.json"
+
+    def gap(self):
+        return run_quiet(B.author_gap, self.ba, self.home)
+
+    def reference(self, b3=None, **kw):
+        a, b = self.runset("ref-a"), self.runset("ref-b")
+        return self.agreement("reference", a, b, b3 or {"gvc": 0.72, "ward": 1.0, "uv": 0.975,
+                                                         "gvc-resolve-alone": 0.748}, **kw)
+
+    def test_absent_without_the_reference_or_without_a_reading_of_the_newest_round(self):
+        blind, ours = self.runset("blind-r2", "blind-author-20261009-r2"), self.runset("e4", age=10)
+        self.agreement("r2-e4", blind, ours, {})
+        with self.assertRaises(B.Absent):
+            self.gap()
+        self.reference()
+        self.blind("blind-author-20261011", "gvc")  # a newer round nobody has read against ours yet
+        with self.assertRaises(B.Absent):
+            self.gap()
+
+    def test_the_minimum_ratio_over_the_four_rows_of_the_newest_reading(self):
+        self.reference()
+        blind = self.runset("blind-r2", "blind-author-20261009-r2")
+        old, new = self.runset("c2", age=1000), self.runset("e4", age=10)
+        self.agreement("r2", blind, old, {"gvc-resolve-alone": 0.1})
+        path = self.agreement("r2-e4", blind, new, {"gvc": 0.914, "ward": 1.0, "uv": 0.987, "gvc-resolve-alone": 0.438})
+        row, err = self.gap()
+        self.assertEqual(row["value"], 0.586)  # .438 / .748, RESOLVE alone the least
+        self.assertEqual(row["artifact"], str(path))
+        self.assertIn("ward", err)
+
+    def test_an_older_rounds_reading_is_never_chosen(self):
+        self.reference()
+        r1, r2 = self.runset("blind-r1", "blind-author-20261009"), self.runset("blind-r2", "blind-author-20261009-r2")
+        ours = self.runset("e4", age=10)
+        self.agreement("r1", r1, ours, {"gvc": 0.1})
+        self.agreement("r2", r2, ours, {})
+        row, _ = self.gap()
+        self.assertEqual(row["value"], round(0.9 / 1.0, 3))  # ward's 1.0 reference is the largest denominator
+
+    def test_a_system_with_no_judged_agreement_cannot_be_judged_and_names_it(self):
+        self.reference()
+        blind, ours = self.runset("blind-r2", "blind-author-20261009-r2"), self.runset("e4")
+        self.agreement("r2", blind, ours, {"uv": "could-not-judge: a ladder did not judge"})
+        with self.assertRaisesRegex(B.CannotJudge, "uv"):
+            self.gap()
+
+    def test_a_reference_missing_a_system_or_reading_zero_cannot_be_judged(self):
+        blind, ours = self.runset("blind-r2", "blind-author-20261009-r2"), self.runset("e4")
+        self.agreement("r2", blind, ours, {})
+        self.reference(drop=("ward",))
+        with self.assertRaisesRegex(B.CannotJudge, "ward"):
+            self.gap()
+        for d in (self.ba / "reference", self.runs / "ref-a", self.runs / "ref-b"):
+            shutil.rmtree(d)
+        self.reference({"gvc": 0.0})
+        with self.assertRaisesRegex(B.CannotJudge, "gvc"):
+            self.gap()
+
+    def test_a_reference_holding_a_blind_run_cannot_be_judged(self):
+        blind, ours = self.runset("blind-r2", "blind-author-20261009-r2"), self.runset("e4")
+        self.agreement("r2", blind, ours, {})
+        self.agreement("reference", blind, ours, {})
+        with self.assertRaisesRegex(B.CannotJudge, "reference"):
+            self.gap()
+
+
+class RealAuthorGap(unittest.TestCase):
+    """The committed data: the r2-e4 reading over the committed reference."""
+
+    def test_the_committed_reading_is_r2_e4_at_586(self):
+        if not (B.RUNS / "e4-locate-values").is_dir():
+            self.skipTest("runs/e4-locate-values is not on this host")
+        row, _ = run_quiet(B.author_gap)
+        self.assertEqual(row["value"], 0.586)
+        self.assertTrue(row["artifact"].endswith("blind-author/r2-e4/agreement.json"))
+
+
 class Exits(unittest.TestCase):
     def test_absent_exits_3_cannot_judge_1_unknown_bar_2(self):
         def absent():
@@ -295,7 +403,7 @@ class Exits(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(B.main(["bars.py", "a"]), 3)
                 self.assertEqual(B.main(["bars.py", "c"]), 1)
-                self.assertEqual(B.main(["bars.py", "layer-author-gap"]), 2)
+                self.assertEqual(B.main(["bars.py", "no-such-bar"]), 2)
         finally:
             B.READERS.clear()
             B.READERS.update(saved)
