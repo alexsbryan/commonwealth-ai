@@ -150,3 +150,34 @@ turns, so it measured the cap. Both arms now run at ctx 262144; everything
 else in the appendix stands. Run ids are `ab262-<arm>-<task>`. The one
 completed 131k row and the partial B ldaptor run (46 requests, stopped)
 stay on the record and are not mixed in.
+
+### Appendix 2026-10-09 (evening): the daemon on its remote engine (arm D)
+
+This is the e2e-swe half of `bench/lanes/engine-swap`, run after the quality
+check showed that the resident stack on llama-server matches its own engine
+once three client gaps are closed (bcdc39c98, fixed in the client at
+3c0568cba).
+
+**Arm D** is arm B's daemon: the release stock binary built after
+3c0568cba, with the same env and context of 262144. Its `[engine]` is
+`kind = "remote"`, in front of a llama-server started with A0's flags on its
+own port (`serve-arm.sh D`). So the daemon's conversation path and the tool
+loop are the same as in B, while the decoding is llama-server's.
+
+**Schedule.** One run per task, in the order ldaptor, cement, j1939,
+hojichar. Each run gets a fresh server, an 80-minute cap and run id
+`d262-D-<task>`.
+
+**Bars.** The comparison is with the `ab262` rows of 2026-10-09. That was the
+same host and the same llama-server build, but a different day, so a speed
+ratio carries that caveat.
+- D passes every gate A0 passed (g1-g5).
+- D's median per-turn wall is at most 1.25x the pooled ab262 A0 median
+  (5.40 s). B's was 1.38x.
+- Test fractions are reported and not judged (n = 1).
+
+**What a result claims.**
+- A pass says the daemon can keep its conversation and tool layer in front
+  of llama-server, at llama-server's speed, on this workload.
+- A miss on speed with gates held prices the daemon's own layer, separately
+  from its engine.

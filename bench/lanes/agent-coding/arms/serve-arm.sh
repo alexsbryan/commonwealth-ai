@@ -13,6 +13,9 @@
 #   C  B with SOVEREIGN_FRONTDOOR_RESHAPE=1 (turn_fidelity::reshape_enabled):
 #      the reshape passes opted in (default off since 2026-10-07), the
 #      serving layer otherwise identical
+#   D  B with `[engine] kind = "remote"`: the same daemon serving through an
+#      A0 llama-server on <port>+3 instead of its embedded engine
+#      (bench/lanes/engine-swap). The daemon holds no weights.
 #
 # What every arm shares is the model's identity, not the server's behaviour:
 # one GGUF, one context window per request (`--parallel 1`, the daemon's
@@ -21,7 +24,7 @@
 # sampler defaults and chat rendering are left at each server's own default,
 # because those are what the A/B measures.
 #
-#   serve-arm.sh <A|A0|B|C> <port> [ctx]
+#   serve-arm.sh <A|A0|B|C|D> <port> [ctx]
 #
 # Stop an arm by its pid file: kill "$(cat target/agent-coding-arms/<arm>-<port>/pid)".
 # Killing the `toolbox run` that started it does not reach the server.
@@ -47,13 +50,27 @@ case $arm in
       --spec-type draft-mtp --spec-draft-n-max 3 --reasoning "$reasoning" \
       --host 127.0.0.1 --port "$port" > "$out/server.log" 2>&1 &
     ;;
-  B|C)
+  B|C|D)
     bin=${AGENT_ARM_STOCK_BIN:-$repo/target/release/sovereign-stock}
     [ -x "$bin" ] || { echo "serve-arm: no stock binary at $bin (scripts/dev-release.sh -p sovereign-stock)" >&2; exit 2; }
     root=$out/root
     mkdir -p "$root/home"
     printf '[models]\nprimary = "%s"\nembed = "%s/absent-embed.gguf"\ncontext_size = %s\n\n[daemon]\nclient_port = %s\ninternal_port = %s\nrails_base = "http://127.0.0.1:%s"\n\n[data]\ndir = "%s/data"\n' \
       "$gguf" "$root" "$ctx" "$port" $((port + 1)) $((port + 9)) "$root" > "$root/config.toml"
+    if [ "$arm" = D ]; then
+      backend=$((port + 3))
+      server=$repo/target/llama-server-vanilla/build/bin/llama-server
+      "$server" -m "$gguf" -c "$ctx" -ngl 99 --parallel 1 \
+        --spec-type draft-mtp --spec-draft-n-max 3 --reasoning off \
+        --host 127.0.0.1 --port "$backend" > "$out/backend.log" 2>&1 &
+      echo $! > "$out/backend.pid"
+      until curl -sf "http://127.0.0.1:$backend/v1/models" >/dev/null; do
+        kill -0 "$(cat "$out/backend.pid")" 2>/dev/null || { echo "serve-arm: D backend died (see $out/backend.log)" >&2; exit 1; }
+        sleep 1
+      done
+      printf '\n[engine]\nkind = "remote"\nendpoint = "http://127.0.0.1:%s/v1"\nmodel_id = "%s"\ncontext_size = %s\n' \
+        "$backend" "$(basename "$gguf" .gguf)" "$ctx" >> "$root/config.toml"
+    fi
     inst=$HOME/.cache/agent-coding-arms
     mkdir -p "$inst"
     cmp -s "$bin" "$inst/sovereign-stock" || cp "$bin" "$inst/sovereign-stock"
@@ -64,11 +81,11 @@ case $arm in
       SOVEREIGN_SERVE_PORT=$((port + 2)) RUST_LOG=${RUST_LOG:-info} \
       exec ./sovereign-stock run --config "$root/config.toml") > "$out/server.log" 2>&1 &
     ;;
-  *) echo "serve-arm: arm is A, A0, B or C, not $arm" >&2; exit 2 ;;
+  *) echo "serve-arm: arm is A, A0, B, C or D, not $arm" >&2; exit 2 ;;
 esac
 pid=$!
 echo $pid > "$out/pid"
-trap 'kill $pid 2>/dev/null; wait $pid 2>/dev/null || true; rm -f "$out/pid"' EXIT INT TERM
+trap 'kill $pid 2>/dev/null; wait $pid 2>/dev/null || true; rm -f "$out/pid"; [ -f "$out/backend.pid" ] && kill "$(cat "$out/backend.pid")" 2>/dev/null; rm -f "$out/backend.pid"' EXIT INT TERM
 i=0
 until curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null; do
   kill -0 $pid 2>/dev/null || { echo "serve-arm: $arm died (see $out/server.log)" >&2; exit 1; }
