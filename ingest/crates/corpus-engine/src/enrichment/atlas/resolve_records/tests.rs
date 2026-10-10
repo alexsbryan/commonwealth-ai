@@ -164,7 +164,7 @@ async fn a_declared_key_decides_without_a_call() {
 
 #[tokio::test]
 async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
-    let b1 = "A man was shot in Salisbury on Sunday. The shooting left him dead.";
+    let b1 = "A man was shot in Salisbury on Sunday.\nNeighbours heard nothing.\nThe shooting left him dead.";
     let b2 = "Police said the Salisbury shooting on Sunday was a dispute.";
     let (infer, seen) = scripted(vec![
         answer(vec![part(
@@ -223,17 +223,15 @@ async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
         "{}",
         prompts[0].user
     );
-    // C2 narrowed: shown by what it holds and its statements' own spans,
+    // C2 narrowed: shown by what it holds and the lines its statements cite,
     // each marked as a quote; no other words of the earlier document.
     let shown = "- r0 (document similarity 1.00), 2 statement(s) in 1 document(s); \
-                 no declared value\n    quoted from another document: \"shot\"\n    \
-                 quoted from another document: \"shooting\"\n";
+                 no declared value\n    quoted from another document: \
+                 \"A man was shot in Salisbury on Sunday.\"\n    quoted from another document: \
+                 \"The shooting left him dead.\"\n";
     let u = &prompts[1].user;
     assert!(u.contains(shown), "{u}");
-    assert!(
-        !u.contains("A man was shot") && !u.contains("in Salisbury on Sunday. "),
-        "{u}"
-    );
+    assert!(!u.contains("Neighbours"), "{u}");
     assert_eq!(
         prompts[1].response_schema.as_ref().unwrap()["properties"]["particulars"]["items"]
             ["properties"]["same_as"]["enum"],
@@ -265,11 +263,26 @@ async fn an_uncitable_cite_refuses_its_statement_only_never_defaulted() {
     assert_eq!(res.records()[0].statements, ["b"]);
 }
 
+#[test]
+fn a_quote_is_the_whole_lines_its_statement_lies_on() {
+    let body = "Title line\nA man was shot in Salisbury.\nPolice  came.\nLast line";
+    let at = body.find("shot").unwrap();
+    assert_eq!(lines_of(body, at, at + 4), "A man was shot in Salisbury.");
+    let from = body.find("A man").unwrap();
+    let to = body.find("came.").unwrap() + "came.".len();
+    assert_eq!(
+        lines_of(body, from, to),
+        "A man was shot in Salisbury. Police came."
+    );
+    // A folded body has no lines: the span is the reader's cited lines.
+    assert_eq!(lines_of("a folded body", 2, 8), "folded");
+}
+
 /// C2, narrowed: a candidate's quote is shown, but a cite copied from it is
 /// checked against the asked statement's own document and refused there.
 #[tokio::test]
 async fn a_cite_copied_from_a_candidates_quote_is_refused_never_a_citation() {
-    let b1 = "A man was shot in Salisbury on Sunday.";
+    let b1 = "A man was shot in Salisbury on Sunday.\nIt rained.";
     let b2 = "Police said it was a dispute.";
     let (infer, seen) = scripted(vec![
         answer(vec![part(
@@ -302,7 +315,7 @@ async fn a_cite_copied_from_a_candidates_quote_is_refused_never_a_citation() {
         .await;
     let shown = seen.lock().unwrap()[1].user.clone();
     assert!(
-        shown.contains("quoted from another document: \"shot in Salisbury\""),
+        shown.contains("quoted from another document: \"A man was shot in Salisbury on Sunday.\""),
         "{shown}"
     );
     assert_eq!(labels(&two), ["refused:cite_not_found"]);
@@ -525,6 +538,7 @@ fn record(id: &str, surface: &str) -> Record {
             title: None,
             surface: surface.into(),
             cite: None,
+            quote: surface.into(),
         }],
     }
 }

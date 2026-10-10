@@ -682,7 +682,9 @@ question the pipeline asks about a type is a method on the resolved
   thread, `change.document.thread`, then TF-IDF over documents already
   resolved; each candidate shown with its `Reason`s, its statement and
   document counts, the values declared structure gave it, and up to four of
-  its statements' spans from other documents, one line each marked
+  its statements' cited lines from other documents (`passage::lines_of`: a
+  span widened to its whole line, or the reader's lines as they stand on the
+  folded default-path text), one line each marked
   `QUOTE_LABEL` and nothing else of those documents (C2 narrowed 2026-10-10;
   a cite is still checked against the asked document alone),
   `answer::describe`) and the answer threads,

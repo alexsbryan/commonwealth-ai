@@ -66,7 +66,7 @@ saying whether the precision is declared or estimated on the corpus; **C4** reco
 document order; **C5** a run replays without the model, every answer recorded; **C6** is invariant 1. The
 tests: `sovereign-enrichment-build/src/layer_contract_tests/contracts.rs`, over the default path's own code on
 `tests/fixtures/layer/{mail,issues,news}` with a scripted oracle that reads no declared name. Meeting C2, a RESOLVE
-question shows a candidate record by its counts, declared values and its statements' spans as marked quotes,
+question shows a candidate record by its counts, declared values and the lines its statements cite, as marked quotes,
 never the rest of its documents' text (`answer::describe`); meeting C3,
 each link, read field and derived value carries `by` (`atlas/precision.rs`: declared, estimated or unmeasured).
 

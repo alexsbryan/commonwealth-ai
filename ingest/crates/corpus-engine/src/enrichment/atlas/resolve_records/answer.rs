@@ -189,10 +189,10 @@ pub const QUOTE_LABEL: &str = "quoted from another document";
 /// A candidate record as every RESOLVE question shows it: why it was
 /// offered, how many statements of how many documents it holds, the values
 /// declared structure gave it, and up to `SHOWN_SURFACES` of its distinct
-/// surfaces from other documents, one line each, marked as quoted from that
-/// document. A surface is its statement's span, the lines the statement
-/// cites (`Resolver::resolve_document`), so nothing else of that document is
-/// shown (C2, narrowed 2026-10-10): a RESOLVE answer is a choice, never a
+/// statements' quotes from other documents, one line each, marked as quoted
+/// from that document. A quote is the whole lines its statement's span lies
+/// on (`passage::lines_of`), the lines the statement cites, so nothing else of
+/// that document is shown (C2, narrowed 2026-10-10): a RESOLVE answer is a choice, never a
 /// citation, and code checks every cite against the asked statement's own
 /// document (`cite_found`). This question's own document is already in the
 /// question, so none of it is quoted. One renderer for the partition and the
@@ -226,7 +226,7 @@ pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
     let mut shown: Vec<String> = Vec::new();
     let mut withheld = 0usize;
     for e in rec.evidence.iter().filter(|e| e.document != this_document) {
-        let quote = fold_ws(&e.surface);
+        let quote = e.quote.clone();
         if shown.contains(&quote) {
             continue;
         }

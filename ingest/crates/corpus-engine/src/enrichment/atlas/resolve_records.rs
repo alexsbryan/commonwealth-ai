@@ -177,6 +177,9 @@ pub struct Evidence {
     pub title: Option<String>,
     pub surface: String,
     pub cite: Option<String>,
+    /// The lines the statement cites, whole (`passage::lines_of`): what a
+    /// later RESOLVE question quotes, marked as from another document.
+    pub quote: String,
 }
 
 /// How a statement's record was decided. Closed: there is no other way.
@@ -913,6 +916,7 @@ impl Resolver {
             title: doc.title.map(str::to_string),
             surface: surface.to_string(),
             cite: cite.map(str::to_string),
+            quote: lines_of(doc.body, statement.start, statement.end),
         });
     }
 }
@@ -950,7 +954,7 @@ use estimate::{Comparison, Pairs};
 pub use estimate::{Estimate, SourceWeight};
 pub use weigh::Carried;
 mod passage;
-use passage::{context, marked_context};
+use passage::{context, lines_of, marked_context};
 mod drive;
 mod estimate;
 mod fields;
