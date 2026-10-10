@@ -2,7 +2,7 @@
 //! Records what an engine is asked, at the provider boundary, for the engine
 //! conformance battery's case bank (`bench/lanes/engine-swap/`).
 //!
-//! `SOVEREIGN_ENGINE_CAPTURE=<path>` wraps the built engine in a
+//! `[engine] capture = "<path>"` wraps the built engine in a
 //! [`RecordingProvider`], which appends one JSON line per model call: the
 //! method, its input (the `CompletionRequest` itself for completions) and the
 //! innermost tracing span, which stands in for the caller. It records only;
@@ -21,29 +21,29 @@ use sovereign_contracts::traits::{InferenceProvider, ResidentSlot, ServingLocus}
 use sovereign_contracts::types::*;
 use sovereign_contracts::{oicp, Result};
 
-/// The variable that turns capture on, naming the file to append to.
-pub const CAPTURE_ENV: &str = "SOVEREIGN_ENGINE_CAPTURE";
-
 /// An engine whose model calls are appended to a capture file.
 pub struct RecordingProvider {
     inner: Arc<dyn InferenceProvider>,
     file: Mutex<File>,
 }
 
-/// Wrap `provider` when [`CAPTURE_ENV`] names a file; otherwise return it as
-/// it is. A file that cannot be opened is reported and capture stays off:
-/// the engine serves either way.
-pub fn wrap_if_requested(provider: Arc<dyn InferenceProvider>) -> Arc<dyn InferenceProvider> {
-    let Some(path) = std::env::var_os(CAPTURE_ENV) else {
+/// Wrap `provider` when `[engine] capture` names a file; otherwise return
+/// it as it is. A file that cannot be opened is reported and capture stays
+/// off: the engine serves either way.
+pub fn wrap_if_requested(
+    provider: Arc<dyn InferenceProvider>,
+    capture: Option<&Path>,
+) -> Arc<dyn InferenceProvider> {
+    let Some(path) = capture else {
         return provider;
     };
-    match RecordingProvider::open(provider.clone(), Path::new(&path)) {
+    match RecordingProvider::open(provider.clone(), path) {
         Ok(recording) => {
-            tracing::info!(target: "engine_capture", path = %Path::new(&path).display(), "engine calls are being captured");
+            tracing::info!(target: "engine_capture", path = %path.display(), "engine calls are being captured");
             Arc::new(recording)
         }
         Err(e) => {
-            tracing::warn!(target: "engine_capture", path = %Path::new(&path).display(), error = %e, "capture file could not be opened; capture is off");
+            tracing::warn!(target: "engine_capture", path = %path.display(), error = %e, "capture file could not be opened; capture is off");
             provider
         }
     }
@@ -280,6 +280,27 @@ mod tests {
         assert_eq!(lines[0]["input"]["admitted"], false);
         assert_eq!(lines[1]["method"], "count_tokens");
         assert_eq!(lines[1]["input"]["text"], "four");
+    }
+
+    #[test]
+    fn only_a_named_file_that_opens_turns_capture_on() {
+        let engine: Arc<dyn InferenceProvider> = Arc::new(TestProvider::new());
+        let unset = super::wrap_if_requested(engine.clone(), None);
+        assert!(
+            Arc::ptr_eq(&unset, &engine),
+            "unset leaves the engine unwrapped"
+        );
+        let unopenable = super::wrap_if_requested(
+            engine.clone(),
+            Some(std::path::Path::new("/nonexistent-dir/capture.jsonl")),
+        );
+        assert!(
+            Arc::ptr_eq(&unopenable, &engine),
+            "a file that cannot open leaves capture off"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let on = super::wrap_if_requested(engine.clone(), Some(&dir.path().join("c.jsonl")));
+        assert!(!Arc::ptr_eq(&on, &engine), "a named file wraps the engine");
     }
 
     #[test]

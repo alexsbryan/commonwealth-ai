@@ -53,6 +53,22 @@ when a host advertises nothing.
 
 **Review by 2026-11-09.**
 
+### `[engine] capture` — unset, nothing captured (2026-10-10)
+
+**What ships.** With `capture = "<path>"` the daemon appends every model call
+at the engine boundary to that file: the method, the `CompletionRequest` or
+the embed, rerank or count input, and the innermost tracing span
+(`sovereign-inference/src/engine_capture.rs`). Unset, the engine is not
+wrapped at all.
+
+**Why unset.** It is an instrument for the engine conformance battery's case
+bank (`bench/lanes/engine-swap/`), not a behaviour. Captured prompts carry
+corpus text, so the file is written only where an operator asks for it.
+
+**Flip condition.** None; it stays an operator's choice per run.
+
+**Review by 2026-11-10.**
+
 ### `[engine] grammar` — `sovereign` unless the operator says `llguidance` (2026-10-10)
 
 **What ships.** A remote engine sends Lark grammars and the URL and

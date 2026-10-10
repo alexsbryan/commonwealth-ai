@@ -216,6 +216,11 @@ pub struct EngineSection {
     /// the URL and evidence-id allow-lists. Unset is `sovereign`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grammar: Option<GrammarSupport>,
+    /// A file to append every model call to, for the engine conformance
+    /// battery's case bank (`bench/lanes/engine-swap/`). Unset captures
+    /// nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capture: Option<std::path::PathBuf>,
 }
 
 /// How a host takes a decode constraint. A property of the SERVER: nothing
@@ -283,6 +288,7 @@ impl Default for EngineSection {
             structured_output: None,
             embed_inputs: None,
             grammar: None,
+            capture: None,
         }
     }
 }

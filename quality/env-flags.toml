@@ -1824,10 +1824,3 @@ default = "no effect"
 status = "removed"
 purpose = "Enabled LLM question-to-title expansion in retrieval."
 replacement = "retired: the title-expansion retrieval step was deleted (ac032e5bc)"
-
-[[flag]]
-name = "SOVEREIGN_ENGINE_CAPTURE"
-cluster = "inference"
-default = "unset (no capture)"
-purpose = "A file path. When set, engine_factory wraps the built engine in engine_capture::RecordingProvider, which appends one JSON line per model call (method, the CompletionRequest or embed/rerank input, innermost tracing span) for the engine conformance battery's case bank (bench/lanes/engine-swap/). Records only; every call is forwarded unchanged. A file that cannot be opened is warned about and capture stays off."
-status = "experiment"
