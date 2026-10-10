@@ -6,6 +6,9 @@
 #   arm.sh up L|R       restart the resident daemon on arm L or R
 #   arm.sh check <run>  the eight `check` lanes, one invocation each, with
 #                       each lane's wall window recorded for census.py
+#   arm.sh reproxy <arm> [proxy flags]
+#                       restart engine_proxy.py alone under a new arm label,
+#                       e.g. `reproxy R1b --forced-choice-logprobs`
 #   arm.sh restore      put the resident config back and restart on it
 #
 # ENGINE_SWAP_ENV names a file of KEY=VALUE lines: the resident daemon's
@@ -46,6 +49,14 @@ router_down() {
   done
 }
 
+proxy_up() {
+  label=$1; shift
+  python3 "$repo/bench/lanes/engine-swap/engine_proxy.py" --listen 127.0.0.1:18300 \
+    --upstream http://127.0.0.1:18301 --log "$out/proxy.jsonl" --arm "$label" "$@" \
+    > "$out/proxy-$label.log" 2>&1 & echo $! > "$out/proxy.pid"
+  until curl -sf localhost:18300/v1/models >/dev/null; do sleep 1; done
+}
+
 router_up() {
   cat > "$out/router.ini" <<EOF
 version = 1
@@ -77,10 +88,7 @@ EOF
   i=0; until curl -sf localhost:18301/v1/models >/dev/null; do
     i=$((i + 1)); [ $i -lt 120 ] || { echo "arm: router not up, see $out/router.log" >&2; exit 1; }; sleep 1
   done
-  python3 "$repo/bench/lanes/engine-swap/engine_proxy.py" --listen 127.0.0.1:18300 \
-    --upstream http://127.0.0.1:18301 --log "$out/proxy.jsonl" --arm R \
-    > "$out/proxy.log" 2>&1 & echo $! > "$out/proxy.pid"
-  until curl -sf localhost:18300/v1/models >/dev/null; do sleep 1; done
+  proxy_up R
   # Load all three before the first lane, so no lane pays a model load.
   for m in Qwen3.6-35B-A3B-MTP-UD-Q6_K Qwen3.5-4B-UD-MTP-Q6_K_XL; do
     curl -sf -m 600 localhost:18301/v1/chat/completions -H 'content-type: application/json' \
@@ -133,6 +141,13 @@ case ${1:-} in
       printf '%s\n' "$svrn_out" > "$out/$run-$lane.out"
       echo "arm: $run $lane done in $(echo "$t1 - $t0" | bc | cut -d. -f1)s, stamp $stamp"
     done
+    ;;
+  reproxy)
+    label=${2:?arm label}; shift 2
+    [ -f "$out/proxy.pid" ] && kill "$(cat "$out/proxy.pid")" 2>/dev/null
+    while curl -sf -m 1 localhost:18300/v1/models >/dev/null; do sleep 1; done
+    proxy_up "$label" "$@"
+    echo "arm: proxy restarted as $label $*"
     ;;
   restore)
     daemon_down
