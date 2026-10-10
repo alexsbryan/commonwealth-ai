@@ -45,6 +45,7 @@ direction    = "higher_is_better"
 target       = 0.599
 noise_band   = 0.007
 goodhart     = "can reach target while the predicate is false if the blind recipe carries numbers fitted to GVC, or if the gain is bought with a GVC-only code path or a model-call bill no user would pay; read with layer-no-tuning and calls per document"
+instrument   = "python3 research/ontology-apps/bars.py layer-identity-gvc"
 
 [[bar]]
 id           = "layer-identity-ward"
@@ -54,6 +55,7 @@ status       = "open"
 direction    = "higher_is_better"
 target       = 0.875
 goodhart     = "can reach target while the predicate is false because the baseline row is the all-singletons floor (92 stage_update claims opened 77 deal records; none of the 18 scored messages shares a record, pairwise 0), so a recipe that places fewer or different messages moves B3 without one correct link; read with LEA (.556), membership coverage (.367) and the scored count"
+instrument   = "python3 research/ontology-apps/bars.py layer-identity-ward"
 
 [[bar]]
 id           = "layer-identity-uv"
@@ -63,6 +65,7 @@ status       = "open"
 direction    = "higher_is_better"
 target       = 0.838
 goodhart     = "can reach target while the predicate is false if the recipe places fewer documents: B3 scores only the 235 tune documents a case_state claim placed (membership coverage .158, recovery B3 F1 .056), so read with coverage and recovery B3"
+instrument   = "python3 research/ontology-apps/bars.py layer-identity-uv"
 
 [[bar]]
 id           = "layer-estimator"
@@ -72,6 +75,7 @@ status       = "open"
 direction    = "lower_is_better"
 target       = 0.1
 goodhart     = "can reach target while the predicate is false if the estimates are right but the decider does not use them, or if the gold-measured precision was itself measured under gold reading; read with the identity bars"
+instrument   = "python3 research/ontology-apps/bars.py layer-estimator"
 
 [[bar]]
 id           = "layer-no-tuning"
@@ -83,6 +87,7 @@ floor        = 13
 floor_basis  = "2026-10-09 count over the three frozen baseline recipes: 9 identity_evidential count entries and 4 reader switches"
 target       = 0
 goodhart     = "can reach 0 while the predicate is false if the numbers move out of recipes into system constants fitted to the three examples; read with layer-estimator and layer-author-gap"
+instrument   = "python3 research/ontology-apps/bars.py layer-no-tuning"
 
 [[bar]]
 id           = "layer-default-path"
@@ -94,12 +99,14 @@ floor        = 0
 floor_basis  = "2026-10-09 inventory: Ward and uv need --phase all; GVC hits two refusals (resolution_records.rs:155-171, passes.rs:57-62)"
 target       = 3
 goodhart     = "can reach 3 while the predicate is false if the default path runs but its records are worse than the flagged path's; read with the identity bars"
+instrument   = "python3 research/ontology-apps/bars.py layer-default-path"
 
 [[bar]]
 id           = "layer-author-gap"
 derives_from = "operator 2026-10-09: any new user with a first-principles understanding and the syntax gets very similar output"
 one_line     = "Per system, agreement (B3 between the two record partitions) of the records a blind author's recipe gets with the records our recipe gets, gold measures side by side; target set from the first blind measurement"
 status       = "open"
+# no instrument: the bar declares neither floor nor target, and co-lineage refuses an instrument nothing judges
 
 [[bar]]
 id           = "layer-invariants"
@@ -109,3 +116,5 @@ status       = "open"
 direction    = "higher_is_better"
 target       = 6
 goodhart     = "can reach 6 while the predicate is false if the fixtures are too small to exercise the stage a contract guards, or a contract is tested at one stage while another stage breaks it; read with the stage ladders on the three systems' tune folds"
+instrument   = "python3 research/ontology-apps/bars.py layer-invariants"
+timeout_s    = 1800   # run-tier: builds and runs the contract tests behind scripts/with-cargo-lock.sh; not yet timed, the lock wait is unbounded

@@ -1,0 +1,51 @@
+{
+ "run": "RUN",
+ "estimator": {
+  "sources": {
+   "document_date": {
+    "estimated": 0.134,
+    "labelled": 0.134,
+    "agreed_pairs": 2574,
+    "labelled_ci90": [
+     0.078,
+     0.193
+    ],
+    "gap": 0.001
+   },
+   "model_choice": {
+    "estimated": 0.727,
+    "labelled": 0.286,
+    "agreed_pairs": 217,
+    "labelled_ci90": [
+     0.233,
+     0.345
+    ],
+    "gap": 0.441
+   },
+   "necessary:kind": {
+    "estimated": 0.182,
+    "labelled": 0.209,
+    "agreed_pairs": 3291,
+    "labelled_ci90": [
+     0.184,
+     0.236
+    ],
+    "gap": 0.027
+   },
+   "proposed_answer": {
+    "estimated": 0.988,
+    "labelled": 0.54,
+    "agreed_pairs": 506,
+    "labelled_ci90": [
+     0.49,
+     0.593
+    ],
+    "gap": 0.449
+   }
+  },
+  "largest_gap": [
+   0.449,
+   "proposed_answer"
+  ]
+ }
+}
