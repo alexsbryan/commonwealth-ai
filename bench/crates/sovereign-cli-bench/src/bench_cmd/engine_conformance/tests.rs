@@ -47,7 +47,8 @@ fn pair(check: &Check, a: Facets, b: Facets) -> CellVerdict {
 
 #[test]
 fn the_committed_inventory_parses_with_unique_row_ids() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lanes/engine-swap/conformance.toml");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lanes/engine-swap/conformance.toml");
     let inventory = Inventory::load(&path).unwrap();
     let mut ids: Vec<&str> = inventory.rows.iter().map(|r| r.id.as_str()).collect();
     ids.sort_unstable();
@@ -60,8 +61,14 @@ fn the_committed_inventory_parses_with_unique_row_ids() {
 fn a_row_that_names_no_check_is_refused_at_load() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("inv.toml");
-    std::fs::write(&path, "[[row]]\nid = \"x\"\njudge = []\npredict = \"pass\"\n").unwrap();
-    assert!(Inventory::load(&path).unwrap_err().contains("names no check"));
+    std::fs::write(
+        &path,
+        "[[row]]\nid = \"x\"\njudge = []\npredict = \"pass\"\n",
+    )
+    .unwrap();
+    assert!(Inventory::load(&path)
+        .unwrap_err()
+        .contains("names no check"));
 }
 
 #[test]
@@ -202,7 +209,10 @@ fn label_probs_embedding_rerank_and_counts() {
         label_probs: Some(BTreeMap::from([("A".to_string(), 0.9)])),
         ..Default::default()
     };
-    assert!(is_differs(&pair(&lpc, lp(0.9), only_a)), "a label missing on one side is not a zero");
+    assert!(
+        is_differs(&pair(&lpc, lp(0.9), only_a)),
+        "a label missing on one side is not a zero"
+    );
 
     let e = |v: Vec<f32>| Facets {
         embedding: Some(v),

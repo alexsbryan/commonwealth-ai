@@ -88,7 +88,11 @@ fn cmd_judge(args: &[String]) -> i32 {
             }
         }
     }
-    tracing::debug!(rows = inventory.rows.len(), records = records.len(), "engine_conformance: judging");
+    tracing::debug!(
+        rows = inventory.rows.len(),
+        records = records.len(),
+        "engine_conformance: judging"
+    );
     let verdicts = verdict::judge(&inventory, &records);
     if let Some(dir) = out {
         if let Err(e) = write_verdicts(&dir, &verdicts) {
@@ -101,11 +105,14 @@ fn cmd_judge(args: &[String]) -> i32 {
 }
 
 fn read_records(path: &Path) -> Result<Vec<CaseRecord>, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
     text.lines()
         .enumerate()
         .filter(|(_, l)| !l.trim().is_empty())
-        .map(|(n, l)| serde_json::from_str(l).map_err(|e| format!("{}:{}: {e}", path.display(), n + 1)))
+        .map(|(n, l)| {
+            serde_json::from_str(l).map_err(|e| format!("{}:{}: {e}", path.display(), n + 1))
+        })
         .collect()
 }
 
@@ -142,7 +149,10 @@ fn print_table(verdicts: &[RowVerdict]) {
         );
     }
     let count = |s: &str| verdicts.iter().filter(|v| v.verdict == s).count();
-    let off = verdicts.iter().filter(|v| v.as_predicted == Some(false)).count();
+    let off = verdicts
+        .iter()
+        .filter(|v| v.as_predicted == Some(false))
+        .count();
     println!(
         "\npassed {}  failed {}  could-not-judge {}  never-ran {}  ·  not as predicted {off}",
         count("passed"),

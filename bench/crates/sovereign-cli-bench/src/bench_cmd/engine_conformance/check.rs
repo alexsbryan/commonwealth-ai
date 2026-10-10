@@ -500,4 +500,3 @@ fn rank(scores: &[f32]) -> Vec<usize> {
     idx.sort_by(|&i, &j| scores[j].total_cmp(&scores[i]));
     idx
 }
-

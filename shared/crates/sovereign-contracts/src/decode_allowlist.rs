@@ -149,7 +149,9 @@ mod tests {
         assert!(URL
             .entries_outside("See https://a.org/x, and https://a.org.", &urls)
             .is_empty());
-        assert!(URL.entries_outside("ends on https://a.org/x", &urls).is_empty());
+        assert!(URL
+            .entries_outside("ends on https://a.org/x", &urls)
+            .is_empty());
         let ids = list(&["ev-T1-0002"]);
         assert!(EVIDENCE_ID
             .entries_outside("as shown [ev-T1-0002]; bare ev-T9 is prose", &ids)
@@ -163,7 +165,10 @@ mod tests {
             URL.entries_outside("https://a.org/y and http://b.net/z", &urls),
             ["https://a.org/y", "http://b.net/z"]
         );
-        assert_eq!(URL.entries_outside("cut off at https://a.o", &urls), ["https://a.o"]);
+        assert_eq!(
+            URL.entries_outside("cut off at https://a.o", &urls),
+            ["https://a.o"]
+        );
         assert_eq!(
             EVIDENCE_ID.entries_outside("[ev-T1-0003] and [ev-T1-000", &list(&["ev-T1-0002"])),
             ["[ev-T1-0003]", "[ev-T1-000"]
