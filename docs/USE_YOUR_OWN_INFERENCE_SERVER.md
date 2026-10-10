@@ -134,6 +134,23 @@ queries. Prepared, they were 0.9996 or closer.
 You can skip all of this if you don't use corpora, memory, or anything that
 retrieves — plain chat needs no embedding model.
 
+**Grammars and citation allow-lists need a declared host.** Some requests
+constrain decoding: a Lark grammar for a structured answer, or allow-lists
+that keep cited URLs and evidence handles to the ones a source actually
+gave. A Sovereign daemon enforces these in its own engine. A plain
+llama-server ignores the fields, so the answer comes back unconstrained. If
+your llama-server was built with llguidance (`-DLLAMA_LLGUIDANCE=ON`), say
+so, and each constraint is sent as a grammar it enforces:
+
+```toml
+grammar = "llguidance"
+```
+
+Do not set this for a server built without llguidance: it aborts on such a
+grammar. A request whose constraint cannot be expressed as one grammar (an
+allow-list on a request that also offers tools, for example) is refused, not
+answered unconstrained.
+
 ## A hosted provider
 
 No local model? One command sets a node up on a hosted one:

@@ -138,6 +138,7 @@ fn an_engine_off_this_machine_is_a_third_party() {
             8192,
             None,
             Default::default(),
+            Default::default(),
         )
         .unwrap()
     };
@@ -170,6 +171,7 @@ async fn a_hosted_engine_embeds_in_this_process() {
         None,
         8192,
         None,
+        Default::default(),
         Default::default(),
     )
     .unwrap();
@@ -205,6 +207,7 @@ async fn a_hosted_engine_reports_its_models_and_pins_unnamed_turns() {
         Some("small".into()),
         8192,
         None,
+        Default::default(),
         Default::default(),
     )
     .unwrap();
@@ -315,6 +318,7 @@ async fn an_engine_told_tool_use_forced_sends_schemas_as_a_function_call() {
         8192,
         None,
         crate::StructuredOutputMode::ToolUseForced,
+        Default::default(),
     )
     .unwrap();
     let schema =
@@ -372,6 +376,7 @@ async fn a_client_prepared_engine_sends_the_embed_slots_inputs() {
             8192,
             None,
             Default::default(),
+            Default::default(),
         )
         .unwrap()
     };
@@ -422,6 +427,7 @@ async fn a_hosted_engine_sends_model_ids_not_slot_aliases() {
         Some("fast-model".into()),
         8192,
         None,
+        Default::default(),
         Default::default(),
     )
     .unwrap();

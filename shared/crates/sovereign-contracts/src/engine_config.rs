@@ -212,6 +212,27 @@ pub struct EngineSection {
     /// EOS an instruction-aware embedder was trained with. Unset is `server`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embed_inputs: Option<EmbedInputs>,
+    /// How `remote` hands this host a decode constraint: a Lark grammar or
+    /// the URL and evidence-id allow-lists. Unset is `sovereign`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grammar: Option<GrammarSupport>,
+}
+
+/// How a host takes a decode constraint. A property of the SERVER: nothing
+/// in a response tells a host that enforced a constraint from one that
+/// ignored the field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GrammarSupport {
+    /// A Sovereign daemon: `lark_grammar`, `url_allowlist` and
+    /// `evidence_id_allowlist` go as extension fields, and its engine
+    /// enforces them. Any other server ignores those fields.
+    #[default]
+    Sovereign,
+    /// llama-server built with `LLAMA_LLGUIDANCE`: each constraint becomes
+    /// one `grammar` in llguidance's Lark. A server built without it aborts
+    /// on that grammar, so this is declared, never guessed.
+    Llguidance,
 }
 
 /// Who turns text into the input an embedding model expects. A property of
@@ -261,6 +282,7 @@ impl Default for EngineSection {
             extra_params: None,
             structured_output: None,
             embed_inputs: None,
+            grammar: None,
         }
     }
 }

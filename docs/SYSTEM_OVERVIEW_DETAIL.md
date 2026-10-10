@@ -3991,6 +3991,25 @@ had no key that could say otherwise.
   - **Slot aliases** (`outbound::Hosted::alias_target`, through
     `venue::resolution_alias_keys`). A hosted engine sends `primary`/`fast`
     as the model ids it holds.
+- **`[engine] grammar` (2026-10-10)** says how the remote host takes a decode
+  constraint: a Lark grammar, or the URL and evidence-id allow-lists. It is
+  written in one place, `chat_wire::write_constraints`.
+  - `sovereign` (the default) sends the `lark_grammar`, `url_allowlist` and
+    `evidence_id_allowlist` extension fields, which a daemon's engine
+    enforces and any other server ignores.
+  - `llguidance` is for a llama-server built with `LLAMA_LLGUIDANCE`. It
+    sends one `grammar`: the Lark grammar with its `%llguidance` header, or
+    the allow-lists rendered by `sovereign_contracts::decode_allowlist::llguidance_lark`.
+    The tries in `url_constraint.rs` and `evidence_id_constraint.rs` read
+    their markers and terminators from that same module, and
+    `decode_allowlist_parity_tests` holds the grammar to the tries' verdicts.
+  - What one grammar cannot carry is refused: a Lark grammar together with
+    an allow-list, an allow-list beside tools (llama-server refuses a grammar
+    there), and a grammar beside `response_format`. A Lark grammar beside
+    tools is dropped and traced, because llama-server's own tool-call grammar
+    stands in for the envelope grammar.
+  - Measured through a daemon on the remote engine (4B, 5 runs per cell):
+    0 of 15 URLs outside the list, against 11 of 12 unconstrained.
 - **Proven live 2026-08-30**: a second daemon on `kind = "remote"` with
   deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
   (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file

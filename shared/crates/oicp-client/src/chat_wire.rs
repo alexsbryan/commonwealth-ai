@@ -5,6 +5,8 @@
 //! way ([`crate::RemoteApiProvider::build_request`] is their one builder).
 
 use serde_json::{json, Value};
+use sovereign_contracts::decode_allowlist;
+use sovereign_contracts::engine_config::GrammarSupport;
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::{CompletionRequest, PromptShape};
 use std::sync::atomic::Ordering;
@@ -33,6 +35,93 @@ pub(crate) fn request_messages(request: &CompletionRequest) -> Vec<Value> {
     }
     messages.push(json!({"role": "user", "content": &request.prompt}));
     messages
+}
+
+/// Write `request`'s decode constraint (a Lark grammar, the URL and
+/// evidence-id allow-lists) in `host`'s spelling. Call it after the tools and
+/// any `response_format` are on `body`: llama-server takes one `grammar` and
+/// refuses it beside tools, so what can ride depends on them.
+///
+/// A constraint the host cannot enforce is refused, never dropped unseen.
+/// The one exception is a Lark grammar beside tools: llama-server's own
+/// tool-call grammar takes its place, and the drop is traced.
+pub(crate) fn write_constraints(
+    body: &mut Value,
+    request: &CompletionRequest,
+    host: GrammarSupport,
+) -> Result<()> {
+    if host == GrammarSupport::Sovereign {
+        if let Some(grammar) = &request.lark_grammar {
+            body["lark_grammar"] = json!(grammar);
+        }
+        if let Some(urls) = &request.url_allowlist {
+            body["url_allowlist"] = json!(urls);
+        }
+        if let Some(ids) = &request.evidence_id_allowlist {
+            body["evidence_id_allowlist"] = json!(ids);
+        }
+        return Ok(());
+    }
+    let no_ids: &[String] = &[];
+    let masks = decode_allowlist::llguidance_lark(&[
+        (
+            &decode_allowlist::URL,
+            request.url_allowlist.as_deref().unwrap_or(no_ids),
+        ),
+        (
+            &decode_allowlist::EVIDENCE_ID,
+            request.evidence_id_allowlist.as_deref().unwrap_or(no_ids),
+        ),
+    ]);
+    let lark = request.lark_grammar.as_deref();
+    if lark.is_none() && masks.is_none() {
+        return Ok(());
+    }
+    let tools_offered = body
+        .get("tools")
+        .and_then(Value::as_array)
+        .is_some_and(|t| !t.is_empty())
+        && body.get("tool_choice") != Some(&json!("none"));
+    let refuse = |why: &str| {
+        tracing::warn!(target: "oicp_client", why, "write_constraints: refused");
+        Err(Error::InvalidInput(format!(
+            "this host takes one llguidance grammar, and {why}, so the request's \
+             constraint cannot be honoured. It is refused rather than answered \
+             unconstrained."
+        )))
+    };
+    let grammar = match (lark, masks) {
+        (Some(_), Some(_)) => {
+            return refuse("a Lark grammar cannot be intersected with an allow-list")
+        }
+        (None, Some(_)) if tools_offered => {
+            return refuse("llama-server refuses a grammar beside tools")
+        }
+        (Some(_), None) if tools_offered => {
+            tracing::debug!(
+                target: "oicp_client",
+                "write_constraints: lark_grammar dropped beside tools; the host's own \
+                 tool-call grammar applies"
+            );
+            return Ok(());
+        }
+        (Some(lark), None) if lark.trim_start().starts_with("%llguidance") => lark.to_string(),
+        (Some(lark), None) => format!("%llguidance {{}}\n{lark}"),
+        (None, Some(masks)) => masks,
+        (None, None) => unreachable!("returned above"),
+    };
+    if body.get("response_format").is_some() {
+        return refuse("llama-server lets a grammar override response_format");
+    }
+    tracing::debug!(
+        target: "oicp_client",
+        lark = lark.is_some(),
+        urls = request.url_allowlist.as_ref().map_or(0, Vec::len),
+        evidence_ids = request.evidence_id_allowlist.as_ref().map_or(0, Vec::len),
+        "write_constraints: sent as an llguidance grammar"
+    );
+    body["grammar"] = json!(grammar);
+    Ok(())
 }
 
 /// Write `schema` onto `body` in `mode`'s spelling, named after the schema's
@@ -194,7 +283,7 @@ impl RemoteApiProvider {
     ) -> Result<(reqwest::Response, StructuredOutputMode)> {
         let what = "Remote API request";
         let mode = self.effective_structured_output_mode();
-        let body = self.build_request_in(request, mode);
+        let body = self.build_request_in(request, mode)?;
         // The whole body, so a run can be replayed by hand (§9.1). Debug: it
         // carries the full prompt and any schema.
         tracing::debug!(target: "oicp_client", %url, %body, "chat request body");
@@ -211,7 +300,7 @@ impl RemoteApiProvider {
             return Err(refusal.into_error(what));
         }
         let forced = StructuredOutputMode::ToolUseForced;
-        let retry = self.build_request_in(request, forced);
+        let retry = self.build_request_in(request, forced)?;
         tracing::info!(
             target: "oicp_client",
             %url,
@@ -544,14 +633,14 @@ mod tests {
     /// forward spends it), so the daemon could never hand them to a peer.
     #[test]
     fn an_originating_request_spends_no_hop_and_synthesizes_no_envelope() {
-        let forwarded = provider().build_request(&named_request());
+        let forwarded = provider().build_request(&named_request()).unwrap();
         assert_eq!(
             forwarded["oicp"]["forward_budget"], 0,
             "a forward spends the hop"
         );
 
         let origin = provider().originating();
-        assert!(origin.build_request(&named_request()).get("oicp").is_none());
+        assert!(origin.build_request(&named_request()).unwrap().get("oicp").is_none());
 
         let mut composed = named_request();
         composed.oicp = Some(
@@ -559,7 +648,7 @@ mod tests {
                 .with_latency_class(sovereign_contracts::oicp::LatencyClass::Fast)
                 .with_max_output_tokens(512),
         );
-        let body = origin.build_request(&composed);
+        let body = origin.build_request(&composed).unwrap();
         assert_eq!(body["oicp"]["latency_class"], "fast");
         assert_eq!(body["oicp"]["max_output_tokens"], 512);
         assert!(
@@ -576,7 +665,7 @@ mod tests {
         })));
         let mut req = named_request();
         req.temperature = Some(0.2);
-        let body = p.build_request(&req);
+        let body = p.build_request(&req).unwrap();
         assert_eq!(body["provider"], json!({"require_parameters": true}));
         assert_eq!(body["temperature"], 0.9);
     }
@@ -586,7 +675,7 @@ mod tests {
         let p = provider().with_structured_output_mode(StructuredOutputMode::ToolUseForced);
         let mut req = named_request();
         req.structured_output = Some(titled_schema(&schema(), Some("phase 1 (atlas)")));
-        let body = p.build_request(&req);
+        let body = p.build_request(&req).unwrap();
         assert!(body.get("response_format").is_none(), "{body}");
         assert_eq!(body["tools"][0]["function"]["name"], "phase_1__atlas_");
         assert_eq!(body["tool_choice"]["function"]["name"], "phase_1__atlas_");
@@ -612,11 +701,91 @@ mod tests {
         req.prompt_shape = Some(PromptShape::Conversation {
             messages: history.clone(),
         });
-        let body = provider().build_request(&req);
+        let body = provider().build_request(&req).unwrap();
         assert_eq!(body["messages"], json!(history), "{body}");
 
         req.prompt_shape = None;
-        let flat = provider().build_request(&req);
+        let flat = provider().build_request(&req).unwrap();
         assert_eq!(flat["messages"][1]["content"], json!(req.prompt));
+    }
+
+    fn llguidance() -> crate::RemoteApiProvider {
+        provider().with_grammar(GrammarSupport::Llguidance)
+    }
+
+    fn constrained(lark: Option<&str>, urls: &[&str]) -> sovereign_contracts::types::CompletionRequest {
+        let mut req = named_request();
+        req.lark_grammar = lark.map(str::to_string);
+        if !urls.is_empty() {
+            req.url_allowlist = Some(urls.iter().map(|u| u.to_string()).collect());
+        }
+        req
+    }
+
+    fn with_tools(mut req: sovereign_contracts::types::CompletionRequest) -> sovereign_contracts::types::CompletionRequest {
+        req.tools = Some(vec![sovereign_contracts::types::ToolSchema {
+            name: "bash".into(),
+            description: Some("run".into()),
+            parameters: json!({"type": "object"}),
+        }]);
+        req
+    }
+
+    /// A daemon far end keeps its extension fields, as before.
+    #[test]
+    fn a_sovereign_host_gets_the_extension_fields() {
+        let mut req = constrained(Some("start: \"a\""), &["https://a.test/x"]);
+        req.evidence_id_allowlist = Some(vec!["ev-T1-0001".into()]);
+        let body = provider().build_request(&req).unwrap();
+        assert_eq!(body["lark_grammar"], "start: \"a\"");
+        assert_eq!(body["url_allowlist"], json!(["https://a.test/x"]));
+        assert_eq!(body["evidence_id_allowlist"], json!(["ev-T1-0001"]));
+        assert!(body.get("grammar").is_none(), "{body}");
+    }
+
+    /// THE FAILING INPUT: a deep-research draft on a remote llama-server. Its
+    /// `url_allowlist` went out as a field llama-server ignores, so the draft
+    /// was unmasked (14 of 15 URLs outside the list, 2026-10-09 probe).
+    #[test]
+    fn an_llguidance_host_gets_the_allow_list_as_its_grammar() {
+        let body = llguidance().build_request(&constrained(None, &["https://a.test/x"])).unwrap();
+        let urls = vec!["https://a.test/x".to_string()];
+        let want = decode_allowlist::llguidance_lark(&[(&decode_allowlist::URL, &urls)]).unwrap();
+        assert_eq!(body["grammar"], json!(want));
+        assert!(body.get("url_allowlist").is_none(), "{body}");
+    }
+
+    #[test]
+    fn an_llguidance_host_gets_a_lark_grammar_with_its_header_once() {
+        let body = llguidance().build_request(&constrained(Some("start: \"a\""), &[])).unwrap();
+        assert_eq!(body["grammar"], "%llguidance {}\nstart: \"a\"");
+        assert!(body.get("lark_grammar").is_none(), "{body}");
+        let headed = "%llguidance {}\nstart: \"b\"";
+        let body = llguidance().build_request(&constrained(Some(headed), &[])).unwrap();
+        assert_eq!(body["grammar"], headed);
+    }
+
+    /// llama-server answers 400 to a grammar beside tools; its own tool-call
+    /// grammar stands in for an envelope grammar, but nothing stands in for an
+    /// allow-list.
+    #[test]
+    fn beside_tools_a_lark_grammar_is_dropped_and_an_allow_list_refused() {
+        let body = llguidance().build_request(&with_tools(constrained(Some("start: \"a\""), &[]))).unwrap();
+        assert!(body.get("grammar").is_none() && body.get("lark_grammar").is_none(), "{body}");
+        assert!(body["tools"].as_array().is_some_and(|t| t.len() == 1));
+        let refused = llguidance().build_request(&with_tools(constrained(None, &["https://a.test/x"])));
+        assert!(refused.is_err(), "{refused:?}");
+    }
+
+    #[test]
+    fn what_one_grammar_cannot_carry_is_refused() {
+        let both = llguidance().build_request(&constrained(Some("start: \"a\""), &["https://a.test/x"]));
+        assert!(both.is_err(), "{both:?}");
+        let mut beside_schema = constrained(None, &["https://a.test/x"]);
+        beside_schema.structured_output = Some(schema());
+        let refused = llguidance()
+            .with_structured_output_mode(StructuredOutputMode::JsonSchema)
+            .build_request(&beside_schema);
+        assert!(refused.is_err(), "{refused:?}");
     }
 }

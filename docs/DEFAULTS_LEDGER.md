@@ -53,6 +53,29 @@ when a host advertises nothing.
 
 **Review by 2026-11-09.**
 
+### `[engine] grammar` — `sovereign` unless the operator says `llguidance` (2026-10-10)
+
+**What ships.** A remote engine sends Lark grammars and the URL and
+evidence-id allow-lists as one llguidance `grammar` only with
+`grammar = "llguidance"`. The default, `sovereign`, sends the daemon's
+extension fields.
+
+**Why `sovereign`.** Every deployed remote engine today points at a Sovereign
+daemon, which enforces the extension fields. A llama-server built without
+llguidance aborts on an llguidance grammar, so the client cannot try it and
+see.
+
+**Measured.** On 2026-10-10, through a daemon on the remote engine in front
+of an llguidance llama-server (Qwen3.5-4B, 5 runs per cell): 0 of 15 cited
+URLs and 0 of 10 evidence handles were outside the lists. Unconstrained, 11 of
+12 URLs were outside.
+
+**Flip condition.** Make the default follow the host when a remote engine can
+learn whether its host enforces grammars, for example from an OICP manifest
+field. Until then the operator says so.
+
+**Review by 2026-11-10.**
+
 ### `[enrichment.ontology].document_reading` — false unless a recipe opts in (2026-10-07)
 
 **What ships.** In a version-1 recipe, `[enrichment.ontology]` may set

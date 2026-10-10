@@ -74,7 +74,7 @@ impl RemoteApiProvider {
         labels: &[String],
     ) -> Result<Option<String>> {
         let admitted = self.outbound(crate::Payload::Completion)?;
-        let mut body = self.build_request(request);
+        let mut body = self.build_request(request)?;
         if let Some(obj) = body.as_object_mut() {
             for key in [
                 "response_format",

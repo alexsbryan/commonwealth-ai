@@ -12,6 +12,7 @@ use sovereign_contracts::setup_config::ModelsSection;
 fn client_embed_inputs_name_a_family_or_refuse() {
     let section = |inputs: Option<EmbedInputs>| EngineSection {
         embed_inputs: inputs,
+        grammar: None,
         ..Default::default()
     };
     let client = section(Some(EmbedInputs::Client));
@@ -199,6 +200,7 @@ fn the_remote_engine_builds_with_no_weights_and_no_llama_handle() {
         extra_params: None,
         structured_output: None,
         embed_inputs: None,
+        grammar: None,
     };
     // Deliberately absent paths: if this engine touched a GGUF the
     // build would fail, and that failure is the assertion.
@@ -243,6 +245,7 @@ fn a_separate_embedding_server_is_wired_to_its_own_model() {
         extra_params: None,
         structured_output: None,
         embed_inputs: None,
+        grammar: None,
     };
     let built = build_engine(&config).expect("split chat/embed builds without I/O");
     assert!(built.llama.is_none());

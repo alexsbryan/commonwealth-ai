@@ -252,6 +252,9 @@ pub struct RemoteApiProvider {
     input_prep: Option<sovereign_contracts::embed_quirks::EmbedQuirks>,
     /// How this provider's host is asked for schema-shaped output.
     structured_output_mode: StructuredOutputMode,
+    /// How this provider's host takes a decode constraint
+    /// (`[engine] grammar`).
+    grammar: sovereign_contracts::engine_config::GrammarSupport,
     /// Operator-set vendor fields merged into every body last (OpenRouter's
     /// `provider` routing, OpenAI's `seed`).
     extra_params: Option<serde_json::Value>,
@@ -412,6 +415,7 @@ impl RemoteApiProvider {
             query_instruction: String::new(),
             input_prep: None,
             structured_output_mode: StructuredOutputMode::default(),
+            grammar: Default::default(),
             extra_params: None,
             json_schema_refused: std::sync::atomic::AtomicBool::new(false),
             forced_choice_by_logprobs: std::sync::atomic::AtomicBool::new(false),
@@ -482,6 +486,13 @@ impl RemoteApiProvider {
     }
 
     /// Merge these vendor fields into every request body, last.
+    /// How this host takes a decode constraint: a daemon's extension
+    /// fields (the default) or one llguidance `grammar`.
+    pub fn with_grammar(mut self, grammar: sovereign_contracts::engine_config::GrammarSupport) -> Self {
+        self.grammar = grammar;
+        self
+    }
+
     pub fn with_extra_params(mut self, extra: Option<serde_json::Value>) -> Self {
         self.extra_params = extra;
         self
@@ -560,7 +571,7 @@ impl RemoteApiProvider {
         }
     }
 
-    fn build_request(&self, request: &CompletionRequest) -> serde_json::Value {
+    fn build_request(&self, request: &CompletionRequest) -> Result<serde_json::Value> {
         self.build_request_in(request, self.effective_structured_output_mode())
     }
 
@@ -568,7 +579,7 @@ impl RemoteApiProvider {
         &self,
         request: &CompletionRequest,
         mode: StructuredOutputMode,
-    ) -> serde_json::Value {
+    ) -> Result<serde_json::Value> {
         let messages = chat_wire::request_messages(request);
 
         // Pin the OpenAI `model` field when the caller asked for a
@@ -710,28 +721,6 @@ impl RemoteApiProvider {
         // was truncated raw deliberation (2026-06-10 fabrication burn-down).
         chat_wire::write_thinking(&mut body, request.think_budget, request.enable_thinking);
 
-        // Forward `lark_grammar` to the daemon as a sovereign-specific
-        // extension field. The daemon's inference_adapter unwraps it
-        // back onto CompletionRequest.lark_grammar; embedded.rs then
-        // compiles it via llguidance and constrains decoding.
-        //
-        // Why this exists separately from `response_format`: lark
-        // grammars are strictly more expressive than JSON-Schema
-        // (regex tokens, recursion, custom productions) and the
-        // OpenAI envelope has no slot for free-form lark. The
-        // structured_output → response_format path remains the
-        // canonical route for schema-shaped output; this is the
-        // escape hatch for non-schema constraints like
-        // `(entity ("," entity)*)?` per-line lists or strict
-        // BREAK/CONTINUE alternations.
-        //
-        // The wire field name `lark_grammar` mirrors the
-        // CompletionRequest field exactly — chosen for symmetry
-        // with the in-process path so daemon-side debugging
-        // doesn't need a translation table.
-        if let Some(grammar) = &request.lark_grammar {
-            body["lark_grammar"] = serde_json::json!(grammar);
-        }
 
         // Commonwealth extension: forward the caller-directed
         // stable-prefix declaration (bytes of the user prompt shared
@@ -809,12 +798,11 @@ impl RemoteApiProvider {
         if let Some(prefix) = &request.cmd_prefix {
             body["cmd_prefix"] = serde_json::json!(prefix);
         }
-        if let Some(urls) = &request.url_allowlist {
-            body["url_allowlist"] = serde_json::json!(urls);
-        }
-        if let Some(ids) = &request.evidence_id_allowlist {
-            body["evidence_id_allowlist"] = serde_json::json!(ids);
-        }
+        // The Lark grammar and the URL and evidence-id allow-lists, in this
+        // host's spelling: a daemon's extension fields, or one llguidance
+        // `grammar` (`[engine] grammar`). After the tools and the schema,
+        // which decide what can ride beside them.
+        chat_wire::write_constraints(&mut body, request, self.grammar)?;
         // Operator-set vendor fields, last, so they can override.
         if let (Some(extra), Some(obj)) = (
             self.extra_params.as_ref().and_then(|e| e.as_object()),
@@ -822,7 +810,7 @@ impl RemoteApiProvider {
         ) {
             obj.extend(extra.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
-        body
+        Ok(body)
     }
 
     /// The daemon root: this provider's endpoint with any `/v1` suffix
@@ -1135,7 +1123,7 @@ impl InferenceProvider for RemoteApiProvider {
         use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
-        let mut body = self.build_request(request);
+        let mut body = self.build_request(request)?;
         body["stream"] = serde_json::json!(true);
 
         let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
@@ -1221,7 +1209,7 @@ impl InferenceProvider for RemoteApiProvider {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
-        let mut body = self.build_request(request);
+        let mut body = self.build_request(request)?;
         body["stream"] = serde_json::json!(true);
 
         let response = self
@@ -2190,7 +2178,7 @@ mod tests {
         // empty so the daemon's OICP slot picker decides — see the
         // doc comment on `build_request`.
         let request = CompletionRequest::new("Hello, world!").with_model_id("test-model");
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
 
         assert_eq!(body["model"], "test-model");
         let messages = body["messages"].as_array().unwrap();
@@ -2208,7 +2196,7 @@ mod tests {
         // Priority-1 envelope routing would override the pin (the
         // 2026-07-23 fast-slot hijack; see `build_request` docs).
         let request = CompletionRequest::new("Hello");
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
         assert_eq!(body["model"], "test-model");
         // The invariant this guards is "no ROUTING signal", not "no envelope".
         // Absence of the envelope used to be a sufficient proxy for it; since
@@ -2232,7 +2220,7 @@ mod tests {
         // Fast with model_id = None keeps the empty model + envelope
         // form so the daemon routes it to a fast-class slot.
         let fast = CompletionRequest::new("Hello").with_speed(Speed::Fast);
-        let body = provider.build_request(&fast);
+        let body = provider.build_request(&fast).unwrap();
         assert_eq!(body["model"], "");
         assert_eq!(body["oicp"]["latency_class"], "fast");
     }
@@ -2251,7 +2239,7 @@ mod tests {
         assert!(env.forward_budget.is_none(), "fixture starts unstated");
         assert_eq!(env.effective_forward_budget(), 1, "unstated means one hop");
 
-        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(env));
+        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(env)).unwrap();
 
         // Explicit zero, not omission. The receiver must be able to tell
         // "you are the last hop" from "nobody told me".
@@ -2270,7 +2258,7 @@ mod tests {
 
         // Fast + no model_id is the branch that builds an envelope from
         // scratch (see `build_request_slow_pins_provider_model_...`).
-        let body = provider.build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast));
+        let body = provider.build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast)).unwrap();
 
         assert_eq!(
             body["oicp"]["latency_class"], "fast",
@@ -2294,7 +2282,7 @@ mod tests {
             .with_forward_budget(0);
         assert!(!spent.may_forward());
 
-        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(spent));
+        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(spent)).unwrap();
         assert_eq!(
             body["oicp"]["forward_budget"], 0,
             "saturating, not wrapping"
@@ -2331,7 +2319,7 @@ mod tests {
 
         let request = CompletionRequest::new("complete this").with_model_id("qwen-122b");
         assert!(request.oicp.is_none(), "thin clients send no envelope");
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
 
         // The name survives the hop — no silent substitution.
         assert_eq!(body["model"], "qwen-122b");
@@ -2389,7 +2377,7 @@ mod tests {
             stable_prefix_len: None,
         };
 
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
         let messages = body["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0]["role"], "system");
@@ -2435,7 +2423,7 @@ mod tests {
             stable_prefix_len: None,
         };
 
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
         assert!(body.get("oicp").is_some());
         // v0.3: hint + latency class + sizing live at the top level
         // of the OICP envelope.

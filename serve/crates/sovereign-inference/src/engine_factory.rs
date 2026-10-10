@@ -451,6 +451,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
         section.context_size,
         section.extra_params.clone(),
         section.structured_output.unwrap_or_default(),
+        section.grammar.unwrap_or_default(),
     )
     .map_err(|e| format!("[engine] kind = \"remote\": {e}"))?;
     tracing::info!(

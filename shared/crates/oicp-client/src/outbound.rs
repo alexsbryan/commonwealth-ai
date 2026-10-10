@@ -365,6 +365,7 @@ impl SplitInferenceProvider {
         context_size: u32,
         extra_params: Option<serde_json::Value>,
         structured_output: crate::StructuredOutputMode,
+        grammar: sovereign_contracts::engine_config::GrammarSupport,
     ) -> Result<Self> {
         let half = |endpoint: &str, model: &str| -> Result<RemoteApiProvider> {
             let provider = match FarEnd::of_engine_endpoint(endpoint) {
@@ -380,7 +381,8 @@ impl SplitInferenceProvider {
         };
         let chat = half(chat_endpoint_v1, &chat_model_id)?
             .with_extra_params(extra_params)
-            .with_structured_output_mode(structured_output);
+            .with_structured_output_mode(structured_output)
+            .with_grammar(grammar);
         let local_embed = matches!(embed, EngineEmbed::Local { .. });
         let (embed, embed_model_id, embed_at): (
             std::sync::Arc<dyn sovereign_contracts::traits::InferenceProvider>,
