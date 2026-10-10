@@ -1,0 +1,54 @@
+L1	routing	scores (tracked) passed - lane `routing` — cells_v1 27/27 · cells_v1_paraphrases 26/27
+{"subject":"routing","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791590209}
+L1	retrieval-prod	scores (tracked) passed - lane `retrieval-prod` — questions 5/5 · questions 5/5
+{"subject":"retrieval-prod","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791590451}
+L1	enrichment-f1	scores (tracked) passed - lane `enrichment-f1` — bk-book-1 24/29
+{"subject":"enrichment-f1","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791590451}
+L1	knowledge-gym	scores (tracked) passed - lane `knowledge-gym` — 01_corpus_definitional 3/3 · 05_noresults_honesty 3/3 · 06_fabricated_id_blocked 3/3
+{"subject":"knowledge-gym","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791590635}
+L1	synth	scores (tracked) passed - lane `synth` — questions 3/3
+{"subject":"synth","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791590917}
+L1	throughput	e2e passed - 2 plain turns completed; median total_latency_ms 23117 (tracked, no bar)
+L2	routing	scores (tracked) passed - lane `routing` — cells_v1 27/27 · cells_v1_paraphrases 26/27
+{"subject":"routing","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791591322}
+L2	retrieval-prod	scores (tracked) passed - lane `retrieval-prod` — questions 5/5 · questions 5/5
+{"subject":"retrieval-prod","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791591559}
+L2	enrichment-f1	scores (tracked) passed - lane `enrichment-f1` — bk-book-1 24/29
+{"subject":"enrichment-f1","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791591559}
+L2	knowledge-gym	scores (tracked) passed - lane `knowledge-gym` — 01_corpus_definitional 3/3 · 05_noresults_honesty 3/3 · 06_fabricated_id_blocked 3/3
+{"subject":"knowledge-gym","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791591734}
+L2	synth	scores (tracked) passed - lane `synth` — questions 3/3
+{"subject":"synth","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791592016}
+L2	throughput	e2e passed - 2 plain turns completed; median total_latency_ms 18122 (tracked, no bar)
+R1	routing	scores (tracked) passed - lane `routing` — cells_v1 27/27 · cells_v1_paraphrases 20/27
+{"subject":"routing","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791592590}
+R1	retrieval-prod	scores (tracked) passed - lane `retrieval-prod` — questions 5/5 · questions 5/5
+{"subject":"retrieval-prod","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791592825}
+R1	enrichment-f1	scores (tracked) passed - lane `enrichment-f1` — bk-book-1 24/29
+{"subject":"enrichment-f1","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791592826}
+R1	knowledge-gym	scores (tracked) passed - lane `knowledge-gym` — 01_corpus_definitional 3/3 · 05_noresults_honesty 0/3 · 06_fabricated_id_blocked 0/3
+R1	synth	scores (tracked) passed - lane `synth` — questions 3/3
+{"subject":"synth","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791593721}
+R1	throughput	e2e passed - 2 plain turns completed; median total_latency_ms 87931 (tracked, no bar)
+R2	routing	scores (tracked) passed - lane `routing` — cells_v1 27/27 · cells_v1_paraphrases 20/27
+{"subject":"routing","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791594291}
+R2	retrieval-prod	scores (tracked) passed - lane `retrieval-prod` — questions 5/5 · questions 5/5
+{"subject":"retrieval-prod","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791594528}
+R2	enrichment-f1	scores (tracked) passed - lane `enrichment-f1` — bk-book-1 24/29
+{"subject":"enrichment-f1","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791594528}
+R2	knowledge-gym	scores (tracked) passed - lane `knowledge-gym` — 01_corpus_definitional 3/3 · 05_noresults_honesty 1/3 · 06_fabricated_id_blocked 2/3
+{"subject":"knowledge-gym","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791594968}
+R2	synth	scores (tracked) passed - lane `synth` — questions 3/3
+{"subject":"synth","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791595448}
+R2	throughput	e2e passed - 2 plain turns completed; median total_latency_ms 86905 (tracked, no bar)
+R1b	routing	scores (tracked) passed - lane `routing` — cells_v1 27/27 · cells_v1_paraphrases 26/27
+{"subject":"routing","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791595812}
+R1b	retrieval-prod	scores (tracked) passed - lane `retrieval-prod` — questions 5/5 · questions 5/5
+{"subject":"retrieval-prod","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791596045}
+R1b	enrichment-f1	scores (tracked) passed - lane `enrichment-f1` — bk-book-1 24/29
+{"subject":"enrichment-f1","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791596045}
+R1b	knowledge-gym	scores (tracked) passed - lane `knowledge-gym` — 01_corpus_definitional 3/3 · 05_noresults_honesty 2/3 · 06_fabricated_id_blocked 3/3
+{"subject":"knowledge-gym","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791596259}
+R1b	synth	scores (tracked) passed - lane `synth` — questions 3/3
+{"subject":"synth","verdict":"passed","reason":"4 of 4 passed: errored items, empty answers, all-zero tally, scores (tracked)","as_of":1791596644}
+R1b	throughput	e2e passed - 2 plain turns completed; median total_latency_ms 19453 (tracked, no bar)
