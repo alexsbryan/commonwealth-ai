@@ -212,12 +212,20 @@ pub fn unforwarded_methods(impl_src: &str, impl_header: &str) -> Vec<String> {
             .collect()
     }
     fn block<'a>(text: &'a str, header: &str) -> &'a str {
-        let start = text.find(header).unwrap_or_else(|| panic!("`{header}` not found"));
+        let start = text
+            .find(header)
+            .unwrap_or_else(|| panic!("`{header}` not found"));
         let body = &text[start..];
         &body[..body.find("\n}\n").expect("the closing brace")]
     }
-    let methods = fn_names(block(include_str!("traits.rs"), "pub trait InferenceProvider"));
-    assert!(methods.len() > 20, "parsed too few trait methods: {methods:?}");
+    let methods = fn_names(block(
+        include_str!("traits.rs"),
+        "pub trait InferenceProvider",
+    ));
+    assert!(
+        methods.len() > 20,
+        "parsed too few trait methods: {methods:?}"
+    );
     let impl_text = block(impl_src, impl_header);
     let forwarded = fn_names(impl_text);
     methods

@@ -272,7 +272,8 @@ mod tests {
             .collect();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0]["method"], "complete");
-        let replayed: CompletionRequest = serde_json::from_value(lines[0]["input"].clone()).unwrap();
+        let replayed: CompletionRequest =
+            serde_json::from_value(lines[0]["input"].clone()).unwrap();
         assert_eq!(replayed.prompt, "a question");
         assert_eq!(replayed.url_allowlist, request.url_allowlist);
         assert_eq!(replayed.think_budget, Some(0));
