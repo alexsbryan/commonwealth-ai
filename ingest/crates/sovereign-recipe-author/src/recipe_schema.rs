@@ -627,21 +627,10 @@ fn ontology_type_schema(descriptor: &Value) -> Value {
             "identity":          str_array.clone(),
             "identity_fallback": str_array.clone(),
             // RESOLVE (`ONTOLOGY_METHOD.md`): the criterion in words, the
-            // evidence each kind of link carries with its counts, the bar a
-            // link's expected precision must clear, and the extracted
+            // bar a link's posterior must clear (what each source is worth
+            // is estimated on the corpus, never declared), and the extracted
             // fields a mention must fill before it can be linked.
             "identity_criterion":  { "type": "string" },
-            "identity_evidential": { "type": "array", "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["evidence", "right", "of", "measured_on"],
-                "properties": {
-                    "evidence":    { "type": "string" },
-                    "right":       { "type": "integer", "minimum": 0 },
-                    "of":          { "type": "integer", "minimum": 0 },
-                    "measured_on": { "type": "string" }
-                }
-            } },
             "identity_bar":        { "type": "number", "minimum": 0, "maximum": 1 },
             "identity_necessary":  str_array.clone(),
             "force":            { "enum": desc_ontology(descriptor, "force") },
