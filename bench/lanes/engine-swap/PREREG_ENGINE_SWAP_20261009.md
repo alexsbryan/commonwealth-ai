@@ -132,3 +132,32 @@ R1b is the same eight lanes, run after R1.
 A miss names forced choice as a dependency that a logprobs route cannot
 replace. A pass moves forced choice from the inventory's "no counterpart"
 table to its "client work" table.
+
+## Amendment, 2026-10-09 18:05, after R1 and before any R1b data: two more client gaps in R1b
+
+R1's other lanes showed two more gaps on the client side of the remote
+engine. Neither is a llama-server limit.
+
+- **Throughput.** Every probe got a 503: the daemon passed the alias `primary`
+  through, and the router answered 400 `model 'primary' not found`.
+  - R1b adds `--model-alias primary=<primary id> --model-alias fast=<fast id>`.
+- **Routing.** The paraphrase set dropped from 26/27 to 20/27. The embedding
+  layer was identical across the runs (85% and 67%), so the misses are the
+  LLM layer's. Its calls carry `think_budget: 0`. The daemon renders those
+  with thinking suppressed in the prompt itself (`prompt_helpers.rs:353-455`).
+  The R1 proxy sent `reasoning_budget_tokens: 0` instead, which still lets
+  the template pre-open a think block.
+  - R1b adds `--think-zero-off`: `think_budget: 0` becomes
+    `chat_template_kwargs.enable_thinking = false`.
+
+**R1b** is therefore the R1 proxy plus `--forced-choice-logprobs`,
+`--think-zero-off` and both aliases. It runs after R2, the pre-registered
+repeat of R1 with the R1 proxy.
+
+**Added bars:**
+4. Every throughput probe that measured in L1 and L2 also measures in R1b.
+5. R1b's routing paraphrase score is inside the L band, 26/27. If it is not,
+   the remaining difference is attributed to the daemon's own prompt
+   rendering for non-conversation calls (`format_prompt`), which llama-server
+   replaces with the model's jinja template. That is the inventory's
+   "per-family format_prompt quirks" row.

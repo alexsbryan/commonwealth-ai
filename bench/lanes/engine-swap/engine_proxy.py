@@ -73,6 +73,8 @@ class EngineProxy(tap.Tap):
     log_every_post = True
     rerank_model = None
     forced_choice_logprobs = False
+    think_zero_off = False
+    model_alias: dict = {}
     top_logprobs = 20
 
     def answer_here(self, body: bytes, rec: dict, is_chat: bool):
@@ -151,9 +153,19 @@ class EngineProxy(tap.Tap):
                     ext["lark_grammar"] = "translated"
             tb = req.pop("think_budget", None)
             req.pop("thinking", None)  # the DeepSeek spelling of the same budget
-            if tb is not None:
+            kwargs = req.get("chat_template_kwargs") or {}
+            if tb == 0 and self.think_zero_off and "enable_thinking" not in kwargs:
+                # The daemon suppresses thinking at budget 0 in the prompt
+                # (prompt_helpers.rs:353-455); a zero reasoning budget does not.
+                req["chat_template_kwargs"] = {**kwargs, "enable_thinking": False}
+                ext["think_budget"] = "translated: 0 -> enable_thinking false"
+            elif tb is not None:
                 req["reasoning_budget_tokens"] = tb
                 ext["think_budget"] = "translated"
+            model = req.get("model")
+            if model in self.model_alias:
+                req["model"] = self.model_alias[model]
+                ext["model_alias"] = f"{model} -> {req['model']}"
             prefix = req.pop("assistant_prefix", None)
             if prefix:
                 req.setdefault("messages", []).append({"role": "assistant", "content": prefix})
@@ -177,6 +189,10 @@ def main() -> int:
     ap.add_argument("--log", required=True)
     ap.add_argument("--arm", required=True)
     ap.add_argument("--rerank-model", help="router model id that serves /rerank")
+    ap.add_argument("--think-zero-off", action="store_true",
+                    help="think_budget 0 -> chat_template_kwargs enable_thinking false, not a zero reasoning budget")
+    ap.add_argument("--model-alias", action="append", default=[],
+                    help="ALIAS=MODEL, e.g. primary=Qwen3.6-35B-A3B-MTP-UD-Q6_K (repeatable)")
     ap.add_argument("--forced-choice-logprobs", action="store_true",
                     help="answer x_forced_choice calls from one token's top logprobs (see answer_here)")
     a = ap.parse_args()
@@ -185,6 +201,8 @@ def main() -> int:
     EngineProxy.arm = a.arm
     EngineProxy.rerank_model = a.rerank_model
     EngineProxy.forced_choice_logprobs = a.forced_choice_logprobs
+    EngineProxy.think_zero_off = a.think_zero_off
+    EngineProxy.model_alias = dict(x.split("=", 1) for x in a.model_alias)
     EngineProxy.log = open(a.log, "a", encoding="utf-8")
     srv = ThreadingHTTPServer((host, int(port)), EngineProxy)
     srv.daemon_threads = True
