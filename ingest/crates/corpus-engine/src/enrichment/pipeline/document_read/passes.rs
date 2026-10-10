@@ -169,7 +169,11 @@ pub(super) fn lines(body: &str) -> Vec<Line> {
 
 /// The Locate question for `line`: the whole document with its lines
 /// numbered (a prefix every line of the document shares), then the line and
-/// the declared kinds, each with its description.
+/// the declared kinds, each with its description and, under it, each of its
+/// closed-valued fields with the declared values and the field's description.
+/// The values are the words a line uses to state the kind: a recipe that put
+/// them only in a field's description went unseen here (order 8, abfe32a14:
+/// 14 uv states read by a blind recipe that put them in its kind's text).
 pub(super) fn locate_question(
     body: &str,
     lines: &[Line],
@@ -197,6 +201,16 @@ pub(super) fn locate_question(
             u.push_str(&format!(" ({})", kind.decl.description));
         }
         u.push('\n');
+        for field in &kind.fields {
+            let FieldPlan::Choose(attr) = field else {
+                continue;
+            };
+            u.push_str(&format!("   {}: {}", attr.name, attr.values.join(", ")));
+            if !attr.description.is_empty() {
+                u.push_str(&format!(" ({})", attr.description));
+            }
+            u.push('\n');
+        }
     }
     u.push_str(&format!("{NONE} none of them\nAnswer with its letter."));
     ChatPrompt::new(LOCATE_SYSTEM, u)

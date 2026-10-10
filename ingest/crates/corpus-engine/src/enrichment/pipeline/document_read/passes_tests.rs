@@ -147,7 +147,7 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         .contains("<<<\n1 Thread title\n2 The case   is closed now.\n3 Thanks\n>>>\n\nLine 2: \"The case   is closed now.\""));
     assert!(prompts[1]
         .user
-        .contains("A membership\nB reported_status\n0 none of them"));
+        .contains("A membership\nB reported_status\n   status: open, closed\n0 none of them"));
     assert_eq!(
         prompts[3].phase_id.as_deref(),
         Some("document_passes_choose")

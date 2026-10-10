@@ -105,7 +105,8 @@ estimated on the run itself, document by document in clock order, and checked ag
 The reader asks; it never decides identity. A document is prefilled once with its declared facts (metadata
 fields and the roles derived from them through declared sets, such as the sender's side), then asked a
 fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
-renaming: **Locate** each declared claim kind (line sets or none), **Mention** each entity type a read
+renaming: **Locate** each declared claim kind (line sets or none; each kind shown with its closed-valued fields' declared
+values and descriptions, the words a line states it in), **Mention** each entity type a read
 reference field targets and no exhaustive source covers, then per statement **Choose** each closed-valued
 field (the subject's identity fields included) as a distribution over its declared values and "not stated",
 **Pick** each reference field from candidates code proposes (identity keys derivable from the document's
