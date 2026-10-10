@@ -19,8 +19,9 @@ use oicp_types::forced_choice;
 use tracing::{debug, warn};
 
 use super::answer::{describe, describe_opened, reasons, Proposed, ProposedVerdict};
-use super::fields::FieldVote;
-use super::weigh::{weigh, Vote, Zone};
+use super::estimate::{Comparison, Estimate};
+use super::fields::{self, compare_necessary};
+use super::weigh::{tally, weigh, Carried, Zone};
 use super::{
     context, marked_context, Choice, Criterion, Document, Held, Plan, Proposal, Record, Refusal,
     Statement,
@@ -51,13 +52,19 @@ pub(super) struct Chosen {
     pub plans: Vec<Plan>,
     pub choices: Vec<Option<Choice>>,
     pub calls: u32,
-    /// Candidates not offered because a necessary value differs.
+    /// Candidates not offered because a supplied necessary value differs.
     pub vetoed: u32,
+    /// Every (statement, alternative) comparison weighed, for the estimate.
+    pub seen: Vec<Comparison>,
+    /// Per source, what it carried (`Carried`).
+    pub carried: BTreeMap<String, Carried>,
 }
 
 /// Two value sets are compatible when every necessary attribute evidenced on
 /// both sides has exactly one shared value. Missing evidence is permissive;
-/// contaminated multi-value sets match neither of their members.
+/// contaminated multi-value sets match neither of their members. Called on
+/// SUPPLIED values only (a declared field's, never a model's read): those
+/// forbid outright. A read value is a weighed source (`compare_necessary`).
 pub(super) fn necessary_compatible(
     criterion: &Criterion,
     left: &BTreeMap<String, BTreeSet<String>>,
@@ -92,12 +99,12 @@ pub(super) fn key_hits(
         .collect()
 }
 
-/// A sufficient key settles only when its record's necessary values agree.
+/// A sufficient key settles only when its record's supplied necessary values agree.
 pub(super) fn key_plan(
     criterion: &Criterion,
     statement: &Statement,
     hits: &[(usize, String, String)],
-    read: &BTreeMap<String, BTreeSet<String>>,
+    supplied: &BTreeMap<String, BTreeSet<String>>,
     records: &[Record],
     document: &str,
     vetoed: &mut u32,
@@ -106,7 +113,7 @@ pub(super) fn key_plan(
     match (held.len(), hits.first()) {
         (0, _) | (_, None) => None,
         (1, Some((record, key, value))) => {
-            if necessary_compatible(criterion, read, &records[*record].fields) {
+            if necessary_compatible(criterion, supplied, &records[*record].supplied) {
                 Some(Plan::Key {
                     record: *record,
                     key: key.clone(),
@@ -135,11 +142,11 @@ pub(super) fn key_plan(
     }
 }
 
-/// Apply the fields' plan (`fields::settle`) only where necessary values are compatible.
+/// Apply the fields' plan (`fields::settle`) only where supplied necessary values are compatible.
 pub(super) fn settle_field(
     criterion: &Criterion,
     statements: &[Statement],
-    read: &[BTreeMap<String, BTreeSet<String>>],
+    supplied: &[BTreeMap<String, BTreeSet<String>>],
     records: &[Record],
     plans: &mut [Option<Plan>],
     field: Option<Plan>,
@@ -154,7 +161,7 @@ pub(super) fn settle_field(
         if plan.is_some() {
             continue;
         }
-        if necessary_compatible(criterion, &read[i], &records[record].fields) {
+        if necessary_compatible(criterion, &supplied[i], &records[record].supplied) {
             *plan = field.clone();
         } else {
             *vetoed += 1;
@@ -169,12 +176,13 @@ pub(super) fn settle_field(
     }
 }
 
-/// Recheck every answerer join and every same-document opened group before fold.
+/// Recheck every answerer join and every same-document opened group against
+/// supplied necessary values before fold.
 pub(super) fn gate_plans(
     criterion: &Criterion,
     statements: &[Statement],
     asked: &[usize],
-    read: &[BTreeMap<String, BTreeSet<String>>],
+    supplied: &[BTreeMap<String, BTreeSet<String>>],
     records: &[Record],
     decided: Vec<Plan>,
     document: &str,
@@ -185,14 +193,13 @@ pub(super) fn gate_plans(
     for (j, mut plan) in decided.into_iter().enumerate() {
         let i = asked[j];
         let target = match &plan {
-            Plan::Key { record, .. }
-            | Plan::Join { record, .. }
-            | Plan::Selected { record, .. }
-            | Plan::Weighed { record, .. } => Some(*record),
+            Plan::Key { record, .. } | Plan::Join { record, .. } | Plan::Weighed { record, .. } => {
+                Some(*record)
+            }
             Plan::Open { .. } | Plan::Held(_) | Plan::Refuse(_) => None,
         };
         if let Some(record) = target {
-            if !necessary_compatible(criterion, &read[i], &records[record].fields) {
+            if !necessary_compatible(criterion, &supplied[i], &records[record].supplied) {
                 *vetoed += 1;
                 debug!(
                     document,
@@ -214,7 +221,7 @@ pub(super) fn gate_plans(
                 prior
                     .iter()
                     .copied()
-                    .find(|&prior| !necessary_compatible(criterion, &read[i], &read[prior]))
+                    .find(|&prior| !necessary_compatible(criterion, &supplied[i], &supplied[prior]))
             });
             if let Some(prior) = conflict {
                 *vetoed += 1;
@@ -313,10 +320,9 @@ impl Candidate<'_> {
 /// Where an earlier asked statement's plan put it; `None` when held or refused.
 fn alt_of(plan: &Plan) -> Option<Alt> {
     match plan {
-        Plan::Key { record, .. }
-        | Plan::Join { record, .. }
-        | Plan::Selected { record, .. }
-        | Plan::Weighed { record, .. } => Some(Alt::Record(*record)),
+        Plan::Key { record, .. } | Plan::Join { record, .. } | Plan::Weighed { record, .. } => {
+            Some(Alt::Record(*record))
+        }
         Plan::Open { group, .. } => Some(Alt::Opened(*group)),
         Plan::Held(_) | Plan::Refuse(_) => None,
     }
@@ -333,48 +339,63 @@ fn place(alts: &mut Vec<Alt>, a: Alt) -> usize {
     }
 }
 
+/// What the proposed answer says of one statement.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Say {
+    Names(Alt),
+    /// It proposes none of the alternatives: it disagrees with each.
+    NoneOf,
+    /// It names an earlier statement that was held or refused: silent.
+    Silent,
+}
+
+/// The inputs every statement of one document is weighed with.
+pub(super) struct Weighing<'a> {
+    pub asked: &'a [usize],
+    pub shown: &'a [(usize, &'a Proposal)],
+    pub records: &'a [Record],
+    pub key_edges: &'a [(usize, usize)],
+    /// Per asked statement: necessary values supplied or READ, and supplied alone.
+    pub read: &'a [BTreeMap<String, BTreeSet<String>>],
+    pub supplied: &'a [BTreeMap<String, BTreeSet<String>>],
+    pub proposed: &'a Proposed,
+    /// Records holding one of the document's declared field values (`fields::named`).
+    pub field_named: &'a [usize],
+    pub estimate: &'a Estimate,
+}
+
 /// Ask each asked statement, in document order, which candidate it is about,
-/// and decide it with every source (Ring 2, `weigh.rs`). A candidate whose
-/// necessary value differs from the statement's, both supplied or READ
-/// (`read.rs`), is not offered. Each source names one alternative or is
-/// silent: a field (`fields.rs`), the proposed answer, the model's most
-/// probable candidate (its "none" is silent: no precision is measured for
-/// it). Their posterior against the type's bar links, opens a record (no
-/// source raised a candidate), or holds the statement unsettled. The model is
-/// asked as before Ring 2: where its measured precision clears the bar, or
-/// unmeasured (Ring 0, where its argmax decides so it can be measured), and
-/// not where the fields alone link.
-#[allow(clippy::too_many_arguments)]
+/// and decide it with every source (`weigh.rs`) at the weights estimated on
+/// this corpus (`estimate.rs`). A candidate whose SUPPLIED necessary value
+/// differs is not offered; a READ value that differs is one more source,
+/// weighed. Each source speaks on each alternative or is silent: the declared
+/// document fields (`fields.rs`), each necessary value, the proposed answer,
+/// and the model's most probable candidate (agreeing with it, disagreeing
+/// with every other shown, all of them when it chose none). The model is
+/// asked only where the other sources do not already link. The posterior
+/// against the type's bar links, opens a record, or holds the statement.
 pub(super) async fn choose(
     criterion: &Criterion,
     doc: Document<'_>,
     statements: &[Statement],
-    asked: &[usize],
-    shown: &[(usize, &Proposal)],
-    records: &[Record],
-    key_edges: &[(usize, usize)],
-    read: &[BTreeMap<String, BTreeSet<String>>],
-    proposed: Option<&Proposed>,
-    fields: &[FieldVote],
+    w: &Weighing<'_>,
     reason: bool,
     infer: &InferenceFn,
 ) -> Chosen {
+    let (asked, records, estimate) = (w.asked, w.records, w.estimate);
     let mut plans: Vec<Plan> = Vec::with_capacity(asked.len());
     let mut choices: Vec<Option<Choice>> = Vec::with_capacity(asked.len());
     let mut opened: Vec<usize> = Vec::new();
+    let mut seen: Vec<Comparison> = Vec::new();
+    let mut carried: BTreeMap<String, Carried> = BTreeMap::new();
     let mut calls = 0;
     let mut vetoed = 0;
-    let clears = |p: f64| criterion.bar.is_some_and(|b| p >= b);
-    // The choice weighed is the one asked: after reasoning, or in one pass.
-    let (measured, model_source) = if reason {
-        (criterion.reasoned_choice, "reasoned_choice")
+    let model_source = if reason {
+        "reasoned_choice"
     } else {
-        (criterion.model_choice, "model_choice")
+        "model_choice"
     };
-    let ask_model = measured.is_none_or(clears);
-    if !ask_model {
-        debug!(document = doc.id, reason, ?measured, bar = ?criterion.bar, "atlas/resolve: the model's choice is below the bar; it is not asked");
-    }
+    let prior = estimate.prior_log_odds();
     let id_of = |a: Alt| match a {
         Alt::Record(r) => records[r].id.clone(),
         Alt::Opened(g) => statements[asked[g]].id.clone(),
@@ -382,82 +403,83 @@ pub(super) async fn choose(
     for (j, &i) in asked.iter().enumerate() {
         // A declared key shared with an earlier statement of this document
         // settles it: the same plan, no question.
-        if let Some(&(a, _)) = key_edges.iter().find(|&&(a, b)| b == j && a < j) {
+        if let Some(&(a, _)) = w.key_edges.iter().find(|&&(a, b)| b == j && a < j) {
             plans.push(plans[a].clone());
             choices.push(None);
             continue;
         }
+        let compatible = |a: Alt| match a {
+            Alt::Record(r) => necessary_compatible(criterion, &w.supplied[j], &records[r].supplied),
+            Alt::Opened(g) => necessary_compatible(criterion, &w.supplied[j], &w.supplied[g]),
+        };
         let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
-        candidates.extend(shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
+        candidates.extend(w.shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
         let offered = candidates.len();
-        candidates.retain(|c| match *c {
-            Candidate::Record(r, _) => {
-                necessary_compatible(criterion, &read[j], &records[r].fields)
-            }
-            Candidate::Opened(g) => necessary_compatible(criterion, &read[j], &read[g]),
-        });
+        candidates.retain(|c| compatible(c.alt()));
         if candidates.len() < offered {
             let n = offered - candidates.len();
             vetoed += n as u32;
-            debug!(document = doc.id, statement = %statements[i].id, vetoed = n, "atlas/resolve: candidates whose necessary value differs are not offered");
+            debug!(document = doc.id, statement = %statements[i].id, vetoed = n, "atlas/resolve: candidates whose supplied necessary value differs are not offered");
         }
         candidates.truncate(LABELS.len());
         let mut alts: Vec<Alt> = candidates.iter().map(Candidate::alt).collect();
-        // (position in `alts`, precision, source)
-        let mut votes: Vec<(usize, f64, &'static str)> = Vec::new();
-        for f in fields {
-            if necessary_compatible(criterion, &read[j], &records[f.record].fields) {
-                votes.push((
-                    place(&mut alts, Alt::Record(f.record)),
-                    f.precision,
-                    f.stamp.attr(),
-                ));
+        for &r in w.field_named {
+            if compatible(Alt::Record(r)) {
+                place(&mut alts, Alt::Record(r));
             } else {
                 vetoed += 1;
-                debug!(
-                    document = doc.id,
-                    statement = %statements[i].id,
-                    candidate = %records[f.record].id,
-                    route = "evidential_field",
-                    "atlas/resolve: necessary-field conflict vetoed the field's vote"
-                );
+                debug!(document = doc.id, statement = %statements[i].id, candidate = %records[r].id, route = "evidential_field", "atlas/resolve: a supplied necessary value differs; the field's record is not weighed");
             }
         }
-        let weighed = |votes: &[(usize, f64, &'static str)]| -> Vec<(usize, f64)> {
-            votes.iter().map(|&(at, p, _)| (at, p)).collect()
-        };
-        let fields_link = !votes.is_empty()
-            && criterion.bar.is_some_and(|bar| {
-                matches!(
-                    weigh(alts.len(), &weighed(&votes), bar).zone,
-                    Zone::Link(..)
-                )
-            });
         // The proposed answer: an offered record, or where an earlier
-        // statement of its wording went, its necessary values agreeing.
-        if let (Some(pr), Some(pa)) = (proposed, criterion.proposed_answer) {
-            let named = match pr.verdict(j) {
-                Some(ProposedVerdict::Record(r))
-                    if candidates
-                        .iter()
-                        .any(|c| matches!(c, Candidate::Record(x, _) if *x == r)) =>
-                {
-                    Some(Alt::Record(r))
-                }
-                Some(ProposedVerdict::Earlier(f))
-                    if necessary_compatible(criterion, &read[j], &read[f]) =>
-                {
-                    alt_of(&plans[f])
-                }
-                _ => None,
-            };
-            if let Some(a) = named {
-                votes.push((place(&mut alts, a), pa, "proposed_answer"));
+        // statement of its wording went.
+        let say = match w.proposed.verdict(j) {
+            Some(ProposedVerdict::Record(r)) if alts.contains(&Alt::Record(r)) => {
+                Say::Names(Alt::Record(r))
             }
+            Some(ProposedVerdict::Record(_)) => Say::NoneOf,
+            Some(ProposedVerdict::Earlier(f)) => match alt_of(&plans[f]) {
+                Some(a) if compatible(a) => Say::Names(a),
+                _ => Say::Silent,
+            },
+            None => Say::NoneOf,
+        };
+        if let Say::Names(a) = say {
+            place(&mut alts, a);
         }
-        let mut argmax: Option<(Alt, f64)> = None;
+        let mut comps: Vec<Comparison> = alts
+            .iter()
+            .map(|&a| {
+                let mut c = Comparison::new();
+                match a {
+                    Alt::Record(r) => {
+                        fields::compare(doc, &records[r], &mut c);
+                        compare_necessary(criterion, &w.read[j], &records[r].fields, &mut c);
+                    }
+                    // One document: its fields say nothing about two of its statements.
+                    Alt::Opened(g) => compare_necessary(criterion, &w.read[j], &w.read[g], &mut c),
+                }
+                match say {
+                    Say::Names(n) => {
+                        c.insert("proposed_answer".into(), n == a);
+                    }
+                    Say::NoneOf => {
+                        c.insert("proposed_answer".into(), false);
+                    }
+                    Say::Silent => {}
+                }
+                c
+            })
+            .collect();
+        let evidence = |comps: &[Comparison]| -> Vec<f64> {
+            comps.iter().map(|c| estimate.evidence(c)).collect()
+        };
+        let raised = |comps: &[Comparison]| -> Vec<bool> {
+            comps.iter().map(|c| estimate.supports(c)).collect()
+        };
+        let before = weigh(&evidence(&comps), &raised(&comps), prior, criterion.bar);
         let mut choice: Option<Choice> = None;
-        if ask_model && !candidates.is_empty() && !fields_link {
+        if !matches!(before.zone, Zone::Link(..)) && !candidates.is_empty() {
             let Some(same_when) = criterion.same_when.as_deref() else {
                 plans.push(Plan::Refuse(Refusal::NoCriterion));
                 choices.push(None);
@@ -521,7 +543,7 @@ pub(super) async fn choose(
                 reasoning,
             });
             // The most probable label; a tie goes to the later one, so to none.
-            let (best, probability) = candidates
+            let (best, _) = candidates
                 .iter()
                 .zip(LABELS)
                 .map(|(c, l)| (Some(c.alt()), p(l)))
@@ -530,62 +552,53 @@ pub(super) async fn choose(
                     (None, f64::NEG_INFINITY),
                     |a, b| if b.1 >= a.1 { b } else { a },
                 );
-            argmax = best.map(|a| (a, probability));
+            // The model spoke on the candidates it was shown, the first
+            // `candidates.len()` alternatives; the rest it never saw.
+            for (k, c) in comps.iter_mut().enumerate().take(candidates.len()) {
+                c.insert(model_source.into(), best == Some(alts[k]));
+            }
         }
-        let open = |opened: &mut Vec<usize>| {
-            opened.push(j);
-            Plan::Open {
-                group: j,
-                cite: None,
-            }
-        };
-        let decided = match (measured, criterion.bar) {
-            // Unmeasured, the argmax decides, so it can be measured (Ring 0).
-            (None, _) if !fields_link => match argmax {
-                Some((Alt::Record(record), probability)) => Plan::Selected {
+        let weighed = weigh(&evidence(&comps), &raised(&comps), prior, criterion.bar);
+        tally(
+            &mut carried,
+            &comps,
+            estimate,
+            prior,
+            criterion.bar,
+            weighed.zone,
+        );
+        debug!(document = doc.id, statement = %statements[i].id, alternatives = ?alts, comparisons = ?comps, zone = ?weighed.zone, "atlas/resolve: the sources weighed");
+        let decided = match weighed.zone {
+            Zone::Link(at, posterior) => match alts[at] {
+                Alt::Record(record) => Plan::Weighed {
                     record,
-                    probability,
+                    posterior,
+                    votes: fields::votes_for(&comps[at], &records[record].id, estimate),
                 },
-                Some((Alt::Opened(group), _)) => Plan::Open { group, cite: None },
-                None => open(&mut opened),
+                Alt::Opened(group) => Plan::Open { group, cite: None },
             },
-            (_, None) => {
-                debug!(document = doc.id, statement = %statements[i].id, "atlas/resolve: no bar is declared; no source links");
-                open(&mut opened)
-            }
-            (_, Some(bar)) => {
-                if let (Some(mc), Some((a, _))) = (measured, argmax) {
-                    votes.push((place(&mut alts, a), mc, model_source));
-                }
-                let w = weigh(alts.len(), &weighed(&votes), bar);
-                let vote = |&(at, precision, source): &(usize, f64, &'static str)| Vote {
-                    source,
-                    record: id_of(alts[at]),
-                    precision,
-                };
-                debug!(document = doc.id, statement = %statements[i].id, alternatives = ?alts, ?votes, zone = ?w.zone, "atlas/resolve: the sources weighed");
-                match w.zone {
-                    Zone::Link(at, posterior) => match alts[at] {
-                        Alt::Record(record) => Plan::Weighed {
-                            record,
-                            posterior,
-                            votes: votes.iter().filter(|v| v.0 == at).map(vote).collect(),
-                        },
-                        Alt::Opened(group) => Plan::Open { group, cite: None },
-                    },
-                    Zone::NoLink => open(&mut opened),
-                    Zone::Unsettled => Plan::Held(Held {
-                        alternatives: alts
-                            .iter()
-                            .map(|&a| id_of(a))
-                            .zip(w.posterior.iter().copied())
-                            .collect(),
-                        none: w.none,
-                        sources: votes.iter().map(vote).collect(),
-                    }),
+            Zone::NoLink => {
+                opened.push(j);
+                Plan::Open {
+                    group: j,
+                    cite: None,
                 }
             }
+            Zone::Unsettled => Plan::Held(Held {
+                alternatives: alts
+                    .iter()
+                    .map(|&a| id_of(a))
+                    .zip(weighed.posterior.iter().copied())
+                    .collect(),
+                none: weighed.none,
+                sources: alts
+                    .iter()
+                    .zip(&comps)
+                    .flat_map(|(&a, c)| fields::votes_for(c, &id_of(a), estimate))
+                    .collect(),
+            }),
         };
+        seen.extend(comps);
         plans.push(decided);
         choices.push(choice);
     }
@@ -594,6 +607,8 @@ pub(super) async fn choose(
         choices,
         calls,
         vetoed,
+        seen,
+        carried,
     }
 }
 

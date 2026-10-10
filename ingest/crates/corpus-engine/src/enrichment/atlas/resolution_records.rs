@@ -126,6 +126,9 @@ pub struct RecordsReport {
     pub retired: usize,
     /// References to them dropped, by what held each.
     pub dropped: BTreeMap<&'static str, usize>,
+    /// Each source's weight as estimated on this corpus and what it carried,
+    /// one line each (`Resolver::sources_summary`, D2).
+    pub sources: Vec<String>,
 }
 
 impl RecordsReport {
@@ -152,7 +155,11 @@ impl RecordsReport {
             fold(&self.outcomes),
             self.retired,
             fold(&self.dropped),
-        )
+        ) + &self
+            .sources
+            .iter()
+            .map(|l| format!("\n    source {l}"))
+            .collect::<String>()
     }
 }
 
@@ -535,6 +542,11 @@ async fn resolve_type(
         },
     )
     .await;
+
+    report.sources = resolver.sources_summary();
+    for line in &report.sources {
+        info!(r#type = %t.name, source = %line, "atlas/resolve: source weight estimated on this corpus");
+    }
 
     // Records become the type's atoms, in the type's own kind.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();

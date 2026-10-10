@@ -4,9 +4,11 @@
 //! under its declared type's identity criterion and against the candidates a
 //! proposer offered. GROUP and JOIN are one step; novelty is the "none" answer.
 //!
-//! Identity (§Invariants 2): a sufficient key links, a differing necessary
-//! value forbids, otherwise every evidential source is weighed (`weigh.rs`):
-//! link at the bar, open where nothing raised a candidate, else held.
+//! Identity (§Invariants 2): a sufficient key links, a differing SUPPLIED
+//! necessary value forbids, otherwise every source is weighed (`weigh.rs`) at
+//! what it is estimated to be worth on this corpus (`estimate.rs`, refitted
+//! after every document): link at the bar, open where nothing raised a
+//! candidate, else held.
 //! Candidates only bound what the model is shown. An unverifiable answer
 //! refuses its statement, counted and traced, never defaulted (§4).
 
@@ -40,21 +42,9 @@ pub struct Criterion {
     pub same_when: Option<String>,
     /// The keys that suffice, inherited ones included.
     pub keys: Vec<String>,
-    /// The document fields whose agreement is evidence, each with its
-    /// measured precision (`identity_evidential`).
-    pub evidential: Vec<(DocumentStamp, f64)>,
-    /// The precision a link decided by evidence alone must have.
+    /// The posterior a link decided by evidence must reach. `None`: the most
+    /// probable of the alternatives and none decides (`weigh.rs`).
     pub bar: Option<f64>,
-    /// The measured precision of the forced choice's most probable candidate
-    /// (`model_choice`). `None`: unmeasured, and the argmax decides (Ring 0),
-    /// so it can be measured.
-    pub model_choice: Option<f64>,
-    /// The measured precision of the forced choice read after the model's own
-    /// reasoning (`reasoned_choice`). `None`: unmeasured, its argmax decides.
-    pub reasoned_choice: Option<f64>,
-    /// The measured precision of the proposed answer (`proposed_answer`).
-    /// `None`: it decides nothing in a forced-choice run.
-    pub proposed_answer: Option<f64>,
     /// The attributes whose supplied or read values must agree.
     pub necessary: Vec<ClosedAttr>,
 }
@@ -93,25 +83,10 @@ impl ClosedAttr {
 }
 
 impl Criterion {
-    /// `keys` is the type's effective identity, its parents' included. An
-    /// evidential field that is no document stamp is refused, never skipped.
+    /// `keys` is the type's effective identity, its parents' included. What
+    /// each source is worth is estimated on the corpus, never declared: the
+    /// retired `identity_evidential` key is dropped by the loader, warned.
     pub fn of(decl: &OntologyTypeDecl, keys: Vec<String>) -> Result<Self, String> {
-        let (mut evidential, mut model_choice, mut proposed_answer, mut reasoned_choice) =
-            (Vec::new(), None, None, None);
-        for e in &decl.identity_evidential {
-            match (DocumentStamp::from_attr(&e.evidence), e.evidence.as_str()) {
-                (Some(stamp), _) => evidential.push((stamp, e.precision())),
-                (None, "model_choice") => model_choice = Some(e.precision()),
-                (None, "proposed_answer") => proposed_answer = Some(e.precision()),
-                (None, "reasoned_choice") => reasoned_choice = Some(e.precision()),
-                (None, other) => {
-                    return Err(format!(
-                        "type `{}`: evidence `{other}` is no source",
-                        decl.name
-                    ))
-                }
-            }
-        }
         let necessary = decl
             .identity_necessary
             .iter()
@@ -134,11 +109,7 @@ impl Criterion {
             description: decl.description.clone(),
             same_when: decl.identity_criterion.clone(),
             keys,
-            evidential,
             bar: decl.identity_bar,
-            model_choice,
-            reasoned_choice,
-            proposed_answer,
             necessary,
         })
     }
@@ -188,6 +159,10 @@ pub struct Record {
     pub keys: BTreeMap<String, BTreeSet<String>>,
     /// The document stamps and necessary values supplied or READ for its statements.
     pub fields: BTreeMap<String, BTreeSet<String>>,
+    /// The necessary values its statements carried SUPPLIED (never READ):
+    /// one that differs forbids a link outright.
+    #[serde(skip)]
+    pub supplied: BTreeMap<String, BTreeSet<String>>,
     /// One entry per folded statement; later calls are shown these.
     pub evidence: Vec<Evidence>,
 }
@@ -216,15 +191,10 @@ pub enum Decision {
     /// The model put the statement in a particular it said is the record,
     /// and the statement's cited passage was found.
     Cited { record: String, cite: String },
-    /// A forced choice named the record as the statement's most probable
-    /// candidate (`Answerer::Select`, Ring 0: the argmax decides, so what the
-    /// choice carries can be measured). Its whole distribution is the
-    /// outcome's `choice`.
-    Selected { record: String, probability: f64 },
-    /// Every source that named a candidate was weighed (`weigh.rs`: fields,
-    /// the proposed answer, the model's choice), and the record's posterior
-    /// reached the type's bar ahead of every other. `sources` are those that
-    /// named it.
+    /// Every source that spoke was weighed at its estimated weight
+    /// (`weigh.rs`: fields, necessary values, the proposed answer, the model's
+    /// choice), and the record's posterior reached the type's bar ahead of
+    /// every other. `sources` are those that agreed with it.
     Weighed {
         record: String,
         posterior: f64,
@@ -286,7 +256,6 @@ impl Outcome {
         match self {
             Outcome::Decided(Decision::Key { .. }) => "key",
             Outcome::Decided(Decision::Cited { .. }) => "cited",
-            Outcome::Decided(Decision::Selected { .. }) => "selected",
             Outcome::Decided(Decision::Weighed { .. }) => "weighed",
             Outcome::Decided(Decision::Opened { .. }) => "opened",
             Outcome::Held(_) => "held",
@@ -308,7 +277,6 @@ impl Outcome {
             Outcome::Decided(
                 Decision::Key { record, .. }
                 | Decision::Cited { record, .. }
-                | Decision::Selected { record, .. }
                 | Decision::Weighed { record, .. }
                 | Decision::Opened { record, .. },
             ) => Some(record),
@@ -430,10 +398,6 @@ enum Plan {
         record: usize,
         cite: String,
     },
-    Selected {
-        record: usize,
-        probability: f64,
-    },
     Weighed {
         record: usize,
         posterior: f64,
@@ -456,8 +420,14 @@ pub struct Resolver {
     /// Record id -> position in `records`.
     position: HashMap<String, usize>,
     by_key: HashMap<(String, String), usize>,
-    /// (stamp, value) -> the records holding it, for evidential fields.
+    /// (stamp, value) -> the records holding it, for the declared fields.
     by_field: HashMap<(DocumentStamp, String), BTreeSet<usize>>,
+    /// Every comparison weighed so far, and the weights fitted to them
+    /// (`estimate.rs`): refitted after each document, so a document is
+    /// weighed at what the documents before it, in clock order, estimate.
+    pairs: Pairs,
+    estimate: Estimate,
+    carried: BTreeMap<String, Carried>,
 }
 
 impl Resolver {
@@ -493,8 +463,10 @@ impl Resolver {
             .map(|s| declared_keys(criterion, s))
             .collect();
         let key_hits = select::key_hits(&self.by_key, &folded_keys);
-        let field_votes = fields::votes(criterion, doc, &self.by_field);
-        let mut read_of = read::provided(criterion, doc, statements);
+        let field_named = fields::named(doc, &self.by_field);
+        let supplied = read::provided(criterion, doc, statements);
+        let mut read_of = supplied.clone();
+        let mut seen: Vec<Comparison> = Vec::new();
         let (mut calls, mut unread, mut vetoed) = (0, 0, 0);
 
         // READ once before any route can settle: sufficient keys and evidential
@@ -536,7 +508,7 @@ impl Resolver {
                 criterion,
                 s,
                 &key_hits[i],
-                &read_of[i],
+                &supplied[i],
                 &self.records,
                 doc.id,
                 &mut vetoed,
@@ -548,12 +520,18 @@ impl Resolver {
         // necessary values READ supplied. A forced choice weighs the fields
         // with every other source, statement by statement (`select::choose`).
         if read_infer.is_none() {
-            let ids = |r: usize| self.records[r].id.clone();
-            let field = fields::settle(criterion, doc, &field_votes, &ids);
+            let field = fields::settle(
+                criterion,
+                doc,
+                &self.records,
+                &self.by_field,
+                &self.estimate,
+                &mut seen,
+            );
             select::settle_field(
                 criterion,
                 statements,
-                &read_of,
+                &supplied,
                 &self.records,
                 &mut plan,
                 field,
@@ -583,24 +561,35 @@ impl Resolver {
         {
             let asked_read: Vec<BTreeMap<String, BTreeSet<String>>> =
                 asked.iter().map(|&i| read_of[i].clone()).collect();
-            let proposed = criterion
-                .proposed_answer
-                .map(|_| Proposed::of(self.rule, doc, statements, &asked, &shown, &self.records));
+            let asked_supplied: Vec<BTreeMap<String, BTreeSet<String>>> =
+                asked.iter().map(|&i| supplied[i].clone()).collect();
+            let proposed = Proposed::of(self.rule, doc, statements, &asked, &shown, &self.records);
             let chosen = select::choose(
                 criterion,
                 doc,
                 statements,
-                &asked,
-                &shown,
-                &self.records,
-                &key_edges,
-                &asked_read,
-                proposed.as_ref(),
-                &field_votes,
+                &select::Weighing {
+                    asked: &asked,
+                    shown: &shown,
+                    records: &self.records,
+                    key_edges: &key_edges,
+                    read: &asked_read,
+                    supplied: &asked_supplied,
+                    proposed: &proposed,
+                    field_named: &field_named,
+                    estimate: &self.estimate,
+                },
                 matches!(answerer, Answerer::Reason(_)),
                 infer,
             )
             .await;
+            seen.extend(chosen.seen);
+            for (source, c) in chosen.carried {
+                let t = self.carried.entry(source).or_default();
+                t.links += c.links;
+                t.pivotal_links += c.pivotal_links;
+                t.vetoes += c.vetoes;
+            }
             calls += chosen.calls;
             vetoed += chosen.vetoed;
             for (&i, c) in asked.iter().zip(chosen.choices) {
@@ -660,7 +649,7 @@ impl Resolver {
             criterion,
             statements,
             &asked,
-            &read_of,
+            &supplied,
             &self.records,
             decided,
             doc.id,
@@ -715,6 +704,7 @@ impl Resolver {
                         surface[i],
                         &folded_keys[i],
                         &read_of[i],
+                        &supplied[i],
                         None,
                     );
                     Outcome::Decided(Decision::Key {
@@ -731,29 +721,12 @@ impl Resolver {
                         surface[i],
                         &folded_keys[i],
                         &read_of[i],
+                        &supplied[i],
                         Some(&cite),
                     );
                     Outcome::Decided(Decision::Cited {
                         record: self.records[record].id.clone(),
                         cite,
-                    })
-                }
-                Plan::Selected {
-                    record,
-                    probability,
-                } => {
-                    self.fold(
-                        record,
-                        doc,
-                        &statements[i],
-                        surface[i],
-                        &folded_keys[i],
-                        &read_of[i],
-                        None,
-                    );
-                    Outcome::Decided(Decision::Selected {
-                        record: self.records[record].id.clone(),
-                        probability,
                     })
                 }
                 Plan::Weighed {
@@ -768,6 +741,7 @@ impl Resolver {
                         surface[i],
                         &folded_keys[i],
                         &read_of[i],
+                        &supplied[i],
                         None,
                     );
                     Outcome::Decided(Decision::Weighed {
@@ -794,6 +768,7 @@ impl Resolver {
                         surface[i],
                         &folded_keys[i],
                         &read_of[i],
+                        &supplied[i],
                         cite.as_deref(),
                     );
                     Outcome::Decided(Decision::Opened {
@@ -812,10 +787,16 @@ impl Resolver {
             );
             outcomes[i] = Some(StatementOutcome {
                 statement: statements[i].id.clone(),
-                by: outcome.by(criterion),
+                by: outcome.by(),
                 outcome,
                 choice: choices[i].take(),
             });
+        }
+        for c in &seen {
+            self.pairs.add(c);
+        }
+        if !seen.is_empty() {
+            self.estimate = Estimate::fit(&self.pairs);
         }
         let resolution = DocumentResolution {
             document: doc.id.to_string(),
@@ -857,6 +838,7 @@ impl Resolver {
             statements: Vec::new(),
             keys: BTreeMap::new(),
             fields: BTreeMap::new(),
+            supplied: BTreeMap::new(),
             evidence: Vec::new(),
         });
         self.records.len() - 1
@@ -870,9 +852,17 @@ impl Resolver {
         surface: &str,
         keys: &[(String, String)],
         read: &BTreeMap<String, BTreeSet<String>>,
+        supplied: &BTreeMap<String, BTreeSet<String>>,
         cite: Option<&str>,
     ) {
         let record = &mut self.records[r];
+        for (attr, values) in supplied {
+            record
+                .supplied
+                .entry(attr.clone())
+                .or_default()
+                .extend(values.iter().cloned());
+        }
         for (attr, values) in read {
             record
                 .fields
@@ -935,9 +925,13 @@ fn key_edges(asked: &[usize], keys: &[Vec<(String, String)>]) -> Vec<(usize, usi
 
 mod answer;
 mod by;
+use estimate::{Comparison, Pairs};
+pub use estimate::{Estimate, SourceWeight};
+pub use weigh::Carried;
 mod passage;
 use passage::{context, marked_context};
 mod drive;
+mod estimate;
 mod fields;
 pub mod propose;
 mod read;
@@ -948,7 +942,7 @@ pub(crate) use read::choice_question;
 pub(crate) use select::{decision_call, LABELS, NONE};
 
 pub use answer::{cite_found, ProposalRule};
-use answer::{judge, prompt, Proposed, ProposedVerdict};
+use answer::{judge, prompt, Proposed};
 pub use drive::{clock, resolve_in_clock_order};
 pub use weigh::Vote;
 

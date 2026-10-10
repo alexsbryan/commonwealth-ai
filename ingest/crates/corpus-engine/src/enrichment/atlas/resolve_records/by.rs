@@ -3,14 +3,15 @@
 //! apart from `resolve_records.rs`, which sits in arch-gate's approach band.
 
 use super::super::precision::{Precision, SourcePrecision};
-use super::{Criterion, Decision, Held, Outcome};
+use super::{Decision, Held, Outcome};
 
 impl Outcome {
     /// The sources of a link and their precisions (C3). A key the declaration
-    /// says suffices links at 1.0 by construction; the model's argmax decides
-    /// unmeasured; a weighed link carries each source that named it at the
-    /// precision the recipe declares. Opening or refusing links nothing.
-    pub fn by(&self, criterion: &Criterion) -> Vec<SourcePrecision> {
+    /// says suffices links at 1.0 by construction; a partition answer's link is
+    /// unmeasured; a weighed link carries each source that agreed with it at
+    /// its precision as estimated on this corpus. Opening or refusing links
+    /// nothing.
+    pub fn by(&self) -> Vec<SourcePrecision> {
         match self {
             Outcome::Decided(Decision::Key { key, .. }) => vec![SourcePrecision::new(
                 format!("identity_key:{key}"),
@@ -20,14 +21,10 @@ impl Outcome {
                 "model_partition",
                 Precision::Unmeasured,
             )],
-            Outcome::Decided(Decision::Selected { .. }) => vec![SourcePrecision::new(
-                "model_choice",
-                Precision::declared_or_unmeasured(criterion.model_choice),
-            )],
             Outcome::Decided(Decision::Weighed { sources, .. })
             | Outcome::Held(Held { sources, .. }) => sources
                 .iter()
-                .map(|v| SourcePrecision::new(v.source, Precision::Declared(v.precision)))
+                .map(|v| SourcePrecision::new(v.source.clone(), Precision::Estimated(v.precision)))
                 .collect(),
             Outcome::Decided(Decision::Opened { .. }) | Outcome::Refused(_) => Vec::new(),
         }

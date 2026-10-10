@@ -805,17 +805,6 @@ Allowed values:
 | `sets` | `Vec<super::derived::SetDecl>` | no | type default |  |
 | `folds` | `Vec<super::derived::FoldDecl>` | no | type default |  |
 
-## `EvidentialFieldDecl`
-
-A source of identity evidence and what its links were measured to be worth on the live rule: `{ evidence = "document_thread", right = 18, of = 20, measured_on = "…" }`. The source is a `change.document` stamp, `model_choice` (the forced choice's most probable candidate), `reasoned_choice` (the same, read after the model's own reasoning) or `proposed_answer` (threads, wording and similarity alone); `right` of `of` links were right where `measured_on` says.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `evidence` | `String` | **yes** | — |  |
-| `right` | `u32` | **yes** | — |  |
-| `of` | `u32` | **yes** | — |  |
-| `measured_on` | `String` | **yes** | — |  |
-
 ## `OntologyTypeDecl`
 
 One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are required; every other facet is optional and most apply to one kind only (`from`/`to` to relations, `participants` to events, `of` to states, `force`/`deontic`/`subject`/`grades`/`anchors`/`scope` to claims). `recipe validate` checks that every reference resolves to a declared type.
@@ -837,8 +826,7 @@ One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are requi
 | `identity` | `Vec<String>` | no | type default | External identifiers that make two mentions one thing (`rxnorm_id`). An external key merges strictly. |
 | `identity_fallback` | `Vec<String>` | no | type default | Descriptive keys used when no external identifier is present (`["name", "employer"]`). A descriptive key is judged, not trusted. |
 | `identity_criterion` | `Option<String>` | no | type default | When two mentions are one particular, in the author's words. RESOLVE gives it to the model beside the candidates whenever no `identity` key settles the question (ONTOLOGY_METHOD.md §The core). |
-| `identity_evidential` | `Vec<EvidentialFieldDecl>` | no | type default | Fields whose agreement is evidence that two mentions are one particular, each with the precision measured for it (ONTOLOGY_METHOD.md §Identity). RESOLVE links on one only where that precision clears `identity_bar`. |
-| `identity_bar` | `Option<f64>` | no | type default | The precision a link decided by evidence alone must have. |
+| `identity_bar` | `Option<f64>` | no | type default | The posterior a link decided by evidence must reach; RESOLVE weighs every source at what it is estimated to be worth on the corpus (ONTOLOGY_METHOD.md §Identity). Absent: the most probable decides. |
 | `identity_necessary` | `Vec<String>` | no | type default | Attributes whose values must agree: two mentions whose values differ, both read, are different particulars. Each a declared attribute with `values`, READ per statement as one forced choice over them. |
 | `force` | `Option<Force>` | no | type default | Claims only, REQUIRED there: what a source does with the claim. |
 | `deontic` | `Vec<Deontic>` | no | type default | Claims with `force = "directive"` only: the deontic modes the type can carry. `forbid X` is stored as `require not-X`. |

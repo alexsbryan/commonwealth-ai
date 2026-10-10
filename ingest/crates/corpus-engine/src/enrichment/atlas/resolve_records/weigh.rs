@@ -1,46 +1,49 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The decider (ONTOLOGY_METHOD.md §Identity, Ring 2 of
-//! `research/ontology-apps/resolve-prereg.md`): every source that names an
-//! alternative for a statement adds its evidence, and the type's declared bar
-//! reads three zones off the posterior: link, no link, unsettled.
+//! `research/ontology-apps/resolve-prereg.md`): every source that spoke on a
+//! statement's alternatives adds its evidence, weighed at what it is
+//! estimated to be worth on this corpus (`estimate.rs`), and the type's
+//! declared bar reads three zones off the posterior: link, no link,
+//! unsettled.
 //!
-//! Independence, stated because the posterior rests on it: the sources err
-//! independently given the truth, and a wrong source names any of the other
-//! K-1 alternatives alike, under a uniform prior over the K alternatives (the
-//! candidates and none). A source of precision p naming alternative a then
-//! multiplies a's odds against each other alternative by p(K-1)/(1-p), so a
-//! lone source's posterior is its own precision and every single-source link
-//! made before Ring 2 is kept. The model's choice and the similarity behind
-//! the proposed answer both read the text, so they are not independent in
-//! fact; what that costs is measured, not assumed away.
+//! Each alternative's evidence is the sum of the agreement weights of the
+//! sources that spoke on it (Fellegi-Sunter); with the pair prior it is the
+//! alternative's log odds of being the particular against none. At most one
+//! alternative is the particular, so the posterior over the alternatives and
+//! none is their odds normalised, none at even odds.
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 use tracing::debug;
 
-/// One source's say for a statement: the alternative it named, and the
-/// precision it is weighed at.
+use super::estimate::{Comparison, Estimate};
+
+/// One source's say for a statement: the alternative it agreed with, and
+/// that source's precision as estimated on this corpus.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Vote {
-    /// The declared source: a document stamp's attribute, `proposed_answer`,
-    /// `model_choice` or `reasoned_choice`.
-    pub source: &'static str,
+    /// The source: a document stamp's attribute, `proposed_answer`,
+    /// `model_choice`, `reasoned_choice` or `necessary:<attribute>`.
+    pub source: String,
     /// The record it named; inside one document, the statement that opened it.
     pub record: String,
+    /// P(one particular | it agrees), estimated on this corpus.
     pub precision: f64,
 }
 
 /// Where the posterior falls against the bar.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) enum Zone {
-    /// The candidate at this position reached the bar, strictly ahead of every other.
+    /// The alternative at this position reached the bar, strictly ahead of every other.
     Link(usize, f64),
-    /// No source raised any candidate's odds against none: novelty.
+    /// No source raised any alternative's odds, or none itself reached the bar: novelty.
     NoLink,
-    /// Some candidate rose, none reached the bar alone at the top.
+    /// Some alternative rose, and neither it nor none reached the bar.
     Unsettled,
 }
 
-/// The posterior over `candidates` alternatives and none, and its zone.
+/// The posterior over the alternatives and none, and its zone.
 #[derive(Debug, Clone)]
 pub(super) struct Weighed {
     pub posterior: Vec<f64>,
@@ -48,51 +51,52 @@ pub(super) struct Weighed {
     pub zone: Zone,
 }
 
-/// Precisions are read as open-interval probabilities; a declared 0 or 1
-/// would make one source overrule every other without bound.
-const EDGE: f64 = 1e-9;
-
-/// Weigh `votes`, each (candidate position, precision), over `candidates`
-/// alternatives plus none, against `bar`.
-pub(super) fn weigh(candidates: usize, votes: &[(usize, f64)], bar: f64) -> Weighed {
-    let k = candidates as f64 + 1.0;
-    let mut score = vec![0.0_f64; candidates];
-    for &(at, p) in votes {
-        let p = p.clamp(EDGE, 1.0 - EDGE);
-        score[at] += (p * (k - 1.0) / (1.0 - p)).ln();
-    }
+/// Weigh each alternative's summed `evidence` (log-likelihood ratios) at
+/// `prior_log_odds`, against `bar`. `raised[k]`: some source agreed with
+/// alternative k at a weight above 0; only such an alternative can link,
+/// since one that rose only because every other fell has nothing for it.
+/// With no bar declared the most probable of the alternatives and none
+/// decides (the Bayes choice): there is no unsettled zone.
+pub(super) fn weigh(
+    evidence: &[f64],
+    raised: &[bool],
+    prior_log_odds: f64,
+    bar: Option<f64>,
+) -> Weighed {
+    let score: Vec<f64> = evidence.iter().map(|e| e + prior_log_odds).collect();
     // Log-sum-exp with none at 0.
     let top = score.iter().copied().fold(0.0_f64, f64::max);
     let total = (-top).exp() + score.iter().map(|s| (s - top).exp()).sum::<f64>();
     let posterior: Vec<f64> = score.iter().map(|s| (s - top).exp() / total).collect();
     let none = (-top).exp() / total;
-    // Raised: some source moved a candidate's odds against none up. A source
-    // below 1/K lowers what it names, which lifts the others only by
-    // renormalising, and that is no evidence for them.
-    let raised = score.iter().any(|&s| s > 1e-12);
+    let any_raised = raised.iter().any(|&r| r);
     let best = posterior
         .iter()
         .enumerate()
         .max_by(|a, b| a.1.total_cmp(b.1).then(b.0.cmp(&a.0)));
-    let zone = match best {
-        _ if !raised => Zone::NoLink,
-        Some((at, &p))
-            if p >= bar
-                && posterior
-                    .iter()
-                    .enumerate()
-                    .all(|(i, &q)| i == at || q + 1e-12 < p) =>
-        {
-            Zone::Link(at, p)
-        }
-        _ => Zone::Unsettled,
+    let strict = |at: usize, p: f64| {
+        raised[at]
+            && p > none + 1e-12
+            && posterior
+                .iter()
+                .enumerate()
+                .all(|(i, &q)| i == at || q + 1e-12 < p)
+    };
+    let zone = match (best, bar) {
+        _ if !any_raised => Zone::NoLink,
+        (Some((at, &p)), Some(bar)) if p >= bar && strict(at, p) => Zone::Link(at, p),
+        (_, Some(bar)) if none >= bar => Zone::NoLink,
+        (_, Some(_)) => Zone::Unsettled,
+        (Some((at, &p)), None) if strict(at, p) => Zone::Link(at, p),
+        (_, None) => Zone::NoLink,
     };
     debug!(
-        candidates,
-        votes = votes.len(),
+        alternatives = evidence.len(),
+        ?evidence,
+        prior_log_odds,
         ?posterior,
         none,
-        bar,
+        ?bar,
         ?zone,
         "atlas/resolve weigh: posterior over the alternatives"
     );
@@ -100,6 +104,65 @@ pub(super) fn weigh(candidates: usize, votes: &[(usize, f64)], bar: f64) -> Weig
         posterior,
         none,
         zone,
+    }
+}
+
+/// What one source carried over a run: links it agreed with, and decisions
+/// it turned: a link that would not have been made without it, or one that
+/// would have been made but for it (its disagreement, a veto weighed).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+pub struct Carried {
+    pub links: u32,
+    pub pivotal_links: u32,
+    pub vetoes: u32,
+}
+
+/// Count, per source, the links it agreed with and the decisions it turned:
+/// weighed again without it, a link it made would not be, or a link it
+/// prevented would be (a weighed veto).
+pub(super) fn tally(
+    carried: &mut BTreeMap<String, Carried>,
+    comps: &[Comparison],
+    estimate: &Estimate,
+    prior: f64,
+    bar: Option<f64>,
+    zone: Zone,
+) {
+    let sources: BTreeSet<&String> = comps.iter().flat_map(|c| c.keys()).collect();
+    for source in sources {
+        let without: Vec<Comparison> = comps
+            .iter()
+            .map(|c| {
+                let mut c = c.clone();
+                c.remove(source.as_str());
+                c
+            })
+            .collect();
+        let other = weigh(
+            &without
+                .iter()
+                .map(|c| estimate.evidence(c))
+                .collect::<Vec<_>>(),
+            &without
+                .iter()
+                .map(|c| estimate.supports(c))
+                .collect::<Vec<_>>(),
+            prior,
+            bar,
+        )
+        .zone;
+        let t = carried.entry(source.clone()).or_default();
+        match (zone, other) {
+            (Zone::Link(at, _), Zone::Link(was, _)) if at == was => {}
+            (Zone::Link(..), _) => t.pivotal_links += 1,
+            (_, Zone::Link(..)) => t.vetoes += 1,
+            _ => {}
+        }
+        if let Zone::Link(at, _) = zone {
+            if comps[at].get(source.as_str()) == Some(&true) {
+                t.links += 1;
+            }
+        }
     }
 }
 

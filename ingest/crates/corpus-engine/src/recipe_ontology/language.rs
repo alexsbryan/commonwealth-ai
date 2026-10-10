@@ -194,6 +194,34 @@ pub const V1_RETIRED_KEYS: &[(&str, &str)] = &[
     ),
 ];
 
+/// Keys a version-1 type once read and no longer does, with what replaced
+/// each: loaded, ignored and named like `V1_RETIRED_KEYS`.
+pub const V1_RETIRED_TYPE_KEYS: &[(&str, &str)] = &[(
+    "identity_evidential",
+    "what each identity source is worth is estimated on the corpus being read, with no labels (campaign ontology-layer E2, ONTOLOGY_METHOD §Identity); every declared document field, necessary value, the proposed answer and the model's choice is weighed",
+)];
+
+/// The retired type keys `body`'s `types` carry: (type name, key, instead).
+pub fn retired_type_keys(body: &toml::Table) -> Vec<(String, &'static str, &'static str)> {
+    let Some(toml::Value::Array(types)) = body.get("types") else {
+        return Vec::new();
+    };
+    types
+        .iter()
+        .filter_map(toml::Value::as_table)
+        .flat_map(|t| {
+            let name = t
+                .get("name")
+                .and_then(toml::Value::as_str)
+                .unwrap_or("<unnamed>");
+            V1_RETIRED_TYPE_KEYS
+                .iter()
+                .filter(|(key, _)| t.contains_key(*key))
+                .map(move |&(key, instead)| (name.to_string(), key, instead))
+        })
+        .collect()
+}
+
 /// The retired keys `body` carries, with what replaced each.
 pub fn retired_keys(body: &toml::Table) -> Vec<(&'static str, &'static str)> {
     V1_RETIRED_KEYS
@@ -217,6 +245,21 @@ impl OntologyLanguage for V1 {
         for (key, instead) in retired_keys(&body) {
             tracing::warn!(key, instead, "ontology: a retired key is ignored");
             body.remove(key);
+        }
+        for (r#type, key, instead) in retired_type_keys(&body) {
+            tracing::warn!(
+                r#type,
+                key,
+                instead,
+                "ontology: a retired type key is ignored"
+            );
+        }
+        if let Some(toml::Value::Array(types)) = body.get_mut("types") {
+            for t in types.iter_mut().filter_map(toml::Value::as_table_mut) {
+                for (key, _) in V1_RETIRED_TYPE_KEYS {
+                    t.remove(*key);
+                }
+            }
         }
         let v1: OntologyV1 = body.try_into().map_err(translate_parse_error)?;
         // Reading is chosen by the declaration (`OntologyPolicies::reads_documents`):

@@ -21,8 +21,8 @@ use std::time::Instant;
 use corpus_engine::enrichment::atlas::read_stamp;
 use corpus_engine::enrichment::atlas::resolve_records::propose::{Proposers, SimilarDocuments};
 use corpus_engine::enrichment::atlas::resolve_records::{
-    resolve_in_clock_order, Answerer, Criterion, Document, Outcome, ProposalRule, Resolver,
-    Statement,
+    resolve_in_clock_order, Answerer, Carried, Criterion, Document, Estimate, Outcome,
+    ProposalRule, Resolver, Statement,
 };
 use corpus_engine::enrichment::ontology::{DocumentStamp, TypeIndex};
 use serde::{Deserialize, Serialize};
@@ -208,13 +208,12 @@ pub struct ResolveStatementsSummary {
     pub threaded_documents: usize,
     /// Per declared stamp, how many documents it could not be read from.
     pub stamps_unread: BTreeMap<&'static str, usize>,
-    /// The evidential fields and bar the type declares (`identity_evidential`).
-    pub evidential: Vec<(&'static str, f64)>,
+    /// The bar the type declares; `None`: the most probable decides.
     pub bar: Option<f64>,
-    /// The measured precision of the model's choice and of the proposed
-    /// answer; `None` for the choice means the argmax decides (Ring 0).
-    pub model_choice: Option<f64>,
-    pub proposed_answer: Option<f64>,
+    /// Each source's weights as estimated on this run's pairs, no labels
+    /// (`resolve_records::estimate`), and what each carried.
+    pub estimate: Estimate,
+    pub carried: BTreeMap<String, Carried>,
     /// The necessary attributes READ, candidates not offered because one
     /// differed, and reads that came back none of the values or refused.
     pub necessary: Vec<String>,
@@ -470,14 +469,9 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         thread_field,
         threaded_documents: threaded,
         stamps_unread,
-        evidential: criterion
-            .evidential
-            .iter()
-            .map(|&(s, p)| (s.attr(), p))
-            .collect(),
         bar: criterion.bar,
-        model_choice: criterion.model_choice,
-        proposed_answer: criterion.proposed_answer,
+        estimate: resolver.estimate().clone(),
+        carried: resolver.carried().clone(),
         necessary: criterion.necessary.iter().map(|n| n.name.clone()).collect(),
         vetoed,
         unread,
@@ -493,6 +487,9 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
         tokens: ledger.snapshot(),
         wall_seconds: started.elapsed().as_secs_f64(),
     };
+    for line in resolver.sources_summary() {
+        eprintln!("  source {line}");
+    }
     write_json(&p.out.join("summary.json"), &summary)?;
     Ok(summary)
 }

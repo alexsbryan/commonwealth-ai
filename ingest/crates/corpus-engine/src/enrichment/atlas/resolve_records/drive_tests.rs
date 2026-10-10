@@ -58,12 +58,7 @@ fn criterion() -> Criterion {
         description: String::new(),
         same_when: Some("the same problem".into()),
         keys: vec![],
-        evidential: vec![(DocumentStamp::Thread, 0.9)],
         bar: Some(0.5),
-        // Below the bar: never asked, so no call is made in any order.
-        model_choice: Some(0.3),
-        reasoned_choice: None,
-        proposed_answer: Some(0.8),
         necessary: vec![],
     }
 }
@@ -107,7 +102,16 @@ async fn resolve(order: &[usize], answerer: Answerer<'_>) -> (String, BTreeMap<S
             )
         })
         .collect();
-    let mut resolver = Resolver::with_rule(super::super::ProposalRule::default());
+    // Weights chosen, so the run links something (`estimate::expected_pairs`).
+    let mut resolver = Resolver::seeded(super::super::estimate::expected_pairs(
+        0.4,
+        &[
+            ("document_thread", 0.9, 0.05),
+            ("document_date", 0.3, 0.2),
+            ("proposed_answer", 0.7, 0.2),
+            ("model_choice", 0.9, 0.05),
+        ],
+    ));
     let mut proposers = Proposers::new(true, SimilarDocuments::new(3, 12, 0.1));
     let mut outcomes = BTreeMap::new();
     resolve_in_clock_order(
@@ -169,11 +173,18 @@ fn the_clock_puts_dated_documents_first_and_breaks_ties_by_id() {
 
 #[tokio::test]
 async fn any_document_order_gives_the_same_records_and_decisions() {
-    // Any call refuses: none is scripted, and none should be made.
-    let refuse: InferenceFn = Arc::new(|_, _| {
-        Box::pin(async { Err(crate::Error::Extraction("no call expected".into())) })
+    // Every call answers "none" over any labels, the same in every order.
+    let none: InferenceFn = Arc::new(|_, _| {
+        Box::pin(async {
+            let mut d = serde_json::Map::new();
+            for l in super::super::LABELS {
+                d.insert(l.into(), serde_json::json!(0.01));
+            }
+            d.insert(super::super::NONE.into(), serde_json::json!(0.75));
+            Ok(serde_json::Value::Object(d).to_string())
+        })
     });
-    for answerer in [Answerer::Select(&refuse), Answerer::Proposed] {
+    for answerer in [Answerer::Select(&none), Answerer::Proposed] {
         let orders = permutations(DOCS.len());
         assert_eq!(orders.len(), 120);
         let first = resolve(&orders[0], answerer).await;

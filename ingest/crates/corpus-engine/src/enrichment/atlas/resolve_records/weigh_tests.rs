@@ -1,71 +1,78 @@
 use super::*;
 
+/// Every alternative with evidence above 0 raised by an agreeing source.
+fn post(evidence: &[f64], prior: f64, bar: Option<f64>) -> Weighed {
+    let raised: Vec<bool> = evidence.iter().map(|&e| e > 0.0).collect();
+    weigh(evidence, &raised, prior, bar)
+}
+
 fn close(a: f64, b: f64) -> bool {
     (a - b).abs() < 1e-9
 }
 
 #[test]
-fn a_lone_source_is_weighed_at_its_own_precision() {
-    for (candidates, p) in [(1, 0.83), (4, 0.618), (9, 0.3)] {
-        let w = weigh(candidates, &[(0, p)], 0.5);
-        assert!(
-            close(w.posterior[0], p),
-            "K={} p={p}: {:?}",
-            candidates + 1,
-            w
-        );
-    }
-    match weigh(3, &[(1, 0.6)], 0.5).zone {
-        Zone::Link(1, p) => assert!(close(p, 0.6)),
-        z => panic!("{z:?}"),
-    }
+fn evidence_and_the_prior_are_the_alternatives_log_odds_against_none() {
+    // One alternative, evidence ln 4, even prior: odds 4 to 1.
+    let w = post(&[4f64.ln()], 0.0, Some(0.5));
+    assert!(close(w.posterior[0], 0.8) && close(w.none, 0.2), "{w:?}");
+    assert!(matches!(w.zone, Zone::Link(0, p) if close(p, 0.8)));
+    // A prior of 1 in 5 (ln 1/4) cancels it: even.
+    let w = post(&[4f64.ln()], 0.25f64.ln(), Some(0.5));
+    assert!(close(w.posterior[0], 0.5));
 }
 
 #[test]
-fn two_sources_below_the_bar_that_agree_link() {
-    // Each alone is unsettled; together, under independence, they clear .5.
-    let alone = weigh(4, &[(2, 0.45)], 0.5);
+fn two_sources_that_agree_add_and_a_disagreeing_one_subtracts() {
+    let alone = post(&[0.5, 0.0, 0.0], -1.0, Some(0.5));
     assert_eq!(alone.zone, Zone::Unsettled);
-    let both = weigh(4, &[(2, 0.45), (2, 0.45)], 0.5);
-    match both.zone {
-        Zone::Link(2, p) => assert!(p > 0.7, "{p}"),
+    match post(&[0.5 + 2.5, 0.0, 0.0], -1.0, Some(0.5)).zone {
+        Zone::Link(0, p) => assert!(p > 0.6, "{p}"),
         z => panic!("{z:?}"),
     }
-}
-
-#[test]
-fn sources_that_disagree_weigh_against_each_other() {
-    // .618 for A, .572 for B: alone either links; together neither reaches .5.
-    let w = weigh(3, &[(0, 0.618), (1, 0.572)], 0.5);
-    assert_eq!(w.zone, Zone::Unsettled);
-    assert!(w.posterior[0] > w.posterior[1]);
-    // A far more precise source still carries it.
-    match weigh(3, &[(0, 0.95), (1, 0.572)], 0.5).zone {
-        Zone::Link(0, _) => {}
-        z => panic!("{z:?}"),
-    }
-}
-
-#[test]
-fn silence_or_a_source_below_one_in_k_is_no_link() {
-    assert_eq!(weigh(3, &[], 0.5).zone, Zone::NoLink);
-    assert_eq!(weigh(0, &[], 0.5).zone, Zone::NoLink);
-    // 1 of 13 naming one of five alternatives is evidence against it.
-    let w = weigh(4, &[(1, 1.0 / 13.0)], 0.5);
-    assert_eq!(w.zone, Zone::NoLink);
-    assert!(w.posterior[1] < 0.2 && w.none > 0.2);
-    // ... and it pulls a model choice on the same record below the bar.
-    assert_eq!(
-        weigh(4, &[(1, 0.572), (1, 1.0 / 13.0)], 0.5).zone,
-        Zone::Unsettled
+    // A disagreeing source (a read value that differs) pulls it back below.
+    assert_ne!(
+        post(&[0.5 + 2.5 - 2.0, 0.0, 0.0], -1.0, Some(0.5)).zone,
+        Zone::Link(0, 0.0)
     );
 }
 
 #[test]
-fn a_tie_at_the_top_is_unsettled_and_the_posterior_sums_to_one() {
-    let w = weigh(2, &[(0, 0.8), (1, 0.8)], 0.3);
-    assert_eq!(w.zone, Zone::Unsettled);
-    let w = weigh(5, &[(0, 0.7), (3, 0.6), (3, 0.2), (4, 1.0)], 0.5);
+fn silence_or_only_disagreement_is_no_link_and_a_confident_none_opens() {
+    assert_eq!(post(&[], 0.0, Some(0.5)).zone, Zone::NoLink);
+    assert_eq!(post(&[0.0, 0.0], -1.0, Some(0.5)).zone, Zone::NoLink);
+    assert_eq!(post(&[-2.0, -0.5], -1.0, Some(0.5)).zone, Zone::NoLink);
+    // Raised a little against a low prior: none holds .5 or more, so it opens.
+    let w = post(&[0.3], -3.0, Some(0.5));
+    assert!(w.none > 0.9);
+    assert_eq!(w.zone, Zone::NoLink);
+}
+
+#[test]
+fn with_no_bar_the_most_probable_decides_and_nothing_is_held() {
+    // .45 / .45 / .10 none: a tie, so nothing strictly ahead: opens.
+    assert_eq!(post(&[1.5, 1.5], 0.0, None).zone, Zone::NoLink);
+    // Ahead of none and of the other, under .5: links with no bar.
+    match post(&[1.0, 0.5, 0.2], 0.0, None).zone {
+        Zone::Link(0, p) => assert!(p < 0.5, "{p}"),
+        z => panic!("{z:?}"),
+    }
+    // Raised but none still ahead: opens.
+    assert_eq!(post(&[0.5], -2.0, None).zone, Zone::NoLink);
+}
+
+#[test]
+fn the_posterior_sums_to_one_and_stays_finite() {
+    let w = post(&[40.0, -30.0, 3.0, 0.0], -2.0, Some(0.5));
     assert!(close(w.posterior.iter().sum::<f64>() + w.none, 1.0));
     assert!(w.posterior.iter().all(|p| p.is_finite()));
+}
+
+#[test]
+fn an_alternative_no_source_agreed_with_never_links() {
+    // Evidence above 0 (a source disagreeing at a positive weight), yet
+    // nothing agreed with it: it may rise, it does not link.
+    let lone = weigh(&[1.5, -3.0], &[false, false], 0.0, None);
+    assert_eq!(lone.zone, Zone::NoLink);
+    let other = weigh(&[1.5, 0.2], &[false, true], 0.0, Some(0.5));
+    assert!(!matches!(other.zone, Zone::Link(0, _)), "{other:?}");
 }

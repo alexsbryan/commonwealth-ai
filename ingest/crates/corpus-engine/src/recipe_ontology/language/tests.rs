@@ -109,3 +109,41 @@ subject = "happening"
     assert!(report.is_document_reading_eligible(&policies.shape.types));
     assert!(policies.reads_documents());
 }
+
+#[test]
+fn a_retired_type_key_is_named_ignored_and_never_persisted() {
+    let declared = r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same case record"
+identity_bar = 0.5
+
+[[types]]
+name = "membership"
+kind = "claim"
+force = "assertive"
+subject = "case"
+"#;
+    let registry = OntologyLanguageRegistry::builtin();
+    let language = registry.get(1).unwrap();
+    let plain: toml::Table = toml::from_str(declared).unwrap();
+    let keyed: toml::Table = toml::from_str(&declared.replace(
+        "identity_bar = 0.5",
+        "identity_bar = 0.5\nidentity_evidential = [{ evidence = \"model_choice\", right = 6, of = 19, measured_on = \"x\" }]",
+    ))
+    .unwrap();
+    assert_eq!(
+        retired_type_keys(&keyed),
+        [(
+            "case".to_string(),
+            "identity_evidential",
+            V1_RETIRED_TYPE_KEYS[0].1
+        )]
+    );
+    assert!(retired_type_keys(&plain).is_empty());
+    let policies = language.parse(&keyed).unwrap();
+    assert_eq!(policies, language.parse(&plain).unwrap());
+    let wire = serde_json::to_string(&policies).unwrap();
+    assert!(!wire.contains("identity_evidential"), "{wire}");
+}

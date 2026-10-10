@@ -30,4 +30,9 @@ pub(super) fn layer_warnings(
             "[enrichment.ontology] `{key}` is retired and ignored: {instead}. Remove the key."
         ));
     }
+    for (t, key, instead) in crate::recipe_ontology::language::retired_type_keys(&block.body) {
+        warnings.push(format!(
+            "ontology type `{t}`: `{key}` is retired and ignored: {instead}. Remove the key."
+        ));
+    }
 }

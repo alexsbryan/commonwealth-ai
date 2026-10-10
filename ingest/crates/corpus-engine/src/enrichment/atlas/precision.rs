@@ -13,20 +13,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Precision {
-    /// The recipe declares it (`identity_evidential`), or the declaration
-    /// makes it so by construction (an equal sufficient key: 1.0).
+    /// The declaration makes it so by construction (an equal sufficient key: 1.0).
     Declared(f64),
     /// Estimated on this corpus from the sources' agreement (campaign E2).
     Estimated(f64),
     /// Nothing has measured it: the source decided only so that it can be
     /// measured (an argmax read before its precision is known).
     Unmeasured,
-}
-
-impl Precision {
-    pub fn declared_or_unmeasured(precision: Option<f64>) -> Self {
-        precision.map_or(Self::Unmeasured, Self::Declared)
-    }
 }
 
 /// One source of a value or a link, and its precision.

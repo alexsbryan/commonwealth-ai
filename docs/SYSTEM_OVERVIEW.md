@@ -671,11 +671,12 @@ question the pipeline asks about a type is a method on the resolved
   RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
   puts each statement of one document into an open record of one declared
   type, opens one, or holds it. An equal declared `identity` key decides without a call.
-  An `identity_evidential` document field (a `change.document` stamp, read by
-  `read_stamp`, the one reader claim stamping uses too) names the one record
-  from an earlier document holding its value (`resolve_records/fields.rs`), a
-  vote at its declared precision. Under a partition answerer the fields alone
-  are weighed and link where they reach `identity_bar`; otherwise ONE grammar-constrained call per document, given the type's
+  Every declared document field (a `change.document` stamp, read by
+  `read_stamp`, the one reader claim stamping uses too) is compared between a
+  statement's document and each record (`resolve_records/fields.rs`), and a
+  record holding the document's value is an alternative. Under a partition
+  answerer the fields alone are weighed and link where they reach
+  `identity_bar`; otherwise ONE grammar-constrained call per document, given the type's
   `identity_criterion`, the candidates the proposers offered
   (`resolve_records/propose.rs`: the records of the document's declared
   thread, `change.document.thread`, then TF-IDF over documents already
@@ -690,21 +691,30 @@ question the pipeline asks about a type is a method on the resolved
   `--answer select` (`resolve_records/select.rs`) asks instead one forced
   choice per statement, in document order, over the shown candidates and the
   records this document opened, read as a distribution in one forward pass and
-  kept on the outcome (`Choice`); unmeasured, the argmax decides
-  (`Decision::Selected`), Ring 0 of `research/ontology-apps/resolve-prereg.md`.
+  kept on the outcome (`Choice`); the argmax is one source among the rest.
   A type's `identity_necessary` attributes (each with declared `values`) are READ
   per asked statement as one forced choice over those values
-  (`resolve_records/read.rs`); a candidate whose value differs is not offered.
-  `identity_evidential` also declares `model_choice` and `proposed_answer`
-  precisions. Ring 2's decider (`resolve_records/weigh.rs`) weighs every source
-  that names an alternative (fields, the proposed answer, the model's argmax)
-  as a log-likelihood ratio under a stated independence assumption: a
-  candidate whose posterior reaches `identity_bar` links (`Decision::Weighed`,
-  with the sources that named it); no source raising a candidate opens a
-  record; anything between is `Outcome::Held`, counted, its alternatives and
-  votes kept, never opened as a record. A choice below the bar is never asked.
+  (`resolve_records/read.rs`); a candidate whose SUPPLIED value differs is not
+  offered, while a READ value is one more weighed source
+  (`necessary:<attribute>`). Every source (each declared field, each necessary
+  value, the proposed answer, the model's argmax) agrees or disagrees with each
+  (statement, alternative) pair, and is weighed at what it is worth on the
+  corpus being read: Fellegi-Sunter agreement weights fitted by EM over those
+  pairs with no labels (`resolve_records/estimate.rs`), refitted after every
+  document in clock order, so a document is weighed at what the documents
+  before it estimate; the recipe declares no precision (`identity_evidential`
+  is a retired key, warned and ignored). The decider (`resolve_records/weigh.rs`)
+  sums each alternative's weights with the pair prior into its log odds
+  against none: one an agreeing source raised and whose posterior reaches
+  `identity_bar` links (`Decision::Weighed`, with the sources that agreed);
+  with no bar the most probable of the alternatives and none decides; no
+  source raising one opens a record; anything between is `Outcome::Held`,
+  counted, its alternatives and votes kept, never opened as a record. The model
+  is asked only where the other sources do not already link. The resolve step
+  prints, per source, its estimated precision, weights and the links and
+  vetoes it carried (`Resolver::sources_summary`).
   `--answer reason` reads the same choice after the model's own bounded
-  reasoning (`reasoned_choice`). `Decision` is `Key | Cited | Selected |
+  reasoning (`reasoned_choice`). `Decision` is `Key | Cited |
   Weighed | Opened`; anything else is a counted `Refusal` or `Held`, never
   defaulted. A link carries `by`, each source with its `Precision`
   (`atlas/precision.rs`: declared, estimated on the corpus, or unmeasured), as

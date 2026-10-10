@@ -357,30 +357,6 @@ impl OntologyV1 {
     }
 }
 
-/// A source of identity evidence and what its links were measured to be worth
-/// on the live rule: `{ evidence = "document_thread", right = 18, of = 20,
-/// measured_on = "…" }`. The source is a `change.document` stamp,
-/// `model_choice` (the forced choice's most probable candidate),
-/// `reasoned_choice` (the same, read after the model's own reasoning) or
-/// `proposed_answer` (threads, wording and similarity alone); `right` of `of`
-/// links were right where `measured_on` says.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EvidentialFieldDecl {
-    pub evidence: String,
-    pub right: u32,
-    pub of: u32,
-    pub measured_on: String,
-}
-
-impl EvidentialFieldDecl {
-    /// The expected precision given the counts: the posterior mean under a
-    /// uniform prior, (right + 1) / (of + 2). Not right / of, which overstates
-    /// few links (15 of 16 is .938, but .889 expected; 190 of 210 is .901).
-    pub fn precision(&self) -> f64 {
-        (self.right as f64 + 1.0) / (self.of as f64 + 2.0)
-    }
-}
-
 /// One declared type (`[[enrichment.ontology.types]]`). `name` and `kind`
 /// are required; every other facet is optional and most apply to one kind
 /// only (`from`/`to` to relations, `participants` to events, `of` to states,
@@ -442,12 +418,9 @@ pub struct OntologyTypeDecl {
     /// settles the question (ONTOLOGY_METHOD.md §The core).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_criterion: Option<String>,
-    /// Fields whose agreement is evidence that two mentions are one particular,
-    /// each with the precision measured for it (ONTOLOGY_METHOD.md §Identity).
-    /// RESOLVE links on one only where that precision clears `identity_bar`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub identity_evidential: Vec<EvidentialFieldDecl>,
-    /// The precision a link decided by evidence alone must have.
+    /// The posterior a link decided by evidence must reach; RESOLVE weighs
+    /// every source at what it is estimated to be worth on the corpus
+    /// (ONTOLOGY_METHOD.md §Identity). Absent: the most probable decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_bar: Option<f64>,
     /// Attributes whose values must agree: two mentions whose values differ,

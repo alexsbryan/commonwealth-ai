@@ -15,11 +15,7 @@ fn criterion() -> Criterion {
         description: "A support case".into(),
         same_when: Some("the same case".into()),
         keys: Vec::new(),
-        evidential: Vec::new(),
         bar: None,
-        model_choice: None,
-        reasoned_choice: None,
-        proposed_answer: None,
         necessary: Vec::new(),
     }
 }

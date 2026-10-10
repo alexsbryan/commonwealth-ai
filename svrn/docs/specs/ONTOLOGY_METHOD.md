@@ -33,7 +33,7 @@ problem?") is not RESOLVE, and it fails (uv-support spin-offs: precision .206, 4
 ## What code may do
 
 Code READS what the recipe declares, PROPOSES candidates from declared structure, VERIFIES what a model
-points at is in the text, WEIGHS evidence by its measured precision, and FOLDS by the declared protocol. The
+points at is in the text, WEIGHS evidence by its precision estimated on the corpus, and FOLDS by the declared protocol. The
 model reads declared fields and answers closed questions as distributions. Neither decides identity any other
 way: no undeclared pattern (no phrase matcher for "duplicate of", no owner by domain, no thread from a subject
 line), and no model verdict taken as a decision. Domain knowledge lives
@@ -44,8 +44,9 @@ in the recipe. Best-in-class results come through this architecture, not through
 1. **The code knows no domain.** Rename every type and attribute in a recipe; the composition is the same up
    to the renaming.
 2. **Identity is decided by declared fields, in one place** (§Identity): a sufficient field that agrees links,
-   a necessary field that differs forbids, and evidential agreement links only where its measured precision
-   clears the type's bar; the rest is unsettled and counted.
+   a necessary value a declared field supplies that differs forbids (a read one is weighed), and evidential
+   agreement links only where its posterior, at weights estimated on the corpus, clears the type's bar; the
+   rest is unsettled and counted.
 3. **Candidates come from declared structure** (the same thread, the same party, a declared reference) **or
    from generic, domain-free retrieval** (similar names, similar descriptions); a proposer never decides, and
    its recall (how often the right record is among the candidates) is reported.
@@ -82,14 +83,18 @@ while its verdict was informative and stable across the three systems (+1.4 to +
 
 Built in rings, innermost first, each with bars before data: **0** one forced choice per statement (built,
 `--answer select`; the argmax decides only so the choice can be measured); **1** READ by pointing and per-field
-comparison (1a built: declared document fields weighed by code, `identity_evidential` and `identity_bar`; 1b
-built for closed sets: `identity_necessary` attributes READ as one forced choice over their `values`, a
-differing value forbidding the candidate; the model's choice and the proposed answer weighed as evidence at
-their measured precision); **2** the decider: constraints, calibrated
-evidence, the unsettled band; **3** the layer's other identity deciders onto it (about fifteen today, with
+comparison (1a built: declared document fields weighed by code against `identity_bar`; 1b
+built for closed sets: `identity_necessary` attributes READ as one forced choice over their `values`; the
+model's choice and the proposed answer weighed as evidence); **2** the decider: constraints, calibrated
+evidence, the unsettled band (built; since E2, 2026-10-10, every source is weighed at Fellegi-Sunter agreement
+weights fitted by EM on the corpus being read, with no labels, `resolve_records/estimate.rs`: the recipe
+declares no precision, and a necessary value forbids outright only when a declared field supplies it on both
+sides, a READ one being one more weighed source); **3** the layer's other identity deciders onto it (about fifteen today, with
 three ways of combining keys; begun: an entity or event type with a criterion and no source is RESOLVE's alone in the
 atlas build, over the claims whose subject it is, `resolution_records.rs`). A precision is measured on the rule as it runs, never under gold alone: a field
-follows whatever decision put its value in a record (uv thread .905 under gold, .71 live).
+follows whatever decision put its value in a record (uv thread .905 under gold, .71 live). That is why it is
+estimated on the run itself, document by document in clock order, and checked against the labelled ratios
+(layer-estimator) rather than declared.
 
 ## Reading (agreed 2026-10-08)
 
