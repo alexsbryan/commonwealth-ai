@@ -46,6 +46,24 @@ before any score against gold:
                      and no run E0 had within .1 leaves it.
     NOT WORTH        otherwise, or the stop above fired.
   The lines-scope variants are reported beside, never chosen over a document-scope one that reaches the same verdict.
+
+E7 STEP 2b (the seat, after the agreement verdict; `--differs DIR`), PRE-REGISTERED before scoring: do entities that
+DIFFER on the cited lines separate the lookalikes? GVC only (verified lines), from the same cache, no new extraction.
+  Feature `entity_differs:<label>` for Person and Location: both sides' cited lines name at least one mention of the
+  label and the two sides' normalised sets do not intersect: it FIRES (evidence against identity: another victim,
+  another city). Where both sides name the label and the sets intersect it agrees; where either side names none it
+  is absent. `entity_differs` (the candidate) fires when either label's does, agrees when neither fires and some
+  label has both sides, else absent.
+  Lookalike false links: the labelled pairs a text-reading source agreed on that gold calls different.
+  WORTH A STAGE when, on both GVC RESOLVE-alone runs (ours and blind), `entity_differs` fires on at most .10 of the
+  gold-same pairs, at least .90 of the pairs it fires on are gold-different, and it flags at least .30 of the
+  lookalike false links; judged only where it fires on >= 20 labelled pairs. NOT WORTH otherwise. Per-label rows
+  and the GVC end-to-end runs are reported beside, not gated.
+  Beside the verdict: E0 with `entity_differs` added as a source (fitted on agree and disagree; the decider would
+  apply its disagreement weight only), its largest judged gap with and without the feature's own row; and on the
+  two RESOLVE-alone runs the CoNLL (MUC, B3, CEAF-e, LEA) a decider reaches when every weighed link whose pair the
+  feature fires on is vetoed (the statement opens its own record), from resolve/decisions.jsonl and clustering.json
+  through `sovereign bench er-score`, with the vetoed links counted right and wrong under gold.
 """
 import argparse, collections, json, math, pathlib, random, sys
 
@@ -378,8 +396,12 @@ def main():
     ap.add_argument("--score", action="store_true")
     ap.add_argument("--out", type=pathlib.Path, default=HERE)
     ap.add_argument("--entities", type=pathlib.Path, help="entities.py's feature dir: score the E7 probe (gaps-e7.md/json)")
+    ap.add_argument("--differs", type=pathlib.Path, help="entities.py's feature dir: score E7 step 2b, entities that differ (gaps-e7b.md/json)")
     a = ap.parse_args()
     recorded = json.loads((a.tables / "labelled.json").read_text())
+    if a.differs:
+        differs_probe(a.tables, a.differs, a.out)
+        return
     if a.entities:
         entities_probe(a.tables, a.entities, a.out)
         return
@@ -535,6 +557,141 @@ def entities_probe(tables, feature_dir, out_dir):
     (out_dir / "gaps-e7.json").write_text(json.dumps({"verdict": verdict, "chosen": chosen, "stop": stop, "lookalikes": look,
                                                       "results": {n: {k: {"sources": v[0], "largest_gap": v[1]} for k, v in r.items()} for n, r in results.items()}}, indent=1) + "\n")
     print("\n".join(lines[:4 + len(RUNS) + 3]))
+
+
+DIFFER_LABELS = ("Person", "Location")
+DIFFER_RULE = {"max_fire_on_same": 0.10, "min_different_when_fired": 0.90, "min_lookalikes_flagged": 0.30}
+RESOLVE_ALONE = {"c2-lines-gvc-resolve-alone": "runs/c2-lines-gvc-resolve-alone", "blind-r2--gvc-resolve-alone": "runs/blind-r2/gvc-resolve-alone"}
+GOLD_GVC = L.BASELINE / "gvc/statements/gold.json"
+
+
+def differs(f, label):
+    """True (agrees: both name the label, sets intersect), False (fires: both name it, disjoint), None (absent)."""
+    block = (f or {}).get("lines")
+    if not block:
+        return None
+    if label == "either":
+        says = [differs(f, lab) for lab in DIFFER_LABELS]
+        if any(x is False for x in says):
+            return False
+        return True if any(x is True for x in says) else None
+    b = block.get(label)
+    if not b or not b["statement"] or not b["alternative"]:
+        return None
+    return bool(b["shared"])
+
+
+def differs_rates(rows, feats, label):
+    lab = [(r, f) for r, f in zip(rows, feats) if r["same"] is not None]
+    same = [x for x in lab if x[0]["same"]]
+    diff = [x for x in lab if not x[0]["same"]]
+    fired_same = sum(differs(f, label) is False for _, f in same)
+    fired_diff = sum(differs(f, label) is False for _, f in diff)
+    look = [(r, f) for r, f in diff if any(r["comparison"].get(t) is True for t in ("proposed_answer", "model_choice"))]
+    look_same = [(r, f) for r, f in same if any(r["comparison"].get(t) is True for t in ("proposed_answer", "model_choice"))]
+    fired = fired_same + fired_diff
+    out = {"labelled": len(lab), "same": len(same), "different": len(diff), "fires": fired,
+           "fire_on_same": round(fired_same / len(same), 3) if same else None,
+           "different_when_fired": round(fired_diff / fired, 3) if fired else None,
+           "lookalikes": len(look), "lookalikes_flagged": sum(differs(f, label) is False for _, f in look),
+           "lookalikes_flagged_share": round(sum(differs(f, label) is False for _, f in look) / len(look), 3) if look else None,
+           "true_text_links": len(look_same), "true_text_links_flagged": sum(differs(f, label) is False for _, f in look_same),
+           "judged": fired >= JUDGED_MIN}
+    out["meets"] = (out["judged"] and out["fire_on_same"] is not None and out["fire_on_same"] <= DIFFER_RULE["max_fire_on_same"]
+                    and out["different_when_fired"] >= DIFFER_RULE["min_different_when_fired"]
+                    and out["lookalikes_flagged_share"] is not None and out["lookalikes_flagged_share"] >= DIFFER_RULE["min_lookalikes_flagged"])
+    return out
+
+
+def veto_simulation(name, rows, feats):
+    """The RESOLVE-alone run's clustering with every weighed link the feature fires on undone, scored by er-score."""
+    import subprocess, tempfile  # noqa: PLC0415
+    run = pathlib.Path(RESOLVE_ALONE[name])
+    gold = json.loads(GOLD_GVC.read_text())
+    fires = {(r["statement"], r["alternative"]) for r, f in zip(rows, feats) if differs(f, "either") is False}
+    clustering = json.loads((run / "resolve/clustering.json").read_text())
+    vetoed, right, wrong, unscorable, links = [], 0, 0, 0, 0
+    for line in (run / "resolve/decisions.jsonl").read_text().splitlines():
+        for o in json.loads(line)["outcomes"]:
+            d = o["outcome"].get("decided") or {}
+            if d.get("decision") != "weighed" or d.get("record") == o["statement"]:
+                continue
+            links += 1
+            if (o["statement"], d["record"]) in fires:
+                vetoed.append(o["statement"])
+                g_s, g_r = gold.get(o["statement"]), gold.get(d["record"])
+                if g_s is None or g_r is None:
+                    unscorable += 1
+                elif g_s == g_r:
+                    wrong += 1
+                else:
+                    right += 1
+    after = dict(clustering)
+    for s_ in vetoed:
+        after[s_] = s_
+
+    def er(c):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as t:
+            json.dump(c, t)
+        p = subprocess.run([str(pathlib.Path.home() / ".local/bin/sovereign"), "bench", "er-score", t.name, str(GOLD_GVC)], capture_output=True, text=True)
+        if p.returncode != 0:
+            sys.exit(f"er-score exited {p.returncode}: {p.stderr.strip()}")
+        e = json.loads(p.stdout)
+        return {"conll": round(e["conll_f1"], 3), "muc": round(e["muc"]["f1"], 3), "b3": round(e["b_cubed"]["f1"], 3),
+                "ceaf_e": round(e["ceaf_e"]["f1"], 3), "lea": round(e["lea"]["f1"], 3)}
+
+    return {"weighed_links": links, "vetoed": len(vetoed), "vetoed_right": right, "vetoed_wrong": wrong, "vetoed_unscorable": unscorable,
+            "before": er(clustering), "after": er(after)}
+
+
+def differs_probe(tables, feature_dir, out_dir):
+    rates, fits, vetoes = {}, {}, {}
+    for name in GVC_RUNS:
+        rows = load(tables, name)
+        feats = [json.loads(l) for l in (feature_dir / f"{name}.jsonl").read_text().splitlines() if l.strip()]
+        assert len(feats) == len(rows) and all(f["statement"] == r["statement"] and f["alternative"] == r["alternative"] for f, r in zip(feats, rows))
+        rates[name] = {lab: differs_rates(rows, feats, lab) for lab in ("either",) + DIFFER_LABELS}
+        lab, _ = labelled(rows)
+        e0 = score(fit([r["comparison"] for r in rows]), lab)
+        comps = []
+        for r, f in zip(rows, feats):
+            c = dict(r["comparison"])
+            v = differs(f, "either")
+            if v is not None:
+                c["entity_differs"] = v
+            comps.append(c)
+        lab_e, _ = labelled([{**r, "comparison": c} for r, c in zip(rows, comps)])
+        srcs, largest = score(fit(comps), lab_e)
+        without = [(v["gap"], s_) for s_, v in srcs.items() if v["gap"] is not None and s_ != "entity_differs"]
+        fits[name] = {"E0": e0[1], "E0+differs": largest, "E0+differs_without_feature_row": max(without) if without else None, "sources": srcs}
+        if name in RESOLVE_ALONE:
+            vetoes[name] = veto_simulation(name, rows, feats)
+    verdict = "WORTH A STAGE" if all(rates[n]["either"]["meets"] for n in RESOLVE_ALONE) else "NOT WORTH"
+    lines = ["# E7 step 2b: entities that DIFFER on the cited lines (GVC, verified lines; Person and Location)", "",
+             "| run | feature | fires | fire on gold-same | different when fired | lookalikes flagged | true text links flagged | judged | meets rule |", "|---|---|---|---|---|---|---|---|---|"]
+    for name in GVC_RUNS:
+        for lab, v in rates[name].items():
+            lines.append(f"| {name} | {lab} | {v['fires']} of {v['labelled']} | {v['fire_on_same']} | {v['different_when_fired']} | "
+                         f"{v['lookalikes_flagged']} of {v['lookalikes']} ({v['lookalikes_flagged_share']}) | {v['true_text_links_flagged']} of {v['true_text_links']} | "
+                         f"{'yes' if v['judged'] else 'no'} | {'yes' if v['meets'] else 'no'} |")
+    lines += ["", f"Verdict under the pre-registered rule (both RESOLVE-alone runs: fire on gold-same <= {DIFFER_RULE['max_fire_on_same']}, "
+              f"different when fired >= {DIFFER_RULE['min_different_when_fired']}, lookalikes flagged >= {DIFFER_RULE['min_lookalikes_flagged']}): {verdict}", "",
+              "## Today's EM with `entity_differs` added (largest judged gap)", "", "| run | E0 | E0+differs | E0+differs, feature's own row aside | entity_differs est (lab, agreed) |", "|---|---|---|---|---|"]
+    for name in GVC_RUNS:
+        f_ = fits[name]
+        g = lambda x: "could-not-judge" if x is None else f"{x[0]:.3f} ({x[1]})"  # noqa: E731
+        v = f_["sources"].get("entity_differs")
+        lines.append(f"| {name} | {g(f_['E0'])} | {g(f_['E0+differs'])} | {g(f_['E0+differs_without_feature_row'])} | "
+                     f"{'-' if v is None else f'{v[chr(101)+chr(115)+chr(116)+chr(105)+chr(109)+chr(97)+chr(116)+chr(101)+chr(100)]} ({v[chr(108)+chr(97)+chr(98)+chr(101)+chr(108)+chr(108)+chr(101)+chr(100)]}, {v[chr(97)+chr(103)+chr(114)+chr(101)+chr(101)+chr(100)]})'} |")
+    lines += ["", "## RESOLVE alone: every weighed link the feature fires on vetoed", "", "| run | weighed links | vetoed (right / wrong / unscorable) | CoNLL before -> after | MUC | B3 | CEAF-e | LEA |", "|---|---|---|---|---|---|---|---|"]
+    for name, v in vetoes.items():
+        b, a_ = v["before"], v["after"]
+        lines.append(f"| {name} | {v['weighed_links']} | {v['vetoed']} ({v['vetoed_right']} / {v['vetoed_wrong']} / {v['vetoed_unscorable']}) | {b['conll']} -> {a_['conll']} | "
+                     f"{b['muc']} -> {a_['muc']} | {b['b3']} -> {a_['b3']} | {b['ceaf_e']} -> {a_['ceaf_e']} | {b['lea']} -> {a_['lea']} |")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "gaps-e7b.md").write_text("\n".join(lines) + "\n")
+    (out_dir / "gaps-e7b.json").write_text(json.dumps({"rule": DIFFER_RULE, "verdict": verdict, "rates": rates, "fits": fits, "vetoes": vetoes}, indent=1) + "\n")
+    print("\n".join(lines))
 
 
 if __name__ == "__main__":
