@@ -84,11 +84,6 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/size-warn.py",
             "type": "command",
             "timeout": 5
-          },
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/euphemia-pre-edit.sh",
-            "type": "command",
-            "timeout": 10
           }
         ]
       },

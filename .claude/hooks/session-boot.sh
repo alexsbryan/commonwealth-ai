@@ -47,13 +47,6 @@ export SOVEREIGN_HOOK_INPUT="$(cat)"
 export SOVEREIGN_PORT="${SOVEREIGN_PORT:-9741}"
 export SOVEREIGN_NO_STALE_WARN=1
 
-# euphemia (campaign euphemia, Stage A): the commons brief — receive, then
-# print — only where euphemia is installed. It prints nothing in a checkout
-# that is in no commons and always exits 0. Here, before the exec below,
-# which does not return.
-command -v euphemia >/dev/null 2>&1 \
-  && printf '%s' "$SOVEREIGN_HOOK_INPUT" | euphemia hook session-start 2>/dev/null
-
 exec python3 - <<'PY' 2>/dev/null
 import json
 import os
