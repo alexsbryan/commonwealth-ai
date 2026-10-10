@@ -700,7 +700,8 @@ question the pipeline asks about a type is a method on the resolved
   value, the proposed answer, the model's argmax) agrees or disagrees with each
   (statement, alternative) pair, and is weighed at what it is worth on the
   corpus being read: Fellegi-Sunter agreement weights fitted by EM over those
-  pairs with no labels (`resolve_records/estimate.rs`), refitted after every
+  pairs with no labels (`resolve_records/estimate.rs`; agreeing is never fitted
+  as evidence against, and sources identical on every pair count once), refitted after every
   document in clock order, so a document is weighed at what the documents
   before it estimate; the recipe declares no precision (`identity_evidential`
   is a retired key, warned and ignored). The decider (`resolve_records/weigh.rs`)
