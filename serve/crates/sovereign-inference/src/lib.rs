@@ -36,6 +36,9 @@ pub mod smoketest;
 pub mod url_constraint;
 pub mod vocab_cache;
 
+#[cfg(test)]
+mod decode_allowlist_parity_tests;
+
 pub use gguf_validator::{validate_gguf, GgufExpectation, GgufValidationError};
 
 /// Terminate the process with `code`, skipping C/C++ static destructors on

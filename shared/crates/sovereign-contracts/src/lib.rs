@@ -36,6 +36,7 @@ pub mod containment;
 // path, so the routes are unchanged.
 pub mod daemon_wire;
 pub mod data_roots;
+pub mod decode_allowlist;
 /// `TestProvider`, the builder-style `InferenceProvider` double.
 #[cfg(feature = "test-fixtures")]
 pub mod double;
