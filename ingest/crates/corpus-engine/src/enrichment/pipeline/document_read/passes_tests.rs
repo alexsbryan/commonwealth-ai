@@ -191,3 +191,31 @@ async fn a_refused_locate_call_is_never_a_located_line() {
     let outcome: Value = serde_json::from_str(&envelope).unwrap();
     assert_eq!(outcome["documents"][0]["status"], "could_not_judge");
 }
+
+/// The Locate system prompt mentions field values only when some kind in the
+/// question shows them: a declaration with no closed claim value (GVC's) asks
+/// the pre-E4 question byte for byte.
+#[test]
+fn the_locate_system_prompt_names_values_only_when_a_kind_shows_them() {
+    let p = passes_policies();
+    let full = Plan::of(&p);
+    let with = locate_system(&full);
+    assert!(
+        with.contains("with what it means, followed by the values its fields can take. Answer"),
+        "{with}"
+    );
+    let bare = Plan {
+        kinds: Plan::of(&p)
+            .kinds
+            .into_iter()
+            .filter(|k| k.fields.is_empty())
+            .collect(),
+    };
+    assert_eq!(bare.kinds.len(), 1, "membership declares no field");
+    let without = locate_system(&bare);
+    assert!(without.contains("with what it means. Answer"), "{without}");
+    assert!(
+        !without.contains("values") && !without.contains('{'),
+        "{without}"
+    );
+}

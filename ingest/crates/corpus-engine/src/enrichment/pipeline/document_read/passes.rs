@@ -39,6 +39,10 @@ use crate::error::{Error, Result};
 use crate::InferenceFn;
 
 const LOCATE_SYSTEM: &str = include_str!("passes_locate_prompt.md");
+/// What `{values}` in [`LOCATE_SYSTEM`] becomes when some kind in the question
+/// shows closed values; nothing otherwise, so the prompt never describes lines
+/// it does not show (a declaration with none asks the pre-E4 question).
+const LOCATE_SHOWS_VALUES: &str = ", followed by the values its fields can take";
 
 /// A statement is one kind and at most this many verified lines
 /// (ONTOLOGY_METHOD §Reading).
@@ -213,10 +217,26 @@ pub(super) fn locate_question(
         }
     }
     u.push_str(&format!("{NONE} none of them\nAnswer with its letter."));
-    ChatPrompt::new(LOCATE_SYSTEM, u)
+    ChatPrompt::new(locate_system(plan), u)
         .with_response_schema("read", forced_choice::schema(labels))
         .with_phase_id(LOCATE_PHASE)
         .with_temperature(0.0)
+}
+
+/// The Locate system prompt for `plan`: a pure function of the declaration.
+pub(super) fn locate_system(plan: &Plan<'_>) -> String {
+    let shows_values = plan
+        .kinds
+        .iter()
+        .any(|k| k.fields.iter().any(|f| matches!(f, FieldPlan::Choose(_))));
+    LOCATE_SYSTEM.replace(
+        "{values}",
+        if shows_values {
+            LOCATE_SHOWS_VALUES
+        } else {
+            ""
+        },
+    )
 }
 
 /// Runs of consecutive located lines of one kind, each cut into statements
