@@ -2104,6 +2104,7 @@ class Loop:
             say(f"unit {unit}: {s['rejects']}")
             self.notifier("auto — permission rejects", f"{unit}: {rejects} auto-rejections",
                           self.notify_enabled)
+        self._save_uncommitted(unit, s)
         event, ctx = self.classify(unit, entry)
         if event is E.RESULT_AWAIT:
             try:
@@ -2112,6 +2113,34 @@ class Loop:
                 event, ctx = E.AWAIT_FAILED, {"why": f"the loop could not start "
                                                      f"{ctx['result']['argv']}: {e}"}
         self.fire(unit, event, **ctx)
+
+    def _save_uncommitted(self, unit, s):
+        """A lane worker that ended with no result and left TRACKED changes it
+        never committed: commit them on the lane's branch, named as saved by
+        the loop, so the next session starts from them and the end reads as
+        progress (a continuation), not as nothing (a strike). ersilia's
+        workers ended hour-long sessions mid-change on 2026-10-09:
+        r12-step-scale struck out, and r12-glassbox struck with 503 lines in
+        its tree. Untracked scratch is not swept in; the main tree is never
+        touched; the merge check still guards the base."""
+        if s.get("main") or s.get("role") != "worker":
+            return
+        if pathlib.Path(s["result"]).exists():
+            return
+        ws = s["workspace"]
+        if not (_git_out(ws, "status", "--porcelain", "--untracked-files=no") or "").strip():
+            return
+        subprocess.run(["git", "-C", str(ws), "add", "-u"], capture_output=True, text=True)
+        r = subprocess.run(["git", "-C", str(ws), "commit", "-q", "-m",
+                            f"ralph: {unit} session {s.get('n')}'s uncommitted work, saved by the "
+                            "loop when the session ended with no result"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            say(f"unit {unit}: session {s.get('n')} ended with uncommitted tracked changes — "
+                "saved as a commit on its lane")
+        else:
+            say(f"unit {unit}: could not save session {s.get('n')}'s uncommitted changes: "
+                f"{error_tail(r.stderr or r.stdout) or 'refused'}")
 
     def classify(self, unit, entry):
         """A session's end as one event: its result, else whether it left

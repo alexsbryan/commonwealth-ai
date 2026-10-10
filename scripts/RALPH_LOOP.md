@@ -56,7 +56,10 @@ records under `target/`, which a host may purge under disk pressure;
 
 Nothing else a session writes is read as loop state. A session that ends
 without a result is judged by its commits alone: commits mean it continues,
-none mean a strike.
+none mean a strike. A lane worker that ends with no result but with tracked
+changes it never committed has them committed on its lane's branch by the loop
+("saved by the loop"), so the work is kept and the end counts as progress;
+untracked files are left alone, and the main tree is never touched.
 
 ## Escalation
 

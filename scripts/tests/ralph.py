@@ -600,6 +600,30 @@ class PoolTests(unittest.TestCase):
     def rig(self, state, **kw):
         return Rig(self.tmp.name, state, lane_mode=True, lanes=kw.pop("lanes", 2), **kw)
 
+    def test_a_lane_session_that_ends_with_uncommitted_work_is_saved_not_struck(self):
+        # ersilia's workers (2026-10-09) ended hour-long sessions mid-change: no
+        # commit, so a strike, and the work left loose in the lane
+        # (r12-step-scale struck out; r12-glassbox struck with 503 lines in its
+        # tree). The loop commits the TRACKED changes on the lane's branch, so
+        # the end reads as progress; untracked scratch stays out.
+        rig = self.rig("- [ ] a — depends []\n", lanes=1, session_timeout=60,
+                       extra={"code.txt": "v1\n"})
+
+        def half_done(s):
+            write(s.cwd, "code.txt", "v2, half done\n")
+            write(s.cwd, "scratch.tmp", "untracked\n")
+            return FOREVER
+
+        rig.procs.sessions += [half_done, lambda s: FOREVER]
+        rig.tick(3)                                   # 60s: killed
+        self.assertEqual(len(rig.procs.killed), 1)
+        self.assertEqual(rig.entry("a").get("strikes", 0), 0)
+        self.assertEqual(rig.entry("a")["continuations"], 1)
+        lane = rig.tmp / "lanes" / "a"
+        self.assertIn("saved by the loop", git(lane, "log", "-1", "--format=%s"))
+        self.assertEqual(git(lane, "show", "HEAD:code.txt"), "v2, half done")
+        self.assertIn("scratch.tmp", git(lane, "status", "--porcelain"))   # not swept in
+
     def test_two_lanes_run_at_once_and_each_lands_on_the_base(self):
         rig = self.rig("- [ ] a — depends []\n- [ ] b — depends []\n")
         rig.procs.sessions += [lambda s: (s.commit("a.txt"), s.result("done"))[1],
