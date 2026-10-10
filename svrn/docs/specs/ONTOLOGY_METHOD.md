@@ -89,7 +89,8 @@ model's choice and the proposed answer weighed as evidence); **2** the decider: 
 evidence, the unsettled band (built; since E2, 2026-10-10, every source is weighed at Fellegi-Sunter agreement
 weights fitted by EM on the corpus being read, with no labels, `resolve_records/estimate.rs`: the recipe
 declares no precision, and a necessary value forbids outright only when a declared field supplies it on both
-sides, a READ one being one more weighed source); **3** the layer's other identity deciders onto it (about fifteen today, with
+sides, one a model chose (the reader's Choose or RESOLVE's READ) being one more weighed source, which C3's test
+checks on the default path); **3** the layer's other identity deciders onto it (about fifteen today, with
 three ways of combining keys; begun: an entity or event type with a criterion and no source is RESOLVE's alone in the
 atlas build, over the claims whose subject it is, `resolution_records.rs`). A precision is measured on the rule as it runs, never under gold alone: a field
 follows whatever decision put its value in a record (uv thread .905 under gold, .71 live). That is why it is

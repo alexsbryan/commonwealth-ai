@@ -694,9 +694,14 @@ question the pipeline asks about a type is a method on the resolved
   kept on the outcome (`Choice`); the argmax is one source among the rest.
   A type's `identity_necessary` attributes (each with declared `values`) are READ
   per asked statement as one forced choice over those values
-  (`resolve_records/read.rs`); a candidate whose SUPPLIED value differs is not
-  offered, while a READ value is one more weighed source
-  (`necessary:<attribute>`). Every source (each declared field, each necessary
+  (`resolve_records/read.rs`), unless the document reader already chose it
+  (`Statement::read`, filled from its subject fields by `resolution_records.rs`);
+  a candidate whose SUPPLIED value (a declared field's, `Statement::keys`)
+  differs is not offered, while a value a model chose, the reader's or RESOLVE's
+  own READ, is one more weighed source (`necessary:<attribute>`); each
+  document's decisions count the necessary values used by origin
+  (`DocumentResolution::necessary`: supplied, reader, resolve_read). A partition
+  answerer, which weighs nothing, still holds read values as constraints. Every source (each declared field, each necessary
   value, the proposed answer, the model's argmax) agrees or disagrees with each
   (statement, alternative) pair, and is weighed at what it is worth on the
   corpus being read: Fellegi-Sunter agreement weights fitted by EM over those
