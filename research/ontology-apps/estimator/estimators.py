@@ -75,7 +75,7 @@ def fit(comps, joint=False, fixed_u=None, fixed_prior=None):
     """EM over the comparisons. Binary sources as estimate.rs fits them (posterior-mean rates, agreeing never evidence
     against, identical sources once, classes named by lean); a tuple-valued source as categorical with Dirichlet-1
     smoothing. `fixed_u`: {source: u} held through the M-step; `fixed_prior`: the prior held."""
-    fixed_u = fixed_u or {}
+    fixed_u = {s: clamp(v) for s, v in (fixed_u or {}).items()}  # a held rate is still an open-interval probability
     patterns = collections.Counter()
     for c in comps:
         v = view(c, joint)
