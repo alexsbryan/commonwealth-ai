@@ -71,9 +71,12 @@ pub(crate) fn write_structured_output(
 /// - `chat_template_kwargs: {enable_thinking: bool}`: llama-server, vLLM and
 ///   SGLang hand the map to the Jinja chat template, and the Qwen3 templates
 ///   read exactly this key. It is the ONLY one of the three a bare
-///   llama-server understands, and it is written from `enable_thinking`, not
-///   derived from the budget: a positive budget says nothing to a template
-///   that ships thinking off.
+///   llama-server understands. It is written from `enable_thinking`, and as
+///   `false` for a zero budget when the caller set nothing: a zero budget
+///   means no thinking on every host, while a positive budget says nothing
+///   to a template that ships thinking off. A zero reasoning budget alone
+///   still lets the template open a think block (bench/lanes/engine-swap,
+///   2026-10-09: seven routing paraphrases flipped without this).
 ///
 /// The third was missing on enrich's path until 2026-09-08, and the
 /// bare-endpoint acceptance (`svrn/crates/corpus-mcp/acceptance.sh`, a
@@ -94,7 +97,8 @@ pub(crate) fn write_thinking(
             json!({"type": "enabled", "budget_tokens": tb})
         };
     }
-    if let Some(enable) = enable_thinking {
+    let enable = enable_thinking.or((think_budget == Some(0)).then_some(false));
+    if let Some(enable) = enable {
         body["chat_template_kwargs"] = json!({ "enable_thinking": enable });
     }
 }

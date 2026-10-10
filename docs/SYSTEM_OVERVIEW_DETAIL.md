@@ -3977,6 +3977,20 @@ had no key that could say otherwise.
     on `embed`/`embed_batch` and `prepare_query` on `embed_query`.
   - Found by the engine-swap probe (`bench/lanes/engine-swap/embed_parity.py`):
     unprepared query vectors sat at cosine 0.84 from the daemon's.
+- **Three more remote-engine translations (2026-10-09)**, for hosts that
+  render the model's own template. The engine-swap check found each one
+  against llama-server. With all three, R1b matched the daemon's own engine
+  on every lane the check reaches.
+  - **Forced choice** (`oicp-client/src/forced_choice.rs`). The native answer
+    is asked for first. If it is not a label-to-probability map, the call is
+    answered from one token's top-20 logprobs, renormalised over the labels,
+    and that route is remembered per provider. With no label in the top 20,
+    the answer is empty, which reads as no answer.
+  - **Zero think budget** (`chat_wire::write_thinking`). It also writes
+    `enable_thinking: false` unless the caller set the flag.
+  - **Slot aliases** (`outbound::Hosted::alias_target`, through
+    `venue::resolution_alias_keys`). A hosted engine sends `primary`/`fast`
+    as the model ids it holds.
 - **Proven live 2026-08-30**: a second daemon on `kind = "remote"` with
   deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
   (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file

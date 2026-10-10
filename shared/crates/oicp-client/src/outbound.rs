@@ -307,6 +307,20 @@ impl Hosted {
         }
     }
 
+    /// The model id a slot alias names here: `primary`, `fast`, `embed` and
+    /// their keys in `SLOT_ALIAS_POLICY` (`commonwealth/primary`, ...).
+    /// `None` for anything that is not an alias of a slot this engine holds.
+    pub(crate) fn alias_target(&self, name: &str) -> Option<&str> {
+        self.slots
+            .iter()
+            .find(|s| {
+                sovereign_contracts::venue::resolution_alias_keys(&s.role)
+                    .iter()
+                    .any(|k| k == name)
+            })
+            .map(|s| s.model_id.as_str())
+    }
+
     pub(crate) fn primary(&self) -> Option<sovereign_contracts::traits::ResidentSlot> {
         self.slots.iter().find(|s| s.role == "primary").cloned()
     }
@@ -453,7 +467,27 @@ impl SplitInferenceProvider {
                 pinned.model_id = Some(model);
                 std::borrow::Cow::Owned(pinned)
             }
-            _ => std::borrow::Cow::Borrowed(request),
+            Some(hosted) => match request
+                .model_id
+                .as_deref()
+                .and_then(|m| hosted.alias_target(m))
+            {
+                // A slot role named by its alias (`primary`, `fast`, ...):
+                // the remote serves model ids, not this node's role names.
+                Some(model) => {
+                    tracing::debug!(
+                        target: "oicp_client",
+                        alias = ?request.model_id,
+                        %model,
+                        "hosted engine: a slot alias resolved to the model id the remote serves"
+                    );
+                    let mut pinned = request.clone();
+                    pinned.model_id = Some(model.to_string());
+                    std::borrow::Cow::Owned(pinned)
+                }
+                None => std::borrow::Cow::Borrowed(request),
+            },
+            None => std::borrow::Cow::Borrowed(request),
         }
     }
 }

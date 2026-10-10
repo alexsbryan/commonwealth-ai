@@ -258,6 +258,9 @@ pub struct RemoteApiProvider {
     /// Set once this host refused `json_schema` and answered a forced function
     /// call instead (`chat_wire::send_chat`); schemas go that way from then on.
     json_schema_refused: std::sync::atomic::AtomicBool,
+    /// Set once this host answered a forced-choice call only through its
+    /// logprobs (`forced_choice`); such calls go that way from then on.
+    forced_choice_by_logprobs: std::sync::atomic::AtomicBool,
 }
 
 /// Default request timeout for `RemoteApiProvider`. Matches the
@@ -411,6 +414,7 @@ impl RemoteApiProvider {
             structured_output_mode: StructuredOutputMode::default(),
             extra_params: None,
             json_schema_refused: std::sync::atomic::AtomicBool::new(false),
+            forced_choice_by_logprobs: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -1047,6 +1051,27 @@ impl InferenceProvider for RemoteApiProvider {
         let start = Instant::now();
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
+        let labels = request.forced_choice_candidates();
+        if let Some(labels) = labels
+            .as_deref()
+            .filter(|_| self.forced_choice_by_logprobs_known())
+        {
+            if let Some(text) = self
+                .forced_choice_by_logprobs(&url, request, labels)
+                .await?
+            {
+                return Ok(CompletionResponse {
+                    text,
+                    tokens_used: 0,
+                    prompt_tokens: 0,
+                    model_id: self.model_id.clone(),
+                    latency_ms: start.elapsed().as_millis() as u64,
+                    oicp_meta: None,
+                    finish_reason: Some(FinishReason::Stop),
+                    completion_tokens: Some(1),
+                });
+            }
+        }
         let (response, mode) = self.send_chat(&admitted, &url, request).await?;
 
         let chat_response: ChatCompletionResponse = response
@@ -1058,6 +1083,16 @@ impl InferenceProvider for RemoteApiProvider {
         let text = first_choice
             .map(|c| c.message.answer(request, mode))
             .unwrap_or_default();
+        // A host that sampled a label rather than answering with the map
+        // (`forced_choice`): ask it once more through its logprobs.
+        let text = match labels {
+            Some(labels) if sovereign_contracts::oicp::forced_choice::parse(&text).is_none() => {
+                self.forced_choice_by_logprobs(&url, request, &labels)
+                    .await?
+                    .unwrap_or(text)
+            }
+            _ => text,
+        };
         let finish_reason = first_choice
             .and_then(|c| c.finish_reason.as_deref())
             .and_then(FinishReason::from_openai_str);
@@ -1451,6 +1486,7 @@ pub struct SplitInferenceProvider {
 }
 
 mod chat_wire;
+mod forced_choice;
 mod outbound;
 pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal};
 mod shed;

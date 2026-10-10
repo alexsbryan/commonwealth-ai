@@ -402,3 +402,69 @@ async fn a_client_prepared_engine_sends_the_embed_slots_inputs() {
         "the EOS is part of the input"
     );
 }
+
+/// A hosted engine resolves this node's slot aliases to the model ids the
+/// remote serves: a remote knows `Qwen3.6-35B-A3B`, not `primary`. A name
+/// that is no alias passes through untouched.
+#[tokio::test]
+async fn a_hosted_engine_sends_model_ids_not_slot_aliases() {
+    let (url, _, bodies) = vendor().await;
+    let embed = EngineEmbed::Remote {
+        endpoint_v1: "http://127.0.0.1:1/v1".into(),
+        model_id: "e".into(),
+        input_prep: None,
+    };
+    let engine = SplitInferenceProvider::engine(
+        &url,
+        embed,
+        None,
+        "chat-model".into(),
+        Some("fast-model".into()),
+        8192,
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    for (asked, sent) in [
+        ("primary", "chat-model"),
+        ("commonwealth/fast", "fast-model"),
+        ("some-other-model", "some-other-model"),
+    ] {
+        let req = CompletionRequest {
+            prompt: "hi".into(),
+            model_id: Some(asked.into()),
+            ..Default::default()
+        };
+        engine.complete(&req).await.unwrap();
+        let body = bodies.lock().unwrap().last().cloned().unwrap();
+        assert_eq!(body["model"], sent, "{asked}");
+    }
+}
+
+/// A zero think budget also tells the template: `enable_thinking: false`,
+/// unless the caller set it. A positive budget says nothing to the template.
+#[tokio::test]
+async fn a_zero_think_budget_switches_the_template_off() {
+    let (url, _, bodies) = vendor().await;
+    let provider = RemoteApiProvider::new(&url, None, "m", 8192).originating();
+    for (budget, enable, want) in [
+        (Some(0), None, Some(false)),
+        (Some(0), Some(true), Some(true)),
+        (Some(512), None, None),
+    ] {
+        let req = CompletionRequest {
+            prompt: "hi".into(),
+            think_budget: budget,
+            enable_thinking: enable,
+            ..Default::default()
+        };
+        provider.complete(&req).await.unwrap();
+        let body = bodies.lock().unwrap().last().cloned().unwrap();
+        assert_eq!(
+            body.pointer("/chat_template_kwargs/enable_thinking")
+                .and_then(Value::as_bool),
+            want,
+            "budget {budget:?}, enable_thinking {enable:?}"
+        );
+    }
+}
