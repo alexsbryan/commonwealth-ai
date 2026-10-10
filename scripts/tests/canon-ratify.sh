@@ -1,22 +1,17 @@
 #!/usr/bin/env bash
-# canon-ratify.py — proposals shown when an edit touches them, ratified by text.
+# canon-ratify.py — proposals ratified by text.
 #
-# WHY THIS EXISTS. Two things here act for the operator. The review mode types
-# answers into `canon draft --resume`, so an answer that lands on the wrong
-# candidate is a rule nobody ratified, written under their name. The lookup mode
-# puts rules in front of every edit, so a rejected proposal shown as live, or a
-# ratified rule shown as merely proposed, misleads every session.
+# WHY THIS EXISTS. The review mode acts for the operator: it types answers into
+# `canon draft --resume`, so an answer that lands on the wrong candidate is a
+# rule nobody ratified, written under their name.
 #
 # A stub prints canon's review prompt in the format of canon's draft.rs `review`
 # and wrap.rs `hang_at`, at a narrow width so candidate text wraps, and answers
-# `canon list --json` from a file. Review cases: a wrapped text with quotes and a
+# `canon list --json` from a file. Cases: a wrapped text with quotes and a
 # `because` line, a reject, an edit, a text not in the verdicts, a source that
 # differs from the judged one, an unratified group, a repeat, `--plan`, `--ids`,
-# and an agent CANON_ACTOR refused. Lookup cases: a proposal matched by file
-# name, one matched only through its edit text, a ratified rule labelled by its
-# canon id, and three that must NOT show (declined in seen, a reject verdict, an
-# unrelated file). With the source check removed, the mismatch case fails
-# (watched 2026-09-13).
+# and an agent CANON_ACTOR refused. With the source check removed, the mismatch
+# case fails (watched 2026-09-13).
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -27,7 +22,7 @@ T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 
 SCRIPT="$SCRIPT" T="$T" python3 - <<'PY'
-import hashlib, json, os, subprocess, sys
+import json, os, subprocess, sys
 
 SCRIPT, d = os.environ["SCRIPT"], os.environ["T"]
 STUB = r'''
@@ -146,49 +141,5 @@ p2 =subprocess.run([sys.executable, SCRIPT, "--root", d, "--verdicts", V, "--run
                     env=dict(env, CANON_ACTOR="agent:test"), capture_output=True, text=True)
 check(p2.returncode != 0 and "agent" in p2.stderr, "an agent CANON_ACTOR is refused before canon's review runs")
 
-# ---- lookup: what an edit is shown
-R = os.path.join(d, "repo")
-RV = os.path.join(R, ".canon", "adjudication", "ratify.jsonl")
-declined_text = "`worker_gate.rs` retries forever."
-write_jsonl(RV, [
-    {"id": "nprop0001", "text": "Every `worker_gate.rs` change keeps request ids outside the pick.", "source": "invariant/p1.md:1-2", "verdict": "accept", "group": "accept-invariant-1", "edit_text": None, "reason": "r1", "runs": {"rerun": 1}},
-    {"id": "nrat00002", "text": "`worker_gate.rs` must log every refusal.", "source": "invariant/p2.md:1-1", "verdict": "accept", "group": "accept-invariant-1", "edit_text": None, "reason": "r2", "runs": {"rerun": 2}},
-    {"id": "nrej00003", "text": declined_text, "source": "invariant/p3.md:1-1", "verdict": "accept", "group": "accept-invariant-1", "edit_text": None, "reason": "r3", "runs": {"rerun": 3}},
-    {"id": "nrjv00004", "text": "`worker_gate.rs` is fast.", "source": "invariant/p4.md:1-1", "verdict": "reject", "group": "reject-fact-1", "edit_text": None, "reason": "r4", "runs": {"rerun": 4}},
-    {"id": "nunr00005", "text": "`other_file.rs` owns its retries.", "source": "invariant/p5.md:1-1", "verdict": "accept", "group": "accept-invariant-1", "edit_text": None, "reason": "r5", "runs": {"rerun": 5}},
-    {"id": "nedt00006", "text": "Do not fold the ids.", "source": "invariant/p6.md:1-1", "verdict": "edit", "group": "edit", "edit_text": "Keep `SinglePeerSelection` ids outside its `Option<pick>`.", "reason": "r6", "runs": {"rerun": 6}},
-])
-with open(os.path.join(R, ".canon", "seen"), "w") as f:
-    f.write(hashlib.sha256(declined_text.encode()).hexdigest()[:8] + " rejected\n")
-canon_list(["`worker_gate.rs` must log every refusal."])
-
-
-def lookup(file, edit):
-    return subprocess.run([sys.executable, SCRIPT, "--lookup", "--root", R, "--canon", CANON, "--file", file,
-                           "--session", "s1"], input=edit, env=env, capture_output=True, text=True, timeout=30)
-
-
-def run_hits(extra=()):
-    return subprocess.run([sys.executable, SCRIPT, "--hits", "--root", R, "--canon", CANON, *extra],
-                          env=env, capture_output=True, text=True, timeout=30)
-
-
-out = lookup("src/mesh/worker_gate.rs", "let pick = SinglePeerSelection::new();").stdout
-check("[proposed nprop0001]" in out, "a proposal naming the edited file is shown as proposed")
-check("[proposed nedt00006]" in out, "an edit proposal matches through its corrected text")
-check("[can-000000000abc]" in out and "nrat00002" not in out, "a ratified rule is shown by its canon id, not as a proposal")
-check("nrej00003" not in out and "retries forever" not in out, "a proposal the operator declined in seen is not shown")
-check("nrjv00004" not in out and "nunr00005" not in out, "a reject verdict and an unrelated file are not shown")
-hit_ids = {json.loads(l)["id"] for l in open(os.path.join(R, ".canon", "adjudication", "hits.jsonl"))}
-check(hit_ids == {"nprop0001", "nedt00006"}, f"only shown proposals are logged as hits: {sorted(hit_ids)}")
-check(lookup("src/unrelated.rs", "fn nothing_here() {}").stdout == "", "an edit that touches no rule prints nothing")
-
-h = run_hits().stdout
-check("--run 1789349217 --ids nprop0001,nedt00006" in h or "--run 1789349217 --ids nedt00006,nprop0001" in h,
-      "--hits prints the one command that ratifies the hit proposals")
-check("2 proposed" in run_hits(["--brief"]).stdout, "--hits --brief gives the boot line")
-canon_list(["`worker_gate.rs` must log every refusal.", "Every `worker_gate.rs` change keeps request ids outside the pick."])
-h = run_hits().stdout
-check("nprop0001" not in h and "nedt00006" in h, "a hit proposal drops off --hits once canon holds it")
 sys.exit(rc)
 PY

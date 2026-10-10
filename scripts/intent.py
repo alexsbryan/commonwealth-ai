@@ -12,8 +12,7 @@ an existing seam, so the run tells us where to deepen.
   symbol ──symbols──▶ file:range ──git log -L──▶ commits
          ──body──▶ argument (local daemon; deterministic fallback, NAMED)
          ──evidence-verdict records / static class──▶ verdict
-         ──note tagged with the symbol──▶ shown by .claude/hooks/intent-warn.py
-                                          at the moment of the edit
+         ──note tagged with the symbol──▶ the notes store (--note)
 
   scripts/intent.py open_index_transient            # print the record
   scripts/intent.py open_index_transient --note     # and write it to the notes store

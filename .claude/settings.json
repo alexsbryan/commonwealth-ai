@@ -76,11 +76,6 @@
             "timeout": 15
           },
           {
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/intent-warn.py",
-            "type": "command",
-            "timeout": 10
-          },
-          {
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/size-warn.py",
             "type": "command",
             "timeout": 5
