@@ -100,3 +100,35 @@ underpriced.
 
 One run of R cannot show that the two arms are equal. It can show that
 nothing broke, and what was dropped.
+
+## Amendment, 2026-10-09 17:40, before any R1b data: forced choice through logprobs
+
+During R1, chat-ask showed the following. R1's other lanes were still
+running at the time.
+- On R, the usefulness judge returned no scores.
+- The grounding gate's judge failed open on two of three q1 runs.
+- The proxy counted 83 `x_forced_choice` calls in that lane.
+
+The embedded engine answers such a call with a label-to-probability map from
+one forward pass. llama-server instead returns the enum-constrained label it
+sampled, which `forced_choice::parse` rejects.
+
+**Arm R1b** is R1 with `engine_proxy.py --forced-choice-logprobs`. The proxy
+answers each forced-choice call itself:
+- It asks llama-server for one token, with no schema, thinking off,
+  temperature 0, and `top_logprobs = 20`.
+- It renormalises the labels' mass into the map.
+- A label outside the top 20 gets no mass. If no label is in the top 20,
+  the call returns no answer.
+
+R1b is the same eight lanes, run after R1.
+
+**Bars:**
+1. Every chat-ask check that is judged in L1 and L2 is judged in R1b. That
+   means no could-not-judge from the judge, and no `judge_failed_open` action.
+2. R1b's P(useful) medians for q1 and q2 lie within 0.05 of the L runs' range.
+3. Every proxy row for a forced-choice call reports a label mass above 0.
+
+A miss names forced choice as a dependency that a logprobs route cannot
+replace. A pass moves forced choice from the inventory's "no counterpart"
+table to its "client work" table.

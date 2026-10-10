@@ -159,6 +159,13 @@ class Tap(BaseHTTPRequestHandler):
             rec["injected_chat_template_kwargs"] = "failed: unparsable body"
             return body
 
+    def answer_here(self, body: bytes, rec: dict, is_chat: bool):
+        """`(status, json bytes)` to answer this request without forwarding it
+        as sent, or None to forward. The tap forwards everything; a subclass
+        that must reshape a call (engine_proxy.py's forced choice) answers
+        here and records what it did in `rec`."""
+        return None
+
     def forward(self):
         t0 = time.monotonic()
         with LOCK:
@@ -176,6 +183,17 @@ class Tap(BaseHTTPRequestHandler):
             body = self.rewrite(body, rec, is_chat)
         if is_chat:
             rec.update(request_shape(body))
+        answered = self.answer_here(body, rec, is_chat) if self.command == "POST" else None
+        if answered is not None:
+            status, payload = answered
+            rec.update(status=status, total_ms=round((time.monotonic() - t0) * 1000, 1))
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            self.write_log(rec, is_chat)
+            return
         tally = Tally(t0)
         try:
             conn.request(self.command, path, body=body, headers=headers)
