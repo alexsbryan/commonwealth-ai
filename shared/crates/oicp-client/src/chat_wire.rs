@@ -640,7 +640,11 @@ mod tests {
         );
 
         let origin = provider().originating();
-        assert!(origin.build_request(&named_request()).unwrap().get("oicp").is_none());
+        assert!(origin
+            .build_request(&named_request())
+            .unwrap()
+            .get("oicp")
+            .is_none());
 
         let mut composed = named_request();
         composed.oicp = Some(
@@ -713,7 +717,10 @@ mod tests {
         provider().with_grammar(GrammarSupport::Llguidance)
     }
 
-    fn constrained(lark: Option<&str>, urls: &[&str]) -> sovereign_contracts::types::CompletionRequest {
+    fn constrained(
+        lark: Option<&str>,
+        urls: &[&str],
+    ) -> sovereign_contracts::types::CompletionRequest {
         let mut req = named_request();
         req.lark_grammar = lark.map(str::to_string);
         if !urls.is_empty() {
@@ -722,7 +729,9 @@ mod tests {
         req
     }
 
-    fn with_tools(mut req: sovereign_contracts::types::CompletionRequest) -> sovereign_contracts::types::CompletionRequest {
+    fn with_tools(
+        mut req: sovereign_contracts::types::CompletionRequest,
+    ) -> sovereign_contracts::types::CompletionRequest {
         req.tools = Some(vec![sovereign_contracts::types::ToolSchema {
             name: "bash".into(),
             description: Some("run".into()),
@@ -748,7 +757,9 @@ mod tests {
     /// was unmasked (14 of 15 URLs outside the list, 2026-10-09 probe).
     #[test]
     fn an_llguidance_host_gets_the_allow_list_as_its_grammar() {
-        let body = llguidance().build_request(&constrained(None, &["https://a.test/x"])).unwrap();
+        let body = llguidance()
+            .build_request(&constrained(None, &["https://a.test/x"]))
+            .unwrap();
         let urls = vec!["https://a.test/x".to_string()];
         let want = decode_allowlist::llguidance_lark(&[(&decode_allowlist::URL, &urls)]).unwrap();
         assert_eq!(body["grammar"], json!(want));
@@ -757,11 +768,15 @@ mod tests {
 
     #[test]
     fn an_llguidance_host_gets_a_lark_grammar_with_its_header_once() {
-        let body = llguidance().build_request(&constrained(Some("start: \"a\""), &[])).unwrap();
+        let body = llguidance()
+            .build_request(&constrained(Some("start: \"a\""), &[]))
+            .unwrap();
         assert_eq!(body["grammar"], "%llguidance {}\nstart: \"a\"");
         assert!(body.get("lark_grammar").is_none(), "{body}");
         let headed = "%llguidance {}\nstart: \"b\"";
-        let body = llguidance().build_request(&constrained(Some(headed), &[])).unwrap();
+        let body = llguidance()
+            .build_request(&constrained(Some(headed), &[]))
+            .unwrap();
         assert_eq!(body["grammar"], headed);
     }
 
@@ -770,16 +785,23 @@ mod tests {
     /// allow-list.
     #[test]
     fn beside_tools_a_lark_grammar_is_dropped_and_an_allow_list_refused() {
-        let body = llguidance().build_request(&with_tools(constrained(Some("start: \"a\""), &[]))).unwrap();
-        assert!(body.get("grammar").is_none() && body.get("lark_grammar").is_none(), "{body}");
+        let body = llguidance()
+            .build_request(&with_tools(constrained(Some("start: \"a\""), &[])))
+            .unwrap();
+        assert!(
+            body.get("grammar").is_none() && body.get("lark_grammar").is_none(),
+            "{body}"
+        );
         assert!(body["tools"].as_array().is_some_and(|t| t.len() == 1));
-        let refused = llguidance().build_request(&with_tools(constrained(None, &["https://a.test/x"])));
+        let refused =
+            llguidance().build_request(&with_tools(constrained(None, &["https://a.test/x"])));
         assert!(refused.is_err(), "{refused:?}");
     }
 
     #[test]
     fn what_one_grammar_cannot_carry_is_refused() {
-        let both = llguidance().build_request(&constrained(Some("start: \"a\""), &["https://a.test/x"]));
+        let both =
+            llguidance().build_request(&constrained(Some("start: \"a\""), &["https://a.test/x"]));
         assert!(both.is_err(), "{both:?}");
         let mut beside_schema = constrained(None, &["https://a.test/x"]);
         beside_schema.structured_output = Some(schema());

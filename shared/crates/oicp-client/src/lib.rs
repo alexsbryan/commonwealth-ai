@@ -488,7 +488,10 @@ impl RemoteApiProvider {
     /// Merge these vendor fields into every request body, last.
     /// How this host takes a decode constraint: a daemon's extension
     /// fields (the default) or one llguidance `grammar`.
-    pub fn with_grammar(mut self, grammar: sovereign_contracts::engine_config::GrammarSupport) -> Self {
+    pub fn with_grammar(
+        mut self,
+        grammar: sovereign_contracts::engine_config::GrammarSupport,
+    ) -> Self {
         self.grammar = grammar;
         self
     }
@@ -720,7 +723,6 @@ impl RemoteApiProvider {
         // gap check, router) died at this boundary and every fast-slot answer
         // was truncated raw deliberation (2026-06-10 fabrication burn-down).
         chat_wire::write_thinking(&mut body, request.think_budget, request.enable_thinking);
-
 
         // Commonwealth extension: forward the caller-directed
         // stable-prefix declaration (bytes of the user prompt shared
@@ -2239,7 +2241,9 @@ mod tests {
         assert!(env.forward_budget.is_none(), "fixture starts unstated");
         assert_eq!(env.effective_forward_budget(), 1, "unstated means one hop");
 
-        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(env)).unwrap();
+        let body = provider
+            .build_request(&CompletionRequest::new("hi").with_oicp(env))
+            .unwrap();
 
         // Explicit zero, not omission. The receiver must be able to tell
         // "you are the last hop" from "nobody told me".
@@ -2258,7 +2262,9 @@ mod tests {
 
         // Fast + no model_id is the branch that builds an envelope from
         // scratch (see `build_request_slow_pins_provider_model_...`).
-        let body = provider.build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast)).unwrap();
+        let body = provider
+            .build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast))
+            .unwrap();
 
         assert_eq!(
             body["oicp"]["latency_class"], "fast",
@@ -2282,7 +2288,9 @@ mod tests {
             .with_forward_budget(0);
         assert!(!spent.may_forward());
 
-        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(spent)).unwrap();
+        let body = provider
+            .build_request(&CompletionRequest::new("hi").with_oicp(spent))
+            .unwrap();
         assert_eq!(
             body["oicp"]["forward_budget"], 0,
             "saturating, not wrapping"
