@@ -79,4 +79,17 @@ mark the earlier line lacks); boilerplate by author deleted. Replay over the bas
 lines from Locate instead of 335 and no document goes unasked (was 61); Ward 579 instead of 869. Reports: f3108fd6f
 (coverage, recovery B³, what a hit checks, joint placement coverage).
 
-**S1.3 Subject fields:** in progress. **S1.4 Ward coverage:** next. **S1.5 Typed handoff:** next.
+**S1.3 Subject fields:** in progress. The validator's fill analysis already promises them (Ward `deal: amount ←
+Point, term ← Choose`; GVC `happening: kind ← Choose`) and RESOLVE drops them, so GVC's 322 could-not-judge FOLD
+items and Ward's descriptors wait on this step.
+
+**S1.4 Modelled records.** Tracked recipes are now the ones the runs read (2c27672b6), without the keys the
+validator retires, the measured `identity_evidential` counts among them (92f5c6590). uv's case serves its current
+state through the declared protocol fold, as Ward's deal does its stage (666637f34). Ward's counterparty: of the 25
+PLACE-lost deals in the e4 residual (ward-placing/e4-ward-tune.json), 22 name the counterparty in the latest
+message's body (18 with no company record, 4 body-only); 2 never carry it, 1 is named in no body. A counterparty read
+by Pick (header companies less `ours`, and the body's mentions) as a field of the deal reaches the record once S1.3
+lands; the fold walker follows atom ids only (resolution_derived.rs `step`), so a picked value on the claim would not
+fold onto the deal without new code.
+
+**S1.5 Typed handoff:** next.
