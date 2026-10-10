@@ -35,7 +35,7 @@ check = "rendered token ids equal"
 predict = "fail:differs"
 basis = "read"
 note = "Embedded renders enable_thinking.unwrap_or(false), so thinking is closed in the prompt (prompt_helpers.rs:578). Remote sends no kwarg when think_budget > 0 (chat_wire.rs:210), and llama-server defaults thinking on for a thinking template (LS server-context.cpp:1382)."
-fix = "oicp-client: send the engine's default (enable_thinking=false) when the request leaves it None on the Templated shape"
+fix = "decided 2026-10-10: behaviour-preserving. The client sends enable_thinking=false when the request leaves it None, as the engine renders today; think_budget > 0 has been inert on jinja templates, and whether synthesis should think is a separate, measured change"
 
 [[row]]
 id = "prompt.templated-tools"
@@ -46,7 +46,7 @@ check = "rendered token ids equal"
 predict = "fail:differs"
 basis = "read"
 note = "Embedded appends the daemon's '# Tools … <tools>' block to the system message (prompt_helpers.rs:476-505). llama-server renders the template's native tool block (LS common/chat.cpp:946)."
-fix = "decision: render Hermes tools client-side and send a raw prompt, or move these callers to the native tool format (then a projection row, not a prompt row)"
+fix = "decided 2026-10-10: tool callers move to the Conversation shape and the model's native tool format, as every OpenAI-compatible server serves them; the daemon's Hermes tool block retires. This row then becomes prompt.conversation."
 
 [[row]]
 id = "prompt.conversation"
@@ -123,7 +123,7 @@ check = "greedy token sequence equal over 64 tokens on the Templated shape"
 predict = "fail:differs"
 basis = "read"
 note = "At T=0 the embedded Hermes chain still runs DRY (0.8/1.75) and a 128-token penalty window before greedy (sampler.rs:557-573); llama-server is plain argmax. Diverges only where DRY or the penalty fires (repetitive output)."
-fix = "decision: drop DRY at T=0 in the engine, or send dry_multiplier/penalties to the server"
+fix = "decided 2026-10-10: the client sends the whole sampler tuple, DRY and penalties included, from the ModelQuirks the engine reads (one decider). The server's chain order is accepted as a named difference."
 
 [[row]]
 id = "decode.sampling-mode"
@@ -145,7 +145,7 @@ check = "per-role temperature applied"
 predict = "fail:differs"
 basis = "read"
 note = "Embedded switches temperature inside JSON string content (sampler.rs:536-584). llama-server has one sampler per request."
-fix = "decision: drop it (quality effect never measured) or keep the engine"
+fix = "decided 2026-10-10: dropped. Its quality effect was never measured; a caller that wants deterministic arguments sets temperature."
 
 [[row]]
 id = "decode.max-tokens"
@@ -228,7 +228,7 @@ check = "the caller's grammar constrains the output"
 predict = "fail:differs"
 basis = "read"
 note = "Dropped and traced by the client (chat_wire.rs:100-105); llama-server's tool-call grammar stands in. A named substitution, not silent."
-fix = "decision: accept the server's tool grammar for recipe_author, or keep the engine"
+fix = "decided 2026-10-10: the alternation grammar only permits text-or-a-call (recipe_author.rs:220-231), which is tool_choice auto under llama-server's lazy tool grammar. recipe_author sends auto and no grammar."
 
 [[row]]
 id = "decode.url-allowlist"
@@ -268,6 +268,7 @@ callers = "external clients only (passthrough inference_adapter.rs:417)"
 check = "the named function is called"
 predict = "fail:silent"
 basis = "read"
+fix = "decided 2026-10-10: the client refuses a named tool_choice the server would downgrade (ARCH 6)"
 note = "llama-server reads tool_choice as a string; an object warns and becomes 'auto' (LS server-common.cpp:1138, server-common.h:40-52). The embedded engine does not enforce it either; it only changes the prompt path."
 
 [[row]]
@@ -311,7 +312,7 @@ check = "as compute.embeddings, with embed_inputs left at its default"
 predict = "fail:silent"
 basis = "measured"
 note = "Default embed_inputs=server sends bare text (engine_config.rs:245); cosine 0.84 against the engine's index, and embed_query equals embed (lib.rs:415)."
-fix = "decision: make client the default for kind=remote, or refuse a remote engine whose index was built by the embedded one"
+fix = "decided 2026-10-10: input preparation belongs to the embedding model (EmbedQuirks), applied by one decider whichever engine serves; client is the default for kind=remote"
 
 [[row]]
 id = "compute.rerank"
@@ -321,6 +322,7 @@ callers = "corpus/mod.rs:188 search_with_rerank; /v1/rerank served_kind.rs:238; 
 check = "same order and the same refusal class when no reranker is configured"
 predict = "fail:differs"
 basis = "read"
+fix = "decided 2026-10-10: reranking is its own --reranking model in the router with its own endpoint; callers that threshold scores are checked against probabilities"
 note = "The engine client sends rerank to the CHAT server (lib.rs:1840), which refuses /rerank without --reranking (LS server-context.cpp:5021): an HTTP error where the engine returns NotImplemented. With a dedicated --reranking server the 8-document order matched (2026-10-09), but llama-server scores by rank pooling and the engine generatively (rerank_slot.rs:88-119, 217)."
 
 [[row]]
@@ -331,6 +333,7 @@ callers = "streaming.rs:2968; knowledge_query.rs:1470; history.rs:366,376,381 (p
 check = "count equals llama-server /tokenize on the same text"
 predict = "fail:differs"
 basis = "read"
+fix = "decided 2026-10-10: budget callers are async; they get an exact async count from /tokenize, and the sync method stays an estimate named as one"
 note = "Remote uses the trait default chars/4 (traits.rs:578); the engine uses the fast model's tokenizer. count_tokens is sync, so the fix cannot be a per-call HTTP request."
 
 # ── projection ──────────────────────────────────────────────────────────
@@ -344,7 +347,7 @@ check = "text bytes equal given equal generated tokens"
 predict = "fail:silent"
 basis = "read"
 note = "llama-server's default reasoning format moves thinking into reasoning_content (LS common.h:633); the client reads only content and tool_calls (lib.rs:909-922), and StreamDelta only content (lib.rs:1020-1022)."
-fix = "server flag --reasoning-format none, or the client re-inlines reasoning_content"
+fix = "decided 2026-10-10: the client reads reasoning_content, the field every OpenAI-compatible server uses, and emits it as Reasoning frames; text carries the answer only"
 
 [[row]]
 id = "projection.tool-calls"
@@ -436,6 +439,7 @@ callers = "grounding judges judge.rs:148-154, batched.rs:437-561, scan.rs:50-54;
 check = "prompt tokens evaluated per call over the sequence A,A,B,A of judge calls sharing per-family prefixes"
 predict = "fail:differs"
 basis = "unverified"
+fix = "if it fails: llama-server slot save/restore (/slots/:id?action=save|restore) at the declared boundary, then checkpoint placement upstream"
 note = "The engine restores a checkpoint at the declared boundary (prefix_pin.rs:166-193). llama-server ignores the field. On Qwen3.5/3.6 (recurrent layers) it can only restore a context checkpoint at or below the common prefix (LS server-context.cpp:3344-3356), and it places checkpoints near the end of each previous prompt, past the shared prefix, so a judge call would re-evaluate the whole prefix."
 
 [[row]]
@@ -466,6 +470,7 @@ callers = "admission::stamp, streaming.rs:985,1392,2959; call_census.rs:258"
 check = "under predicted overload, an admitted call parks and an unadmitted one is shed"
 predict = "fail:differs"
 basis = "read"
+fix = "decided 2026-10-10: admission belongs to the scheduler above the engine (ARCH 12); it sheds from the server's /slots occupancy rather than an engine-internal prediction"
 note = "The engine parks admitted calls and sheds the rest past 30 s predicted wait (model_slot.rs:1316-1403). The engine client never sends turn_admission (outbound.rs:359-386), and llama-server queues everything without shedding."
 
 # ── host ────────────────────────────────────────────────────────────────
@@ -498,6 +503,7 @@ callers = "oicp_synthesis.rs:468; peer_inference.rs:2015,2078"
 check = "a supervised loopback llama-server reports the same locus as owned weights"
 predict = "fail:differs"
 basis = "read"
+fix = "decided 2026-10-10: a llama-server the daemon supervises reports OwnWeights; ForwardsOnBox stays for one it does not"
 note = "Loopback reports ForwardsOnBox (outbound.rs:410-413), which changes name resolution and consent routing (peer_inference.rs:2014-2088)."
 
 [[row]]
@@ -508,6 +514,7 @@ callers = "~12 budget sites; admin_http.rs:159"
 check = "equals the server's per-slot n_ctx and n_ctx_train from /props or /models"
 predict = "fail:differs"
 basis = "read"
+fix = "oicp-client: read n_ctx and n_ctx_train from the server at startup; refuse a configured size larger than the server's"
 note = "Remote returns configured context_size, never read from the server (lib.rs:1368); per-slot n_ctx shrinks with --parallel (LS server-context.cpp:1158-1161). n_ctx_train is None remotely."
 
 [[row]]
@@ -518,6 +525,7 @@ callers = "routes_status.rs:124; routes_inference.rs:862; daemon.rs:1334; stream
 check = "reported residency equals the router's /models status"
 predict = "fail:silent"
 basis = "read"
+fix = "oicp-client: read the router's /models status"
 note = "Synthetic rows, resident: true, size None (outbound.rs:281-324): asserted, not observed."
 
 [[row]]
@@ -528,6 +536,7 @@ callers = "mesh_admin.rs:193,307,364; hybrid.rs:288,301"
 check = "the call does what it says, or refuses"
 predict = "fail:silent"
 basis = "read"
+fix = "oicp-client: warmup and load/unload go to the router's /models/load and /models/unload; a failure is an error"
 note = "warmup POSTs a route llama-server lacks and reports Ok on failure (lib.rs:1382). load and unload refuse (lib.rs:1868-1872), which is honest; the router has /models/load and /models/unload."
 
 [[row]]
