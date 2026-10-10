@@ -569,19 +569,7 @@ impl RemoteApiProvider {
         request: &CompletionRequest,
         mode: StructuredOutputMode,
     ) -> serde_json::Value {
-        let mut messages = Vec::new();
-
-        if let Some(ref system) = request.system_message {
-            messages.push(serde_json::json!({
-                "role": "system",
-                "content": system,
-            }));
-        }
-
-        messages.push(serde_json::json!({
-            "role": "user",
-            "content": &request.prompt,
-        }));
+        let messages = chat_wire::request_messages(request);
 
         // Pin the OpenAI `model` field when the caller asked for a
         // specific model — and, since 2026-07-23, ALSO for slot-routed

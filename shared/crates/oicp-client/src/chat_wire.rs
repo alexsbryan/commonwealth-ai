@@ -6,12 +6,34 @@
 
 use serde_json::{json, Value};
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::types::CompletionRequest;
+use sovereign_contracts::types::{CompletionRequest, PromptShape};
 use std::sync::atomic::Ordering;
 
 use crate::{error_excerpt, ChatMessage, RemoteApiProvider};
 
 pub use sovereign_contracts::setup_config::StructuredOutputMode;
+
+/// The `messages` a request goes out as. A conversation goes whole, so the
+/// far end's chat template renders its roles, calls and results, as the
+/// embedded engine does. On that shape `prompt` is a flattened copy kept for
+/// token estimators; sending it put the whole agent history in one user turn
+/// labelled `Tool[id]:`, and the model ran on inside its own tool call,
+/// writing fake results and turns (e2e-swe arm D, 2026-10-09).
+pub(crate) fn request_messages(request: &CompletionRequest) -> Vec<Value> {
+    if let Some(PromptShape::Conversation { messages }) = &request.prompt_shape {
+        tracing::debug!(
+            messages = messages.len(),
+            "oicp_client:request_messages conversation sent whole"
+        );
+        return messages.clone();
+    }
+    let mut messages = Vec::with_capacity(2);
+    if let Some(system) = &request.system_message {
+        messages.push(json!({"role": "system", "content": system}));
+    }
+    messages.push(json!({"role": "user", "content": &request.prompt}));
+    messages
+}
 
 /// Write `schema` onto `body` in `mode`'s spelling, named after the schema's
 /// own `title` (JSON Schema's annotation for exactly that, which a grammar
@@ -568,5 +590,33 @@ mod tests {
         assert!(body.get("response_format").is_none(), "{body}");
         assert_eq!(body["tools"][0]["function"]["name"], "phase_1__atlas_");
         assert_eq!(body["tool_choice"]["function"]["name"], "phase_1__atlas_");
+    }
+
+    /// THE FAILING INPUT: an agent's turn the daemon took the conversation
+    /// path for. Sent as `prompt`, the whole history went to llama-server as
+    /// one user turn of `Tool[id]:` lines (e2e-swe arm D, 2026-10-09).
+    #[test]
+    fn a_conversation_goes_out_as_its_own_messages() {
+        let history = vec![
+            json!({"role": "system", "content": "You are an agent."}),
+            json!({"role": "user", "content": "Fix the bug."}),
+            json!({"role": "assistant", "content": "", "tool_calls": [{"id": "call_1",
+                "type": "function", "function": {"name": "bash", "arguments": "{\"command\":\"ls\"}"}}]}),
+            json!({"role": "tool", "tool_call_id": "call_1", "content": "src"}),
+        ];
+        let mut req = named_request();
+        req.prompt =
+            "User: Fix the bug.\n\nAssistant: <tool_call>…\n\nTool[call_1]: src\n\nAssistant:"
+                .into();
+        req.system_message = Some("You are an agent.".into());
+        req.prompt_shape = Some(PromptShape::Conversation {
+            messages: history.clone(),
+        });
+        let body = provider().build_request(&req);
+        assert_eq!(body["messages"], json!(history), "{body}");
+
+        req.prompt_shape = None;
+        let flat = provider().build_request(&req);
+        assert_eq!(flat["messages"][1]["content"], json!(req.prompt));
     }
 }
