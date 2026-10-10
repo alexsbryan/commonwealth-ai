@@ -59,6 +59,13 @@ case $arm in
       "$gguf" "$root" "$ctx" "$port" $((port + 1)) $((port + 9)) "$root" > "$root/config.toml"
     if [ "$arm" = D ]; then
       backend=$((port + 3))
+      # A server still on the backend port answers the readiness probe below
+      # while the new one fails to bind, so the daemon would quietly run on the
+      # last run's server (d262: three of four tasks, 2026-10-09).
+      if curl -sf "http://127.0.0.1:$backend/v1/models" >/dev/null; then
+        echo "serve-arm: :$backend already answers; stop that server first, a run gets a fresh one" >&2
+        exit 2
+      fi
       server=$repo/target/llama-server-vanilla/build/bin/llama-server
       "$server" -m "$gguf" -c "$ctx" -ngl 99 --parallel 1 \
         --spec-type draft-mtp --spec-draft-n-max 3 --reasoning off \
