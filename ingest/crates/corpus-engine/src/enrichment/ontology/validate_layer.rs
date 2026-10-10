@@ -85,9 +85,7 @@ impl Gap {
 /// (`document_read::reader_chosen_fields`, the plan the reader runs), never
 /// from a domain word. `None` when the declaration is read by the general
 /// extractor rather than by the passes reader, which this does not judge.
-pub(super) fn fill_analysis(
-    policies: &OntologyPolicies,
-) -> Option<Vec<((String, String), Fill)>> {
+pub(super) fn fill_analysis(policies: &OntologyPolicies) -> Option<Vec<((String, String), Fill)>> {
     let chosen = crate::enrichment::pipeline::document_read::reader_chosen_fields(policies)?;
     let index = TypeIndex::from_policies(policies);
     let mut out = Vec::new();
@@ -266,7 +264,9 @@ pub(super) fn fill_warnings(
                 say(
                     f,
                     "protocol.effective_time",
-                    format!("every transition of `{c}` stays pending and {target} never folds from it"),
+                    format!(
+                        "every transition of `{c}` stays pending and {target} never folds from it"
+                    ),
                 );
             }
             for field in rule.when.keys() {
@@ -288,7 +288,11 @@ pub(super) fn fill_warnings(
 
     // A derived path or fold steps through `ref` attributes; one that only
     // unfilled declarations carry reaches nothing.
-    let ids = d.paths.iter().map(|x| &x.id).chain(d.folds.iter().map(|x| &x.id));
+    let ids = d
+        .paths
+        .iter()
+        .map(|x| &x.id)
+        .chain(d.folds.iter().map(|x| &x.id));
     for id in ids {
         let steps: BTreeSet<String> = d
             .exprs(id)
@@ -308,9 +312,11 @@ pub(super) fn fill_warnings(
                 .filter(|((_, a), _)| *a == step)
                 .map(|((t, a), _)| unfilled(t, a))
                 .collect();
-            if let Some(Some(g)) = declared.first().copied().filter(|_| {
-                declared.iter().all(Option::is_some)
-            }) {
+            if let Some(Some(g)) = declared
+                .first()
+                .copied()
+                .filter(|_| declared.iter().all(Option::is_some))
+            {
                 warnings.push(format!(
                     "derived `{id}` steps through `{step}`, which nothing fills on any type \
                      declaring it ({}), so it reaches nothing.",
