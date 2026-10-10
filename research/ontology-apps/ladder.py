@@ -96,6 +96,55 @@ def run_trace(run):
     return trace(run) if (run / "job.debug.log").exists() and (run / "job.log").exists() else ({}, None)
 
 
+# A run that read a subset of its corpus names the sections it read in sections.ids beside its atlas (comma-separated,
+# as runs/scaffold-3sys/job.sh writes it). Its population is the fold's gold items on those sections' documents.
+SECTIONS = "sections.ids"
+
+
+def run_documents(run, atlas):
+    """The one map from a run's sections to their documents: None when the run names no sections (its population is
+    the whole fold), {"sections": n, "documents": {source_doc_id}} through the run's own index (chapters.json chunk
+    ids -> chunks.lance source_doc_id), or why it cannot be mapped (a str: could-not-judge, never a smaller fold).
+    Each system reads a source_doc_id as its gold document itself (uv: url -> id; ward: file; gvc: id or url)."""
+    path = pathlib.Path(run) / SECTIONS
+    if not path.exists():
+        return None
+    ids = [s.strip() for s in path.read_text().replace("\n", ",").split(",") if s.strip()]
+    if not ids:
+        return f"{path} names no section"
+    if atlas["index"] is None or not (atlas["index"] / "chapters.json").exists():
+        return f"{run} names its sections but holds no single index with a chapters.json to map them to documents"
+    chapters = {c["id"]: c["chunk_ids"] for c in json.loads((atlas["index"] / "chapters.json").read_text())["chapters"]}
+    absent = sorted(set(ids) - set(chapters))
+    if absent:
+        return f"{len(absent)} of {SECTIONS}'s sections are not in the run's chapters.json, e.g. {absent[0]}"
+    import lance  # noqa: PLC0415  (only a run that names its sections needs it)
+    rows = lance.dataset(str(atlas["index"] / "chunks.lance")).to_table(columns=["id", "source_doc_id"]).to_pylist()
+    doc_of = {str(r["id"]): r["source_doc_id"] for r in rows}
+    chunks = [str(c) for s in ids for c in chapters[s]]
+    lost = [c for c in chunks if not doc_of.get(c)]
+    if lost:
+        return f"{len(lost)} chunks of the named sections have no source_doc_id in chunks.lance, e.g. chunk {lost[0]}"
+    return {"sections": len(ids), "documents": {doc_of[c] for c in chunks}}
+
+
+def scope(sliced, total, kept):
+    """The `scope` every ladder reports: None for the whole fold, else the slice and the gold items it left out."""
+    if sliced is None:
+        return None
+    return {"sections": sliced["sections"], "documents": len(sliced["documents"]), "items": kept,
+            "items_left_out": total - kept}
+
+
+def population(base, sliced):
+    """The `population` every ladder names: the fold's gold items, and the restriction to the run's sections."""
+    return base if sliced is None else f"{base} on the documents of the run's {sliced['sections']} sections ({SECTIONS})"
+
+
+def could_not_judge(system, why):
+    return {"system": system, "status": "could-not-judge", "reason": why}
+
+
 def what_was_read(atlas, cost):
     """The `read` entry every ladder reports: which atlas and which half of the logs it measured."""
     return {"atlas": str(atlas["dir"]), "half": atlas["half"], "logs": cost["log_half"] if cost else "no logs kept"}
@@ -322,6 +371,10 @@ def table(results):
         out.append(f"{r['system']:5} {r['population']}: n {lad['n']}, hit {lad['hit']}, "
                    f"{lad['documents_read']} documents read; run {r['run']}")
         out.append(f"      read: atlas {r['read']['half']}; logs {r['read']['logs']}")
+        sc = r.get("scope")
+        if sc:
+            out.append(f"      scope: {sc['sections']} sections, {sc['documents']} documents; "
+                       f"{sc['items_left_out']} gold items lie outside them, left out")
         for s in Stage:
             st = lad["stages"][s.value]
             cnj = f" (+{st['could_not_judge']} could not judge)" if st["could_not_judge"] else ""
@@ -365,7 +418,8 @@ def run_system(system, path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    opt = lambda s: None if s in (None, "none") else pathlib.Path(s).expanduser()  # noqa: E731
+    # absolute once, here: ward/score.py's section_files joins a run's index under ~/.svrnmesh/indexes
+    opt = lambda s: None if s in (None, "none") else pathlib.Path(s).expanduser().resolve()  # noqa: E731
     ap.add_argument("--ward", default=str(BASELINE / "ward"))
     ap.add_argument("--uv", default=str(BASELINE / "uv"))
     ap.add_argument("--gvc", default=None, help="an end-to-end GVC run directory (none exists yet)")

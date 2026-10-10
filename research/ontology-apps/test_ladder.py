@@ -3,7 +3,7 @@ Judgement verdict, and the moved instrument against the 2026-10-09 baseline row.
 
     python3 test_ladder.py
 """
-import contextlib, io, json, pathlib, sys, tempfile, unittest
+import contextlib, io, json, os, pathlib, subprocess, sys, tempfile, unittest
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -193,6 +193,107 @@ class ScaffoldLeg(unittest.TestCase):
             (run / "recorded/atoms.json").unlink()
             r = G.measure(run, gold=FIX / "gold.json", corpus=FIX / "corpus")
         self.assertEqual(r["status"], "never-ran", r.get("reason"))
+
+
+def sliced_run(root, sections):
+    """A run that names a subset of its sections, built from fixtures/gvc-e2e-mini: its index holds one section per
+    document (sec_00001 holds A over two chunks, sec_00002 B, sec_00003 C) in chapters.json and chunks.lance, and
+    sections.ids (as runs/scaffold-3sys/job.sh writes it) names `sections`."""
+    import lance, pyarrow as pa  # noqa: E401, PLC0415  (only this fixture needs them)
+    index = root / "data/indexes/cdcr-gvc"
+    (index / "atlas").mkdir(parents=True)
+    (index / "atlas/atoms.json").write_text((FIX / "run/data/indexes/cdcr-gvc/atlas/atoms.json").read_text())
+    chunks = [(1, A), (2, A), (3, B), (4, C)]
+    lance.write_dataset(pa.table({"id": [i for i, _ in chunks], "source_doc_id": [d for _, d in chunks]}),
+                        str(index / "chunks.lance"))
+    (index / "chapters.json").write_text(json.dumps({"chapters": [
+        {"id": "sec_00001", "chunk_ids": [1, 2]}, {"id": "sec_00002", "chunk_ids": [3]},
+        {"id": "sec_00003", "chunk_ids": [4]}]}))
+    for log in ("job.log", "job.debug.log"):
+        (root / log).write_text((FIX / "run" / log).read_text())
+    (root / "sections.ids").write_text(",".join(sections) + "\n")
+    return root
+
+
+class SlicedRun(unittest.TestCase):
+    """A run that names its sections is scored on the gold items whose documents lie in them, and says so."""
+
+    def measure(self, sections):
+        with tempfile.TemporaryDirectory() as tmp:
+            return G.measure(sliced_run(pathlib.Path(tmp) / "run", sections), gold=FIX / "gold.json", corpus=FIX / "corpus")
+
+    def test_the_sections_map_to_their_documents_through_the_runs_own_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = sliced_run(pathlib.Path(tmp) / "run", ["sec_00001", "sec_00003"])
+            got = L.run_documents(run, L.run_atlas(run))
+        self.assertEqual((got["sections"], got["documents"]), (2, {A, C}))
+
+    def test_items_outside_the_sections_are_left_out_and_counted(self):
+        r = self.measure(["sec_00001", "sec_00002"])  # A and B; C's two mentions lie outside
+        self.assertEqual((r["ladder"]["n"], r["ladder"]["hit"]), (24, 3))
+        self.assertEqual(r["ladder"]["stages"]["read"]["lost"], 14)  # C's two were READ losses
+        self.assertEqual(r["scope"], {"sections": 2, "documents": 2, "items": 24, "items_left_out": 2})
+        self.assertIn("sections.ids", r["population"])
+        self.assertNotIn(C, {x["mention"].split("/")[0] for x in r["items"]})
+
+    def test_identity_scores_only_the_slices_gold(self):
+        r = self.measure(["sec_00001", "sec_00002"])
+        self.assertEqual((r["identity"]["scored"], r["identity"]["gold"]), (10, 24))
+        self.assertEqual(r["identity"]["coverage"], round(10 / 24, 3))
+
+    def test_a_section_the_index_does_not_hold_is_could_not_judge_never_a_smaller_fold(self):
+        r = self.measure(["sec_00001", "sec_09999"])
+        self.assertEqual(r["status"], "could-not-judge", r.get("reason"))
+        self.assertIn("sec_09999", r["reason"])
+
+    def test_a_run_that_names_no_sections_scores_the_whole_fold(self):
+        r = G.measure(FIX / "run", gold=FIX / "gold.json", corpus=FIX / "corpus")
+        self.assertEqual((r["ladder"]["n"], r["scope"]), (26, None))
+        self.assertEqual(r["identity"]["gold"], 26)
+
+
+RUNS = HERE.parents[1] / "runs/scaffold-3sys"
+
+
+class ScaffoldRuns(unittest.TestCase):
+    """The 2026-10-09 scaffold runs (runs/scaffold-3sys): the uv slice reads the seat's hand post-filter, and the
+    whole-fold runs, which list every section of their fold, do not move."""
+
+    def need(self, name):
+        if not (RUNS / name).exists():
+            self.skipTest(f"could not judge: {RUNS / name} is not on this host")
+        return RUNS / name
+
+    def test_the_uv_slice_reads_the_seats_post_filter(self):
+        import ladder_uv  # noqa: PLC0415
+        r = ladder_uv.measure(self.need("uv-third"))
+        self.assertEqual(r["ladder"]["n"], 132)
+        self.assertEqual(r["rungs"], {"hit": 30, "no_case_state_claim": 72, "document_not_read": 12,
+                                      "wrong_state": 11, "record_not_matched": 7})
+        self.assertEqual(r["scope"]["items_left_out"], 386 - 132)
+        if not (L.BASELINE / "uv").exists():
+            self.skipTest(f"could not judge the like-for-like pair: {L.BASELINE / 'uv'} is not on this host")
+        b = ladder_uv.measure(L.BASELINE / "uv", sections_of=RUNS / "uv-third")  # the full-fold run on the slice
+        self.assertEqual(b["rungs"], {"hit": 31, "no_case_state_claim": 72, "document_not_read": 12,
+                                      "wrong_state": 11, "record_not_matched": 6})
+        self.assertEqual(b["identity"]["gold"], r["identity"]["gold"])  # both score the slice's gold
+
+    def test_the_whole_fold_runs_do_not_move(self):
+        import ladder_ward  # noqa: PLC0415
+        w = ladder_ward.measure(self.need("ward-tune"))
+        self.assertEqual((w["ladder"]["n"], w["ladder"]["hit"], w["scope"]["items_left_out"]), (47, 2, 0))
+        self.assertEqual([w["ladder"]["stages"][s]["lost"] for s in ("read", "place", "fold")], [19, 25, 1])
+        g = G.measure(self.need("gvc"))
+        self.assertEqual((g["ladder"]["n"], g["scope"]["items_left_out"]), (977, 0))
+        self.assertEqual([(g["ladder"]["stages"][s]["lost"], g["ladder"]["stages"][s]["could_not_judge"])
+                          for s in ("read", "place", "fold")], [(180, 0), (484, 0), (0, 313)])
+
+    def test_a_relative_run_path_is_read(self):
+        run = self.need("ward-tune")
+        r = subprocess.run([sys.executable, str(HERE / "ladder.py"), "--ward", os.path.relpath(run, HERE),
+                            "--uv", "none", "--json"], capture_output=True, text=True, cwd=HERE)
+        self.assertEqual(r.returncode, 0, r.stderr[-600:])
+        self.assertEqual(json.loads(r.stdout.rsplit("\n{\"subject\"", 1)[0])[0]["status"], "judged", r.stdout[-600:])
 
 
 class Verdict(unittest.TestCase):

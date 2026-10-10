@@ -7,7 +7,9 @@ The bars are ward/score.py's score() (ward-score-v3), unchanged, and so is the r
 gold deals to deal records by evidence and party (deal_matches). The items are the tune gold deals with a current
 stage. READ: a stage_update claim sits on the deal's latest message; PLACE: one of them is about the deal's
 matched record; FOLD: the record serves the gold current stage (score()'s stage_served_by_deal is "served").
-Sections map to files through the RUN's own index, not the live one.
+Sections map to files through the RUN's own index, not the live one. A run that names its sections
+(ladder.run_documents) is scored on the tune files of their documents only: score()'s scope, so bars, items and
+identity alike; the deals that leaves out are counted.
 
 `identity` is layer-identity-ward's measure: deal records scored the way support/score.py scores uv's case
 records (er_score, the one partition scorer).
@@ -130,7 +132,10 @@ def measure(run):
     if found["index"] is None:
         return L.never_ran("ward", f"{run} holds no single data/indexes/*/atlas: its sections cannot be mapped to files")
     index, atlas = found["index"], found["dir"]
-    secfiles = S.section_files(str(index))  # an absolute path: section_files joins it under ~/.svrnmesh/indexes
+    sliced = L.run_documents(run, found)
+    if isinstance(sliced, str):
+        return L.could_not_judge("ward", sliced)
+    secfiles = S.section_files(str(index))  # absolute (the CLI resolves run paths): section_files joins it under ~/.svrnmesh/indexes
     for e in json.loads((S.WARD / "manifest.json").read_text()):
         try:
             S.DATES.setdefault(e["path"], email.utils.parsedate_to_datetime(e["date"]).isoformat())
@@ -140,6 +145,12 @@ def measure(run):
     tune_files = {f for f in g["files"] if f.split("/", 1)[0] in TUNE}
     atoms = json.loads((atlas / "atoms.json").read_text())["atoms"]
     ent, claims = S.load_atlas(atoms, secfiles, S.load_decisions(atlas / "derived_decisions.jsonl"))
+    total = len(S.score(g, ent, claims, tune_files)["stage_served_by_deal"])
+    if sliced is not None:  # the fold's files on the run's sections' documents: bars, items and identity alike
+        unnamed = {d for d in sliced["documents"] if d not in S.DOC_FILES}
+        if unnamed:
+            return L.could_not_judge("ward", f"{len(unnamed)} of the sections' documents name no manifest file")
+        tune_files = tune_files & {S.DOC_FILES[d] for d in sliced["documents"]}
     res = S.score(g, ent, claims, tune_files)
     locate, cost = L.run_trace(run)
     label = L.kind_label(locate, "stage_update")
@@ -147,7 +158,8 @@ def measure(run):
     idn = identity(g, atoms, tune_files)
     return {"system": "ward", "status": "judged", "run": str(run), "instrument_version": S.INSTRUMENT_VERSION,
             "read": L.what_was_read(found, cost),
-            "population": "tune gold deals with a current stage",
+            "population": L.population("tune gold deals with a current stage", sliced),
+            "scope": L.scope(sliced, total, len(rows)),
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
             "identity": {"b_cubed": idn["b_cubed"]["f1"], "ceaf_e": idn["ceaf_e"]["f1"], "lea": idn["lea"]["f1"],
                          "scored": idn["scored"], "coverage": idn["membership_coverage"]},

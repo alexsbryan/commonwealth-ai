@@ -3,13 +3,14 @@
     RUN holds recorded/atoms.json (a scaffold leg) or its one data/indexes/*/atlas/atoms.json (ladder.run_atlas),
     and job.log, job.debug.log, _tokens.json (their recorded half: ladder.trace)
 
-Identity is support/score.py --fold tune --atlas, unchanged (`svrn bench er-score` underneath). The items are the
-tune gold case states. A gold case's record is the one its member documents share most with, one to one
+Identity is support/score.py --fold tune --atlas, through its own functions (`svrn bench er-score` underneath). The
+items are the tune gold case states; a run that names its sections (ladder.run_documents) is scored on the states
+whose documents lie in them, and identity on that slice's gold. A gold case's record is the one its member documents share most with, one to one
 (ladder.assign). READ: a case_state claim exists on the state's document (and, with a trace, Locate saw the
 document); PLACE: one sits on the case's record; FOLD: one on that record carries the gold state.
 The baseline's rungs check the state before the record, so they are kept beside the stages from the same facts.
 """
-import collections, json, pathlib, subprocess, sys
+import collections, json, pathlib, sys
 
 import ladder as L
 
@@ -28,7 +29,36 @@ def rung(f, state_on_document, traced):
     return "hit" if f.folded else "record_not_matched"
 
 
-def items(atoms_path, locate):
+def identity(atoms_path, docs):
+    """support/score.py --fold tune --atlas, through its own deciders (load_gold, atlas_pred, evaluation_scope,
+    er_score), with gold, its no-case documents and the predictions restricted to `docs` when the run names its
+    sections: the slice's records are scored against the slice's gold, never the fold's."""
+    gold, ambiguous, none, n_cases = U.load_gold("tune")
+    pred, read = U.atlas_pred(str(atoms_path), "case_state")
+    pred = {str(k): str(v) for k, v in pred.items()}
+    outside = 0
+    if docs is not None:
+        gold = {d: c for d, c in gold.items() if d in docs}
+        ambiguous, none = ambiguous & docs, none & docs
+        outside = len(set(pred) - docs)
+        pred = {d: c for d, c in pred.items() if d in docs}
+    raw = [json.loads(x) for x in (U.ROOT / "raw/documents.jsonl").read_text().splitlines() if x.strip()]
+    try:
+        pred, scoped = U.evaluation_scope(pred, gold, ambiguous, none, raw, "tune")
+    except ValueError as e:
+        sys.exit(f"support/score.py's evaluation_scope could not judge: {e}")
+    r = U.er_score(pred, gold)
+    pick = lambda m: {k: round(r[m][k], 3) for k in ("precision", "recall", "f1")}  # noqa: E731
+    return {"fold": "tune", "atlas_read": read, "gold_cases": n_cases, "gold_documents": len(gold),
+            "ambiguous_excluded": len(ambiguous), "scored": r["b_cubed"]["n_aligned"],
+            "gold_unpredicted": len(set(gold) - set(pred)),
+            "membership_coverage": round(len(set(gold) & set(pred)) / len(gold), 3) if gold else None,
+            **scoped, "predictions_outside_sections": outside,
+            "recovery_b_cubed": pick("recovery_b_cubed"), "b_cubed": pick("b_cubed"), "ceaf_e": pick("ceaf_e"),
+            "lea": pick("lea"), "pairwise": pick("pairwise")}
+
+
+def items(atoms_path, locate, docs):
     g = json.loads((U.ROOT / "gold/cases.json").read_text())
     tune = {c["id"] for c in g["cases"] if c["fold"] == "tune"}
     gold_doc, _, _, _ = U.load_gold("tune")
@@ -40,6 +70,9 @@ def items(atoms_path, locate):
         if a.get("atom_type") == "Claim" and d.get("claim_kind") == "case_state":
             claims[str((d.get("attributes") or {}).get("document_id"))].append(d)
     states = [s for s in g["case_states"] if s["case"] in tune]
+    total = len(states)
+    if docs is not None:  # the record matching above still reads every document the run placed
+        states = [s for s in states if str(s["document"]) in docs]
     traced = {str(x) for x in locate}
     judged = bool(traced & {str(s["document"]) for s in states})
     label = L.kind_label(locate, "case_state")
@@ -56,10 +89,13 @@ def items(atoms_path, locate):
                      "claimed": sorted({state(c) or "?" for c in on}),
                      "near": L.near(locate, [doc], label) if r == "no_case_state_claim" and label else None})
     return facts, rows, {"cases_matched": len(match), "tune_cases": len(tune), "case_state_label": label,
-                         "document_not_read": "judged" if judged else "could_not_judge (no trace names a gold document)"}
+                         "document_not_read": "judged" if judged else "could_not_judge (no trace names a gold document)",
+                         "tune_case_states": total}
 
 
-def measure(run, atoms=None):
+def measure(run, atoms=None, sections_of=None):
+    """`sections_of`: read the population from another run's sections.ids (a like-for-like pair: a whole-fold run
+    scored on a slice run's documents); default the run's own."""
     run = pathlib.Path(run)
     atlas = L.run_atlas(run)
     if isinstance(atlas, str):
@@ -67,20 +103,29 @@ def measure(run, atoms=None):
     atoms = pathlib.Path(atoms) if atoms else atlas["dir"] / "atoms.json"
     if not atoms.exists():
         return L.never_ran("uv", f"{atoms} does not exist")
-    r = subprocess.run([sys.executable, str(HERE / "support/score.py"), "--fold", "tune", "--atlas", str(atoms)],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"support/score.py could not judge (exit {r.returncode}): {r.stderr.strip()[-400:]}")
-    comp = json.loads(r.stdout)
-    locate, cost = L.run_trace(run)
+    src = pathlib.Path(sections_of) if sections_of else run
+    src_atlas = atlas if src == run else L.run_atlas(src)
+    sliced = src_atlas if isinstance(src_atlas, str) else L.run_documents(src, src_atlas)
+    if isinstance(sliced, str):
+        return L.could_not_judge("uv", sliced)
     # The reader logs a document by its url, gold names it by id; raw/documents.jsonl holds both, one to one.
     url_id = {d["url"]: str(d["id"]) for d in map(json.loads, filter(str.strip, (U.ROOT / "raw/documents.jsonl").read_text().splitlines()))}
+    docs = None
+    if sliced is not None:
+        docs = {url_id[u] for u in sliced["documents"] if u in url_id}
+        unnamed = len(sliced["documents"]) - len(docs)
+        if unnamed:
+            return L.could_not_judge("uv", f"{unnamed} of the sections' documents name no raw/documents.jsonl url")
+    comp = identity(atoms, docs)
+    locate, cost = L.run_trace(run)
     locate = {url_id.get(k, k): v for k, v in locate.items()}
-    facts, rows, detail = items(atoms, locate)
+    facts, rows, detail = items(atoms, locate, docs)
     return {"system": "uv", "status": "judged", "run": str(run), "atoms": str(atoms),
             "read": L.what_was_read(atlas, cost),
-            "population": "tune gold case states",
+            "population": L.population("tune gold case states", sliced)
+                          + (f" of {src}" if sliced is not None and src != run else ""),
+            "scope": L.scope(sliced, detail["tune_case_states"], len(rows)),
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
             "identity": {"b_cubed": comp["b_cubed"]["f1"], "ceaf_e": comp["ceaf_e"]["f1"], "lea": comp["lea"]["f1"],
-                         "scored": comp["scored"], "coverage": comp["membership_coverage"]},
+                         "scored": comp["scored"], "gold": comp["gold_documents"], "coverage": comp["membership_coverage"]},
             "composition": comp, "cost": cost, "detail": detail, "items": rows}

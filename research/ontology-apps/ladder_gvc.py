@@ -17,6 +17,7 @@ sits on the chain's record, the record its mentions share most with, one to one 
 record's declared field (cdcr/fold_values.json) names the chain's gold type. A chain whose gold type has no
 declared value, a value the map does not name, or a run whose records carry no such field is could-not-judge.
 Identity: mention -> record for mentions covered on exactly one record, through support/score.py's er_score.
+A run that names its sections (ladder.run_documents) is scored on the mentions of their documents only, identity too.
 
 A record is any atom a declared type's records are written as (ladder.records_of): the happening type is an
 event type, so its records are Event atoms. Tested on fixtures/gvc-e2e-mini (built from gold.json and the raw
@@ -197,7 +198,8 @@ def identity(mentions, cover):
         return None
     r = U.er_score(pred, gold)
     return {"b_cubed": round(r["b_cubed"]["f1"], 3), "ceaf_e": round(r["ceaf_e"]["f1"], 3),
-            "lea": round(r["lea"]["f1"], 3), "scored": len(pred), "coverage": round(len(pred) / len(gold), 3),
+            "lea": round(r["lea"]["f1"], 3), "scored": len(pred), "gold": len(gold),
+            "coverage": round(len(pred) / len(gold), 3),
             "several_records": sum(len({s["record"] for s in ss}) > 1 for ss in cover.values())}
 
 
@@ -209,11 +211,19 @@ def measure(run, atoms=None, gold=GOLD, corpus=CORPUS, spec=FOLD_VALUES):
     atoms = pathlib.Path(atoms) if atoms else atlas["dir"] / "atoms.json"
     spec = json.loads(pathlib.Path(spec).read_text())
     mentions, bodies, keys = load_gold(gold, corpus)
+    sliced = L.run_documents(run, atlas)
+    if isinstance(sliced, str):
+        return L.could_not_judge("gvc", sliced)
+    total = len(mentions)
+    if sliced is not None:  # the mentions on the run's sections' documents: items, alignment and identity alike
+        docs = {keys[k] for k in sliced["documents"] if k in keys}
+        mentions = {mid: m for mid, m in mentions.items() if m["doc"] in docs}
     stmts, records, counts = statements(json.loads(atoms.read_text())["atoms"], bodies, keys)
     locate, cost = L.run_trace(run)
     facts, rows, cover, detail = items(mentions, stmts, records, spec, locate, keys)
     return {"system": "gvc", "status": "judged", "run": str(run), "atoms": str(atoms),
             "read": L.what_was_read(atlas, cost),
-            "population": "gold event mentions (gold.json)",
+            "population": L.population("gold event mentions (gold.json)", sliced),
+            "scope": L.scope(sliced, total, len(mentions)),
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
             "identity": identity(mentions, cover), "alignment": counts, "detail": detail, "cost": cost, "items": rows}
