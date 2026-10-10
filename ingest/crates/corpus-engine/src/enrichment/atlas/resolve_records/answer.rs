@@ -244,6 +244,7 @@ pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
         record = %rec.id,
         quoted = shown.len(),
         withheld,
+        quotes = ?shown,
         "atlas/resolve: a candidate's spans from other documents, quoted up to SHOWN_SURFACES"
     );
     out
