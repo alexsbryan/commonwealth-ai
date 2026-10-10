@@ -1,0 +1,342 @@
+{
+ "join": {
+  "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/blind-r2/ward-tune",
+  "rows12": "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-apps/ward-placing/e4-ward-tune.json",
+  "declaration": {
+   "type": "deal",
+   "type_description": "One gas transaction between Enron and a counterparty: who, where, how much, for what period, at what price. Known by a deal/Sitara number when one is quoted, otherwise by counterparty, delivery point and term.",
+   "attribute": "counterparty",
+   "attribute_description": "",
+   "target": "company",
+   "target_description": "An organization Kim deals with: a customer (utility, municipality, industrial user, marketer, producer), a broker, a pipeline, or Enron itself."
+  },
+  "deal_claims": {
+   "blind:deal_terms": 111,
+   "stage_update": 94
+  },
+  "deals_in_order12": 47,
+  "deals_probed": 40,
+  "deals_without_deal_claim": [
+   "bhp-d2",
+   "bhp-d3",
+   "bhp-d4",
+   "mesa-d5",
+   "mesa-d6",
+   "pasadena-d6",
+   "tep-d5"
+  ],
+  "gold_deals_outside_order12_reached": [],
+  "messages": 25,
+  "classes": {
+   "fold": 1,
+   "read": 12,
+   "BODY_ONLY": 4,
+   "ABSENT": 2,
+   "NO_JOIN": 19,
+   "hit": 2
+  },
+  "deals_sharing_their_pick_message": 20,
+  "named_in_text": 27
+ },
+ "bars": {
+  "right": 0.6,
+  "wrong_company": 0.15,
+  "calls_per_message": 3
+ },
+ "cost": {
+  "ner": {
+   "messages": 25,
+   "calls": 50,
+   "calls_per_message": 2.0,
+   "failed_calls": 0,
+   "chat_prompt_tokens_per_message": 808,
+   "chat_completion_tokens_per_message": 0
+  },
+  "chat": {
+   "messages": 25,
+   "calls": 50,
+   "calls_per_message": 2.0,
+   "failed_calls": 0,
+   "chat_prompt_tokens_per_message": 1471,
+   "chat_completion_tokens_per_message": 48
+  }
+ },
+ "named_in_text": {
+  "ner": {
+   "n": 27,
+   "right": 0.222,
+   "wrong_company": 0.593,
+   "none": 0.185,
+   "failed": 0,
+   "candidate_recall": 0.444,
+   "mention_recall": 0.444
+  },
+  "chat": {
+   "n": 27,
+   "right": 0.444,
+   "wrong_company": 0.444,
+   "none": 0.111,
+   "failed": 0,
+   "candidate_recall": 0.519,
+   "mention_recall": 0.519
+  }
+ },
+ "all": {
+  "ner": {
+   "n": 40,
+   "right": 0.2,
+   "wrong_company": 0.65,
+   "none": 0.15,
+   "failed": 0,
+   "candidate_recall": 0.425,
+   "mention_recall": 0.3
+  },
+  "chat": {
+   "n": 40,
+   "right": 0.325,
+   "wrong_company": 0.575,
+   "none": 0.1,
+   "failed": 0,
+   "candidate_recall": 0.475,
+   "mention_recall": 0.375
+  }
+ },
+ "by_class": {
+  "ABSENT": {
+   "ner": {
+    "n": 2,
+    "right": 0.0,
+    "wrong_company": 1.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 0.0,
+    "mention_recall": 0.0
+   },
+   "chat": {
+    "n": 2,
+    "right": 0.0,
+    "wrong_company": 1.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 0.0,
+    "mention_recall": 0.0
+   }
+  },
+  "BODY_ONLY": {
+   "ner": {
+    "n": 4,
+    "right": 0.25,
+    "wrong_company": 0.0,
+    "none": 0.75,
+    "failed": 0,
+    "candidate_recall": 0.25,
+    "mention_recall": 0.25
+   },
+   "chat": {
+    "n": 4,
+    "right": 0.25,
+    "wrong_company": 0.25,
+    "none": 0.5,
+    "failed": 0,
+    "candidate_recall": 0.25,
+    "mention_recall": 0.25
+   }
+  },
+  "NO_JOIN": {
+   "ner": {
+    "n": 19,
+    "right": 0.105,
+    "wrong_company": 0.842,
+    "none": 0.053,
+    "failed": 0,
+    "candidate_recall": 0.421,
+    "mention_recall": 0.421
+   },
+   "chat": {
+    "n": 19,
+    "right": 0.421,
+    "wrong_company": 0.579,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 0.526,
+    "mention_recall": 0.526
+   }
+  },
+  "fold": {
+   "ner": {
+    "n": 1,
+    "right": 0.0,
+    "wrong_company": 1.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 1.0,
+    "mention_recall": 0.0
+   },
+   "chat": {
+    "n": 1,
+    "right": 0.0,
+    "wrong_company": 1.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 1.0,
+    "mention_recall": 1.0
+   }
+  },
+  "hit": {
+   "ner": {
+    "n": 2,
+    "right": 1.0,
+    "wrong_company": 0.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 1.0,
+    "mention_recall": 0.5
+   },
+   "chat": {
+    "n": 2,
+    "right": 1.0,
+    "wrong_company": 0.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 1.0,
+    "mention_recall": 0.5
+   }
+  },
+  "read": {
+   "ner": {
+    "n": 12,
+    "right": 0.25,
+    "wrong_company": 0.583,
+    "none": 0.167,
+    "failed": 0,
+    "candidate_recall": 0.417,
+    "mention_recall": 0.167
+   },
+   "chat": {
+    "n": 12,
+    "right": 0.167,
+    "wrong_company": 0.667,
+    "none": 0.167,
+    "failed": 0,
+    "candidate_recall": 0.417,
+    "mention_recall": 0.167
+   }
+  }
+ },
+ "by_class_named": {
+  "BODY_ONLY": {
+   "ner": {
+    "n": 3,
+    "right": 0.333,
+    "wrong_company": 0.0,
+    "none": 0.667,
+    "failed": 0,
+    "candidate_recall": 0.333,
+    "mention_recall": 0.333
+   },
+   "chat": {
+    "n": 3,
+    "right": 0.333,
+    "wrong_company": 0.333,
+    "none": 0.333,
+    "failed": 0,
+    "candidate_recall": 0.333,
+    "mention_recall": 0.333
+   }
+  },
+  "NO_JOIN": {
+   "ner": {
+    "n": 18,
+    "right": 0.111,
+    "wrong_company": 0.833,
+    "none": 0.056,
+    "failed": 0,
+    "candidate_recall": 0.444,
+    "mention_recall": 0.444
+   },
+   "chat": {
+    "n": 18,
+    "right": 0.444,
+    "wrong_company": 0.556,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 0.556,
+    "mention_recall": 0.556
+   }
+  },
+  "hit": {
+   "ner": {
+    "n": 1,
+    "right": 1.0,
+    "wrong_company": 0.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 1.0,
+    "mention_recall": 1.0
+   },
+   "chat": {
+    "n": 1,
+    "right": 1.0,
+    "wrong_company": 0.0,
+    "none": 0.0,
+    "failed": 0,
+    "candidate_recall": 1.0,
+    "mention_recall": 1.0
+   }
+  },
+  "read": {
+   "ner": {
+    "n": 5,
+    "right": 0.4,
+    "wrong_company": 0.2,
+    "none": 0.4,
+    "failed": 0,
+    "candidate_recall": 0.4,
+    "mention_recall": 0.4
+   },
+   "chat": {
+    "n": 5,
+    "right": 0.4,
+    "wrong_company": 0.2,
+    "none": 0.4,
+    "failed": 0,
+    "candidate_recall": 0.4,
+    "mention_recall": 0.4
+   }
+  }
+ },
+ "header_has_gold": 5,
+ "verdict": {
+  "ner": {
+   "verdict": "not worth a pass",
+   "bars": {
+    "right": false,
+    "wrong_company": false,
+    "calls_per_message": true
+   },
+   "n": 27,
+   "right": 0.222,
+   "wrong_company": 0.593,
+   "none": 0.185,
+   "failed": 0,
+   "candidate_recall": 0.444,
+   "mention_recall": 0.444
+  },
+  "chat": {
+   "verdict": "not worth a pass",
+   "bars": {
+    "right": false,
+    "wrong_company": false,
+    "calls_per_message": true
+   },
+   "n": 27,
+   "right": 0.444,
+   "wrong_company": 0.444,
+   "none": 0.111,
+   "failed": 0,
+   "candidate_recall": 0.519,
+   "mention_recall": 0.519
+  }
+ },
+ "worth_building": false
+}
