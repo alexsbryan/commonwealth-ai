@@ -3,6 +3,7 @@ pub mod capacity;
 pub mod cpu_compat;
 pub mod embedded;
 /// The contracts an engine must satisfy, as runnable checks.
+pub mod engine_capture;
 pub mod engine_conformance;
 /// Which inference engine serves this node — selection + construction.
 pub mod engine_factory;

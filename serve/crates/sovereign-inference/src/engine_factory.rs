@@ -188,7 +188,7 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
         engine = %kind,
         "constructing the inference engine"
     );
-    match &kind {
+    let built = match &kind {
         EngineKind::Llama => build_llama(config),
         EngineKind::Remote => build_remote(&config.engine),
         EngineKind::Custom(name) => {
@@ -209,7 +209,11 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
             };
             builder.build(&config.engine)
         }
-    }
+    }?;
+    Ok(BuiltEngine {
+        provider: crate::engine_capture::wrap_if_requested(built.provider),
+        ..built
+    })
 }
 
 /// The in-process llama.cpp engine — the three-to-four GGUF slots.

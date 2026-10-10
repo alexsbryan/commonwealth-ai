@@ -196,9 +196,14 @@ impl InferenceProvider for ReloadableProvider {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    /// The names of the `fn`s declared in `text`, in order.
+/// The `InferenceProvider` methods the impl headed `impl_header` in
+/// `impl_src` does not forward, where forwarding means it declares the method
+/// and calls `.method(` in its body. A forwarding wrapper's test calls this
+/// on its own source: a trait method with a default compiles unforwarded and
+/// answers for the wrapper, which is how `lender_manifest` went missing
+/// (seat, 3f9749490).
+#[doc(hidden)]
+pub fn unforwarded_methods(impl_src: &str, impl_header: &str) -> Vec<String> {
     fn fn_names(text: &str) -> Vec<&str> {
         text.split("fn ")
             .skip(1)
@@ -206,34 +211,33 @@ mod tests {
             .filter(|name| name.chars().all(|c| c.is_alphanumeric() || c == '_'))
             .collect()
     }
+    fn block<'a>(text: &'a str, header: &str) -> &'a str {
+        let start = text.find(header).unwrap_or_else(|| panic!("`{header}` not found"));
+        let body = &text[start..];
+        &body[..body.find("\n}\n").expect("the closing brace")]
+    }
+    let methods = fn_names(block(include_str!("traits.rs"), "pub trait InferenceProvider"));
+    assert!(methods.len() > 20, "parsed too few trait methods: {methods:?}");
+    let impl_text = block(impl_src, impl_header);
+    let forwarded = fn_names(impl_text);
+    methods
+        .into_iter()
+        .filter(|m| !forwarded.contains(m) || !impl_text.contains(&format!(".{m}(")))
+        .map(str::to_string)
+        .collect()
+}
 
-    /// The doc above ("every method delegates, defaults included") as code:
-    /// a trait method with a default compiles unforwarded and answers for the
-    /// wrapper, which is how `lender_manifest` went missing (seat, 3f9749490).
+#[cfg(test)]
+mod tests {
+    use super::unforwarded_methods;
+
+    /// The doc above ("every method delegates, defaults included") as code.
     #[test]
     fn the_cell_forwards_every_inference_provider_method() {
-        let traits = include_str!("traits.rs");
-        let start = traits
-            .find("pub trait InferenceProvider")
-            .expect("the trait is declared in traits.rs");
-        let body = &traits[start..];
-        let end = body.find("\n}\n").expect("the trait's closing brace");
-        let methods = fn_names(&body[..end]);
-        assert!(methods.len() > 20, "parsed too few methods: {methods:?}");
-
-        let cell = include_str!("reloadable_provider.rs");
-        let start = cell
-            .find("impl InferenceProvider for ReloadableProvider")
-            .expect("the cell's impl");
-        let body = &cell[start..];
-        let end = body.find("\n}\n").expect("the impl's closing brace");
-        let impl_text = &body[..end];
-        let forwarded = fn_names(impl_text);
-        let missing: Vec<&str> = methods
-            .iter()
-            .copied()
-            .filter(|m| !forwarded.contains(m) || !impl_text.contains(&format!(".{m}(")))
-            .collect();
+        let missing = unforwarded_methods(
+            include_str!("reloadable_provider.rs"),
+            "impl InferenceProvider for ReloadableProvider",
+        );
         assert!(
             missing.is_empty(),
             "ReloadableProvider does not forward: {missing:?}"
