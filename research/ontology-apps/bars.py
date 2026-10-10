@@ -28,7 +28,8 @@ Selection rules, one per artifact kind; a reader never takes "something close":
 
 Per bar:
 
-  layer-default-path   the newest job run; per system, its chosen leg counts when DONE has resolve_exit=0
+  layer-default-path   the newest job run; per system (system_of: a blind recipe's round dir, else the corpus id;
+                       blind GVC's corpus is `gvc`), its chosen leg counts when DONE has resolve_exit=0
                        AND ladder.run_system judges it (status "judged"). Read-tier: on runs/scaffold-3sys the
                        whole reader took 3.4 s warm, and the three ladders 7.1 s summed as separate cold
                        processes (2026-10-09); a fold big enough to pass 10 s reads could-not-judge (timeout).
@@ -182,14 +183,14 @@ def judge_leg(system, leg):
 
 
 # ---------------------------------------------------------------- the readers
-def default_path(runs=RUNS, judge=judge_leg):
+def default_path(runs=RUNS, judge=judge_leg, home=HOME):
     found = job_runs(runs)
     if not found:
         raise Absent(f"no job run (runs/*/job.sh with a leg) under {runs}")
     run, legs = found[0]
     n = 0
     for system in SYSTEMS:
-        leg = choose_leg([l for l in legs if CORPUS_SYSTEM.get(l["corpus"]) == system])
+        leg = choose_leg([l for l in legs if system_of(l["recipe"], home, l["corpus"]) == system])
         if leg is None:
             note(f"{system}: no non-smoke leg in {run.name}")
             continue

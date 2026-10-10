@@ -93,6 +93,14 @@ class DefaultPath(Tmp):
         self.assertIn("ward: no non-smoke leg", err)
         self.assertIn("resolve_exit=1", err)
 
+    def test_a_blind_round_counts_by_its_recipe_not_its_corpus_id(self):
+        # blind GVC's corpus id is `gvc`, which names no system; its recipe's round dir does
+        for name, corpus, system in (("gvc", "gvc", "gvc"), ("ward-tune", "crm-ward", "ward"), ("uv-third", "uv-support", "uv")):
+            leg(self.runs, "r", name, corpus, self.blind("blind-author-20261009-r2", system, corpus))
+        judge, seen = judged()
+        row, _ = run_quiet(B.default_path, self.runs, judge, self.home)
+        self.assertEqual((row["value"], sorted(seen)), (3, ["gvc", "uv-third", "ward-tune"]))
+
     def test_a_ladder_that_does_not_judge_does_not_count(self):
         leg(self.runs, "r", "gvc", "cdcr-gvc", self.frozen)
         row, _ = run_quiet(B.default_path, self.runs, lambda s, l: {"status": "could-not-judge", "reason": "x"})
