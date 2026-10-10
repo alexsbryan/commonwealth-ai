@@ -34,6 +34,8 @@ type = "atlas"
 
 [enrichment.ontology]
 version = 1
+document_reading = true
+document_reader = "passes"
 
 [[enrichment.ontology.types]]
 name = "person"
@@ -61,6 +63,7 @@ attributes = [
 [[enrichment.ontology.types]]
 name = "case_state"
 kind = "claim"
+description = "a statement that shows where a case stands"
 force = "assertive"
 subject = "case"
 attributes = [
