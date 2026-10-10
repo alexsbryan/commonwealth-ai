@@ -4,3 +4,4 @@ identity: team → canonical name (default; declare `identity = [...]` for an ex
 identity: component → path (external key, strict merge)
 identity: service → path (external key, strict merge) — inherited from `component`
 question shapes: enumerate [team, component, service]; relations [(none)]; events [incident]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

@@ -115,6 +115,7 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         check_evidential(&policies, &mut out.errors);
         derived_facets(&policies, &mut out.notes);
         super::validate_derived::check(&policies, &mut out.errors, &mut out.notes);
+        super::validate_layer::fill_warnings(&policies, &mut out.warnings, &mut out.notes);
     }
     out.notes.extend(document_note);
     out

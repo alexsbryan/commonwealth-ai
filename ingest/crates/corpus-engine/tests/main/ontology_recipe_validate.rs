@@ -667,9 +667,17 @@ from = ["^subject / party"]
 fn validate_derived_attributes_print_in_words_with_their_side_of_resolve() {
     let v = validate(&derived_decl("party_of_message", "party_of_deal", ""));
     assert!(v.errors.is_empty(), "{:?}", v.errors);
-    assert!(
-        v.warnings.is_empty(),
+    // The only warning is the fill analysis's true one: `person.nickname` is
+    // open text no source reads and Point is not built.
+    assert_eq!(
+        v.warnings.len(),
+        1,
         "the new keys are known: {:?}",
+        v.warnings
+    );
+    assert!(
+        v.warnings[0].contains("nothing fills `nickname`"),
+        "{:?}",
         v.warnings
     );
     let notes = v.notes.join("\n");

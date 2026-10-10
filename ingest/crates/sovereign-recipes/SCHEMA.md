@@ -1344,6 +1344,18 @@ kind whose `subject` it is: with none, nothing of it would be read, so `enrich
 extract` refuses the build and `recipe validate` says why. The old `document_reading` and
 `document_reader` keys are ignored, and `recipe validate` names them.
 
+Under that plan an attribute gets a value only four ways: its type's `source`
+reads it, a declared path or fold derives it (`derived = "<id>"`), Choose asks
+it (a closed `values` set on a claim kind, or on a claim kind's subject; a
+metadata-sourced subject is asked its identity keys only), or, for a claim's
+`subject`, RESOLVE decides it. A `ref` waits on the Pick pass and open text, a
+quantity or a time on the Point pass, neither built. `recipe validate` prints
+each type's fillers as a `fill:` note and warns on every attribute nothing
+fills, and on every protocol field (`identity`, `effective_time`, a `when` or
+`corrects` field), identity key or derived step keyed on one: such a fold
+never folds and such a key never links. A declaration the general extractor
+reads is not analysed, and the note says so.
+
 ```toml
 [enrichment.ontology]
 version = 1

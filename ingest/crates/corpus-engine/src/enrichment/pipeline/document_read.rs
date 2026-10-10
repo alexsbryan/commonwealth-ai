@@ -17,6 +17,7 @@ pub use cache::{
     cache_matches_chapter, checkpoint_processed_ids, context_fingerprint, contract_fingerprint,
     phase1_cache_matches, validate_checkpoint,
 };
+pub use passes::chosen_fields as reader_chosen_fields;
 pub use passes::read as read_passes;
 pub use projection::parse_response;
 pub(super) use runner_support::{

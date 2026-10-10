@@ -3,3 +3,4 @@ identity: organization → canonical name (default; declare `identity = [...]` f
 identity: customer → account_id (external key, strict merge)
 identity: feature → canonical name (default; declare `identity = [...]` for an external key)
 question shapes: enumerate [organization, customer, feature]; relations [(none)]; events [ticket]; aggregate [request by customer]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

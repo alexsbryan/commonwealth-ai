@@ -125,7 +125,11 @@ by the declaration (every claim kind readable, or the general extractor; a mix r
 and Choose; the one-shot reader was deleted on 2026-10-09 with no comparison run (operator: no build step gated on a
 test made up for it). Why: every one-shot read
 failed the same way — the local model asked to find, label, name and cite at once (stage ~43%, party
-.24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c).
+.24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c). Until Pick and Point are built, a
+field they would answer stays empty, so `recipe validate` names each attribute's filler (a source, a derivation,
+Choose from the reader's own plan, RESOLVE for a subject) and warns on what nothing fills and on any fold, protocol
+or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
+and `decision_ref` never folded, silently).
 
 ## The generality test
 

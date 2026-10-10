@@ -543,6 +543,37 @@ impl Folded {
     }
 }
 
+/// Every field the plan's Choose pass asks, as `(claim kind, type, attribute)`:
+/// the claim's own closed fields under its own name, its subject's under the
+/// subject's. `None` when the declaration is not read by this plan at all
+/// (`OntologyPolicies::reads_documents`). `recipe validate`'s fill analysis
+/// reads it, so what validate says is asked is what the reader asks.
+pub fn chosen_fields(policies: &OntologyPolicies) -> Option<Vec<(String, String, String)>> {
+    if !policies.reads_documents() {
+        return None;
+    }
+    let plan = Plan::of(policies);
+    let mut out = Vec::new();
+    for kind in &plan.kinds {
+        let sides = [
+            (kind.decl, &kind.fields),
+            (kind.subject, &kind.subject_fields),
+        ];
+        for (owner, fields) in sides {
+            for field in fields.iter() {
+                if let FieldPlan::Choose(closed) = field {
+                    out.push((
+                        kind.decl.name.clone(),
+                        owner.name.clone(),
+                        closed.name.clone(),
+                    ));
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
 /// What the plan asks, rendered on a fixed sample document: a change to any
 /// question's wording changes this value, and so the contract fingerprint
 /// that keys cached reads (`schema::contract_value`).
