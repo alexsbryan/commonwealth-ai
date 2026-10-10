@@ -5,18 +5,18 @@ use super::*;
 use corpus_engine::enrichment::atlas::resolve_records::QUOTE_LABEL;
 
 /// The attributes a declared field, key, reference or derivation supplies,
-/// per type: derived attributes, references, a metadata-sourced type's
-/// attributes other than the identity keys a statement names it by, and the
-/// document stamps.
+/// per type: derived attributes (a declared path or fold fills them, references
+/// among them), a metadata-sourced type's attributes other than the identity
+/// keys a statement names it by (its `refs` among them), and the document
+/// stamps. A reference no declaration fills is open: Pick asks it.
 fn supplied(policies: &OntologyPolicies) -> BTreeSet<(String, String)> {
-    use corpus_engine::enrichment::ontology::{AttrFamily, SourceDecl};
+    use corpus_engine::enrichment::ontology::SourceDecl;
     let mut out = BTreeSet::new();
     for t in &policies.shape.types {
         let sourced = matches!(t.source, Some(SourceDecl::Metadata(_)));
         for a in &t.attributes {
-            let reference = matches!(a.family, AttrFamily::Ref { .. });
             let keyed = t.identity.contains(&a.name);
-            if a.derived.is_some() || reference || (sourced && !keyed) {
+            if a.derived.is_some() || (sourced && !keyed) {
                 out.insert((t.name.clone(), a.name.clone()));
             }
         }
@@ -27,8 +27,9 @@ fn supplied(policies: &OntologyPolicies) -> BTreeSet<(String, String)> {
     out
 }
 
-/// The `(type, attribute)` a Choose question asks, from its rendered text.
-fn chosen(prompt: &ChatPrompt) -> (String, String) {
+/// The `(type, attribute)` a Choose, Point or Pick question asks, from its
+/// rendered text.
+pub(super) fn chosen(prompt: &ChatPrompt) -> (String, String) {
     let line = |tag: &str| {
         prompt
             .user
@@ -39,8 +40,17 @@ fn chosen(prompt: &ChatPrompt) -> (String, String) {
     };
     let ty = line("Type: ");
     let ty = ty.split(" (").next().unwrap().to_string();
-    (ty, line("Attribute: "))
+    let attr = line("Attribute: ");
+    let attr = attr.split([',', ' ']).next().unwrap().to_string();
+    (ty, attr)
 }
+
+/// The phases that ask a field of a statement.
+pub(super) const FIELD_PHASES: [&str; 3] = [
+    "document_passes_choose",
+    "document_passes_point",
+    "document_passes_pick",
+];
 
 /// C1: a model question asks only what declared structure leaves open: no
 /// question of a kind the plan does not generate, and no Choose of a value a
@@ -58,15 +68,20 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
             assert!(
                 matches!(
                     phase.as_str(),
-                    "document_passes_locate" | "document_passes_choose" | "resolve_select"
+                    "document_passes_locate"
+                        | "document_passes_mention"
+                        | "document_passes_choose"
+                        | "document_passes_point"
+                        | "document_passes_pick"
+                        | "resolve_select"
                 ),
                 "{shape}: a question the plan does not generate: `{phase}`"
             );
-            if phase == "document_passes_choose" {
+            if FIELD_PHASES.contains(&phase.as_str()) {
                 let asked = chosen(p);
                 assert!(
                     !supplied.contains(&asked),
-                    "{shape}: Choose asked {asked:?}, which declared structure supplies"
+                    "{shape}: `{phase}` asked {asked:?}, which declared structure supplies"
                 );
             }
         }
@@ -459,7 +474,7 @@ async fn c5_a_run_replays_without_the_model() {
 }
 
 /// Every type and attribute name of a recipe, renamed: `t<i>` and `a<i>`.
-fn renamed(f: &Fixture) -> (Fixture, BTreeMap<String, String>) {
+pub(super) fn renamed(f: &Fixture) -> (Fixture, BTreeMap<String, String>) {
     let p = f.policies();
     let mut names: BTreeMap<String, String> = BTreeMap::new();
     for (i, t) in p.shape.types.iter().enumerate() {

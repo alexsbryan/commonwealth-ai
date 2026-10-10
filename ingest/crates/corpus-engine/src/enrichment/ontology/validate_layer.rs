@@ -50,43 +50,47 @@ pub(super) enum Fill {
     Source,
     /// A declared path or fold derives it (`derived = "<id>"`).
     Derived(String),
-    /// The reader's Choose pass asks it, on statements of these claim kinds.
-    Choose(Vec<String>),
+    /// A reader pass asks it (`Choose`, `Point`, `Pick`), on statements of
+    /// these claim kinds.
+    Read(&'static str, Vec<String>),
     /// Nothing does; why, in the declaration's own terms.
     Nothing(Gap),
 }
 
-/// Why nothing fills an attribute: the reader pass that would ask it is not
-/// built (ONTOLOGY_METHOD §Reading), or it is closed and no Choose reaches it.
+/// Why nothing fills an attribute (ONTOLOGY_METHOD §Reading).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) enum Gap {
-    /// A `ref`: the Pick pass is specced, not built.
-    Pick,
-    /// Open text, a quantity or a time: the Point pass is specced, not built.
-    Point,
-    /// Closed, but neither a read claim kind nor the subject of one asks it
-    /// (a metadata-sourced subject is asked its identity keys only).
-    NotAsked,
+    /// Neither a read claim kind nor the subject of one asks it (a
+    /// metadata-sourced subject is asked its identity keys only).
+    NotRead,
+    /// Closed with more values than one forced choice shows.
+    TooWide,
+    /// A reference to a type only a table source holds, which no stage reads
+    /// yet and Mention does not look past: Pick has no candidate.
+    NoCandidate,
 }
 
 impl Gap {
     fn why(self) -> &'static str {
         match self {
-            Gap::Pick => "a `ref`: the reader's Pick pass is not built",
-            Gap::Point => "an open value: the reader's Point pass is not built",
-            Gap::NotAsked => "closed, but no read claim kind's Choose asks it",
+            Gap::NotRead => "no read claim kind, nor the subject of one, asks it",
+            Gap::TooWide => "closed with more values than one forced choice shows",
+            Gap::NoCandidate => {
+                "a `ref` to a type only a table source holds, which no stage reads yet, so Pick \
+                 has no candidate"
+            }
         }
     }
 }
 
 /// The fill analysis: for every attribute every declared type declares, how
 /// it is filled, keyed `(type, attribute)` in declaration order. A filler is
-/// named from the declaration and the reader's built passes alone
-/// (`document_read::reader_chosen_fields`, the plan the reader runs), never
+/// named from the declaration and the reader's plan alone
+/// (`document_read::reader_read_fields`, the plan the reader runs), never
 /// from a domain word. `None` when the declaration is read by the general
 /// extractor rather than by the passes reader, which this does not judge.
 pub(super) fn fill_analysis(policies: &OntologyPolicies) -> Option<Vec<((String, String), Fill)>> {
-    let chosen = crate::enrichment::pipeline::document_read::reader_chosen_fields(policies)?;
+    let read = crate::enrichment::pipeline::document_read::reader_read_fields(policies)?;
     let index = TypeIndex::from_policies(policies);
     let mut out = Vec::new();
     for t in &policies.shape.types {
@@ -96,15 +100,19 @@ pub(super) fn fill_analysis(policies: &OntologyPolicies) -> Option<Vec<((String,
             } else if sourced(t.source.as_ref(), &a.name) {
                 Fill::Source
             } else {
-                let via: BTreeSet<String> = chosen
+                let mut pass = None;
+                let via: BTreeSet<String> = read
                     .iter()
-                    .filter(|(_, owner, attr)| *attr == a.name && index.is_a(owner, &t.name))
-                    .map(|(claim, _, _)| claim.clone())
+                    .filter(|(_, owner, attr, _)| *attr == a.name && index.is_a(owner, &t.name))
+                    .map(|(claim, _, _, p)| {
+                        pass = Some(*p);
+                        claim.clone()
+                    })
                     .collect();
-                if via.is_empty() {
-                    Fill::Nothing(gap(a))
-                } else {
-                    Fill::Choose(via.into_iter().collect())
+                match pass {
+                    Some("Pick") if no_candidate(policies, a) => Fill::Nothing(Gap::NoCandidate),
+                    Some(p) => Fill::Read(p, via.into_iter().collect()),
+                    None => Fill::Nothing(gap(a)),
                 }
             };
             out.push(((t.name.clone(), a.name.clone()), fill));
@@ -123,11 +131,35 @@ fn sourced(source: Option<&SourceDecl>, attr: &str) -> bool {
     }
 }
 
+/// The type a reference targets, when only a table source holds it.
+fn no_candidate(policies: &OntologyPolicies, a: &AttrDecl) -> bool {
+    let AttrFamily::Ref { of } = &a.family else {
+        return false;
+    };
+    policies
+        .type_decl(of)
+        .is_some_and(|t| matches!(t.source, Some(SourceDecl::Table(_))))
+}
+
 fn gap(a: &AttrDecl) -> Gap {
     match &a.family {
-        AttrFamily::Ref { .. } => Gap::Pick,
-        AttrFamily::Text { values } if !values.is_empty() => Gap::NotAsked,
-        _ => Gap::Point,
+        AttrFamily::Text { values }
+            if values.len() > crate::enrichment::atlas::resolve_records::LABELS.len() =>
+        {
+            Gap::TooWide
+        }
+        _ => Gap::NotRead,
+    }
+}
+
+/// Where a Pick of `a` finds its candidates, for the fill note.
+fn candidates_of(policies: &OntologyPolicies, a: &AttrDecl) -> String {
+    let AttrFamily::Ref { of } = &a.family else {
+        return String::new();
+    };
+    match policies.type_decl(of).and_then(|t| t.source.as_ref()) {
+        Some(SourceDecl::Metadata(_)) => format!(" (candidates: `{of}`'s source records, Mention)"),
+        _ => " (candidates: Mention)".to_string(),
     }
 }
 
@@ -180,7 +212,16 @@ pub(super) fn fill_warnings(
             parts.push(match fill {
                 Fill::Source => format!("{} ← source", a.name),
                 Fill::Derived(id) => format!("{} ← derived `{id}`", a.name),
-                Fill::Choose(via) => format!("{} ← Choose on {}", a.name, via.join(", ")),
+                Fill::Read(pass, via) => format!(
+                    "{} ← {pass} on {}{}",
+                    a.name,
+                    via.join(", "),
+                    if *pass == "Pick" {
+                        candidates_of(policies, a)
+                    } else {
+                        String::new()
+                    }
+                ),
                 Fill::Nothing(g) => {
                     gaps.push(format!("`{}` ({})", a.name, g.why()));
                     format!("{} ← nothing", a.name)

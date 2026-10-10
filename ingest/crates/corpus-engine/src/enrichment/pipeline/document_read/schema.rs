@@ -7,7 +7,9 @@ use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 
 /// v4: one reader remains (passes); the one-shot prompt, its decoder schema and
 /// its citation handles are gone, so reads cached under v3 are not reused.
-const CONTRACT_VERSION: u32 = 4;
+/// v5: prefill, line classes, Point, Mention and Pick; a v4 read left open
+/// fields and references unknown, so it is not reused.
+const CONTRACT_VERSION: u32 = 5;
 
 /// The Phase-1 prompt of a declared reading: the plan this chapter will be read
 /// by, never dispatched. The passes reader asks its own small questions

@@ -37,7 +37,7 @@ pub(super) fn context(body: &str, start: usize, end: usize) -> String {
 }
 
 /// A statement's passage with its own words in `[[` `]]`.
-pub(super) fn marked_context(body: &str, start: usize, end: usize) -> String {
+pub(crate) fn marked_context(body: &str, start: usize, end: usize) -> String {
     let (lo, hi) = window(body, start, end);
     fold_ws(&format!(
         "{}[[{}]]{}",

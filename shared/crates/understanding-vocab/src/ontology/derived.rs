@@ -179,6 +179,28 @@ impl DerivedPolicy {
             .or_else(|| self.sets.iter().find(|s| s.id == id).map(Named::SetDecl))
     }
 
+    /// The declared exclusion sets: every set a declared path or fold drops
+    /// what it reaches by (`[!set]`). A path that does not parse names none;
+    /// `recipe validate` refuses it.
+    pub fn exclusion_sets(&self) -> BTreeSet<&str> {
+        let paths = self.paths.iter().map(|p| p.path.as_str());
+        let folds = self
+            .folds
+            .iter()
+            .flat_map(|f| f.from.iter().map(String::as_str));
+        let mut out = BTreeSet::new();
+        for src in paths.chain(folds) {
+            if let Ok(e) = PathExpr::parse(src) {
+                for set in e.dropped_sets() {
+                    if let Some(s) = self.sets.iter().find(|s| s.id == set) {
+                        out.insert(s.id.as_str());
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// The parsed expressions a path or fold id evaluates.
     pub fn exprs(&self, id: &str) -> Result<Vec<PathExpr>, String> {
         match self.get(id) {
@@ -350,6 +372,23 @@ impl PathExpr {
             PathExpr::Filter { inner, set, .. } => {
                 let mut v = inner.sets();
                 v.push(set);
+                v
+            }
+        }
+    }
+
+    /// Every set a filter drops what it names by (`[!set]`).
+    pub fn dropped_sets(&self) -> Vec<&str> {
+        match self {
+            PathExpr::Step { .. } => Vec::new(),
+            PathExpr::Seq(ps) | PathExpr::Alt(ps) => {
+                ps.iter().flat_map(PathExpr::dropped_sets).collect()
+            }
+            PathExpr::Filter { inner, set, keep } => {
+                let mut v = inner.dropped_sets();
+                if !keep {
+                    v.push(set);
+                }
                 v
             }
         }

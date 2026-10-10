@@ -15,28 +15,20 @@ Derived from your declarations:
   identity: participant → login (external key, strict merge)
   question shapes: enumerate [problem, issue, pull_request, uv_release, label, participant]; relations [concerns, duplicate_of, addresses]; events [(none)]; aggregate [report by uv_version, report by last_working, diagnosis by introduced_in, decision by fixed_in, decision by pull_request, commitment by target_release]
   derived: problem.status ← fold `problem_status` by `protocol`, after RESOLVE: the claims about it
-  fill: problem: category ← Choose on commitment, decision, diagnosis, report, request; component ← Choose on commitment, decision, diagnosis, report, request; status ← derived `problem_status`; introduced_in ← nothing; fixed_in ← nothing
+  fill: problem: category ← Choose on commitment, decision, diagnosis, report, request; component ← Choose on commitment, decision, diagnosis, report, request; status ← derived `problem_status`; introduced_in ← Pick on commitment, decision, diagnosis, report, request (candidates: Mention); fixed_in ← Pick on commitment, decision, diagnosis, report, request (candidates: Mention)
   fill: issue: number ← source
   fill: pull_request: number ← nothing; state ← nothing
   fill: uv_release: version ← nothing; released_on ← nothing
   fill: label: name ← source
   fill: participant: login ← source
-  fill: report: subject `problem` ← RESOLVE; framed_as ← Choose on report; symptom ← nothing; uv_version ← nothing; last_working ← nothing; os ← Choose on report; arch ← Choose on report; python_version ← nothing
-  fill: request: subject `problem` ← RESOLVE; ask ← Choose on request; desired ← nothing
-  fill: diagnosis: subject `problem` ← RESOLVE; nature ← Choose on diagnosis; component ← Choose on diagnosis; cause ← nothing; introduced_in ← nothing; role ← Choose on diagnosis
-  fill: decision: subject `problem` ← RESOLVE; outcome ← Choose on decision; role ← Choose on decision; decision_ref ← nothing; corrects ← nothing; fixed_in ← nothing; pull_request ← nothing
-  fill: commitment: subject `problem` ← RESOLVE; role ← Choose on commitment; target_release ← nothing
+  fill: report: subject `problem` ← RESOLVE; framed_as ← Choose on report; symptom ← Point on report; uv_version ← Pick on report (candidates: Mention); last_working ← Pick on report (candidates: Mention); os ← Choose on report; arch ← Choose on report; python_version ← Point on report
+  fill: request: subject `problem` ← RESOLVE; ask ← Choose on request; desired ← Point on request
+  fill: diagnosis: subject `problem` ← RESOLVE; nature ← Choose on diagnosis; component ← Choose on diagnosis; cause ← Point on diagnosis; introduced_in ← Pick on diagnosis (candidates: Mention); role ← Choose on diagnosis
+  fill: decision: subject `problem` ← RESOLVE; outcome ← Choose on decision; role ← Choose on decision; decision_ref ← Point on decision; corrects ← Point on decision; fixed_in ← Pick on decision (candidates: Mention); pull_request ← Pick on decision (candidates: Mention)
+  fill: commitment: subject `problem` ← RESOLVE; role ← Choose on commitment; target_release ← Pick on commitment (candidates: Mention)
   document fields: document_date ← `created_at` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `thread`, document_id ← `id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted
   ⚠  [enrichment.ontology] `document_reading` is retired and ignored: declared reading is chosen by the declaration: every claim kind with a force and a subject RESOLVE or a metadata source identifies is read document by document. Remove the key.
-  ⚠  ontology type `problem`: nothing fills `introduced_in` (a `ref`: the reader's Pick pass is not built), `fixed_in` (a `ref`: the reader's Pick pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
-  ⚠  ontology type `pull_request`: nothing fills `number` (an open value: the reader's Point pass is not built), `state` (closed, but no read claim kind's Choose asks it). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `pull_request`: nothing fills `number` (no read claim kind, nor the subject of one, asks it), `state` (no read claim kind, nor the subject of one, asks it). Each stays empty on every record; give it a source or a derivation, or drop it.
   ⚠  ontology type `pull_request`: identity is keyed on `number` (identity), which nothing fills, so no record ever has a value there and the key never links or forbids a link.
-  ⚠  ontology type `uv_release`: nothing fills `version` (an open value: the reader's Point pass is not built), `released_on` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `uv_release`: nothing fills `version` (no read claim kind, nor the subject of one, asks it), `released_on` (no read claim kind, nor the subject of one, asks it). Each stays empty on every record; give it a source or a derivation, or drop it.
   ⚠  ontology type `uv_release`: identity is keyed on `version` (identity), which nothing fills, so no record ever has a value there and the key never links or forbids a link.
-  ⚠  ontology type `report`: nothing fills `symptom` (an open value: the reader's Point pass is not built), `uv_version` (a `ref`: the reader's Pick pass is not built), `last_working` (a `ref`: the reader's Pick pass is not built), `python_version` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
-  ⚠  ontology type `request`: nothing fills `desired` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
-  ⚠  ontology type `diagnosis`: nothing fills `cause` (an open value: the reader's Point pass is not built), `introduced_in` (a `ref`: the reader's Pick pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
-  ⚠  ontology type `decision`: nothing fills `decision_ref` (an open value: the reader's Point pass is not built), `corrects` (an open value: the reader's Point pass is not built), `fixed_in` (a `ref`: the reader's Pick pass is not built), `pull_request` (a `ref`: the reader's Pick pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
-  ⚠  ontology type `commitment`: nothing fills `target_release` (a `ref`: the reader's Pick pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
-  ⚠  derived fold `problem_status`: protocol.identity `decision.decision_ref`, which nothing fills (an open value: the reader's Point pass is not built), so every transition of `decision` stays pending and `problem.status` never folds from it.
-  ⚠  derived fold `problem_status`: rule `mistaken_close_corrected` corrects by `decision.corrects`, which nothing fills (an open value: the reader's Point pass is not built), so it never corrects a prior transition.

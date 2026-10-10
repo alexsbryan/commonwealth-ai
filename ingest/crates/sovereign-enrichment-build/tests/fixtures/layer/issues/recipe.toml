@@ -59,6 +59,7 @@ force = "assertive"
 subject = "case"
 attributes = [
   { name = "state", type = "text", values = ["reported", "confirmed", "resolved", "declined"] },
+  { name = "app_version", type = "text", description = "the app version the statement names" },
 ]
 
 [enrichment.ontology.change]

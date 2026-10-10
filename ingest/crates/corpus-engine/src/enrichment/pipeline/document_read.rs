@@ -6,9 +6,13 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod ask;
 mod cache;
 mod line_classes;
+mod mention;
 mod passes;
+mod pick;
+mod point;
 mod prefill;
 mod projection;
 mod runner_support;
@@ -20,8 +24,8 @@ pub use cache::{
     phase1_cache_matches, validate_checkpoint,
 };
 pub use line_classes::LineClasses;
-pub use passes::chosen_fields as reader_chosen_fields;
 pub use passes::read as read_passes;
+pub use passes::read_fields as reader_read_fields;
 pub use projection::parse_response;
 pub(super) use runner_support::{
     cache_text as runner_cache_text, load_exemplar_bank as runner_load_exemplar_bank,

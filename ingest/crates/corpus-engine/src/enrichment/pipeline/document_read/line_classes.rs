@@ -86,7 +86,8 @@ impl LineClasses {
             if out.docs.contains_key(d.key()) {
                 continue;
             }
-            let date = date_field.and_then(|f| read_stamp(d.metadata(), DocumentStamp::Date, f).ok());
+            let date =
+                date_field.and_then(|f| read_stamp(d.metadata(), DocumentStamp::Date, f).ok());
             // An author is compared after the identity fold, as a source's
             // identity values are.
             let author = author_field
@@ -95,7 +96,10 @@ impl LineClasses {
             out.docs.insert(d.key().to_string(), (date, author));
             for line in d.raw_body().lines() {
                 if let Some(k) = line_key(line) {
-                    out.holders.entry(k).or_default().insert(d.key().to_string());
+                    out.holders
+                        .entry(k)
+                        .or_default()
+                        .insert(d.key().to_string());
                 }
             }
         }

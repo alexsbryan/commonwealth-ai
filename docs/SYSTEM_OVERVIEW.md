@@ -637,14 +637,21 @@ question the pipeline asks about a type is a method on the resolved
   (`change.document.author`: boilerplate), is never asked (`line_classes.rs`,
   indexed once per run over every chapter's documents and part of the section
   cache key). Locate asks every remaining
-  numbered line which declared claim kind it states, then Choose asks each
-  closed-valued field of the claim and of its subject RESOLVE's READ question
-  through the census funnel (`decision_call`); a field it cannot ask yet
-  (reference, quantity, time, open text) is Unknown with that reason. Its
+  numbered line which declared claim kind it states, and Mention which entity
+  type a read reference targets it names, pointing at the words (`mention.rs`;
+  no type a table source holds). Per statement each field is asked by its
+  declared family (`ask.rs`): Choose a closed value with RESOLVE's READ question,
+  Point at an open one's start and end words and read the value by the family
+  (`point.rs`), Pick a reference among the records the target's metadata source
+  reads from this document plus its mentions, less declared exclusion sets
+  (`pick.rs`); every question goes through the census funnel (`decision_call`)
+  and every read value carries `reader_choose` / `reader_point` / `reader_pick`
+  at `Precision::Unmeasured`. A closed set wider than one forced choice is
+  Unknown with that reason. Its
   answers assemble into the `DocumentRead` envelope that validation checks
   against the document (exact source verification is mandatory) and the section
   cache keeps; its rendered questions are part of the contract fingerprint
-  (`schema::contract_value`, version 4). The one-shot reader is deleted.
+  (`schema::contract_value`, version 5). The one-shot reader is deleted.
   The Asker (`enrichment/asker.rs`, ONTOLOGY_METHOD §Reading, campaign C5)
   stands in front of the chat and embed ports of `enrich extract`,
   `atlas-resolve` (and `enrich build`, `delta`, `resolve-statements`), built in

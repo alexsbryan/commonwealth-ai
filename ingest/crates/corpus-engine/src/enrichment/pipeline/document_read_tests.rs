@@ -61,6 +61,29 @@ values = ["open", "closed"]
     ontology.into_policies()
 }
 
+/// A model that answers `answers` in order and records every question.
+pub(super) fn scripted(
+    answers: Vec<Value>,
+) -> (
+    crate::InferenceFn,
+    std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
+) {
+    use std::sync::{Arc, Mutex};
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let queue = Arc::new(Mutex::new(answers.into_iter()));
+    let kept = seen.clone();
+    let f: crate::InferenceFn = Arc::new(
+        move |p: &crate::enrichment::pipeline::types::ChatPrompt, _| {
+            kept.lock().unwrap().push(p.clone());
+            let next = queue.lock().unwrap().next().map(|v| v.to_string());
+            Box::pin(async move {
+                next.ok_or_else(|| crate::Error::Extraction("no scripted answer left".into()))
+            })
+        },
+    );
+    (f, seen)
+}
+
 pub(super) fn row(
     id: u64,
     source_doc_id: &str,
@@ -245,7 +268,7 @@ async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
         .await
         .unwrap();
     assert!(result.failures.is_empty(), "{:?}", result.failures);
-    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 4);
 }
 
 #[tokio::test]
@@ -277,9 +300,9 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .await
         .unwrap();
 
-    // One Locate per line, then one Choose per closed-valued field the
-    // located kind and its subject declare (`project`; `number` is open).
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    // One Locate per line, then per field the located kind and its subject
+    // declare: `number` (open) pointed at, start and end; `project` chosen.
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
     assert!(result.output.questions_by_chapter[0].questions.is_empty());
     let read = result.output.questions_by_chapter[0]
         .section_extraction
@@ -304,7 +327,15 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .iter()
         .map(|p| p.phase_id.as_deref().unwrap_or(""))
         .collect();
-    assert_eq!(phases, ["document_passes_locate", "document_passes_choose"]);
+    assert_eq!(
+        phases,
+        [
+            "document_passes_locate",
+            "document_passes_point",
+            "document_passes_point",
+            "document_passes_choose"
+        ]
+    );
     // A metadata-sourced author is a declared fact every question carries
     // first (prefill), and never what a question asks about.
     for p in prompts.iter() {
@@ -395,7 +426,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         )
         .await
         .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
 
     let panic_chat: crate::types::InferenceFn =
         Arc::new(|_, _| panic!("identical accountable read must use the section cache"));
@@ -404,7 +435,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
 
     let mut identity_policy = policies.clone();
     identity_policy
@@ -422,7 +453,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
 }
 
 #[tokio::test]

@@ -56,6 +56,7 @@ kind = "claim"
 description = "a statement that a happening took place"
 force = "assertive"
 subject = "happening"
+attributes = [{ name = "place", type = "text", description = "where it happened" }]
 
 [enrichment.ontology.change]
 document = { date = "created_at", id = "id" }

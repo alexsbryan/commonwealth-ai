@@ -113,10 +113,17 @@ fixed plan of small closed questions generated from the contract — a pure func
 renaming: **Locate** each declared claim kind (line sets or none; each kind shown with its closed-valued fields' declared
 values and descriptions, the words a line states it in; the system prompt mentions values only when a kind
 shows some), **Mention** each entity type a read
-reference field targets and no exhaustive source covers, then per statement **Choose** each closed-valued
+reference field targets and no exhaustive source covers (a table source is exhaustive; a metadata source names
+only who took part, so it is not), one choice per asked line then pointed at, a proposal and never a record
+(`mention.rs`), then per statement **Choose** each closed-valued
 field (the subject's identity fields included) as a distribution over its declared values and "not stated",
-**Pick** each reference field from candidates code proposes (identity keys derivable from the document's
-fields, plus located mentions, less any declared exclusion set), and **Point** at each open-valued field. A
+**Pick** each reference field from candidates code proposes (the records the referenced type's metadata source
+reads from this document's fields, plus this document's mentions that name no listed record, less any record in
+a declared exclusion set, a set a declared path drops by; `pick.rs`), and **Point** at each open-valued field
+(text, quantity, time): its start word, then its end word, among the statement's own words shown under labels,
+"not stated" when no start is chosen; the value is read out of the words by the declared family, a quantity as
+the one number they write in digits (refused when they hold none or several), a time as ISO 8601 when code reads
+a date and as written otherwise (`point.rs`). A
 statement is one kind and at most three verified lines. Statements reach RESOLVE ungrouped. Every document of a selected section is read, whatever its
 length: the body-word floor (`min_section_body_words`) guards the general extractor from heading-only book
 sections and never applies to documents. A choice decides
@@ -128,14 +135,15 @@ question alone. Answers assemble into the stored claims RESOLVE already reads; t
 the daemon, a replay, or gold, so every question is an oracle at its own boundary (built 2026-10-09,
 `enrichment/asker.rs`, `--asker` on extract and atlas-resolve: every answer recorded by its question's content,
 and a replay with no daemon reproduces the run's records, C5). One reader, chosen
-by the declaration (every claim kind readable, or the general extractor; a mix refuses): passes, built for Locate
-and Choose; the one-shot reader was deleted on 2026-10-09 with no comparison run (operator: no build step gated on a
+by the declaration (every claim kind readable, or the general extractor; a mix refuses): passes, every pass built
+(Locate and Choose 2026-10-09; prefill, line classes, Mention, Pick and Point 2026-10-10, order
+ontology-layer-15); the one-shot reader was deleted on 2026-10-09 with no comparison run (operator: no build step gated on a
 test made up for it). Why: every one-shot read
 failed the same way — the local model asked to find, label, name and cite at once (stage ~43%, party
-.24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c). Until Pick and Point are built, a
-field they would answer stays empty, so `recipe validate` names each attribute's filler (a source, a derivation,
-Choose from the reader's own plan, RESOLVE for a subject) and warns on what nothing fills and on any fold, protocol
-or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
+.24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c). `recipe validate` names each attribute's filler (a
+source, a derivation, Choose, Point or Pick from the reader's own plan with Pick's candidates, RESOLVE for a
+subject) and warns on what nothing fills (a type no read claim kind is about, a closed set wider than one
+forced choice, a reference to a type only a table holds) and on any fold, protocol or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
 and `decision_ref` never folded, silently).
 
 ## The generality test

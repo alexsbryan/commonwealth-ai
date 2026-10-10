@@ -65,6 +65,7 @@ identity_criterion = "Two mentions are one order when they are about the same pi
 attributes = [
   { name = "customer", type = "ref", of = "company", derived = "customer_of_order" },
   { name = "stage", type = "text", values = ["asked", "quoted", "confirmed", "cancelled"], derived = "order_stage" },
+  { name = "piece", type = "text", description = "what is to be made" },
 ]
 
 [[enrichment.ontology.types]]
@@ -76,6 +77,9 @@ subject = "order"
 attributes = [
   { name = "stage", type = "text", values = ["asked", "quoted", "confirmed", "cancelled"] },
   { name = "party", type = "ref", of = "company", derived = "party_of_message" },
+  { name = "price", type = "quantity", unit = "USD" },
+  { name = "due", type = "time", description = "when the work is to be delivered" },
+  { name = "named_customer", type = "ref", of = "company", description = "the customer the statement names" },
 ]
 
 [enrichment.ontology.change]

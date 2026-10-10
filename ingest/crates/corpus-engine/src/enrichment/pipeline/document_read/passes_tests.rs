@@ -1,27 +1,22 @@
-use std::sync::{Arc, Mutex};
-
 use serde_json::{json, Value};
 
-use super::super::tests::{input_chapter, policies, row};
+use super::super::tests::{input_chapter, policies, row, scripted};
 use super::*;
-
-fn scripted(answers: Vec<Value>) -> (InferenceFn, Arc<Mutex<Vec<ChatPrompt>>>) {
-    let seen = Arc::new(Mutex::new(Vec::new()));
-    let queue = Arc::new(Mutex::new(answers.into_iter()));
-    let kept = seen.clone();
-    let f: InferenceFn = Arc::new(move |p: &ChatPrompt, _| {
-        kept.lock().unwrap().push(p.clone());
-        let next = queue.lock().unwrap().next().map(|v| v.to_string());
-        Box::pin(async move {
-            next.ok_or_else(|| crate::Error::Extraction("no scripted answer left".into()))
-        })
-    });
-    (f, seen)
-}
+use crate::enrichment::pipeline::document_read::DocumentReadField;
 
 /// The reader over `chapter`, its line classes indexed over the chapter alone.
-async fn read_all(chapter: &ChapterInput, p: &OntologyPolicies, infer: &InferenceFn) -> Result<String> {
-    read(chapter, p, &LineClasses::of(&chapter.source_documents, p), infer).await
+async fn read_all(
+    chapter: &ChapterInput,
+    p: &OntologyPolicies,
+    infer: &InferenceFn,
+) -> Result<String> {
+    read(
+        chapter,
+        p,
+        &LineClasses::of(&chapter.source_documents, p),
+        infer,
+    )
+    .await
 }
 
 fn passes_policies() -> OntologyPolicies {
@@ -43,15 +38,15 @@ fn the_plan_is_generated_from_the_contract() {
     assert!(
         matches!(&status.fields[..], [FieldPlan::Choose(a)] if a.name == "status" && a.values == ["open", "closed"])
     );
-    let subject: Vec<(&str, bool)> = status
+    let subject: Vec<(&str, Option<&str>)> = status
         .subject_fields
         .iter()
-        .map(|f| match f {
-            FieldPlan::Choose(a) => (a.name.as_str(), true),
-            FieldPlan::Unasked(a) => (a.name.as_str(), false),
-        })
+        .map(|f| (f.name(), f.pass()))
         .collect();
-    assert_eq!(subject, [("number", false), ("project", true)]);
+    assert_eq!(
+        subject,
+        [("number", Some("Point")), ("project", Some("Choose"))]
+    );
     assert!(plan.kinds[0].fields.is_empty());
 }
 
@@ -93,6 +88,8 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         json!({"A": 0.1, "B": 0.85, "0": 0.05}),
         none(),
         json!({"A": 0.1, "B": 0.8, "0": 0.1}),
+        // `number` is pointed at: none of the statement's five words.
+        json!({"A": 0.02, "B": 0.02, "C": 0.02, "D": 0.02, "E": 0.02, "0": 0.9}),
         json!({"A": 0.2, "B": 0.1, "0": 0.7}),
     ]);
     let envelope = read_all(&chapter, &p, &infer).await.unwrap();
@@ -133,15 +130,15 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         matches!(&claim.subject_fields["project"], DocumentReadField::Unknown { reason } if reason.contains("none of the values"))
     );
     assert!(
-        matches!(&claim.subject_fields["number"], DocumentReadField::Unknown { reason } if reason.contains("not asked"))
+        matches!(&claim.subject_fields["number"], DocumentReadField::Unknown { reason } if reason.contains("not stated"))
     );
     assert!(!extraction.claims.is_empty(), "the kept claim is projected");
 
     let prompts = seen.lock().unwrap();
     assert_eq!(
         prompts.len(),
-        5,
-        "three lines located, then status and project chosen"
+        6,
+        "three lines located, then status chosen, number pointed at, project chosen"
     );
     assert_eq!(
         prompts[0].phase_id.as_deref(),
@@ -165,7 +162,14 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         "{}",
         prompts[3].user
     );
+    assert_eq!(
+        prompts[4].phase_id.as_deref(),
+        Some("document_passes_point")
+    );
     assert!(prompts[4]
+        .user
+        .contains("Type: case (A support case.)\nAttribute: number, words of the statement"));
+    assert!(prompts[5]
         .user
         .contains("Type: case (A support case.)\nAttribute: project"));
 }
@@ -215,6 +219,7 @@ fn the_locate_system_prompt_names_values_only_when_a_kind_shows_them() {
             .into_iter()
             .filter(|k| k.fields.is_empty())
             .collect(),
+        picked: Vec::new(),
     };
     assert_eq!(bare.kinds.len(), 1, "membership declares no field");
     let without = locate_system(&bare);
@@ -255,24 +260,25 @@ async fn facts_open_every_question_and_a_quoted_line_is_never_located() {
         none(),
         json!({"A": 0.1, "B": 0.85, "0": 0.05}),
         json!({"A": 0.1, "B": 0.8, "0": 0.1}),
+        json!({"A": 0.02, "B": 0.02, "C": 0.02, "D": 0.02, "E": 0.02, "0": 0.9}),
         json!({"A": 0.2, "B": 0.1, "0": 0.7}),
         none(),
     ]);
     read_all(&chapter, &p, &infer).await.unwrap();
     let prompts = seen.lock().unwrap();
-    assert_eq!(prompts.len(), 5, "doc-2's quoted line is not asked");
+    assert_eq!(prompts.len(), 6, "doc-2's quoted line is not asked");
     for (i, prompt) in prompts.iter().enumerate() {
-        let from = if i < 4 { "a@x" } else { "b@y" };
+        let from = if i < 5 { "a@x" } else { "b@y" };
         assert!(
             prompt.user.starts_with(&format!(
                 "Declared facts of this document:\ndate: 2026-01-0{}\nfrom: {from}.example\n\n",
-                if i < 4 { 1 } else { 2 }
+                if i < 5 { 1 } else { 2 }
             )),
             "{}",
             prompt.user
         );
     }
-    assert!(prompts[4].user.contains("Line 2: \"Thanks\""));
+    assert!(prompts[5].user.contains("Line 2: \"Thanks\""));
     assert!(!prompts
         .iter()
         .any(|p| p.user.contains("Line 1: \"> The case")));

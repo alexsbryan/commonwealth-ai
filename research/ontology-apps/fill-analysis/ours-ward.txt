@@ -15,12 +15,10 @@ Derived from your declarations:
   derived: deal.counterparty ← fold `party_of_deal` by `most`, after RESOLVE: the claims about it → `party`
   fill: person: email ← source; employer ← source; name ← source
   fill: company: domain ← source
-  fill: deal: counterparty ← derived `party_of_deal`; amount ← nothing; term ← Choose on stage_update; stage ← derived `deal_stage`
+  fill: deal: counterparty ← derived `party_of_deal`; amount ← Point on stage_update; term ← Choose on stage_update; stage ← derived `deal_stage`
   fill: stage_update: subject `deal` ← RESOLVE; stage ← Choose on stage_update; party ← derived `party_of_message`
-  fill: commitment: subject `person`: a sourced type, not RESOLVE's; due ← nothing
+  fill: commitment: subject `person`: a sourced type, not RESOLVE's; due ← Point on commitment
   document fields: document_date ← `date` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `thread_id`, document_id ← `message_id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted
   ⚠  [enrichment.ontology] `document_reading` is retired and ignored: declared reading is chosen by the declaration: every claim kind with a force and a subject RESOLVE or a metadata source identifies is read document by document. Remove the key.
   ⚠  [enrichment.ontology] `document_reader` is retired and ignored: one reader remains, the passes reader (ONTOLOGY_METHOD §Reading). Remove the key.
   ⚠  ontology type `deal`: `identity_evidential` is retired and ignored: what each identity source is worth is estimated on the corpus being read, with no labels (campaign ontology-layer E2, ONTOLOGY_METHOD §Identity); every declared document field, necessary value, the proposed answer and the model's choice is weighed. Remove the key.
-  ⚠  ontology type `deal`: nothing fills `amount` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
-  ⚠  ontology type `commitment`: nothing fills `due` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
