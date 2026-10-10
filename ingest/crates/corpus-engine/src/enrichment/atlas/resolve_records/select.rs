@@ -655,7 +655,7 @@ fn question(
     ));
     for (c, label) in candidates.iter().zip(LABELS) {
         let line = match *c {
-            Candidate::Record(r, p) => describe(&records[r], &reasons(p)),
+            Candidate::Record(r, p) => describe(&records[r], &reasons(p), doc.id),
             Candidate::Opened(g) => {
                 let o = &statements[asked[g]];
                 // Asked spans were checked readable in `resolve_document`.

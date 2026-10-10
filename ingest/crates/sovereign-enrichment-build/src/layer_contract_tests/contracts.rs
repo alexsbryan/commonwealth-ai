@@ -2,6 +2,7 @@
 //! C1-C6, one test each, every one over all three fixture shapes.
 
 use super::*;
+use corpus_engine::enrichment::atlas::resolve_records::QUOTE_LABEL;
 
 /// The attributes a declared field, key, reference or derivation supplies,
 /// per type: derived attributes, references, a metadata-sourced type's
@@ -98,33 +99,114 @@ fn planted(f: &Fixture) -> Fixture {
     out
 }
 
-/// C2: a model turn holds one document's text and no other stored
-/// document's: every question carries the planted code of one document at most.
+/// The planted codes of `0..n` documents `text` holds.
+fn codes(text: &str, n: usize) -> Vec<usize> {
+    (0..n)
+        .filter(|i| text.contains(&format!("(PQ{i}Z)")))
+        .collect()
+}
+
+/// A RESOLVE question's quote lines: `(line, quoted text)` for each line
+/// carrying `QUOTE_LABEL`, its text the last string the line quotes.
+fn quotes(user: &str) -> Vec<(&str, String)> {
+    user.lines()
+        .filter(|l| l.trim_start().starts_with(QUOTE_LABEL))
+        .map(|l| {
+            let at = l.rfind(": \"").expect("a quote line ends in its quote") + 2;
+            (
+                l,
+                serde_json::from_str::<String>(&l[at..]).expect("a quoted string"),
+            )
+        })
+        .collect()
+}
+
+/// C2, narrowed 2026-10-10: a READ turn holds one document's text. A RESOLVE
+/// turn holds its own document's text plus, for its candidates, their
+/// statements' cited lines, each on a line marked as quoted from another
+/// document and no wider than the lines its statement cites; no other
+/// document's text. That a quote never becomes a citation is
+/// `resolve_records::tests::a_cite_copied_from_a_candidates_quote_is_refused_never_a_citation`:
+/// the default path asks the forced choice, which cites nothing, and no
+/// fixture record holds two documents, so a check here could not fail.
 #[tokio::test]
-async fn c2_a_model_turn_holds_one_documents_text() {
+async fn c2_a_read_turn_holds_one_document_and_a_resolve_turn_adds_only_marked_quotes() {
     for shape in SHAPES {
         let f = planted(&Fixture::load(shape));
         let n = f.documents.len();
+        let (content, _) = f.fields();
+        let lines: Vec<Vec<String>> = f
+            .documents
+            .iter()
+            .map(|d| {
+                d[&content]
+                    .as_str()
+                    .unwrap()
+                    .lines()
+                    .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+                    .collect()
+            })
+            .collect();
         let run = run(&f).await;
-        let mut asked_resolve = 0;
+        let (mut asked_resolve, mut quoted) = (0, 0);
         for p in &run.prompts {
-            let text = format!("{}\n{}", p.system, p.user);
-            let codes: Vec<usize> = (0..n)
-                .filter(|i| text.contains(&format!("(PQ{i}Z)")))
-                .collect();
-            if p.phase_id.as_deref() == Some("resolve_select") {
-                asked_resolve += 1;
+            let phase = p.phase_id.as_deref().unwrap_or("-");
+            if phase != "resolve_select" {
+                let held = codes(&format!("{}\n{}", p.system, p.user), n);
+                assert!(
+                    held.len() <= 1,
+                    "{shape}: a `{phase}` question holds the text of documents {held:?}:\n{}",
+                    p.user
+                );
+                continue;
             }
-            assert!(
-                codes.len() <= 1,
-                "{shape}: a `{}` question holds the text of documents {codes:?}:\n{}",
-                p.phase_id.as_deref().unwrap_or("-"),
+            asked_resolve += 1;
+            let (_, rest) = p.user.split_once("<<<\n").expect("the asked document");
+            let (own_text, _) = rest.split_once("\n>>>").expect("the asked document ends");
+            let own = codes(own_text, n);
+            assert_eq!(
+                own.len(),
+                1,
+                "{shape}: the asked document is one: {}",
                 p.user
             );
+            let outside: String = p
+                .user
+                .lines()
+                .filter(|l| !l.trim_start().starts_with(QUOTE_LABEL))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let others: Vec<usize> = codes(&outside, n)
+                .into_iter()
+                .filter(|i| !own.contains(i))
+                .collect();
+            assert!(
+                others.is_empty(),
+                "{shape}: a RESOLVE question holds unmarked text of documents {others:?}:\n{}",
+                p.user
+            );
+            for (line, quote) in quotes(&p.user) {
+                quoted += 1;
+                // The reader cites whole lines, so a quote bounded to them is
+                // a run of whole lines of one other document, never a window.
+                let whole_lines = (0..n).filter(|j| !own.contains(j)).any(|j| {
+                    (0..lines[j].len())
+                        .any(|a| (a..lines[j].len()).any(|b| lines[j][a..=b].join(" ") == quote))
+                });
+                assert!(
+                    whole_lines,
+                    "{shape}: a quote not bounded to another document's cited lines: {line}\n{}",
+                    p.user
+                );
+            }
         }
         assert!(
             asked_resolve > 0,
             "{shape}: no RESOLVE question was asked, so C2 judged none"
+        );
+        assert!(
+            quoted > 0,
+            "{shape}: no RESOLVE question quoted a candidate, so the quote bound judged none"
         );
     }
 }

@@ -23,8 +23,8 @@ use crate::enrichment::ontology::{AttrDecl, AttrFamily, DocumentStamp, OntologyT
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 use crate::InferenceFn;
 
-/// Bytes of the document kept either side of a statement as its record's
-/// context. A cost knob: it bounds the prompt, it decides nothing.
+/// Bytes of the asked document shown either side of a statement in its own
+/// question. A cost knob: it bounds the prompt, it decides nothing.
 const CONTEXT_BYTES: usize = 200;
 
 /// The most values a necessary attribute may declare: READ labels each with
@@ -177,9 +177,6 @@ pub struct Evidence {
     pub title: Option<String>,
     pub surface: String,
     pub cite: Option<String>,
-    /// The passage around the statement: what a later call compares under
-    /// the criterion (who, when, where), since the cite alone may not say.
-    pub context: String,
 }
 
 /// How a statement's record was decided. Closed: there is no other way.
@@ -916,7 +913,6 @@ impl Resolver {
             title: doc.title.map(str::to_string),
             surface: surface.to_string(),
             cite: cite.map(str::to_string),
-            context: context(doc.body, statement.start, statement.end),
         });
     }
 }
@@ -966,7 +962,7 @@ mod weigh;
 pub(crate) use read::choice_question;
 pub(crate) use select::{decision_call, LABELS, NONE};
 
-pub use answer::{cite_found, ProposalRule};
+pub use answer::{cite_found, ProposalRule, QUOTE_LABEL};
 use answer::{judge, prompt, Proposed};
 pub use drive::{clock, resolve_in_clock_order};
 pub use weigh::Vote;

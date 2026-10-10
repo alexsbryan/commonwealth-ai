@@ -680,9 +680,12 @@ question the pipeline asks about a type is a method on the resolved
   `identity_criterion`, the candidates the proposers offered
   (`resolve_records/propose.rs`: the records of the document's declared
   thread, `change.document.thread`, then TF-IDF over documents already
-  resolved; each candidate shown with its `Reason`s and, never another
-  document's text (C2), its statement and document counts and the values
-  declared structure gave it, `answer::describe`) and the answer threads,
+  resolved; each candidate shown with its `Reason`s, its statement and
+  document counts, the values declared structure gave it, and up to four of
+  its statements' spans from other documents, one line each marked
+  `QUOTE_LABEL` and nothing else of those documents (C2 narrowed 2026-10-10;
+  a cite is still checked against the asked document alone),
+  `answer::describe`) and the answer threads,
   wording and similarity alone propose (`ProposalRule`), partitions the
   document's statements into particulars, each the same as one candidate or
   none, with a passage per statement code must find in the document.

@@ -223,10 +223,17 @@ async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
         "{}",
         prompts[0].user
     );
-    // C2: shown by what it holds, never by the earlier document's text.
-    let shown = "- r0 (document similarity 1.00), 2 statement(s) in 1 document(s); ";
+    // C2 narrowed: shown by what it holds and its statements' own spans,
+    // each marked as a quote; no other words of the earlier document.
+    let shown = "- r0 (document similarity 1.00), 2 statement(s) in 1 document(s); \
+                 no declared value\n    quoted from another document: \"shot\"\n    \
+                 quoted from another document: \"shooting\"\n";
     let u = &prompts[1].user;
-    assert!(u.contains(shown) && !u.contains("A man was shot"), "{u}");
+    assert!(u.contains(shown), "{u}");
+    assert!(
+        !u.contains("A man was shot") && !u.contains("in Salisbury on Sunday. "),
+        "{u}"
+    );
     assert_eq!(
         prompts[1].response_schema.as_ref().unwrap()["properties"]["particulars"]["items"]
             ["properties"]["same_as"]["enum"],
@@ -256,6 +263,50 @@ async fn an_uncitable_cite_refuses_its_statement_only_never_defaulted() {
         .await;
     assert_eq!(labels(&r), ["refused:cite_not_found", "opened"]);
     assert_eq!(res.records()[0].statements, ["b"]);
+}
+
+/// C2, narrowed: a candidate's quote is shown, but a cite copied from it is
+/// checked against the asked statement's own document and refused there.
+#[tokio::test]
+async fn a_cite_copied_from_a_candidates_quote_is_refused_never_a_citation() {
+    let b1 = "A man was shot in Salisbury on Sunday.";
+    let b2 = "Police said it was a dispute.";
+    let (infer, seen) = scripted(vec![
+        answer(vec![part(
+            "none",
+            &[("s0", "shot in Salisbury"), ("s1", "on Sunday")],
+        )]),
+        answer(vec![part("r0", &[("s0", "shot in Salisbury")])]),
+    ]);
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    res.resolve_document(
+        &c,
+        doc("d1", b1),
+        &[
+            stmt("a", b1, "shot in Salisbury", 0, &[]),
+            stmt("b", b1, "Sunday", 0, &[]),
+        ],
+        &[],
+        Answerer::Model(&infer),
+    )
+    .await;
+    let two = res
+        .resolve_document(
+            &c,
+            doc("d2", b2),
+            &[stmt("c", b2, "dispute", 0, &[])],
+            &[prop("a")],
+            Answerer::Model(&infer),
+        )
+        .await;
+    let shown = seen.lock().unwrap()[1].user.clone();
+    assert!(
+        shown.contains("quoted from another document: \"shot in Salisbury\""),
+        "{shown}"
+    );
+    assert_eq!(labels(&two), ["refused:cite_not_found"]);
+    assert_eq!(res.records()[0].statements, ["a", "b"]);
 }
 
 #[tokio::test]
@@ -474,7 +525,6 @@ fn record(id: &str, surface: &str) -> Record {
             title: None,
             surface: surface.into(),
             cite: None,
-            context: "Police said the shooting happened at noon.".into(),
         }],
     }
 }

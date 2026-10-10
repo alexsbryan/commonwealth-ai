@@ -88,7 +88,7 @@ pub(super) fn prompt(
         u.push_str(&format!(
             "- {} {}",
             rec.handle,
-            describe(rec, &reasons(proposal))
+            describe(rec, &reasons(proposal), doc.id)
         ));
     }
     let mut marks: Vec<(usize, usize)> = asked
@@ -178,15 +178,26 @@ pub(super) fn reasons(proposal: &Proposal) -> String {
     why.join("; ")
 }
 
+/// How many of a candidate's statements the model is shown: its distinct
+/// surfaces, as the pre-C2 renderer bounded them. A cost knob: it bounds the
+/// prompt, it decides nothing.
+const SHOWN_SURFACES: usize = 4;
+
+/// The label every quote of another document carries in a RESOLVE question.
+pub const QUOTE_LABEL: &str = "quoted from another document";
+
 /// A candidate record as every RESOLVE question shows it: why it was
-/// offered, how many statements of how many documents it holds, and the
-/// values declared structure gave it (document stamps, keys, necessary
-/// values). Never another document's text: a model turn holds one document's
-/// text (campaign ontology-layer C2), so a record is shown by what it holds as
-/// values, and which record a statement is about is otherwise left to the
-/// declared sources RESOLVE weighs. One renderer for the partition and the
+/// offered, how many statements of how many documents it holds, the values
+/// declared structure gave it, and up to `SHOWN_SURFACES` of its distinct
+/// surfaces from other documents, one line each, marked as quoted from that
+/// document. A surface is its statement's span, the lines the statement
+/// cites (`Resolver::resolve_document`), so nothing else of that document is
+/// shown (C2, narrowed 2026-10-10): a RESOLVE answer is a choice, never a
+/// citation, and code checks every cite against the asked statement's own
+/// document (`cite_found`). This question's own document is already in the
+/// question, so none of it is quoted. One renderer for the partition and the
 /// forced choice, so the two arms differ only in the question.
-pub(super) fn describe(rec: &Record, why: &str) -> String {
+pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
     let documents: BTreeSet<&str> = rec.evidence.iter().map(|e| e.document.as_str()).collect();
     let values: Vec<String> = rec
         .keys
@@ -202,7 +213,7 @@ pub(super) fn describe(rec: &Record, why: &str) -> String {
             )
         })
         .collect();
-    format!(
+    let mut out = format!(
         "({why}), {} statement(s) in {} document(s); {}\n",
         rec.statements.len().max(rec.evidence.len()),
         documents.len(),
@@ -211,7 +222,20 @@ pub(super) fn describe(rec: &Record, why: &str) -> String {
         } else {
             values.join("; ")
         }
-    )
+    );
+    let mut shown: Vec<String> = Vec::new();
+    for e in rec.evidence.iter().filter(|e| e.document != this_document) {
+        let quote = fold_ws(&e.surface);
+        if shown.len() == SHOWN_SURFACES || shown.contains(&quote) {
+            continue;
+        }
+        match &e.title {
+            Some(t) => out.push_str(&format!("    {QUOTE_LABEL} {t:?}: {quote:?}\n")),
+            None => out.push_str(&format!("    {QUOTE_LABEL}: {quote:?}\n")),
+        }
+        shown.push(quote);
+    }
+    out
 }
 
 /// A record this document opened earlier, shown by its own words in this
