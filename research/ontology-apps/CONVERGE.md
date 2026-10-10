@@ -74,6 +74,9 @@ The run's other legs (RESOLVE alone, four blind) were stopped: they re-measured 
 | Ward | the deal record serves the stage | 2/47 | B³ .957 (12, .245) | .233 |
 | GVC | the record's declared field names the type | 0/977 (322 could not judge) | B³ .457 (781, .799) | .396 |
 
+Cost per document read, from the same logs (ladder's cost line): uv 4.0 model calls and 2.47 model seconds; Ward 22.8
+and 15.44; GVC 23.2 and 21.54 (model seconds over every phase, extract and RESOLVE).
+
 **S1.2 Repetition, repaired: cf33c151d.** A line is a quote only on structural evidence (a copied passage, or a
 mark the earlier line lacks); boilerplate by author deleted. Replay over the baseline's recordings: uv keeps 156
 lines from Locate instead of 335 and no document goes unasked (was 61); Ward 579 instead of 869. Reports: f3108fd6f

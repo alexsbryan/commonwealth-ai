@@ -526,6 +526,12 @@ def table(results):
             out.append("      served state: " + (f"{ss['served_right']} of {ss['cases']} cases right"
                                                  if ss["status"] == "judged" else f"could not judge: {ss['reason']}"))
         out.append(f"      read: atlas {r['read']['half']}; logs {r['read']['logs']}")
+        cost = r.get("cost") or {}
+        if cost.get("calls_per_document") is not None:
+            docs, model_s = cost.get("documents_read") or 0, sum((cost.get("model_s_by_phase") or {}).values())
+            out.append(f"      cost: {cost['calls_per_document']} model calls/doc, "
+                       f"{round(model_s / docs, 2) if docs else 'could not judge'} model s/doc over every phase, "
+                       f"{cost.get('s_per_document')} s/doc extract wall")
         sc = r.get("scope")
         if sc:
             out.append(f"      scope: {sc['sections']} sections, {sc['documents']} documents; "
