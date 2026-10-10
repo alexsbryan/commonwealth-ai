@@ -50,6 +50,7 @@ identity_criterion = "Two mentions are one case when they are about the same und
 identity_bar = 0.5
 attributes = [
   { name = "reporter", type = "ref", of = "person", derived = "reporter_of_case" },
+  { name = "state", type = "text", values = ["reported", "confirmed", "in_progress", "resolved", "declined"], derived = "case_state_now" },
 ]
 
 [[enrichment.ontology.types]]
@@ -63,6 +64,7 @@ attributes = [
 ]
 
 [enrichment.ontology.change]
+supersedes = { case_state = "document_date" }
 document = { date = "created_at", thread = "thread", id = "id" }
 
 # Derived attributes (ONTOLOGY_PRIMITIVES.md §8): a case's reporter is who wrote its earliest document that no
@@ -76,3 +78,44 @@ where = { author_association = ["MEMBER", "OWNER", "COLLABORATOR"] }
 id = "reporter_of_case"
 by = "earliest"
 from = ["^subject / document [!maintainer_post] / author"]
+
+# A case's state now is its latest report by document date, projected by the protocol fold: only a state the reader
+# supported with field evidence counts, and a case with any unqualified report stays pending, its reasons listed. A
+# transition is identified by the state it enters; the tracker declares no corrections.
+[[enrichment.ontology.folds]]
+id = "case_state_now"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "state"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported"
+claim_kind = "case_state"
+state = "reported"
+when = { state = "reported" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "confirmed"
+claim_kind = "case_state"
+state = "confirmed"
+when = { state = "confirmed" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "in_progress"
+claim_kind = "case_state"
+state = "in_progress"
+when = { state = "in_progress" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "resolved"
+claim_kind = "case_state"
+state = "resolved"
+when = { state = "resolved" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "declined"
+claim_kind = "case_state"
+state = "declined"
+when = { state = "declined" }
