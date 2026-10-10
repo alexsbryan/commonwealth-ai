@@ -1,0 +1,59 @@
+{
+ "about": "The evaluator's map from blind round 2's recipes onto the names our ladders read gold through (our frozen recipes' types, claim kinds, attributes and values; cdcr/fold_values.json and the scorers take it from there to gold). Written from the three blind recipes and gold's definitions only, frozen 2026-10-09 BEFORE any blind result existed (order ontology-layer-3-any-author step 9); never fitted to results. Read by ladder.translate, one place. A blind name the map does not name keeps its name prefixed `blind:` (it can never meet one of ours); a blind value the map does not name, or names as null, becomes `unmapped:<value>` (it can never equal a gold value). A gold concept with no blind analog is listed under `unjudged` and read could-not-judge, never zero.",
+ "round": "blind-author-20261009-r2",
+ "systems": {
+  "ward": {
+   "types": {"deal": "deal", "company": "company", "contact": "person"},
+   "attributes": {
+    "deal": {"counterparty": "counterparty", "status": "stage"},
+    "contact": {"email": "email", "company": "employer"}
+   },
+   "values": {
+    "deal.status": {"inquiry": "lead", "offered": "proposal", "negotiating": "negotiating", "agreed": "won", "confirmed": "won",
+                    "flowing": "won", "ended": "won", "cancelled": "lost", "lost": "lost"}
+   },
+   "kinds": {
+    "deal_step": {"as": "stage_update", "attributes": {"step": "stage"},
+                  "values": {"step": {"inquiry": "lead", "offer": "proposal", "counter": "negotiating", "accept": "won",
+                                      "confirm": "won", "amend": "negotiating", "start_flow": "won", "end_term": "won",
+                                      "cancel": "lost", "lost": "lost", "correction": null}}}
+   },
+   "unjudged": {
+    "commitments": "the blind recipe's commitment is about an open_item, not a person; gold's commitment-to-a-person has no analog",
+    "master_agreements": "the blind recipe declares no master or enabling agreement apart from a deal"
+   },
+   "why": "Gold stages (GOLD_SPEC, our stage_update description): lead = inquiry or interest received; proposal = indication, price or offer sent; negotiating = terms, credit or drafts exchanged; won = confirmed, executed or awarded to Enron; lost = declined, awarded elsewhere or withdrawn. The blind deal_step `step` is the per-message move (the stage-bearing claim) and deal.status its derived fold (deal_status, a protocol fold like our deal_stage). An amendment re-opens terms (negotiating); flow and end of term follow an award (won); a correction names no stage."
+  },
+  "uv": {
+   "types": {"problem": "case"},
+   "attributes": {},
+   "values": {},
+   "kinds": {
+    "report": {"as": "case_state", "set": {"state": "reported"}},
+    "request": {"as": "case_state", "set": {"state": "reported"}},
+    "decision": {"as": "case_state", "attributes": {"outcome": "state"},
+                 "values": {"outcome": {"confirmed": "confirmed", "needs-reproduction": null, "in-progress": "in_progress",
+                                        "fixed": "resolved", "released": "resolved", "not-planned": "declined",
+                                        "not-a-bug": "declined", "reopened": "reported", "closed-in-error": null}}},
+    "commitment": {"as": "case_state", "set": {"state": "in_progress"}}
+   },
+   "unjudged": {},
+   "why": "Gold case_state (support/GOLD_SPEC.md): reported = described by a user (a request is a user asking for something); confirmed = a maintainer reproduces or accepts it; in_progress = a fix or design being worked on, a PR open (the blind commitment: someone undertakes to fix it or open a PR); resolved = fixed, implemented, answered or released; declined = won't fix, not planned, works as intended, invalid. The blind decision `outcome` is what its author's own status fold reads. Asking for a reproduction and a close made in error name no gold state. The blind diagnosis is the problem's nature, not where it stands, so it is no state claim. Membership (identity) is read off the state claims, as ours is off case_state."
+  },
+  "gvc": {
+   "types": {"incident": "happening"},
+   "attributes": {"incident": {"incident_type": "kind"}},
+   "values": {
+    "incident.incident_type": {"shooting": "the incident as a whole", "homicide": "the incident as a whole",
+                               "murder-suicide": "the incident as a whole", "mass shooting": "the incident as a whole",
+                               "accidental discharge": "the incident as a whole", "self-inflicted": "the incident as a whole",
+                               "police shooting": "the incident as a whole", "defensive use": "the incident as a whole",
+                               "other": "the incident as a whole"}
+   },
+   "kinds": {},
+   "resolve_type": "incident",
+   "unjudged": {},
+   "why": "The blind recipe's only occurrence type is the incident, an entity: one shooting at one place and time. Every incident_type value types the incident as a whole (gold's bag_of_events); the blind recipe declares no firing, hitting, injuring or death apart from the incident, so those gold mention types can only land on an incident record. Its person records are not the event analog; claims about them do not count as covering an event mention."
+  }
+ }
+}
