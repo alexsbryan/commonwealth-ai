@@ -115,8 +115,10 @@ fields, plus located mentions, less any declared exclusion set), and **Point** a
 statement is one kind and at most three verified lines. Statements reach RESOLVE ungrouped. Every document of a selected section is read, whatever its
 length: the body-word floor (`min_section_body_words`) guards the general extractor from heading-only book
 sections and never applies to documents. A choice decides
-only once its precision is measured on the rule as it runs; until then its argmax is recorded for measurement,
-and below the bar it is unknown with its distribution attached. An answer code cannot verify refuses that
+by its argmax and carries its source and that source's precision (C3, `atlas/precision.rs`): `unmeasured`
+until the corpus supports an estimate, because a text-reading source's precision is not identifiable without
+labels (E2b, ecb58efcc), so every value a choice decided says it rests on an unmeasured read (amended by the
+operator 2026-10-10; it said a choice decides only once measured, which would leave most values unknown). An answer code cannot verify refuses that
 question alone. Answers assemble into the stored claims RESOLVE already reads; the `Asker` that answers takes
 the daemon, a replay, or gold, so every question is an oracle at its own boundary (built 2026-10-09,
 `enrichment/asker.rs`, `--asker` on extract and atlas-resolve: every answer recorded by its question's content,
