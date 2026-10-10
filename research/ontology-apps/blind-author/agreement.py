@@ -88,8 +88,16 @@ def ladder_side(r):
 
 
 def system_row(system, blind_run, our_run):
-    b, o = L.run_system(system, blind_run), L.run_system(system, our_run)
+    o = L.run_system(system, our_run)
+    if system == "uv":  # a blind index may chapter differently: read the blind run on OUR run's documents
+        import ladder_uv  # noqa: PLC0415
+        b = ladder_uv.measure(blind_run, sections_of=our_run)
+        own = ladder_side(L.run_system(system, blind_run))
+    else:
+        b, own = L.run_system(system, blind_run), None
     side = {"blind": ladder_side(b), "ours": ladder_side(o)}
+    if own:
+        side["blind_on_its_own_sections"] = own
     if b.get("status") != "judged" or o.get("status") != "judged":
         return {**side, "agreement": "could-not-judge: a ladder did not judge"}, []
     pb, po = b["placements"]["items"], o["placements"]["items"]
