@@ -94,9 +94,8 @@ fn identical(pairs: &Pairs) -> Vec<Vec<String>> {
         n.dedup();
         n
     };
-    let say = |pattern: &[(String, bool)], s: &str| {
-        pattern.iter().find(|(x, _)| x == s).map(|(_, a)| *a)
-    };
+    let say =
+        |pattern: &[(String, bool)], s: &str| pattern.iter().find(|(x, _)| x == s).map(|(_, a)| *a);
     let mut grouped: Vec<Vec<String>> = Vec::new();
     for (i, a) in names.iter().enumerate() {
         if grouped.iter().any(|g| g.iter().any(|x| x == a)) {
@@ -135,7 +134,10 @@ impl Estimate {
     pub fn fit(observed: &Pairs) -> Self {
         let groups = identical(observed);
         if !groups.is_empty() {
-            debug!(?groups, "atlas/resolve estimate: sources identical on every pair are fitted as one");
+            debug!(
+                ?groups,
+                "atlas/resolve estimate: sources identical on every pair are fitted as one"
+            );
         }
         // The pairs with each group's members after the first dropped.
         let mut folded = Pairs::default();

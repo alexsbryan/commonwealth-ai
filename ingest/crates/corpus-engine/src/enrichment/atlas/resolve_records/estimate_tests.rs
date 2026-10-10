@@ -174,9 +174,12 @@ fn sources_identical_on_every_pair_are_fitted_as_one_and_counted_once() {
     let two = Estimate::fit(&twin);
     assert_eq!(two.sources["document_id"].with, ["thread"]);
     assert!((two.sources["thread"].agree - one.sources["thread"].agree).abs() < 1e-9);
-    let c: Comparison = [("thread".to_string(), true), ("document_id".to_string(), true)]
-        .into_iter()
-        .collect();
+    let c: Comparison = [
+        ("thread".to_string(), true),
+        ("document_id".to_string(), true),
+    ]
+    .into_iter()
+    .collect();
     let alone: Comparison = [("thread".to_string(), true)].into_iter().collect();
     assert!((two.evidence(&c) - one.evidence(&alone)).abs() < 1e-9);
 }
