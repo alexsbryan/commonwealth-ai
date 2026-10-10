@@ -2,7 +2,8 @@
 
 Written for reviewers who have not followed the work. Numbers come from runs on this repo; every figure has a
 commit or run directory behind it, and the campaign log (`.sovereign/features/ontology-layer/campaign.md`,
-local) holds the dated decisions.
+local) holds the dated decisions. The previous brief, written 2026-10-07 for the crm-proof phase, is kept
+as `REVIEW_BRIEF_2026-10-07.md`.
 
 ## 1. What we are trying to build
 
