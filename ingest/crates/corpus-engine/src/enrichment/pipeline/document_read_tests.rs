@@ -226,13 +226,22 @@ fn reader_runner(
 /// floor of 40 is still read (abfe32a14: the floor skipped 12 uv states).
 #[tokio::test]
 async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
-    let rows = [row(1, "doc-a", "Issue 842 was closed by pull request #1380.", "{}")];
+    let rows = [row(
+        1,
+        "doc-a",
+        "Issue 842 was closed by pull request #1380.",
+        "{}",
+    )];
     let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let chat = passes_model(CLOSED, calls.clone(), Default::default());
     let temp = tempfile::tempdir().unwrap();
     let runner = reader_runner(temp.path(), &policies(), chat, false).with_min_body_words(40);
     let result = runner
-        .phase_1_extract_questions(&[input_chapter(&rows)], &super::super::ChapterSelection::Full, |_| {})
+        .phase_1_extract_questions(
+            &[input_chapter(&rows)],
+            &super::super::ChapterSelection::Full,
+            |_| {},
+        )
         .await
         .unwrap();
     assert!(result.failures.is_empty(), "{:?}", result.failures);
