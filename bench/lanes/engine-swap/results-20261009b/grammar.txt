@@ -1,0 +1,6 @@
+raptor_summary         L             succeeded 5/5  matches grammar 5/5  e.g. '{"summary": "Immanuel Kant published the Groundwork of the Metaphysics of Morals in Riga i'
+raptor_summary         llama-server  succeeded 5/5  matches grammar 4/5  e.g. '{"summary": "Immanuel Kant introduced the Categorical Imperative in his 1785 work publishe'
+skeleton_entities      L             succeeded 5/5  matches grammar 5/5  e.g. 'Immanuel Kant, Groundwork, Metaphysics, Morals, Riga, Categorical Imperative, Arthur Schop'
+skeleton_entities      llama-server  succeeded 5/5  matches grammar 5/5  e.g. 'Immanuel Kant, Groundwork, Categorical Imperative, Arthur Schopenhauer'
+skeleton_segments_n3   L             succeeded 5/5  matches grammar 5/5  e.g. '1|Immanuel Kant published the Groundwork of the Metaphysics of Morals in Riga in 1|Introdu'
+skeleton_segments_n3   llama-server  succeeded 5/5  matches grammar 5/5  e.g. '1|Immanuel Kant published the Groundwork of the Metaphysics of Morals in Riga in 1|Introdu'
