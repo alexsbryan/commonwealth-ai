@@ -23,6 +23,29 @@ PRE-REGISTERED CHOICE RULE (committed before any candidate was scored; the rule 
   E1 is not a candidate but a check of E2's premise: each document field's random-pair u beside its labelled u over
   the proposed pairs. Oracles O1 (u held at labelled u), O2 (prior held at the labelled base rate), O3 (both) locate
   the error; they read labels and can never be ported.
+
+E7 PROBE (order ontology-layer-7-entities step 2; `--entities DIR` reads entities.py's feature rows), PRE-REGISTERED
+before any score against gold:
+  Feature sources, fixed before scoring. A pair's two sides share an entity of label X when a mention of label X
+  normalises the same on both (entities.py). Labels used: Person, Organization, Location. Event is left out (it is the
+  kind the recipes already read as `necessary:kind`, and the same word on both sides is what a lookalike is); Work
+  fires on 5 to 18 documents a corpus and is left out. Scope `document` on every run; `lines` (the cited lines) only on
+  GVC, where the reader's lines are verified against the raw body.
+    E5   E0 plus one source `entity`: the sides share an entity of any of the three labels, document scope.
+    E6   E0 plus three sources `entity:Person`, `entity:Organization`, `entity:Location`, document scope.
+    E5L  E5 at lines scope (GVC runs only).
+    E6L  E6 at lines scope (GVC runs only).
+  Lookalikes: the labelled pairs a text-reading source (proposed_answer or model_choice) agreed on; the false ones are
+  those gold calls different. On those agreed pairs, per run: P(same | feature agrees) against P(same | date agrees)
+  and P(same | kind agrees) over the same pairs, and the feature's recall of the same pairs.
+  The order's stop fires when, on any run where the feature and date (or kind) are each judged on >= 20 of those
+  agreed pairs, the feature's P(same | agrees) is no better than the better of date's and kind's.
+  Verdict for the operator, from the largest judged gap (E2b's rule, same JUDGED_MIN and TARGET):
+    WORTH A STAGE    E5 or E6 (the simplest that does) is within .1 on every judged run.
+    PARTIAL          not that, but on both GVC RESOLVE-alone runs the largest judged gap at least halves against E0,
+                     and no run E0 had within .1 leaves it.
+    NOT WORTH        otherwise, or the stop above fired.
+  The lines-scope variants are reported beside, never chosen over a document-scope one that reaches the same verdict.
 """
 import argparse, collections, json, math, pathlib, random, sys
 
@@ -38,6 +61,9 @@ RUNS = ["c2-lines-gvc-resolve-alone", "blind-r2--gvc-resolve-alone", "c2-lines--
         "blind-r2--ward-tune", "blind-r2--uv-third", "blind-r2--gvc"]
 CANDIDATES = ("E0", "E2", "E3", "E4")
 ORACLES = ("O1", "O2", "O3")
+ENTITY_LABELS = ("Person", "Organization", "Location")
+ENTITY_CANDIDATES = ("E5", "E6", "E5L", "E6L")
+GVC_RUNS = [r for r in RUNS if "gvc" in r]
 
 
 def clamp(p):
@@ -253,6 +279,51 @@ def labelled(rows):
     return out, base
 
 
+def with_entities(rows, feats, kind):
+    """The comparisons with the feature sources E5/E6 (document scope) or E5L/E6L (lines scope) added; a pair whose
+    feature is absent (no text for a side, no cited lines) carries no entity source, as a silent source would."""
+    scope = "lines" if kind.endswith("L") else "document"
+    out = []
+    for r, f in zip(rows, feats):
+        c = dict(r["comparison"])
+        block = (f or {}).get(scope)
+        if block:
+            shared = {lab: bool(block.get(lab, {}).get("shared")) for lab in ENTITY_LABELS}
+            if kind.startswith("E5"):
+                c["entity"] = any(shared.values())
+            else:
+                for lab, v in shared.items():
+                    c[f"entity:{lab}"] = v
+        out.append(c)
+    return out
+
+
+def lookalikes(rows, feats, scope):
+    """Per text source, over its agreed labelled pairs: the feature's P(same | agrees) and recall of the same pairs
+    beside date's and kind's on the same pairs, and how many false links the feature leaves (disagrees on)."""
+    out = {}
+    for src in ("proposed_answer", "model_choice"):
+        agreed = [(r, f) for r, f in zip(rows, feats) if r["same"] is not None and r["comparison"].get(src) is True]
+        if not agreed:
+            continue
+        same = [x for x in agreed if x[0]["same"]]
+        diff = [x for x in agreed if not x[0]["same"]]
+        ent = lambda f: bool((f or {}).get(scope)) and any((f[scope].get(lab) or {}).get("shared") for lab in ENTITY_LABELS)  # noqa: E731
+        block = {"agreed": len(agreed), "same": len(same), "different": len(diff), "text_precision": round(len(same) / len(agreed), 3)}
+        for name, says in (("entity", ent), ("document_date", lambda f, r=None: None), ("necessary:kind", None)):
+            if name == "entity":
+                a_same = sum(ent(f) for _, f in same); a_diff = sum(ent(f) for _, f in diff)
+            else:
+                a_same = sum(1 for r, _ in same if r["comparison"].get(name) is True)
+                a_diff = sum(1 for r, _ in diff if r["comparison"].get(name) is True)
+            spoke = sum(1 for r, _ in agreed if name == "entity" or name in r["comparison"])
+            n = a_same + a_diff
+            block[name] = {"agrees_on": n, "precision": round(a_same / n, 3) if n else None, "recall_same": round(a_same / len(same), 3) if same else None,
+                           "false_links_left": len(diff) - a_diff, "judged": n >= JUDGED_MIN and spoke > 0}
+        out[src] = block
+    return out
+
+
 def candidate(kind, comps, lab, base, rand_u):
     if kind == "E0":
         return fit(comps)
@@ -306,8 +377,12 @@ def main():
     ap.add_argument("--reproduce", action="store_true")
     ap.add_argument("--score", action="store_true")
     ap.add_argument("--out", type=pathlib.Path, default=HERE)
+    ap.add_argument("--entities", type=pathlib.Path, help="entities.py's feature dir: score the E7 probe (gaps-e7.md/json)")
     a = ap.parse_args()
     recorded = json.loads((a.tables / "labelled.json").read_text())
+    if a.entities:
+        entities_probe(a.tables, a.entities, a.out)
+        return
     if a.reproduce:
         worst = 0.0
         for name in RUNS:
@@ -372,6 +447,94 @@ def main():
             lines.append("")
         (a.out / "gaps.md").write_text("\n".join(lines) + "\n")
         print("\n".join(lines[:4 + len(RUNS) + 2]))
+
+
+def entities_probe(tables, feature_dir, out_dir):
+    results, look, stop = {}, {}, []
+    for name in RUNS:
+        rows = load(tables, name)
+        feats = [json.loads(l) for l in (feature_dir / f"{name}.jsonl").read_text().splitlines() if l.strip()]
+        assert len(feats) == len(rows) and all(f["statement"] == r["statement"] and f["alternative"] == r["alternative"] for f, r in zip(feats, rows))
+        lab, base = labelled(rows)
+        results[name] = {}
+        e0 = fit([r["comparison"] for r in rows])
+        results[name]["E0"] = score(e0, lab)
+        for kind in ENTITY_CANDIDATES:
+            if kind.endswith("L") and name not in GVC_RUNS:
+                continue
+            comps = with_entities(rows, feats, kind)
+            est = fit(comps)
+            lab_e, _ = labelled([{**r, "comparison": c} for r, c in zip(rows, comps)])
+            results[name][kind] = score(est, lab_e)
+        look[name] = {"document": lookalikes(rows, feats, "document")}
+        if name in GVC_RUNS:
+            look[name]["lines"] = lookalikes(rows, feats, "lines")
+        for src, b in look[name]["document"].items():
+            e, d, k = b["entity"], b["document_date"], b["necessary:kind"]
+            rivals = [x["precision"] for x in (d, k) if x["judged"] and x["precision"] is not None]
+            if e["judged"] and rivals and e["precision"] <= max(rivals):
+                stop.append(f"{name}/{src}: entity {e['precision']} <= {max(rivals)}")
+
+    def largest(name, kind):
+        return results[name].get(kind, (None, None))[1]
+
+    def passes(name, kind):
+        lg = largest(name, kind)
+        return lg is None or lg[0] <= TARGET
+
+    verdict, chosen = "NOT WORTH", None
+    for kind in ("E5", "E6"):
+        if all(passes(n, kind) for n in RUNS):
+            verdict, chosen = "WORTH A STAGE", kind
+            break
+    if verdict == "NOT WORTH" and not stop:
+        for kind in ("E5", "E6"):
+            halves = all(largest(n, "E0") and largest(n, kind) and largest(n, kind)[0] <= largest(n, "E0")[0] / 2 for n in RUNS[:2])
+            keeps = all(passes(n, kind) for n in RUNS if passes(n, "E0"))
+            if halves and keeps:
+                verdict, chosen = "PARTIAL", kind
+                break
+    if stop:
+        verdict = "NOT WORTH (stop fired)"
+    kinds = ("E0",) + ENTITY_CANDIDATES
+    lines = ["# E7 probe: largest judged gap per run, today's EM with an entity source added", "",
+             "| run | " + " | ".join(kinds) + " |", "|---|" + "---|" * len(kinds)]
+    for name in RUNS:
+        cells = []
+        for k in kinds:
+            if k not in results[name]:
+                cells.append("n/a"); continue
+            lg = results[name][k][1]
+            cells.append("could-not-judge" if lg is None else f"{lg[0]:.3f} ({lg[1]})")
+        lines.append(f"| {name} | " + " | ".join(cells) + " |")
+    lines += ["", f"Verdict under the pre-registered rule: {verdict}" + (f" ({chosen})" if chosen else ""),
+              "Stop clause: " + ("; ".join(stop) if stop else "did not fire"), "",
+              "## Lookalikes: over each text source's agreed labelled pairs, who separates gold-different from gold-same", "",
+              "| run | scope | text source | agreed (same/diff) | text P | entity P / recall / false left | date P / recall | kind P / recall |", "|---|---|---|---|---|---|---|---|"]
+    for name in RUNS:
+        for scope, blocks in look[name].items():
+            for src, b in blocks.items():
+                f = lambda x: f"{x['precision']} / {x['recall_same']}" + ("" if x["judged"] else " (unjudged)")  # noqa: E731
+                lines.append(f"| {name} | {scope} | {src} | {b['agreed']} ({b['same']}/{b['different']}) | {b['text_precision']} | "
+                             f"{f(b['entity'])} / {b['entity']['false_links_left']} left of {b['different']} | {f(b['document_date'])} | {f(b['necessary:kind'])} |")
+    lines += ["", "## Per source", ""]
+    for name in RUNS:
+        present = [k for k in kinds if k in results[name]]
+        lines.append(f"### {name}"); lines.append("")
+        lines.append("| source | " + " | ".join(f"{k} est (lab, agreed)" for k in present) + " |"); lines.append("|---|" + "---|" * len(present))
+        srcs = sorted({s for k in present for s in results[name][k][0]})
+        for s_ in srcs:
+            cells = []
+            for k in present:
+                v = results[name][k][0].get(s_)
+                cells.append("-" if v is None else f"{v['estimated']} ({v['labelled']}, {v['agreed']}){'' if v['judged'] else ' unjudged'}")
+            lines.append(f"| {s_} | " + " | ".join(cells) + " |")
+        lines.append("")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "gaps-e7.md").write_text("\n".join(lines) + "\n")
+    (out_dir / "gaps-e7.json").write_text(json.dumps({"verdict": verdict, "chosen": chosen, "stop": stop, "lookalikes": look,
+                                                      "results": {n: {k: {"sources": v[0], "largest_gap": v[1]} for k, v in r.items()} for n, r in results.items()}}, indent=1) + "\n")
+    print("\n".join(lines[:4 + len(RUNS) + 3]))
 
 
 if __name__ == "__main__":
