@@ -96,3 +96,16 @@ lands; the fold walker follows atom ids only (resolution_derived.rs `step`), so 
 fold onto the deal without new code.
 
 **S1.5 Typed handoff:** next.
+
+**Order of the remaining Session 1 work** (reuse audit, Sovereign note 17c216ff, every file:line there):
+1. S1.3, claim side: subject readings ride the claim in the claim fields' own shape (`DocumentReadField`, under
+   `__document_read_subject_fields`), decoded in one place, never stripped; the projection's temporary subject sketch
+   goes, so on the passes path RESOLVE retires nothing (S1.5 there). RESOLVE writes no record attribute.
+2. Equal text is not the same occurrence, a third time: `resolution_documents::locate` re-derives a claim's document
+   from its anchor text and refuses when two documents of one section hold it, ignoring the claim's own
+   `source_doc_id`. In the baseline 15 of 148 Ward claims and 8 of 194 uv claims got no document, behind 7 of Ward's
+   9 pending deal stages. Fix: the claim's own document first; guard: a twin-occurrence contract beside C4 and C6.
+3. A record serves a read field only through the derivation writer: a value step in the existing folds, the policy
+   declared in the recipe (all, or agree with conflict), for GVC's happening kind and Ward's deal fields.
+4. S1.4 Ward's counterparty read by Pick as a field of the deal, with product and delivery point; S1.5 on the general
+   extractor path (3a skips RESOLVE's types), then retire.rs goes.
