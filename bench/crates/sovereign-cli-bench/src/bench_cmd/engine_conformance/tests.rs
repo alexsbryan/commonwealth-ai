@@ -325,6 +325,33 @@ fn projection_checks_compare_what_the_caller_receives() {
 }
 
 #[test]
+fn a_projection_is_not_blamed_for_an_upstream_difference() {
+    let f = |ids: Vec<i64>, text: &str| Facets {
+        prompt_ids: Some(ids),
+        output: Some(output(text)),
+        ..Default::default()
+    };
+    assert!(is_differs(&pair(
+        &Check::Text,
+        f(vec![1, 2], "a"),
+        f(vec![1, 2], "b")
+    )));
+    assert!(matches!(
+        pair(&Check::Text, f(vec![1, 2], "a"), f(vec![1, 3], "b")),
+        CellVerdict::CouldNotJudge(why) if why.contains("prompts differ")
+    ));
+    let frames = Check::StreamFrames {
+        frames: vec!["usage".into()],
+    };
+    let mut with_usage = f(vec![1, 2], "a");
+    with_usage.output.as_mut().unwrap().frames = vec!["usage".into()];
+    assert!(
+        is_differs(&pair(&frames, with_usage, f(vec![9], "a"))),
+        "whether a frame arrives does not depend on the prompt"
+    );
+}
+
+#[test]
 fn cost_checks_allow_their_slack_and_no_more() {
     let p = |n: u64| Facets {
         prefill_evaluated: Some(n),

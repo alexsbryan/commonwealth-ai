@@ -215,6 +215,28 @@ impl Check {
         }
     }
 
+    /// A projection check reads what the caller received, which also depends
+    /// on what the model was given and generated. When either differs, the
+    /// difference belongs to the prompt or decode rows, not this one.
+    fn upstream_difference(&self, r: &CaseRecord, t: &CaseRecord) -> Option<String> {
+        if !matches!(
+            self,
+            Check::Text | Check::ToolCalls | Check::Finish | Check::Usage
+        ) {
+            return None;
+        }
+        let (a, b) = (&r.facets, &t.facets);
+        if matches!((&a.prompt_ids, &b.prompt_ids), (Some(x), Some(y)) if x != y) {
+            return Some("the prompts differ, so the projection cannot be isolated".into());
+        }
+        if matches!((&a.greedy_tokens, &b.greedy_tokens), (Some(x), Some(y)) if x != y) {
+            return Some(
+                "the generated tokens differ, so the projection cannot be isolated".into(),
+            );
+        }
+        None
+    }
+
     fn judge_alone(&self, target: &CaseRecord) -> CellVerdict {
         if target.outcome != Outcome::Ok {
             return CellVerdict::CouldNotJudge(format!("{} did not serve", target.target));
@@ -257,6 +279,9 @@ impl Check {
     }
 
     fn judge_pair(&self, r: &CaseRecord, t: &CaseRecord) -> CellVerdict {
+        if let Some(upstream) = self.upstream_difference(r, t) {
+            return CellVerdict::CouldNotJudge(upstream);
+        }
         match self {
             Check::PromptIds => {
                 let (a, b) = both!(r, t, prompt_ids);
