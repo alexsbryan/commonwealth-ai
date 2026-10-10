@@ -1,0 +1,440 @@
+{
+ "all_by_cause": {
+  "None": 30,
+  "body_floor": 12,
+  "chaptering": 4,
+  "description_wording": 39,
+  "document_kind": 3,
+  "kind_factoring": 32,
+  "placement": 6,
+  "value_set": 6
+ },
+ "blind_extra_hits_by_cause": {
+  "chaptering": 2,
+  "description_wording": 14,
+  "kind_factoring": 11,
+  "placement": 1
+ },
+ "causes": {
+  "body_floor": "the loser's Locate never saw the document because its chapter was skipped under min_section_body_words (questions.json failures)",
+  "chaptering": "the loser's Locate never saw the document though its chapter was not floor-skipped (the document lies outside the chapters it read), or both saw it with different lines (chunking composed the document differently)",
+  "could_not_attribute": "no rule above decides; reported, never defaulted (principle 6)",
+  "description_wording": "the same question shape (one kind whose value is chosen) answered differently: the loser located no line on the document while the winner located it under a value-bearing kind (our case_state, the blind decision), or both read a claim and the loser chose a wrong value that maps one to one; for a state both lose, an issue or comment line no kind took",
+  "document_kind": "a state both runs lose on an event document (tracker-generated text) that no kind took. The reader shows both recipes the same text and no metadata, so document kind cannot by itself separate the two recipes: in a difference it is a stratum (the row's doc_kind), never a cause",
+  "kind_factoring": "the state follows from WHICH kind Locate put the line under: the winner's right state is set by a specific kind (report, request, commitment: the map's `set`), or the loser's line went to a kind that carries a fixed wrong state or no state (diagnosis, an unmapped kind)",
+  "placement": "not the reader: both read the gold state on the document and the loser's claim sits on a record not matched to the gold case (RESOLVE)",
+  "value_set": "both read a claim on the document and the right value was reachable for one only: the winner's raw value is one of several mapping to the gold state (fixed/released, not-planned/not-a-bug), or the loser's value maps to no state (needs-reproduction, closed-in-error) or was 'none of them'"
+ },
+ "choose_calls_by_field": {
+  "blind": {
+   "arch": 194,
+   "ask": 222,
+   "category": 641,
+   "component": 698,
+   "framed_as": 194,
+   "nature": 57,
+   "os": 194,
+   "outcome": 137,
+   "role": 225
+  },
+  "ours": {
+   "state": 97
+  }
+ },
+ "ladders": {
+  "blind_on_our_slice": {
+   "hit": 58,
+   "n": 132,
+   "rungs": {
+    "document_not_read": 12,
+    "hit": 58,
+    "no_case_state_claim": 9,
+    "record_not_matched": 22,
+    "wrong_state": 31
+   }
+  },
+  "ours": {
+   "hit": 32,
+   "n": 132,
+   "rungs": {
+    "document_not_read": 12,
+    "hit": 32,
+    "no_case_state_claim": 72,
+    "record_not_matched": 5,
+    "wrong_state": 11
+   }
+  }
+ },
+ "ours_extra_hits_by_cause": {
+  "description_wording": 1,
+  "placement": 1
+ },
+ "ours_no_claim_best_p": {
+  ".2-.5": 18,
+  "<.2": 54
+ },
+ "ours_no_claim_by_doc_kind": {
+  "comment": 29,
+  "event:cross-referenced": 15,
+  "event:labeled": 3,
+  "event:pr_merged": 11,
+  "issue": 14
+ },
+ "pairs": {
+  "blind_better": 42,
+  "blind_better_hit": 28,
+  "both_document_not_read": 12,
+  "both_hit": 30,
+  "both_no_case_state_claim": 7,
+  "both_record_not_matched": 4,
+  "both_wrong_state": 6,
+  "ours_better": 1,
+  "ours_better_hit": 2
+ },
+ "reader_changes": {
+  "body_floor": "no chapter floor ahead of the passes reader: min_section_body_words guards chapter analysis, but Locate asks per line and a one-line event is a whole document",
+  "chaptering": "none in the reader: the blind recipe's chunk overlap and title handling composed these documents' lines differently; both runs' readers saw a different text",
+  "could_not_attribute": "none",
+  "description_wording": "Locate shows each kind's closed-valued fields with their declared values and descriptions (today it shows the kind's name and description only, passes.rs locate_question): our recipe already says 'a pull request is open' and 'fixed ... released', in the state attribute's description, where Locate never looks; the weaker form of kind_factoring's change",
+  "document_kind": "the document's declared facts (its kind and structured fields) prefilled into the Locate prefix, and a value a declared structured field carries read by code (E4's own text)",
+  "kind_factoring": "Locate factors a claim kind whose closed-valued field carries the state into one label per declared value, each with the value's declared description: the state is answered where the line is found, as the blind recipe's report/request/commitment kinds answer it, at the same one Locate call per line",
+  "placement": "none in the reader: RESOLVE",
+  "value_set": "Choose decides only above its measured precision (ONTOLOGY_METHOD \u00a7Reading, not built): below the bar the field stays unknown with its distribution; these rows show a misread, not a missing value"
+ },
+ "slice_cost": {
+  "blind": {
+   "choose": 2562,
+   "documents": 554,
+   "locate": 2359
+  },
+  "ours": {
+   "choose": 97,
+   "documents": 554,
+   "locate": 2272
+  }
+ },
+ "table": [
+  {
+   "cause": "chaptering",
+   "cost_blind": {
+    "choose": 133,
+    "documents": 2,
+    "locate": 204
+   },
+   "cost_ours": {
+    "choose": 0,
+    "documents": 2,
+    "locate": 190
+   },
+   "doc_kind": {
+    "issue": 2
+   },
+   "n": 2,
+   "pair": "blind_better"
+  },
+  {
+   "cause": "description_wording",
+   "cost_blind": {
+    "choose": 76,
+    "documents": 19,
+    "locate": 19
+   },
+   "cost_ours": {
+    "choose": 0,
+    "documents": 19,
+    "locate": 19
+   },
+   "doc_kind": {
+    "comment": 5,
+    "event": 14
+   },
+   "n": 19,
+   "pair": "blind_better"
+  },
+  {
+   "cause": "kind_factoring",
+   "cost_blind": {
+    "choose": 234,
+    "documents": 21,
+    "locate": 160
+   },
+   "cost_ours": {
+    "choose": 1,
+    "documents": 21,
+    "locate": 160
+   },
+   "doc_kind": {
+    "comment": 13,
+    "issue": 8
+   },
+   "n": 21,
+   "pair": "blind_better"
+  },
+  {
+   "cause": "chaptering",
+   "cost_blind": {
+    "choose": 73,
+    "documents": 2,
+    "locate": 114
+   },
+   "cost_ours": {
+    "choose": 3,
+    "documents": 2,
+    "locate": 103
+   },
+   "doc_kind": {
+    "comment": 1,
+    "issue": 1
+   },
+   "n": 2,
+   "pair": "blind_better_hit"
+  },
+  {
+   "cause": "description_wording",
+   "cost_blind": {
+    "choose": 56,
+    "documents": 14,
+    "locate": 14
+   },
+   "cost_ours": {
+    "choose": 0,
+    "documents": 14,
+    "locate": 14
+   },
+   "doc_kind": {
+    "comment": 3,
+    "event": 11
+   },
+   "n": 14,
+   "pair": "blind_better_hit"
+  },
+  {
+   "cause": "kind_factoring",
+   "cost_blind": {
+    "choose": 116,
+    "documents": 11,
+    "locate": 113
+   },
+   "cost_ours": {
+    "choose": 2,
+    "documents": 11,
+    "locate": 113
+   },
+   "doc_kind": {
+    "comment": 6,
+    "event": 1,
+    "issue": 4
+   },
+   "n": 11,
+   "pair": "blind_better_hit"
+  },
+  {
+   "cause": "placement",
+   "cost_blind": {
+    "choose": 49,
+    "documents": 1,
+    "locate": 35
+   },
+   "cost_ours": {
+    "choose": 3,
+    "documents": 1,
+    "locate": 35
+   },
+   "doc_kind": {
+    "issue": 1
+   },
+   "n": 1,
+   "pair": "blind_better_hit"
+  },
+  {
+   "cause": "body_floor",
+   "cost_blind": {
+    "choose": 0,
+    "documents": 12,
+    "locate": 0
+   },
+   "cost_ours": {
+    "choose": 0,
+    "documents": 12,
+    "locate": 0
+   },
+   "doc_kind": {
+    "comment": 3,
+    "event": 5,
+    "issue": 4
+   },
+   "n": 12,
+   "pair": "both_document_not_read"
+  },
+  {
+   "cause": null,
+   "cost_blind": {
+    "choose": 383,
+    "documents": 30,
+    "locate": 330
+   },
+   "cost_ours": {
+    "choose": 31,
+    "documents": 30,
+    "locate": 291
+   },
+   "doc_kind": {
+    "comment": 11,
+    "event": 17,
+    "issue": 2
+   },
+   "n": 30,
+   "pair": "both_hit"
+  },
+  {
+   "cause": "description_wording",
+   "cost_blind": {
+    "choose": 5,
+    "documents": 4,
+    "locate": 4
+   },
+   "cost_ours": {
+    "choose": 0,
+    "documents": 4,
+    "locate": 4
+   },
+   "doc_kind": {
+    "comment": 4
+   },
+   "n": 4,
+   "pair": "both_no_case_state_claim"
+  },
+  {
+   "cause": "document_kind",
+   "cost_blind": {
+    "choose": 0,
+    "documents": 3,
+    "locate": 3
+   },
+   "cost_ours": {
+    "choose": 0,
+    "documents": 3,
+    "locate": 3
+   },
+   "doc_kind": {
+    "event": 3
+   },
+   "n": 3,
+   "pair": "both_no_case_state_claim"
+  },
+  {
+   "cause": "placement",
+   "cost_blind": {
+    "choose": 57,
+    "documents": 4,
+    "locate": 57
+   },
+   "cost_ours": {
+    "choose": 4,
+    "documents": 4,
+    "locate": 57
+   },
+   "doc_kind": {
+    "comment": 1,
+    "issue": 3
+   },
+   "n": 4,
+   "pair": "both_record_not_matched"
+  },
+  {
+   "cause": "value_set",
+   "cost_blind": {
+    "choose": 22,
+    "documents": 6,
+    "locate": 20
+   },
+   "cost_ours": {
+    "choose": 7,
+    "documents": 6,
+    "locate": 20
+   },
+   "doc_kind": {
+    "comment": 5,
+    "event": 1
+   },
+   "n": 6,
+   "pair": "both_wrong_state"
+  },
+  {
+   "cause": "description_wording",
+   "cost_blind": {
+    "choose": 0,
+    "documents": 1,
+    "locate": 1
+   },
+   "cost_ours": {
+    "choose": 1,
+    "documents": 1,
+    "locate": 1
+   },
+   "doc_kind": {
+    "event": 1
+   },
+   "n": 1,
+   "pair": "ours_better"
+  },
+  {
+   "cause": "description_wording",
+   "cost_blind": {
+    "choose": 0,
+    "documents": 1,
+    "locate": 1
+   },
+   "cost_ours": {
+    "choose": 1,
+    "documents": 1,
+    "locate": 1
+   },
+   "doc_kind": {
+    "comment": 1
+   },
+   "n": 1,
+   "pair": "ours_better_hit"
+  },
+  {
+   "cause": "placement",
+   "cost_blind": {
+    "choose": 6,
+    "documents": 1,
+    "locate": 18
+   },
+   "cost_ours": {
+    "choose": 2,
+    "documents": 1,
+    "locate": 18
+   },
+   "doc_kind": {
+    "issue": 1
+   },
+   "n": 1,
+   "pair": "ours_better_hit"
+  }
+ ],
+ "winner_rung_by_cause": {
+  "body_floor": {},
+  "chaptering": {
+   "hit": 2,
+   "record_not_matched": 2
+  },
+  "could_not_attribute": {},
+  "description_wording": {
+   "hit": 15,
+   "wrong_state": 20
+  },
+  "document_kind": {},
+  "kind_factoring": {
+   "hit": 11,
+   "record_not_matched": 15,
+   "wrong_state": 6
+  },
+  "placement": {
+   "hit": 2
+  },
+  "value_set": {}
+ }
+}

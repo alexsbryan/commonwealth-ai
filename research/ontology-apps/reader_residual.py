@@ -60,6 +60,28 @@ CAUSES = {
                  "not matched to the gold case (RESOLVE)",
     "could_not_attribute": "no rule above decides; reported, never defaulted (principle 6)",
 }
+# The domain-free reader change each cause points at. Written AFTER the rows were read (step 2), unlike CAUSES; each
+# is a function of the contract, never of one recipe, and none is measured here.
+READER_CHANGES = {
+    "kind_factoring": "Locate factors a claim kind whose closed-valued field carries the state into one label per "
+                      "declared value, each with the value's declared description: the state is answered where the "
+                      "line is found, as the blind recipe's report/request/commitment kinds answer it, at the same "
+                      "one Locate call per line",
+    "description_wording": "Locate shows each kind's closed-valued fields with their declared values and descriptions "
+                           "(today it shows the kind's name and description only, passes.rs locate_question): our "
+                           "recipe already says 'a pull request is open' and 'fixed ... released', in the state "
+                           "attribute's description, where Locate never looks; the weaker form of kind_factoring's change",
+    "value_set": "Choose decides only above its measured precision (ONTOLOGY_METHOD §Reading, not built): below the "
+                 "bar the field stays unknown with its distribution; these rows show a misread, not a missing value",
+    "document_kind": "the document's declared facts (its kind and structured fields) prefilled into the Locate "
+                     "prefix, and a value a declared structured field carries read by code (E4's own text)",
+    "body_floor": "no chapter floor ahead of the passes reader: min_section_body_words guards chapter analysis, but "
+                  "Locate asks per line and a one-line event is a whole document",
+    "chaptering": "none in the reader: the blind recipe's chunk overlap and title handling composed these documents' "
+                  "lines differently; both runs' readers saw a different text",
+    "placement": "none in the reader: RESOLVE",
+    "could_not_attribute": "none",
+}
 CAUSE_RULES = list(CAUSES)  # precedence is applied in classify(), stage by stage; this is the closed set
 RANK = {"document_not_read": 0, "no_case_state_claim": 1, "wrong_state": 2, "record_not_matched": 3, "hit": 4}
 # blind raw values that are one of several mapping to one gold state (the frozen map, r2-mapping.json uv.decision)
@@ -336,6 +358,19 @@ def summarize(rows, ours, blind, runs, docs):
             "blind_extra_hits_by_cause": dict(collections.Counter(r["cause"] for r in gains("blind"))),
             "ours_extra_hits_by_cause": dict(collections.Counter(r["cause"] for r in gains("ours"))),
             "all_by_cause": dict(collections.Counter(str(r["cause"]) for r in rows)),
+            "winner_rung_by_cause": {f"{c}": dict(collections.Counter(r[r["pair"].split("_")[0]]["rung"] for r in rows
+                                                                    if r["cause"] == c and "_better" in r["pair"]))
+                                     for c in CAUSES},
+            "choose_calls_by_field": {k: dict(collections.Counter(ch["field"] for d in docs
+                                                                  for ch in runs[k]["trace"].get(d, {}).get("chose", [])))
+                                      for k in runs},
+            "ours_no_claim_by_doc_kind": dict(collections.Counter(
+                f"{r['doc_kind']}:{r['event_type']}" if r["event_type"] else r["doc_kind"]
+                for r in rows if r["ours"]["rung"] == "no_case_state_claim")),
+            "ours_no_claim_best_p": dict(collections.Counter(
+                "<.2" if r["ours"]["best_state_p"] < .2 else ".2-.5" for r in rows
+                if r["ours"]["rung"] == "no_case_state_claim")),
+            "reader_changes": READER_CHANGES,
             "table": table, "slice_cost": {"ours": cost([{"document": d, "ours": {"calls": dict(runs["ours"]["trace"].get(d, {}).get("calls", {}))}} for d in docs], "ours"),
                                            "blind": cost([{"document": d, "blind": {"calls": dict(runs["blind"]["trace"].get(d, {}).get("calls", {}))}} for d in docs], "blind")},
             "causes": CAUSES}
