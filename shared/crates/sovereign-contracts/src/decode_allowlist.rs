@@ -30,6 +30,40 @@ impl AllowlistLanguage {
     pub fn entry(&self, id: &str) -> String {
         format!("{}{id}", self.entry_prefix)
     }
+
+    /// The entries in `text` this language rejects for `allowed`: at each
+    /// marker an allowed entry must follow, then a terminator or the end of
+    /// the text. A rejected entry is returned from its marker to the next
+    /// whitespace. This is how an output is checked when its mask ran where
+    /// it cannot be observed.
+    pub fn entries_outside<'t>(&self, text: &'t str, allowed: &[String]) -> Vec<&'t str> {
+        let bytes = text.as_bytes();
+        let entries: Vec<String> = allowed.iter().map(|id| self.entry(id)).collect();
+        let mut outside = Vec::new();
+        let mut at = 0;
+        while at < bytes.len() {
+            if !self.markers.iter().any(|m| bytes[at..].starts_with(m)) {
+                at += 1;
+                continue;
+            }
+            let accepted = entries
+                .iter()
+                .filter(|e| bytes[at..].starts_with(e.as_bytes()))
+                .map(|e| at + e.len())
+                .find(|&end| end == bytes.len() || self.is_terminator(bytes[end]));
+            at = match accepted {
+                Some(end) => end,
+                None => {
+                    let end = (at..bytes.len())
+                        .find(|&i| bytes[i].is_ascii_whitespace())
+                        .unwrap_or(bytes.len());
+                    outside.push(&text[at..end]);
+                    end
+                }
+            };
+        }
+        outside
+    }
 }
 
 /// `url_allowlist`: cited URLs.
@@ -98,5 +132,41 @@ fn regex_byte(b: u8) -> String {
         (b as char).to_string()
     } else {
         format!("\\x{b:02x}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn list(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn an_allowed_entry_followed_by_a_terminator_or_the_end_is_inside() {
+        let urls = list(&["https://a.org/x", "https://a.org"]);
+        assert!(URL
+            .entries_outside("See https://a.org/x, and https://a.org.", &urls)
+            .is_empty());
+        assert!(URL.entries_outside("ends on https://a.org/x", &urls).is_empty());
+        let ids = list(&["ev-T1-0002"]);
+        assert!(EVIDENCE_ID
+            .entries_outside("as shown [ev-T1-0002]; bare ev-T9 is prose", &ids)
+            .is_empty());
+    }
+
+    #[test]
+    fn anything_else_after_a_marker_is_outside() {
+        let urls = list(&["https://a.org"]);
+        assert_eq!(
+            URL.entries_outside("https://a.org/y and http://b.net/z", &urls),
+            ["https://a.org/y", "http://b.net/z"]
+        );
+        assert_eq!(URL.entries_outside("cut off at https://a.o", &urls), ["https://a.o"]);
+        assert_eq!(
+            EVIDENCE_ID.entries_outside("[ev-T1-0003] and [ev-T1-000", &list(&["ev-T1-0002"])),
+            ["[ev-T1-0003]", "[ev-T1-000"]
+        );
     }
 }

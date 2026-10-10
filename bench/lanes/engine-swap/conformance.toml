@@ -9,7 +9,12 @@
 #   covers    CompletionRequest fields, InferenceProvider methods, or response
 #             fields the row exercises (the coverage guard reads this)
 #   callers   production callers that reach it
-#   check     the exact oracle
+#   check     the exact oracle, in words
+#   judge     the same oracle as the checks the judge applies; every one must
+#             pass (svrn bench engine-conformance judge; kinds in
+#             sovereign-cli-bench/src/bench_cmd/engine_conformance/check.rs)
+#   pairs     [reference, target] pairs compared; default embedded against
+#             every other target
 #   predict   pass | fail:silent | fail:refused | fail:differs
 #   basis     read | measured | unverified
 #   fix       what would make it pass, and whose it is
@@ -22,6 +27,7 @@ layer = "prompt"
 covers = ["prompt", "system_message", "prompt_shape:Templated", "think_budget", "enable_thinking"]
 callers = "grounding judges, router, planner, memory, title, documents: think_budget Some(0) and/or enable_thinking Some(false), ~37 sites"
 check = "rendered token ids equal, system + one user turn, no tools"
+judge = [{ kind = "prompt-ids" }]
 predict = "pass"
 basis = "unverified"
 note = "Embedded renders through minijinja with enable_thinking=false (prompt_helpers.rs:574-579) then enforce_think_suppression (:353). Remote sends chat_template_kwargs.enable_thinking=false (chat_wire.rs:211). Unverified: minijinja and llama.cpp's jinja agree byte for byte on whitespace."
@@ -32,6 +38,7 @@ layer = "prompt"
 covers = ["think_budget", "enable_thinking"]
 callers = "synthesis with InferenceConfig.think_budget 512 and enable_thinking None: synthesis_common.rs:47, knowledge_query.rs:1402, streaming.rs:2916, collaboration.rs:353"
 check = "rendered token ids equal"
+judge = [{ kind = "prompt-ids" }]
 predict = "fail:differs"
 basis = "read"
 note = "Embedded renders enable_thinking.unwrap_or(false), so thinking is closed in the prompt (prompt_helpers.rs:578). Remote sends no kwarg when think_budget > 0 (chat_wire.rs:210), and llama-server defaults thinking on for a thinking template (LS server-context.cpp:1382)."
@@ -43,6 +50,7 @@ layer = "prompt"
 covers = ["tools", "prompt_shape:Templated"]
 callers = "executor.rs:503,1184; recipe_author.rs:242; Hermes-path passthrough (inference_adapter.rs:416)"
 check = "rendered token ids equal"
+judge = [{ kind = "prompt-ids" }]
 predict = "fail:differs"
 basis = "read"
 note = "Embedded appends the daemon's '# Tools … <tools>' block to the system message (prompt_helpers.rs:476-505). llama-server renders the template's native tool block (LS common/chat.cpp:946)."
@@ -54,6 +62,7 @@ layer = "prompt"
 covers = ["prompt_shape:Conversation", "tools", "enable_thinking"]
 callers = "serving-host into_conversation (conversation.rs:61-71): external OpenAI clients, the e2e-swe agents"
 check = "rendered token ids equal, with and without tools, last message user or tool"
+judge = [{ kind = "prompt-ids" }]
 predict = "pass"
 basis = "unverified"
 note = "Both render the model's own template with add_generation_prompt and thinking on by default (chat_template.rs:38-49; LS server-common.cpp:1262). Arm D's 1.02x and 100% tool-call rate agree but do not check bytes."
@@ -64,6 +73,7 @@ layer = "prompt"
 covers = ["prompt_shape:Conversation"]
 callers = "external clients that end on an assistant message (passthrough)"
 check = "rendered token ids equal"
+judge = [{ kind = "prompt-ids" }]
 predict = "fail:differs"
 basis = "read"
 note = "llama-server prefills a trailing assistant message (prefill_assistant, LS server-common.cpp:1272-1278); embedded always appends a fresh generation prompt (chat_template.rs:48). The server is the one doing what the client asked."
@@ -75,6 +85,7 @@ layer = "prompt"
 covers = ["assistant_prefix"]
 callers = "title.rs:116; gk_rescue.rs:155; knowledge_query.rs:569,841,1454; streaming.rs:363 (refusal retry), :423 (continue truncated synthesis), :2938; longform.rs:384; metalingual.rs:527; sovereign-tdd model.rs:68"
 check = "rendered token ids equal, and returned text excludes the prefix on both sides"
+judge = [{ kind = "prompt-ids" }]
 predict = "fail:silent"
 basis = "read"
 note = "Remote sends an 'assistant_prefix' key (lib.rs:797) that llama-server copies and never reads (LS server-common.cpp:1386-1391). The model starts fresh; continue-truncated-synthesis restarts instead of continuing. The 2026-10-09 R1b arm went through engine_proxy.py, which translated it (engine_proxy.py:169-172), so that measurement did not see this."
@@ -86,6 +97,7 @@ layer = "prompt"
 covers = ["prompt_shape:Raw", "edit_slot_info"]
 callers = "fim_adapter.rs:240 (/v1/completions); next-edit serve_dial.rs"
 check = "token ids equal: verbatim prompt, no template, no BOS"
+judge = [{ kind = "prompt-ids" }]
 predict = "fail:refused"
 basis = "read"
 note = "edit_slot_info() is None on the engine client (lib.rs:1864), so FIM answers 503 (fim_adapter.rs:164-166) before any request is sent."
@@ -99,6 +111,7 @@ layer = "decode"
 covers = ["temperature", "top_k", "top_p", "sampling_mode"]
 callers = "every Templated request that leaves any sampler field None; InferenceConfig temperature 0.7 (types/mod.rs:84)"
 check = "effective sampler tuple and chain order equal (temp, top_k, top_p, min_p, presence, frequency, DRY, penalty window)"
+judge = [{ kind = "sampler", order = false }]
 predict = "fail:differs"
 basis = "read"
 note = "Embedded Hermes chain: DRY → penalties(128) → top_k → min_p → top_p → temp, values from ModelQuirks (sampler.rs:486-579). Server: penalties, DRY, top_n_sigma, top_k, typical, top_p, min_p, xtc, temp, values from GGUF/CLI (LS common.h:260-270)."
@@ -110,6 +123,7 @@ layer = "decode"
 covers = ["temperature", "top_k", "top_p"]
 callers = "Conversation-shape turns"
 check = "effective sampler tuple and chain order equal"
+judge = [{ kind = "sampler" }]
 predict = "pass"
 basis = "unverified"
 note = "Embedded server_sampling.rs mirrors llama-server's defaults (0.8 → GGUF general.sampling.* → request, :28-76); its chain is penalties(64) → top_k → top_p → min_p → temp (:96-113), which omits DRY/typical/xtc, all of them no-ops at their defaults."
@@ -120,6 +134,7 @@ layer = "decode"
 covers = ["temperature"]
 callers = "temperature 0.0: grounding judges, router, planner, memory, yes_no, frontdoor"
 check = "greedy token sequence equal over 64 tokens on the Templated shape"
+judge = [{ kind = "greedy-tokens" }]
 predict = "fail:differs"
 basis = "read"
 note = "At T=0 the embedded Hermes chain still runs DRY (0.8/1.75) and a 128-token penalty window before greedy (sampler.rs:557-573); llama-server is plain argmax. Diverges only where DRY or the penalty fires (repetitive output)."
@@ -131,6 +146,7 @@ layer = "decode"
 covers = ["sampling_mode"]
 callers = "fim_adapter.rs:241 (Code), recipe_author.rs:245 (Instruct), passthrough"
 check = "effective sampler tuple equal to the mode's profile"
+judge = [{ kind = "sampler", order = false }]
 predict = "fail:silent"
 basis = "read"
 note = "Sent as 'sampling_mode' (lib.rs:794), unknown to llama-server."
@@ -142,6 +158,7 @@ layer = "decode"
 covers = ["tools"]
 callers = "Hermes path with tools: content inside JSON strings at SOVEREIGN_CONTENT_TEMPERATURE 0.0"
 check = "per-role temperature applied"
+judge = [{ kind = "sampler", order = false }]
 predict = "fail:differs"
 basis = "read"
 note = "Embedded switches temperature inside JSON string content (sampler.rs:536-584). llama-server has one sampler per request."
@@ -153,6 +170,7 @@ layer = "decode"
 covers = ["max_tokens"]
 callers = "~115 sites; judges 1-5, synthesis 2048"
 check = "completion stops at n with finish length; prompt >= n_ctx errors on both"
+judge = [{ kind = "finish" }, { kind = "usage" }]
 predict = "pass"
 basis = "read"
 note = "Embedded clamps to headroom up front (prompt_helpers.rs:184-213); server stops at the context wall. Differ only when n exceeds headroom: finish reason length on both, counts may differ by the clamp."
@@ -163,6 +181,7 @@ layer = "decode"
 covers = ["think_budget"]
 callers = "synthesis think_budget 512 where thinking is on (Conversation, or once prompt.templated-thinking-default is fixed)"
 check = "the think block closes at the budget on both sides"
+judge = [{ kind = "reasoning-within", slack = 2 }]
 predict = "fail:silent"
 basis = "read"
 note = "Remote sends think_budget and an Anthropic-style 'thinking' object (chat_wire.rs:204-209); llama-server reads neither on chat completions. It honours reasoning_budget_tokens (LS server-common.cpp:1360)."
@@ -174,6 +193,7 @@ layer = "decode"
 covers = ["think_budget", "enable_thinking"]
 callers = "~60 sites with Some(0)"
 check = "no think block generated on either side"
+judge = [{ kind = "reasoning-within" }]
 predict = "pass"
 basis = "measured"
 note = "Mapped to enable_thinking=false; restored routing to 26/27 on 2026-10-09 (DAEMON_ENGINE_INVENTORY Measured)."
@@ -184,6 +204,7 @@ layer = "decode"
 covers = ["structured_output"]
 callers = "~35 sites: router, planner, memory, pipeline, atom_enum, typed_call, deep_research, enrichment"
 check = "language parity: same accept/reject over a generated corpus per production schema"
+judge = [{ kind = "scenario", what = "language parity of the two schema conversions (llg-parity, milestone 5)" }]
 predict = "fail:differs"
 basis = "unverified"
 note = "Embedded rewrites absent additionalProperties to false (llguidance_constraint.rs:188-197). Server, built with llguidance, emits '%json <schema>' with no rewrite (LS common/json-schema-to-grammar.cpp:1234-1236). Differs for every schema that omits additionalProperties."
@@ -195,6 +216,7 @@ layer = "decode"
 covers = ["structured_output"]
 callers = "response_format json_object from external clients (inference_adapter.rs:1018)"
 check = "output constrained to a JSON object on both"
+judge = [{ kind = "scenario", what = "language parity of {} against {type: object} (llg-parity, milestone 5)" }]
 predict = "fail:silent"
 basis = "unverified"
 note = "Default JsonSchema mode sends {type:object} as a schema; in JsonObject mode llama-server gets json_schema={} and the Qwen3 template path requires a non-empty schema (LS chat.cpp:1199)."
@@ -205,6 +227,7 @@ layer = "decode"
 covers = ["structured_output"]
 callers = "grounding judge judge.rs:170; atlas select.rs:570, read.rs:155"
 check = "per-label probability |Δ| <= 1e-3; prompt token ids equal"
+judge = [{ kind = "label-probs", tol = 1e-3 }, { kind = "prompt-ids" }]
 predict = "pass"
 basis = "measured"
 note = "70 of 70 calls found the labels, minimum label mass 0.964 (2026-10-09). A label outside the server's top 20 gets 0 where the engine computes it (forced_choice.rs:131-139)."
@@ -215,6 +238,7 @@ layer = "decode"
 covers = ["lark_grammar"]
 callers = "skeleton.rs:249,617; raptor_atlas.rs:1299; workflow steps.rs:148; sovereign-tdd model.rs:437"
 check = "language parity per production grammar between llguidance 1.7.6 (engine) and 1.0.1 (server build)"
+judge = [{ kind = "grammar" }, { kind = "scenario", what = "language parity between llguidance 1.7.6 and 1.0.1 (llg-parity, milestone 5)" }]
 predict = "pass"
 basis = "measured"
 note = "Three production grammars compile verbatim under 1.0.1; aye|nay 3/3 through the daemon (911253601). Parity across the two llguidance versions is not yet checked."
@@ -225,6 +249,7 @@ layer = "decode"
 covers = ["lark_grammar", "tools", "tool_choice"]
 callers = "recipe_author.rs:227-246 (tool_choice required + lark)"
 check = "the caller's grammar constrains the output"
+judge = [{ kind = "grammar" }]
 predict = "fail:differs"
 basis = "read"
 note = "Dropped and traced by the client (chat_wire.rs:100-105); llama-server's tool-call grammar stands in. A named substitution, not silent."
@@ -236,6 +261,7 @@ layer = "decode"
 covers = ["url_allowlist"]
 callers = "deep_research port.rs:495; frontdoor.rs:1931 (opt-in)"
 check = "language parity (decode_allowlist_parity_tests.rs) and no URL outside the list end to end"
+judge = [{ kind = "allowlist-held" }]
 predict = "pass"
 basis = "measured"
 note = "15 cited, 0 outside (bd3ac4ea6, 911253601). Beside tools the client refuses (chat_wire.rs:96-98): reachable only through the opt-in frontdoor path."
@@ -246,6 +272,7 @@ layer = "decode"
 covers = ["evidence_id_allowlist"]
 callers = "simple.rs:131,140; streaming.rs:2896,2947; frontdoor.rs:2025 (opt-in)"
 check = "as decode.url-allowlist"
+judge = [{ kind = "allowlist-held" }]
 predict = "pass"
 basis = "measured"
 note = "10 cited, 0 outside."
@@ -256,6 +283,7 @@ layer = "decode"
 covers = ["tool_choice", "tools", "cmd_prefix"]
 callers = "recipe_author.rs:227-231; Responses API grammar lock routes_responses.rs:570; frontdoor cmd_prefix (opt-in, frontdoor.rs:1294)"
 check = "exactly one tool call returned, parsed calls equal"
+judge = [{ kind = "tool-calls" }]
 predict = "fail:differs"
 basis = "unverified"
 note = "The Hermes path installs the envelope as structured_output (inference_adapter.rs:546); the client then sends response_format beside tools, and the Qwen3 template path lets response_format win over tools (LS chat.cpp:1199-1247), so the server constrains to the envelope schema and parses no tool call. cmd_prefix lives inside that schema as a pattern."
@@ -266,6 +294,7 @@ layer = "decode"
 covers = ["tool_choice"]
 callers = "external clients only (passthrough inference_adapter.rs:417)"
 check = "the named function is called"
+judge = [{ kind = "tool-calls" }]
 predict = "fail:silent"
 basis = "read"
 fix = "decided 2026-10-10: the client refuses a named tool_choice the server would downgrade (ARCH 6)"
@@ -277,6 +306,8 @@ layer = "decode"
 covers = ["complete"]
 callers = "every greedy call on an MTP model"
 check = "greedy tokens with speculation equal greedy tokens without, on each side separately"
+judge = [{ kind = "greedy-tokens" }]
+pairs = [["embedded-nospec", "embedded"], ["llama-server-nospec", "llama-server"]]
 predict = "pass"
 basis = "unverified"
 note = "Verification batches change the batch shape, which can move float results."
@@ -289,6 +320,8 @@ layer = "compute"
 covers = ["complete"]
 callers = "all"
 check = "matched config: top-20 logprobs equal at each of the first 64 greedy positions, greedy tokens equal, for the fast and primary models"
+judge = [{ kind = "logprobs", tol = 0.0 }, { kind = "greedy-tokens" }]
+pairs = [["embedded", "llama-server-matched"]]
 predict = "pass"
 basis = "read"
 note = "Same commit 035e227 on both; patches 0003-0008 change no math; n_ubatch 512 on both, and n_batch boundaries are multiples of it, so the ubatch splits coincide."
@@ -299,6 +332,7 @@ layer = "compute"
 covers = ["embed", "embed_batch", "embed_query"]
 callers = "~60 embed, ~20 embed_batch, ~30 embed_query sites; /v1/embeddings"
 check = "min cosine >= 0.9995 over 20 questions + 20 chunks, and identical top-10 retrieval sets on the retrieval-prod bank"
+judge = [{ kind = "embedding", min_cos = 0.9995 }]
 predict = "pass"
 basis = "measured"
 note = "With embed_inputs=client, min cosine 0.9996 (9785cfe5a). Not bit-equal: the engine's embed slot batches 16 sequences per decode (embed_slot.rs:208)."
@@ -309,6 +343,8 @@ layer = "compute"
 covers = ["embed_query"]
 callers = "as compute.embeddings"
 check = "as compute.embeddings, with embed_inputs left at its default"
+judge = [{ kind = "embedding", min_cos = 0.9995 }]
+pairs = [["embedded", "llama-server-default-embed"]]
 predict = "fail:silent"
 basis = "measured"
 note = "Default embed_inputs=server sends bare text (engine_config.rs:245); cosine 0.84 against the engine's index, and embed_query equals embed (lib.rs:415)."
@@ -320,6 +356,7 @@ layer = "compute"
 covers = ["rerank_batch"]
 callers = "corpus/mod.rs:188 search_with_rerank; /v1/rerank served_kind.rs:238; inner_chaos recall.rs:780"
 check = "same order and the same refusal class when no reranker is configured"
+judge = [{ kind = "rerank-order" }]
 predict = "fail:differs"
 basis = "read"
 fix = "decided 2026-10-10: reranking is its own --reranking model in the router with its own endpoint; callers that threshold scores are checked against probabilities"
@@ -331,6 +368,7 @@ layer = "compute"
 covers = ["count_tokens"]
 callers = "streaming.rs:2968; knowledge_query.rs:1470; history.rs:366,376,381 (prompt budgets)"
 check = "count equals llama-server /tokenize on the same text"
+judge = [{ kind = "token-count" }]
 predict = "fail:differs"
 basis = "read"
 fix = "decided 2026-10-10: budget callers are async; they get an exact async count from /tokenize, and the sync method stays an estimate named as one"
@@ -344,6 +382,7 @@ layer = "projection"
 covers = ["text"]
 callers = "everyone reading text; conversation::stream_turn builds Reasoning frames from inline <think> (conversation.rs:169)"
 check = "text bytes equal given equal generated tokens"
+judge = [{ kind = "text" }]
 predict = "fail:silent"
 basis = "read"
 note = "llama-server's default reasoning format moves thinking into reasoning_content (LS common.h:633); the client reads only content and tool_calls (lib.rs:909-922), and StreamDelta only content (lib.rs:1020-1022)."
@@ -355,6 +394,7 @@ layer = "projection"
 covers = ["text", "tools"]
 callers = "executor, recipe_author, Conversation turns with tools"
 check = "parsed (name, arguments) equal given equal generated tokens"
+judge = [{ kind = "tool-calls" }]
 predict = "pass"
 basis = "unverified"
 note = "Native tool_calls are re-emitted as <tool_call>{json}</tool_call> (lib.rs:954-975). Bytes can differ (key order, spacing); the check is on the parse."
@@ -365,6 +405,7 @@ layer = "projection"
 covers = ["finish_reason"]
 callers = "inference_adapter.rs:1316; grounding and raptor logging"
 check = "the reason the adapter's callers see is equal"
+judge = [{ kind = "finish" }]
 predict = "pass"
 basis = "unverified"
 note = "Remote may return tool_calls where the engine returns stop and the adapter derives ToolCalls (inference_adapter.rs:1312-1318)."
@@ -375,6 +416,7 @@ layer = "projection"
 covers = ["tokens_used", "prompt_tokens", "completion_tokens"]
 callers = "runner.rs:352-409; inference_adapter.rs:1340-1343; resource_meter.rs:125; enrichment wire.rs:155-157"
 check = "counts equal given equal prompts and outputs"
+judge = [{ kind = "usage" }]
 predict = "pass"
 basis = "unverified"
 
@@ -384,6 +426,7 @@ layer = "projection"
 covers = ["tokens_used", "prompt_tokens", "completion_tokens"]
 callers = "as decode.forced-choice"
 check = "counts equal"
+judge = [{ kind = "usage" }]
 predict = "fail:differs"
 basis = "read"
 note = "Remote reports 0, 0, Some(1) (lib.rs:1041-1050); the engine reports the real prompt count and 0."
@@ -394,6 +437,7 @@ layer = "projection"
 covers = ["complete_stream_with_finish"]
 callers = "streaming turns, pipeline runner, serve"
 check = "Finish frame carries usage on both"
+judge = [{ kind = "stream-frames", frames = ["usage"] }]
 predict = "fail:silent"
 basis = "read"
 note = "The client never sets stream_options.include_usage, so llama-server sends no usage (LS server-task.cpp:502)."
@@ -405,6 +449,7 @@ layer = "projection"
 covers = ["complete_stream_with_finish", "tools"]
 callers = "streaming turns with tools"
 check = "tool calls arrive in the stream on both"
+judge = [{ kind = "stream-frames", frames = ["tool-calls"] }]
 predict = "fail:silent"
 basis = "read"
 note = "StreamDelta has only content (lib.rs:1020-1022); delta.tool_calls are dropped."
@@ -415,6 +460,7 @@ layer = "projection"
 covers = ["complete_stream_with_finish"]
 callers = "every streaming caller"
 check = "a server error mid-stream ends in Finish{Error} on both"
+judge = [{ kind = "stream-frames", frames = ["error"] }]
 predict = "fail:silent"
 basis = "read"
 note = "The client skips error chunks and transport errors with continue (lib.rs:1153) and ends with Stop (lib.rs:1199). The engine emits Finish{Error}."
@@ -425,6 +471,7 @@ layer = "projection"
 covers = ["complete_stream", "complete_stream_with_id"]
 callers = "bare Split providers: CLI chat, desktop attach (the daemon uses the typed path)"
 check = "an SSE line split across two byte chunks is delivered whole"
+judge = [{ kind = "scenario", what = "an SSE line split across two byte chunks, through a bare Split provider" }]
 predict = "fail:silent"
 basis = "read"
 note = "The untyped parser has no line buffer across chunks (lib.rs:1222-1245)."
@@ -437,6 +484,7 @@ layer = "cost"
 covers = ["stable_prefix_len"]
 callers = "grounding judges judge.rs:148-154, batched.rs:437-561, scan.rs:50-54; sovereign-tdd"
 check = "prompt tokens evaluated per call over the sequence A,A,B,A of judge calls sharing per-family prefixes"
+judge = [{ kind = "prefill", slack = 16 }]
 predict = "fail:differs"
 basis = "unverified"
 fix = "if it fails: llama-server slot save/restore (/slots/:id?action=save|restore) at the declared boundary, then checkpoint placement upstream"
@@ -448,6 +496,7 @@ layer = "cost"
 covers = ["complete", "complete_batch"]
 callers = "enrichment and judges at max_tokens <= 512 (FastShort coalescer, engine.rs:816-855)"
 check = "aggregate tokens/s, 8 concurrent fast calls, within 10% (the only timed row)"
+judge = [{ kind = "throughput", ratio = 0.9 }]
 predict = "pass"
 basis = "unverified"
 note = "llama-server --parallel batches continuously; the default is 4 slots."
@@ -458,6 +507,7 @@ layer = "cost"
 covers = ["resident_slots"]
 callers = "admission, status"
 check = "resident bytes for the same three models within 5%"
+judge = [{ kind = "resident-bytes", ratio = 1.05 }]
 predict = "pass"
 basis = "unverified"
 note = "Router mode runs a process per model; the three models are distinct GGUFs, so no weights were shared to begin with."
@@ -468,6 +518,7 @@ layer = "cost"
 covers = ["admission"]
 callers = "admission::stamp, streaming.rs:985,1392,2959; call_census.rs:258"
 check = "under predicted overload, an admitted call parks and an unadmitted one is shed"
+judge = [{ kind = "scenario", what = "an admitted call parks and an unadmitted one is shed under predicted overload" }]
 predict = "fail:differs"
 basis = "read"
 fix = "decided 2026-10-10: admission belongs to the scheduler above the engine (ARCH 12); it sheds from the server's /slots occupancy rather than an engine-internal prediction"
@@ -481,6 +532,7 @@ layer = "host"
 covers = ["model_id", "preferred_speed", "model_id_for", "code_model_id", "oicp"]
 callers = "~25 model_id_for; manifest oicp_synthesis.rs; slot_select.rs"
 check = "each Speed reaches the model the engine would use; ids match the server's /models"
+judge = [{ kind = "host-truth", keys = ["model_for_fast", "model_for_slow", "code_model"] }]
 predict = "fail:differs"
 basis = "read"
 note = "The engine routes Fast, FastShort, primary, the Code slot (oicp capability_hint CODE, engine.rs:873-881) and extras; the remote maps Speed to one of two ids (outbound.rs:455-490). The Code slot and the forced-choice→primary override (engine.rs:884-892) have no remote equivalent."
@@ -491,6 +543,7 @@ layer = "host"
 covers = ["embed_model_id"]
 callers = "memory.rs:142,1471; acquisition.rs:412; mem_tree.rs:345; mem_atlas.rs:100"
 check = "equals the engine's id for the same GGUF"
+judge = [{ kind = "host-equal", keys = ["embed_model_id"] }]
 predict = "fail:differs"
 basis = "unverified"
 note = "Remote takes embed_model_id, else the chat model_id, else the embed_path stem (lib.rs:1884). A different string marks every stored memory vector stale."
@@ -501,6 +554,7 @@ layer = "host"
 covers = ["serving_locus"]
 callers = "oicp_synthesis.rs:468; peer_inference.rs:2015,2078"
 check = "a supervised loopback llama-server reports the same locus as owned weights"
+judge = [{ kind = "host-equal", keys = ["serving_locus"] }]
 predict = "fail:differs"
 basis = "read"
 fix = "decided 2026-10-10: a llama-server the daemon supervises reports OwnWeights; ForwardsOnBox stays for one it does not"
@@ -512,6 +566,7 @@ layer = "host"
 covers = ["effective_context_size", "n_ctx_train_for_primary", "capabilities"]
 callers = "~12 budget sites; admin_http.rs:159"
 check = "equals the server's per-slot n_ctx and n_ctx_train from /props or /models"
+judge = [{ kind = "host-truth", keys = ["effective_context_size", "n_ctx_train"] }]
 predict = "fail:differs"
 basis = "read"
 fix = "oicp-client: read n_ctx and n_ctx_train from the server at startup; refuse a configured size larger than the server's"
@@ -523,6 +578,7 @@ layer = "host"
 covers = ["resident_slots", "primary_slot_status", "extras_inventory"]
 callers = "routes_status.rs:124; routes_inference.rs:862; daemon.rs:1334; streaming.rs:1076 (cold-load narration)"
 check = "reported residency equals the router's /models status"
+judge = [{ kind = "host-truth", keys = ["resident_models"] }]
 predict = "fail:silent"
 basis = "read"
 fix = "oicp-client: read the router's /models status"
@@ -534,6 +590,7 @@ layer = "host"
 covers = ["warmup_primary", "load_extra_slot", "unload_extra_slot"]
 callers = "mesh_admin.rs:193,307,364; hybrid.rs:288,301"
 check = "the call does what it says, or refuses"
+judge = [{ kind = "host-truth", keys = ["warmup_loaded", "extra_loaded", "extra_unloaded"] }]
 predict = "fail:silent"
 basis = "read"
 fix = "oicp-client: warmup and load/unload go to the router's /models/load and /models/unload; a failure is an error"
@@ -545,6 +602,7 @@ layer = "host"
 covers = ["compute_children", "peer_manifests", "lender_manifest", "complete_batch", "complete_stream_with_id_and_finish", "oicp_meta", "latency_ms"]
 callers = "router and status paths"
 check = "same value on both"
+judge = [{ kind = "host-equal", keys = ["compute_children", "peer_manifests", "lender_manifest"] }]
 predict = "pass"
 basis = "read"
 note = "Implemented above the engine (provider_impl.rs:670-676, manager.rs:1379), or filled the same way on both (oicp_meta None; latency wall clock)."

@@ -2,7 +2,8 @@
 //! The grammar a remote llguidance host is sent for the allow-lists
 //! (`sovereign_contracts::decode_allowlist::llguidance_lark`) must accept
 //! exactly the outputs the engine's tries accept. Each string is judged
-//! whole: every byte allowed, and EOS allowed after the last.
+//! whole: every byte allowed, and EOS allowed after the last. The post-hoc
+//! reader `AllowlistLanguage::entries_outside` is held to the same verdicts.
 
 use llguidance::{api::TopLevelGrammar, toktrie::ApproximateTokEnv, Matcher, ParserFactory};
 use sovereign_contracts::decode_allowlist::{llguidance_lark, EVIDENCE_ID, URL};
@@ -139,6 +140,15 @@ fn assert_parity(lists: &[(&str, &[String])], truth: impl Fn(&[u8]) -> bool) {
             g.accepts(text.as_bytes()),
             want,
             "grammar and trie disagree on {text:?} (trie says {want})"
+        );
+        // The post-hoc reader the conformance judge uses holds to the same
+        // language.
+        let post_hoc = langs
+            .iter()
+            .all(|(lang, ids)| lang.entries_outside(text, ids).is_empty());
+        assert_eq!(
+            post_hoc, want,
+            "entries_outside and trie disagree on {text:?} (trie says {want})"
         );
     }
     // Both verdicts occur, or agreement says nothing.
