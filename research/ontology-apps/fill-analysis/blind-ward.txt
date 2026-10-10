@@ -1,0 +1,44 @@
+Validating recipe: /Users/alexsbryan/blind-author-20261009-r2/ward/recipe.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  tension selector: embedding top-k (k = 10, floor = 0.5) over deal_terms — cross-document declared corpora select the embedding net; the classifier judges each pair
+  source: company ← document fields from, to, cc (domain: domain) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: company → domain (external key, strict merge)
+  source: contact ← document fields from, to, cc (email: address) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: contact → email (external key, strict merge)
+  identity: delivery_point → name + pipeline (descriptive keys, judged merge)
+  identity: deal → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  identity: open_item → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  question shapes: enumerate [company, contact, delivery_point, deal, open_item]; relations [(none)]; events [(none)]; aggregate [deal_terms by counterparty, deal_terms by delivery_point]
+  derived: deal.status ← fold `deal_status` by `protocol`, after RESOLVE: the claims about it
+  derived: open_item.status ← fold `item_status` by `protocol`, after RESOLVE: the claims about it
+  fill: company: domain ← source; role ← nothing; segment ← nothing
+  fill: contact: email ← source; company ← source; function ← nothing
+  fill: delivery_point: pipeline ← nothing
+  fill: deal: deal_number ← nothing; counterparty ← nothing; delivery_point ← nothing; direction ← Choose on deal_step, deal_terms; term ← nothing; volume ← nothing; price ← nothing; status ← derived `deal_status`
+  fill: open_item: owed_to ← nothing; deal ← nothing; item ← Choose on commitment, request; due ← nothing; status ← derived `item_status`
+  fill: deal_terms: subject `deal` ← RESOLVE; counterparty ← nothing; volume ← nothing; price ← nothing; term ← nothing; delivery_point ← nothing; basis ← Choose on deal_terms
+  fill: deal_step: subject `deal` ← RESOLVE; step ← Choose on deal_step; by ← Choose on deal_step; step_id ← nothing; effective ← nothing; corrects ← nothing
+  fill: commitment: subject `open_item` ← RESOLVE; item_id ← nothing; action ← Choose on commitment; due ← nothing
+  fill: request: subject `open_item` ← RESOLVE; item_id ← nothing; asked_of ← Choose on request; due ← nothing
+  document fields: document_date ← `date` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `thread_id`, document_id ← `message_id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted
+  ⚠  [enrichment.ontology] `document_reading` is retired and ignored: declared reading is chosen by the declaration: every claim kind with a force and a subject RESOLVE or a metadata source identifies is read document by document. Remove the key.
+  ⚠  ontology type `company`: nothing fills `role` (closed, but no read claim kind's Choose asks it), `segment` (closed, but no read claim kind's Choose asks it). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `contact`: nothing fills `function` (closed, but no read claim kind's Choose asks it). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `delivery_point`: nothing fills `pipeline` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `delivery_point`: identity is keyed on `pipeline` (identity_fallback), which nothing fills, so no record ever has a value there and the key never links or forbids a link.
+  ⚠  ontology type `deal`: nothing fills `deal_number` (an open value: the reader's Point pass is not built), `counterparty` (a `ref`: the reader's Pick pass is not built), `delivery_point` (a `ref`: the reader's Pick pass is not built), `term` (an open value: the reader's Point pass is not built), `volume` (an open value: the reader's Point pass is not built), `price` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `deal`: identity is keyed on `deal_number` (identity), `counterparty` (identity_fallback), `delivery_point` (identity_fallback), `term` (identity_fallback), which nothing fills, so no record ever has a value there and the key never links or forbids a link.
+  ⚠  ontology type `open_item`: nothing fills `owed_to` (a `ref`: the reader's Pick pass is not built), `deal` (a `ref`: the reader's Pick pass is not built), `due` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `open_item`: identity is keyed on `owed_to` (identity_fallback), `deal` (identity_fallback), which nothing fills, so no record ever has a value there and the key never links or forbids a link.
+  ⚠  ontology type `deal_terms`: nothing fills `counterparty` (a `ref`: the reader's Pick pass is not built), `volume` (an open value: the reader's Point pass is not built), `price` (an open value: the reader's Point pass is not built), `term` (an open value: the reader's Point pass is not built), `delivery_point` (a `ref`: the reader's Pick pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `deal_step`: nothing fills `step_id` (an open value: the reader's Point pass is not built), `effective` (an open value: the reader's Point pass is not built), `corrects` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `commitment`: nothing fills `item_id` (an open value: the reader's Point pass is not built), `due` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `request`: nothing fills `item_id` (an open value: the reader's Point pass is not built), `due` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  derived fold `deal_status`: protocol.identity `deal_step.step_id`, which nothing fills (an open value: the reader's Point pass is not built), so every transition of `deal_step` stays pending and `deal.status` never folds from it.
+  ⚠  derived fold `deal_status`: protocol.effective_time `deal_step.effective`, which nothing fills (an open value: the reader's Point pass is not built), so every transition of `deal_step` stays pending and `deal.status` never folds from it.
+  ⚠  derived fold `deal_status`: rule `booking_corrected` corrects by `deal_step.corrects`, which nothing fills (an open value: the reader's Point pass is not built), so it never corrects a prior transition.
+  ⚠  derived fold `item_status`: protocol.identity `request.item_id`, which nothing fills (an open value: the reader's Point pass is not built), so every transition of `request` stays pending and `open_item.status` never folds from it.
+  ⚠  derived fold `item_status`: protocol.identity `commitment.item_id`, which nothing fills (an open value: the reader's Point pass is not built), so every transition of `commitment` stays pending and `open_item.status` never folds from it.

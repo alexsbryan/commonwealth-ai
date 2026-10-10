@@ -1,0 +1,26 @@
+Validating recipe: /Users/alexsbryan/.svrnmesh/bench-corpora/baseline-3sys-20261009/recipes/crm-ward.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  tension selector: embedding top-k (k = 10, floor = 0.5) over stage_update — cross-document declared corpora select the embedding net; the classifier judges each pair
+  source: person ← document fields from, to, cc (email: address, name: display_name) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: person → email (external key, strict merge)
+  source: company ← document fields from, to, cc (domain: domain) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: company → domain (external key, strict merge)
+  identity: deal → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  question shapes: enumerate [person, company, deal]; relations [(none)]; events [(none)]; aggregate [stage_update by party]
+  derived: deal.stage ← fold `deal_stage` by `protocol`, after RESOLVE: the claims about it
+  derived: stage_update.party ← fold `party_of_message` by `first`, before RESOLVE: `outside_parties` (its document → `from`, `to` or `cc` → `employer` not in `ours`)
+  derived: deal.counterparty ← fold `party_of_deal` by `most`, after RESOLVE: the claims about it → `party`
+  fill: person: email ← source; employer ← source; name ← source
+  fill: company: domain ← source
+  fill: deal: counterparty ← derived `party_of_deal`; amount ← nothing; term ← Choose on stage_update; stage ← derived `deal_stage`
+  fill: stage_update: subject `deal` ← RESOLVE; stage ← Choose on stage_update; party ← derived `party_of_message`
+  fill: commitment: subject `person`: a sourced type, not RESOLVE's; due ← nothing
+  document fields: document_date ← `date` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `thread_id`, document_id ← `message_id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted
+  ⚠  [enrichment.ontology] `document_reading` is retired and ignored: declared reading is chosen by the declaration: every claim kind with a force and a subject RESOLVE or a metadata source identifies is read document by document. Remove the key.
+  ⚠  [enrichment.ontology] `document_reader` is retired and ignored: one reader remains, the passes reader (ONTOLOGY_METHOD §Reading). Remove the key.
+  ⚠  ontology type `deal`: `identity_evidential` is retired and ignored: what each identity source is worth is estimated on the corpus being read, with no labels (campaign ontology-layer E2, ONTOLOGY_METHOD §Identity); every declared document field, necessary value, the proposed answer and the model's choice is weighed. Remove the key.
+  ⚠  ontology type `deal`: nothing fills `amount` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `commitment`: nothing fills `due` (an open value: the reader's Point pass is not built). Each stays empty on every record; give it a source or a derivation, or drop it.
