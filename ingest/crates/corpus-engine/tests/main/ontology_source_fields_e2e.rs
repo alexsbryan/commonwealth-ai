@@ -577,13 +577,14 @@ async fn a_ref_links_a_person_to_the_company_its_address_domain_keys_and_survive
     assert_eq!(attr(person("carol@freemail.example"), "works_at"), None);
 }
 
-/// With no `exclude` declared, an address at a mailbox provider names no
-/// company: `dan@hotmail.com` and `eve@email.msn.com` (a provider's subdomain)
-/// project none, and their people link to none. Read off the atoms, not only
+/// A source that names the bundled free-mail list in `exclude` projects no
+/// company at a mailbox provider: `dan@hotmail.com` and `eve@email.msn.com` (a
+/// provider's subdomain) project none, and their people link to none. With no
+/// `exclude` declared, code skips nothing: the list is a declaration, never
+/// knowledge in code (campaign ontology-layer E5). Read off the atoms, not only
 /// off the report the projection writes about itself.
 #[tokio::test]
-async fn an_address_at_a_mailbox_provider_names_no_company_with_no_exclude_declared() {
-    let policies = policies_of(&MAIL_REFS.replace(r#", exclude = ["freemail.example"]"#, ""));
+async fn an_address_at_a_mailbox_provider_names_no_company_only_when_declared() {
     let rows = vec![row(
         1,
         "m1",
@@ -591,32 +592,48 @@ async fn an_address_at_a_mailbox_provider_names_no_company_with_no_exclude_decla
             "recipients": "Dan <dan@hotmail.com>, eve@email.msn.com" }),
     )];
     let documents = SectionDocuments::from_chunk_rows([("sec_00001", &[1u64][..])], &rows);
+    let sites_and_links = |out: &_| {
+        let sites: Vec<String> = of_type(out, "company")
+            .into_iter()
+            .filter_map(|e| attr(e, "site").map(str::to_string))
+            .collect();
+        let works_at = |mailbox: &str| {
+            of_type(out, "person")
+                .into_iter()
+                .find(|e| attr(e, "mailbox") == Some(mailbox))
+                .and_then(|e| attr(e, "works_at"))
+                .is_some()
+        };
+        (
+            sites,
+            works_at("dan@hotmail.com"),
+            works_at("eve@email.msn.com"),
+        )
+    };
+
+    let declared = policies_of(&MAIL_REFS.replace(
+        r#"exclude = ["freemail.example"]"#,
+        r#"exclude = ["@bundled:mailbox_providers"]"#,
+    ));
     let (projection, out) =
-        project_and_resolve(&policies, &documents, vec![section("sec_00001", vec![])]).await;
-    let companies = projection
-        .report
-        .types
-        .get("company")
-        .expect("company projected");
+        project_and_resolve(&declared, &documents, vec![section("sec_00001", vec![])]).await;
+    let companies = &projection.report.types["company"];
     assert_eq!(
-        companies.providers, 2,
+        companies.excluded, 2,
         "dan's and eve's domains: {companies:?}"
     );
-    assert_eq!(companies.excluded, 0, "nothing declared: {companies:?}");
-    let sites: Vec<&str> = of_type(&out, "company")
-        .into_iter()
-        .filter_map(|e| attr(e, "site"))
-        .collect();
+    let (sites, dan, eve) = sites_and_links(&out);
     assert_eq!(sites, ["acme.org"]);
-    let works_at = |mailbox: &str| {
-        of_type(&out, "person")
-            .into_iter()
-            .find(|e| attr(e, "mailbox") == Some(mailbox))
-            .and_then(|e| attr(e, "works_at"))
-    };
-    assert!(works_at("ann@acme.org").is_some());
-    assert_eq!(works_at("dan@hotmail.com"), None);
-    assert_eq!(works_at("eve@email.msn.com"), None);
+    assert!(!dan && !eve);
+
+    let undeclared = policies_of(&MAIL_REFS.replace(r#", exclude = ["freemail.example"]"#, ""));
+    let (projection, out) =
+        project_and_resolve(&undeclared, &documents, vec![section("sec_00001", vec![])]).await;
+    assert_eq!(projection.report.types["company"].excluded, 0);
+    let (mut sites, dan, eve) = sites_and_links(&out);
+    sites.sort();
+    assert_eq!(sites, ["acme.org", "email.msn.com", "hotmail.com"]);
+    assert!(dan && eve);
 }
 
 #[test]

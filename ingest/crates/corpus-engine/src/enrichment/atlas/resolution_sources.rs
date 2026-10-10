@@ -20,8 +20,8 @@ use tracing::{debug, info, trace, warn};
 
 #[path = "resolution_sources/fields.rs"]
 mod fields;
+use fields::{addresses, read_item, scalars_of, sighting, Item, Sighting};
 pub use fields::{field_records, FieldRecord};
-use fields::{mailboxes, read_item, scalars_of, sighting, Item, Sighting};
 
 use super::atoms::{AtomId, ChunkRef, Entity, SignalKind, SignalProvenance};
 use super::resolution::{fold, merge_into_existing};
@@ -73,12 +73,9 @@ pub struct SourceTypeReport {
     pub identity: Vec<String>,
     /// Atoms projected: distinct identity values.
     pub projected: usize,
-    /// Sightings skipped because `exclude` names their identity value.
+    /// Sightings skipped because `exclude` names their identity value (or one
+    /// it ends in at a word boundary), a bundled list it names included.
     pub excluded: usize,
-    /// Sightings skipped because a `domain`-read identity value is a mailbox
-    /// provider's (the bundled `mailbox_providers` list, or a subdomain of a
-    /// listed domain): an address there names no organization.
-    pub providers: usize,
     /// Sightings with no identity value (a bare address read by `display_name`).
     pub without_identity: usize,
     /// Field → documents that do not carry it.
@@ -119,8 +116,8 @@ impl SourceReport {
                     .collect::<Vec<_>>();
                 format!(
                     "source {t} ← {}: {} atom(s) from {} document(s); {} model atom(s) merged \
-                     on {} ({} refused, {} named an atom); {} excluded, {} at a mailbox provider, \
-                     {} without identity, {} unreadable field(s); absent: {}",
+                     on {} ({} refused, {} named an atom); {} excluded, {} without identity, \
+                     {} unreadable field(s); absent: {}",
                     r.fields.join(", "),
                     r.projected,
                     self.documents,
@@ -129,7 +126,6 @@ impl SourceReport {
                     fold.refused.get(t).copied().unwrap_or(0),
                     fold.named.get(t).copied().unwrap_or(0),
                     r.excluded,
-                    r.providers,
                     r.without_identity,
                     r.unreadable,
                     if absent.is_empty() {
@@ -176,7 +172,17 @@ pub fn project_source_atoms(
             identity: identity.iter().map(|(k, _)| k.to_string()).collect(),
             ..Default::default()
         };
-        let accs = project_type(&t.name, src, &identity, &docs, &mut report, &mut out.report);
+        let excluded = fields::Exclusion::of(src)
+            .map_err(|e| format!("ontology type `{}` (metadata source): {e}", t.name))?;
+        let accs = project_type(
+            &t.name,
+            src,
+            &excluded,
+            &identity,
+            &docs,
+            &mut report,
+            &mut out.report,
+        );
         report.projected = accs.len();
         let ty = EntityType::from_str_repr(&t.name);
         for mut a in accs {
@@ -201,7 +207,6 @@ pub fn project_source_atoms(
             ty = %t.name,
             projected = report.projected,
             excluded = report.excluded,
-            providers = report.providers,
             unreadable = report.unreadable,
             "atlas/resolution sources: projected from document fields"
         );
@@ -264,13 +269,14 @@ struct Accum {
 fn project_type(
     type_name: &str,
     src: &MetadataSourceDecl,
+    excluded: &fields::Exclusion,
     identity: &[(&str, FieldReader)],
     docs: &[(&str, &str, &Map<String, Value>)],
     report: &mut SourceTypeReport,
     all: &mut SourceReport,
 ) -> Vec<Accum> {
     let reads_addresses = src.reads_addresses();
-    let excluded = fields::excluded(src);
+
     let mut accs: Vec<Accum> = Vec::new();
     let mut by_key: HashMap<String, usize> = HashMap::new();
     for (section, doc, fields) in docs {
@@ -307,7 +313,7 @@ fn project_type(
                         name: None,
                     }]
                 } else {
-                    match mailboxes(&scalar) {
+                    match addresses(&scalar) {
                         Ok(m) => m,
                         Err(why) => {
                             report.unreadable += 1;
@@ -318,7 +324,7 @@ fn project_type(
                 };
                 for item in items {
                     let read = |r: FieldReader| read_item(r, &item, &scalar);
-                    let folded = match sighting(identity, &excluded, &item, &scalar) {
+                    let folded = match sighting(identity, excluded, &item, &scalar) {
                         Sighting::Key(folded) => folded,
                         Sighting::NoIdentity => {
                             trace!(
@@ -332,11 +338,6 @@ fn project_type(
                         Sighting::Excluded(folded) => {
                             trace!(document = doc, field, key = ?folded, "atlas/resolution sources: excluded");
                             report.excluded += 1;
-                            continue;
-                        }
-                        Sighting::Provider(folded) => {
-                            trace!(document = doc, field, key = ?folded, "atlas/resolution sources: a mailbox provider's address names no organization");
-                            report.providers += 1;
                             continue;
                         }
                     };

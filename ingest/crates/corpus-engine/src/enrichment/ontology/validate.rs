@@ -233,6 +233,16 @@ fn check_sources(p: &OntologyPolicies, errors: &mut Vec<String>) {
         if let Err(e) = s.identity_readers(index.effective_identity(&t.name)) {
             errors.push(at(e));
         }
+        for list in s.exclude.iter().filter_map(|e| e.strip_prefix("@bundled:")) {
+            if crate::recipe_source::default_assets()
+                .bundled_asset(list)
+                .is_none()
+            {
+                errors.push(at(format!(
+                    "`exclude` names `@bundled:{list}`, which is no bundled list"
+                )));
+            }
+        }
         for (attr, r) in &s.refs {
             let family = index
                 .effective_attributes(&t.name)

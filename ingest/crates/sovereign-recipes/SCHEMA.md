@@ -1101,7 +1101,7 @@ The three declarations, as the policies carry them (Axis 5).
 |---|---|---|---|---|
 | `metadata` | `Vec<String>` | **yes** | — | The document metadata fields read, by the corpus's own names. |
 | `attributes` | `BTreeMap<String, FieldReader>` | no | type default | Declared attribute name → the reader that fills it from each field. The type's `identity` attributes must be among them. |
-| `exclude` | `Vec<String>` | no | type default | Identity values never projected beyond the mailbox providers a `domain` reading already skips (a provider the bundled list lacks), compared after the identity fold. |
+| `exclude` | `Vec<String>` | no | type default | Identity values never projected, compared after the identity fold: a value is excluded when it equals one or ends in one at a word boundary (`example.org` covers `mail.example.org`). An entry `@bundled:<key>` names a list shipped with the recipes, one value a line, such as `@bundled:mailbox_providers`, the free-mail domains whose addresses name no organization. Nothing is excluded that the recipe does not name. |
 | `refs` | `BTreeMap<String, SourceRef>` | no | type default | Declared `ref` attribute → the sourced type it links to, and the reader whose value on the same document is that type's identity value. Scholar → museum: `affiliation = { of = "museum", reader = "domain" }`. A value the target type excludes or never projects links nothing; a role, never an identity key (`ONTOLOGY_METHOD.md`). |
 
 ## `SourceRef`
@@ -1509,14 +1509,14 @@ extractor's. The atom counts the documents it was seen in (`document_count`).
 A model-extracted atom of the type carrying the same identity value merges
 into it (strict merge). The atom is named by its display name when one was
 read, else by the most salient model atom merged into it, else by its
-identity value, which stays an alias. An identity value read by `domain`
-at a mailbox provider is never projected, since an address there names no
-organization: the bundled list
-(`ingest/crates/sovereign-recipes/_assets/mailbox_providers.txt`,
-free-email-domains at a pinned commit) or a subdomain of a listed domain
-(`mail.aol.com`), counted apart as `providers`. A listed parent covers its
-subdomains, so `uk.aol.com` is read as `aol.com`'s. `exclude` lists further
-identity values never projected, a provider the list lacks. A field a
+identity value, which stays an alias. `exclude` lists identity values never
+projected; one excludes the values equal to it or ending in it at a word
+boundary, so `example.org` covers `mail.example.org`. An entry
+`@bundled:<key>` names a list shipped with the recipes: write
+`exclude = ["@bundled:mailbox_providers"]` on a type read by `domain` so that
+an address at a free-mail domain (free-email-domains at a pinned commit,
+`ingest/crates/sovereign-recipes/_assets/mailbox_providers.txt`) names no
+organization. Nothing is excluded that the recipe does not name. A field a
 document lacks is counted; one that holds no
 address or a value no reader reads is recorded in `resolution_failures.json`.
 `file` and `metadata` are one or the other, and an unknown key or reader

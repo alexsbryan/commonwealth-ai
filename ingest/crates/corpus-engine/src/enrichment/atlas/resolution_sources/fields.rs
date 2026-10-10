@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! How a metadata source reads one document field: the scalars a field holds,
-//! the mailboxes of an address list, what each declared [`FieldReader`] reads
+//! the addresses of an address list, what each declared [`FieldReader`] reads
 //! out of one, and which identity value (if any) a sighting carries after the
-//! declaration's `exclude` and the mailbox-provider skip. The projection
+//! declaration's `exclude` ([`Exclusion`]). The projection
 //! ([`super::project_source_atoms`]) and the passes reader (its prefill and its
 //! Pick candidates, `pipeline/document_read/`) read fields through this one
 //! module, so the reader never sees a record the projection would not make.
 
 use std::collections::{BTreeMap, HashSet};
-use std::sync::OnceLock;
 
 use mailparse::{MailAddr, SingleInfo};
 use serde_json::Value;
@@ -16,7 +15,7 @@ use serde_json::Value;
 use crate::enrichment::ontology::{FieldReader, MetadataSourceDecl};
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
-/// One mailbox of an address list, or the whole value under `value`.
+/// One address of an address list, or the whole value under `value`.
 pub(super) struct Item {
     pub(super) addr: Option<String>,
     pub(super) name: Option<String>,
@@ -31,15 +30,13 @@ pub(super) enum Sighting {
     NoIdentity,
     /// `exclude` names the folded value.
     Excluded(Vec<String>),
-    /// A `domain`-read identity value is a mailbox provider's.
-    Provider(Vec<String>),
 }
 
 /// The one decision over a sighting's identity, for the projection and the
 /// reader alike.
 pub(super) fn sighting(
     identity: &[(&str, FieldReader)],
-    excluded: &HashSet<String>,
+    excluded: &Exclusion,
     item: &Item,
     scalar: &str,
 ) -> Sighting {
@@ -51,24 +48,65 @@ pub(super) fn sighting(
     let Some(folded) = folded else {
         return Sighting::NoIdentity;
     };
-    if folded.iter().any(|f| excluded.contains(f)) {
+    if folded.iter().any(|f| excluded.holds(f)) {
         return Sighting::Excluded(folded);
-    }
-    // the raw domain, not the folded key: folding turns '.' and '-' alike into spaces
-    if identity.iter().any(|(_, r)| {
-        *r == FieldReader::Domain && read(*r).is_some_and(|d| is_mailbox_provider(&d))
-    }) {
-        return Sighting::Provider(folded);
     }
     Sighting::Key(folded)
 }
 
-/// `exclude`'s values after the identity fold.
-pub(super) fn excluded(src: &MetadataSourceDecl) -> HashSet<String> {
-    src.exclude
-        .iter()
-        .filter_map(|e| fold_identity_value(e))
-        .collect()
+/// What a source's `exclude` declares: identity values, and the lists a
+/// `@bundled:<key>` entry names (one value a line, `#` comments), each after
+/// the identity fold. A value is excluded when it equals one, or ends in one
+/// at a word boundary, as a set's `suffix` condition reads it: an excluded
+/// `example.org` covers `mail.example.org`. Code holds no list of its own.
+#[derive(Debug, Default)]
+pub(super) struct Exclusion {
+    values: HashSet<String>,
+}
+
+/// The prefix that names a bundled list, as filter configs spell it.
+const BUNDLED: &str = "@bundled:";
+
+impl Exclusion {
+    /// Read `src.exclude`, refusing a `@bundled:` key that names no list.
+    pub(super) fn of(src: &MetadataSourceDecl) -> Result<Self, String> {
+        let mut values = HashSet::new();
+        for entry in &src.exclude {
+            match entry.strip_prefix(BUNDLED) {
+                Some(key) => {
+                    let bytes = crate::recipe_source::default_assets()
+                        .bundled_asset(key)
+                        .ok_or_else(|| {
+                            format!("`exclude` names `{entry}`, which is no bundled list")
+                        })?;
+                    let text = std::str::from_utf8(bytes)
+                        .map_err(|e| format!("`exclude` list `{entry}` is not UTF-8: {e}"))?;
+                    values.extend(
+                        text.lines()
+                            .map(str::trim)
+                            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                            .filter_map(fold_identity_value),
+                    );
+                }
+                None => values.extend(fold_identity_value(entry)),
+            }
+        }
+        tracing::debug!(
+            declared = src.exclude.len(),
+            values = values.len(),
+            "atlas/resolution sources: exclusion read"
+        );
+        Ok(Self { values })
+    }
+
+    /// Whether a folded identity value is excluded: equal to a declared one,
+    /// or ending in one at a word boundary.
+    pub(super) fn holds(&self, folded: &str) -> bool {
+        self.values.contains(folded)
+            || folded
+                .match_indices(' ')
+                .any(|(at, _)| self.values.contains(&folded[at + 1..]))
+    }
 }
 
 /// One record a document field names for a sourced type, as the projection
@@ -86,8 +124,8 @@ pub struct FieldRecord {
 
 /// Every record `value` (one document field's value) names for a type with
 /// metadata source `src`, skipping what the projection skips: no identity,
-/// excluded, a mailbox provider's, unreadable. Nothing when the declaration
-/// names no identity reader.
+/// excluded, unreadable. Nothing when the declaration names no identity reader
+/// or a `@bundled:` list that does not exist, which the projection refuses.
 pub fn field_records(
     src: &MetadataSourceDecl,
     identity_keys: &[String],
@@ -99,11 +137,13 @@ pub fn field_records(
     let Ok(Some(scalars)) = scalars_of(value) else {
         return Vec::new();
     };
-    let excluded = excluded(src);
+    let Ok(excluded) = Exclusion::of(src) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for scalar in scalars {
         let items = if src.reads_addresses() {
-            match mailboxes(&scalar) {
+            match addresses(&scalar) {
                 Ok(items) => items,
                 // The projection counts this field as unreadable and makes no
                 // record of it; the reader names none either.
@@ -157,8 +197,8 @@ pub(super) fn scalars_of(v: &Value) -> Result<Option<Vec<String>>, String> {
     Ok((!all.is_empty()).then_some(all))
 }
 
-/// The mailboxes of an RFC 5322 address list (groups flattened).
-pub(super) fn mailboxes(list: &str) -> Result<Vec<Item>, String> {
+/// The addresses of an RFC 5322 address list (groups flattened).
+pub(super) fn addresses(list: &str) -> Result<Vec<Item>, String> {
     let parsed = mailparse::addrparse(list).map_err(|e| format!("is not an address list ({e})"))?;
     let item = |s: &SingleInfo| Item {
         addr: Some(s.addr.trim().to_lowercase()).filter(|a| !a.is_empty()),
@@ -196,31 +236,6 @@ pub(super) fn read_item(reader: FieldReader, item: &Item, scalar: &str) -> Optio
     }
 }
 
-/// Whether `domain` is a mailbox provider's: on the bundled `mailbox_providers`
-/// list, or a subdomain of a listed domain (`email.msn.com` is `msn.com`'s). The
-/// list is compiled in through the asset port, so its absence is a build defect.
-pub(super) fn is_mailbox_provider(domain: &str) -> bool {
-    static LISTED: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    let listed = LISTED.get_or_init(|| {
-        let bytes = crate::recipe_source::default_assets()
-            .bundled_asset("mailbox_providers")
-            .expect("the mailbox_providers asset is compiled in");
-        std::str::from_utf8(bytes)
-            .expect("mailbox_providers is UTF-8")
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .collect()
-    });
-    let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
-    let mut d = domain.as_str();
-    loop {
-        if listed.contains(d) {
-            return true;
-        }
-        match d.split_once('.') {
-            Some((_, rest)) if rest.contains('.') => d = rest,
-            _ => return false,
-        }
-    }
-}
+#[cfg(test)]
+#[path = "fields_tests.rs"]
+mod tests;

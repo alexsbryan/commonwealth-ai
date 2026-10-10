@@ -86,9 +86,12 @@ pub struct MetadataSourceDecl {
     /// The type's `identity` attributes must be among them.
     #[serde(default)]
     pub attributes: BTreeMap<String, FieldReader>,
-    /// Identity values never projected beyond the mailbox providers a
-    /// `domain` reading already skips (a provider the bundled list
-    /// lacks), compared after the identity fold.
+    /// Identity values never projected, compared after the identity fold: a
+    /// value is excluded when it equals one or ends in one at a word boundary
+    /// (`example.org` covers `mail.example.org`). An entry `@bundled:<key>`
+    /// names a list shipped with the recipes, one value a line, such as
+    /// `@bundled:mailbox_providers`, the free-mail domains whose addresses
+    /// name no organization. Nothing is excluded that the recipe does not name.
     #[serde(default)]
     pub exclude: Vec<String>,
     /// Declared `ref` attribute → the sourced type it links to, and the reader

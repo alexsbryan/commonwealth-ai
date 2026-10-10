@@ -679,10 +679,13 @@ question the pipeline asks about a type is a method on the resolved
   a reader reads on the same mailbox (Contact -> Account: `employer = { of =
   "company", reader = "domain" }`), linked after every type is projected;
   attributes merge first-wins, so a model's raw name never displaces the link.
-  A `domain`-read identity value at a mailbox provider (the bundled
-  `mailbox_providers` asset, free-email-domains at a pinned commit, or a
-  subdomain of a listed domain) is never projected and is counted as
-  `providers`, so no recipe lists ISPs to keep a contact's account honest.
+  A source's `exclude` (`resolution_sources/fields.rs::Exclusion`) skips an
+  identity value equal to, or ending at a word boundary in, a value it names
+  or one of a `@bundled:<key>` list it names (`@bundled:mailbox_providers`,
+  free-email-domains at a pinned commit), counted as `excluded`; code holds no
+  list and skips nothing a recipe does not name (E5, 2026-10-10: the provider
+  skip that was code is now this declaration). The reader's prefill and Pick
+  read fields through the same readers (`field_records`).
   RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
   puts each statement of one document into an open record of one declared
   type, opens one, or holds it. An equal declared `identity` key decides without a call.
