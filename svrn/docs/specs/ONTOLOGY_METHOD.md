@@ -93,7 +93,10 @@ evidence, the unsettled band (built; since E2, 2026-10-10, every source is weigh
 weights fitted by EM on the corpus being read, with no labels, `resolve_records/estimate.rs`: the recipe
 declares no precision, and a necessary value forbids outright only when a declared field supplies it on both
 sides, one a model chose (the reader's Choose or RESOLVE's READ) being one more weighed source, which C3's test
-checks on the default path); **3** the layer's other identity deciders onto it (about fifteen today, with
+checks on the default path; E3, 2026-10-10: a statement held in its document is settled after the last one,
+weighed again against the records it was held between at the whole corpus's weights with the model asked once
+more over those only, linking at the bar, opening its own record when nothing raises one, and otherwise taken by
+the most probable, so nothing is left held, `resolve_records/settle.rs`); **3** the layer's other identity deciders onto it (about fifteen today, with
 three ways of combining keys; begun: an entity or event type with a criterion and no source is RESOLVE's alone in the
 atlas build, over the claims whose subject it is, `resolution_records.rs`). A precision is measured on the rule as it runs, never under gold alone: a field
 follows whatever decision put its value in a record (uv thread .905 under gold, .71 live). That is why it is

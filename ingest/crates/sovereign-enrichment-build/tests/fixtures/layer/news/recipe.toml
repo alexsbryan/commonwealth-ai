@@ -40,6 +40,7 @@ name = "happening"
 kind = "event"
 description = "something that happens: an action, an occurrence, or a change of state"
 identity_criterion = "Two mentions are one happening when they refer to the same real-world occurrence: the same kind of action or change, by or to the same participants, at the same time and place, however differently it is worded."
+identity_bar = 0.9
 identity_necessary = ["what"]
 attributes = [
   { name = "what", type = "text", values = [

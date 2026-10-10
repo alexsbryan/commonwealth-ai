@@ -62,6 +62,7 @@ name = "order"
 kind = "entity"
 description = "one piece of work a customer asks the workshop to make"
 identity_criterion = "Two mentions are one order when they are about the same piece of work for the same customer, however it is worded and whoever writes."
+identity_bar = 0.9
 attributes = [
   { name = "customer", type = "ref", of = "company", derived = "customer_of_order" },
   { name = "stage", type = "text", values = ["asked", "quoted", "confirmed", "cancelled"], derived = "order_stage" },

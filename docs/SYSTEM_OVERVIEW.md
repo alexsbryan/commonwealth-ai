@@ -735,7 +735,17 @@ question the pipeline asks about a type is a method on the resolved
   `identity_bar` links (`Decision::Weighed`, with the sources that agreed);
   with no bar the most probable of the alternatives and none decides; no
   source raising one opens a record; anything between is `Outcome::Held`,
-  counted, its alternatives and votes kept, never opened as a record. The model
+  counted, its alternatives, votes and necessary values kept, never opened as a
+  record in its document. After the last document every held statement is
+  settled (`resolve_records/settle.rs`, E3, called by `drive.rs` for both
+  drivers): weighed again against the records it was held between as they
+  stand, at the whole corpus's weights, with the model asked once more over
+  those records only (one more `model_choice` or `reasoned_choice`); at the bar
+  it links, with no source raising a record it opens its own, and still
+  unsettled the most probable decides, so nothing is left held. Each settled
+  document reaches `on_document` again as a resolution with `settles`, its
+  outcomes replacing the held ones (`RecordsReport::settled` is the held count
+  before; `outcomes["held"]` after). The model
   is asked only where the other sources do not already link. The resolve step
   prints, per source, its estimated precision, weights and the links and
   vetoes it carried (`Resolver::sources_summary`).

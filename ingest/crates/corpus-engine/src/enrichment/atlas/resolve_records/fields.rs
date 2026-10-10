@@ -14,8 +14,9 @@ use tracing::debug;
 
 use super::estimate::{Comparison, Estimate};
 use super::weigh::{weigh, Vote, Zone};
-use super::{Criterion, Document, Plan, Record};
+use super::{Criterion, Document, Plan, Record, Statement};
 use crate::enrichment::ontology::DocumentStamp;
+use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
 /// The records holding one of `doc`'s stamp values, in record order.
 pub(super) fn named(
@@ -148,4 +149,31 @@ pub(super) fn compare_necessary(
             (true, _) => {}
         }
     }
+}
+
+/// The declared keys a statement carries, folded the way every identity
+/// comparison folds them (`fold_identity_value`, one decider with the reconciler).
+pub(super) fn declared_keys(criterion: &Criterion, s: &Statement) -> Vec<(String, String)> {
+    criterion
+        .keys
+        .iter()
+        .filter_map(|k| Some((k.clone(), fold_identity_value(s.keys.get(k)?)?)))
+        .collect()
+}
+
+/// Pairs of asked statements (positions in `asked`) that share a declared key value.
+pub(super) fn key_edges(asked: &[usize], keys: &[Vec<(String, String)>]) -> Vec<(usize, usize)> {
+    let mut first: HashMap<&(String, String), usize> = HashMap::new();
+    let mut edges = Vec::new();
+    for (j, &i) in asked.iter().enumerate() {
+        for kv in &keys[i] {
+            match first.get(kv) {
+                Some(&f) => edges.push((f, j)),
+                None => {
+                    first.insert(kv, j);
+                }
+            }
+        }
+    }
+    edges
 }

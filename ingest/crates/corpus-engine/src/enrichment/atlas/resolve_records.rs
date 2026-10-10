@@ -20,7 +20,6 @@ use tracing::{debug, info};
 
 use super::resolution_documents::fold_ws;
 use crate::enrichment::ontology::{AttrDecl, AttrFamily, DocumentStamp, OntologyTypeDecl};
-use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 use crate::InferenceFn;
 
 /// Bytes of the asked document shown either side of a statement in its own
@@ -246,12 +245,18 @@ pub enum Outcome {
 }
 
 /// What an unsettled statement was held with: each alternative's posterior,
-/// in the order weighed, none's, and every source's vote.
+/// in the order weighed, none's, and every source's vote; and the necessary
+/// values it was weighed with, read and supplied, which settling it after the
+/// last document weighs again (`settle.rs`, E3).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Held {
     pub alternatives: Vec<(String, f64)>,
     pub none: f64,
     pub sources: Vec<Vote>,
+    #[serde(skip)]
+    pub read: BTreeMap<String, BTreeSet<String>>,
+    #[serde(skip)]
+    pub supplied: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Outcome {
@@ -382,6 +387,10 @@ pub struct DocumentResolution {
     /// own READ), both model reads, weighed.
     pub necessary: BTreeMap<&'static str, u32>,
     pub outcomes: Vec<StatementOutcome>,
+    /// Held statements of this document settled after the last document
+    /// (`settle.rs`, E3), each outcome replacing its held one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub settles: bool,
 }
 
 impl DocumentResolution {
@@ -833,6 +842,7 @@ impl Resolver {
             unread,
             necessary,
             outcomes: outcomes.into_iter().flatten().collect(),
+            settles: false,
         };
         info!(
             document = doc.id,
@@ -921,33 +931,6 @@ impl Resolver {
     }
 }
 
-/// The declared keys a statement carries, folded the way every identity
-/// comparison folds them (`fold_identity_value`, one decider with the reconciler).
-fn declared_keys(criterion: &Criterion, s: &Statement) -> Vec<(String, String)> {
-    criterion
-        .keys
-        .iter()
-        .filter_map(|k| Some((k.clone(), fold_identity_value(s.keys.get(k)?)?)))
-        .collect()
-}
-
-/// Pairs of asked statements (positions in `asked`) that share a declared key value.
-fn key_edges(asked: &[usize], keys: &[Vec<(String, String)>]) -> Vec<(usize, usize)> {
-    let mut first: HashMap<&(String, String), usize> = HashMap::new();
-    let mut edges = Vec::new();
-    for (j, &i) in asked.iter().enumerate() {
-        for kv in &keys[i] {
-            match first.get(kv) {
-                Some(&f) => edges.push((f, j)),
-                None => {
-                    first.insert(kv, j);
-                }
-            }
-        }
-    }
-    edges
-}
-
 mod answer;
 mod by;
 use estimate::{Comparison, Pairs};
@@ -962,7 +945,9 @@ mod fields;
 pub mod propose;
 mod read;
 mod select;
+mod settle;
 mod weigh;
+use fields::{declared_keys, key_edges};
 
 pub(crate) use read::choice_question;
 pub(crate) use select::{decision_call, LABELS, NONE};

@@ -6,10 +6,14 @@
 //! `research/ontology-apps/resolve-prereg.md`). Before Ring 2 the atlas build
 //! sorted by the clock and `resolve-statements` took its file's order, so a
 //! reordered statements file (`statements.py --salt`) moved GVC's measures.
+//! After the last document the statements the decider held are settled
+//! (`settle.rs`, E3), and each document that had one is passed to
+//! `on_document` once more as a resolution that `settles`.
 
 use tracing::debug;
 
 use super::propose::Proposers;
+use super::settle::held_in;
 use super::{Answerer, Criterion, Document, DocumentResolution, Resolver, Statement};
 use crate::enrichment::ontology::DocumentStamp;
 
@@ -37,13 +41,22 @@ pub async fn resolve_in_clock_order<'a>(
         first = documents.first().map(|d| d.0.id),
         "atlas/resolve: documents in clock order"
     );
+    let mut held = Vec::new();
     for (k, (doc, statements)) in documents.iter().enumerate() {
         let candidates = proposers.propose(*doc);
         let r = resolver
             .resolve_document(criterion, *doc, statements, &candidates, answerer)
             .await;
         proposers.observe(*doc, &r);
+        held_in(k, &r, &mut held);
         on_document(k, *doc, &r);
+    }
+    // E3: what the decider held is settled once every document is seen, and
+    // each settled document is seen again, its outcomes replacing the held.
+    if !held.is_empty() {
+        for (k, r) in resolver.settle(criterion, documents, held, answerer).await {
+            on_document(k, documents[k].0, &r);
+        }
     }
 }
 

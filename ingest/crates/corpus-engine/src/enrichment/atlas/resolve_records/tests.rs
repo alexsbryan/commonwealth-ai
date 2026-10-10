@@ -969,3 +969,6 @@ mod necessary_tests;
 
 #[path = "weighed_tests.rs"]
 mod weighed_tests;
+
+#[path = "settle_tests.rs"]
+mod settle_tests;

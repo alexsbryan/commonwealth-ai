@@ -272,6 +272,7 @@ mod tests {
                     by: Vec::new(),
                 })
                 .collect(),
+            settles: false,
         }
     }
 

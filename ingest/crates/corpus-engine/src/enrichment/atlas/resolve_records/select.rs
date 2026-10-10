@@ -42,7 +42,7 @@ pub(crate) const NONE: &str = "0";
 /// What a candidate is: an open record a proposer offered, or a record an
 /// earlier statement of this document opened (its position in `asked`).
 #[derive(Clone, Copy)]
-enum Candidate<'p> {
+pub(super) enum Candidate<'p> {
     Record(usize, &'p Proposal),
     Opened(usize),
 }
@@ -608,6 +608,8 @@ pub(super) async fn choose(
                     .zip(&comps)
                     .flat_map(|(&a, c)| fields::votes_for(c, &id_of(a), estimate))
                     .collect(),
+                read: w.read[j].clone(),
+                supplied: w.supplied[j].clone(),
             }),
         };
         seen.extend(comps);
@@ -628,7 +630,7 @@ pub(super) async fn choose(
 /// and are the same for every statement of the document, so the engine can
 /// keep them prefilled; the candidates and the statement follow.
 #[allow(clippy::too_many_arguments)]
-fn question(
+pub(super) fn question(
     criterion: &Criterion,
     same_when: &str,
     doc: Document<'_>,
@@ -695,7 +697,7 @@ fn question(
 /// (generated, bounded by `REASON_TOKENS`), or one forced choice read after
 /// that reasoning (`reasoned_choice`).
 #[derive(Clone, Copy)]
-enum Ask<'a> {
+pub(super) enum Ask<'a> {
     Choose,
     Reason,
     ChooseAfter(&'a str),
@@ -707,7 +709,7 @@ const REASON_TOKENS: u32 = 2000;
 
 /// The reasoning before a reasoned choice: one bounded generation, traced
 /// and counted by the caller. Empty or failed, the statement is refused.
-async fn reason_call(
+pub(super) async fn reason_call(
     infer: &InferenceFn,
     prompt: &ChatPrompt,
     document: &str,

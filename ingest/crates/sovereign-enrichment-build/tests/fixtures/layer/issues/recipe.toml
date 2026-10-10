@@ -47,6 +47,7 @@ name = "case"
 kind = "entity"
 description = "one underlying problem or request, however many issues report it"
 identity_criterion = "Two mentions are one case when they are about the same underlying problem or request, however many issues report it and whoever writes."
+identity_bar = 0.9
 attributes = [
   { name = "reporter", type = "ref", of = "person", derived = "reporter_of_case" },
 ]

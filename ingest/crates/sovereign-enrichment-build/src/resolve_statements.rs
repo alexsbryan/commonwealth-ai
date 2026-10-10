@@ -429,6 +429,12 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
                     .and_then(|()| decisions.write_all(b"\n").map_err(|e| e.to_string()));
             }
             for o in &r.outcomes {
+                if r.settles {
+                    // It replaces the statement's held outcome (E3).
+                    if let Some(n) = tally.get_mut("held") {
+                        *n -= 1;
+                    }
+                }
                 *tally.entry(o.outcome.label().to_string()).or_insert(0) += 1;
                 let cluster = match &o.outcome {
                     Outcome::Decided(_) => o.outcome.record().unwrap_or_default().to_string(),
@@ -440,7 +446,9 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
             calls += r.calls;
             vetoed += r.vetoed;
             unread += r.unread;
-            statements += r.outcomes.len();
+            if !r.settles {
+                statements += r.outcomes.len();
+            }
             eprintln!(
                 "  [{}/{}] {}: {} statement(s), {} candidate(s), {} call(s) {:?}",
                 k + 1,

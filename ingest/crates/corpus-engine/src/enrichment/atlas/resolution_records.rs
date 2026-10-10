@@ -118,8 +118,12 @@ pub struct RecordsReport {
     pub documents: usize,
     /// Documents with no date stamp, resolved after every dated one.
     pub undated: usize,
-    /// Statements by how RESOLVE decided them (`Outcome::label`).
+    /// Statements by how RESOLVE decided them (`Outcome::label`), a held
+    /// statement settled after the last document by how it settled.
     pub outcomes: BTreeMap<&'static str, usize>,
+    /// Statements held in their document and settled after the last one (E3):
+    /// the held count before; `outcomes["held"]` is the count after.
+    pub settled: usize,
     pub records: usize,
     pub calls: u32,
     /// The type's atoms 3a made from Phase-1 sketches, retired.
@@ -142,8 +146,8 @@ impl RecordsReport {
         };
         format!(
             "RESOLVE `{}`: {} record(s) from {} statement(s) of {} claim(s) in {} document(s) \
-             ({} unplaced, {} undated), {} call(s); decided [{}]; {} Phase-1 atom(s) retired, \
-             references dropped [{}]",
+             ({} unplaced, {} undated), {} call(s); decided [{}], {} held and settled after the \
+             last document; {} Phase-1 atom(s) retired, references dropped [{}]",
             self.type_name,
             self.records,
             self.statements,
@@ -153,6 +157,7 @@ impl RecordsReport {
             self.undated,
             self.calls,
             fold(&self.outcomes),
+            self.settled,
             self.retired,
             fold(&self.dropped),
         ) + &self
@@ -550,9 +555,17 @@ async fn resolve_type(
             on_document(&t.name, r);
             report.calls += r.calls;
             for o in &r.outcomes {
+                if r.settles {
+                    // It replaces the statement's held outcome (E3).
+                    if let Some(n) = report.outcomes.get_mut("held") {
+                        *n -= 1;
+                    }
+                    report.settled += 1;
+                }
                 *report.outcomes.entry(o.outcome.label()).or_default() += 1;
                 match o.outcome.record() {
                     Some(rec) => {
+                        refused.remove(&o.statement);
                         record_of.insert(o.statement.clone(), rec.to_string());
                     }
                     None => {
