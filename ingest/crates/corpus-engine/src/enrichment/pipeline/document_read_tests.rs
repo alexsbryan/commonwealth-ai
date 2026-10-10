@@ -305,10 +305,13 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .map(|p| p.phase_id.as_deref().unwrap_or(""))
         .collect();
     assert_eq!(phases, ["document_passes_locate", "document_passes_choose"]);
-    assert!(
-        prompts.iter().all(|p| !p.user.contains("Alice")),
-        "a metadata-sourced author is never asked about"
-    );
+    // A metadata-sourced author is a declared fact every question carries
+    // first (prefill), and never what a question asks about.
+    for p in prompts.iter() {
+        let (facts, asked) = p.user.split_once("\n\n").unwrap();
+        assert!(facts.contains("author: Alice"), "{}", p.user);
+        assert!(!asked.contains("Alice"), "{}", p.user);
+    }
     assert!(phase1_cache_matches(&[chapter.clone()], &result.output, &policies).is_ok());
     let default_policy = OntologyPolicies::default();
     assert!(phase1_cache_matches(&[], &result.output, &default_policy).is_err());

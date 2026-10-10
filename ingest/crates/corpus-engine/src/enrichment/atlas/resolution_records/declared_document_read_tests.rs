@@ -86,6 +86,7 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
         date: None,
         thread: Some("thread".into()),
         id: Some("id".into()),
+        author: None,
     });
 
     let claim = |id: &str, kind: &str, document: &str, local: &str, number: &str, project: &str| {

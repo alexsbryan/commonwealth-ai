@@ -459,7 +459,8 @@ fn ontology_schema(descriptor: &Value) -> Value {
                         "properties": {
                             "date":   { "type": "string" },
                             "thread": { "type": "string" },
-                            "id":     { "type": "string" }
+                            "id":     { "type": "string" },
+                            "author": { "type": "string" }
                         }
                     }
                 }

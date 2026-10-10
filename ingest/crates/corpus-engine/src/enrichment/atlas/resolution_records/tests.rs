@@ -79,6 +79,7 @@ fn policies() -> OntologyPolicies {
         date: Some("date".into()),
         thread: Some("thread".into()),
         id: None,
+        author: None,
     });
     p
 }

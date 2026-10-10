@@ -964,6 +964,7 @@ Allowed values:
 | `date` | `Option<String>` | no | type default | The field holding the document's date, RFC 2822 or ISO 8601. Stamped as `document_date` in ISO 8601 — the clock supersession folds on. |
 | `thread` | `Option<String>` | no | type default | The field naming the thread the document belongs to. Stamped as `document_thread`. |
 | `id` | `Option<String>` | no | type default | The field holding the document's own identifier. Stamped as `document_id`. |
+| `author` | `Option<String>` | no | type default | The field naming who wrote the document (`from`, `author`). Not stamped: the reader reads it so that a line its author repeats across documents (a signature) is never asked about (ONTOLOGY_METHOD §Reading, line classes). |
 
 ## `TensionDecl`
 

@@ -680,6 +680,12 @@ pub struct DocumentFieldsDecl {
     /// `document_id`.
     #[serde(default)]
     pub id: Option<String>,
+    /// The field naming who wrote the document (`from`, `author`). Not
+    /// stamped: the reader reads it so that a line its author repeats across
+    /// documents (a signature) is never asked about (ONTOLOGY_METHOD
+    /// §Reading, line classes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
 }
 
 /// `[enrichment.ontology.tension]` — which claims can conflict, and what makes

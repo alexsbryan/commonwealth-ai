@@ -103,7 +103,12 @@ estimated on the run itself, document by document in clock order, and checked ag
 ## Reading (agreed 2026-10-08)
 
 The reader asks; it never decides identity. A document is prefilled once with its declared facts (metadata
-fields and the roles derived from them through declared sets, such as the sender's side), then asked a
+fields and the roles derived from them through declared sets, such as the sender's side; built 2026-10-10,
+`document_read/prefill.rs`, first in every question about the document). Lines code classifies by structure
+are never asked: a quote (its text, from first to last letter or digit, is a line of a document dated
+earlier by the declared clock) and boilerplate (a line of another document by the same author, the field
+`change.document.author` names); each class is counted and traced, and the classes hold no word of any
+format (`document_read/line_classes.rs`). The rest is asked a
 fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
 renaming: **Locate** each declared claim kind (line sets or none; each kind shown with its closed-valued fields' declared
 values and descriptions, the words a line states it in; the system prompt mentions values only when a kind

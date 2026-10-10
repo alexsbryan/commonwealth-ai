@@ -125,10 +125,17 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
 /// attribute under a key a stamp would overwrite.
 fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &mut Vec<String>) {
     let keys = DocumentStamp::ALL.map(DocumentStamp::key).join(", ");
-    if d.declared().next().is_none() {
+    if d.declared().next().is_none() && d.author.is_none() {
         errors.push(format!(
-            "change.document names no field. Declare at least one of {keys}, or drop the key."
+            "change.document names no field. Declare at least one of {keys}, author, or drop \
+             the key."
         ));
+    }
+    if d.author.as_deref().is_some_and(|f| f.trim().is_empty()) {
+        errors.push(
+            "change.document.author is blank. Name the metadata field your documents carry."
+                .to_string(),
+        );
     }
     for (stamp, field) in d.declared() {
         if field.trim().is_empty() {
@@ -274,9 +281,19 @@ fn document_fields_note(d: &DocumentFieldsDecl) -> String {
             DocumentStamp::Thread | DocumentStamp::Id => format!("{} ← `{field}`", stamp.attr()),
         })
         .collect();
+    let author = d
+        .author
+        .as_deref()
+        .map(|f| {
+            format!(
+                "; author ← `{f}`, read by the reader only: a line its author repeats in \
+                 another document is boilerplate, never asked"
+            )
+        })
+        .unwrap_or_default();
     format!(
         "document fields: {} — stamped on each claim from the one document its evidence \
-         lands in; a claim in none or several is left unstamped and counted",
+         lands in; a claim in none or several is left unstamped and counted{author}",
         join_or_none(pairs.iter().map(String::as_str))
     )
 }

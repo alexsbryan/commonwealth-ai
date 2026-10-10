@@ -795,6 +795,16 @@ impl PhaseRunner {
         // through.
         let policies = self.pipeline.declaration();
         let document_reading = policies.reads_documents();
+        // The reader's line classes need every document a run reads, so they
+        // are indexed over all chapters, whichever are targeted.
+        let line_classes = if document_reading {
+            super::document_read::LineClasses::of(
+                chapters.iter().flat_map(|c| c.source_documents.iter()),
+                &policies,
+            )
+        } else {
+            super::document_read::LineClasses::default()
+        };
         let exemplar_path = self.exemplar_path(PipelinePhase::Questions);
         let bank =
             runner_load_exemplar_bank(document_reading, targets.len(), &exemplar_path, &self.embed)
@@ -952,7 +962,13 @@ impl PhaseRunner {
             // version + model id. Only the default retry mode
             // consults the cache — terse retries are by definition
             // a different prompt shape and would corrupt the entry.
-            let cache_text = runner_cache_text(document_reading, &policies, chapter, &prompt)?;
+            let cache_text = runner_cache_text(
+                document_reading,
+                &policies,
+                chapter,
+                &line_classes.digest(&chapter.source_documents),
+                &prompt,
+            )?;
             let section_cache_key = if retry_mode.is_none() {
                 self.section_cache.as_ref().map(|cfg| {
                     crate::enrichment::atlas::section_cache::cache_key(
@@ -1007,7 +1023,8 @@ impl PhaseRunner {
                 // many small questions through the chat port, answered into
                 // the envelope the parse, validation and cache below read.
                 tracing::debug!(chapter_id = %chapter.chapter_id, "phase1.document_read_passes");
-                super::document_read::read_passes(chapter, &policies, &self.chat).await
+                super::document_read::read_passes(chapter, &policies, &line_classes, &self.chat)
+                    .await
             } else {
                 match retry_mode {
                     Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {

@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 mod cache;
+mod line_classes;
 mod passes;
+mod prefill;
 mod projection;
 mod runner_support;
 mod schema;
@@ -17,6 +19,7 @@ pub use cache::{
     cache_matches_chapter, checkpoint_processed_ids, context_fingerprint, contract_fingerprint,
     phase1_cache_matches, validate_checkpoint,
 };
+pub use line_classes::LineClasses;
 pub use passes::chosen_fields as reader_chosen_fields;
 pub use passes::read as read_passes;
 pub use projection::parse_response;

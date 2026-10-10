@@ -27,6 +27,8 @@ use oicp_types::forced_choice;
 use serde_json::{json, Value};
 use tracing::{debug, info};
 
+use super::line_classes::{LineClass, LineClasses};
+use super::prefill;
 use super::{DocumentReadClaim, DocumentReadField, DocumentReadOutcome, DocumentReadStatus};
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolve_records::{
@@ -56,6 +58,7 @@ const CHOOSE_PHASE: &str = "document_passes_choose";
 pub async fn read(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
+    classes: &LineClasses,
     infer: &InferenceFn,
 ) -> Result<String> {
     let plan = Plan::of(policies);
@@ -67,7 +70,7 @@ pub async fn read(
     let mut documents = Vec::with_capacity(chapter.source_documents.len());
     let mut calls = 0u32;
     for document in &chapter.source_documents {
-        let (outcome, n) = read_document(document, &plan, infer).await;
+        let (outcome, n) = read_document(document, &plan, policies, classes, infer).await;
         calls += n;
         documents.push(outcome);
     }
@@ -179,13 +182,14 @@ pub(super) fn lines(body: &str) -> Vec<Line> {
 /// them only in a field's description went unseen here (order 8, abfe32a14:
 /// 14 uv states read by a blind recipe that put them in its kind's text).
 pub(super) fn locate_question(
+    facts: &str,
     body: &str,
     lines: &[Line],
     line: &Line,
     plan: &Plan<'_>,
     labels: &[&str],
 ) -> ChatPrompt {
-    let mut u = String::from("Document, its lines numbered:\n<<<\n");
+    let mut u = format!("{facts}Document, its lines numbered:\n<<<\n");
     for l in lines {
         u.push_str(&format!(
             "{} {}\n",
@@ -294,6 +298,8 @@ fn render(dist: &BTreeMap<String, f64>) -> String {
 async fn read_document(
     document: &SourceDocument,
     plan: &Plan<'_>,
+    policies: &OntologyPolicies,
+    classes: &LineClasses,
     infer: &InferenceFn,
 ) -> (DocumentReadOutcome, u32) {
     let id = document.key().to_string();
@@ -320,11 +326,20 @@ async fn read_document(
         .copied()
         .chain([NONE])
         .collect();
+    let facts = prefill::facts(document, policies);
     let mut calls = 0u32;
     let mut refused = 0usize;
+    let mut classed: BTreeMap<LineClass, usize> = BTreeMap::new();
     let mut located = Vec::with_capacity(lines.len());
     for line in &lines {
-        let prompt = locate_question(&raw, &lines, line, plan, &labels);
+        let text = &raw[line.start..line.end];
+        if let Some(class) = classes.class(&id, text) {
+            debug!(document = %id, line = line.n, class = class.label(), text = %excerpt(text), "document_read/passes: line not asked");
+            *classed.entry(class).or_default() += 1;
+            located.push(None);
+            continue;
+        }
+        let prompt = locate_question(&facts, &raw, &lines, line, plan, &labels);
         calls += 1;
         let item = format!("line {}", line.n);
         match decision_call(infer, &prompt, &labels, &id, &item).await {
@@ -351,7 +366,8 @@ async fn read_document(
             }
         }
     }
-    if refused == lines.len() {
+    let asked = lines.len() - classed.values().sum::<usize>();
+    if asked > 0 && refused == asked {
         return (
             outcome(
                 DocumentReadStatus::CouldNotJudge,
@@ -361,14 +377,16 @@ async fn read_document(
         );
     }
     let found = statements(&located);
-    debug!(document = %id, lines = lines.len(), refused, statements = found.len(), "document_read/passes: statements");
+    debug!(document = %id, lines = lines.len(), refused, classed = ?classed, statements = found.len(), "document_read/passes: statements");
     if found.is_empty() {
         return (
             outcome(
                 DocumentReadStatus::NothingApplicable,
                 format!(
-                    "no line of {} was located as a declared claim kind ({refused} refused)",
-                    lines.len()
+                    "no line of {} was located as a declared claim kind ({refused} refused, \
+                     {} not asked: {classed:?})",
+                    lines.len(),
+                    lines.len() - asked
                 ),
             ),
             calls,
@@ -386,6 +404,7 @@ async fn read_document(
         let at = folded.span(first.start..last.end);
         let ask = Ask {
             infer,
+            facts: &facts,
             document: &id,
             statement: &local_ref,
             body: &folded.text,
@@ -430,6 +449,8 @@ async fn read_document(
 /// lines that are its evidence.
 struct Ask<'q> {
     infer: &'q InferenceFn,
+    /// The document's declared facts, first in every question (`prefill`).
+    facts: &'q str,
     document: &'q str,
     statement: &'q str,
     body: &'q str,
@@ -464,14 +485,17 @@ impl Ask<'_> {
             .copied()
             .chain([NONE])
             .collect();
-        let prompt = choice_question(
-            &owner.name,
-            &owner.description,
-            attr,
-            &labels,
-            self.body,
-            self.at.clone(),
-            CHOOSE_PHASE,
+        let prompt = prefill::carrying(
+            choice_question(
+                &owner.name,
+                &owner.description,
+                attr,
+                &labels,
+                self.body,
+                self.at.clone(),
+                CHOOSE_PHASE,
+            ),
+            self.facts,
         );
         *calls += 1;
         let read = match decision_call(self.infer, &prompt, &labels, self.document, self.statement)
@@ -586,7 +610,14 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         .copied()
         .chain([NONE])
         .collect();
-    let locate = locate_question(body, &lines, &lines[0], &plan, &labels);
+    let locate = locate_question(
+        prefill::FACTS_HEADER,
+        body,
+        &lines,
+        &lines[0],
+        &plan,
+        &labels,
+    );
     let probe = ClosedAttr {
         name: "attribute".into(),
         description: String::new(),

@@ -39,6 +39,8 @@ pub struct CorpusFieldReport {
 #[derive(Debug, Clone, PartialEq)]
 enum FieldUse {
     Stamp(DocumentStamp),
+    /// `change.document.author`, read by the passes reader's line classes.
+    Author,
     Source(String),
 }
 
@@ -46,6 +48,7 @@ impl FieldUse {
     fn describe(&self) -> String {
         match self {
             Self::Stamp(s) => format!("change.document.{}", s.key()),
+            Self::Author => "change.document.author".to_string(),
             Self::Source(ty) => format!("type `{ty}` source.metadata"),
         }
     }
@@ -58,7 +61,14 @@ fn declared_fields(p: &OntologyPolicies) -> Vec<(String, FieldUse)> {
         .document
         .iter()
         .flat_map(|d| d.declared())
-        .map(|(s, f)| (f.to_string(), FieldUse::Stamp(s)));
+        .map(|(s, f)| (f.to_string(), FieldUse::Stamp(s)))
+        .chain(
+            p.change
+                .document
+                .iter()
+                .filter_map(|d| d.author.clone())
+                .map(|f| (f, FieldUse::Author)),
+        );
     let sources = p.shape.types.iter().flat_map(|t| match &t.source {
         Some(SourceDecl::Metadata(s)) => s
             .metadata

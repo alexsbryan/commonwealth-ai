@@ -591,28 +591,40 @@ impl<'a> Graph<'a> {
             }
             _ => return Some(false),
         };
-        for (attr, cond) in &set.conditions {
-            let values: Vec<String> = scalars(fields.get(attr))
-                .iter()
-                .filter_map(|v| fold_identity_value(v))
-                .collect();
-            if values.is_empty() {
-                return None;
-            }
-            let wanted = |w: &str| fold_identity_value(w);
-            let holds = values.iter().any(|v| match cond {
-                Condition::Is(w) => wanted(w).as_deref() == Some(v.as_str()),
-                Condition::In(ws) => ws.iter().any(|w| wanted(w).as_deref() == Some(v.as_str())),
-                Condition::Suffix { suffix } => {
-                    wanted(suffix).is_some_and(|s| *v == s || v.ends_with(&format!(" {s}")))
-                }
-            });
-            if !holds {
-                return Some(false);
-            }
-        }
-        Some(true)
+        conditions_hold(set, fields)
     }
+}
+
+/// Whether `fields` meet every condition of `set`: `None` when a condition's
+/// attribute is absent, which is no answer either way. The one reading of a
+/// set: a derived step's filter here, and the passes reader's prefill and Pick
+/// exclusions (`pipeline/document_read/`).
+pub fn conditions_hold(set: &SetDecl, fields: &serde_json::Map<String, Value>) -> Option<bool> {
+    for (attr, cond) in &set.conditions {
+        let values: Vec<String> = scalars(fields.get(attr))
+            .iter()
+            .filter_map(|v| fold_identity_value(v))
+            .collect();
+        if values.is_empty() {
+            return None;
+        }
+        if !condition_holds(cond, &values) {
+            return Some(false);
+        }
+    }
+    Some(true)
+}
+
+/// Whether any of `values` (already identity-folded) meets `cond`.
+fn condition_holds(cond: &Condition, values: &[String]) -> bool {
+    let wanted = |w: &str| fold_identity_value(w);
+    values.iter().any(|v| match cond {
+        Condition::Is(w) => wanted(w).as_deref() == Some(v.as_str()),
+        Condition::In(ws) => ws.iter().any(|w| wanted(w).as_deref() == Some(v.as_str())),
+        Condition::Suffix { suffix } => {
+            wanted(suffix).is_some_and(|s| *v == s || v.ends_with(&format!(" {s}")))
+        }
+    })
 }
 
 /// The fold registry's arms. `inputs[k]` maps each value input `k` reached to

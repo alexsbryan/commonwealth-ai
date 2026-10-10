@@ -74,6 +74,7 @@ pub fn cache_text<P: Serialize>(
     document_reading: bool,
     policies: &OntologyPolicies,
     chapter: &ChapterInput,
+    line_classes: &str,
     prompt: &P,
 ) -> Result<String> {
     if document_reading {
@@ -83,9 +84,10 @@ pub fn cache_text<P: Serialize>(
             ))
         })?;
         Ok(format!(
-            "{}\0{}\0{}",
+            "{}\0{}\0{}\0{}",
             super::contract_fingerprint(policies),
             super::context_fingerprint(chapter),
+            line_classes,
             prompt
         ))
     } else {

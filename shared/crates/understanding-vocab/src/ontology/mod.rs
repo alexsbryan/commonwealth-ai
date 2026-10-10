@@ -438,6 +438,7 @@ mod tests {
             date: Some("a".into()),
             thread: Some("b".into()),
             id: Some("c".into()),
+            author: None,
         };
         let json = serde_json::to_value(&all).unwrap();
         let mut wire: Vec<&str> = json

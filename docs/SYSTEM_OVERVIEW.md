@@ -628,7 +628,15 @@ question the pipeline asks about a type is a method on the resolved
   cache/checkpoints, keyed by the read contract and source context; generic
   questions are skipped on this path, and accountable source identity and
   subject fields flow to RESOLVE. One reader asks: the passes reader
-  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). Locate asks every
+  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). Every question about a
+  document opens with its declared facts (`prefill.rs`: the metadata fields the
+  declaration names and the declared sets they put the document or a sourced
+  record in, read through the projection's own field readers,
+  `resolution_sources/fields.rs`). A line whose text another document dated
+  earlier holds (a quote), or another document by the same declared author
+  (`change.document.author`: boilerplate), is never asked (`line_classes.rs`,
+  indexed once per run over every chapter's documents and part of the section
+  cache key). Locate asks every remaining
   numbered line which declared claim kind it states, then Choose asks each
   closed-valued field of the claim and of its subject RESOLVE's READ question
   through the census funnel (`decision_call`); a field it cannot ask yet

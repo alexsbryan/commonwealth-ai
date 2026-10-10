@@ -19,6 +19,11 @@ fn scripted(answers: Vec<Value>) -> (InferenceFn, Arc<Mutex<Vec<ChatPrompt>>>) {
     (f, seen)
 }
 
+/// The reader over `chapter`, its line classes indexed over the chapter alone.
+async fn read_all(chapter: &ChapterInput, p: &OntologyPolicies, infer: &InferenceFn) -> Result<String> {
+    read(chapter, p, &LineClasses::of(&chapter.source_documents, p), infer).await
+}
+
 fn passes_policies() -> OntologyPolicies {
     policies()
 }
@@ -90,7 +95,7 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         json!({"A": 0.1, "B": 0.8, "0": 0.1}),
         json!({"A": 0.2, "B": 0.1, "0": 0.7}),
     ]);
-    let envelope = read(&chapter, &p, &infer).await.unwrap();
+    let envelope = read_all(&chapter, &p, &infer).await.unwrap();
     let mut extraction = super::super::parse_response(&envelope, &p)
         .unwrap()
         .section_extraction
@@ -170,7 +175,7 @@ async fn a_document_with_nothing_located_reads_nothing_applicable() {
     let p = passes_policies();
     let chapter = input_chapter(&[row(1, "doc-1", "Hello\nBye", "{}")]);
     let (infer, _) = scripted(vec![none(), none()]);
-    let envelope = read(&chapter, &p, &infer).await.unwrap();
+    let envelope = read_all(&chapter, &p, &infer).await.unwrap();
     let mut extraction = super::super::parse_response(&envelope, &p)
         .unwrap()
         .section_extraction
@@ -187,7 +192,7 @@ async fn a_refused_locate_call_is_never_a_located_line() {
     let chapter = input_chapter(&[row(1, "doc-1", "Hello\nBye", "{}")]);
     // The model answers no distribution at all: both lines refuse.
     let (infer, _) = scripted(vec![json!("A"), json!({"A": 1.0})]);
-    let envelope = read(&chapter, &p, &infer).await.unwrap();
+    let envelope = read_all(&chapter, &p, &infer).await.unwrap();
     let outcome: Value = serde_json::from_str(&envelope).unwrap();
     assert_eq!(outcome["documents"][0]["status"], "could_not_judge");
 }
@@ -218,4 +223,57 @@ fn the_locate_system_prompt_names_values_only_when_a_kind_shows_them() {
         !without.contains("values") && !without.contains('{'),
         "{without}"
     );
+}
+
+/// Steps 1 and 2 of order ontology-layer-15: every question about a document
+/// opens with its declared facts, and a line another document dated earlier
+/// already holds is never asked.
+#[tokio::test]
+async fn facts_open_every_question_and_a_quoted_line_is_never_located() {
+    let mut p = passes_policies();
+    p.change.document = Some(crate::enrichment::ontology::DocumentFieldsDecl {
+        date: Some("date".into()),
+        thread: None,
+        id: None,
+        author: Some("from".into()),
+    });
+    let chapter = input_chapter(&[
+        row(
+            1,
+            "doc-1",
+            "Hello\nThe case is closed now.",
+            r#"{"date": "2026-01-01", "from": "a@x.example"}"#,
+        ),
+        row(
+            2,
+            "doc-2",
+            "> The case is closed now.\nThanks",
+            r#"{"date": "2026-01-02", "from": "b@y.example"}"#,
+        ),
+    ]);
+    let (infer, seen) = scripted(vec![
+        none(),
+        json!({"A": 0.1, "B": 0.85, "0": 0.05}),
+        json!({"A": 0.1, "B": 0.8, "0": 0.1}),
+        json!({"A": 0.2, "B": 0.1, "0": 0.7}),
+        none(),
+    ]);
+    read_all(&chapter, &p, &infer).await.unwrap();
+    let prompts = seen.lock().unwrap();
+    assert_eq!(prompts.len(), 5, "doc-2's quoted line is not asked");
+    for (i, prompt) in prompts.iter().enumerate() {
+        let from = if i < 4 { "a@x" } else { "b@y" };
+        assert!(
+            prompt.user.starts_with(&format!(
+                "Declared facts of this document:\ndate: 2026-01-0{}\nfrom: {from}.example\n\n",
+                if i < 4 { 1 } else { 2 }
+            )),
+            "{}",
+            prompt.user
+        );
+    }
+    assert!(prompts[4].user.contains("Line 2: \"Thanks\""));
+    assert!(!prompts
+        .iter()
+        .any(|p| p.user.contains("Line 1: \"> The case")));
 }
