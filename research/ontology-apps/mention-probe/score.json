@@ -1,0 +1,27 @@
+{
+ "bars": {
+  "recall": 0.7,
+  "precision": 0.7,
+  "split": 0.5,
+  "calls_per_line": 2.0
+ },
+ "table": {
+  "lines": 200,
+  "never_ran": 0,
+  "failed_calls": 0,
+  "recall": 0.798,
+  "recall_multi": 0.755,
+  "recall_single": 0.9,
+  "precision": 0.589,
+  "spans_no_gold": 116,
+  "spans_two_chains": 29,
+  "split": 0.38,
+  "multi_lines_one_chain": 8,
+  "refused_spans": 6,
+  "answered_spans": 359,
+  "calls_per_line": 1.0,
+  "prompt_tokens_per_line": 195.195,
+  "completion_tokens_per_line": 14.515
+ },
+ "verdict": "not worth a pass (below: precision, split)"
+}
