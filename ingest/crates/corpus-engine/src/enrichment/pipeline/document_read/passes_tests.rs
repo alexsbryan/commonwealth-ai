@@ -231,8 +231,8 @@ fn the_locate_system_prompt_names_values_only_when_a_kind_shows_them() {
 }
 
 /// Steps 1 and 2 of order ontology-layer-15: every question about a document
-/// opens with its declared facts, and a line another document dated earlier
-/// already holds is never asked.
+/// opens with its declared facts, and a line carried, under a mark, from a
+/// document dated earlier is never asked.
 #[tokio::test]
 async fn facts_open_every_question_and_a_quoted_line_is_never_located() {
     let mut p = passes_policies();

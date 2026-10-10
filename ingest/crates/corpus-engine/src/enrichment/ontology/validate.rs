@@ -296,8 +296,8 @@ fn document_fields_note(d: &DocumentFieldsDecl) -> String {
         .as_deref()
         .map(|f| {
             format!(
-                "; author ← `{f}`, read by the reader only: a line its author repeats in \
-                 another document is boilerplate, never asked"
+                "; author ← `{f}`, read by the reader only, among each document's \
+                 declared facts"
             )
         })
         .unwrap_or_default();

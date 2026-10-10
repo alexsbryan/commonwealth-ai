@@ -35,19 +35,28 @@ async fn every_question_opens_with_its_documents_declared_facts() {
     }
 }
 
-/// Line classes: the mail fixture's reply quoting an earlier message, and the
-/// greeting its author opens two messages with, are never sent to Locate,
-/// while the quoted line is still asked in the message it comes from.
-#[tokio::test]
-async fn a_quoted_or_repeated_line_is_never_located() {
-    let run = run(&Fixture::load("mail")).await;
-    let locate: Vec<&ChatPrompt> = run
-        .prompts
+/// The Locate questions of `run`.
+fn locates(run: &Run) -> Vec<&ChatPrompt> {
+    run.prompts
         .iter()
         .filter(|p| p.phase_id.as_deref() == Some("document_passes_locate"))
-        .collect();
+        .collect()
+}
+
+/// Whether `prompt` is about the document whose declared id is `id`.
+fn in_doc(prompt: &ChatPrompt, id: &str) -> bool {
+    prompt.user.contains(&format!("\nid: {id}\n"))
+}
+
+/// Line classes: the mail fixture's reply carries a line of the message it
+/// answers under a mark, and it is never sent to Locate there, while it is
+/// asked in the message it comes from. The greeting its author opens two
+/// messages with is asked in both: repetition alone is no evidence.
+#[tokio::test]
+async fn a_quoted_line_is_never_located_and_a_repeated_one_is() {
+    let run = run(&Fixture::load("mail")).await;
+    let locate = locates(&run);
     let quoted = "The offer stands for thirty days; tell us if you would like to go ahead.";
-    let in_doc = |p: &&ChatPrompt, id: &str| p.user.contains(&format!("\nid: {id}\n"));
     assert!(
         locate
             .iter()
@@ -60,7 +69,69 @@ async fn a_quoted_or_repeated_line_is_never_located() {
             !(in_doc(p, "q3@birchhall.example") && line.ends_with(quoted)),
             "a quote reached Locate: {line}"
         );
-        assert_ne!(line, "Hello Tom,", "boilerplate reached Locate");
+    }
+    for doc in ["q1@birchhall.example", "q3@birchhall.example"] {
+        assert!(
+            locate
+                .iter()
+                .any(|p| in_doc(p, doc) && asked_line(p) == "Hello Tom,"),
+            "{doc}: the repeated greeting was never asked"
+        );
+    }
+}
+
+/// Review 2026-10-10 (note 2347f4c6), on the default path: a tracker act
+/// written in the same words in two threads, and again in its own thread
+/// after a reopen, is asked in each document and each becomes a placed
+/// statement of its own document.
+#[tokio::test]
+async fn a_repeated_act_is_read_and_placed_in_every_document() {
+    let mut f = Fixture::load("issues");
+    let closed = "Closed this issue as resolved in the latest release.";
+    for (id, thread, at, body) in [
+        ("event-101-closed", 101, "2026-02-11T09:00:00Z", closed),
+        ("event-102-closed", 102, "2026-02-12T09:00:00Z", closed),
+        (
+            "event-101-reopened",
+            101,
+            "2026-02-13T09:00:00Z",
+            "Reopened this issue after a report from another user.",
+        ),
+        (
+            "event-101-closed-again",
+            101,
+            "2026-02-14T09:00:00Z",
+            closed,
+        ),
+    ] {
+        let doc = json!({"id": id, "thread": thread, "kind": "event", "author": "jon",
+            "author_association": "MEMBER", "created_at": at, "body": body});
+        f.documents.push(doc.as_object().unwrap().clone());
+    }
+    let run = run(&f).await;
+    let locate = locates(&run);
+    let placed: BTreeSet<String> = run
+        .atoms()
+        .iter()
+        .filter(|a| a["atom_type"] == "Claim" && a["data"]["subject"].is_string())
+        .filter_map(|a| a["data"]["attributes"]["document_id"].as_str())
+        .map(str::to_string)
+        .collect();
+    for doc in [
+        "event-101-closed",
+        "event-102-closed",
+        "event-101-closed-again",
+    ] {
+        assert!(
+            locate
+                .iter()
+                .any(|p| in_doc(p, doc) && asked_line(p) == closed),
+            "{doc}: the act never reached Locate"
+        );
+        assert!(
+            placed.contains(doc),
+            "{doc}: no placed statement: {placed:?}"
+        );
     }
 }
 

@@ -632,11 +632,12 @@ question the pipeline asks about a type is a method on the resolved
   document opens with its declared facts (`prefill.rs`: the metadata fields the
   declaration names and the declared sets they put the document or a sourced
   record in, read through the projection's own field readers,
-  `resolution_sources/fields.rs`). A line whose text another document dated
-  earlier holds (a quote), or another document by the same declared author
-  (`change.document.author`: boilerplate), is never asked (`line_classes.rs`,
-  indexed once per run over every chapter's documents and part of the section
-  cache key). Locate asks every remaining
+  `resolution_sources/fields.rs`). A line carried from a document dated
+  earlier, shown by structure (a passage of neighbouring lines that document
+  holds in order, or its line under a mark it lacks there), is never asked;
+  a line that only repeats another's words is (`line_classes.rs`, indexed
+  once per run over every chapter's documents and part of the section cache
+  key). Locate asks every remaining
   numbered line which declared claim kind it states, and Mention which entity
   type a read reference targets it names, pointing at the words (`mention.rs`;
   no type a table source holds). Per statement each field is asked by its

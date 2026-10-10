@@ -418,11 +418,12 @@ async fn read_document(
     let mut classed: BTreeMap<LineClass, usize> = BTreeMap::new();
     let mut located = Vec::with_capacity(lines.len());
     let mut asked_lines = vec![true; lines.len()];
-    for line in &lines {
+    let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
+    for (line, carried) in lines.iter().zip(classes.classes(&id, &texts)) {
         let text = &raw[line.start..line.end];
-        if let Some(class) = classes.class(&id, text) {
-            debug!(document = %id, line = line.n, class = class.label(), text = %excerpt(text), "document_read/passes: line not asked");
-            *classed.entry(class).or_default() += 1;
+        if let Some(carried) = carried {
+            debug!(document = %id, line = line.n, class = carried.class.label(), from = carried.from, text = %excerpt(text), "document_read/passes: line not asked");
+            *classed.entry(carried.class).or_default() += 1;
             located.push(None);
             asked_lines[line.n - 1] = false;
             continue;

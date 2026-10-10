@@ -107,11 +107,14 @@ estimated on the run itself, document by document in clock order, and checked ag
 
 The reader asks; it never decides identity. A document is prefilled once with its declared facts (metadata
 fields and the roles derived from them through declared sets, such as the sender's side; built 2026-10-10,
-`document_read/prefill.rs`, first in every question about the document). Lines code classifies by structure
-are never asked: a quote (its text, from first to last letter or digit, is a line of a document dated
-earlier by the declared clock) and boilerplate (a line of another document by the same author, the field
-`change.document.author` names); each class is counted and traced, and the classes hold no word of any
-format (`document_read/line_classes.rs`). The rest is asked a
+`document_read/prefill.rs`, first in every question about the document). A line a document carries from one
+dated earlier by the declared clock is never asked, and structure must show it is carried: it lies in a
+passage, two neighbouring lines that document holds in the same order, or it is that document's line under a
+mark the line was not written under there (its text compared from first to last letter or digit). Repetition
+alone shows nothing (amended 2026-10-10 on the outside review, note 2347f4c6): a tracker's act and an
+author's greeting repeat in the same words and each is read, and who wrote a line suppresses nothing, so a
+passage an author sends twice is read where it first appears. Each class is counted and traced, and the
+classes hold no word of any format (`document_read/line_classes.rs`). The rest is asked a
 fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
 renaming: **Locate** each declared claim kind (line sets or none; each kind shown with its closed-valued fields' declared
 values and descriptions, the words a line states it in; the system prompt mentions values only when a kind

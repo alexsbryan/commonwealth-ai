@@ -964,7 +964,7 @@ Allowed values:
 | `date` | `Option<String>` | no | type default | The field holding the document's date, RFC 2822 or ISO 8601. Stamped as `document_date` in ISO 8601 — the clock supersession folds on. |
 | `thread` | `Option<String>` | no | type default | The field naming the thread the document belongs to. Stamped as `document_thread`. |
 | `id` | `Option<String>` | no | type default | The field holding the document's own identifier. Stamped as `document_id`. |
-| `author` | `Option<String>` | no | type default | The field naming who wrote the document (`from`, `author`). Not stamped: the reader reads it so that a line its author repeats across documents (a signature) is never asked about (ONTOLOGY_METHOD §Reading, line classes). |
+| `author` | `Option<String>` | no | type default | The field naming who wrote the document (`from`, `author`). Not stamped: the reader shows it among the document's declared facts (ONTOLOGY_METHOD §Reading, prefill). |
 
 ## `TensionDecl`
 
@@ -1436,10 +1436,12 @@ hoard reports), so a claim whose anchor is in none of them, or in several, is le
 counted in `resolution_failures.json`, as is a field a document lacks or a
 date that does not parse. An unknown key inside `document` refuses at load.
 `author` names the field holding who wrote each document (`from`, `author`).
-It is not stamped: the document reader reads it so that a line an author
-repeats across their documents (a signature) is never asked about. A line a
-document shares with one dated earlier (a quoted reply) is never asked about
-either, with or without `author`.
+It is not stamped: the document reader shows it among each document's declared
+facts. A line a document carries from one dated earlier (a quoted reply) is
+never asked about: two or more neighbouring lines that document holds in the
+same order, or one of its lines under a mark it was not written under, such as
+`> `. A line that only repeats words written elsewhere, a tracker's "closed" or
+an author's greeting, is asked each time it appears.
 
 ```toml
 [enrichment.ontology.change]
