@@ -59,6 +59,21 @@ def identity(atoms, docs):
             "lea": pick("lea"), "pairwise": pick("pairwise")}
 
 
+def served_state(atoms, match, states):
+    """Served-state accuracy, named apart from the ladder's FOLD (a state CLAIM on the matched record): per gold case
+    with a state in scope, whether its matched record's own `state` attribute is the case's latest gold state.
+    Could-not-judge when no case record carries a state attribute (the recipe declares no case-state fold)."""
+    recs = {k: v.get("attributes") or {} for k, v in L.records_of(atoms).items() if v["record_type"] == "case"}
+    if not any("state" in attrs for attrs in recs.values()):
+        return {"status": "could_not_judge",
+                "reason": f"none of the {len(recs)} case records carries a state attribute"}
+    latest = {}
+    for s in sorted(states, key=lambda s: s["date"]):
+        latest[s["case"]] = s["state"]
+    right = sum(recs.get(match.get(c), {}).get("state") == st for c, st in latest.items())
+    return {"status": "judged", "cases": len(latest), "served_right": right}
+
+
 def items(atoms, locate, docs):
     g = json.loads((U.ROOT / "gold/cases.json").read_text())
     tune = {c["id"] for c in g["cases"] if c["fold"] == "tune"}
@@ -90,6 +105,7 @@ def items(atoms, locate, docs):
                      "claimed": sorted({state(c) or "?" for c in on}),
                      "near": L.near(locate, [doc], label) if r == "no_case_state_claim" and label else None})
     return facts, rows, {"cases_matched": len(match), "tune_cases": len(tune), "case_state_label": label,
+                         "served_state": served_state(atoms, match, states),
                          "document_not_read": "judged" if judged else "could_not_judge (no trace names a gold document)",
                          "tune_case_states": total}
 
@@ -131,8 +147,10 @@ def measure(run, atoms=None, sections_of=None):
                           + (f" of {src}" if sliced is not None and src != run else ""),
             "scope": L.scope(sliced, detail["tune_case_states"], len(rows)),
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
+            "fold_checks": "a state claim on the matched case record states the gold state (state-claim accuracy)",
+            "served_state": detail["served_state"],
             "identity": {"b_cubed": comp["b_cubed"]["f1"], "ceaf_e": comp["ceaf_e"]["f1"], "lea": comp["lea"]["f1"],
                          "scored": comp["scored"], "gold": comp["gold_documents"], "coverage": comp["membership_coverage"],
-                         "gold_left_out": comp["gold_left_out"]},
+                         "recovery_b_cubed": comp["recovery_b_cubed"]["f1"], "gold_left_out": comp["gold_left_out"]},
             "composition": comp, "placements": {"unit": "tune gold document", "items": placements},
             "cost": cost, "detail": detail, "items": rows}

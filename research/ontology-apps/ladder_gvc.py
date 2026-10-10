@@ -210,7 +210,7 @@ def identity(mentions, cover):
     r = U.er_score(pred, gold)
     return {"b_cubed": round(r["b_cubed"]["f1"], 3), "ceaf_e": round(r["ceaf_e"]["f1"], 3),
             "lea": round(r["lea"]["f1"], 3), "scored": len(pred), "gold": len(gold),
-            "coverage": round(len(pred) / len(gold), 3),
+            "coverage": round(len(pred) / len(gold), 3), "recovery_b_cubed": round(r["recovery_b_cubed"]["f1"], 3),
             "several_records": sum(len({s["record"] for s in ss}) > 1 for ss in cover.values())}
 
 
@@ -240,5 +240,6 @@ def measure(run, atoms=None, gold=GOLD, corpus=CORPUS, spec=FOLD_VALUES):
             "population": L.population("gold event mentions (gold.json)", sliced),
             "scope": L.scope(sliced, total, len(mentions)),
             "ladder": L.summarize(facts, cost), "rungs": dict(collections.Counter(x["rung"] for x in rows)),
+            "fold_checks": "the chain's record carries a declared field naming its gold type (served value)",
             "identity": identity(mentions, cover), "alignment": counts,
             "placements": {"unit": "gold event mention", "items": placements(mentions, cover)}, "detail": detail, "cost": cost, "items": rows}

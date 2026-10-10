@@ -71,7 +71,9 @@ def compare(system, units, gold, ours, blind):
                      "closer": closer, "ours_mates": len(mo.get(u, ())), "blind_mates": len(mb.get(u, ())),
                      "gold_mates": len(g & both) if u in both else None})
     pick = lambda m: {k: round(r[m][k], 3) for k in ("precision", "recall", "f1")} if r else None  # noqa: E731
+    # Agreement is read over the units both placed: say how many of the units that is, beside it.
     summary = {"units": len(units), "ours_placed": len(po), "blind_placed": len(pb), "both_placed": len(both),
+               "joint_placement_coverage": round(len(both) / len(units), 3) if units else None,
                "b_cubed": pick("b_cubed"), "ceaf_e": pick("ceaf_e"), "lea": pick("lea"),
                "differences": len(rows), "differences_by_kind": dict(collections.Counter(x["kind"] for x in rows))}
     return summary, rows

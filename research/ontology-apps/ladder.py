@@ -519,6 +519,12 @@ def table(results):
         lad = r["ladder"]
         out.append(f"{r['system']:5} {r['population']}: n {lad['n']}, hit {lad['hit']}, "
                    f"{lad['documents_read']} documents read; run {r['run']}")
+        if r.get("fold_checks"):
+            out.append(f"      a hit: {r['fold_checks']}")
+        ss = r.get("served_state")
+        if ss:
+            out.append("      served state: " + (f"{ss['served_right']} of {ss['cases']} cases right"
+                                                 if ss["status"] == "judged" else f"could not judge: {ss['reason']}"))
         out.append(f"      read: atlas {r['read']['half']}; logs {r['read']['logs']}")
         sc = r.get("scope")
         if sc:
@@ -532,8 +538,9 @@ def table(results):
             out.append(f"      unstaged calls/doc: {fmt_calls(lad['unstaged_calls'])}")
         idn = r.get("identity")
         if idn:
-            out.append(f"      identity  B3 {idn['b_cubed']}  CEAF-e {idn['ceaf_e']}  LEA {idn['lea']}  "
-                       f"over {idn['scored']} scored, coverage {idn['coverage']}")
+            out.append(f"      identity  conditional on the {idn['scored']} units placed (coverage {idn['coverage']}): "
+                       f"B3 {idn['b_cubed']}  CEAF-e {idn['ceaf_e']}  LEA {idn['lea']}; recovery B3 "
+                       f"{idn.get('recovery_b_cubed', 'not reported')} (missing and extra placements count)")
         out.append(f"      rungs  {json.dumps(r['rungs'], sort_keys=True)}")
     return "\n".join(out)
 
