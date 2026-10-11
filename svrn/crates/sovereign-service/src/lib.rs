@@ -792,17 +792,19 @@ pub(crate) fn reregister_argv(
 ///   to spawn and records `EX_CONFIG` (78). Observed 2026-08-26 with
 ///   `runs = 1038`, `last exit code = 78: EX_CONFIG`, `needs LWCR update`.
 /// - **systemd**: a unit whose file changed on disk without a `daemon-reload`
-///   starts from the STALE definition, and a unit that has hit its start limit
-///   (`Result=start-limit-hit`) is refused outright until `reset-failed`.
+///   starts from the STALE definition, and a failed unit — one that hit its
+///   start limit among them, whatever `Result` it still shows — is refused
+///   outright until `reset-failed`.
 ///
 /// Different mechanisms, one shape — and one repair: make the manager re-read
 /// the job.
 pub(crate) fn diagnosis_needs_reregister(mgr: Manager, text: &str) -> bool {
     match mgr {
+        // Any failed unit, not only `Result=start-limit-hit`: a lockout keeps
+        // the Result of the failure before it (watched 2026-10-11 as
+        // `Result=timeout`), and `reset-failed` clears both.
         Manager::Systemd => {
-            text.contains("NeedDaemonReload=yes")
-                || text.contains("Result=start-limit-hit")
-                || (text.contains("ActiveState=failed") && text.contains("Result=exit-code"))
+            text.contains("NeedDaemonReload=yes") || text.contains("ActiveState=failed")
         }
         // No `pid = ` line means launchd is not running it right now; the LWCR
         // note is the cause and the 78 is the symptom, and launchd does not
@@ -872,8 +874,9 @@ impl ManagingService {
                     been rebuilt since"
                     .to_string(),
                 Manager::Systemd => "systemd is holding a stale or failed unit \
-                    (NeedDaemonReload / start-limit-hit): the unit on disk and the one \
-                    systemd will run are not the same"
+                    (NeedDaemonReload, or ActiveState=failed, which a start-limit \
+                    lockout leaves): it will not run the unit until it re-reads and \
+                    resets it"
                     .to_string(),
                 // Unreachable: `diagnosis_needs_reregister` answers false for
                 // Schtasks, because the failure class does not exist there.
@@ -1445,6 +1448,17 @@ mod reregister_decision_tests {
     #[test]
     fn systemd_start_limit_needs_reset_failed() {
         let text = "ActiveState=failed\nResult=start-limit-hit\nNeedDaemonReload=no";
+        assert!(diagnosis_needs_reregister(Manager::Systemd, text));
+    }
+
+    /// A start-limit lockout keeps the Result of the failure before it, so
+    /// `start-limit-hit` is not what a locked-out unit always shows: watched
+    /// 2026-10-11, a stop that timed out, then "Start request repeated too
+    /// quickly" with `Result=timeout` standing. `reset-failed` clears the
+    /// failed state and the start counter alike.
+    #[test]
+    fn systemd_failed_unit_needs_reset_failed_whatever_the_result() {
+        let text = "ActiveState=failed\nNeedDaemonReload=no\nResult=timeout";
         assert!(diagnosis_needs_reregister(Manager::Systemd, text));
     }
 
