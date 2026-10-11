@@ -214,7 +214,12 @@ async fn run_case(
     }
     if method.is_completion() && rec.outcome == Outcome::Ok {
         let reasoning = project::generated_reasoning(rec.facets.output.as_ref(), wire.as_ref());
-        match reasoning_tokens(daemon, server, reasoning.as_deref()).await {
+        // The router routes /tokenize by model, as it routes the call.
+        let model = wire
+            .as_ref()
+            .and_then(|w| w.requests.last())
+            .map(|b| b["model"].clone());
+        match reasoning_tokens(daemon, server, model.as_ref(), reasoning.as_deref()).await {
             Ok(n) => rec.facets.reasoning_tokens = n,
             Err(why) => {
                 rec.facets.unobserved.insert("reasoning_tokens".into(), why);
@@ -229,6 +234,7 @@ async fn run_case(
 async fn reasoning_tokens(
     daemon: &Daemon,
     server: Option<&LlamaServer>,
+    model: Option<&Value>,
     reasoning: Option<&str>,
 ) -> Result<Option<u64>, String> {
     let Some(text) = reasoning else {
@@ -239,7 +245,7 @@ async fn reasoning_tokens(
     }
     if let Some(s) = server {
         return s
-            .tokenize(text, false, None)
+            .tokenize(text, false, model)
             .await
             .map(|ids| Some(ids.len() as u64));
     }

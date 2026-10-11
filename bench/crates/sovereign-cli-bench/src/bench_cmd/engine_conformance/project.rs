@@ -295,6 +295,11 @@ pub struct WireReply {
     /// `timings.prompt_n` summed over the call's responses: prompt tokens
     /// the server evaluated, its cache hits excluded.
     pub prompt_evaluated: Option<u64>,
+    /// `timings.prompt_n + cache_n` of the call's last response, `None` when
+    /// it carried no `cache_n`: the server's own count of the prompt, which a
+    /// stream sent without `stream_options` reports where it reports no
+    /// usage. An earlier response counted an earlier request's prompt.
+    pub prompt_timed: Option<u64>,
 }
 
 /// Read the wire observations of one call. `None` when the client sent
@@ -352,12 +357,14 @@ fn read_response(body: &str, reply: &mut WireReply) {
     }
     // Timings are cumulative for the task and a stream repeats them on its
     // last chunks, so each response counts once, from its last.
-    if let Some(n) = chunks
+    let timings = chunks
         .iter()
         .rev()
-        .find_map(|c| c["timings"]["prompt_n"].as_u64())
-    {
-        *reply.prompt_evaluated.get_or_insert(0) += n;
+        .find_map(|c| Some((&c["timings"], c["timings"]["prompt_n"].as_u64()?)));
+    reply.prompt_timed = None;
+    if let Some((t, evaluated)) = timings {
+        *reply.prompt_evaluated.get_or_insert(0) += evaluated;
+        reply.prompt_timed = t["cache_n"].as_u64().map(|cached| evaluated + cached);
     }
     reply.content = content;
     reply.reasoning = reasoning;

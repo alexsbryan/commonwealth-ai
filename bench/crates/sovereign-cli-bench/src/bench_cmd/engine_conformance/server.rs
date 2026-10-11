@@ -101,29 +101,40 @@ impl LlamaServer {
 
     /// Add what the server says it did to a remote target's facets.
     pub async fn observe(&self, wire: &WireReply, f: &mut Facets) {
-        let body = match wire.requests.as_slice() {
-            [] => Err("the client sent no request".to_string()),
-            [one] => Ok(one),
-            many if many.windows(2).all(|w| w[0] == w[1]) => Ok(&many[0]),
-            many => Err(format!("the client sent {} different requests", many.len())),
-        };
+        for (i, b) in wire.requests.iter().enumerate() {
+            tracing::debug!(target: "engine_conformance", i, body = %b, "a wire body the client sent");
+        }
+        // The call's answer is its last response, and /slots' newest task is
+        // the last request, so that request is the one observed. An earlier
+        // one was superseded, e.g. forced choice asked natively before its
+        // logprobs route (oicp-client forced_choice.rs).
+        let body = wire
+            .requests
+            .last()
+            .ok_or_else(|| "the client sent no request".to_string());
+        if wire.requests.len() > 1 {
+            tracing::debug!(target: "engine_conformance", n = wire.requests.len(), "observing the last of several requests");
+        }
         let model = body.as_ref().ok().and_then(|b| b["model"].as_str());
         let prompt = match &body {
             Ok(b) => self
                 .prompt_ids(b)
                 .await
-                .and_then(|ids| prompt_oracle(ids, wire.prompt_tokens)),
+                .and_then(|ids| prompt_oracle(ids, wire.prompt_tokens, wire.prompt_timed)),
             Err(why) => Err(why.clone()),
         };
         let slot = match &body {
-            Ok(_) => self
-                .get("/slots", model)
-                .await
-                .and_then(|s| slot_sampler(&s)),
+            Ok(_) => self.get("/slots", model).await.and_then(|s| {
+                tracing::debug!(target: "engine_conformance", slots = %s, "server /slots");
+                slot_sampler(&s)
+            }),
             Err(why) => Err(why.clone()),
         };
         settle(f, "prompt_ids", prompt, |f, ids| f.prompt_ids = Some(ids));
-        let grammar = slot.as_ref().map(|(_, g)| g.clone()).map_err(Clone::clone);
+        let grammar = slot
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|(_, g)| g.clone());
         settle(f, "sampler", slot.map(|(s, _)| s), |f, s| {
             f.sampler = Some(s)
         });
@@ -168,24 +179,44 @@ fn settle<T>(f: &mut Facets, facet: &str, r: Result<T, String>, fill: impl FnOnc
 }
 
 /// Hold the re-derived prompt to the count the server reported for the call
-/// itself. When the two disagree the ids are not the prompt the model was
-/// given, and saying so beats judging them.
-pub fn prompt_oracle(ids: Vec<i64>, prompt_tokens: Option<u64>) -> Result<Vec<i64>, String> {
-    match prompt_tokens {
-        Some(n) if n != ids.len() as u64 => Err(format!(
-            "/tokenize gave {} ids, the response's usage says {n}",
-            ids.len()
-        )),
-        Some(_) => Ok(ids),
-        None => {
-            tracing::debug!(target: "engine_conformance", "no usage.prompt_tokens to hold the prompt ids to");
-            Ok(ids)
+/// itself: its usage, else its timings. When the two disagree the ids are
+/// not the prompt the model was given, and with neither there is nothing to
+/// say they are; either way saying so beats judging them.
+pub fn prompt_oracle(
+    ids: Vec<i64>,
+    prompt_tokens: Option<u64>,
+    prompt_timed: Option<u64>,
+) -> Result<Vec<i64>, String> {
+    let (n, source) = match (prompt_tokens, prompt_timed) {
+        (Some(n), _) => (n, "usage"),
+        (None, Some(n)) => (n, "timings"),
+        (None, None) => {
+            return Err(
+                "no usage.prompt_tokens and no timings to hold the /tokenize ids to".into(),
+            )
         }
+    };
+    tracing::debug!(target: "engine_conformance", ids = ids.len(), n, source, "prompt oracle");
+    if n == ids.len() as u64 {
+        Ok(ids)
+    } else {
+        Err(format!("/tokenize gave {} ids, the response's {source} says {n}", ids.len()))
     }
 }
 
-/// The sampler and grammar of the slot that ran the newest task.
-pub fn slot_sampler(slots: &Value) -> Result<(Sampler, Option<String>), String> {
+/// Why a slot's grammar cannot be read: the server describes its slots in
+/// metrics-only form, which omits the key, unless it runs with
+/// `LLAMA_SERVER_SLOTS_DEBUG` (LS/tools/server/server-context.cpp:2418).
+pub const SLOTS_METRICS_ONLY: &str =
+    "/slots omits the grammar in metrics-only form; start the server with LLAMA_SERVER_SLOTS_DEBUG=1";
+
+/// The sampler and grammar of the slot that ran the newest task. The grammar
+/// is `Ok(None)` when the slot ran without one, and an error when the server
+/// did not say.
+#[allow(clippy::type_complexity)]
+pub fn slot_sampler(
+    slots: &Value,
+) -> Result<(Sampler, Result<Option<String>, String>), String> {
     let slot = slots
         .as_array()
         .and_then(|a| {
@@ -205,10 +236,10 @@ pub fn slot_sampler(slots: &Value) -> Result<(Sampler, Option<String>), String> 
         .map(|a| a.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
     let (params_c, order_c) = canonical_sampler(&raw, &order);
-    let grammar = params["grammar"]
-        .as_str()
-        .filter(|g| !g.is_empty())
-        .map(str::to_string);
+    let grammar = match params.get("grammar") {
+        None => Err(SLOTS_METRICS_ONLY.to_string()),
+        Some(g) => Ok(g.as_str().filter(|g| !g.is_empty()).map(str::to_string)),
+    };
     Ok((
         Sampler {
             params: params_c,

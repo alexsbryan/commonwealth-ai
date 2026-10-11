@@ -12,7 +12,7 @@ use super::project::{
     Replay,
 };
 use super::record::{Outcome, ToolCall, Usage};
-use super::server::{host_truth, prompt_oracle, slot_sampler};
+use super::server::{host_truth, prompt_oracle, slot_sampler, SLOTS_METRICS_ONLY};
 
 fn case(method: &str, input: Value) -> Case {
     serde_json::from_value(json!({"case_id": "c", "method": method, "input": input, "rows": ["r"]}))
@@ -170,6 +170,10 @@ fn the_wire_reply_reads_reasoning_usage_and_counts_each_responses_timings_once()
     assert_eq!(w.reasoning.as_deref(), Some("a"));
     assert_eq!(w.prompt_tokens, Some(9));
     assert_eq!(
+        w.prompt_timed, None,
+        "the last response's timings carry no cache_n, so no count from them"
+    );
+    assert_eq!(
         w.prompt_evaluated,
         Some(10),
         "7 + 3, the stream's repeat not counted"
@@ -256,7 +260,7 @@ fn the_server_sampler_is_the_newest_tasks_slot_described_like_the_engines() {
         "temperature 0 is argmax, truncation dropped"
     );
     assert!(s.params.is_empty(), "{:?}", s.params);
-    assert_eq!(g.as_deref(), Some("%llguidance {}\nstart: \"a\""));
+    assert_eq!(g, Ok(Some("%llguidance {}\nstart: \"a\"".to_string())));
 
     // The embedded engine's description of the same greedy chain
     // (`server_sampling` path, sampler.rs) compares equal.
@@ -283,7 +287,18 @@ fn the_server_sampler_is_the_newest_tasks_slot_described_like_the_engines() {
         !warm.params.contains_key("n_predict"),
         "only stage keys are read"
     );
-    assert_eq!(g, None);
+    assert_eq!(g, Ok(None), "an empty grammar is no grammar");
+    let mut metrics_only = slots(0.0, 4, "");
+    metrics_only["params"]
+        .as_object_mut()
+        .unwrap()
+        .remove("grammar");
+    let (_, g) = slot_sampler(&json!([metrics_only])).unwrap();
+    assert_eq!(
+        g,
+        Err(SLOTS_METRICS_ONLY.to_string()),
+        "a missing key is the server not saying, not an absent grammar"
+    );
     assert!(
         slot_sampler(&json!([{"id": 0}])).is_err(),
         "no slot has run a task"
@@ -291,13 +306,37 @@ fn the_server_sampler_is_the_newest_tasks_slot_described_like_the_engines() {
 }
 
 #[test]
+fn a_stream_without_usage_still_counts_its_prompt_from_timings() {
+    let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"b\"}}]}\n\n\
+               data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"timings\":{\"prompt_n\":4,\"cache_n\":56}}\n\n\
+               data: [DONE]\n\n";
+    let w = wire_reply(&[Observation::WireResponse {
+        status: 200,
+        body: sse.into(),
+    }])
+    .unwrap();
+    assert_eq!(w.prompt_tokens, None);
+    assert_eq!(w.prompt_timed, Some(60), "4 evaluated + 56 from the cache");
+    assert_eq!(w.prompt_evaluated, Some(4));
+}
+
+#[test]
 fn the_prompt_ids_are_held_to_the_count_the_server_reported() {
-    assert_eq!(prompt_oracle(vec![1, 2, 3], Some(3)), Ok(vec![1, 2, 3]));
+    assert_eq!(prompt_oracle(vec![1, 2, 3], Some(3), None), Ok(vec![1, 2, 3]));
     assert_eq!(
-        prompt_oracle(vec![1, 2], Some(3)),
-        Err("/tokenize gave 2 ids, the response's usage says 3".into())
+        prompt_oracle(vec![1, 2], Some(3), Some(2)),
+        Err("/tokenize gave 2 ids, the response's usage says 3".into()),
+        "usage outranks timings"
     );
-    assert_eq!(prompt_oracle(vec![1], None), Ok(vec![1]));
+    assert_eq!(prompt_oracle(vec![1, 2], None, Some(2)), Ok(vec![1, 2]));
+    assert_eq!(
+        prompt_oracle(vec![1], None, Some(3)),
+        Err("/tokenize gave 1 ids, the response's timings says 3".into())
+    );
+    assert!(
+        prompt_oracle(vec![1], None, None).is_err(),
+        "nothing to hold the ids to is not a pass"
+    );
 }
 
 #[test]
