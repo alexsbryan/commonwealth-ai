@@ -39,8 +39,11 @@ problem?") is not RESOLVE, and it fails (uv-support spin-offs: precision .206, 4
 Code READS what the recipe declares, PROPOSES candidates from declared structure, VERIFIES what a model
 points at is in the text, WEIGHS evidence by its precision estimated on the corpus, and FOLDS by the declared protocol. The
 model reads declared fields and answers closed questions as distributions. Neither decides identity any other
-way: no undeclared pattern (no phrase matcher for "duplicate of", no owner by domain, no thread from a subject
-line), and no model verdict taken as a decision. Domain knowledge lives
+way: no undeclared pattern (no phrase matcher for "duplicate of", no owner by domain, no thread code infers from
+a subject line: a thread is a field the recipe declares, and the mail extractor offers two, the reply chain's root
+`thread_id` and the RFC 5256 base subject `base_subject`, the one a mailbox with no reply headers can declare;
+`recipe validate --corpus` warns when a declared thread links no two documents), and no model verdict taken as a
+decision. Domain knowledge lives
 in the recipe. Best-in-class results come through this architecture, not through knowing a domain.
 
 ## Invariants

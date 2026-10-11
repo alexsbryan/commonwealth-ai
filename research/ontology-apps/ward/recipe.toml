@@ -100,7 +100,7 @@ attributes = [{ name = "due", type = "time" }]
 
 [enrichment.ontology.change]
 supersedes = { stage_update = "document_date" }
-document = { date = "date", thread = "thread_id", id = "message_id" }
+document = { date = "date", thread = "base_subject", id = "message_id" }
 
 [enrichment.ontology.tension]
 between = ["stage_update"]

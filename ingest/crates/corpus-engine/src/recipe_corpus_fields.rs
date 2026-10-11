@@ -10,10 +10,12 @@
 //! not carry, and `validate` passed all three. This reads every document the
 //! way ingest stores it (the extractor, then [`DeclaredMetadata::input`]),
 //! names each declared field none of them carries, counts the ones some lack,
-//! reads stamps through the one stamp reader ([`read_stamp`]), and lists every
-//! field the documents do carry so the author can pick the right one.
+//! reads stamps through the one stamp reader ([`read_stamp`]), warns when a
+//! declared thread links no two documents (a mailbox with no reply headers
+//! gives every message its own), and lists every field the documents do carry
+//! so the author can pick the right one.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use serde_json::{Map, Value};
@@ -237,6 +239,22 @@ fn judge(
                     "`{field}` (change.document.{}) cannot be read in {count} of the {present} documents carrying it: {first}",
                     stamp.key()
                 ));
+            }
+            if stamp == DocumentStamp::Thread {
+                let threads: Vec<String> = docs
+                    .iter()
+                    .filter_map(|d| read_stamp(d, stamp, &field).ok())
+                    .collect();
+                let distinct: BTreeSet<&str> = threads.iter().map(String::as_str).collect();
+                debug!(field = %field, documents = threads.len(), threads = distinct.len(), "recipe corpus fields: declared thread");
+                if threads.len() > 1 && distinct.len() == threads.len() {
+                    out.warnings.push(format!(
+                        "`{field}` (change.document.thread) links no two of the {} documents carrying it: \
+                         each is its own thread, so no thread proposes a candidate or places a document. \
+                         Declare the field the documents of one thread share",
+                        threads.len()
+                    ));
+                }
             }
         }
     }
