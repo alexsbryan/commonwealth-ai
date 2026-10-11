@@ -37,9 +37,6 @@ pub mod containment;
 pub mod daemon_wire;
 pub mod data_roots;
 pub mod decode_allowlist;
-/// What an engine did with one request, recorded where it did it, for the
-/// engine conformance battery.
-pub mod engine_observe;
 /// `TestProvider`, the builder-style `InferenceProvider` double.
 #[cfg(feature = "test-fixtures")]
 pub mod double;
@@ -49,6 +46,9 @@ pub mod double;
 /// the code-intelligence crate.
 pub mod drift_fingerprint;
 pub mod engine_config;
+/// What an engine did with one request, recorded where it did it, for the
+/// engine conformance battery.
+pub mod engine_observe;
 /// serve's engine-state wire (pb-svrn-dials-serve).
 pub mod engine_state;
 // The egress boundary — the ONE choke point for remote-model calls and
