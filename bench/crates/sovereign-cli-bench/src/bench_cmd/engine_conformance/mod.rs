@@ -15,6 +15,7 @@
 mod case;
 mod check;
 mod inventory;
+mod mutate;
 mod project;
 mod record;
 mod run;
@@ -42,7 +43,7 @@ const HELP: Help = Help {
             "svrn bench engine-conformance run --target <label> --daemon <url> [--server <url>] --cases <jsonl> --out <jsonl> [--only <case-id>]...",
         ),
         HelpSection::Usage(
-            "svrn bench engine-conformance judge --records <jsonl>... [--inventory <toml>] [--out <dir>]",
+            "svrn bench engine-conformance judge --records <jsonl>... [--inventory <toml>] [--out <dir>] [--mutate]",
         ),
         HelpSection::Subcommands(&[
             (
@@ -51,7 +52,7 @@ const HELP: Help = Help {
             ),
             (
                 "judge",
-                "Apply each row's checks to the records, one verdict per row and target pair, beside the prediction. Exit 0 all as predicted, 3 a verdict differs from its prediction, 4 nothing judged.",
+                "Apply each row's checks to the records, one verdict per row and target pair, beside the prediction. A target run twice is judged only where its two runs agree (A/A). Exit 0 all as predicted, 3 a verdict differs from its prediction, 4 nothing judged. With --mutate, instead perturb one passing cell per check and judge it again: exit 0 every mutation caught, 3 one was missed.",
             ),
         ]),
     ],
@@ -75,8 +76,13 @@ fn cmd_judge(args: &[String]) -> i32 {
     let mut inventory_path = PathBuf::from(DEFAULT_INVENTORY);
     let mut records_paths = Vec::new();
     let mut out = None;
+    let mut mutate = false;
     let mut it = args.iter();
     while let Some(arg) = it.next() {
+        if arg == "--mutate" {
+            mutate = true;
+            continue;
+        }
         match (arg.as_str(), it.next()) {
             ("--inventory", Some(v)) => inventory_path = v.into(),
             ("--records", Some(v)) => records_paths.push(PathBuf::from(v)),
@@ -110,6 +116,9 @@ fn cmd_judge(args: &[String]) -> i32 {
         records = records.len(),
         "engine_conformance: judging"
     );
+    if mutate {
+        return cmd_mutate(&inventory, &records, out.as_deref());
+    }
     let verdicts = verdict::judge(&inventory, &records);
     if let Some(dir) = out {
         if let Err(e) = write_verdicts(&dir, &verdicts) {
@@ -119,6 +128,53 @@ fn cmd_judge(args: &[String]) -> i32 {
     }
     print_table(&verdicts);
     exit_code(&verdicts)
+}
+
+/// `judge --mutate`: watch every check fail on a perturbed copy of a cell
+/// that passed.
+fn cmd_mutate(inventory: &Inventory, records: &[CaseRecord], out: Option<&Path>) -> i32 {
+    let mutations = mutate::run(inventory, records);
+    if let Some(dir) = out {
+        let body: Result<String, _> = mutations
+            .iter()
+            .map(|m| serde_json::to_string(m).map(|s| s + "\n"))
+            .collect();
+        let written = body.map_err(|e| e.to_string()).and_then(|b| {
+            std::fs::create_dir_all(dir)
+                .and_then(|_| std::fs::write(dir.join("mutations.jsonl"), b))
+                .map_err(|e| e.to_string())
+        });
+        if let Err(e) = written {
+            eprintln!("error: writing mutations: {e}");
+            return 2;
+        }
+    }
+    for m in &mutations {
+        let mark = match m.verdict {
+            "caught" => "  ",
+            "missed" => "!!",
+            _ => "··",
+        };
+        println!(
+            "{mark} {:<40} {:<10} {:<14} {}",
+            m.row,
+            m.verdict,
+            m.case.as_deref().unwrap_or("-"),
+            m.detail
+        );
+    }
+    let count = |v: &str| mutations.iter().filter(|m| m.verdict == v).count();
+    println!(
+        "\ncaught {}  missed {}  no-subject {}",
+        count("caught"),
+        count("missed"),
+        count("no-subject")
+    );
+    if count("missed") > 0 {
+        3
+    } else {
+        0
+    }
 }
 
 /// Read a JSONL file of `T`, one per non-blank line, naming the line that

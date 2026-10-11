@@ -39,12 +39,21 @@ pub struct RowVerdict {
     pub as_predicted: Option<bool>,
 }
 
-/// Judge every row against the records.
+/// Judge every row against the records. A target run twice (A/A) is judged
+/// on its first run, and only where its two runs agree under the row's own
+/// pairwise checks: a cell that differs between two runs of one engine says
+/// nothing about the difference between two engines.
 pub fn judge(inventory: &Inventory, records: &[CaseRecord]) -> Vec<RowVerdict> {
-    let by_case: BTreeMap<(&str, &str), &CaseRecord> = records
-        .iter()
-        .map(|r| ((r.case_id.as_str(), r.target.as_str()), r))
-        .collect();
+    let mut by_case: BTreeMap<(&str, &str), &CaseRecord> = BTreeMap::new();
+    let mut repeat: BTreeMap<(&str, &str), &CaseRecord> = BTreeMap::new();
+    for r in records {
+        let key = (r.case_id.as_str(), r.target.as_str());
+        if by_case.contains_key(&key) {
+            repeat.entry(key).or_insert(r);
+        } else {
+            by_case.insert(key, r);
+        }
+    }
     let targets: BTreeSet<&str> = records.iter().map(|r| r.target.as_str()).collect();
     let mut out = Vec::new();
     for row in &inventory.rows {
@@ -59,7 +68,18 @@ pub fn judge(inventory: &Inventory, records: &[CaseRecord]) -> Vec<RowVerdict> {
                 .map(|case| {
                     let t = by_case[&(*case, target.as_str())];
                     let r = by_case.get(&(*case, reference.as_str())).copied();
-                    (*case, judge_case(row, r, t))
+                    let unstable =
+                        [target.as_str(), reference.as_str()]
+                            .into_iter()
+                            .find_map(|who| {
+                                let key = (*case, who);
+                                a_a_difference(row, by_case.get(&key)?, repeat.get(&key)?)
+                            });
+                    let cell = match unstable {
+                        Some(why) => CellVerdict::CouldNotJudge(why),
+                        None => judge_case(row, r, t),
+                    };
+                    (*case, cell)
                 })
                 .collect();
             out.push(roll_up(row, &reference, &target, &cells));
@@ -77,6 +97,22 @@ fn pairs(row: &Row, targets: &BTreeSet<&str>) -> Vec<(String, String)> {
         .filter(|t| **t != REFERENCE)
         .map(|t| (REFERENCE.to_string(), t.to_string()))
         .collect()
+}
+
+/// How two runs of one target differ under the row's pairwise checks, if
+/// they do. A target-only check judges each run on its own, so a failure
+/// there is a failure, not instability, and is left to the first run.
+fn a_a_difference(row: &Row, first: &CaseRecord, second: &CaseRecord) -> Option<String> {
+    let why = row
+        .judge
+        .iter()
+        .filter(|c| !c.target_only())
+        .find_map(|c| match c.judge(Some(first), second) {
+            CellVerdict::Failed { detail, .. } => Some(detail),
+            _ => None,
+        })?;
+    tracing::debug!(target: "engine_conformance", row = %row.id, case = %first.case_id, who = %first.target, %why, "A/A difference");
+    Some(format!("A/A: two runs of {} differ: {why}", first.target))
 }
 
 fn judge_case(row: &Row, reference: Option<&CaseRecord>, target: &CaseRecord) -> CellVerdict {

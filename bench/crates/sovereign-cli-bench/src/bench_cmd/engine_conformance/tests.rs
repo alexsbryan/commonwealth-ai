@@ -620,3 +620,78 @@ fn a_row_with_pairs_compares_only_those_targets() {
         ("embedded-nospec", "passed")
     );
 }
+
+#[test]
+fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
+    let inventory = Inventory {
+        rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
+    };
+    let records = vec![
+        // Stable on both sides, and equal: judged as usual.
+        case("a", "embedded", "count", Some(5)),
+        case("a", "embedded", "count", Some(5)),
+        case("a", "llama-server", "count", Some(5)),
+        case("a", "llama-server", "count", Some(5)),
+        // The target's two runs differ: its first agrees with the
+        // reference, and still nothing is judged.
+        case("b", "embedded", "count", Some(5)),
+        case("b", "llama-server", "count", Some(5)),
+        case("b", "llama-server", "count", Some(6)),
+        // The reference's two runs differ.
+        case("c", "embedded", "count", Some(5)),
+        case("c", "embedded", "count", Some(7)),
+        case("c", "llama-server", "count", Some(5)),
+    ];
+    let v = &verdict::judge(&inventory, &records)[0];
+    assert_eq!((v.verdict, v.cases, v.failed), ("could-not-judge", 3, 0));
+    let detail = v.detail.as_deref().unwrap();
+    assert!(
+        detail.starts_with("b: A/A: two runs of llama-server differ"),
+        "{detail}"
+    );
+
+    let only_c = Inventory {
+        rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
+    };
+    let c: Vec<_> = records
+        .iter()
+        .filter(|r| r.case_id == "c")
+        .cloned()
+        .collect();
+    let v = &verdict::judge(&only_c, &c)[0];
+    assert!(
+        v.detail
+            .as_deref()
+            .unwrap()
+            .contains("A/A: two runs of embedded differ"),
+        "{:?}",
+        v.detail
+    );
+
+    let first_wins: Vec<_> = vec![
+        case("d", "embedded", "count", Some(5)),
+        case("d", "llama-server", "count", Some(5)),
+    ];
+    let v = &verdict::judge(&only_c, &first_wins)[0];
+    assert_eq!(v.verdict, "passed", "one run each is judged as before");
+}
+
+#[test]
+fn every_mutation_is_caught_and_an_a_a_pair_gives_the_reference_a_subject() {
+    use super::mutate;
+    let inventory = Inventory {
+        rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
+    };
+    // llama-server disagrees, so the only passing pair is embedded's A/A.
+    let records = vec![
+        case("a", "embedded", "count", Some(5)),
+        case("a", "embedded", "count", Some(5)),
+        case("a", "llama-server", "count", Some(9)),
+    ];
+    let m = mutate::run(&inventory, &records);
+    assert_eq!(m.len(), 1);
+    assert_eq!((m[0].verdict, m[0].case.as_deref()), ("caught", Some("a")));
+
+    let none = vec![case("a", "embedded", "count", Some(5))];
+    assert_eq!(mutate::run(&inventory, &none)[0].verdict, "no-subject");
+}

@@ -19,7 +19,8 @@
 # Each pass replays the case bank (BATTERY_CASES, default the 2026-10-10
 # bank) through /internal/engine/replay, which the daemon mounts on its
 # operator listener (:9741, beside inference/warmup: server.rs), and writes
-# <out>/<n>-<target>.jsonl; then every record file is judged into <out>.
+# <out>/<n>-<target>.jsonl; then every record file is judged into <out>,
+# and every check is watched catching a mutation of a cell that passed.
 # Name a target twice for an A/A pair. On exit, however it exits, the
 # resident is put back on the config it started with.
 #
@@ -60,8 +61,16 @@ preflight() {
   [ -x "$server" ] || die "no llama-server at $server"
   # Available, not free: page cache from reading the GGUFs is reclaimed on
   # demand, and counting it refused a box with 89G available (2026-10-10).
+  # The resident's own memory comes back when the first pass stops it; its
+  # RSS is credited, which undercounts what a llama process holds in unified
+  # memory, so the estimate stays on the cautious side.
   free_g=$(free -g | awk '/^Mem:/ {print $7}')
-  [ "$free_g" -ge 60 ] || die "available memory ${free_g}G, the battery needs 60G"
+  resident_g=0
+  if pid=$(pgrep -x sovereign-stock); then
+    resident_g=$(awk '/^VmRSS:/ {print int($2 / 1048576)}' "/proc/$pid/status")
+  fi
+  [ $((free_g + resident_g)) -ge 60 ] \
+    || die "available memory ${free_g}G (+${resident_g}G the resident frees), the battery needs 60G"
   if pgrep -x llama-server >/dev/null; then
     die "a llama-server is running (pid $(pgrep -x llama-server | tr '\n' ' ')); stop probe servers first"
   fi
@@ -83,7 +92,7 @@ print(", ".join(busy))')
   # an inventory that does not parse exits 2.
   rc=0; sovereign bench engine-conformance judge --records /dev/null >/dev/null 2>&1 || rc=$?
   [ $rc -eq 4 ] || die "the inventory does not load (judge on no records exited $rc, want 4)"
-  say "preflight passed: ${free_g}G available, no llama-server, :18301 free, resident not busy, inventory loads"
+  say "preflight passed: ${free_g}G available (+${resident_g}G from the resident), no llama-server, :18301 free, resident not busy, inventory loads"
 }
 
 # ── the resident daemon, restarted per target ──────────────────────────────
@@ -241,4 +250,10 @@ rc=0
 sovereign bench engine-conformance judge $records --out "$out" >"$out/judge.log" 2>&1 || rc=$?
 cat "$out/judge.log"
 say "judged into $out (judge exit $rc: 0 as predicted, 3 a verdict differs, 4 nothing judged)"
+# Every check watched failing on a perturbed copy of a cell that passed.
+mrc=0
+# shellcheck disable=SC2086
+sovereign bench engine-conformance judge $records --mutate --out "$out" >"$out/mutate.log" 2>&1 || mrc=$?
+tail -1 "$out/mutate.log"
+say "mutations in $out/mutations.jsonl (exit $mrc: 0 every mutation caught, 3 one missed)"
 exit $rc
