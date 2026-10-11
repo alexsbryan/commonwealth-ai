@@ -99,8 +99,10 @@ print(", ".join(busy))')
 
 daemon_down() {
   tb sovereign daemon stop >/dev/null 2>&1 || true
-  i=0; while curl -sf -m 2 localhost:9741/health >/dev/null; do
-    i=$((i + 1)); [ $i -lt 60 ] || die "daemon still answering after 60s"; sleep 1
+  # /health goes quiet before the process exits (its stop runs ~45s), so a
+  # bare /health wait let the next target's daemon start beside the old one.
+  i=0; while curl -sf -m 2 localhost:9741/health >/dev/null || pgrep -x sovereign-stock >/dev/null; do
+    i=$((i + 1)); [ $i -lt 90 ] || die "daemon still alive after 90s: pids $(pgrep -x sovereign-stock | tr '\n' ' ')"; sleep 1
   done
 }
 

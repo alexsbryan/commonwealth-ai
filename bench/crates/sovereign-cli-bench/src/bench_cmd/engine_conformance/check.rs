@@ -5,7 +5,7 @@
 use serde::Deserialize;
 use sovereign_contracts::decode_allowlist::{AllowlistLanguage, EVIDENCE_ID, URL};
 
-use super::record::{CaseRecord, Outcome};
+use super::record::{CaseRecord, Outcome, Output};
 
 /// One check, as a row names it in `judge = [...]`.
 #[derive(Debug, Clone, Deserialize)]
@@ -229,12 +229,38 @@ impl Check {
         if matches!((&a.prompt_ids, &b.prompt_ids), (Some(x), Some(y)) if x != y) {
             return Some("the prompts differ, so the projection cannot be isolated".into());
         }
-        if matches!((&a.greedy_tokens, &b.greedy_tokens), (Some(x), Some(y)) if x != y) {
-            return Some(
-                "the generated tokens differ, so the projection cannot be isolated".into(),
-            );
+        match (&a.greedy_tokens, &b.greedy_tokens) {
+            (Some(x), Some(y)) if x != y => {
+                Some("the generated tokens differ, so the projection cannot be isolated".into())
+            }
+            (Some(_), Some(_)) => None,
+            // A remote target never shows its tokens. The answer text then
+            // stands in for "generated differently", but only where a
+            // generation can move the value: text cannot excuse a text check,
+            // a value one side never reports is a projection gap, and a
+            // prompt count does not depend on what was generated.
+            _ => match (&a.output, &b.output) {
+                (Some(x), Some(y)) if x.text != y.text && self.generation_moves(x, y) => Some(
+                    "the answer text differs and the tokens are not observed, so the \
+                         projection cannot be isolated"
+                        .into(),
+                ),
+                _ => None,
+            },
         }
-        None
+    }
+
+    /// Whether a difference between these two values could come from the
+    /// generations alone: both sides report it, and only the generated part
+    /// differs.
+    fn generation_moves(&self, x: &Output, y: &Output) -> bool {
+        match self {
+            Check::Finish => x.finish.is_some() && y.finish.is_some(),
+            Check::Usage => {
+                matches!((&x.usage, &y.usage), (Some(a), Some(b)) if a.prompt == b.prompt)
+            }
+            _ => false,
+        }
     }
 
     fn judge_alone(&self, target: &CaseRecord) -> CellVerdict {
