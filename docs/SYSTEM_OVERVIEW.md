@@ -793,7 +793,13 @@ question the pipeline asks about a type is a method on the resolved
   outcome typed in `atlas/derived_decisions.jsonl`. A decided type's read field
   that declares `by` is folded onto each record first, over what its statements
   read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
-  and event records alike); RESOLVE itself writes no record value. **Both tension axes degrade by REPORTING, never by
+  and event records alike); RESOLVE itself writes no record value. When
+  `change.document` declares a thread and an id, a record also holds each
+  document the run read that states nothing of its type and whose thread's
+  statements all sit on it, by declared id under `thread_documents`
+  (`resolution_derived/membership.rs`, after the folds); every document read is
+  counted by how it came to be held or not, and a document the reader could not
+  judge is never placed. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** The optional `by = "protocol"`
   fold projects a closed text state only after RESOLVE, from cited claims assigned
   through `^subject`. Each rule requires source-supported `DocumentRead` fields;

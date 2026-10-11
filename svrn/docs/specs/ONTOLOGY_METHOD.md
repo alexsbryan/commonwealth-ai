@@ -24,7 +24,11 @@ Before building a lever, name the first-principles piece it is; a lever that is 
 Records are declared types, each with an identity criterion (keys that suffice, and the criterion in the
 author's words) and a protocol. Documents are read into cited statements; each statement is RESOLVED to an
 open record or to none (which opens one) under its type's criterion, against candidates the declared
-structure proposes; records FOLD their statements into state through the protocol.
+structure proposes; records FOLD their statements into state through the protocol. A record holds its documents:
+those its statements are in, and each document read that states nothing of its type when the statements of its
+declared thread all sit on that record (`resolution_derived/membership.rs`, added 2026-10-11: replayed on the
+converge-s2 uv run with no model, our recipe's coverage .367 → .953 at B³ .898 → .915, and the share of documents
+both authors place .232 → .816).
 
 RESOLVE is GROUP and JOIN as one step. Novelty is not a primitive: it is RESOLVE answering "none of these".
 A question that gives the model neither the criterion nor the candidates ("is this comment a different

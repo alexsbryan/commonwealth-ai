@@ -33,11 +33,16 @@ use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 mod protocol;
 #[path = "resolution_derived/read_fields.rs"]
 mod read_fields;
+#[path = "resolution_derived/membership.rs"]
+pub mod membership;
 
 /// Whether `policies` derive anything in the atlas build: a declared path or
-/// fold, or a field whose readings a record folds (`AttrDecl::by`).
+/// fold, a field whose readings a record folds (`AttrDecl::by`), or a thread
+/// that places documents on records (`membership`).
 pub fn derives(policies: &OntologyPolicies) -> bool {
-    !policies.derivation.derived.is_empty() || !read_fields::declared(policies).is_empty()
+    !policies.derivation.derived.is_empty()
+        || !read_fields::declared(policies).is_empty()
+        || membership::applies(policies)
 }
 
 /// Which side of RESOLVE a derivation runs on.
@@ -158,6 +163,9 @@ pub struct DerivedTally {
     pub excluded: usize,
     /// Atoms of a set's type lacking an attribute it reads: in no set, out of no set.
     pub unjudged: usize,
+    /// Per document read, how it came to be held or not (`membership`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub documents: BTreeMap<&'static str, usize>,
 }
 
 /// `(type.attribute, tally)` for each attribute one stage derived.

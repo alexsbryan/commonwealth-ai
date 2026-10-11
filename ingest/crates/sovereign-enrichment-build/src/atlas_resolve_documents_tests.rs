@@ -289,6 +289,7 @@ async fn replay(declaration: &str, inputs: &[Input]) -> Vec<Value> {
     let failures = apply(
         atoms,
         &input,
+        &[],
         &policies,
         "protocol-test",
         &inference,

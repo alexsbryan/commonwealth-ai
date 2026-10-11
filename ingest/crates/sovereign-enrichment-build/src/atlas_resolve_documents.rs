@@ -6,9 +6,11 @@
 //! statements in them ([`apply`]). Split from `atlas_resolve.rs` to keep that
 //! file under arch-gate's 800-line band.
 
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
+use corpus_engine::enrichment::atlas::resolution_derived::membership::place_thread_documents;
 use corpus_engine::enrichment::atlas::resolution_derived::{
     derive_attributes, derives, DeriveStage, DerivedReport,
 };
@@ -18,7 +20,8 @@ use corpus_engine::enrichment::atlas::{
     project_source_atoms, stamp_claim_documents, Participants, SectionDocuments, SourceProjection,
 };
 use corpus_engine::enrichment::ontology::{OntologyPolicies, SourceDecl};
-use corpus_engine::enrichment::pipeline::PhaseFailure;
+use corpus_engine::enrichment::pipeline::document_read::DocumentReadStatus;
+use corpus_engine::enrichment::pipeline::{PhaseFailure, SectionExtraction};
 use corpus_engine::InferenceFn;
 
 use super::config::EnrichConfig;
@@ -111,12 +114,15 @@ pub(crate) fn from_documents(
 /// the attributes RESOLVE does not wait for; let RESOLVE decide every type it
 /// decides (`resolution_records`), the model answering as the adopted design
 /// asks (one forced choice per statement, weighed at its declared precision);
-/// then derive the attributes of the records it made. Without documents every
-/// statement is unplaced and recorded; the Phase-1 atoms of a decided type are
-/// retired either way. Each step's decisions land beside the atlas.
+/// then derive the attributes of the records it made, and place on them the
+/// documents `sections` read that their thread places (`membership`). Without
+/// documents every statement is unplaced and recorded; the Phase-1 atoms of a
+/// decided type are retired either way. Each step's decisions land beside the
+/// atlas.
 pub(crate) async fn apply(
     mut atoms: BuildAtoms<'_>,
     inputs: &DocumentInputs,
+    sections: &[SectionExtraction],
     policies: &OntologyPolicies,
     corpus_id: &str,
     infer: &InferenceFn,
@@ -174,19 +180,61 @@ pub(crate) async fn apply(
         failures.extend(refused);
     }
     derive(&mut atoms, DeriveStage::AfterResolve)?;
+    if let Some(out) = derived.as_mut() {
+        let read = read_documents(sections, documents);
+        let report =
+            place_thread_documents(&mut atoms, documents, &read, policies, &mut |v| out.line(v));
+        print_derived(DeriveStage::AfterResolve, &report);
+    }
     if let Some(out) = derived {
         println!("  ✓ derived values → {}", out.finish()?.display());
     }
     Ok(failures)
 }
 
+/// What the run's reader made of each document it was given. A section the
+/// general extractor read has no verdict per document: it was read whole, so
+/// each of its documents counts as read.
+fn read_documents(
+    sections: &[SectionExtraction],
+    documents: &SectionDocuments,
+) -> BTreeMap<String, DocumentReadStatus> {
+    let mut read = BTreeMap::new();
+    for s in sections {
+        match &s.document_read {
+            Some(r) => {
+                for d in &r.documents {
+                    read.entry(d.document_id.clone()).or_insert(d.status);
+                }
+            }
+            None => {
+                for d in documents.documents_for_section(&s.section_id) {
+                    read.entry(d.key().to_string())
+                        .or_insert(DocumentReadStatus::Read);
+                }
+            }
+        }
+    }
+    read
+}
+
 fn print_derived(stage: DeriveStage, report: &DerivedReport) {
     for (attr, t) in report {
-        let outcomes: Vec<String> = t.outcomes.iter().map(|(k, n)| format!("{k} {n}")).collect();
+        let counts = |m: &BTreeMap<&str, usize>| {
+            m.iter()
+                .map(|(k, n)| format!("{k} {n}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let documents = if t.documents.is_empty() {
+            String::new()
+        } else {
+            format!("; documents read: [{}]", counts(&t.documents))
+        };
         println!(
-            "  ✓ derived {attr} ({stage:?}): {} atom(s), [{}]; {} excluded by a set, {} unjudged",
+            "  ✓ derived {attr} ({stage:?}): {} atom(s), [{}]; {} excluded by a set, {} unjudged{documents}",
             t.atoms,
-            outcomes.join(", "),
+            counts(&t.outcomes),
             t.excluded,
             t.unjudged
         );

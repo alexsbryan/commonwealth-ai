@@ -32,9 +32,9 @@ def doc_id(message_id):
 
 
 def identity(g, atoms, tune_files):
-    """Deal identity as support/score.py reads case identity (atlas_pred, evaluation_scope, er-score): each claim
-    about a deal record puts the message its document_id stamp names into that record, and a message naming several
-    records is unplaced and counted, never voted. Gold: tune files in exactly one gold deal; files in several are
+    """Deal identity as support/score.py reads case identity (record_documents, evaluation_scope, er-score): each
+    claim about a deal record puts the message its document_id stamp names into that record, as do a deal's
+    thread_documents, and a message in several records is unplaced and counted, never voted. Gold: tune files in exactly one gold deal; files in several are
     excluded; tune files in no deal are known no-deal placements."""
     of = collections.defaultdict(set)
     for d in g["deals"]:
@@ -47,19 +47,11 @@ def identity(g, atoms, tune_files):
     for e in json.loads((S.WARD / "manifest.json").read_text()):
         for m in e.get("message_ids") or []:
             paths[m.strip("<>").lower()].add(e["path"])
-    deals = {x["data"]["id"] for x in atoms if x["atom_type"] == "Entity" and x["data"].get("entity_type") == "deal"}
-    votes, counts = collections.defaultdict(set), collections.Counter()
-    for x in atoms:
-        c = x["data"]
-        if x["atom_type"] != "Claim" or c.get("subject") not in deals:
-            continue
-        counts["claims"] += 1
-        doc = (c.get("attributes") or {}).get("document_id")
-        if not doc:
-            counts["claims_unstamped"] += 1
-            continue
-        for f in paths.get(str(doc).strip("<>").lower(), ()):
-            votes[f].add(c["subject"])
+    held, counts = U.record_documents(atoms, "deal")
+    votes = collections.defaultdict(set)
+    for doc, rs in held.items():
+        for f in paths.get(doc.strip("<>").lower(), ()):
+            votes[f] |= rs
     counts["documents_in_several_records"] = sum(len(r) > 1 for r in votes.values())
     counts["records"] = len({r for rs in votes.values() for r in rs})
     pred = {f: next(iter(rs)) for f, rs in votes.items() if len(rs) == 1}
