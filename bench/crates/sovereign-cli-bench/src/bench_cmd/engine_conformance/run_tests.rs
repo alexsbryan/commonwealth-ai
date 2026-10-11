@@ -8,10 +8,10 @@ use sovereign_contracts::engine_observe::{canonical_sampler, Observation, Replay
 
 use super::case::{Case, CaseMethod};
 use super::project::{
-    completion_output, engine_facets, generated_reasoning, record, stream_output, wire_reply,
-    Replay,
+    completion_output, engine_facets, generated_reasoning, probe_facets, record, stream_output,
+    wire_reply, Replay,
 };
-use super::record::{Outcome, ToolCall, Usage};
+use super::record::{Facets, Outcome, ToolCall, Usage};
 use super::server::{host_truth, prompt_oracle, slot_sampler, SLOTS_METRICS_ONLY};
 
 fn case(method: &str, input: Value) -> Case {
@@ -419,4 +419,53 @@ fn a_forced_choice_records_its_label_probabilities_and_other_methods_no_completi
     );
     assert!(r.facets.unobserved.is_empty(), "{:?}", r.facets.unobserved);
     assert_eq!(r.facets.host_reported["resident_models"], json!(["a", "b"]));
+}
+
+#[test]
+fn a_probe_fills_the_compute_facets_only_when_each_greedy_token_is_its_top_logprob() {
+    use sovereign_contracts::engine_observe::{ProbeAnswer, ProbeStep};
+    let step = |token, top: &[(i64, f64)]| ProbeStep {
+        token,
+        top: top.to_vec(),
+    };
+    let good = ProbeAnswer {
+        prompt_ids: vec![1, 2],
+        steps: vec![
+            step(7, &[(7, -0.1), (9, -2.5)]),
+            step(9, &[(9, -0.3), (7, -1.4)]),
+        ],
+    };
+    let mut f = Facets::default();
+    probe_facets(&good, &mut f);
+    assert_eq!(f.prompt_ids, Some(vec![1, 2]));
+    assert_eq!(f.greedy_tokens, Some(vec![7, 9]));
+    assert_eq!(f.logprobs.as_ref().map(Vec::len), Some(2));
+    assert!(f.unobserved.is_empty(), "{:?}", f.unobserved);
+
+    let mut bad = good.clone();
+    bad.steps[1].token = 7;
+    let mut f = Facets::default();
+    probe_facets(&bad, &mut f);
+    assert_eq!(
+        f.greedy_tokens, None,
+        "a step that broke the oracle settles nothing"
+    );
+    assert!(
+        f.unobserved["logprobs"].starts_with("step 1:"),
+        "{:?}",
+        f.unobserved
+    );
+
+    let mut f = Facets::default();
+    probe_facets(
+        &ProbeAnswer {
+            prompt_ids: vec![1],
+            steps: vec![],
+        },
+        &mut f,
+    );
+    assert!(
+        f.unobserved.contains_key("greedy_tokens"),
+        "no step is no observation"
+    );
 }

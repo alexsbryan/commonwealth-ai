@@ -1031,6 +1031,18 @@ Cold start and hot reload both reach it through ONE serving assembly,
 which adds admission, llama's slot installs and the compute-child layer; a
 reload re-wraps the running compute children instead of spawning new ones.
 
+**The engine conformance battery measures the engine that serves.**
+`POST /internal/engine/replay`, on the operator listener beside
+`/internal/inference/warmup`, runs one provider call with a
+`sovereign_contracts::engine_observe` sink installed and returns the answer
+and what the engine recorded on the way. Its `probe` method is
+`InferenceProvider::probe_logprobs`: greedy steps with each step's top-k
+logprobs, on a context of the slot's own parameters (`embedded/probe.rs`).
+The default refuses, and the wrappers on the daemon's path forward it.
+`bench/lanes/engine-swap/battery.sh` drives the case bank through it per
+target, and `svrn bench engine-conformance judge` holds the records to
+`conformance.toml`.
+
 **A remote engine off this machine is a third party.** `build_remote` builds
 one shape, `oicp_client::SplitInferenceProvider::engine` (`far_end.rs`), which
 decides each half's `FarEnd`: a loopback endpoint is a server on this box

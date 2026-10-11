@@ -1551,6 +1551,13 @@ impl InferenceProvider for SovereignInferenceAdapter {
         self.provider.warmup_primary().await
     }
 
+    async fn probe_logprobs(
+        &self,
+        probe: &sovereign_contracts::engine_observe::ProbeRequest,
+    ) -> CoreResult<sovereign_contracts::engine_observe::ProbeAnswer> {
+        self.provider.probe_logprobs(probe).await
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.provider.capabilities()
     }

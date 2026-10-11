@@ -13,7 +13,8 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
-use sovereign_contracts::engine_observe::ReplayMethod;
+use sovereign_contracts::engine_observe::{ProbeAnswer, ProbeRequest, ReplayMethod};
+use sovereign_contracts::types::Speed;
 
 use super::case::{Case, CaseMethod};
 use super::project::{self, Replay};
@@ -185,7 +186,7 @@ async fn run_case(
     let method = match case.method {
         CaseMethod::Replay(m) => m,
         CaseMethod::Throughput => return throughput(daemon, target, case).await,
-        CaseMethod::Probe => return Err("the logprob probe is not built yet".into()),
+        CaseMethod::Probe => return probe(daemon, server, target, case).await,
     };
     let replay = daemon.replay(method, &case.input).await?;
     let mut rec = project::record(case, method, target, &replay);
@@ -257,6 +258,49 @@ async fn reasoning_tokens(
         .as_u64()
         .map(Some)
         .ok_or_else(|| format!("count_tokens answered {}", replay.answer))
+}
+
+/// The compute probe: the daemon's engine when it holds weights, else the
+/// server behind a remote target, asked for the model the daemon names at
+/// the probe's speed.
+async fn probe(
+    daemon: &Daemon,
+    server: Option<&LlamaServer>,
+    target: &str,
+    case: &Case,
+) -> Result<CaseRecord, String> {
+    let req: ProbeRequest = serde_json::from_value(case.input.clone())
+        .map_err(|e| format!("not a probe request: {e}"))?;
+    let replay = daemon.replay(ReplayMethod::Probe, &case.input).await?;
+    let answer: Result<ProbeAnswer, String> = match (replay.outcome["kind"].as_str(), server) {
+        (Some("ok"), _) => serde_json::from_value(replay.answer).map_err(|e| e.to_string()),
+        (Some("refused"), Some(s)) => {
+            let host = daemon.replay(ReplayMethod::Host, &json!({})).await?;
+            let key = match req.speed {
+                Speed::Slow | Speed::Medium => "model_for_slow",
+                _ => "model_for_fast",
+            };
+            let model = host.answer[key]
+                .as_str()
+                .ok_or_else(|| format!("the host report names no {key}"))?;
+            tracing::debug!(target: "engine_conformance", model, "probing the server, the daemon holds no weights");
+            s.probe(model, &req).await
+        }
+        _ => Err(format!("the probe did not run: {}", replay.outcome)),
+    };
+    let mut rec = CaseRecord {
+        case_id: case.case_id.clone(),
+        target: target.into(),
+        rows: case.rows.clone(),
+        request: case.input.clone(),
+        outcome: Outcome::Ok,
+        facets: Default::default(),
+    };
+    match answer {
+        Ok(a) => project::probe_facets(&a, &mut rec.facets),
+        Err(message) => rec.outcome = Outcome::Error { message },
+    }
+    Ok(rec)
 }
 
 /// `concurrency` completions of the same request at once; aggregate

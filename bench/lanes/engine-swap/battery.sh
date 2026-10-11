@@ -9,6 +9,12 @@
 #   embedded       the config as it stands ([engine] kind = "llama")
 #   llama-server   [engine] kind = "remote" against one llama-server router on
 #                  :18301, built by build-llama-server.sh --llguidance
+#   llama-server-matched
+#                  the same with no MTP drafting, the configuration the
+#                  compute row compares: a drafted token gets no
+#                  probabilities, and no request field turns drafting off
+#                  in this build (speculative.type "none" and n_max 0 both
+#                  still drafted, 2026-10-11)
 #
 # Each pass replays the case bank (BATTERY_CASES, default the 2026-10-10
 # bank) through /internal/engine/replay, which the daemon mounts on its
@@ -42,9 +48,9 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -gt 0 ] || { echo "battery.sh [--only <case-id>]... embedded|llama-server..." >&2; exit 2; }
+[ $# -gt 0 ] || { echo "battery.sh [--only <case-id>]... embedded|llama-server|llama-server-matched..." >&2; exit 2; }
 for t in "$@"; do
-  case $t in embedded|llama-server) ;; *) die "unknown target $t" ;; esac
+  case $t in embedded|llama-server|llama-server-matched) ;; *) die "unknown target $t" ;; esac
 done
 
 # ── preflight: refuse rather than share the box ────────────────────────────
@@ -99,7 +105,7 @@ daemon_up() {
 write_config() {
   case $1 in
     embedded) cp "$out/config.before.toml" "$cfg" ;;
-    llama-server)
+    llama-server|llama-server-matched)
       python3 - "$out/config.before.toml" "$cfg" <<'EOF'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -133,7 +139,14 @@ router_down() {
   done
 }
 
+# $1: "spec" to draft with each model's MTP head, as the serving config does.
 router_up() {
+  if [ "$1" = spec ]; then
+    spec='spec-type = draft-mtp
+spec-draft-n-max = 3'
+  else
+    spec=''
+  fi
   cat > "$out/router.ini" <<EOF
 version = 1
 
@@ -143,14 +156,12 @@ n-gpu-layers = 99
 [Qwen3.6-35B-A3B-MTP-UD-Q6_K]
 model = $models/Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf
 ctx-size = 65536
-spec-type = draft-mtp
-spec-draft-n-max = 3
+$spec
 
 [Qwen3.5-4B-UD-MTP-Q6_K_XL]
 model = $models/Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf
 ctx-size = 65536
-spec-type = draft-mtp
-spec-draft-n-max = 3
+$spec
 
 [Qwen3-Embedding-0.6B-Q8_0]
 model = $embed
@@ -177,7 +188,7 @@ EOF
   curl -sf -m 600 localhost:18301/v1/embeddings -H 'content-type: application/json' \
     -d '{"model":"Qwen3-Embedding-0.6B-Q8_0","input":"hi"}' >/dev/null \
     || die "router would not load the embedder, see $out/router.log"
-  say "router up on :18301, three models loaded"
+  say "router up on :18301 ($1), three models loaded"
 }
 
 restore() {
@@ -208,7 +219,11 @@ for t in "$@"; do
   router_down
   write_config "$t"
   server_flag=""
-  if [ "$t" = llama-server ]; then router_up; server_flag="--server http://127.0.0.1:18301"; fi
+  case $t in
+    llama-server) router_up spec ;;
+    llama-server-matched) router_up nospec ;;
+  esac
+  case $t in llama-server*) server_flag="--server http://127.0.0.1:18301" ;; esac
   daemon_up "$t"
   rec=$out/$n-$t.jsonl
   t0=$(date +%s)

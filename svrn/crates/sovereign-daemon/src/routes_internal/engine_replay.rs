@@ -16,7 +16,7 @@ use axum::Json;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sovereign_contracts::engine_observe::{observed, Observation, ReplayMethod};
+use sovereign_contracts::engine_observe::{observed, Observation, ProbeRequest, ReplayMethod};
 use sovereign_contracts::error::Error;
 use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
 use sovereign_contracts::types::{CompletionRequest, Speed, StreamFrame};
@@ -30,7 +30,7 @@ pub struct ReplayRequest {
     /// the body is read.
     pub method: ReplayMethod,
     /// Its input: the `CompletionRequest`, or `{text}`, `{texts}`,
-    /// `{query, docs}`, or `{}` for `host`.
+    /// `{query, docs}`, a `ProbeRequest`, or `{}` for `host`.
     #[serde(default)]
     pub input: Value,
 }
@@ -147,6 +147,17 @@ async fn run(
         }
         ReplayMethod::CountTokens => Ok(json!(p.count_tokens(&text("text")?))),
         ReplayMethod::Host => Ok(host_report(p).await),
+        ReplayMethod::Probe => {
+            let probe: ProbeRequest = serde_json::from_value(req.input.clone()).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("input is not a probe request: {e}"),
+                )
+            })?;
+            p.probe_logprobs(&probe).await.and_then(|a| {
+                serde_json::to_value(&a).map_err(|e| Error::Serialization(e.to_string()))
+            })
+        }
     })
 }
 
@@ -199,7 +210,7 @@ mod tests {
     use sovereign_contracts::double::TestProvider;
     use sovereign_contracts::types::{FinishReason, StreamFrame};
 
-    use super::{run, ReplayRequest};
+    use super::{run, Error, ReplayRequest};
 
     fn call(method: &str, input: serde_json::Value) -> ReplayRequest {
         serde_json::from_value(json!({"method": method, "input": input})).unwrap()
@@ -249,7 +260,7 @@ mod tests {
     async fn a_request_the_route_cannot_read_is_refused_by_the_route() {
         let p = TestProvider::new();
         assert!(
-            serde_json::from_value::<ReplayRequest>(json!({"method": "probe", "input": {}}))
+            serde_json::from_value::<ReplayRequest>(json!({"method": "logits", "input": {}}))
                 .is_err(),
             "a method outside ReplayMethod is refused when the body is read"
         );
@@ -261,5 +272,30 @@ mod tests {
             400
         );
         assert_eq!(run(&p, &call("embed", json!({}))).await.unwrap_err().0, 400);
+        assert_eq!(
+            run(&p, &call("probe", json!({"text": "x"})))
+                .await
+                .unwrap_err()
+                .0,
+            400
+        );
+    }
+
+    #[tokio::test]
+    async fn a_provider_that_holds_no_weights_refuses_the_probe() {
+        let p = TestProvider::new();
+        let answer = run(
+            &p,
+            &call(
+                "probe",
+                json!({"text": "The three laws", "steps": 4, "top_k": 3}),
+            ),
+        )
+        .await
+        .unwrap();
+        assert!(
+            matches!(answer, Err(Error::NotImplemented(_))),
+            "the default answers NotImplemented, which the route reports as refused: {answer:?}"
+        );
     }
 }

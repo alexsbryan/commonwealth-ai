@@ -52,6 +52,9 @@ pub enum ReplayMethod {
     CountTokens,
     /// The provider's report about itself, read-only.
     Host,
+    /// `probe_logprobs`: greedy steps with each step's top-k logprobs, the
+    /// compute row's instrument. Not a captured method.
+    Probe,
 }
 
 impl ReplayMethod {
@@ -71,6 +74,42 @@ impl ReplayMethod {
     pub fn is_completion(self) -> bool {
         self.is_stream() || matches!(self, Self::Complete | Self::CompleteBatch)
     }
+}
+
+/// What the logprob probe decodes: `text` tokenized as llama-server's
+/// `/tokenize` does with `add_special`, then `steps` greedy tokens, with the
+/// `top_k` most likely tokens at each.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProbeRequest {
+    /// The prompt, raw: no chat template.
+    pub text: String,
+    /// Greedy tokens to generate.
+    pub steps: usize,
+    /// Alternatives reported at each step.
+    pub top_k: usize,
+    /// Which chat model: `Speed`'s default, the fast one, unless the case
+    /// says otherwise.
+    #[serde(default)]
+    pub speed: crate::types::Speed,
+}
+
+/// One greedy step of the probe.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProbeStep {
+    /// The token greedy decoding chose.
+    pub token: i64,
+    /// The `top_k` most likely tokens and their log-probabilities over the
+    /// whole vocabulary, most likely first.
+    pub top: Vec<(i64, f64)>,
+}
+
+/// What the probe decoded.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProbeAnswer {
+    /// The prompt's token ids.
+    pub prompt_ids: Vec<i64>,
+    /// One entry per generated token.
+    pub steps: Vec<ProbeStep>,
 }
 
 /// One thing an engine did.

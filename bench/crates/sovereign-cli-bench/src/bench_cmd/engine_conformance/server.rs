@@ -18,7 +18,9 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use sovereign_contracts::engine_observe::{canonical_sampler, SAMPLER_STAGE_PARAMS};
+use sovereign_contracts::engine_observe::{
+    canonical_sampler, ProbeAnswer, ProbeRequest, ProbeStep, SAMPLER_STAGE_PARAMS,
+};
 
 use super::project::WireReply;
 use super::record::{Facets, Sampler};
@@ -149,6 +151,51 @@ impl LlamaServer {
             "greedy_tokens".into(),
             "a chat completion returns no token ids; the probe observes them".into(),
         );
+    }
+
+    /// The compute probe as the server answers it: the prompt through its
+    /// own `/tokenize` with `add_special`, then `/completion` on those ids,
+    /// greedy, with `n_probs` read before sampling (the server's default),
+    /// stopping where the server stops. The server must not draft: a token
+    /// accepted from a draft gets no probabilities (only the one-token path
+    /// calls `populate_token_probs`, LS/tools/server/server-context.cpp
+    /// :3766), and no request field turns MTP drafting off in this build, so
+    /// the battery's `llama-server-matched` target runs a preset without it.
+    /// A drafting server shows up as an empty step, which the probe oracle
+    /// (`project::probe_facets`) reports rather than judges.
+    pub async fn probe(&self, model: &str, probe: &ProbeRequest) -> Result<ProbeAnswer, String> {
+        let prompt_ids = self
+            .tokenize(&probe.text, true, Some(&json!(model)))
+            .await?;
+        let body = json!({
+            "model": model,
+            "prompt": prompt_ids,
+            "n_predict": probe.steps,
+            "n_probs": probe.top_k,
+            "temperature": 0.0,
+            "cache_prompt": false,
+            "stream": false,
+        });
+        let resp = self.post("/completion", &body).await?;
+        let probs = resp["completion_probabilities"]
+            .as_array()
+            .ok_or_else(|| format!("/completion carried no completion_probabilities: {resp}"))?;
+        let steps = probs
+            .iter()
+            .map(|p| {
+                let top = p["top_logprobs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|t| Some((t["id"].as_i64()?, t["logprob"].as_f64()?)))
+                    .collect();
+                p["id"]
+                    .as_i64()
+                    .map(|token| ProbeStep { token, top })
+                    .ok_or_else(|| format!("a probability entry carried no id: {p}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ProbeAnswer { prompt_ids, steps })
     }
 
     /// The server's own account of the keys the host rows compare, for

@@ -11,7 +11,7 @@
 
 use serde::Deserialize;
 use serde_json::Value;
-use sovereign_contracts::engine_observe::{Observation, ReplayMethod};
+use sovereign_contracts::engine_observe::{Observation, ProbeAnswer, ReplayMethod};
 use sovereign_contracts::oicp::chat_turn::parse_assistant_turn;
 use sovereign_contracts::oicp::completion::ToolSchema;
 use sovereign_contracts::oicp::forced_choice;
@@ -171,6 +171,39 @@ fn answer_facets(case: &Case, method: ReplayMethod, answer: &Value, f: &mut Face
         }
         // Completions returned above.
         _ => {}
+    }
+}
+
+/// Fill the compute facets from a probe, held to its own oracle: at every
+/// step the greedy token is the most likely one. A step where it is not
+/// means the logprobs are not the distribution the token was chosen from,
+/// and saying so beats judging them.
+pub fn probe_facets(answer: &ProbeAnswer, f: &mut Facets) {
+    f.prompt_ids = Some(answer.prompt_ids.clone());
+    let broken = answer
+        .steps
+        .iter()
+        .position(|s| s.top.first().map(|t| t.0) != Some(s.token));
+    let why = match broken {
+        _ if answer.steps.is_empty() => Some("the probe generated no token".to_string()),
+        Some(i) => Some(format!(
+            "step {i}: the greedy token {} is not the top logprob {:?}",
+            answer.steps[i].token,
+            answer.steps[i].top.first()
+        )),
+        None => None,
+    };
+    tracing::debug!(target: "engine_conformance", steps = answer.steps.len(), broken = ?why, "probe oracle");
+    match why {
+        Some(why) => {
+            for facet in ["greedy_tokens", "logprobs"] {
+                f.unobserved.insert(facet.into(), why.clone());
+            }
+        }
+        None => {
+            f.greedy_tokens = Some(answer.steps.iter().map(|s| s.token).collect());
+            f.logprobs = Some(answer.steps.iter().map(|s| s.top.clone()).collect());
+        }
     }
 }
 

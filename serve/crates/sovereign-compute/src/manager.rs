@@ -1294,6 +1294,13 @@ impl InferenceProvider for ComputeRoutedProvider {
         self.inner.warmup_primary().await
     }
 
+    async fn probe_logprobs(
+        &self,
+        probe: &sovereign_contracts::engine_observe::ProbeRequest,
+    ) -> Result<sovereign_contracts::engine_observe::ProbeAnswer> {
+        self.inner.probe_logprobs(probe).await
+    }
+
     fn load_extra_slot(
         &self,
         slot_name: String,

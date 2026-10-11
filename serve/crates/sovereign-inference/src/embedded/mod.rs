@@ -24,6 +24,7 @@ mod model_slot;
 mod observe;
 mod prefix_pin;
 mod prefix_state;
+mod probe;
 mod prompt_helpers;
 mod rerank_slot;
 mod rpc_distribution;

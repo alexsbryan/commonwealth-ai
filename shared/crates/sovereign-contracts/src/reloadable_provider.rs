@@ -149,6 +149,13 @@ impl InferenceProvider for ReloadableProvider {
         self.current().warmup_primary().await
     }
 
+    async fn probe_logprobs(
+        &self,
+        probe: &crate::engine_observe::ProbeRequest,
+    ) -> Result<crate::engine_observe::ProbeAnswer> {
+        self.current().probe_logprobs(probe).await
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.current().capabilities()
     }

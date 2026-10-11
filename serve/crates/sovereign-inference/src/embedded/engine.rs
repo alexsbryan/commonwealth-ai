@@ -4251,6 +4251,41 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         .await
         .map_err(|e| Error::Inference(format!("warmup join failed: {e}")))?
     }
+
+    /// The compute row's probe (`super::probe`), on the slot `speed` names,
+    /// behind the same permit a completion on that slot takes.
+    async fn probe_logprobs(
+        &self,
+        probe: &sovereign_contracts::engine_observe::ProbeRequest,
+    ) -> Result<sovereign_contracts::engine_observe::ProbeAnswer> {
+        use sovereign_contracts::engine_observe::carry;
+        let probe = probe.clone();
+        let joined = |e| Error::Inference(format!("probe join failed: {e}"));
+        if !matches!(probe.speed, Speed::Slow | Speed::Medium) {
+            let family = self.fast_family("probe_logprobs/fast").await?;
+            let slot = Arc::clone(&family.slot);
+            let _permit = ModelSlot::acquire_inflight(&slot, "probe_logprobs/fast", None).await?;
+            return tokio::task::spawn_blocking(carry(move || {
+                let mut held = slot.context.blocking_lock();
+                super::probe::probe_slot(&slot, &mut held, &probe)
+            }))
+            .await
+            .map_err(joined)?;
+        }
+        self.warmup_primary().await?;
+        let _permit = self.acquire_lazy("probe_logprobs/primary", None).await?;
+        let primary = Arc::clone(&self.primary);
+        tokio::task::spawn_blocking(carry(move || {
+            let guard = primary.blocking_lock();
+            let slot = guard.as_ref().ok_or_else(|| {
+                Error::NotImplemented("probe: no primary model is configured".into())
+            })?;
+            let mut held = slot.context.blocking_lock();
+            super::probe::probe_slot(slot, &mut held, &probe)
+        }))
+        .await
+        .map_err(joined)?
+    }
 }
 
 #[cfg(test)]

@@ -598,6 +598,14 @@ impl InferenceProvider for InferenceRouter {
         self.local.warmup_primary().await
     }
 
+    async fn probe_logprobs(
+        &self,
+        probe: &sovereign_contracts::engine_observe::ProbeRequest,
+    ) -> Result<sovereign_contracts::engine_observe::ProbeAnswer> {
+        // The local engine only: a probe measures this box's weights.
+        self.local.probe_logprobs(probe).await
+    }
+
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         self.local.embed(text).await
     }

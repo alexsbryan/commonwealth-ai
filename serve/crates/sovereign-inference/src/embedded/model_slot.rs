@@ -376,7 +376,7 @@ impl SlotContext {
 /// to `'static`. The caller MUST keep `model` alive (in practice via
 /// the `_model: Arc<LlamaModel>` field on `SlotContext`) for the
 /// lifetime of the returned context.
-fn build_target_ctx_for_slot(
+pub(crate) fn build_target_ctx_for_slot(
     model: &Arc<LlamaModel>,
     params: &MtpRebuildParams,
     model_id: &str,
