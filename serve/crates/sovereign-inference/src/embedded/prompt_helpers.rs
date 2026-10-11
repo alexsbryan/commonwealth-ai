@@ -319,11 +319,7 @@ pub(crate) fn tokenize_prompt(
     let tokens = model
         .str_to_token(full_prompt, add_bos_for(request))
         .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
-    sovereign_contracts::engine_observe::observe(|| {
-        sovereign_contracts::engine_observe::Observation::PromptTokens {
-            ids: tokens.iter().map(|t| i64::from(t.0)).collect(),
-        }
-    });
+    super::observe::prompt_tokens(&tokens);
     Ok(tokens)
 }
 

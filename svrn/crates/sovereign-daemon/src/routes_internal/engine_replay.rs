@@ -16,7 +16,7 @@ use axum::Json;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sovereign_contracts::engine_observe::{observed, Observation};
+use sovereign_contracts::engine_observe::{observed, Observation, ReplayMethod};
 use sovereign_contracts::error::Error;
 use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
 use sovereign_contracts::types::{CompletionRequest, Speed, StreamFrame};
@@ -26,9 +26,9 @@ use crate::state::AppState;
 /// One call to replay, as `[engine] capture` recorded it.
 #[derive(Debug, Deserialize)]
 pub struct ReplayRequest {
-    /// The provider method: a `complete*` method, `embed`, `embed_query`,
-    /// `embed_batch`, `rerank_batch`, `count_tokens`, or `host`.
-    pub method: String,
+    /// The provider method. A name outside [`ReplayMethod`] is refused when
+    /// the body is read.
+    pub method: ReplayMethod,
     /// Its input: the `CompletionRequest`, or `{text}`, `{texts}`,
     /// `{query, docs}`, or `{}` for `host`.
     #[serde(default)]
@@ -61,7 +61,7 @@ pub async fn engine_replay(
         ));
     };
     let provider: &dyn InferenceProvider = &*service;
-    tracing::debug!(target: "engine_replay", method = %req.method, "replaying an engine call");
+    tracing::debug!(target: "engine_replay", method = ?req.method, "replaying an engine call");
     let (result, observations) = observed(run(provider, &req)).await;
     let result = result?;
     let (outcome, answer) = match result {
@@ -74,7 +74,7 @@ pub async fn engine_replay(
                 | Error::PermissionDenied(_) => "refused",
                 _ => "error",
             };
-            tracing::debug!(target: "engine_replay", method = %req.method, kind, error = %e, "the engine did not serve");
+            tracing::debug!(target: "engine_replay", method = ?req.method, kind, error = %e, "the engine did not serve");
             (json!({"kind": kind, "message": e.to_string()}), Value::Null)
         }
     };
@@ -111,8 +111,8 @@ async fn run(
             )
         })
     };
-    Ok(match req.method.as_str() {
-        "complete" | "complete_batch" => {
+    Ok(match req.method {
+        ReplayMethod::Complete | ReplayMethod::CompleteBatch => {
             let r = completion()?;
             p.complete(&r).await.and_then(|resp| {
                 serde_json::to_value(&resp).map_err(|e| Error::Serialization(e.to_string()))
@@ -121,38 +121,32 @@ async fn run(
         // Every streaming method replays as the typed stream: it is the
         // one the daemon serves local streams through, and the untyped ones
         // are adaptations of it.
-        "complete_stream"
-        | "complete_stream_with_id"
-        | "complete_stream_with_finish"
-        | "complete_stream_with_id_and_finish" => {
+        ReplayMethod::CompleteStream
+        | ReplayMethod::CompleteStreamWithId
+        | ReplayMethod::CompleteStreamWithFinish
+        | ReplayMethod::CompleteStreamWithIdAndFinish => {
             let r = completion()?;
             match p.complete_stream_with_finish(&r).await {
                 Ok(stream) => Ok(Value::Array(stream.map(frame_json).collect().await)),
                 Err(e) => Err(e),
             }
         }
-        "embed" => p.embed(&text("text")?).await.map(|v| json!([v])),
-        "embed_query" => p.embed_query(&text("text")?).await.map(|v| json!([v])),
-        "embed_batch" => {
+        ReplayMethod::Embed => p.embed(&text("text")?).await.map(|v| json!([v])),
+        ReplayMethod::EmbedQuery => p.embed_query(&text("text")?).await.map(|v| json!([v])),
+        ReplayMethod::EmbedBatch => {
             let texts: Vec<String> = serde_json::from_value(req.input["texts"].clone())
                 .map_err(|e| (StatusCode::BAD_REQUEST, format!("input.texts: {e}")))?;
             p.embed_batch(&texts).await.map(|v| json!(v))
         }
-        "rerank_batch" => {
+        ReplayMethod::RerankBatch => {
             let docs: Vec<String> = serde_json::from_value(req.input["docs"].clone())
                 .map_err(|e| (StatusCode::BAD_REQUEST, format!("input.docs: {e}")))?;
             p.rerank_batch(&text("query")?, &docs)
                 .await
                 .map(|v| json!(v))
         }
-        "count_tokens" => Ok(json!(p.count_tokens(&text("text")?))),
-        "host" => Ok(host_report(p).await),
-        other => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("method `{other}` is not one this route replays"),
-            ))
-        }
+        ReplayMethod::CountTokens => Ok(json!(p.count_tokens(&text("text")?))),
+        ReplayMethod::Host => Ok(host_report(p).await),
     })
 }
 
@@ -208,10 +202,7 @@ mod tests {
     use super::{run, ReplayRequest};
 
     fn call(method: &str, input: serde_json::Value) -> ReplayRequest {
-        ReplayRequest {
-            method: method.into(),
-            input,
-        }
+        serde_json::from_value(json!({"method": method, "input": input})).unwrap()
     }
 
     #[tokio::test]
@@ -257,7 +248,11 @@ mod tests {
     #[tokio::test]
     async fn a_request_the_route_cannot_read_is_refused_by_the_route() {
         let p = TestProvider::new();
-        assert_eq!(run(&p, &call("probe", json!({}))).await.unwrap_err().0, 400);
+        assert!(
+            serde_json::from_value::<ReplayRequest>(json!({"method": "probe", "input": {}}))
+                .is_err(),
+            "a method outside ReplayMethod is refused when the body is read"
+        );
         assert_eq!(
             run(&p, &call("complete", json!({"no": "prompt"})))
                 .await

@@ -3753,13 +3753,7 @@ impl ModelSlot {
             .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::SessionBegin);
 
-        let reused = if learned_pin { 0 } else { prefix_base };
-        sovereign_contracts::engine_observe::observe(|| {
-            sovereign_contracts::engine_observe::Observation::Prefill {
-                evaluated: (tokens.len() - reused) as u64,
-                reused: reused as u64,
-            }
-        });
+        super::observe::prefill(tokens.len(), prefix_base, learned_pin);
         // Sample the first token from prefill's last logit position.
         // Use ConstrainedSampler::Explore — no JSON-schema mask is
         // installed on this path (dispatcher filtered structured
@@ -4853,13 +4847,7 @@ impl ModelSlot {
         // each token), but we DON'T add generated tokens to
         // cached_tokens because they're not part of the *prompt* the
         // next request will share. Only the prompt is comparable.
-        let reused = if learned_pin { 0 } else { lcp };
-        sovereign_contracts::engine_observe::observe(|| {
-            sovereign_contracts::engine_observe::Observation::Prefill {
-                evaluated: (tokens.len() - reused) as u64,
-                reused: reused as u64,
-            }
-        });
+        super::observe::prefill(tokens.len(), lcp, learned_pin);
         *cached_tokens = tokens.to_vec();
         Ok(())
     }

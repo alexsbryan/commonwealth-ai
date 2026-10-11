@@ -23,6 +23,56 @@ use std::task::{Context, Poll};
 
 use serde::{Deserialize, Serialize};
 
+/// An `InferenceProvider` method the daemon's replay route runs, under the
+/// name `[engine] capture` records it by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReplayMethod {
+    /// `complete`.
+    Complete,
+    /// `complete_batch`, replayed as one `complete`.
+    CompleteBatch,
+    /// `complete_stream`.
+    CompleteStream,
+    /// `complete_stream_with_id`.
+    CompleteStreamWithId,
+    /// `complete_stream_with_finish`.
+    CompleteStreamWithFinish,
+    /// `complete_stream_with_id_and_finish`.
+    CompleteStreamWithIdAndFinish,
+    /// `embed`.
+    Embed,
+    /// `embed_query`.
+    EmbedQuery,
+    /// `embed_batch`.
+    EmbedBatch,
+    /// `rerank_batch`.
+    RerankBatch,
+    /// `count_tokens`.
+    CountTokens,
+    /// The provider's report about itself, read-only.
+    Host,
+}
+
+impl ReplayMethod {
+    /// Whether the method streams. Every streaming method replays as the
+    /// typed stream, the one the daemon serves local streams through.
+    pub fn is_stream(self) -> bool {
+        matches!(
+            self,
+            Self::CompleteStream
+                | Self::CompleteStreamWithId
+                | Self::CompleteStreamWithFinish
+                | Self::CompleteStreamWithIdAndFinish
+        )
+    }
+
+    /// Whether the input is a `CompletionRequest`.
+    pub fn is_completion(self) -> bool {
+        self.is_stream() || matches!(self, Self::Complete | Self::CompleteBatch)
+    }
+}
+
 /// One thing an engine did.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -67,6 +117,38 @@ pub enum Observation {
     },
 }
 
+/// The sampler stages [`canonical_sampler`] knows, each with the parameters
+/// it owns, under llama-server's stage and parameter names. A server-side
+/// observer reads exactly these keys from what the server reports, so both
+/// engines are described over the same set.
+pub const SAMPLER_STAGE_PARAMS: &[(&str, &[&str])] = &[
+    (
+        "penalties",
+        &[
+            "repeat_penalty",
+            "repeat_last_n",
+            "frequency_penalty",
+            "presence_penalty",
+        ],
+    ),
+    (
+        "dry",
+        &[
+            "dry_multiplier",
+            "dry_base",
+            "dry_allowed_length",
+            "dry_penalty_last_n",
+        ],
+    ),
+    ("top_k", &["top_k"]),
+    ("top_p", &["top_p"]),
+    ("min_p", &["min_p"]),
+    ("typ_p", &["typical_p"]),
+    ("xtc", &["xtc_probability", "xtc_threshold"]),
+    ("top_n_sigma", &["top_n_sigma"]),
+    ("temperature", &["temperature"]),
+];
+
 /// A sampler as the conformance battery compares it: only the stages that
 /// change the next token, in order, and only their parameters. `raw` uses
 /// llama-server's parameter names, `order` its stage names, and the result
@@ -81,33 +163,6 @@ pub fn canonical_sampler(
     raw: &BTreeMap<String, f64>,
     order: &[&str],
 ) -> (BTreeMap<String, f64>, Vec<String>) {
-    const STAGE_PARAMS: &[(&str, &[&str])] = &[
-        (
-            "penalties",
-            &[
-                "repeat_penalty",
-                "repeat_last_n",
-                "frequency_penalty",
-                "presence_penalty",
-            ],
-        ),
-        (
-            "dry",
-            &[
-                "dry_multiplier",
-                "dry_base",
-                "dry_allowed_length",
-                "dry_penalty_last_n",
-            ],
-        ),
-        ("top_k", &["top_k"]),
-        ("top_p", &["top_p"]),
-        ("min_p", &["min_p"]),
-        ("typ_p", &["typical_p"]),
-        ("xtc", &["xtc_probability", "xtc_threshold"]),
-        ("top_n_sigma", &["top_n_sigma"]),
-        ("temperature", &["temperature"]),
-    ];
     const TRUNCATION: &[&str] = &["top_k", "top_p", "min_p", "typ_p", "top_n_sigma"];
     let p = |k: &str| raw.get(k).copied();
     let greedy = order.contains(&"greedy") || p("temperature").is_some_and(|t| t <= 0.0);
@@ -140,7 +195,7 @@ pub fn canonical_sampler(
         stages.push("greedy".into());
     }
     let owned_by = |key: &str| {
-        STAGE_PARAMS
+        SAMPLER_STAGE_PARAMS
             .iter()
             .find(|(_, keys)| keys.contains(&key))
             .map(|(s, _)| *s)

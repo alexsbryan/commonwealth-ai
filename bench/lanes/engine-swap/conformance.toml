@@ -127,7 +127,7 @@ covers = ["temperature", "top_k", "top_p", "sampling_mode"]
 callers = "every Templated request that leaves any sampler field None; InferenceConfig temperature 0.7 (types/mod.rs:84)"
 check = "effective sampler tuple and chain order equal (temp, top_k, top_p, min_p, presence, frequency, DRY, penalty window)"
 judge = [{ kind = "sampler", order = false }]
-when = [{ kind = "complete", shape = "templated" }]
+when = [{ kind = "complete", shape = "templated", forced_choice = "=false" }]
 predict = "fail:differs"
 basis = "read"
 note = "Embedded Hermes chain: DRY → penalties(128) → top_k → min_p → top_p → temp, values from ModelQuirks (sampler.rs:486-579). Server: penalties, DRY, top_n_sigma, top_k, typical, top_p, min_p, xtc, temp, values from GGUF/CLI (LS common.h:260-270)."
@@ -152,7 +152,7 @@ covers = ["temperature"]
 callers = "temperature 0.0: grounding judges, router, planner, memory, yes_no, frontdoor"
 check = "greedy token sequence equal over 64 tokens on the Templated shape"
 judge = [{ kind = "greedy-tokens" }]
-when = [{ kind = "complete", shape = "templated", temperature = "=0" }]
+when = [{ kind = "complete", shape = "templated", temperature = "=0", forced_choice = "=false" }]
 predict = "fail:differs"
 basis = "read"
 note = "At T=0 the embedded Hermes chain still runs DRY (0.8/1.75) and a 128-token penalty window before greedy (sampler.rs:557-573); llama-server is plain argmax. Diverges only where DRY or the penalty fires (repetitive output)."

@@ -59,6 +59,10 @@ impl Inventory {
         if let Some(row) = inventory.rows.iter().find(|r| r.judge.is_empty()) {
             return Err(format!("row {} names no check", row.id));
         }
+        let mut seen = std::collections::BTreeSet::new();
+        if let Some(row) = inventory.rows.iter().find(|r| !seen.insert(r.id.as_str())) {
+            return Err(format!("row id {} appears twice", row.id));
+        }
         Ok(inventory)
     }
 }

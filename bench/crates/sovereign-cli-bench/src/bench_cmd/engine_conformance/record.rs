@@ -66,8 +66,8 @@ pub struct Facets {
     pub logprobs: Option<Vec<Vec<(i64, f64)>>>,
     /// Forced-choice label probabilities.
     pub label_probs: Option<BTreeMap<String, f64>>,
-    /// One embedding vector.
-    pub embedding: Option<Vec<f32>>,
+    /// Embedding vectors, one per input text, in input order.
+    pub embeddings: Option<Vec<Vec<f32>>>,
     /// Rerank scores, in document order.
     pub rerank_scores: Option<Vec<f32>>,
     /// `count_tokens` of the case text.
@@ -88,6 +88,10 @@ pub struct Facets {
     /// The serving process's own state for the same keys.
     #[serde(default)]
     pub host_observed: BTreeMap<String, Value>,
+    /// Why the driver left a facet unobserved, by facet name, so a
+    /// could-not-judge cell carries the cause rather than only the absence.
+    #[serde(default)]
+    pub unobserved: BTreeMap<String, String>,
 }
 
 /// A resolved sampler: named parameters and the order the stages run in.

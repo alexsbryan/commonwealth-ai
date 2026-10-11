@@ -3,7 +3,6 @@
 //! a check nobody has watched fail.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use serde_json::json;
 
@@ -46,15 +45,16 @@ fn pair(check: &Check, a: Facets, b: Facets) -> CellVerdict {
 }
 
 #[test]
-fn the_committed_inventory_parses_with_unique_row_ids() {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lanes/engine-swap/conformance.toml");
-    let inventory = Inventory::load(&path).unwrap();
-    let mut ids: Vec<&str> = inventory.rows.iter().map(|r| r.id.as_str()).collect();
-    ids.sort_unstable();
-    let before = ids.len();
-    ids.dedup();
-    assert_eq!(ids.len(), before, "a row id appears twice");
+fn a_row_id_that_appears_twice_is_refused_at_load() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("inv.toml");
+    let row = "[[row]]\nid = \"x\"\njudge = [{ kind = \"text\" }]\npredict = \"pass\"\n";
+    std::fs::write(&path, row).unwrap();
+    assert_eq!(Inventory::load(&path).unwrap().rows.len(), 1);
+    std::fs::write(&path, format!("{row}{row}")).unwrap();
+    assert!(Inventory::load(&path)
+        .unwrap_err()
+        .contains("appears twice"));
 }
 
 #[test]
@@ -92,8 +92,21 @@ fn a_facet_missing_on_either_side_cannot_be_judged() {
         prompt_ids: Some(vec![1]),
         ..Default::default()
     };
-    let v = pair(&Check::PromptIds, f, Facets::default());
+    let v = pair(&Check::PromptIds, f.clone(), Facets::default());
     assert!(matches!(v, CellVerdict::CouldNotJudge(why) if why.contains("llama-server")));
+
+    let explained = Facets {
+        unobserved: BTreeMap::from([(
+            "prompt_ids".to_string(),
+            "/tokenize gave 811 ids, usage says 815".to_string(),
+        )]),
+        ..Default::default()
+    };
+    let v = pair(&Check::PromptIds, f, explained);
+    assert!(
+        matches!(&v, CellVerdict::CouldNotJudge(why) if why.ends_with("usage says 815")),
+        "the driver's reason reaches the cell: {v:?}"
+    );
 }
 
 #[test]
@@ -214,16 +227,33 @@ fn label_probs_embedding_rerank_and_counts() {
         "a label missing on one side is not a zero"
     );
 
-    let e = |v: Vec<f32>| Facets {
-        embedding: Some(v),
+    let e = |v: Vec<Vec<f32>>| Facets {
+        embeddings: Some(v),
         ..Default::default()
     };
     let ec = Check::Embedding { min_cos: 0.9995 };
     assert_eq!(
-        pair(&ec, e(vec![1.0, 0.0]), e(vec![2.0, 0.0])),
+        pair(&ec, e(vec![vec![1.0, 0.0]]), e(vec![vec![2.0, 0.0]])),
         CellVerdict::Passed
     );
-    assert!(is_differs(&pair(&ec, e(vec![1.0, 0.0]), e(vec![1.0, 0.1]))));
+    assert!(is_differs(&pair(
+        &ec,
+        e(vec![vec![1.0, 0.0]]),
+        e(vec![vec![1.0, 0.1]])
+    )));
+    assert!(
+        is_differs(&pair(
+            &ec,
+            e(vec![vec![1.0, 0.0], vec![0.0, 1.0]]),
+            e(vec![vec![1.0, 0.0], vec![1.0, 0.0]])
+        )),
+        "a batch is judged on its worst vector, not its first"
+    );
+    assert!(is_differs(&pair(
+        &ec,
+        e(vec![vec![1.0, 0.0], vec![0.0, 1.0]]),
+        e(vec![vec![1.0, 0.0]])
+    )));
 
     let r = |v: Vec<f32>| Facets {
         rerank_scores: Some(v),

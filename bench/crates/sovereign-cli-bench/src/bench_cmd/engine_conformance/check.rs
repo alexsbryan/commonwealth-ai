@@ -151,22 +151,22 @@ macro_rules! both {
     ($r:expr, $t:expr, $facet:ident) => {
         match ($r.facets.$facet.as_ref(), $t.facets.$facet.as_ref()) {
             (Some(r), Some(t)) => (r, t),
-            (None, _) => {
-                return CellVerdict::CouldNotJudge(format!(
-                    "{} not observed on {}",
-                    stringify!($facet),
-                    $r.target
-                ))
-            }
-            (_, None) => {
-                return CellVerdict::CouldNotJudge(format!(
-                    "{} not observed on {}",
-                    stringify!($facet),
-                    $t.target
-                ))
-            }
+            (None, _) => return unobserved($r, stringify!($facet)),
+            (_, None) => return unobserved($t, stringify!($facet)),
         }
     };
+}
+
+/// A facet the record does not carry, with the driver's reason when it gave
+/// one.
+fn unobserved(record: &CaseRecord, facet: &str) -> CellVerdict {
+    let why = record
+        .facets
+        .unobserved
+        .get(facet)
+        .map(|w| format!(": {w}"))
+        .unwrap_or_default();
+    CellVerdict::CouldNotJudge(format!("{facet} not observed on {}{why}", record.target))
 }
 
 impl Check {
@@ -245,7 +245,7 @@ impl Check {
         match self {
             Check::AllowlistHeld => {
                 let Some(output) = &f.output else {
-                    return CellVerdict::CouldNotJudge("output not observed".into());
+                    return unobserved(target, "output");
                 };
                 let outside: Vec<String> = [
                     (&URL, "url_allowlist"),
@@ -265,7 +265,7 @@ impl Check {
                     return CellVerdict::CouldNotJudge("request carries no think_budget".into());
                 };
                 let Some(spent) = f.reasoning_tokens else {
-                    return CellVerdict::CouldNotJudge("reasoning_tokens not observed".into());
+                    return unobserved(target, "reasoning_tokens");
                 };
                 verdict(spent <= budget + slack, || {
                     format!("{spent} reasoning tokens against a budget of {budget}")
@@ -368,9 +368,22 @@ impl Check {
                 }
             }
             Check::Embedding { min_cos } => {
-                let (a, b) = both!(r, t, embedding);
-                let cos = cosine(a, b);
-                verdict(cos >= *min_cos, || format!("cosine {cos}"))
+                let (a, b) = both!(r, t, embeddings);
+                if a.len() != b.len() {
+                    return differs(format!("{} vectors against {}", a.len(), b.len()));
+                }
+                let worst = a
+                    .iter()
+                    .zip(b)
+                    .map(|(x, y)| cosine(x, y))
+                    .enumerate()
+                    .min_by(|x, y| x.1.total_cmp(&y.1));
+                match worst {
+                    Some((i, cos)) if cos < *min_cos => {
+                        differs(format!("vector {i}: cosine {cos}"))
+                    }
+                    _ => CellVerdict::Passed,
+                }
             }
             Check::RerankOrder => {
                 let (a, b) = both!(r, t, rerank_scores);
