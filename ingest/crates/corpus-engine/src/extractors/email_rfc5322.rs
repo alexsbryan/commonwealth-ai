@@ -234,9 +234,13 @@ impl EmailIterator {
 
         let (body, body_was_truncated) = collect_body(&parsed, self.config.max_body_bytes)?;
         let attachments = self.handle_attachments(&parsed, &message_id, path)?;
+        let base_subject = subject
+            .as_deref()
+            .and_then(super::email_base_subject::base_subject);
         tracing::debug!(
             path = %path.display(),
             message_id = %message_id,
+            base_subject = ?base_subject,
             body_bytes = body.len(),
             body_truncated = body_was_truncated,
             attachments = attachments.len(),
@@ -253,6 +257,7 @@ impl EmailIterator {
             "bcc": bcc,
             "date": date,
             "subject": subject,
+            "base_subject": base_subject,
             "in_reply_to": in_reply_to,
             "references": references,
             "body_was_truncated": body_was_truncated,
