@@ -145,6 +145,21 @@ class IdentityLegs(Tmp):
         with self.assertRaises(B.CannotJudge):
             B.identity_leg("ward", self.runs, self.home, judged()[0])
 
+    def test_a_run_of_side_jobs_reads_its_legs_one_level_down(self):
+        # runs/converge-s2's layout: job-ours.sh and job-blind.sh, legs under ours/ and blind/, no job.sh
+        leg(self.runs, "old", "ward-tune", "crm-ward", self.blind("blind-author-20261010-r3", "ward"), age=1000)
+        for side, recipe in (("ours", self.frozen), ("blind", self.blind("blind-author-20261010-r3", "ward"))):
+            leg(self.runs / "s2", side, "ward-tune", "crm-ward", recipe, sections=81, age=10)
+            (self.runs / "s2" / side / "job.sh").unlink()
+            (self.runs / "s2" / f"job-{side}.sh").write_text("#!/bin/sh\n")
+        (run, legs), _ = B.job_runs(self.runs)
+        self.assertEqual((run.name, sorted(str(l["path"].relative_to(run)) for l in legs)),
+                         ("s2", ["blind/ward-tune", "ours/ward-tune"]))
+        judge, seen = judged(0.81)
+        row, _ = run_quiet(B.identity_leg, "ward", self.runs, self.home, judge)
+        self.assertEqual((row["value"], seen), (0.81, ["ward-tune"]))
+        self.assertTrue(row["artifact"].endswith("s2/blind/ward-tune"))
+
 
 class IdentityGvc(Tmp):
     def resolve_run(self, name, recipe, conll=0.61, er=True):
@@ -380,14 +395,14 @@ class AuthorGap(Tmp):
 
 
 class RealAuthorGap(unittest.TestCase):
-    """The committed data: round 3 (the newest round) read against ours over the committed reference."""
+    """The committed data: round 3 (the newest round) read against ours over the committed reference. The newest
+    reading is CONVERGE Session 2's (blind-author/converge-s2), which ran no RESOLVE-alone leg; r3's was .595."""
 
-    def test_the_committed_reading_is_r3_at_595(self):
-        if not (B.RUNS / "blind-r3").is_dir() or not (B.HOME / "blind-author-20261010-r3").is_dir():
-            self.skipTest("runs/blind-r3 or its round is not on this host")
-        row, _ = run_quiet(B.author_gap)
-        self.assertEqual(row["value"], 0.595)
-        self.assertTrue(row["artifact"].endswith("blind-author/r3/agreement.json"))
+    def test_the_committed_reading_is_converge_s2_and_cannot_judge_resolve_alone(self):
+        if not (B.RUNS / "converge-s2").is_dir() or not (B.HOME / "blind-author-20261010-r3").is_dir():
+            self.skipTest("runs/converge-s2 or its round is not on this host")
+        with self.assertRaisesRegex(B.CannotJudge, r"gvc-resolve-alone: .*blind-author/converge-s2/agreement\.json"):
+            run_quiet(B.author_gap)
 
 
 class Exits(unittest.TestCase):

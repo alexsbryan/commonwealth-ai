@@ -9,9 +9,9 @@ scripts/co-lineage.py's _parse_value reads it; or exits 3 (the artifact it reads
 
 Selection rules, one per artifact kind; a reader never takes "something close":
 
-  job run     a directory runs/<name>/ holding job.sh and at least one leg. Newest = the latest mtime of
-              any of its legs' DONE files.
-  leg         a subdirectory of a job run holding DONE (key=value lines) and a job.log whose
+  job run     a directory runs/<name>/ holding job.sh, or side jobs job-<side>.sh, and at least one leg. Newest =
+              the latest mtime of any of its legs' DONE files.
+  leg         a subdirectory of a job run, or of a side job's runs/<name>/<side>/, holding DONE (key=value lines) and a job.log whose
               "job start: name=... corpus=... recipe=<path>" line names its corpus and recipe. A leg whose
               name contains "smoke" is never chosen. Of a corpus's remaining legs the one with the most
               sections (DONE sections=) is chosen; a tie goes to the newer DONE.
@@ -161,10 +161,14 @@ def leg_of(d):
 
 
 def job_runs(runs=RUNS):
-    """[(run dir, [legs])] for every job run, newest first."""
+    """[(run dir, [legs])] for every job run, newest first. A run of side jobs (job-<side>.sh, as runs/converge-s2's
+    job-ours.sh and job-blind.sh) keeps each side's legs under <side>/."""
     out = []
-    for r in sorted(p for p in runs.glob("*") if (p / "job.sh").is_file()):
-        legs = [l for d in sorted(r.iterdir()) if d.is_dir() for l in [leg_of(d)] if l]
+    for r in sorted(p for p in runs.glob("*") if (p / "job.sh").is_file() or any(p.glob("job-*.sh"))):
+        dirs = [d for d in sorted(r.iterdir()) if d.is_dir()]
+        dirs += [d for s in sorted(j.stem[len("job-"):] for j in r.glob("job-*.sh")) if (r / s).is_dir()
+                 for d in sorted((r / s).iterdir()) if d.is_dir()]
+        legs = [l for d in dirs for l in [leg_of(d)] if l]
         if legs:
             out.append((r, legs))
     return sorted(out, key=lambda rl: max(l["mtime"] for l in rl[1]), reverse=True)
