@@ -173,6 +173,83 @@ async fn every_pass_is_asked_and_still_asked_under_rename() {
     }
 }
 
+/// Review 2026-10-10 (note 2347f4c6): a subject field the reader reads (mail's
+/// `order.piece`, pointed at in every statement) stays on the statement that
+/// read it, as the claim's own fields do, through RESOLVE into the atlas: cited
+/// in that statement's own document, with its source and precision. RESOLVE
+/// writes no value of it on the record. Statements of one order that read it
+/// differently each keep their own reading; a record holds a value of a read
+/// field only by a declared fold.
+#[tokio::test]
+async fn a_read_subject_field_stays_on_its_statement_cited() {
+    let f = Fixture::load("mail");
+    let run = run(&f).await;
+    let atoms = run.atoms();
+    let folded = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let body_of: BTreeMap<&str, String> = f
+        .documents
+        .iter()
+        .map(|d| {
+            (
+                d["id"].as_str().unwrap(),
+                folded(d["body"].as_str().unwrap()),
+            )
+        })
+        .collect();
+    let mut statements_of: BTreeMap<&str, usize> = BTreeMap::new();
+    for c in atoms
+        .iter()
+        .filter(|a| a["atom_type"] == "Claim" && a["data"]["claim_kind"] == "order_update")
+    {
+        let reading = &c["data"]["attributes"]["__document_read_subject_fields"]["piece"];
+        assert!(
+            reading.is_object(),
+            "a statement lost its reading of its order's piece: {c}"
+        );
+        if reading["status"] != "supported" {
+            assert!(
+                reading["reason"].is_string(),
+                "an unknown without why: {reading}"
+            );
+            continue;
+        }
+        assert!(
+            super::contracts::says_its_precision(&reading["by"]),
+            "{reading}"
+        );
+        let document = c["data"]["evidence"][0]["source_doc_id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("a statement with no document: {c}"));
+        let evidence = folded(
+            reading["evidence"]
+                .as_str()
+                .unwrap_or_else(|| panic!("an uncited reading: {reading}")),
+        );
+        assert!(
+            !evidence.is_empty() && body_of[document].contains(&evidence),
+            "a reading not cited in its own document {document}: {reading}"
+        );
+        let order = c["data"]["subject"]
+            .as_str()
+            .unwrap_or_else(|| panic!("a statement placed on no order: {c}"));
+        *statements_of.entry(order).or_default() += 1;
+    }
+    assert!(
+        statements_of.values().any(|n| *n >= 2),
+        "mail: no order has two statements' readings: {statements_of:?}"
+    );
+    for order in statements_of.keys() {
+        let record = atoms
+            .iter()
+            .find(|a| a["atom_type"] == "Entity" && a["data"]["id"] == *order)
+            .unwrap_or_else(|| panic!("no record {order}"));
+        assert!(
+            record["data"]["attributes"].get("piece").is_none(),
+            "RESOLVE wrote a value on record {order}: {record}"
+        );
+    }
+}
+
 /// A read reference's value carries its source and precision (C3) and is one
 /// of its own document's candidates: a record its header fields name, or
 /// words of its own text; never a record of another document.

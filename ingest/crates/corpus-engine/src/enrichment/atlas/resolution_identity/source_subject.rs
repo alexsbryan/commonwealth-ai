@@ -9,6 +9,9 @@ use super::super::resolution_sources::SOURCE_EXTRACTOR_ID;
 use super::{BoundClaimSubject, TypedSubjectPools};
 use crate::enrichment::ontology::SourceDecl;
 use crate::enrichment::pipeline::atlas::ClaimSketch;
+use crate::enrichment::pipeline::document_read::{
+    field_readings, supported_values, SUBJECT_FIELDS_ATTRIBUTE,
+};
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 use crate::enrichment::reconciliation::identity_signals::identity_value_of;
 
@@ -42,15 +45,22 @@ pub fn bind_claim_subject<'a>(
         let source_document_for_binding = source_document.filter(|document| !document.is_empty());
         let subject_fields = sketch
             .attributes
-            .get(crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE)
-            .and_then(Value::as_object);
+            .get(SUBJECT_FIELDS_ATTRIBUTE)
+            .map(|readings| field_readings(readings).map(|readings| supported_values(&readings)));
         match (
             declared_subject,
             source_document_for_binding,
             subject_fields,
         ) {
-            (Some(type_name), Some(_), Some(fields)) => {
-                match resolve_metadata_source_subject(type_name, fields, policy, entities) {
+            (Some(type_name), Some(_), Some(Err(why))) => {
+                debug!(subject_type = type_name, claim = %sketch.content, %why, "atlas/resolution 3b: subject readings unreadable; claim stays unbound");
+                source_identity_failure = Some(format!(
+                    "document-read claim for metadata-backed `{type_name}`: its subject's {why}"
+                ));
+                None
+            }
+            (Some(type_name), Some(_), Some(Ok(fields))) => {
+                match resolve_metadata_source_subject(type_name, &fields, policy, entities) {
                     Ok(id) => Some(id),
                     Err(reason) => {
                         debug!(
@@ -117,11 +127,12 @@ pub fn bind_claim_subject<'a>(
             raw_response_head: None,
         });
     }
+    // The subject's readings stay: they cite the identity this claim was
+    // bound by.
     let mut attributes = sketch.attributes.clone();
     if document_read && metadata_subject {
         attributes.remove(crate::enrichment::pipeline::document_read::LOCAL_REF_ATTRIBUTE);
         attributes.remove(crate::enrichment::pipeline::document_read::SOURCE_DOCUMENT_ATTRIBUTE);
-        attributes.remove(crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE);
     }
     BoundClaimSubject {
         subject,

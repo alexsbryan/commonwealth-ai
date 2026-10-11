@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 mod ask;
 mod cache;
@@ -42,9 +42,31 @@ use schema::eligible_claim;
 /// Internal attributes carried only between Phase 1 projection and RESOLVE.
 pub const LOCAL_REF_ATTRIBUTE: &str = "__document_read_local_ref";
 pub const SOURCE_DOCUMENT_ATTRIBUTE: &str = "__document_read_source_document";
+/// A claim's readings of its subject's fields, each a [`DocumentReadField`]
+/// as its own are under [`CLAIM_FIELDS_ATTRIBUTE`]. RESOLVE keys the subject
+/// on their supported values (`atlas/resolution_records.rs`), 3b binds a
+/// sourced subject by them (`resolution_identity/source_subject.rs`), and
+/// they stay on the claim, cited. No stage writes them onto the record.
 pub const SUBJECT_FIELDS_ATTRIBUTE: &str = "__document_read_subject_fields";
 /// Source-supported claim fields retained beside the flattened compatibility values.
 pub const CLAIM_FIELDS_ATTRIBUTE: &str = "__document_read_fields";
+
+/// The value of each supported reading among `fields`, by field.
+pub fn supported_values(fields: &BTreeMap<String, DocumentReadField>) -> Map<String, Value> {
+    fields
+        .iter()
+        .filter_map(|(name, field)| match field {
+            DocumentReadField::Supported { value, .. } => Some((name.clone(), value.clone())),
+            DocumentReadField::Unknown { .. } => None,
+        })
+        .collect()
+}
+
+/// A claim's field readings as the projection wrote them, under
+/// [`CLAIM_FIELDS_ATTRIBUTE`] or [`SUBJECT_FIELDS_ATTRIBUTE`].
+pub fn field_readings(value: &Value) -> Result<BTreeMap<String, DocumentReadField>, String> {
+    serde_json::from_value(value.clone()).map_err(|e| format!("field readings do not parse: {e}"))
+}
 
 /// Durable source result for one Phase-1 chapter batch.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

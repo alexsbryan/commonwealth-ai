@@ -229,7 +229,7 @@ fn atoms_for(inputs: &[Input]) -> (Vec<EnrichmentChunkRow>, SectionDocuments, Ve
             attributes.insert(SOURCE_DOCUMENT_ATTRIBUTE.into(), json!(input.document));
             attributes.insert(
                 SUBJECT_FIELDS_ATTRIBUTE.into(),
-                json!({ "case_number": input.case_number }),
+                json!({ "case_number": supported(input.case_number, &evidence) }),
             );
             if input.field_provenance {
                 attributes.insert(CLAIM_FIELDS_ATTRIBUTE.into(), Value::Object(source_fields));

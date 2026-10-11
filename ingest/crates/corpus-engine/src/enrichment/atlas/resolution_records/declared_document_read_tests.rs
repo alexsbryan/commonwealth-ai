@@ -7,6 +7,11 @@ use crate::enrichment::pipeline::document_read::{
 };
 use serde_json::json;
 
+/// A subject field the reader read, as the projection carries it.
+fn read(value: &str) -> Value {
+    json!({"status": "supported", "value": value, "evidence": value})
+}
+
 #[tokio::test]
 async fn state_free_membership_resolves_and_survives_the_production_atlas_writer() {
     let body = "Issue 842 is closed; its spin-off issue 159 is also closed.";
@@ -101,7 +106,7 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
         );
         attributes.insert(
             SUBJECT_FIELDS_ATTRIBUTE.into(),
-            json!({"number": number, "project": project}),
+            json!({"number": read(number), "project": read(project)}),
         );
         serde_json::from_value(json!({
             "id": id,
@@ -199,7 +204,11 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
     assert_eq!(memberships[0].subject, memberships[2].subject);
     assert!(memberships[1].subject.is_none());
     for claim in &memberships {
-        assert!(claim.attributes.is_empty(), "membership is state-free");
+        assert_eq!(
+            claim.attributes.keys().collect::<Vec<_>>(),
+            [SUBJECT_FIELDS_ATTRIBUTE],
+            "membership is state-free; it keeps only its subject's readings"
+        );
         assert_eq!(
             claim.evidence[0].source_doc_id.as_deref(),
             Some(if claim.id.as_str() == "claim-2" {
@@ -242,9 +251,16 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
         })
         .collect();
     assert_eq!(written_claims.len(), 3);
-    assert!(written_claims
-        .iter()
-        .all(|claim| claim.attributes.is_empty()));
+    // The writer keeps each one's subject readings, cited.
+    for claim in &written_claims {
+        assert_eq!(
+            claim.attributes.keys().collect::<Vec<_>>(),
+            [SUBJECT_FIELDS_ATTRIBUTE]
+        );
+        let number = &claim.attributes[SUBJECT_FIELDS_ATTRIBUTE]["number"];
+        assert_eq!(number["status"], "supported");
+        assert_eq!(number["evidence"], number["value"]);
+    }
     assert_eq!(
         written_claims
             .iter()
@@ -557,7 +573,10 @@ fn local_subject_claim(id: &str, kind: &str, document: &str, anchor: &str, numbe
         SOURCE_DOCUMENT_ATTRIBUTE.into(),
         Value::String(document.into()),
     );
-    attributes.insert(SUBJECT_FIELDS_ATTRIBUTE.into(), json!({ "number": number }));
+    attributes.insert(
+        SUBJECT_FIELDS_ATTRIBUTE.into(),
+        json!({ "number": read(number) }),
+    );
     serde_json::from_value(json!({
         "id": id,
         "content": "The source reports this about the case.",

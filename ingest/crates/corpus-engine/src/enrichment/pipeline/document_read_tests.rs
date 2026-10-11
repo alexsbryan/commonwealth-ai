@@ -612,14 +612,12 @@ fn document_read_projects_local_subjects_and_keeps_unknown_fields_out_of_attribu
         ["case-main", "case-spin-off"],
         "the qualified cache carrier retains both local references"
     );
-    assert_eq!(extraction.entities_introduced.len(), 2);
+    // No `case` is sketched (RESOLVE decides it); its readings ride the claim.
+    assert!(extraction.entities_introduced.is_empty());
     assert!(extraction.questions_raised.is_empty());
-    assert!(
-        extraction.claims[0].attributes[SUBJECT_FIELDS_ATTRIBUTE]
-            .get("project")
-            .is_none(),
-        "explicit unknown remains in the read carrier, not a compatibility attribute"
-    );
+    let subject = &extraction.claims[0].attributes[SUBJECT_FIELDS_ATTRIBUTE];
+    assert_eq!(subject["number"]["evidence"], "842");
+    assert!(subject["project"]["reason"].is_string());
     assert!(
         !extraction.claims[0].attributes.contains_key("project"),
         "unknown is not projected as an ordinary claim value"

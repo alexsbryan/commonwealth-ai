@@ -1351,7 +1351,10 @@ Under that plan an attribute gets a value only these ways: its type's `source`
 reads it, a declared path or fold derives it (`derived = "<id>"`), the reader
 asks it of each statement of a claim kind that declares it, or of the kind's
 subject (a metadata-sourced subject is asked its identity keys only), or, for a
-claim's `subject`, RESOLVE decides it. The reader asks by the attribute's
+claim's `subject`, RESOLVE decides it. A subject's field read this way stays on
+each statement that read it, cited, as the claim's own fields do: RESOLVE keys
+on it and writes none of those values onto the record, so statements that read
+it differently each keep their own. The reader asks by the attribute's
 type: Choose a closed `values` set; Point at the words of open text, a
 `quantity` (the one number they write in digits) or a `time` (ISO 8601 when it
 reads as a date, the words as written otherwise); Pick a `ref` among the
@@ -1361,7 +1364,8 @@ record in a set a declared path drops by (`[!ours]`, so your own side is never
 offered). A type a table `source` holds is not looked for in the text.
 `recipe validate` prints each type's fillers as a `fill:` note (`price ← Point
 on offer`, `counterparty ← Pick on offer (candidates: `company`'s source
-records, Mention)`) and warns on every attribute nothing fills, and on every protocol field (`identity`, `effective_time`, a `when` or
+records, Mention)`, a subject's `lot ← Point on each offer statement, not the
+record`) and warns on every attribute nothing fills, and on every protocol field (`identity`, `effective_time`, a `when` or
 `corrects` field), identity key or derived step keyed on one: such a fold
 never folds and such a key never links. A declaration the general extractor
 reads is not analysed, and the note says so.

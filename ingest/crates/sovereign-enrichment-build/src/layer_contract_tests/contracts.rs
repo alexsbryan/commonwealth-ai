@@ -228,7 +228,7 @@ async fn c2_a_read_turn_holds_one_document_and_a_resolve_turn_adds_only_marked_q
 
 /// A precision as C3 requires it: declared or estimated with a number in
 /// 0..=1, or said to be unmeasured.
-fn says_its_precision(by: &Value) -> bool {
+pub(super) fn says_its_precision(by: &Value) -> bool {
     by["source"].as_str().is_some_and(|s| !s.is_empty())
         && match &by["precision"] {
             Value::String(s) => s == "unmeasured",
@@ -269,12 +269,15 @@ async fn c3_every_link_and_value_carries_its_source_and_precision() {
             values += 1;
             assert!(says_its_precision(&v["by"]), "{shape}: {v}");
         }
+        // A claim's readings of its own fields and of its subject's.
         for a in run.atoms() {
-            let fields = &a["data"]["attributes"]["__document_read_fields"];
-            for (_, field) in fields.as_object().into_iter().flatten() {
-                if field["status"] == "supported" {
-                    values += 1;
-                    assert!(says_its_precision(&field["by"]), "{shape}: {field}");
+            for carrier in ["__document_read_fields", "__document_read_subject_fields"] {
+                let fields = &a["data"]["attributes"][carrier];
+                for (_, field) in fields.as_object().into_iter().flatten() {
+                    if field["status"] == "supported" {
+                        values += 1;
+                        assert!(says_its_precision(&field["by"]), "{shape}: {field}");
+                    }
                 }
             }
         }

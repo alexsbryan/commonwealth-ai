@@ -277,12 +277,19 @@ async fn metadata_subject_identity_binds_after_source_projection_and_writer() {
     assert_eq!(written_commitments.len(), 2);
     assert_eq!(written_commitments[0].subject.as_ref(), Some(&alice_id));
     assert!(written_commitments[1].subject.is_none());
-    assert!(written_commitments.iter().all(|claim| {
-        !claim.attributes.contains_key("due")
-            && !claim
-                .attributes
-                .contains_key(crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE)
-    }));
+    assert!(written_commitments
+        .iter()
+        .all(|claim| !claim.attributes.contains_key("due")));
+    // Each keeps the reading of its subject's identity it was bound by, or
+    // the unknown that left it unbound, with its reason.
+    let identity = |claim: &crate::enrichment::atlas::atoms::Claim| {
+        claim.attributes[crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE]
+            ["email"]
+            .clone()
+    };
+    assert_eq!(identity(written_commitments[0])["value"], ALICE_EMAIL);
+    assert_eq!(identity(written_commitments[0])["evidence"], ALICE_EMAIL);
+    assert_eq!(identity(written_commitments[1])["status"], "unknown");
     assert_eq!(
         written_commitments[0].evidence[0].source_doc_id.as_deref(),
         Some("doc-1")

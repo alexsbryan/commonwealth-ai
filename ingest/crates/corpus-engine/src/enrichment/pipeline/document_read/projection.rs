@@ -1,12 +1,11 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use serde::Deserialize;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::{
-    ClaimScope, ClaimSketch, EnrichmentDepth, EntitySketch, EntityType, EpistemicStatus,
-    SectionExtraction,
+    ClaimScope, ClaimSketch, EnrichmentDepth, EpistemicStatus, SectionExtraction,
 };
 use crate::enrichment::pipeline::pipelines::literary::prepare_phase_json;
 use crate::enrichment::pipeline::types::Phase1ChapterResult;
@@ -15,8 +14,8 @@ use crate::error::{Error, Result};
 use super::schema;
 use super::validation;
 use super::{
-    DocumentRead, DocumentReadOutcome, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
-    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    supported_values, DocumentRead, DocumentReadOutcome, CLAIM_FIELDS_ATTRIBUTE,
+    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
@@ -64,7 +63,6 @@ pub(super) fn project_compatibility_sketches(
         .iter()
         .filter(|ty| schema::eligible_claim(ty, policies));
     let claim_decls: HashMap<&str, _> = claims.map(|ty| (ty.name.as_str(), ty)).collect();
-    let mut subjects: BTreeMap<(String, String, String), EntitySketch> = BTreeMap::new();
     let mut sketches = Vec::new();
     let read = extraction.document_read.as_ref().ok_or_else(|| {
         Error::Serialization("document-read projection has no source carrier".into())
@@ -94,7 +92,7 @@ pub(super) fn project_compatibility_sketches(
                 index.extracted_attributes(&decl.name),
                 &format!("claim `{}` fields", decl.name),
             )?;
-            let subject_decl = policies.type_decl(subject_type).ok_or_else(|| {
+            policies.type_decl(subject_type).ok_or_else(|| {
                 Error::Serialization(format!("claim subject type `{subject_type}` is undeclared"))
             })?;
             let subject_attributes =
@@ -121,31 +119,17 @@ pub(super) fn project_compatibility_sketches(
                 SOURCE_DOCUMENT_ATTRIBUTE.into(),
                 Value::String(outcome.document_id.clone()),
             );
+            // No sketch of the subject: a source-free subject is a type
+            // RESOLVE decides (`is_document_reading_eligible`), and its
+            // records come from RESOLVE alone; a sourced one from its source.
             attributes.insert(
                 SUBJECT_FIELDS_ATTRIBUTE.into(),
-                Value::Object(supported_values(&claim.subject_fields)),
+                serde_json::to_value(&claim.subject_fields).map_err(|error| {
+                    Error::Serialization(format!(
+                        "document-read subject field evidence cannot be serialized: {error}"
+                    ))
+                })?,
             );
-            if subject_decl.source.is_none() {
-                let key = (
-                    outcome.document_id.clone(),
-                    subject_type.to_string(),
-                    claim.subject_local_ref.clone(),
-                );
-                let entity = EntitySketch {
-                    canonical_name: claim.subject_name.clone(),
-                    aliases: Vec::new(),
-                    entity_type: EntityType::Other(subject_type.to_string()),
-                    description: String::new(),
-                    defining_quote: None,
-                    anchor: claim.evidence.clone(),
-                    attributes: supported_values(&claim.subject_fields),
-                };
-                // A disagreeing repeat of a local reference is refused by
-                // validation, not here: the FIRST occurrence stands, and one
-                // inconsistent claim must not kill its whole chapter. The
-                // runner validates before this extraction is ever persisted.
-                subjects.entry(key).or_insert(entity);
-            }
             let force = decl.force.ok_or_else(|| {
                 Error::Serialization(format!(
                     "claim type `{}` has no declared force for document reading",
@@ -172,23 +156,8 @@ pub(super) fn project_compatibility_sketches(
             });
         }
     }
-    extraction
-        .entities_introduced
-        .extend(subjects.into_values());
     extraction.claims.extend(sketches);
     Ok(())
-}
-
-fn supported_values(fields: &BTreeMap<String, super::DocumentReadField>) -> Map<String, Value> {
-    fields
-        .iter()
-        .filter_map(|(name, field)| match field {
-            super::DocumentReadField::Supported { value, .. } => {
-                Some((name.clone(), value.clone()))
-            }
-            super::DocumentReadField::Unknown { .. } => None,
-        })
-        .collect()
 }
 
 #[cfg(test)]

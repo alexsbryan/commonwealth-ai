@@ -139,7 +139,7 @@ fn every_field_a_pass_asks_is_named_with_its_pass_and_the_rest_is_warned() {
         assert!(mv.contains(filled), "{filled} in {mv}");
     }
     assert!(
-        note("item").contains("code ← Point on move"),
+        note("item").contains("code ← Point on each move statement, not the record"),
         "{}",
         note("item")
     );

@@ -9,7 +9,10 @@ use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 /// its citation handles are gone, so reads cached under v3 are not reused.
 /// v5: prefill, line classes, Point, Mention and Pick; a v4 read left open
 /// fields and references unknown, so it is not reused.
-const CONTRACT_VERSION: u32 = 5;
+/// v6: a claim carries its subject's readings whole and the projection
+/// sketches no subject; a v5 section holds bare values and subject sketches,
+/// so it is not reused.
+const CONTRACT_VERSION: u32 = 6;
 
 /// The Phase-1 prompt of a declared reading: the plan this chapter will be read
 /// by, never dispatched. The passes reader asks its own small questions

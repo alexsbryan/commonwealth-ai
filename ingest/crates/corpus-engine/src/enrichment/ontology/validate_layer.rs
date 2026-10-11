@@ -215,7 +215,13 @@ pub(super) fn fill_warnings(
                 Fill::Read(pass, via) => format!(
                     "{} ← {pass} on {}{}",
                     a.name,
-                    via.join(", "),
+                    // A subject's field is read on each statement about it
+                    // and stays there (`SUBJECT_FIELDS_ATTRIBUTE`).
+                    if t.kind == TypeKind::Claim {
+                        via.join(", ")
+                    } else {
+                        format!("each {} statement, not the record", via.join(", "))
+                    },
                     if *pass == "Pick" {
                         candidates_of(policies, a)
                     } else {

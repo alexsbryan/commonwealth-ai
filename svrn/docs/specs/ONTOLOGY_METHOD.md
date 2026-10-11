@@ -137,7 +137,8 @@ by its argmax and carries its source and that source's precision (C3, `atlas/pre
 until the corpus supports an estimate, because a text-reading source's precision is not identifiable without
 labels (E2b, ecb58efcc), so every value a choice decided says it rests on an unmeasured read (amended by the
 operator 2026-10-10; it said a choice decides only once measured, which would leave most values unknown). An answer code cannot verify refuses that
-question alone. Answers assemble into the stored claims RESOLVE already reads; the `Asker` that answers takes
+question alone. Answers assemble into the stored claims RESOLVE already reads, a reading of the subject's field
+beside the claim's own, cited, and never onto the record (`SUBJECT_FIELDS_ATTRIBUTE`); the `Asker` that answers takes
 the daemon, a replay, or gold, so every question is an oracle at its own boundary (built 2026-10-09,
 `enrichment/asker.rs`, `--asker` on extract and atlas-resolve: every answer recorded by its question's content,
 and a replay with no daemon reproduces the run's records, C5). One reader, chosen

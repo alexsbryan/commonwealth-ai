@@ -41,7 +41,8 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    field_readings, supported_values, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 
@@ -227,10 +228,10 @@ pub async fn resolve_declared_types(
         info!(r#type = %t.name, records = report.records, statements = report.statements, unplaced = report.unplaced, retired = report.retired, calls = report.calls, "atlas/resolve: type decided");
         reports.push(report);
     }
+    // The subject's readings stay on each claim, cited.
     for claim in atoms.claims.iter_mut() {
         claim.attributes.remove(LOCAL_REF_ATTRIBUTE);
         claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE);
-        claim.attributes.remove(SUBJECT_FIELDS_ATTRIBUTE);
     }
     (reports, failures)
 }
@@ -260,8 +261,8 @@ async fn resolve_type(
         .map(|c| c.name.as_str())
         .collect();
     let of_kinds = |c: &Claim| c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k));
-    // Reader-local references and supplied values are transient handoff data;
-    // the qualified read itself remains in the Phase-1 cache.
+    // Reader-local references are transient handoff data. The subject's
+    // readings stay on the claim: RESOLVE keys on their supported values.
     let mut read_document_of = HashMap::<usize, String>::new();
     let mut read_local_ref_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
@@ -279,14 +280,26 @@ async fn resolve_type(
         if let Some(Value::String(local_ref)) = claim.attributes.remove(LOCAL_REF_ATTRIBUTE) {
             read_local_ref_of.insert(i, local_ref);
         }
-        if let Some(Value::Object(fields)) = claim.attributes.remove(SUBJECT_FIELDS_ATTRIBUTE) {
-            read_subject_fields_of.insert(i, fields);
+        if let Some(readings) = claim.attributes.get(SUBJECT_FIELDS_ATTRIBUTE) {
+            match field_readings(readings) {
+                Ok(readings) => {
+                    read_subject_fields_of.insert(i, supported_values(&readings));
+                }
+                Err(why) => {
+                    debug!(claim = %claim.id.as_str(), %why, "atlas/resolve: subject readings unreadable; no key of them");
+                    failures.push(failure(
+                        format!("atom:{}", claim.id.as_str()),
+                        PhaseFailureKind::Other,
+                        format!("its subject's {why}; no key of it reaches RESOLVE"),
+                    ));
+                }
+            }
         }
     }
 
     // One decider: the Phase-1 atoms of the type go first, whatever follows,
-    // in either kind a sketch may have named it (the reader's compatibility
-    // projection names an event type's subjects as entities).
+    // in either kind a sketch may have named it. The passes reader sketches
+    // no subject, so these come from the general extractor's sketches.
     let retired: BTreeSet<AtomId> = atoms
         .entities
         .iter()

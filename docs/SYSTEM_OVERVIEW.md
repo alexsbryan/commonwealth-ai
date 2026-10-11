@@ -627,7 +627,10 @@ question the pipeline asks about a type is a method on the resolved
   outcomes, evidence and `subject_local_ref`s travel through `SectionExtraction`
   cache/checkpoints, keyed by the read contract and source context; generic
   questions are skipped on this path, and accountable source identity and
-  subject fields flow to RESOLVE. One reader asks: the passes reader
+  subject fields flow to RESOLVE. A claim carries its subject's readings whole
+  (`SUBJECT_FIELDS_ATTRIBUTE`, each a `DocumentReadField` like its own fields),
+  RESOLVE keys on their supported values and keeps them on the claim, and the
+  projection sketches no subject (RESOLVE alone makes those records). One reader asks: the passes reader
   (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). Every question about a
   document opens with its declared facts (`prefill.rs`: the metadata fields the
   declaration names and the declared sets they put the document or a sourced
@@ -652,7 +655,7 @@ question the pipeline asks about a type is a method on the resolved
   answers assemble into the `DocumentRead` envelope that validation checks
   against the document (exact source verification is mandatory) and the section
   cache keeps; its rendered questions are part of the contract fingerprint
-  (`schema::contract_value`, version 5). The one-shot reader is deleted.
+  (`schema::contract_value`, version 6). The one-shot reader is deleted.
   The Asker (`enrichment/asker.rs`, ONTOLOGY_METHOD §Reading, campaign C5)
   stands in front of the chat and embed ports of `enrich extract`,
   `atlas-resolve` (and `enrich build`, `delta`, `resolve-statements`), built in
