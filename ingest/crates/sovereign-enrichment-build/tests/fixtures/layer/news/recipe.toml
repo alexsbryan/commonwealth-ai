@@ -1,6 +1,6 @@
 # A news-shaped fixture for the ontology layer's default path (order
 # ontology-layer-2-one-path): two reports of one incident, one of which also
-# reports a second, separate one. Neutral domain. Read by the C1-C6 contract tests.
+# reports a second, separate one and repeats a line of the first word for word. Neutral domain. Read by the C1-C6 contract tests.
 
 [corpus]
 id = "layer-news"

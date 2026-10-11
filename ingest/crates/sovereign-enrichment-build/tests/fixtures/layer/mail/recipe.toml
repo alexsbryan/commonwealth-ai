@@ -1,13 +1,15 @@
 # A mail-shaped fixture for the ontology layer's default path (order
-# ontology-layer-2-one-path): four messages of a furniture workshop with its
-# customers. The `layer-default-path` contract journey installs it and runs the
-# default commands; the C1-C6 contract tests read the same files. Neutral domain
-# on purpose: no word here comes from a test system.
+# ontology-layer-2-one-path): five messages of a furniture workshop with its
+# customers. The fourth repeats a line of the third word for word, in the same
+# section, as a fresh statement: equal text is not the same occurrence. The
+# `layer-default-path` contract journey installs it and runs the default
+# commands; the C1-C6 contract tests read the same files. Neutral domain on
+# purpose: no word here comes from a test system.
 
 [corpus]
 id = "layer-mail"
 name = "Layer fixture: a workshop's mail with its customers"
-description = "Four messages: one order quoted and confirmed in a thread, one cancelled."
+description = "Five messages: one order quoted and confirmed in a thread, one cancelled."
 license = "private"
 schema_version = 1
 mesh_sharing = false

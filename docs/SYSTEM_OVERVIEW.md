@@ -667,7 +667,9 @@ question the pipeline asks about a type is a method on the resolved
   answer is refused, never defaulted.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
-  from the ONE document its evidence anchor lands in
+  from its ONE document (`locate`: the document its evidence names, stamped from
+  the read that cited it, else the one its anchor lands in; equal words in a
+  second document never make a second candidate)
   (`enrichment/atlas/resolution_documents.rs`, rows from
   `corpus_io::section_documents`), and records a claim it cannot place in
   `resolution_failures.json` instead of guessing. An entity type's
@@ -772,7 +774,7 @@ question the pipeline asks about a type is a method on the resolved
   statements, so `enrich extract` refuses it (`types_without_statements`) rather
   than leave it to 3a's merge: its statements are the claims of each kind whose
   `subject` is the type, placed by their anchor in the one document `locate`
-  finds. Claims the reader gave one `subject_local_ref` in one document are one
+  finds (derivation's `document` step uses the same). Claims the reader gave one `subject_local_ref` in one document are one
   statement at the earliest span (`resolution_records/local_subjects.rs`), unless
   they disagree on a supplied identity value; a ref never joins across
   documents. Documents go in clock order (`resolve_records::clock`, through

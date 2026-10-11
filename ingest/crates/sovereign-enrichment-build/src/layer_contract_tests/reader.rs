@@ -6,7 +6,7 @@
 use super::*;
 
 /// The line a Locate question asks about.
-fn asked_line(prompt: &ChatPrompt) -> &str {
+pub(super) fn asked_line(prompt: &ChatPrompt) -> &str {
     prompt
         .user
         .rsplit_once("\n\nLine ")
@@ -36,7 +36,7 @@ async fn every_question_opens_with_its_documents_declared_facts() {
 }
 
 /// The Locate questions of `run`.
-fn locates(run: &Run) -> Vec<&ChatPrompt> {
+pub(super) fn locates(run: &Run) -> Vec<&ChatPrompt> {
     run.prompts
         .iter()
         .filter(|p| p.phase_id.as_deref() == Some("document_passes_locate"))
@@ -44,7 +44,7 @@ fn locates(run: &Run) -> Vec<&ChatPrompt> {
 }
 
 /// Whether `prompt` is about the document whose declared id is `id`.
-fn in_doc(prompt: &ChatPrompt, id: &str) -> bool {
+pub(super) fn in_doc(prompt: &ChatPrompt, id: &str) -> bool {
     prompt.user.contains(&format!("\nid: {id}\n"))
 }
 

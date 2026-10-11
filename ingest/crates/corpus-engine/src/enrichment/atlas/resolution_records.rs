@@ -263,7 +263,6 @@ async fn resolve_type(
     let of_kinds = |c: &Claim| c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k));
     // Reader-local references are transient handoff data. The subject's
     // readings stay on the claim: RESOLVE keys on their supported values.
-    let mut read_document_of = HashMap::<usize, String>::new();
     let mut read_local_ref_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
     for (i, claim) in atoms.claims.iter_mut().enumerate() {
@@ -275,7 +274,6 @@ async fn resolve_type(
             for evidence in &mut claim.evidence {
                 evidence.source_doc_id = Some(document.clone());
             }
-            read_document_of.insert(i, document);
         }
         if let Some(Value::String(local_ref)) = claim.attributes.remove(LOCAL_REF_ATTRIBUTE) {
             read_local_ref_of.insert(i, local_ref);
@@ -354,22 +352,9 @@ async fn resolve_type(
             continue;
         };
         report.claims += 1;
-        let locate_accountable = || {
-            let document_id = read_document_of.get(&i).ok_or_else(|| {
-                "accountable document id is absent from the claim handoff".to_string()
-            })?;
-            let section = claim
-                .evidence
-                .first()
-                .map(|evidence| evidence.chunk_id.as_str())
-                .ok_or_else(|| "accountable claim carries no section evidence".to_string())?;
-            let doc = documents
-                .document_for_section(section, document_id)
-                .ok_or_else(|| {
-                    format!(
-                        "accountable document `{document_id}` is not present in evidence section `{section}`"
-                    )
-                })?;
+        // The claim's own document (its read's, stamped on the evidence),
+        // or the one its anchor lands in (`locate`).
+        let spot = locate(claim, documents).and_then(|doc| {
             let anchor = claim
                 .anchor
                 .as_deref()
@@ -377,37 +362,13 @@ async fn resolve_type(
                     claim
                         .evidence
                         .iter()
-                        .find_map(|evidence| evidence.passage_preview.as_deref())
+                        .find_map(|e| e.passage_preview.as_deref())
                 })
                 .map(fold_ws)
-                .filter(|anchor| !anchor.is_empty())
+                .filter(|a| !a.is_empty())
                 .ok_or_else(|| "the claim carries no anchor".to_string())?;
-            if !doc.body().contains(&anchor) {
-                return Err(format!(
-                    "anchor {anchor:?} is not in explicitly named document `{document_id}`"
-                ));
-            }
             Ok((doc, anchor))
-        };
-        let spot = if read_document_of.contains_key(&i) {
-            locate_accountable()
-        } else {
-            locate(claim, documents).and_then(|doc| {
-                let anchor = claim
-                    .anchor
-                    .as_deref()
-                    .or_else(|| {
-                        claim
-                            .evidence
-                            .iter()
-                            .find_map(|e| e.passage_preview.as_deref())
-                    })
-                    .map(fold_ws)
-                    .filter(|a| !a.is_empty())
-                    .ok_or_else(|| "the claim carries no anchor".to_string())?;
-                Ok((doc, anchor))
-            })
-        };
+        });
         let (doc, anchor) = match spot {
             Ok(s) => s,
             Err(why) => {

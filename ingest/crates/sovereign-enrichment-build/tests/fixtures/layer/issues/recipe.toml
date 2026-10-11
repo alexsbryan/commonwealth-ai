@@ -1,6 +1,7 @@
 # An issue-tracker-shaped fixture for the ontology layer's default path (order
-# ontology-layer-2-one-path): one bug thread (an issue, two maintainer comments)
-# and one feature request, in a neutral domain. Read by the C1-C6 contract tests.
+# ontology-layer-2-one-path): one bug thread (an issue, three maintainer
+# comments, the third repeating the second's instruction word for word) and
+# one feature request, in a neutral domain. Read by the C1-C6 contract tests.
 
 [corpus]
 id = "layer-issues"

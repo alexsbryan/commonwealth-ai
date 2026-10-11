@@ -452,6 +452,82 @@ async fn c4_records_are_the_same_in_any_document_order() {
     }
 }
 
+/// The lines written word for word in two or more of `f`'s documents, with
+/// those documents' ids: whole unmarked lines of six words or more, which the
+/// oracle locates.
+fn repeated_lines(f: &Fixture) -> BTreeMap<String, Vec<String>> {
+    let (content, _) = f.fields();
+    let mut at: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for d in &f.documents {
+        let id = d["id"].as_str().unwrap().to_string();
+        for line in d[&content].as_str().unwrap().lines().map(str::trim) {
+            if line.split_whitespace().count() >= 6 && !line.starts_with('>') {
+                let docs = at.entry(line.to_string()).or_default();
+                if !docs.contains(&id) {
+                    docs.push(id.clone());
+                }
+            }
+        }
+    }
+    at.retain(|_, docs| docs.len() > 1);
+    at
+}
+
+/// Equal text is not the same occurrence (CONVERGE S1; after ChunkKey and the
+/// line classes, its third instance): a line written word for word in two
+/// documents, in one section (mail, issues) or two (news), is asked in each,
+/// read into a placed claim from each, and every fold reaches each claim
+/// through its own document, never none and never the other.
+#[tokio::test]
+async fn a_line_written_in_two_documents_is_two_occurrences() {
+    let folded = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut folds = 0;
+    for shape in SHAPES {
+        let f = Fixture::load(shape);
+        let repeated = repeated_lines(&f);
+        assert!(!repeated.is_empty(), "{shape}: no line is written twice");
+        let run = run(&f).await;
+        let atoms = run.atoms();
+        let mut own: BTreeMap<String, String> = BTreeMap::new();
+        for (line, docs) in &repeated {
+            for doc in docs {
+                assert!(
+                    super::reader::locates(&run).iter().any(|p| {
+                        super::reader::in_doc(p, doc)
+                            && folded(super::reader::asked_line(p)) == folded(line)
+                    }),
+                    "{shape}: {line:?} is not asked in {doc}"
+                );
+                let claim = atoms
+                    .iter()
+                    .find(|a| {
+                        a["atom_type"] == "Claim"
+                            && a["data"]["evidence"][0]["source_doc_id"] == doc.as_str()
+                            && a["data"]["anchor"]
+                                .as_str()
+                                .is_some_and(|x| folded(x).contains(&folded(line)))
+                    })
+                    .unwrap_or_else(|| panic!("{shape}: no claim of {line:?} from {doc}"));
+                assert!(
+                    claim["data"]["subject"].is_string(),
+                    "{shape}: the claim of {line:?} from {doc} is placed nowhere: {claim}"
+                );
+                own.insert(claim["data"]["id"].as_str().unwrap().into(), doc.clone());
+            }
+        }
+        for v in run.lines(DERIVED_FILE) {
+            for h in v["protocol"]["history"].as_array().into_iter().flatten() {
+                let Some(doc) = h["claim"].as_str().and_then(|c| own.get(c)) else {
+                    continue;
+                };
+                folds += 1;
+                assert_eq!(h["document"], doc.as_str(), "{shape}: {h}");
+            }
+        }
+    }
+    assert!(folds > 0, "no fold reached a repeated line's claim");
+}
+
 /// C5: a run replays without the model: every answer recorded, and a replay
 /// with no model writes the run's records byte for byte.
 #[tokio::test]
