@@ -1562,8 +1562,11 @@ pub enum ExtractorConfig {
     /// raw `.eml` files), parses each through `mailparse`, and
     /// emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
     /// per message. Metadata fields: `message_id`, `thread_id` (derived
-    /// from In-Reply-To / References), `from`, `to`, `cc`, `bcc`, `date`,
-    /// `subject`, `in_reply_to`, `references`, `doc_type`,
+    /// from In-Reply-To / References; a message carrying neither is its own
+    /// thread), `from`, `to`, `cc`, `bcc`, `date`, `subject`, `base_subject`
+    /// (RFC 5256 §2.1: the subject without its reply and forward marks,
+    /// case-folded, absent when nothing is left; a mailbox with no reply
+    /// headers can declare it as its thread), `in_reply_to`, `references`, `doc_type`,
     /// `body_was_truncated`, `attachments`, `source_path`. When the
     /// engine has an [`crate::asset_store::AssetStore`] + an
     /// [`crate::extractors::described_asset::AssetSubExtractorRegistry`]
