@@ -48,6 +48,7 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
                     family: AttrFamily::Text { values: Vec::new() },
                     description: "The issue number".into(),
                     derived: None,
+                    by: None,
                 },
                 AttrDecl {
                     name: "project".into(),
@@ -56,6 +57,7 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
                     },
                     description: "The owning project".into(),
                     derived: None,
+                    by: None,
                 },
             ],
             ..Default::default()
@@ -79,6 +81,7 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
                 },
                 description: "The reported case status".into(),
                 derived: None,
+                by: None,
             }],
             ..Default::default()
         },
@@ -531,6 +534,7 @@ fn local_subject_fixture() -> (
                 family: AttrFamily::Text { values: Vec::new() },
                 description: "The issue number".into(),
                 derived: None,
+                by: None,
             }],
             ..Default::default()
         },
@@ -553,6 +557,7 @@ fn local_subject_fixture() -> (
                 },
                 description: "The reported case state".into(),
                 derived: None,
+                by: None,
             }],
             ..Default::default()
         },

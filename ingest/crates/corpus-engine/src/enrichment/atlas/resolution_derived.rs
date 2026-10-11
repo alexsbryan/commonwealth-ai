@@ -31,6 +31,14 @@ use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
 #[path = "resolution_derived/protocol.rs"]
 mod protocol;
+#[path = "resolution_derived/read_fields.rs"]
+mod read_fields;
+
+/// Whether `policies` derive anything in the atlas build: a declared path or
+/// fold, or a field whose readings a record folds (`AttrDecl::by`).
+pub fn derives(policies: &OntologyPolicies) -> bool {
+    !policies.derivation.derived.is_empty() || !read_fields::declared(policies).is_empty()
+}
 
 /// Which side of RESOLVE a derivation runs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -169,6 +177,19 @@ pub fn derive_attributes(
     let index = TypeIndex::from_policies(policies);
     let order = declared.order(&policies.shape.types)?;
     let mut report = DerivedReport::new();
+    // First, so a declared derivation after RESOLVE reads a record's folded
+    // fields as it reads any attribute.
+    if stage == DeriveStage::AfterResolve {
+        read_fields::derive(
+            atoms,
+            documents,
+            participants,
+            policies,
+            &index,
+            &mut report,
+            sink,
+        )?;
+    }
     for (type_name, attr, id) in order {
         let after = decides(&index, type_name);
         if (stage == DeriveStage::AfterResolve) != after {

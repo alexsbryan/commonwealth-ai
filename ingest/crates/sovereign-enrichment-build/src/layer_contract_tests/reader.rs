@@ -250,6 +250,57 @@ async fn a_read_subject_field_stays_on_its_statement_cited() {
     }
 }
 
+/// A read field the recipe folds (news's `happening.what`, `by = "agree"`):
+/// a record holds its statements' one reading, through the derivation writer,
+/// citing the documents it came through, and none when they differ.
+#[tokio::test]
+async fn a_folded_read_field_is_served_on_its_record() {
+    let run = run(&Fixture::load("news")).await;
+    let atoms = run.atoms();
+    let mut read: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    for c in atoms.iter().filter(|a| a["atom_type"] == "Claim") {
+        let reading = &c["data"]["attributes"]["__document_read_subject_fields"]["what"];
+        if let (Some(subject), Some(value)) =
+            (c["data"]["subject"].as_str(), reading["value"].as_str())
+        {
+            read.entry(subject).or_default().insert(value);
+        }
+    }
+    let lines: Vec<Value> = run
+        .lines(DERIVED_FILE)
+        .into_iter()
+        .filter(|l| l["type"] == "happening" && l["attribute"] == "what")
+        .collect();
+    let mut served = 0;
+    for (record, values) in &read {
+        let atom = atoms
+            .iter()
+            .find(|a| a["data"]["id"] == *record)
+            .unwrap_or_else(|| panic!("no record {record}"));
+        let line = lines
+            .iter()
+            .find(|l| l["atom"] == *record)
+            .unwrap_or_else(|| panic!("record {record} has no derivation of `what`"));
+        let held = &atom["data"]["attributes"]["what"];
+        if let [one] = values.iter().collect::<Vec<_>>()[..] {
+            served += 1;
+            assert_eq!(held, *one, "record {record}: {line}");
+            assert_eq!(line["outcome"], "decided", "{line}");
+            assert!(
+                line["documents"].as_array().is_some_and(|d| !d.is_empty()),
+                "{line}"
+            );
+        } else {
+            assert!(
+                held.is_null(),
+                "record {record} holds one of differing readings: {held}"
+            );
+            assert_eq!(line["outcome"], "conflict", "{line}");
+        }
+    }
+    assert!(served > 0, "news: no record holds its statements' `what`");
+}
+
 /// A read reference's value carries its source and precision (C3) and is one
 /// of its own document's candidates: a record its header fields name, or
 /// words of its own text; never a record of another document.

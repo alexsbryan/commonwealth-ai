@@ -656,6 +656,8 @@ fn ontology_attr_schema(descriptor: &Value) -> Value {
             "description": { "type": "string" },
             // A declared path or fold id that fills the attribute (no model).
             "derived":     { "type": "string" },
+            // How a record folds what its statements read of the field.
+            "by":          { "enum": ["agree", "all", "most", "earliest", "latest"] },
             "values":      { "type": "array", "items": { "type": "string" } },
             "unit":        { "type": "string" },
             "range":       { "type": "boolean" },

@@ -10,7 +10,7 @@ use std::io::Write;
 use std::path::Path;
 
 use corpus_engine::enrichment::atlas::resolution_derived::{
-    derive_attributes, DeriveStage, DerivedReport,
+    derive_attributes, derives, DeriveStage, DerivedReport,
 };
 use corpus_engine::enrichment::atlas::resolution_records::{resolve_declared_types, BuildAtoms};
 use corpus_engine::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
@@ -77,7 +77,7 @@ pub(crate) fn from_documents(
         .iter()
         .any(|t| matches!(t.source, Some(SourceDecl::Metadata(_))));
     let read = policies.change.document.is_some()
-        || !policies.derivation.derived.is_empty()
+        || derives(policies)
         || policies
             .shape
             .types
@@ -135,7 +135,7 @@ pub(crate) async fn apply(
         .types
         .iter()
         .any(|t| t.identity_criterion.is_some());
-    let derives = !policies.derivation.derived.is_empty();
+    let derives = derives(policies);
     let mut derived = derives
         .then(|| Jsonl::create(atlas_dir.join(DERIVED_FILE)))
         .transpose()?;

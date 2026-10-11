@@ -204,3 +204,52 @@ fn a_derived_step_through_an_unfilled_ref_is_warned() {
     // `holder` is Picked: the fold stepping through it is not warned.
     assert!(warned(&v, "derived `owner_of_item`").is_empty());
 }
+
+/// `by` folds a read field onto its record, and the fill note says how; a
+/// `by` on a type RESOLVE does not decide, on a derived field, or by `first`
+/// is refused, each with why.
+#[test]
+fn a_folded_read_field_is_named_and_a_misplaced_by_refuses() {
+    let code = r#"{ name = "code", type = "text" },"#;
+    let v =
+        validated(&fixture().replace(code, r#"{ name = "code", type = "text", by = "agree" },"#));
+    assert!(
+        !v.errors.iter().any(|e| e.contains("`by")),
+        "{:#?}",
+        v.errors
+    );
+    let item = v
+        .notes
+        .iter()
+        .find(|n| n.starts_with("fill: item:"))
+        .unwrap();
+    assert!(
+        item.contains("code ← Point on each move statement, the record by agree"),
+        "{item}"
+    );
+    let status = r#"derived = "item_status" },"#;
+    for (from, to, says) in [
+        (
+            r#"{ name = "lot_code", type = "text" },"#,
+            r#"{ name = "lot_code", type = "text", by = "all" },"#,
+            "RESOLVE does not decide `lot`",
+        ),
+        (
+            status,
+            r#"derived = "item_status", by = "agree" },"#,
+            "never both",
+        ),
+        (
+            code,
+            r#"{ name = "code", type = "text", by = "first" },"#,
+            "agree, all, most",
+        ),
+    ] {
+        let v = validated(&fixture().replace(from, to));
+        assert!(
+            v.errors.iter().any(|e| e.contains(says)),
+            "{says}: {:#?}",
+            v.errors
+        );
+    }
+}

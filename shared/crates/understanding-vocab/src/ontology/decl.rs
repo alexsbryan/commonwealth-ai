@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::derived::FoldBy;
 pub use super::source::{FieldReader, MetadataSourceDecl, SourceDecl, SourceRef, TableSourceDecl};
 use super::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
@@ -527,6 +528,12 @@ pub struct AttrDecl {
     /// (`derived.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub derived: Option<String>,
+    /// How a record holds what its statements read of this field: `agree`,
+    /// `all`, `most`, `earliest` or `latest`, decided as a fold's `by` is
+    /// over each statement's reading. Absent, each statement keeps its own
+    /// reading and the record holds none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<FoldBy>,
 }
 
 /// The four value families an attribute can take.
@@ -768,6 +775,7 @@ fn text_attrs(keys: &[String]) -> Vec<AttrDecl> {
             family: AttrFamily::Text { values: Vec::new() },
             description: String::new(),
             derived: None,
+            by: None,
         })
         .collect()
 }

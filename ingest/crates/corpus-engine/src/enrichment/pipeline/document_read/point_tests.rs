@@ -154,6 +154,7 @@ async fn a_pointed_quantity_is_its_number_cited_by_its_words_and_unmeasured() {
         },
         description: String::new(),
         derived: None,
+        by: None,
     };
     let none = BTreeMap::new();
     // Start at "2,400", end at "dollars." (the second of the two words left).

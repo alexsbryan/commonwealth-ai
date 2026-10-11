@@ -48,7 +48,7 @@ attributes = [
     "a person being hurt or treated",
     "people being moved away from danger",
     "the incident as a whole",
-  ] },
+  ], by = "agree" },
 ]
 
 [[enrichment.ontology.types]]

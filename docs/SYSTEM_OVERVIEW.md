@@ -790,7 +790,10 @@ question the pipeline asks about a type is a method on the resolved
   §8): paths over `subject`, `document`, source fields (the `Participants` the
   source projection records) and refs, filtered by sets, combined by a fold from a
   closed registry; claim attributes before RESOLVE, a decided type's after, each
-  outcome typed in `atlas/derived_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
+  outcome typed in `atlas/derived_decisions.jsonl`. A decided type's read field
+  that declares `by` is folded onto each record first, over what its statements
+  read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
+  and event records alike); RESOLVE itself writes no record value. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** The optional `by = "protocol"`
   fold projects a closed text state only after RESOLVE, from cited claims assigned
   through `^subject`. Each rule requires source-supported `DocumentRead` fields;

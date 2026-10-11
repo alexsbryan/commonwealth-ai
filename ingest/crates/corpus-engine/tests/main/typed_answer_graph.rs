@@ -30,6 +30,7 @@ fn policies() -> OntologyPolicies {
                     family: AttrFamily::Text { values: vec![] },
                     description: String::new(),
                     derived: None,
+                    by: None,
                 }],
                 ..Default::default()
             },

@@ -180,7 +180,8 @@
     "attribute": [
       "name",
       "description",
-      "derived"
+      "derived",
+      "by"
     ],
     "attribute_families": [
       {

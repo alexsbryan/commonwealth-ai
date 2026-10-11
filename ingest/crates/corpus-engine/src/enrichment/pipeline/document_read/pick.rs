@@ -292,6 +292,7 @@ pub(super) fn contract_sample() -> Value {
         family: crate::enrichment::ontology::AttrFamily::Ref { of: "other".into() },
         description: String::new(),
         derived: None,
+        by: None,
     };
     let shown = [
         Candidate::Record {

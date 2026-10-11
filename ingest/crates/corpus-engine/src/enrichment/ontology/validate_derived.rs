@@ -15,6 +15,7 @@ use super::{AttrDecl, AttrFamily, OntologyPolicies, SourceDecl, TypeIndex, TypeK
 use crate::enrichment::atlas::resolution_records::decides;
 
 pub(super) fn check(p: &OntologyPolicies, errors: &mut Vec<String>, notes: &mut Vec<String>) {
+    check_record_folds(p, errors);
     let d = &p.derivation.derived;
     let derived: Vec<(&str, &str, &str, &AttrFamily)> = p
         .shape
@@ -245,6 +246,38 @@ pub(super) fn check(p: &OntologyPolicies, errors: &mut Vec<String>, notes: &mut 
             notes.push(format!(
                 "derived: `{id}` is declared and no derived attribute uses it"
             ));
+        }
+    }
+}
+
+/// `by` on an attribute folds what each statement about a record read of it:
+/// only on a type RESOLVE decides (no other has statements of its records),
+/// never on a field a path or fold fills, and by a fold that needs neither an
+/// order of inputs (`first`) nor rules of its own (`protocol`).
+fn check_record_folds(p: &OntologyPolicies, errors: &mut Vec<String>) {
+    let index = TypeIndex::from_policies(p);
+    for t in &p.shape.types {
+        for a in &t.attributes {
+            let Some(by) = a.by else {
+                continue;
+            };
+            let at = format!(
+                "ontology type `{}`: `{}` declares `by = \"{}\"`",
+                t.name,
+                a.name,
+                by.label()
+            );
+            if a.derived.is_some() {
+                errors.push(format!(
+                    "{at} and is derived; a field is read and folded, or derived, never both"
+                ));
+            }
+            if matches!(by, FoldBy::First | FoldBy::Protocol) {
+                errors.push(format!("{at}; a record folds its statements' readings by agree, all, most, earliest or latest"));
+            }
+            if !decides(&index, &t.name) {
+                errors.push(format!("{at}, but RESOLVE does not decide `{}`, so no statements of its records are read", t.name));
+            }
         }
     }
 }

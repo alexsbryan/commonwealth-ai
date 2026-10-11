@@ -62,6 +62,7 @@ fn attr(name: &str, derived: Option<&str>) -> AttrDecl {
         },
         description: String::new(),
         derived: derived.map(str::to_string),
+        by: None,
     }
 }
 
