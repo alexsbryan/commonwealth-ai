@@ -82,9 +82,19 @@ mark the earlier line lacks); boilerplate by author deleted. Replay over the bas
 lines from Locate instead of 335 and no document goes unasked (was 61); Ward 579 instead of 869. Reports: f3108fd6f
 (coverage, recovery B³, what a hit checks, joint placement coverage).
 
-**S1.3 Subject fields:** in progress. The validator's fill analysis already promises them (Ward `deal: amount ←
-Point, term ← Choose`; GVC `happening: kind ← Choose`) and RESOLVE drops them, so GVC's 322 could-not-judge FOLD
-items and Ward's descriptors wait on this step.
+**S1.3 Subject fields, claim side: 7e043fce8.** A claim carries its subject's readings whole (supported with evidence
+and source, or unknown with its reason) through RESOLVE to the atlas; one decoder feeds RESOLVE's keys and 3b; the
+projection sketches no subject, so RESOLVE retires nothing on the passes path; read contract v6. The record gets
+none of these values yet (item 3 below). **Equal text, the locator: 3f7148016.** `locate` takes the document the
+evidence names; stamping, RESOLVE and derivation share it; twin-occurrence contract on all three fixtures.
+
+Replay of the frozen baseline with the binary at 3f7148016 (`runs/replay-s13-locate`, no daemon, same recorded
+answers): extract refused exactly the lines S1.2 newly asks (uv 179, Ward 290, GVC 23), RESOLVE refused none.
+Atoms RESOLVE retired: uv 5, Ward 6, GVC 3 → 0. Supported subject readings served on claims, every one cited with
+its source: Ward 55 (amount, term, email), GVC 313 (kind), uv 0. Ward's folds: deal.stage pending 9 → 2 (decided
+67 → 74; "claim has no unique cited source document" 7 → 0), stage_update.party decided 33 → 41, deal.counterparty
+31 → 38. Ladder rows unchanged (Ward 2/47, uv 54/132, GVC 0/977 with 322 could not judge; identity identical): none
+of the unblocked deals is one the ladder matches to a gold deal.
 
 **S1.4 Modelled records.** Tracked recipes are now the ones the runs read (2c27672b6), without the keys the
 validator retires, the measured `identity_evidential` counts among them (92f5c6590). uv's case serves its current
