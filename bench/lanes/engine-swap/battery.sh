@@ -33,7 +33,10 @@ repo=$(cd "$(dirname "$0")/../../.." && pwd)
 cfg=$HOME/.sovereign/config.toml
 models=$repo/sovereign/models
 embed=$repo/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0.gguf
-server=$repo/target/llama-server-vanilla/build-llg/bin/llama-server
+# BATTERY_LLAMA_SERVER picks another build (a patched one, for an experiment);
+# BATTERY_SERVER_ENV is extra environment for the router and its children.
+server=${BATTERY_LLAMA_SERVER:-$repo/target/llama-server-vanilla/build-llg/bin/llama-server}
+server_env=${BATTERY_SERVER_ENV:-}
 cases=${BATTERY_CASES:-$repo/target/engine-conformance/cases-20261010.jsonl}
 out=$repo/target/engine-conformance/battery-$(date +%Y%m%d-%H%M%S)
 tb() { toolbox run -c sovereign-vulkan "$@"; }
@@ -185,7 +188,9 @@ EOF
   # LLAMA_SERVER_SLOTS_DEBUG makes it describe the grammar too (metrics-only
   # form omits it: LS/tools/server/server-context.cpp:2418). The router hands
   # its environment to each model's child.
-  tb sh -c "LLAMA_SERVER_SLOTS_DEBUG=1 '$server' --models-preset '$out/router.ini' --models-max 4 --slots \
+  say "router: $server${server_env:+ with $server_env}"
+  # shellcheck disable=SC2086 # $server_env is a word list by design
+  tb env $server_env sh -c "LLAMA_SERVER_SLOTS_DEBUG=1 '$server' --models-preset '$out/router.ini' --models-max 4 --slots \
     --host 127.0.0.1 --port 18301 > '$out/router.log' 2>&1 & echo \$! > '$out/router.pid'"
   i=0; until curl -sf localhost:18301/v1/models >/dev/null; do
     i=$((i + 1)); [ $i -lt 120 ] || die "router not up, see $out/router.log"; sleep 1

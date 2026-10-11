@@ -23,9 +23,17 @@ against llama-server (built with llguidance at the vendored commit).
            `/v1/rerank` (qwen3-reranker-0.6b, `--reranking`) with the
            in-process scores that example prints on its sanity line.
 
+  leak     One 7-token prompt three times, then after each of two chat turns,
+           on a llama-server freshly started with -np 1 (lesson 9535ad01: the
+           qwen35 hybrid read stale recurrent state on 035e227). Prints the
+           top logprobs of each and exits 1 when the first top token drifts
+           by more than 1e-4 nats. patches/llama-server-leak-clear.patch is
+           the experiment it measured.
+
     probes.py grammar --daemon http://127.0.0.1:9741 --server http://127.0.0.1:18320
     probes.py mask    --daemon http://127.0.0.1:9741 --server http://127.0.0.1:18320
     probes.py rerank  --server http://127.0.0.1:18321 --inproc "<scores list from the example>"
+    probes.py leak    --server http://127.0.0.1:18399
 """
 import argparse
 import json
@@ -179,16 +187,48 @@ def rerank(a) -> int:
     return 0
 
 
+LEAK_PROMPT = [760, 2250, 6657, 314, 28868, 76214, 513]
+LEAK_CHATS = [
+    "Write a haiku about rust on an old bicycle.",
+    "List three prime numbers greater than one hundred.",
+]
+
+
+def leak(a) -> int:
+    def top():
+        status, out = post(f"{a.server}/completion", {
+            "prompt": LEAK_PROMPT, "n_predict": 1, "n_probs": 3, "temperature": 0,
+            "cache_prompt": False,
+        })
+        if status != 200:
+            raise SystemExit(f"leak: /completion answered {status}: {out}")
+        return [(t["token"], round(t["logprob"], 4))
+                for t in out["completion_probabilities"][0]["top_logprobs"]]
+
+    runs = [("first", top()), ("again", top()), ("again", top())]
+    for prompt in LEAK_CHATS:
+        post(f"{a.server}/v1/chat/completions", {
+            "messages": [{"role": "user", "content": prompt}], "max_tokens": 48, "temperature": 0,
+        })
+        runs.append(("after chat", top()))
+    first = runs[0][1][0]
+    drift = max(abs(t[0][1] - first[1]) if t[0][0] == first[0] else float("inf") for _, t in runs)
+    for label, t in runs:
+        print(f"{label:<11} {t}")
+    print(f"max drift of the first top token: {drift}")
+    return 0 if drift <= 1e-4 else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("probe", choices=["grammar", "mask", "rerank"])
+    ap.add_argument("probe", choices=["grammar", "mask", "rerank", "leak"])
     ap.add_argument("--daemon")
     ap.add_argument("--daemon-model", default="fast")
     ap.add_argument("--server")
     ap.add_argument("--server-model", default="Qwen3.5-4B-UD-MTP-Q6_K_XL")
     ap.add_argument("--inproc", help="rerank: the in-process scores as a JSON list")
     a = ap.parse_args()
-    return {"grammar": grammar, "mask": mask, "rerank": rerank}[a.probe](a)
+    return {"grammar": grammar, "mask": mask, "rerank": rerank, "leak": leak}[a.probe](a)
 
 
 if __name__ == "__main__":
