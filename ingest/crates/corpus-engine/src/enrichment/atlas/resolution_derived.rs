@@ -29,12 +29,12 @@ use crate::enrichment::ontology::derived::{
 use crate::enrichment::ontology::{DocumentStamp, OntologyPolicies, TypeIndex};
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
+#[path = "resolution_derived/membership.rs"]
+pub mod membership;
 #[path = "resolution_derived/protocol.rs"]
 mod protocol;
 #[path = "resolution_derived/read_fields.rs"]
 mod read_fields;
-#[path = "resolution_derived/membership.rs"]
-pub mod membership;
 
 /// Whether `policies` derive anything in the atlas build: a declared path or
 /// fold, a field whose readings a record folds (`AttrDecl::by`), or a thread
