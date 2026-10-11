@@ -191,16 +191,17 @@ pub fn prompt_oracle(
         (Some(n), _) => (n, "usage"),
         (None, Some(n)) => (n, "timings"),
         (None, None) => {
-            return Err(
-                "no usage.prompt_tokens and no timings to hold the /tokenize ids to".into(),
-            )
+            return Err("no usage.prompt_tokens and no timings to hold the /tokenize ids to".into())
         }
     };
     tracing::debug!(target: "engine_conformance", ids = ids.len(), n, source, "prompt oracle");
     if n == ids.len() as u64 {
         Ok(ids)
     } else {
-        Err(format!("/tokenize gave {} ids, the response's {source} says {n}", ids.len()))
+        Err(format!(
+            "/tokenize gave {} ids, the response's {source} says {n}",
+            ids.len()
+        ))
     }
 }
 
@@ -214,9 +215,7 @@ pub const SLOTS_METRICS_ONLY: &str =
 /// is `Ok(None)` when the slot ran without one, and an error when the server
 /// did not say.
 #[allow(clippy::type_complexity)]
-pub fn slot_sampler(
-    slots: &Value,
-) -> Result<(Sampler, Result<Option<String>, String>), String> {
+pub fn slot_sampler(slots: &Value) -> Result<(Sampler, Result<Option<String>, String>), String> {
     let slot = slots
         .as_array()
         .and_then(|a| {

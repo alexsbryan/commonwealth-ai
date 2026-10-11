@@ -322,7 +322,10 @@ fn a_stream_without_usage_still_counts_its_prompt_from_timings() {
 
 #[test]
 fn the_prompt_ids_are_held_to_the_count_the_server_reported() {
-    assert_eq!(prompt_oracle(vec![1, 2, 3], Some(3), None), Ok(vec![1, 2, 3]));
+    assert_eq!(
+        prompt_oracle(vec![1, 2, 3], Some(3), None),
+        Ok(vec![1, 2, 3])
+    );
     assert_eq!(
         prompt_oracle(vec![1, 2], Some(3), Some(2)),
         Err("/tokenize gave 2 ids, the response's usage says 3".into()),
