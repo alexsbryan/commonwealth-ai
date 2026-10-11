@@ -18,7 +18,34 @@ id        = "ontology-layer"
 objective = "A user with a first-principles understanding of their domain and competency in the ontology syntax writes one recipe, runs the CLI's default commands, and gets typed, cited records on unlike systems: very similar records whoever wrote the recipe, with no number measured on data and no mechanism switch in it. The test systems (crm-ward mail, uv-support issues, GVC news) are instruments, and nothing is judged on one of them. Supersedes crm-proof's Ward-first ladder; crm-proof's bars stay declared as lagging checks."
 spec      = "svrn/docs/specs/ONTOLOGY_METHOD.md; svrn/docs/specs/ONTOLOGY_PRIMITIVES.md (sections 0, 4, 8); .sovereign/features/ontology-layer/campaign.md"
 declared  = "2026-10-09"
-status    = "active"
+status    = "closed"
+# ── CLOSED 2026-10-10, OBJECTIVE NOT MET ────────────────────────────────────
+#
+# Closed on the operator's handoff of 2026-10-10 (research/ontology-apps/CONVERGE.md): two final sessions, then
+# close. research/ontology-apps/CLOSING_BRIEF.md is the account. The bars below stay as declared and measured.
+#
+# The predicate reads false on the last rows (2026-10-11T06:13Z, the final run runs/converge-s2 at d1fee1c15,
+# read by bars.py at 41de44e13): layer-default-path met 3, layer-invariants met 6 (17 of 17 tests),
+# layer-no-tuning met 0; layer-identity-ward failed .806 (target .875); layer-identity-gvc failed .515 (target
+# .599; RESOLVE alone, whose newest run is blind round 3's); layer-identity-uv, layer-author-gap and
+# layer-estimator could not judge (no run read uv's whole tune fold; the final run had no RESOLVE-alone leg; no
+# precision estimate for Ward or uv).
+#
+# The three demos (campaign.md). D1, one command set on three unlike systems: MET. Publish, extract,
+# --finalize and atlas-resolve with no flags run on mail, issues and news, and all six final legs (our recipes
+# and the round-3 blind ones) replay byte for byte without the model. D2, why these are one record: PARTLY.
+# Each of the 469 values the final folds decided cites its documents, sources are weighed at corpus-estimated
+# weights (1a2978828) and held statements settle after the last document (d8458602b), but no label-free
+# estimator came within .1 of measured precision on every run (ecb58efcc). D3, two authors on one corpus: NOT
+# MET. Where both authors place a unit their records agree (B3 .864 GVC, 1.0 Ward, .975 uv), but both place
+# 35%, 12% and 23% of the units, and the records serve different fields.
+#
+# What a user gets from our recipes on the final run: Ward 7 of 47 current deals at the right stage, deal
+# records mostly one per statement, and the counterparty, declared a ref, held as text since 9945afc92 (a defect
+# found at close and priced at about six matched deals, not fixed); uv 14 of 44 cases at the right state, with
+# 309 of 488 tune documents in no case; GVC 40 of 977 mentions on a record serving their type, the records at
+# the incident more than the sub-event. Cost per document: Ward 41.2 model calls and 25.9 model-seconds, uv 4.4
+# and 2.5, GVC 23.5 and 17.3. crm-proof, which this campaign superseded, closes with it.
 
 [predicate]
 statement = "On each test system, a recipe written blind from the domain description through the five-question interview, run by the default commands, gets identity at or above the 2026-10-09 baseline row and records close to our own recipe's, and no recipe carries a measured number or a mechanism switch, and the six contracts hold on all three: layer-identity-ward, layer-identity-uv, layer-identity-gvc, layer-no-tuning, layer-default-path, layer-author-gap and layer-invariants each read met on their newest measurement row."

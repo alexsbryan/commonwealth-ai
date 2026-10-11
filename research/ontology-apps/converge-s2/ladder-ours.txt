@@ -1,0 +1,33 @@
+ward  tune gold deals with a current stage on the documents of the run's 81 sections (sections.ids): n 47, hit 5, 99 documents read; run /Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/ward-tune
+      a hit: the matched deal record serves the gold current stage (served-state accuracy)
+      read: atlas recorded; logs recorded: stopped at step replay_extract's start marker
+      cost: 41.2 model calls/doc, 25.93 model s/doc over every phase, 23.98 s/doc extract wall
+      scope: 81 sections, 99 documents; 0 gold items lie outside them, left out
+      READ   lost   14                            calls/doc: Locate 19.71
+      PLACE  lost   28                            calls/doc: RESOLVE read 0.43, RESOLVE forced choice 0.85
+      FOLD   lost    0                            calls/doc: Choose 1.7
+      unstaged calls/doc: document_passes_mention 12.11, document_passes_pick 0.76, document_passes_point 5.69
+      identity  conditional on the 12 units placed (coverage 0.245): B3 0.957  CEAF-e 0.928  LEA 0.833; recovery B3 0.233 (missing and extra placements count)
+      rungs  {"latest_not_located": 5, "latest_wrong_stage": 7, "no_claim_on_any_message": 9, "no_record_with_its_party": 21, "served": 5}
+uv    tune gold case states on the documents of the run's 61 sections (sections.ids): n 132, hit 58, 554 documents read; run /Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/uv-third
+      a hit: a state claim on the matched case record states the gold state (state-claim accuracy)
+      served state: 14 of 44 cases right
+      read: atlas recorded; logs recorded: stopped at step replay_extract's start marker
+      cost: 4.4 model calls/doc, 2.5 model s/doc over every phase, 2.35 s/doc extract wall
+      scope: 61 sections, 554 documents; 254 gold items lie outside them, left out
+      READ   lost   27                            calls/doc: Locate 3.86
+      PLACE  lost   32                            calls/doc: RESOLVE forced choice 0.11
+      FOLD   lost   15                            calls/doc: Choose 0.4
+      identity  conditional on the 179 units placed (coverage 0.367): B3 0.898  CEAF-e 0.797  LEA 0.866; recovery B3 0.248 (missing and extra placements count)
+      rungs  {"hit": 58, "no_case_state_claim": 27, "record_not_matched": 26, "wrong_state": 21}
+gvc   gold event mentions (gold.json) on the documents of the run's 77 sections (sections.ids): n 977, hit 40, 78 documents read; run /Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/gvc
+      a hit: the chain's record carries a declared field naming its gold type (served value)
+      read: atlas recorded; logs recorded: stopped at step replay_extract's start marker
+      cost: 23.5 model calls/doc, 17.31 model s/doc over every phase, 9.29 s/doc extract wall
+      scope: 77 sections, 78 documents; 0 gold items lie outside them, left out
+      READ   lost  194                            calls/doc: Locate 16.21
+      PLACE  lost  461                            calls/doc: RESOLVE read 0.09, RESOLVE forced choice 3.08
+      FOLD   lost  240 (+42 could not judge)      calls/doc: Choose 4.1
+      identity  conditional on the 782 units placed (coverage 0.8): B3 0.458  CEAF-e 0.326  LEA 0.305; recovery B3 0.397 (missing and extra placements count)
+      rungs  {"could_not_judge:fold": 42, "fold": 240, "hit": 40, "place": 461, "read": 194}
+{"subject":"stage-ladders","verdict":"passed","reason":"ward judged (n 47); uv judged (n 132); gvc judged (n 977)","as_of":1791698471}

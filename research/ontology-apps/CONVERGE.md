@@ -122,6 +122,27 @@ Push note: `scripts/pre-push.sh` blocks on arch-gate (runner.rs 2289 → 2355, A
 and clock-gate (`code/crates/sovereign-code/src/dry_report/tests.rs`), all from commits outside this order; rustfmt,
 the scoped lint and the other ratchets pass.
 
+**Session 2, the final run: `runs/converge-s2`** (binary at d1fee1c15; manifest, ladders and measurement copied to
+`converge-s2/`). Six legs, ours and the round-3 blind recipes on uv's third, Ward's tune and GVC dev, 4 h 53
+min; every leg replays `same=7 refused=0`. The bars read it once bars.py took a run of side jobs (41de44e13); the
+campaign's last rows were taken there. Ours against the S1.1 baseline:
+
+| System | What a hit checks | Hit | Identity, conditional (placed, coverage) | Recovery B³ | Calls, model s / doc |
+|---|---|---|---|---|---|
+| uv | a state claim on the matched case; served state beside | 58/132 (was 54); served 14/44 (was could not judge) | B³ .898 (179, .367) | .248 (was .188) | 4.4, 2.5 |
+| Ward | the deal record serves the stage | 7/47 by the scorer, 5 by the ladder (was 2) | B³ .957 (12, .245) | .233 | 41.2, 25.9 (was 22.8, 15.4) |
+| GVC | the record's declared field names the type | 40/977, 42 could not judge (was 0, 322) | B³ .458 (782, .800) | .397 | 23.5, 17.3 |
+
+Authors (`blind-author/converge-s2`): B³ between partitions over units both placed, GVC .864 (344 of 977), Ward 1.0
+(6 of 49), uv .975 (113 of 488); the blind GVC author, scored at the incident it declared, .700 over 366 placed.
+Records inspected (`converge-s2/ward-residual.txt`, `uv-served.txt`): the loss that binds is PLACE on all three;
+Ward's deal records are one per statement, and its counterparty, declared `ref` of company, is held as text by the
+`by` fold (31 linked records at baseline, none now; a side reading resolving domain strings matches 11 of 39 deals
+instead of 5), a defect priced and not fixed; uv serves the right state on 14 of 28 matched cases; GVC's kinds are
+mostly the whole incident. The blind recipes, written before `by`, serve few record fields. No stronger-model
+comparison: the binding loss is not a reader question, and the host has no stronger local model than the reader.
+The campaign closes with its objective not met: `CLOSING_BRIEF.md`, `quality/campaigns/closed/ontology-layer.toml`.
+
 **Order of the remaining Session 1 work** (reuse audit, Sovereign note 17c216ff, every file:line there):
 1. S1.3, claim side: subject readings ride the claim in the claim fields' own shape (`DocumentReadField`, under
    `__document_read_subject_fields`), decoded in one place, never stripped; the projection's temporary subject sketch

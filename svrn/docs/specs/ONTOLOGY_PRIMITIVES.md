@@ -742,7 +742,7 @@ commitment a run of acts builds (a request, an indication, a counter, an
 accept, a confirm); a support case is the tickets and requests one customer
 files about one feature (§1.10). No single section carries their identity or
 their state, so Phase 1 cannot extract them. Measured on the crm-proof
-baseline (`quality/campaigns/crm-proof.toml`): 22 deal atoms for 79 gold
+baseline (`quality/campaigns/closed/crm-proof.toml`): 22 deal atoms for 79 gold
 transactions, 153 of 222 stage claims with no subject, 0 of 206 holdout
 stage updates matched. Header structure alone regroups the gold deals at
 B-cubed F1 0.60 (thread subject; counterparty domain 0.57).
