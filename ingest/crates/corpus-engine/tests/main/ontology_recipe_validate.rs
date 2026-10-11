@@ -561,7 +561,7 @@ document = { date = "sent" }"#,
 }
 
 #[test]
-fn validate_evidential_fields_are_declared_stamps_measured_somewhere_beside_a_bar() {
+fn validate_retires_identity_evidential_and_keeps_the_bar_in_range() {
     let typ = |evidential: &str, bar: &str| {
         format!(
             r#"version = 1
@@ -569,22 +569,31 @@ fn validate_evidential_fields_are_declared_stamps_measured_somewhere_beside_a_ba
 name = "case"
 kind = "entity"
 identity_criterion = "the same problem"
-identity_evidential = [{evidential}]
+{evidential}
 {bar}
 [enrichment.ontology.change]
 document = {{ thread = "thread" }}
 "#
         )
     };
-    let ok = r#"{ evidence = "document_thread", right = 190, of = 210, measured_on = "uv tune, 257/311" }"#;
-    let v = validate(&typ(ok, "identity_bar = 0.5"));
+    let counts = r#"identity_evidential = [{ evidence = "document_thread", right = 190, of = 210, measured_on = "uv tune" }]"#;
+    // The counts load, ignored and named: what each source is worth is estimated on the corpus.
+    let v = validate(&typ(counts, "identity_bar = 0.5"));
     assert!(v.errors.is_empty(), "{:?}", v.errors);
     assert!(
-        v.notes.iter().any(|n| n.starts_with(
-            "identity evidence: case ← document_thread (190 of 210, expected precision 0.901"
-        )),
+        v.warnings
+            .iter()
+            .any(|w| w
+                .starts_with("ontology type `case`: `identity_evidential` is retired and ignored")),
         "{:?}",
-        v.notes
+        v.warnings
+    );
+    let v = validate(&typ("", "identity_bar = 0.5"));
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+    assert!(
+        !v.warnings.iter().any(|w| w.contains("retired")),
+        "{:?}",
+        v.warnings
     );
     // A criterion makes RESOLVE the decider, not the canonical name.
     assert!(
@@ -594,46 +603,14 @@ document = {{ thread = "thread" }}
         "{:?}",
         v.notes
     );
-    first_error_containing(&typ(ok, ""), "no `identity_bar`");
-    first_error_containing(&typ(ok, "identity_bar = 0"), "is not in (0, 1]");
+    // No bar is no error: the most probable decides.
+    assert!(validate(&typ("", "")).errors.is_empty());
+    first_error_containing(&typ("", "identity_bar = 0"), "is not in (0, 1]");
     first_error_containing(
-        &typ(
-            r#"{ evidence = "author", right = 9, of = 10, measured_on = "x" }"#,
-            "identity_bar = 0.5",
-        ),
-        "which is no source",
-    );
-    first_error_containing(
-        &typ(
-            r#"{ evidence = "document_date", right = 9, of = 10, measured_on = "x" }"#,
-            "identity_bar = 0.5",
-        ),
-        "change.document.date",
-    );
-    first_error_containing(
-        &typ(
-            r#"{ evidence = "document_thread", right = 13, of = 10, measured_on = "x" }"#,
-            "identity_bar = 0.5",
-        ),
-        "no more right than measured",
-    );
-    first_error_containing(
-        &typ(
-            r#"{ evidence = "document_thread", right = 9, of = 10, measured_on = " " }"#,
-            "identity_bar = 0.5",
-        ),
-        "says nothing in `measured_on`",
-    );
-    let v = validate(&typ(
-        r#"{ evidence = "model_choice", right = 4, of = 10, measured_on = "x" }, { evidence = "proposed_answer", right = 8, of = 10, measured_on = "y" }"#,
-        "identity_bar = 0.5",
-    ));
-    assert!(v.errors.is_empty(), "{:?}", v.errors);
-    first_error_containing(
-        &typ(ok, "identity_bar = 0.5\nidentity_necessary = [\"kind\"]"),
+        &typ("", "identity_bar = 0.5\nidentity_necessary = [\"kind\"]"),
         "necessary attribute `kind`, which is not one of its attributes with `values`",
     );
-    let with_kind = typ(ok, "identity_bar = 0.5\nidentity_necessary = [\"kind\"]\nattributes = [{ name = \"kind\", type = \"text\", values = [\"firing\", \"death\"] }]");
+    let with_kind = typ("", "identity_bar = 0.5\nidentity_necessary = [\"kind\"]\nattributes = [{ name = \"kind\", type = \"text\", values = [\"firing\", \"death\"] }]");
     let v = validate(&with_kind);
     assert!(v.errors.is_empty(), "{:?}", v.errors);
 }
@@ -659,7 +636,6 @@ source = {{ metadata = ["from", "to"], attributes = {{ domain = "domain" }} }}
 name = "deal"
 kind = "entity"
 identity_criterion = "the same transaction"
-identity_evidential = [{{ evidence = "proposed_answer", right = 4, of = 5, measured_on = "x" }}]
 identity_bar = 0.5
 attributes = [{{ name = "counterparty", type = "ref", of = "company", derived = "{deal_counterparty}" }}]
 [[enrichment.ontology.types]]
@@ -691,9 +667,17 @@ from = ["^subject / party"]
 fn validate_derived_attributes_print_in_words_with_their_side_of_resolve() {
     let v = validate(&derived_decl("party_of_message", "party_of_deal", ""));
     assert!(v.errors.is_empty(), "{:?}", v.errors);
-    assert!(
-        v.warnings.is_empty(),
+    // The only warning is the fill analysis's true one: `person.nickname` is
+    // open text no source reads and Point is not built.
+    assert_eq!(
+        v.warnings.len(),
+        1,
         "the new keys are known: {:?}",
+        v.warnings
+    );
+    assert!(
+        v.warnings[0].contains("nothing fills `nickname`"),
+        "{:?}",
         v.warnings
     );
     let notes = v.notes.join("\n");

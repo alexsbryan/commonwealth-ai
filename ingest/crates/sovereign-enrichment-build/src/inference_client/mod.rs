@@ -508,6 +508,21 @@ impl DaemonInferenceClient {
         Ok(out)
     }
 
+    /// [`Self::into_closures`] with the Asker in front (campaign ontology-layer
+    /// C5): every answer recorded in `enrichment_dir`'s answer store under
+    /// `daemon`, or answered from a store with this client never called under
+    /// `replay` and `gold`. The ontology layer's verbs (extract, resolve, delta)
+    /// build their ports here and nowhere else.
+    pub fn into_asked_closures(
+        self,
+        asker: corpus_engine::enrichment::asker::Asker,
+        enrichment_dir: &std::path::Path,
+    ) -> std::result::Result<(EmbedFn, InferenceFn), String> {
+        let (embed, chat) = self.into_closures();
+        corpus_engine::enrichment::asker::answering(asker, enrichment_dir, embed, chat)
+            .map_err(|e| format!("the {} asker: {e}", asker.label()))
+    }
+
     /// Wrap this client as the `(EmbedFn, InferenceFn)` pair that
     /// `PhaseRunner::new` expects. The one chat closure carries the
     /// per-call `max_tokens` override in its second argument — `Some(n)`

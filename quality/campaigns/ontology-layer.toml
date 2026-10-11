@@ -1,0 +1,125 @@
+# Flight rules — read raw. Verdicts come from measurement rows
+# (~/.sovereign/comaintainer/bar-measurements.jsonl), never from prose here.
+# Pre-registered 2026-10-09 BEFORE any rung ran. The only data behind these
+# numbers is the baseline row (~/.svrnmesh/bench-corpora/baseline-3sys-20261009:
+# frozen recipes, frozen binary, one production-path run per system). Where a
+# target names the baseline row and the row is still being scored, the number
+# is filled from that row and from nothing else.
+#
+# The three systems are instruments. The predicate is about a BLIND author's
+# recipe: identity bars read the records that recipe gets through the default
+# commands, against the row our own frozen recipe got on 2026-10-09.
+#
+# Operator 2026-10-09: the layer is built scaffold first and refined by
+# extrusion inside the scaffold. A component is accepted by its contract tests
+# (layer-invariants); every other bar is a tuning target read on the
+# scaffold's runs, never a gate on one build step and never on one system's row.
+id        = "ontology-layer"
+objective = "A user with a first-principles understanding of their domain and competency in the ontology syntax writes one recipe, runs the CLI's default commands, and gets typed, cited records on unlike systems: very similar records whoever wrote the recipe, with no number measured on data and no mechanism switch in it. The test systems (crm-ward mail, uv-support issues, GVC news) are instruments, and nothing is judged on one of them. Supersedes crm-proof's Ward-first ladder; crm-proof's bars stay declared as lagging checks."
+spec      = "svrn/docs/specs/ONTOLOGY_METHOD.md; svrn/docs/specs/ONTOLOGY_PRIMITIVES.md (sections 0, 4, 8); .sovereign/features/ontology-layer/campaign.md"
+declared  = "2026-10-09"
+status    = "active"
+
+[predicate]
+statement = "On each test system, a recipe written blind from the domain description through the five-question interview, run by the default commands, gets identity at or above the 2026-10-09 baseline row and records close to our own recipe's, and no recipe carries a measured number or a mechanism switch, and the six contracts hold on all three: layer-identity-ward, layer-identity-uv, layer-identity-gvc, layer-no-tuning, layer-default-path, layer-author-gap and layer-invariants each read met on their newest measurement row."
+check     = '''python3 - <<'PY'
+import json, pathlib, sys
+p = pathlib.Path.home() / ".sovereign/comaintainer/bar-measurements.jsonl"
+rows = [json.loads(l) for l in p.read_text().splitlines() if l.strip()] if p.exists() else []
+ok = True
+for bar in ("layer-identity-ward", "layer-identity-uv", "layer-identity-gvc",
+            "layer-no-tuning", "layer-default-path", "layer-author-gap", "layer-invariants"):
+    mine = [r for r in rows if r.get("campaign") == "ontology-layer" and r.get("bar") == bar]
+    met = bool(mine) and mine[-1].get("verdict") == "met"
+    print(f"{bar}: {'met' if met else 'OPEN'}")
+    ok &= met
+sys.exit(0 if ok else 1)
+PY'''
+
+[[bar]]
+id           = "layer-identity-gvc"
+derives_from = "rung 1 (ontology-layer-1-decider): identity is where all three systems lose; on GVC the right record is a candidate for 96.3% of statements while about 30% of gold links are recovered"
+one_line     = "GVC CoNLL F1 (MUC, B3, CEAF-e, LEA beside) of RESOLVE over dev's gold mentions through `enrich resolve-statements`, using the blind author's type declaration, scored by research/ontology-apps/score_resolve.py; the end-to-end row (order 2) is reported beside it"
+status       = "open"
+direction    = "higher_is_better"
+target       = 0.599
+noise_band   = 0.007
+goodhart     = "can reach target while the predicate is false if the blind recipe carries numbers fitted to GVC, or if the gain is bought with a GVC-only code path or a model-call bill no user would pay; read with layer-no-tuning and calls per document"
+instrument   = "python3 research/ontology-apps/bars.py layer-identity-gvc"
+
+[[bar]]
+id           = "layer-identity-ward"
+derives_from = "rung 1: Ward's deals fail on identity (19 of 47 deals have no record with their party; a perfect reader serves at most 10)"
+one_line     = "Ward deal identity (B3 F1 over deal records, CEAF-e and LEA beside) of a blind author's recipe through the default commands on the tune fold, against the frozen recipe's 2026-10-09 baseline row (target filled from measure_ward.py on that row)"
+status       = "open"
+direction    = "higher_is_better"
+target       = 0.875
+goodhart     = "can reach target while the predicate is false because the baseline row is the all-singletons floor (92 stage_update claims opened 77 deal records; none of the 18 scored messages shares a record, pairwise 0), so a recipe that places fewer or different messages moves B3 without one correct link; read with LEA (.556), membership coverage (.367) and the scored count"
+instrument   = "python3 research/ontology-apps/bars.py layer-identity-ward"
+
+[[bar]]
+id           = "layer-identity-uv"
+derives_from = "rung 1: uv's thread settles links within a thread; its identity headroom is cases that span threads"
+one_line     = "uv-support case identity (B3, CEAF-e, LEA) of a blind author's recipe through the default commands on the tune fold, against the frozen recipe's 2026-10-09 baseline row (target filled from measure_uv.py on that row)"
+status       = "open"
+direction    = "higher_is_better"
+target       = 0.838
+goodhart     = "can reach target while the predicate is false if the recipe places fewer documents: B3 scores only the 235 tune documents a case_state claim placed (membership coverage .158, recovery B3 F1 .056), so read with coverage and recovery B3"
+instrument   = "python3 research/ontology-apps/bars.py layer-identity-uv"
+
+[[bar]]
+id           = "layer-estimator"
+derives_from = "rung 1 H2: precision must come from the corpus being read, since a user's corpus has no gold"
+one_line     = "Largest gap, over every evidence source on every system, between the precision the system estimates without labels and the precision measured against gold"
+status       = "open"
+direction    = "lower_is_better"
+target       = 0.1
+goodhart     = "can reach target while the predicate is false if the estimates are right but the decider does not use them, or if the gold-measured precision was itself measured under gold reading; read with the identity bars"
+instrument   = "python3 research/ontology-apps/bars.py layer-estimator"
+
+[[bar]]
+id           = "layer-no-tuning"
+derives_from = "operator 2026-10-09: no master-tuned system per use case; PRIMITIVES section 0, a facet no user would write does not land"
+one_line     = "Recipe fields, across the three systems' recipes, that carry a number measured on data (identity_evidential right/of/measured_on) or a mechanism switch (document_reading, document_reader)"
+status       = "open"
+direction    = "lower_is_better"
+floor        = 13
+floor_basis  = "2026-10-09 count over the three frozen baseline recipes: 9 identity_evidential count entries and 4 reader switches"
+target       = 0
+goodhart     = "can reach 0 while the predicate is false if the numbers move out of recipes into system constants fitted to the three examples; read with layer-estimator and layer-author-gap"
+instrument   = "python3 research/ontology-apps/bars.py layer-no-tuning"
+
+[[bar]]
+id           = "layer-default-path"
+derives_from = "rung 2 (ontology-layer-2-one-path): atlas-resolve defaults to --phase 3a, which skips stamps, RESOLVE and folds; GVC refuses end to end"
+one_line     = "Test systems that run end to end through the default commands (recipe publish, enrich extract, --finalize, atlas-resolve with no flags) and are scored"
+status       = "open"
+direction    = "higher_is_better"
+floor        = 0
+floor_basis  = "2026-10-09 inventory: Ward and uv need --phase all; GVC hits two refusals (resolution_records.rs:155-171, passes.rs:57-62)"
+target       = 3
+goodhart     = "can reach 3 while the predicate is false if the default path runs but its records are worse than the flagged path's; read with the identity bars"
+instrument   = "python3 research/ontology-apps/bars.py layer-default-path"
+
+[[bar]]
+id           = "layer-author-gap"
+derives_from = "operator 2026-10-09: any new user with a first-principles understanding and the syntax gets very similar output"
+one_line     = "The least, over gvc end to end, Ward, uv and GVC RESOLVE alone, of (blind-vs-ours partition B3 F1: the newest blind round's records against our newest kept runs') divided by (ours-vs-ours partition B3 F1: our recipe against itself across two builds, runs/scaffold-3sys against runs/c2-lines), both by blind-author/agreement.py over the units both runs placed"
+status       = "open"
+direction    = "higher_is_better"
+floor        = 0.586
+floor_basis  = "2026-10-10 first reading: blind round 2 (runs/blind-r2) against runs/e4-locate-values and runs/c2-lines-gvc-resolve-alone (blind-author/r2-e4), over the reference runs/scaffold-3sys against runs/c2-lines and c2-lines-gvc-resolve-alone (blind-author/reference): gvc .914/.720 = 1.269, Ward 1.0/1.0, uv .987/.975 = 1.012, RESOLVE alone .438/.748 = .586"
+target       = 1.0
+goodhart     = "can reach 1.0 while the predicate is false if both partitions agree because both place few units (B3 is over units both placed; read both_placed beside it), and Ward's row rests on 10 units both placed (18 in the reference), so its 1.0 says little; read with the identity bars, which score against gold"
+instrument   = "python3 research/ontology-apps/bars.py layer-author-gap"
+
+[[bar]]
+id           = "layer-invariants"
+derives_from = "operator 2026-10-09: build the layer scaffold first and extrude each refinement inside it; the six invariants proposed in seat frame 79fa0e9b are every component's contract (campaign.md, The contract)"
+one_line     = "Of the six contracts (C1 questions only from what declared structure leaves open; C2 no other stored document's text in a model turn; C3 every value and link carries its source and that source's precision; C4 records independent of document order; C5 a run replays without the model; C6 renaming changes nothing but the names), how many have a contract test that passes on fixtures of all three systems"
+status       = "open"
+direction    = "higher_is_better"
+target       = 6
+goodhart     = "can reach 6 while the predicate is false if the fixtures are too small to exercise the stage a contract guards, or a contract is tested at one stage while another stage breaks it; read with the stage ladders on the three systems' tune folds"
+instrument   = "python3 research/ontology-apps/bars.py layer-invariants"
+timeout_s    = 1800   # run-tier: builds and runs the contract tests behind scripts/with-cargo-lock.sh; not yet timed, the lock wait is unbounded

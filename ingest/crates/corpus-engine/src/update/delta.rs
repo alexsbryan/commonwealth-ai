@@ -22,6 +22,9 @@ use tokio::sync::mpsc;
 
 use crate::engine::CorpusEngine;
 use crate::error::Result;
+use crate::index::TextWriter;
+use crate::recipe_documents::DeclaredMetadata;
+use corpus_index::ingest_port::FetchedDoc;
 
 // ─── VersionManifest ─────────────────────────────────────────────────────────
 
@@ -173,7 +176,7 @@ impl CorpusUpdater {
         fetch_content: impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let mut log = self
@@ -533,7 +536,7 @@ impl CorpusUpdater {
         _fetch_content: &impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let total = diff.deleted_documents.len();
@@ -541,12 +544,14 @@ impl CorpusUpdater {
             .engine
             .open_index_for_corpus_transient(corpus_id)
             .await?;
+        let mut texts = TextWriter::open(&index, "", true).await?;
 
         for (i, doc_id) in diff.deleted_documents.iter().enumerate() {
             if log.deleted_ids.contains(doc_id) {
                 continue;
             }
             index.delete_chunks_by_source_doc(doc_id).await?;
+            texts.replace_source(&index, doc_id).await?; // no records left: its texts go
             log.deleted_ids.push(doc_id.clone());
             self.engine.save_update_progress(corpus_id, log)?;
             self.emit(UpdateProgress {
@@ -568,7 +573,7 @@ impl CorpusUpdater {
         fetch_content: &impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let total = diff.updated_documents.len();
@@ -577,14 +582,24 @@ impl CorpusUpdater {
             .engine
             .open_index_for_corpus_transient(corpus_id)
             .await?;
+        let tag = crate::text_store::extractor_tag(&recipe.extract);
+        let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
+        // A delta's sources are stated, never files, so no file declaration
+        // matches; an inline document's would, by its name.
+        let declared = DeclaredMetadata::of(&recipe, None);
 
         for (i, doc_id) in diff.updated_documents.iter().enumerate() {
             if log.updated_ids.contains(doc_id) {
                 continue;
             }
-            let content = fetch_content(doc_id).await?;
-            let mut raw_chunks = self.engine.chunk_document(&recipe, &content)?;
-            stamp_doc_identity(&mut raw_chunks, doc_id);
+            let fetched = fetch_content(doc_id).await?;
+            let raw_chunks = stored_chunks(
+                &self.engine,
+                &recipe,
+                (&mut texts, &declared),
+                doc_id,
+                &fetched,
+            )?;
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
             // Delete-first: the fresh chunks carry the SAME
@@ -597,6 +612,7 @@ impl CorpusUpdater {
             // both ops, so a crash between delete and insert re-runs
             // this doc from fetch on resume (delete is idempotent).
             index.delete_chunks_by_source_doc(doc_id).await?;
+            texts.replace_source(&index, doc_id).await?;
             index.insert_chunks(&embedded).await?;
 
             log.updated_ids.push(doc_id.clone());
@@ -620,7 +636,7 @@ impl CorpusUpdater {
         fetch_content: &impl Fn(
             &str,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+            Box<dyn std::future::Future<Output = Result<FetchedDoc>> + Send>,
         >,
     ) -> Result<()> {
         let total = diff.new_documents.len();
@@ -629,16 +645,27 @@ impl CorpusUpdater {
             .engine
             .open_index_for_corpus_transient(corpus_id)
             .await?;
+        let tag = crate::text_store::extractor_tag(&recipe.extract);
+        let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
+        // A delta's sources are stated, never files, so no file declaration
+        // matches; an inline document's would, by its name.
+        let declared = DeclaredMetadata::of(&recipe, None);
 
         for (i, doc_id) in diff.new_documents.iter().enumerate() {
             if log.added_ids.contains(doc_id) {
                 continue;
             }
-            let content = fetch_content(doc_id).await?;
-            let mut raw_chunks = self.engine.chunk_document(&recipe, &content)?;
-            stamp_doc_identity(&mut raw_chunks, doc_id);
+            let fetched = fetch_content(doc_id).await?;
+            let raw_chunks = stored_chunks(
+                &self.engine,
+                &recipe,
+                (&mut texts, &declared),
+                doc_id,
+                &fetched,
+            )?;
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
+            texts.replace_source(&index, doc_id).await?;
             index.insert_chunks(&embedded).await?;
 
             log.added_ids.push(doc_id.clone());
@@ -661,6 +688,23 @@ impl CorpusUpdater {
     }
 }
 
+/// The delta's document -> chunks transform, the main loop's in one place:
+/// store the canonical text, then chunk that same string and stamp each chunk
+/// with the document's identity and the text's name.
+fn stored_chunks(
+    engine: &CorpusEngine,
+    recipe: &crate::recipe::Recipe,
+    (texts, declared): (&mut TextWriter, &DeclaredMetadata),
+    doc_id: &str,
+    fetched: &FetchedDoc,
+) -> Result<Vec<crate::index::InsertChunk>> {
+    let text = crate::engine::normalize_content(&fetched.content);
+    let name = texts.store_document(declared.input(&text, doc_id, 0, &fetched.source, None))?;
+    let mut chunks = engine.chunk_document(recipe, &text)?;
+    stamp_doc_identity(&mut chunks, doc_id, name);
+    Ok(chunks)
+}
+
 /// Stamp document identity onto delta-produced chunks.
 /// `CorpusEngine::chunk_document` is document-agnostic (it sees only
 /// the content string), so without this stamp every updated/added doc
@@ -673,7 +717,11 @@ impl CorpusUpdater {
 /// (`tiered_group_key` requires `source_doc_id`). 2026-06-10 obsidian
 /// audit. The title is the doc id's file stem — display-grade only;
 /// an existing chunker-provided title is never overwritten.
-fn stamp_doc_identity(chunks: &mut [crate::index::InsertChunk], doc_id: &str) {
+fn stamp_doc_identity(
+    chunks: &mut [crate::index::InsertChunk],
+    doc_id: &str,
+    text_sha256: Option<kernel_types::Sha256Hash>,
+) {
     let title = std::path::Path::new(doc_id)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -681,6 +729,7 @@ fn stamp_doc_identity(chunks: &mut [crate::index::InsertChunk], doc_id: &str) {
         .to_string();
     for c in chunks.iter_mut() {
         c.source_doc_id = Some(doc_id.to_string());
+        c.text_sha256 = text_sha256;
         if c.title.is_none() {
             c.title = Some(title.clone());
         }
@@ -690,104 +739,5 @@ fn stamp_doc_identity(chunks: &mut [crate::index::InsertChunk], doc_id: &str) {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stamp_doc_identity_sets_doc_id_and_stem_title() {
-        let mut chunks = vec![
-            crate::index::InsertChunk {
-                content: "body".into(),
-                title: None,
-                url: None,
-                metadata: None,
-                content_hash: None,
-                source_doc_id: None,
-                source_file: None,
-                code: crate::index::InsertCodeMeta::default(),
-                unit_id: None,
-            },
-            crate::index::InsertChunk {
-                content: "body2".into(),
-                // A chunker-provided title must survive the stamp.
-                title: Some("Existing".into()),
-                url: None,
-                metadata: None,
-                content_hash: None,
-                source_doc_id: None,
-                source_file: None,
-                code: crate::index::InsertCodeMeta::default(),
-                unit_id: None,
-            },
-        ];
-        stamp_doc_identity(&mut chunks, "notes/daily/2026-06-10.md");
-        for c in &chunks {
-            assert_eq!(
-                c.source_doc_id.as_deref(),
-                Some("notes/daily/2026-06-10.md")
-            );
-        }
-        assert_eq!(chunks[0].title.as_deref(), Some("2026-06-10"));
-        assert_eq!(chunks[1].title.as_deref(), Some("Existing"));
-    }
-
-    fn make_manifest(corpus_id: &str, version: &str, entries: &[(&str, &str)]) -> VersionManifest {
-        VersionManifest {
-            corpus_id: corpus_id.into(),
-            version: version.into(),
-            entries: entries
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
-        }
-    }
-
-    #[test]
-    fn manifest_diff_compute_all_buckets() {
-        let old = make_manifest(
-            "sep",
-            "v1",
-            &[("doc-a", "hash1"), ("doc-b", "hash2"), ("doc-c", "hash3")],
-        );
-        let new = make_manifest(
-            "sep",
-            "v2",
-            &[
-                ("doc-b", "hash2-updated"),
-                ("doc-c", "hash3"), // unchanged
-                ("doc-d", "hash4"), // new
-            ],
-        );
-        let diff = ManifestDiff::compute(&old, &new);
-        assert_eq!(diff.new_documents, vec!["doc-d"]);
-        assert_eq!(diff.updated_documents, vec!["doc-b"]);
-        assert_eq!(diff.deleted_documents, vec!["doc-a"]);
-    }
-
-    #[test]
-    fn manifest_diff_empty_when_identical() {
-        let m = make_manifest("sep", "v1", &[("doc-a", "hash1")]);
-        let diff = ManifestDiff::compute(&m, &m);
-        assert!(diff.is_empty());
-    }
-
-    #[test]
-    fn manifest_diff_all_new() {
-        let old = make_manifest("sep", "v1", &[]);
-        let new = make_manifest("sep", "v2", &[("doc-a", "h1"), ("doc-b", "h2")]);
-        let diff = ManifestDiff::compute(&old, &new);
-        assert_eq!(diff.new_documents.len(), 2);
-        assert!(diff.updated_documents.is_empty());
-        assert!(diff.deleted_documents.is_empty());
-    }
-
-    #[test]
-    fn manifest_diff_all_deleted() {
-        let old = make_manifest("sep", "v1", &[("doc-a", "h1")]);
-        let new = make_manifest("sep", "v2", &[]);
-        let diff = ManifestDiff::compute(&old, &new);
-        assert!(diff.new_documents.is_empty());
-        assert!(diff.updated_documents.is_empty());
-        assert_eq!(diff.deleted_documents.len(), 1);
-    }
-}
+#[path = "delta_tests.rs"]
+mod tests;

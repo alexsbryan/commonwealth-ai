@@ -350,6 +350,7 @@ type = "paragraph"
             metadata: Some(serde_json::json!({"section_name": "md_and_a", "parcel": 5})),
             source_file: None,
             embed_text: None,
+            source: crate::extractors::DocSource::Record,
         };
         let present = |p: FieldProbe| FieldDecl::required(String::new(), p).is_present(&doc);
         assert!(present(FieldProbe::Content));

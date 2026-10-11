@@ -109,10 +109,18 @@ mod meshapp_parcels_e2e;
 mod meshapp_surface_e2e;
 #[path = "main/models_http_e2e.rs"]
 mod models_http_e2e;
+#[path = "main/named_client_e2e.rs"]
+mod named_client_e2e;
 #[path = "main/ner_one_load_census.rs"]
 mod ner_one_load_census;
 #[path = "main/no_engine_census.rs"]
 mod no_engine_census;
+#[path = "main/oicp_align_e2e.rs"]
+mod oicp_align_e2e;
+#[path = "main/oicp_evidence_e2e.rs"]
+mod oicp_evidence_e2e;
+#[path = "main/oicp_install_recipe_e2e.rs"]
+mod oicp_install_recipe_e2e;
 #[path = "main/onprem_keys_e2e.rs"]
 mod onprem_keys_e2e;
 #[path = "main/openai_wire_fidelity.rs"]

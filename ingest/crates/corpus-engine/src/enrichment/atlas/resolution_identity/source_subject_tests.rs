@@ -12,7 +12,7 @@ use super::super::super::resolution_sources::project_source_atoms;
 use super::super::super::writer::write_atlas_full;
 use crate::enrichment::ontology::OntologyV1;
 use crate::enrichment::pipeline::document_read::{
-    compose, parse_response, validate_and_stamp, DocumentReadField,
+    parse_response, validate_and_stamp, DocumentReadField,
 };
 use crate::enrichment::pipeline::types::{ChapterInput, PhaseFailureKind};
 use crate::types::EmbedFn;
@@ -24,7 +24,6 @@ const CARRIER_EMAIL: &str = "review@example.test";
 fn policies() -> crate::enrichment::ontology::OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
         r#"
-document_reading = true
 
 [[types]]
 name = "person"
@@ -127,9 +126,6 @@ fn section(
         }]
     })
     .to_string();
-    let prompt = compose(chapter, policies, "source-subject-test");
-    assert!(prompt.user.contains("metadata_source_references"));
-    assert!(prompt.user.contains(ALICE_EMAIL));
     let mut parsed = parse_response(&raw, policies).unwrap();
     let mut section = parsed.section_extraction.take().unwrap();
     section.section_id = chapter.chapter_id.clone();
@@ -281,12 +277,19 @@ async fn metadata_subject_identity_binds_after_source_projection_and_writer() {
     assert_eq!(written_commitments.len(), 2);
     assert_eq!(written_commitments[0].subject.as_ref(), Some(&alice_id));
     assert!(written_commitments[1].subject.is_none());
-    assert!(written_commitments.iter().all(|claim| {
-        !claim.attributes.contains_key("due")
-            && !claim
-                .attributes
-                .contains_key(crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE)
-    }));
+    assert!(written_commitments
+        .iter()
+        .all(|claim| !claim.attributes.contains_key("due")));
+    // Each keeps the reading of its subject's identity it was bound by, or
+    // the unknown that left it unbound, with its reason.
+    let identity = |claim: &crate::enrichment::atlas::atoms::Claim| {
+        claim.attributes[crate::enrichment::pipeline::document_read::SUBJECT_FIELDS_ATTRIBUTE]
+            ["email"]
+            .clone()
+    };
+    assert_eq!(identity(written_commitments[0])["value"], ALICE_EMAIL);
+    assert_eq!(identity(written_commitments[0])["evidence"], ALICE_EMAIL);
+    assert_eq!(identity(written_commitments[1])["status"], "unknown");
     assert_eq!(
         written_commitments[0].evidence[0].source_doc_id.as_deref(),
         Some("doc-1")

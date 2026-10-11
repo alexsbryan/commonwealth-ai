@@ -1,0 +1,10 @@
+Validating recipe: research/ontology-apps/cdcr/recipe-gvc-e2e.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  identity: happening → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  question shapes: enumerate [(none)]; relations [(none)]; events [happening]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]
+  fill: happening: kind ← Choose on report
+  fill: report: subject `happening` ← RESOLVE
+  document fields: document_date ← `created_at` (RFC 2822 or ISO 8601, written as ISO 8601), document_id ← `id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted

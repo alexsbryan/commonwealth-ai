@@ -459,6 +459,7 @@ async fn ingest_run_estate(
                 source_file: None,
                 code: Default::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             embedding,
         ));

@@ -530,6 +530,7 @@ fn insert_chunk(content: &str, source_doc_id: &str, summary: &str) -> InsertChun
         source_file: None,
         code: InsertCodeMeta::default(),
         unit_id: None,
+        text_sha256: None,
     }
 }
 

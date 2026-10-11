@@ -51,6 +51,8 @@ pub use ::oplog;
 pub mod pii;
 pub mod progress;
 pub mod recipe;
+pub mod recipe_corpus_fields;
+pub mod recipe_documents;
 pub mod recipe_install;
 pub mod recipe_ontology;
 mod recipe_parsing;
@@ -67,6 +69,7 @@ mod snapshot_restore;
 pub mod sovereign_config;
 pub mod stream_axes;
 pub mod testing;
+pub mod text_store;
 pub mod types;
 pub mod update;
 // yield_hook extracted to the corpus-engine-yield leaf crate (watchers

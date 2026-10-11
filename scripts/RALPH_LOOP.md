@@ -56,14 +56,22 @@ records under `target/`, which a host may purge under disk pressure;
 
 Nothing else a session writes is read as loop state. A session that ends
 without a result is judged by its commits alone: commits mean it continues,
-none mean a strike.
+none mean a strike. A lane worker that ends with no result but with tracked
+changes it never committed has them committed on its lane's branch by the loop
+("saved by the loop"), so the work is kept and the end counts as progress;
+untracked files are left alone, and the main tree is never touched.
 
 ## Escalation
 
 There is one path: retry, then strikes, then the director, then held. A unit
 strikes when a session ends with no result and no commit, when it continues
 more than `MAX_LANE_CONTINUATIONS` times in a row, when a run passes its
-budget, or when its merge conflicts. At `--max-stall` (serial) or
+budget, when its merge conflicts, or when the project's own pre-merge check
+(`ralph/merge-check`, optional: the base's copy, run in the lane before it
+lands, so a lane cannot weaken its own gate; red sends it back unmerged with
+the check's last lines) fails. A check that does not finish in its bound is
+`could_not_judge`, the host's and not the lane's: no strike, the unit stays
+merging, and the check is retried after a cool-down. At `--max-stall` (serial) or
 `--max-lane-failures` (pool) strikes, a queue with a charter
 (`ralph/CHARTER.md`, or the manifest's) sends the director: a session on
 `RESOLVE_MODEL` that decides the forks the charter covers and records each
@@ -74,6 +82,12 @@ director first too, unless it says `--operator`. With no charter, or after
 does not depend on it keeps running. `ralph.py unpark <row>` (or deleting the
 package) releases it with its counters reset. HUMAN- rows and rows outside a
 frozen scope (`scope_file`) are held the same way.
+
+A detached run that will overrun its budget through no fault of its own (a
+slow row on a loaded host) can be given more time instead of being ended
+and struck: `ralph.py extend <unit> <duration>` writes `<control>/extend/<unit>`,
+and the loop adds it to the run's budget on its next tick, logs it, and
+removes the file. The extended deadline binds as the first one did.
 
 ## The precondition guard
 

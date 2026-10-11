@@ -459,6 +459,7 @@ mod tests {
             tool_name: tool.into(),
             outcome: outcome.into(),
             called_at,
+            caller: None,
         }
     }
 

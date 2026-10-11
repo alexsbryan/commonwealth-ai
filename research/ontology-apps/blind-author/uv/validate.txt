@@ -1,0 +1,21 @@
+Validating recipe: recipe.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  tension selector: embedding top-k (k = 10, floor = 0.5) over diagnosis, occurrence, resolution, behaviour_decision — cross-document declared corpora select the embedding net; the classifier judges each pair
+  source: issue ← document fields issue_number (number: value) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: issue → number (external key, strict merge)
+  identity: problem → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  identity: component → area + command (descriptive keys, judged merge)
+  identity: package → normalized_name (external key, strict merge)
+  identity: release → version (external key, strict merge)
+  identity: platform → os + arch + os_detail (descriptive keys, judged merge)
+  identity: python_build → implementation + version + provenance (descriptive keys, judged merge)
+  identity: pull_request → repository + number (external key, strict merge)
+  source: github_user ← document fields author (login: value) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: github_user → login (external key, strict merge)
+  identity: maintainer → login (external key, strict merge)
+  identity: reporter → login (external key, strict merge)
+  question shapes: enumerate [issue, problem, component, package, release, platform, python_build, pull_request, github_user, maintainer, reporter]; relations [reports, duplicate_of, addresses, shipped_in, involves]; events [triage_action]; aggregate [diagnosis by component, diagnosis by issue, occurrence by issue, occurrence by uv_version, occurrence by platform, occurrence by python, resolution by pull_request, resolution by fixed_in, resolution by issue, behaviour_decision by issue, behaviour_decision by shipped_in, feature_request by issue, commitment by target_release]
+  document fields: document_date ← `created_at` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `issue_number`, document_id ← `id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted

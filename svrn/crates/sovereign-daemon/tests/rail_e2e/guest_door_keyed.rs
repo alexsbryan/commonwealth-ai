@@ -13,7 +13,9 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use sovereign_daemon::api_keys;
-use sovereign_daemon::client_tokens::{client_tokens_dir, keys, ClientTokenStore, KEY_ADMIN_GROUP};
+use sovereign_daemon::client_tokens::{
+    client_tokens_dir, ClientTokenStore, Loopback, LoopbackPosture, KEY_ADMIN_GROUP,
+};
 use sovereign_daemon::guest_door::{serve, GuestPages};
 
 use super::*;
@@ -25,8 +27,15 @@ const IT: &str = "it-key-0000000000000000000000000000000000000000000000000000000
 /// it — and a live wall grant, so the door is open.
 fn keyed_state(data_dir: &std::path::Path) -> AppState {
     let dir = client_tokens_dir(data_dir);
-    keys::add_key(&dir, "alice", &[], ALICE).unwrap();
-    keys::add_key(&dir, "it", &[KEY_ADMIN_GROUP.to_string()], IT).unwrap();
+    let keyed = LoopbackPosture {
+        loopback: Loopback::None,
+        declared: true,
+    };
+    let installer = ClientTokenStore::load(Some(dir.clone()), keyed);
+    installer.mint("alice", &[], ALICE.into()).unwrap();
+    installer
+        .mint("it", &[KEY_ADMIN_GROUP.to_string()], IT.into())
+        .unwrap();
     let node = NodeId::from_u128(1);
     let state = AppState::new_with_seeds(
         node,
@@ -36,7 +45,7 @@ fn keyed_state(data_dir: &std::path::Path) -> AppState {
         sovereign_daemon::state::ServingSeed::default(),
         sovereign_daemon::state::NodeSeed {
             client_token: Some(Arc::<str>::from(TOKEN)),
-            named_client_tokens: Arc::new(ClientTokenStore::load(Some(dir))),
+            named_client_tokens: Arc::new(ClientTokenStore::load(Some(dir), keyed)),
             ..Default::default()
         },
         Arc::new(ledger_double::RecordingLedger::new(node)).seed(),

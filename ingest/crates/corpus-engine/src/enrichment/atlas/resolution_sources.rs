@@ -14,11 +14,14 @@
 //! `merge_into_existing` folds each mention in.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::sync::OnceLock;
 
-use mailparse::{MailAddr, SingleInfo};
 use serde_json::{Map, Value};
 use tracing::{debug, info, trace, warn};
+
+#[path = "resolution_sources/fields.rs"]
+mod fields;
+use fields::{addresses, read_item, scalars_of, sighting, Item, Sighting};
+pub use fields::{field_records, FieldRecord};
 
 use super::atoms::{AtomId, ChunkRef, Entity, SignalKind, SignalProvenance};
 use super::resolution::{fold, merge_into_existing};
@@ -70,12 +73,9 @@ pub struct SourceTypeReport {
     pub identity: Vec<String>,
     /// Atoms projected: distinct identity values.
     pub projected: usize,
-    /// Sightings skipped because `exclude` names their identity value.
+    /// Sightings skipped because `exclude` names their identity value (or one
+    /// it ends in at a word boundary), a bundled list it names included.
     pub excluded: usize,
-    /// Sightings skipped because a `domain`-read identity value is a mailbox
-    /// provider's (the bundled `mailbox_providers` list, or a subdomain of a
-    /// listed domain): an address there names no organization.
-    pub providers: usize,
     /// Sightings with no identity value (a bare address read by `display_name`).
     pub without_identity: usize,
     /// Field → documents that do not carry it.
@@ -116,8 +116,8 @@ impl SourceReport {
                     .collect::<Vec<_>>();
                 format!(
                     "source {t} ← {}: {} atom(s) from {} document(s); {} model atom(s) merged \
-                     on {} ({} refused, {} named an atom); {} excluded, {} at a mailbox provider, \
-                     {} without identity, {} unreadable field(s); absent: {}",
+                     on {} ({} refused, {} named an atom); {} excluded, {} without identity, \
+                     {} unreadable field(s); absent: {}",
                     r.fields.join(", "),
                     r.projected,
                     self.documents,
@@ -126,7 +126,6 @@ impl SourceReport {
                     fold.refused.get(t).copied().unwrap_or(0),
                     fold.named.get(t).copied().unwrap_or(0),
                     r.excluded,
-                    r.providers,
                     r.without_identity,
                     r.unreadable,
                     if absent.is_empty() {
@@ -173,7 +172,17 @@ pub fn project_source_atoms(
             identity: identity.iter().map(|(k, _)| k.to_string()).collect(),
             ..Default::default()
         };
-        let accs = project_type(&t.name, src, &identity, &docs, &mut report, &mut out.report);
+        let excluded = fields::Exclusion::of(src)
+            .map_err(|e| format!("ontology type `{}` (metadata source): {e}", t.name))?;
+        let accs = project_type(
+            &t.name,
+            src,
+            &excluded,
+            &identity,
+            &docs,
+            &mut report,
+            &mut out.report,
+        );
         report.projected = accs.len();
         let ty = EntityType::from_str_repr(&t.name);
         for mut a in accs {
@@ -198,7 +207,6 @@ pub fn project_source_atoms(
             ty = %t.name,
             projected = report.projected,
             excluded = report.excluded,
-            providers = report.providers,
             unreadable = report.unreadable,
             "atlas/resolution sources: projected from document fields"
         );
@@ -244,12 +252,6 @@ pub fn project_source_atoms(
     Ok(out)
 }
 
-/// One mailbox of an address list, or the whole value under `value`.
-struct Item {
-    addr: Option<String>,
-    name: Option<String>,
-}
-
 /// Everything seen for one identity value.
 struct Accum {
     key: String,
@@ -267,17 +269,14 @@ struct Accum {
 fn project_type(
     type_name: &str,
     src: &MetadataSourceDecl,
+    excluded: &fields::Exclusion,
     identity: &[(&str, FieldReader)],
     docs: &[(&str, &str, &Map<String, Value>)],
     report: &mut SourceTypeReport,
     all: &mut SourceReport,
 ) -> Vec<Accum> {
     let reads_addresses = src.reads_addresses();
-    let excluded: HashSet<String> = src
-        .exclude
-        .iter()
-        .filter_map(|e| fold_identity_value(e))
-        .collect();
+
     let mut accs: Vec<Accum> = Vec::new();
     let mut by_key: HashMap<String, usize> = HashMap::new();
     for (section, doc, fields) in docs {
@@ -314,7 +313,7 @@ fn project_type(
                         name: None,
                     }]
                 } else {
-                    match mailboxes(&scalar) {
+                    match addresses(&scalar) {
                         Ok(m) => m,
                         Err(why) => {
                             report.unreadable += 1;
@@ -325,33 +324,23 @@ fn project_type(
                 };
                 for item in items {
                     let read = |r: FieldReader| read_item(r, &item, &scalar);
-                    let folded: Option<Vec<String>> = identity
-                        .iter()
-                        .map(|(_, r)| read(*r).as_deref().and_then(fold_identity_value))
-                        .collect();
-                    let Some(folded) = folded else {
-                        trace!(
-                            document = doc,
-                            field,
-                            "atlas/resolution sources: no identity value"
-                        );
-                        report.without_identity += 1;
-                        continue;
+                    let folded = match sighting(identity, excluded, &item, &scalar) {
+                        Sighting::Key(folded) => folded,
+                        Sighting::NoIdentity => {
+                            trace!(
+                                document = doc,
+                                field,
+                                "atlas/resolution sources: no identity value"
+                            );
+                            report.without_identity += 1;
+                            continue;
+                        }
+                        Sighting::Excluded(folded) => {
+                            trace!(document = doc, field, key = ?folded, "atlas/resolution sources: excluded");
+                            report.excluded += 1;
+                            continue;
+                        }
                     };
-                    if folded.iter().any(|f| excluded.contains(f)) {
-                        trace!(document = doc, field, key = ?folded, "atlas/resolution sources: excluded");
-                        report.excluded += 1;
-                        continue;
-                    }
-                    // the raw domain, not the folded key: folding turns '.' and '-' alike into spaces
-                    if identity.iter().any(|(_, r)| {
-                        *r == FieldReader::Domain
-                            && read(*r).is_some_and(|d| is_mailbox_provider(&d))
-                    }) {
-                        trace!(document = doc, field, key = ?folded, "atlas/resolution sources: a mailbox provider's address names no organization");
-                        report.providers += 1;
-                        continue;
-                    }
                     let key = folded.join("\u{1f}");
                     let i = *by_key.entry(key.clone()).or_insert_with(|| {
                         accs.push(Accum {
@@ -473,93 +462,6 @@ fn key_name<'a>(
         .filter_map(|k| attributes.get(k).and_then(Value::as_str))
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-/// A field's value as the scalars a reader reads: a string or number, or each
-/// one of a list. `Ok(None)` when it holds nothing (null, blank, empty list).
-fn scalars_of(v: &Value) -> Result<Option<Vec<String>>, String> {
-    let one = |x: &Value| match x {
-        Value::String(s) => Ok(s.trim().to_string()),
-        Value::Number(n) => Ok(n.to_string()),
-        Value::Null => Ok(String::new()),
-        Value::Bool(_) => Err("holds a boolean".to_string()),
-        Value::Array(_) => Err("holds a nested list".to_string()),
-        Value::Object(_) => Err("holds an object".to_string()),
-    };
-    let all = match v {
-        Value::Array(xs) => xs.iter().map(one).collect::<Result<Vec<_>, _>>()?,
-        x => vec![one(x)?],
-    };
-    let all: Vec<String> = all.into_iter().filter(|s| !s.is_empty()).collect();
-    Ok((!all.is_empty()).then_some(all))
-}
-
-/// The mailboxes of an RFC 5322 address list (groups flattened).
-fn mailboxes(list: &str) -> Result<Vec<Item>, String> {
-    let parsed = mailparse::addrparse(list).map_err(|e| format!("is not an address list ({e})"))?;
-    let item = |s: &SingleInfo| Item {
-        addr: Some(s.addr.trim().to_lowercase()).filter(|a| !a.is_empty()),
-        name: s
-            .display_name
-            .as_deref()
-            .map(str::trim)
-            .filter(|n| !n.is_empty())
-            .map(str::to_string),
-    };
-    let out: Vec<Item> = parsed
-        .iter()
-        .flat_map(|a| match a {
-            MailAddr::Single(s) => vec![item(s)],
-            MailAddr::Group(g) => g.addrs.iter().map(item).collect(),
-        })
-        .collect();
-    if out.is_empty() {
-        return Err("holds no address".to_string());
-    }
-    Ok(out)
-}
-
-fn read_item(reader: FieldReader, item: &Item, scalar: &str) -> Option<String> {
-    match reader {
-        FieldReader::Address => item.addr.clone(),
-        FieldReader::Domain => item
-            .addr
-            .as_deref()
-            .and_then(|a| a.rsplit_once('@'))
-            .map(|(_, d)| d.to_string())
-            .filter(|d| !d.is_empty()),
-        FieldReader::DisplayName => item.name.clone(),
-        FieldReader::Value => Some(scalar.to_string()),
-    }
-}
-
-/// Whether `domain` is a mailbox provider's: on the bundled `mailbox_providers`
-/// list, or a subdomain of a listed domain (`email.msn.com` is `msn.com`'s). The
-/// list is compiled in through the asset port, so its absence is a build defect.
-fn is_mailbox_provider(domain: &str) -> bool {
-    static LISTED: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    let listed = LISTED.get_or_init(|| {
-        let bytes = crate::recipe_source::default_assets()
-            .bundled_asset("mailbox_providers")
-            .expect("the mailbox_providers asset is compiled in");
-        std::str::from_utf8(bytes)
-            .expect("mailbox_providers is UTF-8")
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .collect()
-    });
-    let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
-    let mut d = domain.as_str();
-    loop {
-        if listed.contains(d) {
-            return true;
-        }
-        match d.split_once('.') {
-            Some((_, rest)) if rest.contains('.') => d = rest,
-            _ => return false,
-        }
-    }
 }
 
 /// Fold every model atom that carries a projected atom's identity value into

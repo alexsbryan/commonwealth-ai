@@ -1,0 +1,14 @@
+Validating recipe: recipe.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  tension selector: embedding top-k (k = 10, floor = 0.5) over toll_report, incident_account, identification, outcome_report, suspect_status, official_ruling — cross-document declared corpora select the embedding net; the classifier judges each pair
+  identity: incident → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  identity: participant → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  identity: location → street_address + city + state (descriptive keys, judged merge)
+  source: news_outlet ← document fields source (name: value) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: news_outlet → name (external key, strict merge)
+  identity: law_enforcement_agency → name + jurisdiction (descriptive keys, judged merge)
+  question shapes: enumerate [incident, participant, location, news_outlet, law_enforcement_agency]; relations [involved_in]; events [(none)]; aggregate [incident_account by location]
+  document fields: document_date ← `date_published` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `incident_id`, document_id ← `url` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted

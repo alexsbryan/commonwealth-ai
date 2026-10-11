@@ -5,7 +5,7 @@
 //!
 //!   svrn recipe test <path>      [--sample-size N] [--output path]
 //!                                     [--no-embed] [--verbose] [--offline]
-//!   svrn recipe validate <path>  [--offline]
+//!   svrn recipe validate <path>  [--offline] [--corpus <path>]
 //!
 //! Both commands use a stub `EmbedFn` that returns zero-vectors. Embedding
 //! is always disabled (`--no-embed`) in this code path because loading an
@@ -84,7 +84,9 @@ const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
             "`list` takes --offline (skip live registry refresh).\n\
              `test` takes --sample-size N, --output <path>, --offline, --verbose, \
              --params k=v[,...], --params-file <json>.\n\
-             `validate` takes --offline.\n\
+             `validate` takes --offline, and --corpus <path>: read the documents at <path> \
+             with the recipe's extractor, fail on a declared metadata field none of them \
+             carries, and list the fields they do.\n\
              `publish` writes to ~/.svrnmesh/recipes/registry.toml; pass \
              --submit-pr to also draft a community-registry PR via `gh`.\n\
              `new` takes --ontology <name> (required; `--ontology list` names them), \
@@ -414,11 +416,22 @@ async fn resolve_daemon_models(v1: &str) -> Result<(String, String), String> {
 async fn cmd_validate(args: &[String]) -> i32 {
     let mut recipe_path: Option<PathBuf> = None;
     let mut offline = false;
+    let mut corpus: Option<PathBuf> = None;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--offline" => offline = true,
+            "--corpus" => {
+                i += 1;
+                match args.get(i) {
+                    Some(p) => corpus = Some(PathBuf::from(p)),
+                    None => {
+                        eprintln!("error: --corpus needs a path");
+                        return 1;
+                    }
+                }
+            }
             flag if flag.starts_with('-') => {
                 eprintln!("warning: unknown flag '{flag}' — ignored");
             }
@@ -433,7 +446,7 @@ async fn cmd_validate(args: &[String]) -> i32 {
         Some(p) => p,
         None => {
             eprintln!("error: missing recipe path");
-            eprintln!("Usage: svrn recipe validate <path> [--offline]");
+            eprintln!("Usage: svrn recipe validate <path> [--offline] [--corpus <path>]");
             return 1;
         }
     };
@@ -449,7 +462,22 @@ async fn cmd_validate(args: &[String]) -> i32 {
     eprintln!("Validating recipe: {}", recipe_path.display());
 
     match engine.test_recipe(&recipe_path, &options).await {
-        Ok(report) => {
+        Ok(mut report) => {
+            // `--corpus`: the declared metadata fields against the documents
+            // the recipe's extractor reads there, folded into the same three
+            // channels, so a field no document carries fails validation.
+            if let Some(corpus) = &corpus {
+                match Recipe::from_file(&recipe_path) {
+                    Ok(recipe) => {
+                        let f =
+                            corpus_engine::recipe_corpus_fields::check(&engine, &recipe, corpus);
+                        report.validation.errors.extend(f.errors);
+                        report.validation.warnings.extend(f.warnings);
+                        report.validation.notes.extend(f.notes);
+                    }
+                    Err(e) => report.validation.errors.push(e.to_string()),
+                }
+            }
             if report.validation.errors.is_empty() {
                 // A VALIDATOR'S VERDICT IS ITS PAYLOAD, so it goes to stdout —
                 // the 17th site of the payload-vs-narration census (note

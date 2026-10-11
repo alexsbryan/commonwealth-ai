@@ -22,7 +22,7 @@ use tracing::{debug, info};
 
 use super::atoms::{
     ArgumentReconstruction, AtomId, ChunkRef, Claim, Entity, Event, Opposition, Position, Relation,
-    SignalKind, SignalProvenance, State,
+    SectionPosition, SignalKind, SignalProvenance, State,
 };
 use super::edges::Edge;
 use super::resolution::Trajectory;
@@ -33,32 +33,62 @@ use super::resolve_records::propose::{
     Proposers, SimilarDocuments, MAX_CANDIDATES, MIN_SIMILARITY, NEIGHBOURS,
 };
 use super::resolve_records::{
-    Answerer, Criterion, Document, DocumentResolution, ProposalRule, Resolver, Statement,
+    resolve_in_clock_order, Answerer, Criterion, Document, DocumentResolution, ProposalRule,
+    Resolver, Statement,
 };
 use crate::enrichment::ontology::{
     DocumentStamp, OntologyPolicies, OntologyTypeDecl, TypeIndex, TypeKind,
 };
-use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    field_readings, supported_values, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 
 #[path = "resolution_records/local_subjects.rs"]
 mod local_subjects;
+#[path = "resolution_records/retire.rs"]
+mod retire;
 use local_subjects::{Assigned, Spot};
+use retire::retire;
 
 /// The extractor id on a record's atom.
 const EXTRACTOR_ID: &str = "atlas/resolve";
 
-/// Whether RESOLVE decides `type_name`'s identity in the atlas build: an
-/// entity type that declares an `identity_criterion` and no metadata
-/// `source`. The one test: 3b leaves a claim's subject of such a type to
-/// RESOLVE, and [`resolve_declared_types`] decides it.
+/// Whether RESOLVE decides `type_name`'s identity in the atlas build: a type
+/// of a kind that is identified again (an entity or an event; PRIMITIVES §0:
+/// events are full subjects of claims) that declares an `identity_criterion`
+/// and no metadata `source`. The one test: 3b leaves a claim's subject of such
+/// a type to RESOLVE, and [`resolve_declared_types`] decides it.
 pub fn decides(index: &TypeIndex<'_>, type_name: &str) -> bool {
     index.get(type_name).is_some_and(|t| {
-        t.kind == TypeKind::Entity && t.identity_criterion.is_some() && t.source.is_none()
+        matches!(t.kind, TypeKind::Entity | TypeKind::Event)
+            && t.identity_criterion.is_some()
+            && t.source.is_none()
     })
+}
+
+/// The types RESOLVE decides ([`decides`]) that no declared claim kind names as
+/// its `subject`: RESOLVE would have no statement of them, and their Phase-1
+/// atoms would be decided by 3a's merge instead. The build refuses such a
+/// declaration (`enrich extract`); `recipe validate` names it.
+pub fn types_without_statements(policies: &OntologyPolicies) -> Vec<String> {
+    let index = TypeIndex::from_policies(policies);
+    policies
+        .shape
+        .types
+        .iter()
+        .filter(|t| decides(&index, &t.name))
+        .filter(|t| {
+            !policies
+                .shape
+                .types
+                .iter()
+                .any(|c| c.kind == TypeKind::Claim && c.subject.as_deref() == Some(t.name.as_str()))
+        })
+        .map(|t| t.name.clone())
+        .collect()
 }
 
 /// Every atom vector of a build that can name an entity. Retiring one
@@ -89,14 +119,21 @@ pub struct RecordsReport {
     pub documents: usize,
     /// Documents with no date stamp, resolved after every dated one.
     pub undated: usize,
-    /// Statements by how RESOLVE decided them (`Outcome::label`).
+    /// Statements by how RESOLVE decided them (`Outcome::label`), a held
+    /// statement settled after the last document by how it settled.
     pub outcomes: BTreeMap<&'static str, usize>,
+    /// Statements held in their document and settled after the last one (E3):
+    /// the held count before; `outcomes["held"]` is the count after.
+    pub settled: usize,
     pub records: usize,
     pub calls: u32,
     /// The type's atoms 3a made from Phase-1 sketches, retired.
     pub retired: usize,
     /// References to them dropped, by what held each.
     pub dropped: BTreeMap<&'static str, usize>,
+    /// Each source's weight as estimated on this corpus and what it carried,
+    /// one line each (`Resolver::sources_summary`, D2).
+    pub sources: Vec<String>,
 }
 
 impl RecordsReport {
@@ -110,8 +147,8 @@ impl RecordsReport {
         };
         format!(
             "RESOLVE `{}`: {} record(s) from {} statement(s) of {} claim(s) in {} document(s) \
-             ({} unplaced, {} undated), {} call(s); decided [{}]; {} Phase-1 atom(s) retired, \
-             references dropped [{}]",
+             ({} unplaced, {} undated), {} call(s); decided [{}], {} held and settled after the \
+             last document; {} Phase-1 atom(s) retired, references dropped [{}]",
             self.type_name,
             self.records,
             self.statements,
@@ -121,9 +158,14 @@ impl RecordsReport {
             self.undated,
             self.calls,
             fold(&self.outcomes),
+            self.settled,
             self.retired,
             fold(&self.dropped),
-        )
+        ) + &self
+            .sources
+            .iter()
+            .map(|l| format!("\n    source {l}"))
+            .collect::<String>()
     }
 }
 
@@ -153,7 +195,7 @@ pub async fn resolve_declared_types(
             continue;
         }
         if !decides(&index, &t.name) {
-            let why = if t.kind == TypeKind::Entity {
+            let why = if t.source.is_some() {
                 "it declares a metadata source".to_string()
             } else {
                 format!("it is a {:?} type", t.kind)
@@ -164,7 +206,8 @@ pub async fn resolve_declared_types(
                 PhaseFailureKind::Other,
                 format!(
                     "`{}` declares an identity_criterion, but {why}: RESOLVE decides only entity \
-                     types with no source in the atlas build, so its atoms are decided as before",
+                     and event types with no source in the atlas build, so its atoms are decided \
+                     as before",
                     t.name
                 ),
             ));
@@ -185,10 +228,10 @@ pub async fn resolve_declared_types(
         info!(r#type = %t.name, records = report.records, statements = report.statements, unplaced = report.unplaced, retired = report.retired, calls = report.calls, "atlas/resolve: type decided");
         reports.push(report);
     }
+    // The subject's readings stay on each claim, cited.
     for claim in atoms.claims.iter_mut() {
         claim.attributes.remove(LOCAL_REF_ATTRIBUTE);
         claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE);
-        claim.attributes.remove(SUBJECT_FIELDS_ATTRIBUTE);
     }
     (reports, failures)
 }
@@ -209,7 +252,7 @@ async fn resolve_type(
         type_name: t.name.clone(),
         ..Default::default()
     };
-    let ty = EntityType::from_str_repr(&t.name);
+    let kind = t.kind;
     let kinds: BTreeSet<&str> = policies
         .shape
         .types
@@ -218,9 +261,8 @@ async fn resolve_type(
         .map(|c| c.name.as_str())
         .collect();
     let of_kinds = |c: &Claim| c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k));
-    // Reader-local references and supplied values are transient handoff data;
-    // the qualified read itself remains in the Phase-1 cache.
-    let mut read_document_of = HashMap::<usize, String>::new();
+    // Reader-local references are transient handoff data. The subject's
+    // readings stay on the claim: RESOLVE keys on their supported values.
     let mut read_local_ref_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
     for (i, claim) in atoms.claims.iter_mut().enumerate() {
@@ -232,22 +274,42 @@ async fn resolve_type(
             for evidence in &mut claim.evidence {
                 evidence.source_doc_id = Some(document.clone());
             }
-            read_document_of.insert(i, document);
         }
         if let Some(Value::String(local_ref)) = claim.attributes.remove(LOCAL_REF_ATTRIBUTE) {
             read_local_ref_of.insert(i, local_ref);
         }
-        if let Some(Value::Object(fields)) = claim.attributes.remove(SUBJECT_FIELDS_ATTRIBUTE) {
-            read_subject_fields_of.insert(i, fields);
+        if let Some(readings) = claim.attributes.get(SUBJECT_FIELDS_ATTRIBUTE) {
+            match field_readings(readings) {
+                Ok(readings) => {
+                    read_subject_fields_of.insert(i, supported_values(&readings));
+                }
+                Err(why) => {
+                    debug!(claim = %claim.id.as_str(), %why, "atlas/resolve: subject readings unreadable; no key of them");
+                    failures.push(failure(
+                        format!("atom:{}", claim.id.as_str()),
+                        PhaseFailureKind::Other,
+                        format!("its subject's {why}; no key of it reaches RESOLVE"),
+                    ));
+                }
+            }
         }
     }
 
-    // One decider: the Phase-1 atoms of the type go first, whatever follows.
+    // One decider: the Phase-1 atoms of the type go first, whatever follows,
+    // in either kind a sketch may have named it. The passes reader sketches
+    // no subject, so these come from the general extractor's sketches.
     let retired: BTreeSet<AtomId> = atoms
         .entities
         .iter()
         .filter(|e| e.entity_type.as_str_repr() == t.name)
         .map(|e| e.id.clone())
+        .chain(
+            atoms
+                .events
+                .iter()
+                .filter(|e| e.event_type.as_str_repr() == t.name)
+                .map(|e| e.id.clone()),
+        )
         .collect();
     report.retired = retired.len();
     report.dropped = retire(atoms, &retired, &t.name, failures);
@@ -290,22 +352,9 @@ async fn resolve_type(
             continue;
         };
         report.claims += 1;
-        let locate_accountable = || {
-            let document_id = read_document_of.get(&i).ok_or_else(|| {
-                "accountable document id is absent from the claim handoff".to_string()
-            })?;
-            let section = claim
-                .evidence
-                .first()
-                .map(|evidence| evidence.chunk_id.as_str())
-                .ok_or_else(|| "accountable claim carries no section evidence".to_string())?;
-            let doc = documents
-                .document_for_section(section, document_id)
-                .ok_or_else(|| {
-                    format!(
-                        "accountable document `{document_id}` is not present in evidence section `{section}`"
-                    )
-                })?;
+        // The claim's own document (its read's, stamped on the evidence),
+        // or the one its anchor lands in (`locate`).
+        let spot = locate(claim, documents).and_then(|doc| {
             let anchor = claim
                 .anchor
                 .as_deref()
@@ -313,37 +362,13 @@ async fn resolve_type(
                     claim
                         .evidence
                         .iter()
-                        .find_map(|evidence| evidence.passage_preview.as_deref())
+                        .find_map(|e| e.passage_preview.as_deref())
                 })
                 .map(fold_ws)
-                .filter(|anchor| !anchor.is_empty())
+                .filter(|a| !a.is_empty())
                 .ok_or_else(|| "the claim carries no anchor".to_string())?;
-            if !doc.body().contains(&anchor) {
-                return Err(format!(
-                    "anchor {anchor:?} is not in explicitly named document `{document_id}`"
-                ));
-            }
             Ok((doc, anchor))
-        };
-        let spot = if read_document_of.contains_key(&i) {
-            locate_accountable()
-        } else {
-            locate(claim, documents).and_then(|doc| {
-                let anchor = claim
-                    .anchor
-                    .as_deref()
-                    .or_else(|| {
-                        claim
-                            .evidence
-                            .iter()
-                            .find_map(|e| e.passage_preview.as_deref())
-                    })
-                    .map(fold_ws)
-                    .filter(|a| !a.is_empty())
-                    .ok_or_else(|| "the claim carries no anchor".to_string())?;
-                Ok((doc, anchor))
-            })
-        };
+        });
         let (doc, anchor) = match spot {
             Ok(s) => s,
             Err(why) => {
@@ -411,6 +436,7 @@ async fn resolve_type(
                 start,
                 end,
                 keys,
+                read: BTreeMap::new(),
             });
         } else if let Some(statement) = placed[k].statements.iter_mut().find(|s| s.id == id) {
             for (key, value) in keys {
@@ -443,21 +469,32 @@ async fn resolve_type(
         statement_of.push((i, id));
     }
     placed.retain(|p| !p.statements.is_empty());
+    // The document reader's subject fields are its Choose answers: a model's
+    // read, so a necessary value among them is weighed (`necessary:<attr>`),
+    // never forbidding outright as a value a declared field supplies does
+    // (campaign E2). A sufficient key stays a key.
+    let mut moved = 0usize;
+    for p in placed.iter_mut() {
+        for s in p.statements.iter_mut() {
+            for n in t
+                .identity_necessary
+                .iter()
+                .filter(|n| !criterion.keys.contains(n))
+            {
+                if let Some(v) = s.keys.remove(n) {
+                    s.read.insert(n.clone(), v);
+                    moved += 1;
+                }
+            }
+        }
+    }
+    debug!(r#type = %t.name, moved, "atlas/resolve: the reader's necessary values are reads, weighed");
     for p in placed.iter_mut() {
         p.statements.sort_by_key(|s| (s.start, s.end));
     }
-    // The clock: dated documents first, oldest first; the key breaks ties.
-    let date = |p: &Placed<'_>| -> Option<String> {
-        p.stamps
-            .iter()
-            .find(|(s, _)| *s == DocumentStamp::Date)
-            .map(|(_, v)| v.clone())
-    };
-    placed.sort_by(|a, b| {
-        (date(a).is_none(), date(a), &a.doc.key).cmp(&(date(b).is_none(), date(b), &b.doc.key))
-    });
+    let undated = |p: &Placed<'_>| !p.stamps.iter().any(|(s, _)| *s == DocumentStamp::Date);
     report.documents = placed.len();
-    report.undated = placed.iter().filter(|p| date(p).is_none()).count();
+    report.undated = placed.iter().filter(|p| undated(p)).count();
     report.statements = placed.iter().map(|p| p.statements.len()).sum();
 
     let mut resolver = Resolver::with_rule(ProposalRule::default());
@@ -467,37 +504,61 @@ async fn resolve_type(
     );
     let mut record_of: HashMap<String, String> = HashMap::new();
     let mut refused: HashMap<String, &'static str> = HashMap::new();
-    for p in &placed {
-        let doc = Document {
-            id: &p.doc.key,
-            title: p.doc.title.as_deref(),
-            body: &p.body,
-            stamps: &p.stamps,
-        };
-        let candidates = proposer.propose(doc);
-        let r = resolver
-            .resolve_document(&criterion, doc, &p.statements, &candidates, answerer)
-            .await;
-        proposer.observe(doc, &r);
-        on_document(&t.name, &r);
-        report.calls += r.calls;
-        for o in &r.outcomes {
-            *report.outcomes.entry(o.outcome.label()).or_default() += 1;
-            match o.outcome.record() {
-                Some(rec) => {
-                    record_of.insert(o.statement.clone(), rec.to_string());
+    let mut documents: Vec<(Document<'_>, &[Statement])> = placed
+        .iter()
+        .map(|p| {
+            (
+                Document {
+                    id: &p.doc.key,
+                    title: p.doc.title.as_deref(),
+                    body: &p.body,
+                    stamps: &p.stamps,
+                },
+                p.statements.as_slice(),
+            )
+        })
+        .collect();
+    // The clock orders them (`resolve_records::clock`), one loop for both drivers.
+    resolve_in_clock_order(
+        &criterion,
+        &mut documents,
+        &mut resolver,
+        &mut proposer,
+        answerer,
+        &mut |_, _, r| {
+            on_document(&t.name, r);
+            report.calls += r.calls;
+            for o in &r.outcomes {
+                if r.settles {
+                    // It replaces the statement's held outcome (E3).
+                    if let Some(n) = report.outcomes.get_mut("held") {
+                        *n -= 1;
+                    }
+                    report.settled += 1;
                 }
-                None => {
-                    refused.insert(o.statement.clone(), o.outcome.label());
+                *report.outcomes.entry(o.outcome.label()).or_default() += 1;
+                match o.outcome.record() {
+                    Some(rec) => {
+                        refused.remove(&o.statement);
+                        record_of.insert(o.statement.clone(), rec.to_string());
+                    }
+                    None => {
+                        refused.insert(o.statement.clone(), o.outcome.label());
+                    }
                 }
             }
-        }
+        },
+    )
+    .await;
+
+    report.sources = resolver.sources_summary();
+    for line in &report.sources {
+        info!(r#type = %t.name, source = %line, "atlas/resolve: source weight estimated on this corpus");
     }
 
-    // Records become the type's atoms.
+    // Records become the type's atoms, in the type's own kind.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();
     for rec in resolver.records() {
-        let id = AtomId::exact_entity_content_hash(&rec.id, &ty, corpus_id);
         // A record is opened by a placed statement, so both are there; one
         // that is not is refused, never named or placed by a default.
         let (Some(e), Some(section)) = (rec.evidence.first(), section_of.get(&rec.id)) else {
@@ -514,6 +575,26 @@ async fn resolve_type(
         let (document, surface, section) = (e.document.clone(), e.surface.clone(), section.clone());
         let mut first = ChunkRef::new(section.clone(), Some(surface.clone()));
         first.source_doc_id = Some(document.clone());
+        if kind == TypeKind::Event {
+            let event_type = EventType::from_str_repr(&t.name);
+            let id = AtomId::event_content_hash(&rec.id, &event_type, &section, corpus_id);
+            debug!(r#type = %t.name, record = %rec.id, atom = %id.as_str(), statements = rec.statements.len(), "atlas/resolve: record becomes an event atom");
+            atom_of.insert(rec.id.as_str(), id.clone());
+            atoms.events.push(Event {
+                id,
+                description: surface,
+                event_type,
+                participants: Vec::new(),
+                evidence: vec![first],
+                section_position: SectionPosition::section(section),
+                causal_antecedents: Vec::new(),
+                attributes: Map::new(),
+                enrichment_depth: EnrichmentDepth::Extracted,
+            });
+            continue;
+        }
+        let ty = EntityType::from_str_repr(&t.name);
+        let id = AtomId::exact_entity_content_hash(&rec.id, &ty, corpus_id);
         debug!(r#type = %t.name, record = %rec.id, atom = %id.as_str(), statements = rec.statements.len(), "atlas/resolve: record becomes an atom");
         atom_of.insert(rec.id.as_str(), id.clone());
         atoms.entities.push(Entity {
@@ -574,183 +655,6 @@ fn unplaced(
         PhaseFailureKind::UnresolvedClaimSubject,
         format!("`{kind}` claim is no statement of a `{type_name}`: {why}; it has no subject"),
     ));
-}
-
-/// Remove the `retired` entities and every reference to them. An atom that
-/// cannot stand without one goes with it: a state of a retired atom, a
-/// relation left with fewer than two participants, and in turn their states,
-/// edges and trajectories. Returns what was dropped, by what held it.
-fn retire(
-    atoms: &mut BuildAtoms<'_>,
-    retired: &BTreeSet<AtomId>,
-    type_name: &str,
-    failures: &mut Vec<PhaseFailure>,
-) -> BTreeMap<&'static str, usize> {
-    let mut dropped: BTreeMap<&'static str, usize> = BTreeMap::new();
-    if retired.is_empty() {
-        return dropped;
-    }
-    let mut add = |what: &'static str, n: usize| {
-        if n > 0 {
-            *dropped.entry(what).or_default() += n;
-        }
-    };
-    let reason = |id: &AtomId| {
-        format!(
-            "names `{type_name}` atom {}, retired: RESOLVE decides `{type_name}` from its \
-             statements, and this mention is not one",
-            id.as_str()
-        )
-    };
-    let mut gone: BTreeSet<AtomId> = retired.clone();
-    atoms.entities.retain(|e| !retired.contains(&e.id));
-    for e in atoms.entities.iter_mut() {
-        add("entity_participant", drop_ids(&mut e.participants, retired));
-        add(
-            "entity_attribute",
-            drop_attr_refs(&mut e.attributes, retired),
-        );
-    }
-    for ev in atoms.events.iter_mut() {
-        add("event_participant", drop_ids(&mut ev.participants, retired));
-        add(
-            "event_attribute",
-            drop_attr_refs(&mut ev.attributes, retired),
-        );
-    }
-    atoms.relations.retain_mut(|r| {
-        let before: Vec<AtomId> = r.participants.clone();
-        let n = drop_ids(&mut r.participants, retired);
-        add(
-            "relation_attribute",
-            drop_attr_refs(&mut r.attributes, retired),
-        );
-        if n == 0 || r.participants.len() >= 2 {
-            add("relation_participant", n);
-            return true;
-        }
-        let named = before
-            .iter()
-            .find(|p| retired.contains(*p))
-            .cloned()
-            .unwrap_or_else(|| r.id.clone());
-        failures.push(failure(
-            format!("atom:{}", r.id.as_str()),
-            PhaseFailureKind::UnresolvedRelationParticipant,
-            reason(&named),
-        ));
-        gone.insert(r.id.clone());
-        add("relation", 1);
-        false
-    });
-    atoms.states.retain(|s| {
-        if !gone.contains(&s.entity_id) {
-            return true;
-        }
-        failures.push(failure(
-            format!("atom:{}", s.id.as_str()),
-            PhaseFailureKind::UnresolvedEntityName,
-            reason(&s.entity_id),
-        ));
-        gone.insert(s.id.clone());
-        add("state", 1);
-        false
-    });
-    for c in atoms.claims.iter_mut() {
-        if let Some(s) = c.subject.take_if(|s| gone.contains(s)) {
-            failures.push(failure(
-                format!("atom:{}", c.id.as_str()),
-                PhaseFailureKind::UnresolvedClaimSubject,
-                reason(&s),
-            ));
-            add("claim_subject", 1);
-        }
-        if let Some(a) = c.attributed_to.take_if(|a| gone.contains(a)) {
-            failures.push(failure(
-                format!("atom:{}", c.id.as_str()),
-                PhaseFailureKind::UnresolvedClaimAttribution,
-                reason(&a),
-            ));
-            add("claim_attribution", 1);
-        }
-        add("claim_attribute", drop_attr_refs(&mut c.attributes, &gone));
-    }
-    for a in atoms.argument_reconstructions.iter_mut() {
-        add(
-            "proponent",
-            usize::from(a.proponent.take_if(|p| gone.contains(p)).is_some()),
-        );
-    }
-    for p in atoms.positions.iter_mut() {
-        add(
-            "proponent",
-            usize::from(p.proponent_id.take_if(|x| gone.contains(x)).is_some()),
-        );
-        add("position_evidence", drop_ids(&mut p.evidence_ids, &gone));
-    }
-    for o in atoms.oppositions.iter_mut() {
-        for side in [&mut o.left_atom_id, &mut o.right_atom_id] {
-            add(
-                "opposition_side",
-                usize::from(side.take_if(|x| gone.contains(x)).is_some()),
-            );
-        }
-    }
-    let edges = atoms.edges.len();
-    atoms
-        .edges
-        .retain(|e| !gone.contains(&e.source) && !gone.contains(&e.target));
-    add("edge", edges - atoms.edges.len());
-    let gone_ids: BTreeSet<&str> = gone.iter().map(AtomId::as_str).collect();
-    let chains = atoms.trajectories.len();
-    atoms
-        .trajectories
-        .retain(|k, _| !gone_ids.contains(k.as_str()));
-    add("trajectory", chains - atoms.trajectories.len());
-    for tr in atoms.trajectories.values_mut() {
-        tr.states
-            .retain(|s| !gone_ids.contains(s.state_id.as_str()));
-        tr.transitions
-            .retain(|x| !gone_ids.contains(x.from.as_str()) && !gone_ids.contains(x.to.as_str()));
-    }
-    debug!(
-        r#type = type_name,
-        retired = retired.len(),
-        ?dropped,
-        "atlas/resolve: Phase-1 atoms retired"
-    );
-    dropped
-}
-
-/// Drop every id in `gone` from `ids`; how many went.
-fn drop_ids(ids: &mut Vec<AtomId>, gone: &BTreeSet<AtomId>) -> usize {
-    let before = ids.len();
-    ids.retain(|id| !gone.contains(id));
-    before - ids.len()
-}
-
-/// Drop every attribute value that is the id of an atom in `gone` (a `ref`
-/// 3b snapped to it), and an attribute left with no value; how many went.
-fn drop_attr_refs(attributes: &mut Map<String, Value>, gone: &BTreeSet<AtomId>) -> usize {
-    let names = |v: &Value| {
-        v.as_str()
-            .is_some_and(|s| gone.iter().any(|g| g.as_str() == s))
-    };
-    let mut n = 0;
-    attributes.retain(|_, v| match v {
-        Value::Array(xs) => {
-            let before = xs.len();
-            xs.retain(|x| !names(x));
-            n += before - xs.len();
-            !(xs.is_empty() && before > 0)
-        }
-        other if names(other) => {
-            n += 1;
-            false
-        }
-        _ => true,
-    });
-    n
 }
 
 #[cfg(test)]

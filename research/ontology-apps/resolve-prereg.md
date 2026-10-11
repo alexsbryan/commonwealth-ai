@@ -261,3 +261,109 @@ reasoned answers against Ring 0's records, nearly all singletons; live, the choi
 (40 for 42 deals, 13 of them mixing deals) and later statements join the mix; and the term read came back
 unknown on 38 statements, so the veto seldom bit. Third reading of one lesson (1a's gold-measured field, this
 probe): a precision measured on another record structure does not transfer; only the live rule's counts do.
+
+## Ring 2, H1: every source combines, the unsettled are held (registered 2026-10-09, before its data)
+
+Order `ontology-layer-1-decider`, campaign `ontology-layer` rung 1. Today the most precise single source
+decides: an evidential field settles a whole document before any other source is read (`fields.rs:20-89`),
+then the more precise of the model's choice and the proposed answer (`select.rs:469-480`), and a statement
+nothing decided opens a record (`select.rs:481-487`).
+
+**The decider.** For each statement no sufficient key settled, the alternatives are the candidates the
+necessary veto left (shown records and records this document opened), any record a field names, and none;
+K counts them. Each source names at most one alternative or is silent: an evidential field the one record
+from an earlier document holding the document's value; the proposed answer its record (or the record an
+earlier statement of its wording went to); the model's choice its most probable candidate ("none" is
+silent: no precision was measured for it). A source of precision p naming an alternative adds
+ln(p(K-1)/(1-p)) nats to it; the posterior is the softmax over alternatives. Independence: the sources err
+independently given the truth, and an error falls uniformly on the other K-1 alternatives, under a uniform
+prior; so a lone source's posterior is its declared precision, and today's single-source links are kept.
+Zones from the declared bar: **link** when a candidate's posterior reaches the bar; **no link** (a record
+opens, novelty) when no source named a candidate; **unsettled** otherwise. A sufficient key still links, a
+differing necessary value still forbids, and the model is asked exactly as today (its declared precision at
+or above the bar), so calls per document are unchanged. Unsettled statements are **held**: no record opens,
+the statement is no candidate, its alternatives' posteriors and sources are written beside the decisions,
+and it is counted. Documents are resolved in one canonical order, the clock (date stamp, undated last,
+document id), in both drivers, so any input order gives the same records. Precisions stay as the three
+frozen recipes declare them.
+
+**Arms.** Control: HEAD 5b9cc28e7 built debug, unchanged. Treatment: the same plus the decider. Both RESOLVE
+only, on copies of `baseline-3sys-20261009`'s extractions: ward and uv `enrich atlas-resolve --phase all`
+with `SVRNMESH_DATA_DIR` on the copy (environment as `job.sh`); GVC `enrich resolve-statements --answer
+select` over `gvc/statements` as `gvc.sh` invokes it. The control must reproduce the baseline row within
+band on every system before any treatment is read; if it does not, the instrument comes first and the arm
+stops. Cap: three runs per system for H1.
+
+**Measures, per system.** GVC: B3, CEAF-e, LEA F1 (`score_resolve.py`, `er-score`), CoNLL beside; held
+statements are scored alone (`held:<id>`), as refusals are. uv: composition B3, CEAF-e, LEA F1
+(`measure_uv.py` -> `support/score.py --fold tune --atlas`); a held statement's claim has no subject, so
+where the treatment holds any, recovery B3 (missing members kept) is read in place of B3. Ward: deals hit
+of 39 and stage served of 47 (`measure_ward.py`, ward-score-v3); identity measures of the deal records are
+not in that instrument, and its deal counts are what identity moves there. Beside every row: held
+statements, model calls per document.
+
+**Bands.** GVC the model's order band (B3 .000, CEAF-e .022, LEA .001, CoNLL .007). uv 0: its atlas path
+makes no model call at these precisions and its order is canonical (the floor is identical under `--salt
+1`, §Knobs), so one decision is beyond band. Ward one deal (1/47 = .021 stage served, 1/39 = .026 deals).
+
+**Adopt rule.** A system rises when one of its measures rises beyond band and none falls beyond band; it
+falls when any measure falls beyond band. Adopted when at least two systems rise and none falls. Refused
+otherwise, with its data.
+
+**Order independence.** A unit test resolves the same documents in every input order through the shared
+driver and asserts identical records and decisions; on GVC, `resolve-statements --answer proposed` over
+`statements.py --salt ""` and `--salt 1` must write identical `clustering.json` under the treatment (the
+control is expected to differ; no model call either way).
+
+**Predictions, written before the data.** Ward equals the control by construction: its model is below the
+bar and never asked, it declares no field, so the proposed answer is its only source. uv within band: its
+thread, date and proposed answer agree on nearly every statement (Ring 1b: one conflict in 384). GVC moves:
+a model choice and a proposed answer that name different records, or a record its date field (1 of 13)
+names, are held where today the more precise decided. So H1 can adopt only if uv rises too, which these
+predictions do not expect; a refusal here is the order's stop condition ("combining is not the lever").
+
+*Amended before any data, same day:* **no link** is when no candidate's posterior rises above its share
+with no evidence (1/K), not when no source names one: a source below 1/K (GVC's date, 1 of 13) naming a
+record is evidence against it, and alone it opens a record as it does today rather than holding. A link
+also needs its candidate strictly ahead of every other (a tie is unsettled). The model is not asked for a
+statement whose fields alone link it, as today (they settled it before any question).
+
+**H2, registered with it, measured only after H1 is read.** With no precision read from any recipe, each
+system's measures hold within the bands above against the H1 treatment, and every source's estimate is
+within .1 of its gold-measured precision on every system.
+
+**Ring 2 H1 verdict (2026-10-09): refused.** Instrument first: two runs of the control binary on one uv copy
+gave different decisions with no model call (the similar-documents proposer summed f32 weights in HashMap
+order, so documents of one wording tied at 1.0 or a ulp under; fixed in f269735e1, watched failing). Both
+arms were rebuilt with that fix: control = eaf0f1a94 + f269735e1, treatment = b5b5b3053. The control then
+reproduced the baseline row exactly on all three (GVC `clustering.json` byte-identical; uv and ward decision
+for decision, and identical on a rerun). Data: `ring2-h1/`.
+
+| system | arm | B3 | CEAF-e | LEA | other | held | calls/doc |
+|---|---|---|---|---|---|---|---|
+| ward tune | control | | | | deals 9/39, stage served 2/47 | 0 | 1.07 |
+| ward tune | treatment | | | | deals 9/39, stage served 2/47 | 0 | 1.07 |
+| uv tune | control | .838 | .752 | .800 | | 0 | 0 |
+| uv tune | treatment | .838 | .752 | .800 | | 0 | 0 |
+| GVC dev | control | .624 | .492 | .440 | CoNLL .599, MUC .682 | 0 | 24.91 |
+| GVC dev | treatment | .629 | .492 | .436 | CoNLL .599, MUC .675 | 31 | 24.91 |
+
+Ward and uv equal, as predicted: on ward the proposed answer is the only source, and on uv thread, date and
+proposed answer never disagreed (235 weighed links, 0 held). GVC rises on B3 (+.005, band .000) and falls on
+LEA (-.004, band .001), so it falls. No system rises beyond band without falling; refused, and with it the
+order's stop condition (fails on two of three with gold-measured precision). GVC's 31 held statements are
+all model choice against proposed answer (one with the date too); the treatment also changed GVC's
+document order to the clock, so its delta is not combining alone. Order independence holds: under the
+treatment `--answer proposed` over `statements.py --salt ""` and `--salt 1` writes identical clusterings
+(the control's differ). GVC's RESOLVE answers do not replay: no replay answerer exists, and 332 of the
+treatment's 966 forced choices (.344) were even asked over the same candidate ids as the control's.
+
+*Corrected by the seat the same day:* "all model choice against proposed answer (one with the date too)" is
+wrong for one of the 31. Thirty are the model's choice against the proposed answer. In the 31st all three
+sources name one record, and the date, declared 0 of 11, counts against it: posterior .419, .812 without the
+date. Against gold (`ring2-h1/held_vs_gold.py`, a record read by its members' majority gold cluster, the
+logged posteriors reproduced first): the control's rule applied to these sources takes the proposed answer,
+right in 14 of the 31 and wrong in 17; the model is right in 16; neither names the right record in 12. Three
+limits on this verdict, none of them measured away: Ward and uv could not move (no decision differed), so
+two of three rising was unreachable before any data; GVC's bands are one pair of runs (line 24); and holding
+was measured without any step that resolves what it holds.

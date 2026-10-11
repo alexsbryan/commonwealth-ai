@@ -1,0 +1,34 @@
+Validating recipe: /Users/alexsbryan/blind-author-20261009-r2/uv/recipe.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  tension selector: embedding top-k (k = 10, floor = 0.5) over report, diagnosis, decision — cross-document declared corpora select the embedding net; the classifier judges each pair
+  identity: problem → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  source: issue ← document fields thread (number: value) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: issue → number (external key, strict merge)
+  identity: pull_request → number (external key, strict merge)
+  identity: uv_release → version (external key, strict merge)
+  source: label ← document fields labels (name: value) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: label → name (external key, strict merge)
+  source: participant ← document fields author (login: value) — one atom per identity value, model atoms with that value merge into it; 0 value(s) excluded
+  identity: participant → login (external key, strict merge)
+  question shapes: enumerate [problem, issue, pull_request, uv_release, label, participant]; relations [concerns, duplicate_of, addresses]; events [(none)]; aggregate [report by uv_version, report by last_working, diagnosis by introduced_in, decision by fixed_in, decision by pull_request, commitment by target_release]
+  derived: problem.status ← fold `problem_status` by `protocol`, after RESOLVE: the claims about it
+  fill: problem: category ← Choose on commitment, decision, diagnosis, report, request; component ← Choose on commitment, decision, diagnosis, report, request; status ← derived `problem_status`; introduced_in ← Pick on commitment, decision, diagnosis, report, request (candidates: Mention); fixed_in ← Pick on commitment, decision, diagnosis, report, request (candidates: Mention)
+  fill: issue: number ← source
+  fill: pull_request: number ← nothing; state ← nothing
+  fill: uv_release: version ← nothing; released_on ← nothing
+  fill: label: name ← source
+  fill: participant: login ← source
+  fill: report: subject `problem` ← RESOLVE; framed_as ← Choose on report; symptom ← Point on report; uv_version ← Pick on report (candidates: Mention); last_working ← Pick on report (candidates: Mention); os ← Choose on report; arch ← Choose on report; python_version ← Point on report
+  fill: request: subject `problem` ← RESOLVE; ask ← Choose on request; desired ← Point on request
+  fill: diagnosis: subject `problem` ← RESOLVE; nature ← Choose on diagnosis; component ← Choose on diagnosis; cause ← Point on diagnosis; introduced_in ← Pick on diagnosis (candidates: Mention); role ← Choose on diagnosis
+  fill: decision: subject `problem` ← RESOLVE; outcome ← Choose on decision; role ← Choose on decision; decision_ref ← Point on decision; corrects ← Point on decision; fixed_in ← Pick on decision (candidates: Mention); pull_request ← Pick on decision (candidates: Mention)
+  fill: commitment: subject `problem` ← RESOLVE; role ← Choose on commitment; target_release ← Pick on commitment (candidates: Mention)
+  document fields: document_date ← `created_at` (RFC 2822 or ISO 8601, written as ISO 8601), document_thread ← `thread`, document_id ← `id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted
+  ⚠  [enrichment.ontology] `document_reading` is retired and ignored: declared reading is chosen by the declaration: every claim kind with a force and a subject RESOLVE or a metadata source identifies is read document by document. Remove the key.
+  ⚠  ontology type `pull_request`: nothing fills `number` (no read claim kind, nor the subject of one, asks it), `state` (no read claim kind, nor the subject of one, asks it). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `pull_request`: identity is keyed on `number` (identity), which nothing fills, so no record ever has a value there and the key never links or forbids a link.
+  ⚠  ontology type `uv_release`: nothing fills `version` (no read claim kind, nor the subject of one, asks it), `released_on` (no read claim kind, nor the subject of one, asks it). Each stays empty on every record; give it a source or a derivation, or drop it.
+  ⚠  ontology type `uv_release`: identity is keyed on `version` (identity), which nothing fills, so no record ever has a value there and the key never links or forbids a link.

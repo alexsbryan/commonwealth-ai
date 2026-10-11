@@ -1,2 +1,3 @@
 clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
 question shapes: enumerate [(none)]; relations [(none)]; events [(none)]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

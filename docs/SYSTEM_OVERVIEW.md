@@ -83,7 +83,9 @@ on-prem distributions hand it in, and cmnwlth links no knowledge crate.
 ```
 
 Two protocols cross that boundary. **OICP** is declared in
-`cmnwlth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively), types in
+`cmnwlth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively; the draft
+`cmnwlth/docs/oicp-v0.5.md` adds the evidence extension over it, each part
+behind its own feature string), types in
 `shared/crates/oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp` and
 `commonwealth_core::oicp` — downstream crates use the re-exports.
 **`EmbedFn` / `InferenceFn`** are closures `corpus-engine` accepts from any
@@ -162,7 +164,7 @@ cmnwlth/crates/
 ├── commonwealth-state             # MeshStore — KV (pure-Rust in-memory; SQLite file store behind `sqlite`); a local PROJECTION of the ring rail
 ├── commonwealth-transport         # PeerTransport seam — (peer, traffic class) → endpoints
 ├── commonwealth-work              # The WORK PLANE on the rail — WorkAct codec, unit seal, lease predicate
-├── oicp-conformance               # Standalone OICP v0.4 host conformance tester
+├── oicp-conformance               # Standalone OICP v0.4/v0.5 host conformance tester; each v0.5 check watched red against a host fake (src/fake_host.rs)
 ├── sovereign-cli-mesh             # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
 └── sovereign-pods                 # Compute's remote isolation — leasing a rented machine; `sovereign-pod-worker`, the pod's worker-mode binary
 ```
@@ -176,7 +178,7 @@ deleted; `-knowledge` became `sovereign-grants`; `-app` became
 `-test-harness` became `sovereign-mesh-test-harness` (since deleted);
 `oicp-conformance` moved to a repo-root sibling, then back here and into
 cmnwlth's package with the top-level-programs move. Beside the crates:
-`cmnwlth/docs/` (OICP v0.2 to v0.4), `cmnwlth/apps/` (ring-doc,
+`cmnwlth/docs/` (OICP v0.2 to v0.4, and the v0.5 draft), `cmnwlth/apps/` (ring-doc,
 ring-runtime), `cmnwlth/deploy/mesh/`, `cmnwlth/BOUNDARY.md`.
 
 ### ingest — the recipe pipeline
@@ -321,6 +323,7 @@ shared/crates/
 ├── oicp-client                    # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-types                     # OICP wire types — no other deps
 ├── oplog                          # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
+├── quote-align                    # The one quote aligner — norm_v0 + seeded token alignment over `&str` texts, ALIGNER_ID pinned by a golden bank (std + unicode-normalization only); asked by `POST /oicp/v1/align` and, in exact mode, by the post-synthesis quote guard (`sovereign-core::quote_verification`); case-folded, by the span resolver's locator (`native_grounding::span_resolver`) and the citation gate's quote match (`grounding::citation::quote_match`, whose six-word run is read off the aligner's differences). `kernel_types::Seal::locate` stays a plain containment check: it is handed a slice already cut from the member it checks
 ├── oplog-types                    # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
 ├── serving-policy-core            # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── sovereign-cli-base             # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)
@@ -416,7 +419,7 @@ Acquirer → Extractor → Filter → Chunker → Embedder → Index
 
 | Stage | Built-ins |
 |---|---|
-| Acquirer | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`, `web_crawl`, `custom` (runtime-registered seam) |
+| Acquirer | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`, `web_crawl`, `inline` (the recipe's own `[[document]]` texts, OICP v0.5 §4.1), `custom` (runtime-registered seam) |
 | Extractor | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `json`, `markdown`, `xml_sections`, `wikipedia_jsonl`, `wikipedia_structured`, `wikipedia_catalog`, `wikipedia_api_article`, `gutenberg_catalog`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email`, `anthropic_export` / `chatgpt_export`, `alignment_workspace`, `custom`, `described_asset`, `tabular_atoms`. `ExtractorConfig` in `recipe.rs` is the SSOT. `column_aware` is an *enrichment-time* extractor, not a recipe `type =` value |
 | Filter | `pageview_rank`, `title_list`, `knowledge_density`, `boilerplate`, composed via `[[filter]]` (`Any` / `All`) |
 | Chunker | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet`, `threaded_turns` |
@@ -443,7 +446,9 @@ full index or a shard.
 ~/.svrnmesh/indexes/<corpus>/
 ├── _corpus_meta.json        # authoritative metadata
 ├── chapters.json            # sections + the chunk_ids join
-├── chunks.lance/
+├── chunks.lance/            # each chunk names its stored text (text_sha256, schema v4)
+├── documents.lance/         # one record per stored text per document
+├── texts/<sha256>           # each document's canonical text, named by its sha256
 ├── assets/                  # content-addressed asset store (raw + parsed + ledger)
 └── atlas/
     ├── atoms.json           # AtomsFile — the canonical export
@@ -464,6 +469,35 @@ seed table is REQUIRED, not an optimisation: seeding has two sources, the ANN
 table and name-matching over an atom bag, and a wiki store has no bag.
 
 `(corpus_id, chunk_id)` is the citation handle and is structurally unique.
+
+**Stored texts** (ADDRESSED_TEXT §3). Every ingest path — the
+main loop, the watched-folder delta, reindex — writes through one writer,
+`corpus_index::index::TextWriter::store_document`. A text is
+`normalize_content(doc.content)`, the string the chunks are cut from, written
+once to `texts/<sha256>` (`Corpus::texts_dir`); its record (extractor, source
+id, source sha256 or none for a record inside a file of many, ordinal,
+metadata) goes to `documents.lance`, and every chunk carries the name. Reads
+(`CorpusIndex::text`, `documents_for`, `documents`) answer a named
+`TextAbsence` rather than an empty result: not held; texts not stored (an
+index that held chunks before the store began, or a merge with an input that
+had none); text not stored (`[index] store_texts = false`). The directory's
+lifecycle carries the store: promote renames it, merges union it only when
+every input had one (`text_store::carry_texts`), a snapshot captures
+`documents.lance` transactionally, removal deletes it. The library digest is
+sha256 of `oicp_types::evidence::texts_digest_preimage` over the records
+(`text_store::texts_digest`). Published names are `kernel_types::Sha256Hash`;
+`ContentHash` stays BLAKE3 and nothing converts between them.
+
+**`[[document]]` blocks** (`recipe_documents.rs`, OICP v0.5 §4.1). A block
+carries `name` + `text` (an inline document, read by `[acquire] type =
+"inline"`) or `source` (metadata for one file under the source root), never
+both; `Recipe::from_toml` refuses anything else. The inline acquirer writes
+each text to `_downloads/<corpus>/inline/<name>` and `InlineExtractor` runs
+the recipe's `[extract]` over each file alone, stating the result as source id
+`name` and `DocSource::Hashed` (the sha256 of the text's UTF-8). `metadata` is
+JSON text, validated at load and stored verbatim; `DeclaredMetadata::input`
+builds every `store_document` input, and is the one place declared metadata
+replaces the extractor's.
 
 **Three readiness questions, three accessors — do not conflate them.** A
 directory under `indexes/` is not an installed corpus; an ingest in flight
@@ -583,23 +617,59 @@ question the pipeline asks about a type is a method on the resolved
   schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
   the navigation map; a relation declared with both ends also gets one focused
   Phase-1 call per section per `from` entity (`pipelines/relation_focus.rs`).
-  Opt-in `document_reading = true` adds an accountable Phase-1 read over the
-  hydrated source documents for every declared claim kind whose subject is a
-  source-free entity with `identity_criterion` or a metadata-sourced entity
-  with declared identity fields, preserving its declared force. Metadata-backed
-  subjects bind to existing projected entities by exact identity and are never
-  re-extracted. V1 validation names and refuses unsupported claim kinds.
-  `DocumentRead` outcomes, evidence and `subject_local_ref`s travel through
-  `SectionExtraction` cache/checkpoints, keyed by the read contract and source
-  context; generic questions are skipped on this path, and accountable source
-  identity and subject fields flow to RESOLVE. Its decoder selects document-scoped
-  source-citation handles; validation expands them to exact source quotes and
-  rebuilds the qualified claim projection before caching. Unknown or foreign
-  handles refuse the claim; exact source verification remains mandatory. `false` preserves the default
-  path.
+  A declaration whose claim kinds all have a force and a `subject` that is a
+  source-free type with an `identity_criterion` or a metadata-sourced entity with
+  declared identity fields is read document by document, with no switch
+  (`OntologyPolicies::reads_documents`; a mix refuses at parse; the retired
+  `document_reading` / `document_reader` keys load, are ignored and are named,
+  `V1_RETIRED_KEYS`). Metadata-backed subjects bind to existing projected
+  entities by exact identity and are never re-extracted. `DocumentRead`
+  outcomes, evidence and `subject_local_ref`s travel through `SectionExtraction`
+  cache/checkpoints, keyed by the read contract and source context; generic
+  questions are skipped on this path, and accountable source identity and
+  subject fields flow to RESOLVE. A claim carries its subject's readings whole
+  (`SUBJECT_FIELDS_ATTRIBUTE`, each a `DocumentReadField` like its own fields),
+  RESOLVE keys on their supported values and keeps them on the claim, and the
+  projection sketches no subject (RESOLVE alone makes those records). One reader asks: the passes reader
+  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). Every question about a
+  document opens with its declared facts (`prefill.rs`: the metadata fields the
+  declaration names and the declared sets they put the document or a sourced
+  record in, read through the projection's own field readers,
+  `resolution_sources/fields.rs`). A line carried from a document dated
+  earlier, shown by structure (a passage of neighbouring lines that document
+  holds in order, or its line under a mark it lacks there), is never asked;
+  a line that only repeats another's words is (`line_classes.rs`, indexed
+  once per run over every chapter's documents and part of the section cache
+  key). Locate asks every remaining
+  numbered line which declared claim kind it states, and Mention which entity
+  type a read reference targets it names, pointing at the words (`mention.rs`;
+  no type a table source holds). Per statement each field is asked by its
+  declared family (`ask.rs`): Choose a closed value with RESOLVE's READ question,
+  Point at an open one's start and end words and read the value by the family
+  (`point.rs`), Pick a reference among the records the target's metadata source
+  reads from this document plus its mentions, less declared exclusion sets
+  (`pick.rs`); every question goes through the census funnel (`decision_call`)
+  and every read value carries `reader_choose` / `reader_point` / `reader_pick`
+  at `Precision::Unmeasured`. A closed set wider than one forced choice is
+  Unknown with that reason. Its
+  answers assemble into the `DocumentRead` envelope that validation checks
+  against the document (exact source verification is mandatory) and the section
+  cache keeps; its rendered questions are part of the contract fingerprint
+  (`schema::contract_value`, version 6). The one-shot reader is deleted.
+  The Asker (`enrichment/asker.rs`, ONTOLOGY_METHOD §Reading, campaign C5)
+  stands in front of the chat and embed ports of `enrich extract`,
+  `atlas-resolve` (and `enrich build`, `delta`, `resolve-statements`), built in
+  one place (`DaemonInferenceClient::into_asked_closures`): `--asker daemon`
+  (default) records every answer in `enrichment/<id>/answers.jsonl` keyed by the
+  hash of the whole prompt and per-call budget (or the text embedded), one answer
+  per question per run; `replay` answers from that store and never calls (or
+  probes) the daemon; `gold` reads `answers.gold.jsonl`. A question with no stored
+  answer is refused, never defaulted.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
-  from the ONE document its evidence anchor lands in
+  from its ONE document (`locate`: the document its evidence names, stamped from
+  the read that cited it, else the one its anchor lands in; equal words in a
+  second document never make a second candidate)
   (`enrichment/atlas/resolution_documents.rs`, rows from
   `corpus_io::section_documents`), and records a claim it cannot place in
   `resolution_failures.json` instead of guessing. An entity type's
@@ -615,22 +685,33 @@ question the pipeline asks about a type is a method on the resolved
   a reader reads on the same mailbox (Contact -> Account: `employer = { of =
   "company", reader = "domain" }`), linked after every type is projected;
   attributes merge first-wins, so a model's raw name never displaces the link.
-  A `domain`-read identity value at a mailbox provider (the bundled
-  `mailbox_providers` asset, free-email-domains at a pinned commit, or a
-  subdomain of a listed domain) is never projected and is counted as
-  `providers`, so no recipe lists ISPs to keep a contact's account honest.
+  A source's `exclude` (`resolution_sources/fields.rs::Exclusion`) skips an
+  identity value equal to, or ending at a word boundary in, a value it names
+  or one of a `@bundled:<key>` list it names (`@bundled:mailbox_providers`,
+  free-email-domains at a pinned commit), counted as `excluded`; code holds no
+  list and skips nothing a recipe does not name (E5, 2026-10-10: the provider
+  skip that was code is now this declaration). The reader's prefill and Pick
+  read fields through the same readers (`field_records`).
   RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
   puts each statement of one document into an open record of one declared
-  type, or opens one. An equal declared `identity` key decides without a call;
-  so does an `identity_evidential` document field (a `change.document` stamp,
-  read by `read_stamp`, the one reader claim stamping uses too) whose measured
-  precision clears the type's `identity_bar` and whose value exactly one record
-  from an earlier document holds (`resolve_records/fields.rs`,
-  `Decision::Field`); otherwise ONE grammar-constrained call per document, given the type's
+  type, opens one, or holds it. An equal declared `identity` key decides without a call.
+  Every declared document field (a `change.document` stamp, read by
+  `read_stamp`, the one reader claim stamping uses too) is compared between a
+  statement's document and each record (`resolve_records/fields.rs`), and a
+  record holding the document's value is an alternative. Under a partition
+  answerer the fields alone are weighed and link where they reach
+  `identity_bar`; otherwise ONE grammar-constrained call per document, given the type's
   `identity_criterion`, the candidates the proposers offered
   (`resolve_records/propose.rs`: the records of the document's declared
   thread, `change.document.thread`, then TF-IDF over documents already
-  resolved; each candidate shown with its `Reason`s) and the answer threads,
+  resolved; each candidate shown with its `Reason`s, its statement and
+  document counts, the values declared structure gave it, and up to four of
+  its statements' cited lines from other documents (`passage::lines_of`: a
+  span widened to its whole line, or the reader's lines as they stand on the
+  folded default-path text), one line each marked
+  `QUOTE_LABEL` and nothing else of those documents (C2 narrowed 2026-10-10;
+  a cite is still checked against the asked document alone),
+  `answer::describe`) and the answer threads,
   wording and similarity alone propose (`ProposalRule`), partitions the
   document's statements into particulars, each the same as one candidate or
   none, with a passage per statement code must find in the document.
@@ -639,28 +720,66 @@ question the pipeline asks about a type is a method on the resolved
   `--answer select` (`resolve_records/select.rs`) asks instead one forced
   choice per statement, in document order, over the shown candidates and the
   records this document opened, read as a distribution in one forward pass and
-  kept on the outcome (`Choice`); the argmax decides (`Decision::Selected`),
-  Ring 0 of `research/ontology-apps/resolve-prereg.md`. The closed
+  kept on the outcome (`Choice`); the argmax is one source among the rest.
   A type's `identity_necessary` attributes (each with declared `values`) are READ
   per asked statement as one forced choice over those values
-  (`resolve_records/read.rs`); a candidate whose value differs is not offered.
-  `identity_evidential` also weighs `model_choice` and `proposed_answer` at their
-  measured precision: of those that name a candidate, the more precise that
-  clears `identity_bar` decides (`Decision::Proposed` for the proposed answer),
-  and a choice below the bar is never asked. `--answer reason` reads the same
-  choice after the model's own bounded reasoning (`reasoned_choice`).
-  `Decision` is `Key | Field | Cited | Selected | Proposed | Opened`; anything else is a counted `Refusal`,
-  never defaulted. Records keep the passage around each statement, which is
+  (`resolve_records/read.rs`), unless the document reader already chose it
+  (`Statement::read`, filled from its subject fields by `resolution_records.rs`);
+  a candidate whose SUPPLIED value (a declared field's, `Statement::keys`)
+  differs is not offered, while a value a model chose, the reader's or RESOLVE's
+  own READ, is one more weighed source (`necessary:<attribute>`); each
+  document's decisions count the necessary values used by origin
+  (`DocumentResolution::necessary`: supplied, reader, resolve_read). A partition
+  answerer, which weighs nothing, still holds read values as constraints. Every source (each declared field, each necessary
+  value, the proposed answer, the model's argmax) agrees or disagrees with each
+  (statement, alternative) pair, and is weighed at what it is worth on the
+  corpus being read: Fellegi-Sunter agreement weights fitted by EM over those
+  pairs with no labels (`resolve_records/estimate.rs`; agreeing is never fitted
+  as evidence against, and sources identical on every pair count once), refitted after every
+  document in clock order, so a document is weighed at what the documents
+  before it estimate; the recipe declares no precision (`identity_evidential`
+  is a retired key, warned and ignored). The decider (`resolve_records/weigh.rs`)
+  sums each alternative's weights with the pair prior into its log odds
+  against none: one an agreeing source raised and whose posterior reaches
+  `identity_bar` links (`Decision::Weighed`, with the sources that agreed);
+  with no bar the most probable of the alternatives and none decides; no
+  source raising one opens a record; anything between is `Outcome::Held`,
+  counted, its alternatives, votes and necessary values kept, never opened as a
+  record in its document. After the last document every held statement is
+  settled (`resolve_records/settle.rs`, E3, called by `drive.rs` for both
+  drivers): weighed again against the records it was held between as they
+  stand, at the whole corpus's weights, with the model asked once more over
+  those records only (one more `model_choice` or `reasoned_choice`); at the bar
+  it links, with no source raising a record it opens its own, and still
+  unsettled the most probable decides, so nothing is left held. Each settled
+  document reaches `on_document` again as a resolution with `settles`, its
+  outcomes replacing the held ones (`RecordsReport::settled` is the held count
+  before; `outcomes["held"]` after). The model
+  is asked only where the other sources do not already link. The resolve step
+  prints, per source, its estimated precision, weights and the links and
+  vetoes it carried (`Resolver::sources_summary`).
+  `--answer reason` reads the same choice after the model's own bounded
+  reasoning (`reasoned_choice`). `Decision` is `Key | Cited |
+  Weighed | Opened`; anything else is a counted `Refusal` or `Held`, never
+  defaulted. A link carries `by`, each source with its `Precision`
+  (`atlas/precision.rs`: declared, estimated on the corpus, or unmeasured), as
+  do the reader's chosen fields (`reader_choose`) and each derived value (C3). Records keep the passage around each statement, which is
   what later calls compare. `svrn enrich resolve-statements` runs it alone over
   supplied statements (the gold-mention setting). The atlas build runs it after
-  3b (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
-  as the ONE decider of every entity type that declares an `identity_criterion`
-  and no `source` (`decides`): its statements are the claims of each kind whose
+  3b, which `enrich atlas-resolve` runs by default (`ResolvePhase::All`; `--phase 3a`
+  is the only opt-out) (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
+  as the ONE decider of every entity or event type that declares an
+  `identity_criterion` and no `source` (`decides`; an event type's records are
+  event atoms); a decided type no claim kind names as its subject has no
+  statements, so `enrich extract` refuses it (`types_without_statements`) rather
+  than leave it to 3a's merge: its statements are the claims of each kind whose
   `subject` is the type, placed by their anchor in the one document `locate`
-  finds. Claims the reader gave one `subject_local_ref` in one document are one
+  finds (derivation's `document` step uses the same). Claims the reader gave one `subject_local_ref` in one document are one
   statement at the earliest span (`resolution_records/local_subjects.rs`), unless
   they disagree on a supplied identity value; a ref never joins across
-  documents. Documents go in clock order under `Answerer::Select` with the adopted
+  documents. Documents go in clock order (`resolve_records::clock`, through
+  `resolve_in_clock_order`, the one loop `resolve-statements` shares, so input
+  order never changes the records) under `Answerer::Select` with the adopted
   proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
   MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
   statement, and each claim's subject its statement's record. 3b leaves such a
@@ -671,7 +790,10 @@ question the pipeline asks about a type is a method on the resolved
   §8): paths over `subject`, `document`, source fields (the `Participants` the
   source projection records) and refs, filtered by sets, combined by a fold from a
   closed registry; claim attributes before RESOLVE, a decided type's after, each
-  outcome typed in `atlas/derived_decisions.jsonl`. **Both tension axes degrade by REPORTING, never by
+  outcome typed in `atlas/derived_decisions.jsonl`. A decided type's read field
+  that declares `by` is folded onto each record first, over what its statements
+  read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
+  and event records alike); RESOLVE itself writes no record value. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** The optional `by = "protocol"`
   fold projects a closed text state only after RESOLVE, from cited claims assigned
   through `^subject`. Each rule requires source-supported `DocumentRead` fields;
@@ -1303,6 +1425,16 @@ a bearer token or serves nobody; when the token chain fails entirely the
 posture installs NONE, so `client_auth` refuses every remote caller rather
 than serving unauthenticated.
 
+A presented credential decides, from any address. `client_auth` and the edge
+resolver read one classification, `client_principal::Presentation`
+(`client_principal/presented.rs`): a bearer that verifies (a live grant, a
+named token, an API key, the daemon-wide token) admits as what it is; one in
+the daemon's form (`svrn_`, which `client_auth::generate_bearer_token` writes
+on every credential it mints) that verifies nothing is a 401 from loopback
+too; one NOT in that form from a local process, where loopback is the owner,
+is read as no credential (INTEROP §1's `OPENAI_API_KEY=local`), and from
+anywhere else is refused.
+
 A non-loopback caller presents one of two bearers. `client_token` is
 daemon-wide. An **ephemeral guest grant** is the narrow one: short-lived,
 revocable, bound to a closed `Scope` enum whose `paths()` is the only route
@@ -1313,8 +1445,19 @@ must claim a name at the rail door, or `MemberPage`, which only the operator's
 mint route sets and only `svrn ring show` asks for, whose writes are the
 member's own.
 
-A daemon holding on-prem API keys (`<data_dir>/client-tokens/<sub>.key`,
-written by `svrn daemon key`) is KEYED: `api_keys::seal` wraps every client
+A named credential is one record `{name, token, groups}` at
+`<data_dir>/client-tokens/<name>.key` (`client_tokens::ClientTokenStore`; legacy
+`<label>.token` files are read as the same record and rewritten as `.key` once
+the posture is declared), minted and revoked by `svrn daemon key` — through the
+running daemon's operator routes, or the store itself when none runs — and it
+resolves to `Principal::Asserted { sub: name, groups }`. `[daemon] loopback`
+declares the posture (`client_tokens::LoopbackPosture::resolve`, its one
+reader): `"owner"` admits a local process presenting nothing as the owner;
+`"none"` grants loopback nothing. Undeclared, it is inferred as before (`none`
+iff a legacy `.key` file exists, warned at boot and in `svrn doctor`'s
+`loopback_posture`), and minting refuses until it is declared.
+
+A daemon under `loopback = "none"` is KEYED: `api_keys::seal` wraps every client
 listener (the guest door's in `guest_door::door_router`, so its own bind and
 the `GUEST_ALPN` forward take one sealed router), loopback grants nothing, a key resolves to `Principal::Asserted`,
 conversations are stored `{sub}:{id}`, a non-`admin` key reaches only
@@ -1334,13 +1477,16 @@ admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
 | `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
 | `POST /v1/rerank` (and each served kind's route) | Mounted from the served-kind registry (`sovereign_inference::served_kind`); answers with the rerank kind's slot or compute child |
-| `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks |
+| `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks. The local corpora searched, here and on the peer route `/internal/knowledge/search`, are the caller's `oicp_evidence::readable_corpora` (a member reaches `query_sharing` corpora, an unverified claimant none, a key its grant); one held here outside that set answers like one nobody holds. Every local hit, and the peer route's, carries `document` (OICP v0.5 §3): its text's record read through `chunk_text_sha256s` + `documents_for` by the one projection `oicp_evidence::knowledge_results`, or names why not in `document_absent` (`texts not stored`, `text not stored`, `document unreadable`); the v0.2 `metadata` map stays empty. `MeshKnowledgeClient` keeps it as `MeshScoredChunk::document` |
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
+| `POST /oicp/v1/corpus/install` | OICP install, by registry id or (v0.5 `ingest:recipe`) with `recipe_toml`: the recipe loads through `Recipe::from_toml`, must name `corpus_id`, is written to the local registry, ingested, and stamped as `<corpus>/_recipe.sha256` (`corpus_index::corpus::recipe_sha256`, the one spelling; a snapshot reads it as `source_recipe_sha256`). The same `(corpus_id, recipe_sha256)` is `spawned: false`, a different recipe reingests (validated before the old index is removed). Outcomes map through `routes_internal::install_status`, shared with the internal route: an invalid recipe or parameters 400, an unknown id 404 (until 2026-10-08 all three answered 200 `spawned: false`). The spawn helpers live in `routes_internal/corpus_install.rs` |
+| `GET /oicp/v1/text/{text_sha256}` | A stored text by name (OICP v0.5 §2.2, `routes_oicp_text`): whole, or `start`/`end` code points with `context`. Consults only the corpora `oicp_evidence::readable_corpora` admits (the caller's kind and the turn's `PrincipalScope` over the runtime's `corpus_principal`, both; a mesh member reads only `query_sharing` corpora), each opened by `oicp_evidence::open_for_reading` (`Corpus::open`, without the query path's embedding-width gate: a text read compares no vectors), in `corpus_id` order, so the record served is the lowest `(corpus_id, source.id, ordinal)` the caller may read. Refusals are `oicp_types::evidence::reasons`, mapped from `TextAbsence` by `oicp_evidence::absence_reason`; a corpus that did not answer is a 503, never `text not held`. Its second user is svrn's own answers: each `answer_segments` entry carries the quotations the quote guard verified in a stored text whose first byte it holds, each a `QuoteAddress` (`sovereign_contracts::types`: the answer's byte range, `corpus_id`, `text_sha256`, code-point `start`/`end` and `exact`), placed by `quote_surface::address_quotes`; a quotation verified only against the prompt's evidence or a chunk has no address. The desktop opens one where it stands through its `read_text_slice` command (`clients/desktop/src-tauri/src/commands/reading.rs`), which reads the `text_endpoint` the daemon's manifest advertises under `evidence:text` and hands a refusal to the reader by its published reason; the webview never fetches the daemon itself |
+| `POST /oicp/v1/align` | OICP v0.5 §2.3 (`routes_oicp_align`): where a quotation stands in the stored texts the caller reaches (`oicp_evidence::readable_corpora`, the one read decider the text route shares: the caller's kind — the owner and its clients every corpus, a member the `query_sharing` ones, a guest or unverified caller none — and the turn's `PrincipalScope`, keyed attribution and grant, must both admit a corpus). Each corpus, opened by `oicp_evidence::open_for_reading` as the text route opens it, gives its FTS top `candidate_k` chunks (`align.toml`), which name their texts by `text_sha256`, and `quote_align::align` reads those texts; a span names the lowest `(corpus_id, source.id, ordinal)` document whose chunk matched. Every requested corpus is in `corpora` with its `texts_digest` (the engine's, through `IngestPort::texts_digest`) or in `corpora_unavailable` by name (`corpus not held`, `texts not stored`, …). Advertised as `evidence:align` with `knowledge.evidence.align_endpoint` |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
 | `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, membership (the one walk `admit` calls, read off the same fold — `svrn ring membership`), and the LIVE lane (delivery, not record — nothing reaches a store or a disk). The journals live at `cw-rails` since fp-54: `/v1/rail/*` dials the rails daemon's doors through the rail port, and a guest's WRITE carries a `GuestAttestation` the daemon signs with its node key for the session's lifetime (`AppState::attest_guest`); rails verifies it against the namespace's roster and a refusal comes back by name (`signer_not_in_roster`, `expired`, …, 403) |
-| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY. The holder's side, `GET /internal/guest/route` (the base URL its stored link reaches, opening the mesh tunnel; 412/502 named absence otherwise), is serve's loopback router since pb-mesh-exit-mesh (`sovereign_serve::guest_route`) |
-| `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
+| `/internal/guest/grant`, `…/revoke`, `…/list`, `/internal/client/token*` | Mint / kill / list guest grants and named credentials. On the Operator bind ONLY, and the OWNER's: `client_auth::owner_only` admits a local process presenting nothing where loopback is the owner, or an `admin`-group credential, so a named client on loopback gets 403 `owner-only`. The holder's side, `GET /internal/guest/route` (the base URL its stored link reaches, opening the mesh tunnel; 412/502 named absence otherwise), is serve's loopback router since pb-mesh-exit-mesh (`sovereign_serve::guest_route`) |
+| `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only. Since 2026-10-08 `/mcp` and every router the daemon merges after the client router sit behind the same `client_auth` layer (`client_surface::operator_listener_router`), so a presented credential decides there too, and a named client's MCP calls carry its principal label into `ToolContext::caller` and the call log of whichever program served the tool: svrn's (`SqliteStateStore::log_tool_call_by`) or code's (`NoteStore::log_tool_call_by`, `notes.db` schema v13's `caller` column), so every MCP call names its harness. One `client_request` span per request carries the principal's label |
 
 **Which listener serves a route is the guard; "is the caller loopback" is
 not.** The acceptor forwards by connecting `127.0.0.1`, so a loopback peer

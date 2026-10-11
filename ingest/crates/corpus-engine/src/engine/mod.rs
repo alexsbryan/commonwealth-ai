@@ -21,7 +21,7 @@ pub mod status;
 pub use article_stats::ArticleStats;
 pub use atlas_port::IngestAtlas;
 pub use cancel::{CancellationFlag, CancellationRegistry};
-pub(crate) use ingest_helpers::chunk_doc;
+pub(crate) use ingest_helpers::{chunk_doc, normalize_content};
 pub use status::{
     corpus_chunk_count, corpus_readiness, scan_corpus_rows, CorpusReadiness, CorpusStatusRow,
 };
@@ -2349,6 +2349,7 @@ impl CorpusEngine {
                     source_file: None,
                     code: crate::index::InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 }
             })
             .collect();
@@ -2491,28 +2492,6 @@ fn read_parquet_row_count(path: &Path) -> crate::error::Result<u64> {
 /// `content_hash` values are unaffected.
 pub(crate) fn blake3_hex(s: &str) -> String {
     kernel_types::ContentHash::of_str(s).to_hex()
-}
-
-/// Strip model-generated artifacts from raw corpus text before chunking.
-/// Some HuggingFace datasets contain LLM-generated content with `<think>`
-/// blocks; storing those verbatim pollutes every chunk and breaks enrichment.
-pub(crate) fn normalize_content(s: &str) -> String {
-    if !s.contains("<think>") {
-        return s.to_string();
-    }
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(start) = rest.find("<think>") {
-        out.push_str(&rest[..start]);
-        match rest[start..].find("</think>") {
-            Some(rel_end) => {
-                rest = &rest[start + rel_end + "</think>".len()..];
-            }
-            None => break,
-        }
-    }
-    out.push_str(rest);
-    out
 }
 
 /// Selection rule for [`CorpusEngine::resume_interrupted_conversation_enrichment`].
@@ -2747,6 +2726,7 @@ mod tests {
                     source_file: None,
                     code: crate::index::InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 vec![0.1_f32; 8],
             )

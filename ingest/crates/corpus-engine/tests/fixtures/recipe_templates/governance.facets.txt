@@ -2,3 +2,4 @@ clock: document_date — supersession folds on document dates (the default; set 
 tension selector: embedding top-k (k = 10, floor = 0.5) over rule — cross-document declared corpora select the embedding net; the classifier judges each pair
 identity: topic → canonical name (default; declare `identity = [...]` for an external key)
 question shapes: enumerate [topic]; relations [(none)]; events [(none)]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

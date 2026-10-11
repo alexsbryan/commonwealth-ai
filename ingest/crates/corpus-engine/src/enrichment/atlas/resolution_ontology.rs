@@ -857,6 +857,7 @@ mod tests {
                     family: AttrFamily::Ref { of: "mint".into() },
                     description: String::new(),
                     derived: None,
+                    by: None,
                 }],
                 ..Default::default()
             },
@@ -896,6 +897,7 @@ mod tests {
                     },
                     description: String::new(),
                     derived: None,
+                    by: None,
                 }],
                 ..Default::default()
             },
@@ -941,6 +943,7 @@ mod tests {
                     family: AttrFamily::Ref { of: "hoard".into() },
                     description: String::new(),
                     derived: None,
+                    by: None,
                 }],
                 ..Default::default()
             },

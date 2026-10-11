@@ -1,0 +1,1446 @@
+{
+ "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/blind-r2/ward-tune",
+ "rows12": "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-apps/ward-placing/e4-ward-tune.json",
+ "declaration": {
+  "type": "deal",
+  "type_description": "One gas transaction between Enron and a counterparty: who, where, how much, for what period, at what price. Known by a deal/Sitara number when one is quoted, otherwise by counterparty, delivery point and term.",
+  "attribute": "counterparty",
+  "attribute_description": "",
+  "target": "company",
+  "target_description": "An organization Kim deals with: a customer (utility, municipality, industrial user, marketer, producer), a broker, a pipeline, or Enron itself."
+ },
+ "deal_claims": {
+  "blind:deal_terms": 111,
+  "stage_update": 94
+ },
+ "deals_in_order12": 47,
+ "deals_probed": 40,
+ "deals_without_deal_claim": [
+  "bhp-d2",
+  "bhp-d3",
+  "bhp-d4",
+  "mesa-d5",
+  "mesa-d6",
+  "pasadena-d6",
+  "tep-d5"
+ ],
+ "gold_deals_outside_order12_reached": [],
+ "messages": 25,
+ "classes": {
+  "fold": 1,
+  "read": 12,
+  "BODY_ONLY": 4,
+  "ABSENT": 2,
+  "NO_JOIN": 19,
+  "hit": 2
+ },
+ "deals_sharing_their_pick_message": 20,
+ "named_in_text": 27,
+ "deals": [
+  {
+   "deal": "bhp-d1",
+   "class12": "fold",
+   "counterparty": "BHP Copper, Inc.",
+   "gold_id": "bhp:c2",
+   "gold_domains": [
+    "bhp.com.au",
+    "bhp.com"
+   ],
+   "forms": [
+    "bhp copper"
+   ],
+   "deal_messages": 7,
+   "messages_with_deal_claim": 2,
+   "pick_file": "bhp/7.",
+   "pick_is_latest": true,
+   "document": "10724026-1075852854521-javamail-evans-thyme",
+   "claim": "claim-0125",
+   "claim_kind": "stage_update",
+   "cited": "I would like to push forward to get ISDA swap contracts in place with BHP.",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "bhp.com",
+     "atom": "entity-0c931dd2c17681e8",
+     "text": "bhp.com",
+     "gold": true
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": true
+  },
+  {
+   "deal": "bhp-d5",
+   "class12": "read",
+   "counterparty": "BHP Copper, Inc.",
+   "gold_id": "bhp:c2",
+   "gold_domains": [
+    "bhp.com.au",
+    "bhp.com"
+   ],
+   "forms": [
+    "bhp copper"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 1,
+   "pick_file": "bhp/8.",
+   "pick_is_latest": false,
+   "document": "17859197-1075852854545-javamail-evans-thyme",
+   "claim": "claim-0139",
+   "claim_kind": "stage_update",
+   "cited": "Hi Chris: We are in the process of acquiring bids for Natural gas for one",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "mesa-d1",
+   "class12": "BODY_ONLY",
+   "counterparty": "City of Mesa",
+   "gold_id": "mesa:mesa",
+   "gold_domains": [
+    "ci.mesa.az.us",
+    "ci.mesa.us"
+   ],
+   "forms": [
+    "city of mesa"
+   ],
+   "deal_messages": 4,
+   "messages_with_deal_claim": 2,
+   "pick_file": "mesa/3.",
+   "pick_is_latest": false,
+   "document": "3323337-1075851871860-javamail-evans-thyme",
+   "claim": "claim-0286",
+   "claim_kind": "blind:deal_terms",
+   "cited": "Volume",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "mesa-d2",
+   "class12": "read",
+   "counterparty": "City of Mesa",
+   "gold_id": "mesa:mesa",
+   "gold_domains": [
+    "ci.mesa.az.us",
+    "ci.mesa.us"
+   ],
+   "forms": [
+    "city of mesa"
+   ],
+   "deal_messages": 8,
+   "messages_with_deal_claim": 3,
+   "pick_file": "mesa/6.",
+   "pick_is_latest": false,
+   "document": "3005056-1075851871926-javamail-evans-thyme",
+   "claim": "claim-0033",
+   "claim_kind": "blind:deal_terms",
+   "cited": "assuming Grigsby's offer is .04)",
+   "named_in_text": [
+    "city of mesa"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "mesa-d3",
+   "class12": "read",
+   "counterparty": "City of Mesa",
+   "gold_id": "mesa:mesa",
+   "gold_domains": [
+    "ci.mesa.az.us",
+    "ci.mesa.us"
+   ],
+   "forms": [
+    "city of mesa"
+   ],
+   "deal_messages": 3,
+   "messages_with_deal_claim": 1,
+   "pick_file": "mesa/13.",
+   "pick_is_latest": true,
+   "document": "33375611-1075852852291-javamail-evans-thyme",
+   "claim": "claim-0250",
+   "claim_kind": "stage_update",
+   "cited": "I wanted to give you a pricing update.  Prices in the near term the next couple of years have come off.  Call me when you get some time.",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "mesa-d4",
+   "class12": "read",
+   "counterparty": "ED 2",
+   "gold_id": "mesa:ed2",
+   "gold_domains": [],
+   "forms": [
+    "ed 2"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "mesa/13.",
+   "pick_is_latest": true,
+   "document": "33375611-1075852852291-javamail-evans-thyme",
+   "claim": "claim-0250",
+   "claim_kind": "stage_update",
+   "cited": "I wanted to give you a pricing update.  Prices in the near term the next couple of years have come off.  Call me when you get some time.",
+   "named_in_text": [
+    "ed 2"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "mesa-d7",
+   "class12": "BODY_ONLY",
+   "counterparty": "City of Mesa",
+   "gold_id": "mesa:mesa",
+   "gold_domains": [
+    "ci.mesa.az.us",
+    "ci.mesa.us"
+   ],
+   "forms": [
+    "city of mesa"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "mesa/14.",
+   "pick_is_latest": true,
+   "document": "14458270-1075852852314-javamail-evans-thyme",
+   "claim": "claim-0030",
+   "claim_kind": "stage_update",
+   "cited": "This confirm is ready to be signed and sent out upon your approval.  Please let me know.",
+   "named_in_text": [
+    "city of mesa"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "pasadena-d1",
+   "class12": "BODY_ONLY",
+   "counterparty": "City of Pasadena (Pasadena Water and Power Department)",
+   "gold_id": "pasadena:pasadena",
+   "gold_domains": [
+    "ci.pasadena.ca.us"
+   ],
+   "forms": [
+    "city of pasadena",
+    "pasadena water and power department"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "pasadena/10.",
+   "pick_is_latest": true,
+   "document": "30325610-1075851872679-javamail-evans-thyme",
+   "claim": "claim-0112",
+   "claim_kind": "stage_update",
+   "cited": "Subject: Physical Deals with Implicit Options",
+   "named_in_text": [
+    "pasadena water and power department",
+    "ci.pasadena.ca.us"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "pasadena-d2",
+   "class12": "ABSENT",
+   "counterparty": "City of Pasadena (Pasadena Water and Power Department)",
+   "gold_id": "pasadena:pasadena",
+   "gold_domains": [
+    "ci.pasadena.ca.us"
+   ],
+   "forms": [
+    "city of pasadena",
+    "pasadena water and power department"
+   ],
+   "deal_messages": 3,
+   "messages_with_deal_claim": 2,
+   "pick_file": "pasadena/7.",
+   "pick_is_latest": true,
+   "document": "13565254-1075851872610-javamail-evans-thyme",
+   "claim": "claim-0215",
+   "claim_kind": "blind:deal_terms",
+   "cited": "You quoted $5.10 as the total spread you would pay.",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "pasadena-d3",
+   "class12": "read",
+   "counterparty": "City of Pasadena (Pasadena Water and Power Department)",
+   "gold_id": "pasadena:pasadena",
+   "gold_domains": [
+    "ci.pasadena.ca.us"
+   ],
+   "forms": [
+    "city of pasadena",
+    "pasadena water and power department"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 1,
+   "pick_file": "pasadena/5.",
+   "pick_is_latest": false,
+   "document": "11830626-1075851872565-javamail-evans-thyme",
+   "claim": "claim-0150",
+   "claim_kind": "stage_update",
+   "cited": "I'm OK with the March deal. After that, it's a little iffy.\n\nI'm still not comfortable with the April-August El Paso arrangement,",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "ci.pasadena.ca.us",
+     "atom": "entity-52f5d1cc75ad320e",
+     "text": "ci.pasadena.ca.us",
+     "gold": true
+    }
+   ],
+   "header_has_gold": true
+  },
+  {
+   "deal": "pasadena-d4",
+   "class12": "BODY_ONLY",
+   "counterparty": "City of Pasadena (Pasadena Water and Power Department)",
+   "gold_id": "pasadena:pasadena",
+   "gold_domains": [
+    "ci.pasadena.ca.us"
+   ],
+   "forms": [
+    "city of pasadena",
+    "pasadena water and power department"
+   ],
+   "deal_messages": 4,
+   "messages_with_deal_claim": 4,
+   "pick_file": "pasadena/15.",
+   "pick_is_latest": true,
+   "document": "524931-1075852851646-javamail-evans-thyme",
+   "claim": "claim-0197",
+   "claim_kind": "stage_update",
+   "cited": "Please review the language under B of Contract Price of the Transaction Agreement to see if it isn't sufficient to cover the concept under item 8 of Pasadena Usage under your term sheet.  Likewise, I have added item C under El Paso Capacity to cover the sale of 1456 MMBtu/d.  Please check the language to ascertain that everything is covered.  Have a good weekend.  I will be in all next week if we need to further tweak the language.",
+   "named_in_text": [
+    "city of pasadena"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "pasadena-d5",
+   "class12": "read",
+   "counterparty": "City of Pasadena (Pasadena Water and Power Department)",
+   "gold_id": "pasadena:pasadena",
+   "gold_domains": [
+    "ci.pasadena.ca.us"
+   ],
+   "forms": [
+    "city of pasadena",
+    "pasadena water and power department"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 2,
+   "pick_file": "pasadena/3.",
+   "pick_is_latest": true,
+   "document": "10913795-1075851872519-javamail-evans-thyme",
+   "claim": "claim-0018",
+   "claim_kind": "stage_update",
+   "cited": "through 1800 or so April 11, 2001.  Kim and I have arranged for Enron to\npurchase the non-APEA gas during that period.  At this time, we believe that",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "ci.pasadena.ca.us",
+     "atom": "entity-52f5d1cc75ad320e",
+     "text": "ci.pasadena.ca.us",
+     "gold": true
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": true
+  },
+  {
+   "deal": "pasadena-d7",
+   "class12": "read",
+   "counterparty": "City of Pasadena (Pasadena Water and Power Department)",
+   "gold_id": "pasadena:pasadena",
+   "gold_domains": [
+    "ci.pasadena.ca.us"
+   ],
+   "forms": [
+    "city of pasadena",
+    "pasadena water and power department"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "pasadena/23.",
+   "pick_is_latest": true,
+   "document": "30908702-1075852851833-javamail-evans-thyme",
+   "claim": "claim-0037",
+   "claim_kind": "stage_update",
+   "cited": "We have an active  Master Purchase/Sale Firm dated 10/1/97.  Do you want a copy?  Please let me know if you need anything else.",
+   "named_in_text": [
+    "city of pasadena"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "pasadena-d8",
+   "class12": "read",
+   "counterparty": "City of Pasadena (Pasadena Water and Power Department)",
+   "gold_id": "pasadena:pasadena",
+   "gold_domains": [
+    "ci.pasadena.ca.us"
+   ],
+   "forms": [
+    "city of pasadena",
+    "pasadena water and power department"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "pasadena/37.",
+   "pick_is_latest": true,
+   "document": "13689323-1075855265256-javamail-evans-thyme",
+   "claim": "claim-0039",
+   "claim_kind": "blind:deal_terms",
+   "cited": "The total burn nomination for month of December 2001 is 6,500MMBtu per day.  This is made up of the sum of the following:\n \n1. 3,989MMBtu/day purchase from Engage @ SoCal Border (net, after PG&ENW losses 4,124MMBtu/day @ Kingsgate);\n2. 3,000MMBtu/day APEA gas;",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "ci.pasadena.ca.us",
+     "atom": "entity-52f5d1cc75ad320e",
+     "text": "ci.pasadena.ca.us",
+     "gold": true
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": true
+  },
+  {
+   "deal": "smurfit-d1",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 6,
+   "messages_with_deal_claim": 3,
+   "pick_file": "smurfit/14.",
+   "pick_is_latest": true,
+   "document": "18223248-1075851876967-javamail-evans-thyme",
+   "claim": "claim-0218",
+   "claim_kind": "stage_update",
+   "cited": "Did you want to bid on the other SES clients?",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d2",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 2,
+   "pick_file": "smurfit/20.",
+   "pick_is_latest": true,
+   "document": "3465682-1075852850731-javamail-evans-thyme",
+   "claim": "claim-0177",
+   "claim_kind": "stage_update",
+   "cited": "Please find attached a Request for Proposal for several Summit  Energy clients in California.\nThe first client is Smurfit Stone Container Corporation  (SSCC), served behind PG&E.  The largest site in this group is the  Santa Clara mill site.  This site owns Redwood capacity.  We are  interested in a supplier that can offer to manage that capacity in an effective  manner.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d3",
+   "class12": "read",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 2,
+   "pick_file": "smurfit/5.",
+   "pick_is_latest": true,
+   "document": "17720071-1075851876765-javamail-evans-thyme",
+   "claim": "claim-0108",
+   "claim_kind": "stage_update",
+   "cited": "option is now not available.? Jason  mentioned doing a long term fixed deal.?",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d4",
+   "class12": "read",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 2,
+   "pick_file": "smurfit/5.",
+   "pick_is_latest": true,
+   "document": "17720071-1075851876765-javamail-evans-thyme",
+   "claim": "claim-0108",
+   "claim_kind": "stage_update",
+   "cited": "option is now not available.? Jason  mentioned doing a long term fixed deal.?",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d5",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 6,
+   "messages_with_deal_claim": 6,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d6",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 3,
+   "messages_with_deal_claim": 2,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d7",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d8",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d9",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d10",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d11",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d12",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/23.",
+   "pick_is_latest": true,
+   "document": "23949849-1075852850801-javamail-evans-thyme",
+   "claim": "claim-0259",
+   "claim_kind": "stage_update",
+   "cited": "The below deals are all the deals we have with Smurfit, and the system shows that all the deals are under GTC's and do not require the cpty to sign, so all the deals have been executed.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d13",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/20.",
+   "pick_is_latest": true,
+   "document": "3465682-1075852850731-javamail-evans-thyme",
+   "claim": "claim-0177",
+   "claim_kind": "stage_update",
+   "cited": "Please find attached a Request for Proposal for several Summit  Energy clients in California.\nThe first client is Smurfit Stone Container Corporation  (SSCC), served behind PG&E.  The largest site in this group is the  Santa Clara mill site.  This site owns Redwood capacity.  We are  interested in a supplier that can offer to manage that capacity in an effective  manner.",
+   "named_in_text": [
+    "smurfit stone container"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d14",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 3,
+   "messages_with_deal_claim": 3,
+   "pick_file": "smurfit/25.",
+   "pick_is_latest": true,
+   "document": "18868731-1075852850848-javamail-evans-thyme",
+   "claim": "claim-0144",
+   "claim_kind": "stage_update",
+   "cited": "Talked to Tanya regarding the long deal for SSCC and relayed to her your suggestion for handling gas.  She is ok with managing both gas and power through EPMI as long as legal is on board and all necessary EPMI docs are in place or amended (netting, physical gas), and that we are comfortable with the receivables risk to SSCC.  She actually mentioned that there has been discussions about merging EPMI and ENA into one entity to more properly handle net positions, so she seems to like your idea.",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d15",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 2,
+   "messages_with_deal_claim": 2,
+   "pick_file": "smurfit/26.",
+   "pick_is_latest": true,
+   "document": "3841251-1075852850876-javamail-evans-thyme",
+   "claim": "claim-0262",
+   "claim_kind": "stage_update",
+   "cited": "I have been working with Ron on this power agreement for the Vernon facility in Los Angeles that is also the entity that is buying gas from us through Kim Ward.  We have not reached agreement on this Scheduling Coordinator arrangement, but are trying to clarify our proposal.",
+   "named_in_text": [
+    "smurfit stone container",
+    "smurfit.com"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d16",
+   "class12": "NO_JOIN",
+   "counterparty": "Smurfit-Stone Container Corporation",
+   "gold_id": "smurfit:smurfit",
+   "gold_domains": [
+    "smurfit.com"
+   ],
+   "forms": [
+    "smurfit stone container"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/26.",
+   "pick_is_latest": true,
+   "document": "3841251-1075852850876-javamail-evans-thyme",
+   "claim": "claim-0262",
+   "claim_kind": "stage_update",
+   "cited": "I have been working with Ron on this power agreement for the Vernon facility in Los Angeles that is also the entity that is buying gas from us through Kim Ward.  We have not reached agreement on this Scheduling Coordinator arrangement, but are trying to clarify our proposal.",
+   "named_in_text": [
+    "smurfit stone container",
+    "smurfit.com"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d17",
+   "class12": "NO_JOIN",
+   "counterparty": "Hayes Lemmerz",
+   "gold_id": "smurfit:hayes",
+   "gold_domains": [],
+   "forms": [
+    "hayes lemmerz"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/4.",
+   "pick_is_latest": true,
+   "document": "14046120-1075851876742-javamail-evans-thyme",
+   "claim": "claim-0064",
+   "claim_kind": "stage_update",
+   "cited": "We would also like to discuss contract possibilities for the  Hayes Lemmerz",
+   "named_in_text": [
+    "hayes lemmerz"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d18",
+   "class12": "NO_JOIN",
+   "counterparty": "SGL Carbon",
+   "gold_id": "smurfit:sgl",
+   "gold_domains": [],
+   "forms": [
+    "sgl carbon"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/20.",
+   "pick_is_latest": true,
+   "document": "3465682-1075852850731-javamail-evans-thyme",
+   "claim": "claim-0177",
+   "claim_kind": "stage_update",
+   "cited": "Please find attached a Request for Proposal for several Summit  Energy clients in California.\nThe first client is Smurfit Stone Container Corporation  (SSCC), served behind PG&E.  The largest site in this group is the  Santa Clara mill site.  This site owns Redwood capacity.  We are  interested in a supplier that can offer to manage that capacity in an effective  manner.",
+   "named_in_text": [
+    "sgl carbon"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d19",
+   "class12": "NO_JOIN",
+   "counterparty": "Borden",
+   "gold_id": "smurfit:borden",
+   "gold_domains": [],
+   "forms": [
+    "borden"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/20.",
+   "pick_is_latest": true,
+   "document": "3465682-1075852850731-javamail-evans-thyme",
+   "claim": "claim-0177",
+   "claim_kind": "stage_update",
+   "cited": "Please find attached a Request for Proposal for several Summit  Energy clients in California.\nThe first client is Smurfit Stone Container Corporation  (SSCC), served behind PG&E.  The largest site in this group is the  Santa Clara mill site.  This site owns Redwood capacity.  We are  interested in a supplier that can offer to manage that capacity in an effective  manner.",
+   "named_in_text": [
+    "borden"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d20",
+   "class12": "NO_JOIN",
+   "counterparty": "Newell Rubbermaid",
+   "gold_id": "smurfit:newell",
+   "gold_domains": [],
+   "forms": [
+    "newell rubbermaid"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/20.",
+   "pick_is_latest": true,
+   "document": "3465682-1075852850731-javamail-evans-thyme",
+   "claim": "claim-0177",
+   "claim_kind": "stage_update",
+   "cited": "Please find attached a Request for Proposal for several Summit  Energy clients in California.\nThe first client is Smurfit Stone Container Corporation  (SSCC), served behind PG&E.  The largest site in this group is the  Santa Clara mill site.  This site owns Redwood capacity.  We are  interested in a supplier that can offer to manage that capacity in an effective  manner.",
+   "named_in_text": [
+    "newell rubbermaid"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "smurfit-d21",
+   "class12": "NO_JOIN",
+   "counterparty": "Libbey",
+   "gold_id": "smurfit:libbey",
+   "gold_domains": [],
+   "forms": [
+    "libbey"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "smurfit/20.",
+   "pick_is_latest": true,
+   "document": "3465682-1075852850731-javamail-evans-thyme",
+   "claim": "claim-0177",
+   "claim_kind": "stage_update",
+   "cited": "Please find attached a Request for Proposal for several Summit  Energy clients in California.\nThe first client is Smurfit Stone Container Corporation  (SSCC), served behind PG&E.  The largest site in this group is the  Santa Clara mill site.  This site owns Redwood capacity.  We are  interested in a supplier that can offer to manage that capacity in an effective  manner.",
+   "named_in_text": [
+    "libbey"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "summitenergy.com",
+     "atom": "entity-09627ce274260257",
+     "text": "summitenergy.com",
+     "gold": false
+    },
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "tep-d1",
+   "class12": "read",
+   "counterparty": "Tucson Electric Power Company",
+   "gold_id": "tep:tep",
+   "gold_domains": [
+    "tucsonelectric.com"
+   ],
+   "forms": [
+    "tucson electric power"
+   ],
+   "deal_messages": 7,
+   "messages_with_deal_claim": 5,
+   "pick_file": "tep/4.",
+   "pick_is_latest": false,
+   "document": "11328527-1075851877173-javamail-evans-thyme",
+   "claim": "claim-0201",
+   "claim_kind": "blind:deal_terms",
+   "cited": "> the Schedule that the ISDA definitions are incorporated into the Schedule",
+   "named_in_text": [
+    "tucson electric power",
+    "tucsonelectric.com"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "tep-d2",
+   "class12": "hit",
+   "counterparty": "Tucson Electric Power Company",
+   "gold_id": "tep:tep",
+   "gold_domains": [
+    "tucsonelectric.com"
+   ],
+   "forms": [
+    "tucson electric power"
+   ],
+   "deal_messages": 4,
+   "messages_with_deal_claim": 3,
+   "pick_file": "tep/7.",
+   "pick_is_latest": false,
+   "document": "11366914-1075851877242-javamail-evans-thyme",
+   "claim": "claim-0277",
+   "claim_kind": "stage_update",
+   "cited": "Genia - These documents are FINE with me and they conform to Ed's Credit \nWorksheet. As far as I am concerned they are ready to be sent out.",
+   "named_in_text": [
+    "tucson electric power",
+    "tucsonelectric.com"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "tep-d3",
+   "class12": "read",
+   "counterparty": "Tucson Electric Power Company",
+   "gold_id": "tep:tep",
+   "gold_domains": [
+    "tucsonelectric.com"
+   ],
+   "forms": [
+    "tucson electric power"
+   ],
+   "deal_messages": 3,
+   "messages_with_deal_claim": 3,
+   "pick_file": "tep/9.",
+   "pick_is_latest": true,
+   "document": "11942366-1075851877289-javamail-evans-thyme",
+   "claim": "claim-0284",
+   "claim_kind": "stage_update",
+   "cited": "Attached please find the credit worksheets for an ISDA and EEI Master Power",
+   "named_in_text": [
+    "tucson electric power"
+   ],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "tep-d4",
+   "class12": "ABSENT",
+   "counterparty": "Tucson Electric Power Company",
+   "gold_id": "tep:tep",
+   "gold_domains": [
+    "tucsonelectric.com"
+   ],
+   "forms": [
+    "tucson electric power"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "tep/10.",
+   "pick_is_latest": true,
+   "document": "26292127-1075851877312-javamail-evans-thyme",
+   "claim": "claim-0242",
+   "claim_kind": "stage_update",
+   "cited": "and will be in the office for one day.  Now for work - can we PLEASE work on \ngetting Tucson a new ISDA?  they have been ready to lock in summer gas prices",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "enron.com",
+     "atom": "entity-a105545f9896632b",
+     "text": "enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": false
+  },
+  {
+   "deal": "tep-d6",
+   "class12": "hit",
+   "counterparty": "Tucson Electric Power Company",
+   "gold_id": "tep:tep",
+   "gold_domains": [
+    "tucsonelectric.com"
+   ],
+   "forms": [
+    "tucson electric power"
+   ],
+   "deal_messages": 1,
+   "messages_with_deal_claim": 1,
+   "pick_file": "tep/3.",
+   "pick_is_latest": true,
+   "document": "24417328-1075851877151-javamail-evans-thyme",
+   "claim": "claim-0044",
+   "claim_kind": "stage_update",
+   "cited": "Subject: FW: Invitation to Bid",
+   "named_in_text": [],
+   "header": [
+    {
+     "source": "header",
+     "domain": "tucsonelectric.com",
+     "atom": "entity-67d2c9ce228957ee",
+     "text": "tucsonelectric.com",
+     "gold": true
+    },
+    {
+     "source": "header",
+     "domain": "ect.enron.com",
+     "atom": "entity-d6c3f83e2c26ab84",
+     "text": "ect.enron.com",
+     "gold": false
+    }
+   ],
+   "header_has_gold": true
+  }
+ ]
+}

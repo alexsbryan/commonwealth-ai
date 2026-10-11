@@ -325,21 +325,34 @@ flags = [{ name = "--peers" }, { name = "--method" }, { name = "--timeout-ms" },
 args = ["mesh", "app", "fanout", "--help"]
 expect_exit = 0
 [[command]]
-# One client-API bearer per machine, so lending the API to a laptop no longer
-# means rotating the credential the desktop and the editor also hold
-# (`docs/THREAT_MODEL.md` gap 3). Mint/list/revoke all reach the daemon's
-# OPERATOR listener on 127.0.0.1 — a peer may not ask for a credential.
+# Retired 2026-10-08: a named credential is the daemon's, and `daemon key` is
+# its one verb (ADDRESSED_TEXT §5.5 rule 2). It refuses by name and points at
+# the survivor, whatever it is given, so `--help` exits 2 as well.
 path = "mesh token"
 binary = "llm"
 visibility = "public"
 classification = "daemon"
+[command.smoke]
+args = ["mesh", "token", "--help"]
+expect_exit = 2
+[[command]]
+# The daemon's named credentials, `{name, token, groups}`: one per client, so
+# lending the API to a laptop or naming a coding harness never means sharing
+# the credential everything else holds (`docs/THREAT_MODEL.md` gap 3). With a
+# daemon listening it asks the owner-only routes on 127.0.0.1; with none, it
+# edits `<data_dir>/client-tokens` (an on-prem install's first keys).
+path = "daemon key"
+binary = "daemon"
+visibility = "public"
+classification = "daemon"
 flags = [
-  { name = "--new", takes_value = true },
+  { name = "--add", takes_value = true },
+  { name = "--group", takes_value = true },
   { name = "--list" },
   { name = "--revoke", takes_value = true },
 ]
 [command.smoke]
-args = ["mesh", "token", "--help"]
+args = ["daemon", "key", "--help"]
 expect_exit = 0
 [[command]]
 path = "mesh balance"
@@ -1066,7 +1079,7 @@ classification = "daemon"
 path = "enrich extract"
 binary = "llm"
 classification = "daemon"
-flags = [{ name = "--chapters", takes_value = true }, { name = "--full" }, { name = "--terse" }]
+flags = [{ name = "--chapters", takes_value = true }, { name = "--full" }, { name = "--terse" }, { name = "--asker", takes_value = true }]
 [[command]]
 path = "enrich cluster"
 binary = "llm"
@@ -1077,7 +1090,7 @@ classification = "daemon"
 [[command]]
 path = "enrich resolve"
 binary = "llm"
-flags = [{ name = "--phase", takes_value = true }]
+flags = [{ name = "--phase", takes_value = true }, { name = "--asker", takes_value = true }]
 [[command]]
 path = "enrich tensions"
 binary = "llm"
@@ -2435,20 +2448,22 @@ tier = 2
 visibility = "public"
 doc = "docs/INTEROP.md#four-facts-before-you-start"
 [[journey.step]]
-run = "mesh token --new contract-probe"
+run = "daemon key --add contract-probe"
 mutates = true
-note = """exit code only: the bearer is the one thing printed and asserting any \
+note = """exit code only: the key is the one thing printed and asserting any \
 part of it would put a credential in the lane's own output. That it LANDED is \
-proven by [1], which is the assertion an exit-code-only gate cannot make."""
+proven by [1], which is the assertion an exit-code-only gate cannot make. The \
+host must declare `[daemon] loopback`: on an undeclared one minting refuses, \
+by design (ADDRESSED_TEXT D5)."""
 [journey.step.expect]
 exit = 0
 [[journey.step]]
-run = "mesh token --list"
+run = "daemon key --list"
 [journey.step.expect]
 exit = 0
 stdout_contains = "contract-probe"
 [[journey.step]]
-run = "mesh token --revoke contract-probe"
+run = "daemon key --revoke contract-probe"
 mutates = true
 note = """prove the mutation reverses — and that revoking is reported rather \
 than assumed: revoking a label that was never there exits 1 and says so, so a \
@@ -2457,7 +2472,7 @@ than assumed: revoking a label that was never there exits 1 and says so, so a \
 exit = 0
 stdout_contains = "Revoked"
 [[journey.step]]
-run = "mesh token --list"
+run = "daemon key --list"
 note = """the absence half. Asserted against --list rather than an exit code \
 because a revoke that deleted the file and left the in-memory set admitting \
 would exit 0 here and still be serving the device."""
@@ -2663,6 +2678,55 @@ this step is the contract-visible floor under it."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "\"entity_type\": \"sceatta\""
+
+[[journey]]
+id = "layer-default-path"
+title = "Publish a typed recipe, run the default commands, and get its records"
+persona = "author"
+experience = "knowledge-corpora"
+tier = 3
+doc = "svrn/docs/ENRICH_A_CORPUS.md#records-from-a-declaration"
+# D1 of campaign ontology-layer: the same default commands give typed records
+# on any system. The fixture is a mail-shaped recipe in a neutral domain
+# (ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/mail/): sourced
+# people and companies, one type RESOLVE decides (`order`, an identity_criterion
+# and no source), one claim kind about it, `change.document` stamps, and a
+# protocol fold. No step names a phase or a reader: until 2026-10-09 the bare
+# resolve ran 3a alone and wrote no claims, so the layer was reachable only
+# through `--phase all`.
+[[journey.step]]
+run = "corpus install {layer_recipe} --wait"
+mutates = true
+note = "by PATH; `--wait` is the barrier for the reason given in enrich-atlas[0]."
+[journey.step.expect]
+exit = 0
+stdout_contains = "installed"
+[[journey.step]]
+run = "enrich init {layer_corpus} --from-corpus {layer_corpus}"
+mutates = true
+note = "no `--pipeline`: the declaration selects the custom atlas."
+[journey.step.expect]
+exit = 0
+stdout_contains = "custom ontology"
+[[journey.step]]
+run = "enrich extract {layer_corpus} --full"
+mutates = true
+note = "the reader is chosen by the declaration; no reader key, no flag."
+[journey.step.expect]
+exit = 0
+stdout_contains = "cache updated"
+[[journey.step]]
+run = "enrich resolve {layer_corpus}"
+mutates = true
+note = """THE PAYLOAD, with no `--phase`. `derived order.stage (AfterResolve)` is \
+printed only by the document step after 3b (`atlas_resolve_documents::apply`), \
+after RESOLVE decided `order`: the same step stamps every claim from its \
+document first (`document stamps:`), so the one line proves stamps, RESOLVE \
+records and the protocol fold ran. `--phase 3a` prints none of it (watched \
+2026-10-09 on this fixture)."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "derived order.stage (AfterResolve)"
 
 [[journey]]
 id = "meshapp-author"

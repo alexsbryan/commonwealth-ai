@@ -323,7 +323,16 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (embed, chat) = client.into_closures();
+    let (embed, chat) = match client.into_asked_closures(
+        corpus_engine::enrichment::asker::Asker::Daemon,
+        &super::paths::enrichment_root(&cfg.corpus_id),
+    ) {
+        Ok(ports) => ports,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
 
     // ── Step 4 (cont.): resolve into a STAGING dir ─────────────
     let staging_root = std::env::temp_dir().join(format!("sov-delta-{}-{suffix}", cfg.corpus_id));
@@ -783,17 +792,7 @@ fn parse_args(args: &[String]) -> Result<ParsedDelta, String> {
                 let val = args
                     .get(i + 1)
                     .ok_or_else(|| "--phase requires a value (3a|all)".to_string())?;
-                phase = match val.as_str() {
-                    "3a" => ResolvePhase::P3a,
-                    "all" => ResolvePhase::All,
-                    // `3b` is accepted as a synonym for `all` to match
-                    // atlas-resolve's vocabulary, but the documented
-                    // surface here is just 3a|all.
-                    "3b" => ResolvePhase::P3b,
-                    other => {
-                        return Err(format!("unknown phase `{other}`; expected 3a or all"));
-                    }
-                };
+                phase = ResolvePhase::parse(val)?;
                 i += 2;
             }
             "--yes" => {

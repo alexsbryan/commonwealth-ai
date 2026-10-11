@@ -83,10 +83,12 @@ dir = "/var/lib/firm-rag"
 
 # ── Daemon ports and binds ───────────────────────────────────────────
 [daemon]
-# The client API, the one nginx proxies to. install.sh writes API keys
-# into the daemon's key store, and a daemon holding any key identifies
-# EVERY caller by key: loopback grants nothing, so nginx on the same host
-# lends no caller a trust it does not have. Bound to loopback all the
+# Loopback grants nothing: EVERY caller presents an API key, so nginx on
+# the same host lends no caller a trust it does not have. Declared, never
+# inferred from the key store. install.sh writes the keys into the
+# daemon's store before its first start (`svrn daemon key --add`).
+loopback = "none"
+# The client API, the one nginx proxies to. Bound to loopback all the
 # same — nginx is the TLS front door and the route allowlist.
 client_bind = "127.0.0.1"
 client_port = 9741

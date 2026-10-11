@@ -291,6 +291,14 @@ if [ ! -f "$ONTOLOGY_RECIPE" ]; then
   ONTOLOGY_RECIPE=""
 fi
 
+# ── the layer-default-path fixture ───────────────────────────────────────
+# Left uninstalled for the same reason as the ontology fixture above.
+LAYER_RECIPE="${SOVEREIGN_JOURNEY_LAYER_RECIPE:-$REPO_ROOT/ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/mail/recipe.toml}"
+if [ ! -f "$LAYER_RECIPE" ]; then
+  echo "sandbox: layer fixture recipe missing ($LAYER_RECIPE) — layer-default-path cannot run" >&2
+  LAYER_RECIPE=""
+fi
+
 FIXTURE_DIR="$REPO_ROOT/svrn/tests/fixtures/journey-corpus"
 FIXTURE_RECIPE="$REPO_ROOT/svrn/tests/fixtures/journey-corpus.recipe.toml"
 JOURNEY_CORPUS="${JOURNEY_CORPUS:-journey-fixture}"
@@ -475,6 +483,7 @@ run_one() { # $1 = journey id; remaining = passthrough flags
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_SPEC="$SPEC_FILE"} \
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_CLAIMS="$CLAIMS_FILE"} \
       ${ONTOLOGY_RECIPE:+SOVEREIGN_JOURNEY_ONTOLOGY_RECIPE="$ONTOLOGY_RECIPE"} \
+      ${LAYER_RECIPE:+SOVEREIGN_JOURNEY_LAYER_RECIPE="$LAYER_RECIPE"} \
     "$RUNNER" --mutating "${SANDBOX_LACKS[@]}" --journey "$jid" "$@" \
     2>&1 | grep -vE '^cli-journey: |^ +steps +[0-9]|^ +coverage |^ +manifest |^$'
   return "${PIPESTATUS[0]}"

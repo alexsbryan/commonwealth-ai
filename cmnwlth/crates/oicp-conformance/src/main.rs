@@ -2,7 +2,7 @@
 // Contract-adjacent binary: liftable by third parties — public items need
 // docs (count-ratcheted by lint-gate, never a hard deny).
 #![warn(missing_docs)]
-//! `oicp-conformance` — a standalone certifier for OICP v0.4 hosts.
+//! `oicp-conformance` — a standalone certifier for OICP v0.4 and v0.5 hosts.
 //!
 //! Point it at `--host <url>` and it fetches the capabilities manifest, then
 //! exercises the inference, constraint, embed, knowledge, and ingest surfaces,
@@ -15,8 +15,17 @@
 //! crate wholesale to certify their own implementation.
 
 mod args;
+mod auth_checks;
 mod checks;
+mod evidence_checks;
+#[cfg(test)]
+mod fake_host;
+mod fixture;
+mod ingest_checks;
 mod report;
+#[cfg(test)]
+mod v05_tests;
+mod wire;
 
 use std::process::ExitCode;
 

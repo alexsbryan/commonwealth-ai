@@ -69,6 +69,7 @@ async fn donor_partition(index_dir: &Path, node: &str, id: &str, unit_id: u32, t
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: Some(unit_id),
+                    text_sha256: None,
                 },
                 vec![0.25_f32; EMBED_DIM],
             )

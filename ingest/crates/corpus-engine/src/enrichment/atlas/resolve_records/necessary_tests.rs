@@ -4,13 +4,14 @@ use super::*;
 
 fn necessary(keys: &[&str]) -> Criterion {
     let mut c = criterion(keys);
-    c.necessary = vec![(
-        "kind".into(),
-        ["firing", "death"]
+    c.necessary = vec![ClosedAttr {
+        name: "kind".into(),
+        description: String::new(),
+        values: ["firing", "death"]
             .into_iter()
             .map(str::to_string)
             .collect(),
-    )];
+    }];
     c
 }
 
@@ -72,7 +73,7 @@ async fn necessary_identity_key_conflict_refuses_instead_of_opening_duplicate() 
 }
 
 #[tokio::test]
-async fn necessary_identity_key_settlement_reads_missing_values_before_join() {
+async fn necessary_identity_a_read_value_never_overrides_a_sufficient_key() {
     let criterion = necessary(&["deal"]);
     let mut resolver = Resolver::default();
     let first = "A firing is reported.";
@@ -87,6 +88,8 @@ async fn necessary_identity_key_settlement_reads_missing_values_before_join() {
         )
         .await;
 
+    // The key D-1 says one particular; the model READ a different kind. A
+    // read value is a weighed source, not a supplied one: the key links.
     let second = "A death is reported for the same deal.";
     let (conflict_read, seen) = scripted(vec![json!({"A": 0.05, "B": 0.9, "0": 0.05})]);
     let result = resolver
@@ -99,15 +102,19 @@ async fn necessary_identity_key_settlement_reads_missing_values_before_join() {
         )
         .await;
 
-    assert_eq!(
+    assert!(matches!(
         result.outcomes[0].outcome,
-        Outcome::Refused(Refusal::Contradiction {
-            targets: vec!["source".into()]
-        })
+        Outcome::Decided(Decision::Key { .. })
+    ));
+    assert_eq!(
+        (result.calls, result.vetoed, seen.lock().unwrap().len()),
+        (1, 0, 1)
     );
-    assert_eq!((result.calls, seen.lock().unwrap().len()), (1, 1));
     assert_eq!(resolver.records().len(), 1);
-    assert_eq!(resolver.records()[0].fields["kind"], values(&["firing"]));
+    assert_eq!(
+        resolver.records()[0].fields["kind"],
+        values(&["death", "firing"])
+    );
 }
 
 #[tokio::test]
@@ -173,6 +180,9 @@ async fn necessary_identity_contaminated_record_matches_neither_member_value() {
         .await;
     resolver.records[0]
         .fields
+        .insert("kind".into(), values(&["firing", "death"]));
+    resolver.records[0]
+        .supplied
         .insert("kind".into(), values(&["firing", "death"]));
 
     let (infer, _) = scripted(vec![
@@ -331,9 +341,9 @@ async fn necessary_identity_missing_value_remains_permissive_and_supplied_eviden
 }
 
 #[tokio::test]
-async fn necessary_identity_evidential_field_cannot_override_conflict() {
+async fn necessary_identity_a_read_conflict_is_weighed_against_the_field() {
     let seed_criterion = necessary(&[]);
-    let mut resolver = Resolver::default();
+    let mut resolver = weights(&[]);
     let first = "The fire happened.";
     let (seed_read, _) = scripted(vec![json!({"A": 0.9, "B": 0.05, "0": 0.05})]);
     resolver
@@ -346,7 +356,7 @@ async fn necessary_identity_evidential_field_cannot_override_conflict() {
         )
         .await;
 
-    let mut field_criterion = thread_evidence(0.83, 0.5);
+    let mut field_criterion = barred();
     field_criterion.necessary = seed_criterion.necessary.clone();
     let second = "The death followed.";
     let (field_read, seen) = scripted(vec![json!({"A": 0.05, "B": 0.9, "0": 0.05})]);
@@ -360,10 +370,12 @@ async fn necessary_identity_evidential_field_cannot_override_conflict() {
         )
         .await;
 
+    // The thread agrees (+2.9) and the read kind differs (-2.5), against the
+    // prior and the proposed answer's none: opened, and nothing vetoed.
     assert_eq!(result.outcomes[0].outcome.record(), Some("conflict"));
     assert_eq!(result.outcomes[0].outcome.label(), "opened");
     assert_eq!((result.calls, seen.lock().unwrap().len()), (1, 1));
-    assert_eq!(result.vetoed, 1);
+    assert_eq!(result.vetoed, 0);
     assert_eq!(resolver.records().len(), 2);
     assert_eq!(resolver.records()[0].statements, ["source"]);
 }
@@ -441,4 +453,94 @@ async fn necessary_identity_proposal_cannot_join_conflicting_record() {
     assert_eq!(result.vetoed, 1);
     assert_eq!(resolver.records()[0].statements, ["source"]);
     assert_eq!(resolver.records().len(), 1);
+}
+
+/// READ shows a necessary attribute with its declared description, as it
+/// shows the type's (value meanings there lifted stage on ward's gold
+/// statements .525 -> .663, crm-proof loop 13 C2), and asks exactly the old
+/// question when the recipe declares none.
+#[tokio::test]
+async fn read_shows_the_declared_description_of_the_attribute_it_asks() {
+    use crate::enrichment::ontology::OntologyTypeDecl;
+    let described: OntologyTypeDecl = toml::from_str(
+        r#"
+name = "happening"
+kind = "event"
+identity_necessary = ["kind"]
+attributes = [{ name = "kind", type = "text", description = "firing: shots fired; death: a person died", values = ["firing", "death"] }]
+"#,
+    )
+    .unwrap();
+    let mut bare = described.clone();
+    bare.attributes[0].description.clear();
+    let body = "The victim died.";
+    let mut users = Vec::new();
+    for decl in [&described, &bare] {
+        let criterion = Criterion::of(decl, vec![]).unwrap();
+        let (read, seen) = scripted(vec![json!({"A": 0.1, "B": 0.85, "0": 0.05})]);
+        let mut resolver = Resolver::default();
+        resolver
+            .resolve_document(
+                &criterion,
+                doc("d0", body),
+                &[stmt("x", body, "died", 0, &[])],
+                &[],
+                Answerer::Select(&read),
+            )
+            .await;
+        assert_eq!(resolver.records()[0].fields["kind"], values(&["death"]));
+        users.push(seen.lock().unwrap()[0].user.clone());
+    }
+    let shown = " (firing: shots fired; death: a person died)";
+    assert!(
+        users[0].contains(&format!("\nAttribute: kind{shown}\n\nStatement")),
+        "{}",
+        users[0]
+    );
+    assert!(
+        users[1].contains("\nAttribute: kind\n\nStatement"),
+        "{}",
+        users[1]
+    );
+    assert_eq!(users[0].replacen(shown, "", 1), users[1]);
+}
+
+/// A necessary value the document reader chose (`Statement::read`) is a read:
+/// it is weighed, and never forbids a candidate as a supplied one does.
+#[tokio::test]
+async fn necessary_identity_a_readers_value_is_weighed_never_a_veto() {
+    let criterion = necessary(&[]);
+    let mut resolver = Resolver::default();
+    let first = "A death was reported.";
+    let mut seed = stmt("source", first, "death", 0, &[]);
+    seed.read.insert("kind".into(), "death".into());
+    resolver
+        .resolve_document(
+            &criterion,
+            doc("d0", first),
+            &[seed],
+            &[],
+            Answerer::Proposed,
+        )
+        .await;
+    let second = "A firing was reported.";
+    let mut later = stmt("later", second, "firing", 0, &[]);
+    later.read.insert("kind".into(), "firing".into());
+    let (infer, seen) = scripted(vec![json!({"A": 0.9, "0": 0.1})]);
+    let result = resolver
+        .resolve_document(
+            &criterion,
+            doc("d1", second),
+            &[later],
+            &[prop("source")],
+            Answerer::Select(&infer),
+        )
+        .await;
+    // Offered and asked (no READ call: the reader already chose), nothing vetoed.
+    assert_eq!(
+        (result.vetoed, result.calls, seen.lock().unwrap().len()),
+        (0, 1, 1)
+    );
+    assert!(resolver.records()[0].supplied.is_empty());
+    assert_eq!(resolver.records()[0].fields["kind"], values(&["death"]));
 }

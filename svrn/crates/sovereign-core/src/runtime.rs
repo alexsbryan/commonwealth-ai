@@ -206,6 +206,9 @@ pub(crate) mod authority_guard;
 pub mod numeric_audit;
 mod prompt_budget;
 mod question_analysis;
+/// The stored texts behind a turn's evidence, for the post-synthesis quote
+/// guard (ADDRESSED_TEXT §5.3, convergence commit 2).
+pub(crate) mod quote_surface;
 pub mod retrieval;
 mod retrieval_helpers;
 /// The pipeline's accounting — what a step may do to the pool, what it says

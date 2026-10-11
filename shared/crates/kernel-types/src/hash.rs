@@ -23,6 +23,9 @@
 //! precisely the defect above wearing a type. Content hashed under SHA-256
 //! elsewhere in the tree is a different value space and must not be converted
 //! into this type — rehash the content instead.
+//!
+//! The published SHA-256 identity has its own type,
+//! [`Sha256Hash`](crate::Sha256Hash), and no conversion either way.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;

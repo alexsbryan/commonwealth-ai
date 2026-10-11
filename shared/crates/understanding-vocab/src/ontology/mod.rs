@@ -57,10 +57,6 @@ pub struct Vocabulary {
     pub evidence_term: String,
 }
 
-fn is_false(value: &bool) -> bool {
-    !value
-}
-
 /// Everything the pipeline reads from a declared ontology. Every field has a
 /// default; the default of the whole is "no ontology" (`is_empty`), and a
 /// prose-only version-0 block differs from it in `prose` alone.
@@ -70,10 +66,6 @@ pub struct OntologyPolicies {
     /// roles, endpoints, sources and labels.
     #[serde(default)]
     pub shape: ShapePolicy,
-    /// Select the accountable declared-types-only Phase-1 document reader.
-    /// Default false preserves the existing reader.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub document_reading: bool,
     /// What a source says: who speaks, and what the corpus must never do.
     /// Per-claim-type facets (force, deontic, subject, grades, anchors, scope)
     /// live on the [`OntologyTypeDecl`] of kind `claim` — see
@@ -309,6 +301,21 @@ impl OntologyPolicies {
         *self == Self::default()
     }
 
+    /// Whether Phase 1 reads each document by the plan the declaration
+    /// generates (ONTOLOGY_METHOD §Reading). The ONE decider, from the
+    /// declaration alone: at least one claim kind, and every claim kind has the
+    /// force and subject the reader needs (`is_document_reading_eligible`). A
+    /// mix is refused at parse, so it never reaches here. There is no switch:
+    /// the `document_reading` / `document_reader` keys are retired.
+    pub fn reads_documents(&self) -> bool {
+        let types = &self.shape.types;
+        let mut claims = types
+            .iter()
+            .filter(|t| t.kind == TypeKind::Claim)
+            .peekable();
+        claims.peek().is_some() && claims.all(|c| c.is_document_reading_eligible(types))
+    }
+
     /// At least one type is declared. The P2 composer and parser return
     /// `None` when this is false, which is what keeps I1 structural: a
     /// version-1 block with no declarations composes today's bytes.
@@ -422,20 +429,6 @@ impl AtlasOntologyFile {
 mod tests {
     use super::*;
 
-    #[test]
-    fn evidence_is_weighed_on_its_expected_precision_not_its_point_estimate() {
-        let e = |right, of| decl::EvidentialFieldDecl {
-            evidence: "x".into(),
-            right,
-            of,
-            measured_on: "m".into(),
-        };
-        // 15 of 16 reads .938 and 190 of 210 .905; few links expect less.
-        assert!(e(15, 16).precision() < e(190, 210).precision());
-        assert!((e(15, 16).precision() - 16.0 / 18.0).abs() < 1e-12);
-        assert!(e(4, 5).precision() > 0.5 && e(10, 21).precision() < 0.5);
-    }
-
     /// `DocumentStamp::key` is the hand-spelled twin of the serde field names
     /// on `DocumentFieldsDecl`; read the struct back through serde so the two
     /// cannot drift.
@@ -445,6 +438,7 @@ mod tests {
             date: Some("a".into()),
             thread: Some("b".into()),
             id: Some("c".into()),
+            author: None,
         };
         let json = serde_json::to_value(&all).unwrap();
         let mut wire: Vec<&str> = json

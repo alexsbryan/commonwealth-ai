@@ -627,6 +627,13 @@ export interface CommandArgs {
     chunkId: unknown;
     radius?: unknown;
   };
+  read_text_slice: {
+    textSha256: unknown;
+    start?: unknown;
+    end?: unknown;
+    context?: unknown;
+    corpus?: unknown;
+  };
   rebuild_document_skeleton: {
     assetId: unknown;
   };

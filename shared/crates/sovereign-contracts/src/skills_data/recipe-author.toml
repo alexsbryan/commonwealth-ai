@@ -324,7 +324,7 @@ overlap_chars = 256
 #    base kind the atlas already emits (person, concept, institution, work,
 #    place, initiative) — so `role_of = "person"` needs no `person`
 #    declaration, while a domain word like `mint` must be declared.
-#    Ten worked declarations ship as templates, one per PRIMITIVES §1 user:
+#    Ten worked declarations ship as templates, one per kind of user:
 #    `svrn recipe new --ontology list` names them and `--ontology <name>`
 #    scaffolds a complete recipe. Start from the closest one instead of
 #    writing from scratch. Omitting `version` keeps the older
@@ -362,24 +362,38 @@ overlap_chars = 256
 #     something plays? Do you already have any of it in a table?"
 #                        (→ types, attributes, specializes, role_of, source)
 #   • Assertion — "What do the sources say about those things — stating,
-#     requiring, deciding, asking? About what? How do you tell strong evidence
-#     from weak? Who is speaking, and are they part of the subject? What must
-#     it never do?"      (→ claim types with force/deontic/subject/grades,
-#                            voices, must_not)
+#     requiring, deciding, asking? About what? What does each statement carry:
+#     amounts, dates, named parties, one of a fixed set of options? How do you
+#     tell strong evidence from weak? Who is speaking, and are they part of the
+#     subject? What must it never do?"
+#                        (→ claim types with force/deontic/subject/grades and
+#                            their attributes — a fixed set of options is a
+#                            text attribute with `values` — voices, must_not)
 #   • Identity — "How do you know two mentions are the same thing? Is there an
 #     ID?"                              (→ identity, identity_fallback)
 #   • Change — "When does a later statement replace an earlier one, and from
-#     when?"                            (→ change.supersedes and its clock)
+#     when? Does anything move through stages over time — what are the stages,
+#     which statements move it from one to the next, who may make each move,
+#     does a move take effect when it is reported or at a time it names, and
+#     how is a mistaken move corrected or a finished thing reopened? Which
+#     fields of each document give its date and the conversation it belongs
+#     to?"  (→ change.supersedes and its clock; a `state` type with closed
+#            `values`; a `folds` entry with `by = "protocol"`, one rule per
+#            move: claim kind, state, who (`when`), `corrects`;
+#            change.document — field names from `validate --corpus`)
 #   • Derivation — "What should it notice that no single document says —
 #     contradictions, patterns, larger structures? What looks like a
 #     contradiction but isn't?"         (→ tension, patterns, derive)
 # Asking these IS the work, not stalling — but keep it focused (not a survey),
 # and skip any the charter already answers. Write the answers as declared types
-# via recipe_write_structured, then RUN `svrn recipe validate <path>` and READ
-# THE DERIVED FACETS BACK to the partner: it prints the clock, the tension
-# selector, the identity criterion each type resolved to, and the question
-# shapes the corpus will answer. Those are inferences — when one is wrong the
-# fix is a declaration, not a retry. If the partner can't or won't specify a
+# via recipe_write_structured, then RUN `svrn recipe validate <path> --corpus
+# <material>` and READ THE DERIVED FACETS BACK to the partner: it prints the
+# clock, the tension selector, the identity criterion each type resolved to,
+# and the question shapes the corpus will answer. Those are inferences — when
+# one is wrong the fix is a declaration, not a retry. `--corpus` also reads the
+# material with the recipe's extractor and lists every metadata field its
+# documents carry: a `change.document` or `source.metadata` field none of them
+# carries fails, so pick field names from that list, never from a guess. If the partner can't or won't specify a
 # domain shape, fall back to the genre default (`domain="literary"` /
 # `"philosophy"`, no ontology) and tell them you did.
 #

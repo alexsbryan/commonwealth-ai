@@ -104,6 +104,7 @@ fn process_html_file(label: &str, path: &Path) -> Result<Option<ExtractedDoc>> {
         metadata: Some(serde_json::json!({ "label": label })),
         source_file: None,
         embed_text: None,
+        source: super::DocSource::File(path.to_path_buf()),
     }))
 }
 

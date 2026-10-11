@@ -33,11 +33,19 @@
 //! **existing** surface, never on a new identity scheme. The arms are read in
 //! this order; the order is load-bearing (see [`AppState::resolve`]).
 //!
+//! Every arm that reads a bearer reads it through ONE classification,
+//! [`Presentation`] (`presented.rs`): verified, unverified, or absent. A
+//! bearer not in this daemon's form (`svrn_`) from a local process, on a
+//! listener and posture where loopback is the owner, is absent — the caller
+//! is what it would be with no header (`docs/INTEROP.md` §1's
+//! `OPENAI_API_KEY=local`).
+//!
 //! 1. **A live guest grant** presented as `Authorization: Bearer` →
 //!    [`Principal::Guest`]. The grant is what bounds the caller's routes, so
 //!    nothing a guest also types may outrank it.
-//!    An on-prem API key (`crate::client_tokens::keys`) is read beside it →
-//!    [`Principal::Asserted`], for the same reason.
+//!    A named credential (`crate::client_tokens`, minted by `svrn daemon
+//!    key`) is read beside it → [`Principal::Asserted`]`{ sub: name, groups
+//!    }`, for the same reason.
 //! 2. **`X-Node-Id`** → [`Principal::Member`], or [`Principal::Unverified`]
 //!    when it is present and not the canonical wire form. Read *before* the
 //!    loopback branch: a mesh peer arrives on the trusting listener over
@@ -90,6 +98,9 @@ use sovereign_contracts::principal::{claimed_node_id, ClaimedNodeId};
 use crate::client_auth::ClientAuthPolicy;
 use crate::state::AppState;
 
+mod presented;
+pub use presented::{bearer, in_our_form, Presentation, Verified, CREDENTIAL_PREFIX};
+
 /// `X-Principal` values longer than this are fingerprinted rather than kept
 /// verbatim. A principal key becomes a map key and a log field, so an
 /// unbounded header value would be an unbounded allocation on the hot path.
@@ -111,23 +122,6 @@ pub(crate) fn fingerprint(secret: &str) -> String {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     secret.hash(&mut h);
     format!("{:016x}", h.finish())
-}
-
-/// Extract a bearer token from an `Authorization` header value. Same
-/// scheme-insensitive parse as [`crate::client_auth`]'s — kept here as a
-/// header read rather than shared, because that one is part of a
-/// constant-time credential check and this one must never be mistaken for it.
-fn bearer(headers: &HeaderMap) -> Option<&str> {
-    let value = headers
-        .get(axum::http::header::AUTHORIZATION)?
-        .to_str()
-        .ok()?;
-    let rest = value.strip_prefix("Bearer ").or_else(|| {
-        let (scheme, rest) = value.split_once(' ')?;
-        scheme.eq_ignore_ascii_case("bearer").then_some(rest)
-    })?;
-    let token = rest.trim();
-    (!token.is_empty()).then_some(token)
 }
 
 impl AppState {
@@ -173,25 +167,74 @@ impl AppState {
         peer: Option<SocketAddr>,
         policy: ClientAuthPolicy,
     ) -> Principal {
+        self.resolve_presented(headers, peer, policy).0
+    }
+
+    /// Whether loopback is the owner on this daemon: a local process that
+    /// presents nothing is admitted as the owner. False on a keyed daemon,
+    /// where loopback grants nothing (`crate::api_keys`).
+    pub fn loopback_is_owner(&self) -> bool {
+        !self.inner.node.named_client_tokens.is_keyed()
+    }
+
+    /// [`Self::resolve`], and the [`Presentation`] its credential arms were
+    /// read from, so `client_auth` admits by the same classification the
+    /// principal is keyed by rather than by a second reading of the header.
+    pub fn resolve_presented(
+        &self,
+        headers: &HeaderMap,
+        peer: Option<SocketAddr>,
+        policy: ClientAuthPolicy,
+    ) -> (Principal, Presentation) {
+        // A local process, on a listener and a posture where loopback is the
+        // owner: the one case a bearer not in this daemon's form is read as
+        // absent (`presented`). A web page is a loopback peer too, so the one
+        // decider reads its headers as well (`host_kit::locality`).
+        let local =
+            peer.is_some_and(|p| host_kit::locality::RequestLocality::of(&p, headers).is_local());
+        let local_owner = policy.trust_loopback && local && self.loopback_is_owner();
+        let presentation = self.presentation(headers, local_owner);
+        let principal = self.principal_for(headers, local, policy, &presentation);
+        (principal, presentation)
+    }
+
+    fn principal_for(
+        &self,
+        headers: &HeaderMap,
+        local: bool,
+        policy: ClientAuthPolicy,
+        presentation: &Presentation,
+    ) -> Principal {
         // 1. A live GUEST grant. Read first and alone: a guest's whole
         //    identity is its grant, and the grant is what bounds its routes,
         //    so nothing a guest also types may outrank it. A lapsed grant is
         //    simply not a grant (`GuestGrantStore::live`).
-        let presented = bearer(headers);
-        if let Some(token) = presented {
-            let now = sovereign_time::unix_millis();
-            if self.inner.node.guest_grants.live(token, now).is_some() {
+        match presentation {
+            Presentation::Verified(Verified::Guest(grant)) => {
                 return Principal::Guest {
-                    grant: fingerprint(token),
+                    grant: fingerprint(&grant.token),
                 };
             }
-            // 1b. An on-prem API key: an asserted subject. Like a grant, the
-            //     key is the caller's whole identity, so nothing it also
-            //     types (a node claim, `X-Principal`) may outrank it.
-            if let Some((sub, groups)) = self.inner.node.named_client_tokens.asserted_for(token) {
-                return Principal::Asserted { sub, groups };
+            // 1b. A named credential (`svrn daemon key`): an asserted subject.
+            //     Like a grant, the credential is the caller's whole identity,
+            //     so nothing it also types (a node claim, `X-Principal`) may
+            //     outrank it.
+            Presentation::Verified(Verified::Named { name, groups }) => {
+                return Principal::Asserted {
+                    sub: name.clone(),
+                    groups: groups.clone(),
+                };
             }
+            Presentation::Verified(_)
+            | Presentation::Unverified { .. }
+            | Presentation::Absent { .. } => {}
         }
+        // A bearer read as absent keys nothing: the caller is what it would
+        // have been had it sent no header at all.
+        let presented = match presentation {
+            Presentation::Absent { .. } => None,
+            Presentation::Verified(_) | Presentation::Unverified { .. } => bearer(headers),
+        };
 
         // 2. A mesh peer names its node id. Read BEFORE the loopback branch:
         //    a peer arrives on the trusting listener over loopback
@@ -237,10 +280,8 @@ impl AppState {
         }
 
         // 4. A local process may name itself, on a listener that trusts a
-        //    loopback peer address. A web page is a loopback peer too, so the
-        //    one decider reads its headers as well (`host_kit::locality`).
-        let local =
-            peer.is_some_and(|p| host_kit::locality::RequestLocality::of(&p, headers).is_local());
+        //    loopback peer address (`local` is the one decider's answer,
+        //    `host_kit::locality`, read once in `resolve_presented`).
         if policy.trust_loopback && local {
             if let Some(declared) = headers
                 .get(PRINCIPAL_HEADER)
@@ -308,7 +349,7 @@ mod tests {
     #[test]
     fn a_bearer_credential_keys_the_principal_and_never_leaks_the_secret() {
         let r = resolve(
-            &headers(&[("authorization", "Bearer super-secret-token")]),
+            &headers(&[("authorization", "Bearer svrn_super-secret-token")]),
             loopback(),
         );
         assert!(matches!(r, Principal::RemoteClient { .. }));
@@ -324,17 +365,32 @@ mod tests {
     fn distinct_bearers_are_distinct_principals_and_equal_ones_collide() {
         // This is precisely what §9.3 measured as absent: ten callers with
         // ten credentials treated as one.
-        let a = resolve(&headers(&[("authorization", "Bearer tok-a")]), loopback());
-        let b = resolve(&headers(&[("authorization", "Bearer tok-b")]), loopback());
-        let a2 = resolve(&headers(&[("authorization", "Bearer tok-a")]), remote());
+        let a = resolve(
+            &headers(&[("authorization", "Bearer svrn_tok-a")]),
+            loopback(),
+        );
+        let b = resolve(
+            &headers(&[("authorization", "Bearer svrn_tok-b")]),
+            loopback(),
+        );
+        let a2 = resolve(
+            &headers(&[("authorization", "Bearer svrn_tok-a")]),
+            remote(),
+        );
         assert_ne!(a, b, "different credentials are different callers");
         assert_eq!(a, a2, "the same credential is the same caller");
     }
 
     #[test]
     fn bearer_scheme_is_case_insensitive_and_an_empty_one_is_not_identity() {
-        let lower = resolve(&headers(&[("authorization", "bearer tok")]), loopback());
-        let upper = resolve(&headers(&[("authorization", "BEARER  tok ")]), loopback());
+        let lower = resolve(
+            &headers(&[("authorization", "bearer svrn_tok")]),
+            loopback(),
+        );
+        let upper = resolve(
+            &headers(&[("authorization", "BEARER  svrn_tok ")]),
+            loopback(),
+        );
         assert_eq!(lower, upper);
         // An empty or non-bearer credential presents nothing.
         for bad in ["Bearer ", "Basic tok"] {
@@ -380,7 +436,7 @@ mod tests {
         // this branch too — a WorkerToken is a plain bearer.
         let r = resolve(
             &headers(&[
-                ("authorization", "Bearer worker-token-abc"),
+                ("authorization", "Bearer svrn_worker-token-abc"),
                 ("x-principal", "pretend-to-be-someone-else"),
             ]),
             loopback(),
@@ -413,7 +469,7 @@ mod tests {
         // credential MUST be one principal; if they were not, a greedy client
         // would mint a fresh identity per TCP connection and the cap would be
         // free to bypass.
-        let h = headers(&[("authorization", "Bearer same-token")]);
+        let h = headers(&[("authorization", "Bearer svrn_same-token")]);
         let a = resolve(&h, Some("127.0.0.1:40001".parse().unwrap()));
         let b = resolve(&h, Some("127.0.0.1:59999".parse().unwrap()));
         assert_eq!(a, b);
@@ -450,7 +506,7 @@ mod tests {
 
         // A bearer that is NOT a grant stays a remote client.
         let other = s.resolve(
-            &headers(&[("authorization", "Bearer not-a-grant")]),
+            &headers(&[("authorization", "Bearer svrn_not-a-grant")]),
             loopback(),
             ClientAuthPolicy::default(),
         );
@@ -476,7 +532,7 @@ mod tests {
             now.saturating_sub(10_000),
         );
         let r = s.resolve(
-            &headers(&[("authorization", "Bearer stale-token")]),
+            &headers(&[("authorization", "Bearer svrn_stale-token")]),
             loopback(),
             ClientAuthPolicy::default(),
         );
@@ -554,5 +610,25 @@ mod tests {
                 sub_identity: Some("desktop".into())
             }
         );
+    }
+
+    /// `docs/INTEROP.md` §1: an OpenAI client sends `Bearer local`. From a
+    /// local process that is no credential, so the caller is what it would be
+    /// with no header; from anywhere else it is a bearer, keyed by its
+    /// fingerprint and refused by `client_auth`.
+    #[test]
+    fn a_bearer_not_in_our_form_from_a_local_process_keys_nothing() {
+        let local = resolve(
+            &headers(&[("authorization", "Bearer local"), ("x-principal", "aider")]),
+            loopback(),
+        );
+        assert_eq!(
+            local,
+            Principal::LocalOwner {
+                sub_identity: Some("aider".into())
+            }
+        );
+        let far = resolve(&headers(&[("authorization", "Bearer local")]), remote());
+        assert!(matches!(far, Principal::RemoteClient { .. }), "got {far:?}");
     }
 }

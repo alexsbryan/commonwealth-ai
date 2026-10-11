@@ -1,0 +1,78 @@
+# An issue-tracker-shaped fixture for the ontology layer's default path (order
+# ontology-layer-2-one-path): one bug thread (an issue, three maintainer
+# comments, the third repeating the second's instruction word for word) and
+# one feature request, in a neutral domain. Read by the C1-C6 contract tests.
+
+[corpus]
+id = "layer-issues"
+name = "Layer fixture: a calendar app's issue tracker"
+description = "Two issue threads: a bug confirmed and fixed, and a feature request."
+license = "private"
+schema_version = 1
+mesh_sharing = false
+
+[acquire]
+type = "local_file"
+path = "documents.jsonl"
+
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "login", type = "text" }]
+identity = ["login"]
+source = { metadata = ["author"], attributes = { login = "value" } }
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+description = "one underlying problem or request, however many issues report it"
+identity_criterion = "Two mentions are one case when they are about the same underlying problem or request, however many issues report it and whoever writes."
+identity_bar = 0.9
+attributes = [
+  { name = "reporter", type = "ref", of = "person", derived = "reporter_of_case" },
+]
+
+[[enrichment.ontology.types]]
+name = "case_state"
+kind = "claim"
+description = "a statement that shows where a case stands"
+force = "assertive"
+subject = "case"
+attributes = [
+  { name = "state", type = "text", values = ["reported", "confirmed", "resolved", "declined"] },
+  { name = "app_version", type = "text", description = "the app version the statement names" },
+]
+
+[enrichment.ontology.change]
+document = { date = "created_at", thread = "thread", id = "id" }
+
+[[enrichment.ontology.sets]]
+id = "maintainer_post"
+type = "document"
+where = { author_association = ["MEMBER", "OWNER", "COLLABORATOR"] }
+
+[[enrichment.ontology.folds]]
+id = "reporter_of_case"
+by = "earliest"
+from = ["^subject / document [!maintainer_post] / author"]

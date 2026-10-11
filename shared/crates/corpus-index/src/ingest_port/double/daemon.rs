@@ -15,7 +15,7 @@ use sovereign_contracts::daemon_wire::{RecipeDryRunReport, RecipeParameterSchema
 
 use super::{refuse, unprogrammed, IngestPortDouble};
 use crate::corpus::Corpus;
-use crate::index::CorpusIndex;
+use crate::index::{CorpusIndex, DocumentRecord, TextLookup};
 use crate::ingest_port::cancel::CancellationRegistry;
 use crate::ingest_port::daemon::{
     ArticleStats, CorpusDiskStatus, HarnessRunCardView, IndexOpener, IngestPort, IngestResult,
@@ -24,6 +24,7 @@ use crate::ingest_port::daemon::{
 };
 use crate::ingest_port::ProgressCallback;
 use crate::Result;
+use kernel_types::Sha256Hash;
 
 fn io_refuse(method: &str) -> std::io::Error {
     std::io::Error::other(unprogrammed(method))
@@ -35,8 +36,11 @@ pub(super) type PackCanonicalFn =
     dyn Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync;
 pub(super) type UnpackCanonicalFn =
     dyn Fn(Box<dyn std::io::Read + Send>, &Path) -> Result<u64> + Send + Sync;
+pub(super) type TextsDigestFn = dyn Fn(&[DocumentRecord]) -> Sha256Hash + Send + Sync;
 pub(super) type PrepareInstallFn =
     dyn Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync;
+pub(super) type PrepareRecipeInstallFn =
+    dyn Fn(&str, &str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync;
 pub(super) type SliceIngestFn =
     dyn Fn(SliceIngest) -> super::BoxFuture<Result<IngestResult>> + Send + Sync;
 
@@ -140,6 +144,16 @@ impl IngestPortDouble {
         self
     }
 
+    /// Program `texts_digest`: the double reads the index's records itself
+    /// and `f` hashes them, so the absences the index names pass through.
+    pub fn on_texts_digest(
+        mut self,
+        f: impl Fn(&[DocumentRecord]) -> Sha256Hash + Send + Sync + 'static,
+    ) -> Self {
+        self.texts_digest = Some(Box::new(f));
+        self
+    }
+
     /// Program `prepare_registry_install`; `f` gets the corpus id (the
     /// parameters are not replayed).
     pub fn on_prepare_registry_install(
@@ -147,6 +161,19 @@ impl IngestPortDouble {
         f: impl Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync + 'static,
     ) -> Self {
         self.prepare_registry_install = Some(Box::new(f));
+        self
+    }
+
+    /// Program `prepare_recipe_install`; `f` gets the corpus id and the
+    /// recipe TOML (the parameters are not replayed).
+    pub fn on_prepare_recipe_install(
+        mut self,
+        f: impl Fn(&str, &str) -> std::result::Result<PreparedInstall, InstallRefusal>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.prepare_recipe_install = Some(Box::new(f));
         self
     }
 
@@ -363,6 +390,14 @@ impl IngestPort for IngestPortDouble {
         }
     }
 
+    async fn texts_digest(&self, index: &CorpusIndex) -> Result<TextLookup<Sha256Hash>> {
+        self.record("texts_digest");
+        let Some(f) = &self.texts_digest else {
+            return Err(refuse("texts_digest"));
+        };
+        Ok(index.documents().await?.map(|(_, rows)| f(&rows)))
+    }
+
     fn set_yield_hook(&self, _hook: Arc<dyn YieldHook>) {
         self.record("set_yield_hook");
         if !self.yield_hooks_ok {
@@ -428,6 +463,21 @@ impl IngestPort for IngestPortDouble {
             Some(f) => f(corpus_id),
             None => Err(InstallRefusal::RecipeNotFound(unprogrammed(
                 "prepare_registry_install",
+            ))),
+        }
+    }
+
+    async fn prepare_recipe_install(
+        self: Arc<Self>,
+        corpus_id: &str,
+        recipe_toml: &str,
+        _parameters: &BTreeMap<String, serde_json::Value>,
+    ) -> std::result::Result<PreparedInstall, InstallRefusal> {
+        self.record("prepare_recipe_install");
+        match &self.prepare_recipe_install {
+            Some(f) => f(corpus_id, recipe_toml),
+            None => Err(InstallRefusal::InvalidRecipe(unprogrammed(
+                "prepare_recipe_install",
             ))),
         }
     }

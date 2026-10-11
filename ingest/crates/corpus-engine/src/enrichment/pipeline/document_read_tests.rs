@@ -12,13 +12,9 @@ use crate::enrichment::pipeline::types::ChapterInput;
 #[path = "document_read/claim_check_tests.rs"]
 mod claim_check_tests;
 
-#[path = "document_read/citation_tests.rs"]
-mod citation_tests;
-
 pub(super) fn policies() -> OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
         r#"
-document_reading = true
 guidance = "Read issue and case assertions."
 
 [[types]]
@@ -63,6 +59,29 @@ values = ["open", "closed"]
     )
     .unwrap();
     ontology.into_policies()
+}
+
+/// A model that answers `answers` in order and records every question.
+pub(super) fn scripted(
+    answers: Vec<Value>,
+) -> (
+    crate::InferenceFn,
+    std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
+) {
+    use std::sync::{Arc, Mutex};
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let queue = Arc::new(Mutex::new(answers.into_iter()));
+    let kept = seen.clone();
+    let f: crate::InferenceFn = Arc::new(
+        move |p: &crate::enrichment::pipeline::types::ChatPrompt, _| {
+            kept.lock().unwrap().push(p.clone());
+            let next = queue.lock().unwrap().next().map(|v| v.to_string());
+            Box::pin(async move {
+                next.ok_or_else(|| crate::Error::Extraction("no scripted answer left".into()))
+            })
+        },
+    );
+    (f, seen)
 }
 
 pub(super) fn row(
@@ -132,19 +151,60 @@ fn response(documents: Value) -> String {
     json!({"documents": documents}).to_string()
 }
 
-fn one_document_read() -> String {
-    response(json!([{
-        "document_id":"doc-a",
-        "status":"read",
-        "claims":[claim(
-            "membership",
-            "case-842",
-            "Case 842",
-            "Issue 842 was closed by pull request #1380.",
-            "unknown"
-        )]
-    }]))
+/// A model for the passes reader: Locate answers the first declared kind for a
+/// line holding `needle` and "none of them" otherwise; Choose answers the first
+/// value. Every prompt is kept, and every call counted.
+fn passes_model(
+    needle: &'static str,
+    calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    prompts: std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
+) -> crate::types::InferenceFn {
+    std::sync::Arc::new(move |prompt, _| {
+        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        prompts.lock().unwrap().push(prompt.clone());
+        let labels: Vec<String> = prompt.response_schema.as_ref().unwrap()["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l.as_str().unwrap().to_string())
+            .collect();
+        let locate = prompt.phase_id.as_deref() == Some("document_passes_locate");
+        let asked_line = prompt.user.split("\n\nLine ").nth(1).unwrap_or("");
+        let pick = if locate && !asked_line.contains(needle) {
+            labels.last().unwrap().clone()
+        } else {
+            labels[0].clone()
+        };
+        let dist: serde_json::Map<String, Value> = labels
+            .iter()
+            .map(|l| {
+                (
+                    l.clone(),
+                    json!(if *l == pick {
+                        0.9
+                    } else {
+                        0.1 / labels.len() as f64
+                    }),
+                )
+            })
+            .collect();
+        let answer = Value::Object(dist).to_string();
+        Box::pin(async move { Ok(answer) })
+    })
 }
+
+fn counted(
+    needle: &'static str,
+) -> (
+    crate::types::InferenceFn,
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) {
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let model = passes_model(needle, calls.clone(), Default::default());
+    (model, calls)
+}
+
+const CLOSED: &str = "closed by pull request";
 
 fn reader_runner(
     root: &std::path::Path,
@@ -184,6 +244,33 @@ fn reader_runner(
     }
 }
 
+/// The body-word floor guards the general extractor against heading-only
+/// sections; the passes reader asks per line, so an 8-word document under a
+/// floor of 40 is still read (abfe32a14: the floor skipped 12 uv states).
+#[tokio::test]
+async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
+    let rows = [row(
+        1,
+        "doc-a",
+        "Issue 842 was closed by pull request #1380.",
+        "{}",
+    )];
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let chat = passes_model(CLOSED, calls.clone(), Default::default());
+    let temp = tempfile::tempdir().unwrap();
+    let runner = reader_runner(temp.path(), &policies(), chat, false).with_min_body_words(40);
+    let result = runner
+        .phase_1_extract_questions(
+            &[input_chapter(&rows)],
+            &super::super::ChapterSelection::Full,
+            |_| {},
+        )
+        .await
+        .unwrap();
+    assert!(result.failures.is_empty(), "{:?}", result.failures);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 4);
+}
+
 #[tokio::test]
 async fn production_phase1_uses_the_mock_provider_with_actual_document_context() {
     use std::sync::{
@@ -201,15 +288,7 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
     let policies = policies();
     let calls = Arc::new(AtomicUsize::new(0));
     let prompts = Arc::new(Mutex::new(Vec::new()));
-    let called = calls.clone();
-    let captured = prompts.clone();
-    let answer = one_document_read();
-    let chat: crate::types::InferenceFn = Arc::new(move |prompt, _| {
-        called.fetch_add(1, Ordering::SeqCst);
-        captured.lock().unwrap().push(prompt.clone());
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let chat = passes_model(CLOSED, calls.clone(), prompts.clone());
     let temp = tempfile::tempdir().unwrap();
     let runner = reader_runner(temp.path(), &policies, chat, false);
     let result = runner
@@ -221,11 +300,9 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .await
         .unwrap();
 
-    assert_eq!(
-        calls.load(Ordering::SeqCst),
-        1,
-        "one chapter batch is one provider call"
-    );
+    // One Locate per line, then per field the located kind and its subject
+    // declare: `number` (open) pointed at, start and end; `project` chosen.
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
     assert!(result.output.questions_by_chapter[0].questions.is_empty());
     let read = result.output.questions_by_chapter[0]
         .section_extraction
@@ -246,35 +323,26 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         "metadata.author is not substituted for quoted speaker"
     );
     let prompts = prompts.lock().unwrap();
-    let prompt = &prompts[0];
+    let phases: Vec<&str> = prompts
+        .iter()
+        .map(|p| p.phase_id.as_deref().unwrap_or(""))
+        .collect();
     assert_eq!(
-        prompt.response_schema_name.as_deref(),
-        Some("declared_document_read")
+        phases,
+        [
+            "document_passes_locate",
+            "document_passes_point",
+            "document_passes_point",
+            "document_passes_choose"
+        ]
     );
-    assert_eq!(
-        prompt.response_schema.as_ref().unwrap()["properties"]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
-        ["documents"],
-        "dedicated schema carries no generic atlas facets"
-    );
-    assert!(
-        !prompt
-            .response_schema
-            .as_ref()
-            .unwrap()
-            .to_string()
-            .contains("author"),
-        "metadata-source entities are reference context only"
-    );
-    assert!(prompt.user.contains("\"author\": \"Alice\""));
-    assert!(prompt.user.contains("metadata_source_references"));
-    assert!(prompt
-        .system
-        .contains("Metadata-sourced entities are reference context"));
+    // A metadata-sourced author is a declared fact every question carries
+    // first (prefill), and never what a question asks about.
+    for p in prompts.iter() {
+        let (facts, asked) = p.user.split_once("\n\n").unwrap();
+        assert!(facts.contains("author: Alice"), "{}", p.user);
+        assert!(!asked.contains("Alice"), "{}", p.user);
+    }
     assert!(phase1_cache_matches(&[chapter.clone()], &result.output, &policies).is_ok());
     let default_policy = OntologyPolicies::default();
     assert!(phase1_cache_matches(&[], &result.output, &default_policy).is_err());
@@ -349,14 +417,7 @@ async fn cached_document_read_replays_without_calling_inference() {
     let chapter = input_chapter(&rows);
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let calls = Arc::new(AtomicUsize::new(0));
-    let called = calls.clone();
-    let answer = one_document_read();
-    let first_chat: crate::types::InferenceFn = Arc::new(move |_, _| {
-        called.fetch_add(1, Ordering::SeqCst);
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first_chat, calls) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first_chat, true)
         .phase_1_extract_questions(
             &[chapter.clone()],
@@ -365,7 +426,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         )
         .await
         .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
 
     let panic_chat: crate::types::InferenceFn =
         Arc::new(|_, _| panic!("identical accountable read must use the section cache"));
@@ -374,7 +435,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
 
     let mut identity_policy = policies.clone();
     identity_policy
@@ -392,7 +453,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
 }
 
 #[tokio::test]
@@ -405,11 +466,7 @@ async fn changed_author_does_not_reuse_a_cached_document_read() {
     let changed = [row(1, "doc-a", body, r#"{"author":"Bob"}"#)];
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let answer = one_document_read();
-    let first: crate::types::InferenceFn = Arc::new(move |_, _| {
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first, _) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[input_chapter(&original)],
@@ -450,11 +507,7 @@ async fn changed_body_does_not_reuse_a_cached_document_read() {
     )];
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let answer = one_document_read();
-    let first: crate::types::InferenceFn = Arc::new(move |_, _| {
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first, _) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[input_chapter(&original)],
@@ -489,11 +542,7 @@ async fn changed_read_contract_does_not_reuse_a_cached_document_read() {
     let chapter = input_chapter(&rows);
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let answer = one_document_read();
-    let first: crate::types::InferenceFn = Arc::new(move |_, _| {
-        let answer = answer.clone();
-        Box::pin(async move { Ok(answer) })
-    });
+    let (first, _) = counted(CLOSED);
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[chapter.clone()],
@@ -563,14 +612,12 @@ fn document_read_projects_local_subjects_and_keeps_unknown_fields_out_of_attribu
         ["case-main", "case-spin-off"],
         "the qualified cache carrier retains both local references"
     );
-    assert_eq!(extraction.entities_introduced.len(), 2);
+    // No `case` is sketched (RESOLVE decides it); its readings ride the claim.
+    assert!(extraction.entities_introduced.is_empty());
     assert!(extraction.questions_raised.is_empty());
-    assert!(
-        extraction.claims[0].attributes[SUBJECT_FIELDS_ATTRIBUTE]
-            .get("project")
-            .is_none(),
-        "explicit unknown remains in the read carrier, not a compatibility attribute"
-    );
+    let subject = &extraction.claims[0].attributes[SUBJECT_FIELDS_ATTRIBUTE];
+    assert_eq!(subject["number"]["evidence"], "842");
+    assert!(subject["project"]["reason"].is_string());
     assert!(
         !extraction.claims[0].attributes.contains_key("project"),
         "unknown is not projected as an ordinary claim value"

@@ -115,6 +115,7 @@ impl OntologyLanguageRegistry {
         let mut out: Vec<String> = body
             .keys()
             .filter(|k| self.first_version_defining(k).is_none())
+            .filter(|k| !V1_RETIRED_KEYS.iter().any(|(retired, _)| retired == k))
             .cloned()
             .collect();
         out.sort();
@@ -165,7 +166,6 @@ const V1_KEYS: &[&str] = &[
     "vocabulary",
     "must_not",
     "types",
-    "document_reading",
     "max_entities_per_section",
     "voices",
     "change",
@@ -178,6 +178,59 @@ const V1_KEYS: &[&str] = &[
     "folds",
 ];
 
+/// Keys version 1 once read and no longer does, each with what replaced it.
+/// A recipe that still carries one loads, with the key ignored and named on
+/// every load (`parse`) and by `recipe validate` (`validate_block`); never an
+/// unknown-key typo warning, never a refusal. Order 3 of campaign
+/// ontology-layer removes them from this list once no recipe carries them.
+pub const V1_RETIRED_KEYS: &[(&str, &str)] = &[
+    (
+        "document_reading",
+        "declared reading is chosen by the declaration: every claim kind with a force and a subject RESOLVE or a metadata source identifies is read document by document",
+    ),
+    (
+        "document_reader",
+        "one reader remains, the passes reader (ONTOLOGY_METHOD §Reading)",
+    ),
+];
+
+/// Keys a version-1 type once read and no longer does, with what replaced
+/// each: loaded, ignored and named like `V1_RETIRED_KEYS`.
+pub const V1_RETIRED_TYPE_KEYS: &[(&str, &str)] = &[(
+    "identity_evidential",
+    "what each identity source is worth is estimated on the corpus being read, with no labels (campaign ontology-layer E2, ONTOLOGY_METHOD §Identity); every declared document field, necessary value, the proposed answer and the model's choice is weighed",
+)];
+
+/// The retired type keys `body`'s `types` carry: (type name, key, instead).
+pub fn retired_type_keys(body: &toml::Table) -> Vec<(String, &'static str, &'static str)> {
+    let Some(toml::Value::Array(types)) = body.get("types") else {
+        return Vec::new();
+    };
+    types
+        .iter()
+        .filter_map(toml::Value::as_table)
+        .flat_map(|t| {
+            let name = t
+                .get("name")
+                .and_then(toml::Value::as_str)
+                .unwrap_or("<unnamed>");
+            V1_RETIRED_TYPE_KEYS
+                .iter()
+                .filter(|(key, _)| t.contains_key(*key))
+                .map(move |&(key, instead)| (name.to_string(), key, instead))
+        })
+        .collect()
+}
+
+/// The retired keys `body` carries, with what replaced each.
+pub fn retired_keys(body: &toml::Table) -> Vec<(&'static str, &'static str)> {
+    V1_RETIRED_KEYS
+        .iter()
+        .copied()
+        .filter(|(key, _)| body.contains_key(*key))
+        .collect()
+}
+
 impl OntologyLanguage for V1 {
     fn version(&self) -> u32 {
         1
@@ -188,30 +241,46 @@ impl OntologyLanguage for V1 {
     }
 
     fn parse(&self, body: &toml::Table) -> Result<OntologyPolicies> {
-        let v1: OntologyV1 = body.clone().try_into().map_err(translate_parse_error)?;
-        if v1.document_reading {
-            let claims: Vec<_> = v1
-                .types
-                .iter()
-                .filter(|claim| claim.kind == TypeKind::Claim)
-                .collect();
-            if claims.is_empty() {
-                return Err(Error::Recipe(
-                    "ontology `document_reading = true` requires at least one declared claim type"
-                        .into(),
-                ));
+        let mut body = body.clone();
+        for (key, instead) in retired_keys(&body) {
+            tracing::warn!(key, instead, "ontology: a retired key is ignored");
+            body.remove(key);
+        }
+        for (r#type, key, instead) in retired_type_keys(&body) {
+            tracing::warn!(
+                r#type,
+                key,
+                instead,
+                "ontology: a retired type key is ignored"
+            );
+        }
+        if let Some(toml::Value::Array(types)) = body.get_mut("types") {
+            for t in types.iter_mut().filter_map(toml::Value::as_table_mut) {
+                for (key, _) in V1_RETIRED_TYPE_KEYS {
+                    t.remove(*key);
+                }
             }
-            let unsupported: Vec<&str> = claims
-                .iter()
-                .filter(|claim| !claim.is_document_reading_eligible(&v1.types))
-                .map(|claim| claim.name.as_str())
-                .collect();
-            if !unsupported.is_empty() {
-                return Err(Error::Recipe(format!(
-                    "ontology `document_reading = true` cannot silently omit unsupported declared claim type(s): {}. Each needs a declared force and a `subject` naming either a source-free entity type with an `identity_criterion` or a metadata-sourced entity type with declared identity fields",
-                    unsupported.join(", ")
-                )));
-            }
+        }
+        let v1: OntologyV1 = body.try_into().map_err(translate_parse_error)?;
+        // Reading is chosen by the declaration (`OntologyPolicies::reads_documents`):
+        // every claim kind read, or none. A mix would read some kinds and leave the
+        // rest to another reader in the same run, so it refuses, naming the ones the
+        // reader cannot read.
+        let claims: Vec<_> = v1
+            .types
+            .iter()
+            .filter(|claim| claim.kind == TypeKind::Claim)
+            .collect();
+        let unsupported: Vec<&str> = claims
+            .iter()
+            .filter(|claim| !claim.is_document_reading_eligible(&v1.types))
+            .map(|claim| claim.name.as_str())
+            .collect();
+        if !unsupported.is_empty() && unsupported.len() < claims.len() {
+            return Err(Error::Recipe(format!(
+                "ontology declared reading cannot silently omit unsupported declared claim type(s): {}. Each needs a declared force and a `subject` naming either a source-free entity or event type with an `identity_criterion` or a metadata-sourced entity type with declared identity fields",
+                unsupported.join(", ")
+            )));
         }
         // The one structural rule this version enforces at parse time. Force
         // is what separates a rule from a finding, and supersession applies

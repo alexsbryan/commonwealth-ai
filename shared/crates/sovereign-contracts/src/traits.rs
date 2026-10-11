@@ -1603,6 +1603,10 @@ pub struct MeshScoredChunk {
     /// un-upgraded peer, which the door reads as `Summary` — the refusing
     /// value for grain, since `Leaf` is the one that may be quoted.
     pub grain: Option<kernel_types::Grain>,
+    /// The stored text the hit was cut from, with its record and metadata
+    /// (OICP v0.5 §3), as the serving index named it. `None` from a host
+    /// that predates the field or keeps no texts.
+    pub document: Option<oicp_types::evidence::Document>,
 }
 
 /// Why a corpus the turn would have searched could not serve it.

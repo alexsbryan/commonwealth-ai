@@ -1,0 +1,66 @@
+[corpus]
+id = "cdcr-gvc"
+name = "Gun Violence Corpus (GVC): 510 news reports of 241 incidents, for cross-document event coreference"
+description = "The third example of svrn/docs/specs/ONTOLOGY_METHOD.md, a public benchmark we did not label. Prepared by research/ontology-apps/cdcr/prepare.py. The type below is stated from the corpora's own definition of event coreference (same occurrence: same act, participants, time and place), without a word of the domain, so ECB+ reads under the same declaration."
+license = "CC-BY-4.0"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.0
+size_indexed_gb = 0.01
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/bench-corpora/gvc/raw/documents.jsonl"
+
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+# Built end to end through the default commands (campaign ontology-layer, D1): publish, `enrich extract`,
+# `--finalize`, `atlas-resolve`. Written from the domain, not from gold (order ontology-layer-2-one-path
+# step 6): the happening is the corpora's own definition of event coreference, as in recipe-gvc.toml, and the
+# one claim kind is what a news report does with a happening, state that it took place. No number measured on
+# data and no mechanism switch: no identity_evidential precision and no identity_bar, so RESOLVE's choice is
+# its argmax until a precision is estimated on the corpus (campaign E2).
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "happening"
+kind = "event"
+description = "something that happens: an action, an occurrence, or a change of state"
+identity_criterion = "Two mentions are one happening when they refer to the same real-world occurrence: the same kind of action or change, by or to the same participants, at the same time and place, however differently it is worded. Two occurrences of the same kind (two separate attacks, two separate meetings) are different happenings, and so are an occurrence and another it caused or was part of."
+identity_necessary = ["kind"]
+attributes = [
+  { name = "kind", type = "text", values = [
+    "the firing of a gun: shots fired, a gun going off",
+    "a person being hit by a bullet",
+    "a wound, an injury, or a person's medical condition after being hurt",
+    "a death or a killing",
+    "the incident as a whole",
+  ], by = "agree" },
+]
+
+[[enrichment.ontology.types]]
+name = "report"
+kind = "claim"
+description = "a statement that a happening took place: that someone fired, was hit, was hurt or died, or what the incident as a whole was"
+force = "assertive"
+subject = "happening"
+
+[enrichment.ontology.change]
+document = { date = "created_at", id = "id" }

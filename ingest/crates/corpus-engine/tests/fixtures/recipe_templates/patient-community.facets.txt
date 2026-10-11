@@ -3,3 +3,4 @@ identity: treatment → canonical name (default; declare `identity = [...]` for 
 identity: drug → rxnorm_id (external key, strict merge)
 identity: symptom → canonical name (default; declare `identity = [...]` for an external key)
 question shapes: enumerate [treatment, drug, symptom]; relations [affects]; events [(none)]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

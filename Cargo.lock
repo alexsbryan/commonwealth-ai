@@ -6757,11 +6757,13 @@ dependencies = [
 name = "kernel-types"
 version = "0.8.0"
 dependencies = [
+ "base64 0.22.1",
  "blake3",
  "getrandom 0.3.4",
  "hex",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "toml 0.8.2",
  "trybuild",
 ]
@@ -9081,10 +9083,13 @@ dependencies = [
 name = "oicp-conformance"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "oicp-types",
+ "quote-align",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "workspace-hack",
 ]
@@ -10475,6 +10480,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfbc457d0c7a0759a614551b11a6409e5951f6c7537be1f1b7682b9ae9230368"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "quote-align"
+version = "0.8.0"
+dependencies = [
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -12681,6 +12693,7 @@ dependencies = [
  "oicp-types",
  "oplog",
  "pdf-extract",
+ "quote-align",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -12733,6 +12746,7 @@ dependencies = [
  "oicp-client",
  "oicp-types",
  "oplog",
+ "quote-align",
  "rand 0.9.4",
  "reqwest 0.12.28",
  "serde",
@@ -13341,6 +13355,7 @@ dependencies = [
  "ignore",
  "image",
  "imageproc",
+ "kernel-types",
  "lettre",
  "libc",
  "mail-parser",

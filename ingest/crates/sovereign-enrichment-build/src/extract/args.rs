@@ -5,6 +5,7 @@
 //! which sections failed and with which kinds (`read_latest_run`), and which
 //! of those are worth a second attempt (`read_failures_for_retry`).
 
+use corpus_engine::enrichment::asker::Asker;
 use corpus_engine::enrichment::pipeline::{
     checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest,
     ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind, PhaseRunner,
@@ -50,6 +51,9 @@ pub struct ParsedExtract {
     /// it, and makes no chat call. Pair with `--chapters` for one section;
     /// refused with `--finalize`, which dispatches nothing anyway.
     pub(super) dry_run: bool,
+    /// `--asker daemon|replay|gold`: where the reader's answers come from
+    /// (`corpus_engine::enrichment::asker`). Default `daemon`, recorded.
+    pub(super) asker: Asker,
 }
 
 pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
@@ -61,6 +65,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     let mut resume = false;
     let mut finalize = false;
     let mut dry_run = false;
+    let mut asker = Asker::default();
 
     let mut i = 0;
     while i < args.len() {
@@ -97,6 +102,13 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
             "--dry-run" => {
                 dry_run = true;
                 i += 1;
+            }
+            "--asker" => {
+                let value = args
+                    .get(i + 1)
+                    .ok_or("--asker requires a value (daemon|replay|gold)".to_string())?;
+                asker = Asker::parse(value)?;
+                i += 2;
             }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
@@ -135,6 +147,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
             resume: false,
             finalize: true,
             dry_run: false,
+            asker,
         });
     }
     if terse && full {
@@ -170,6 +183,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
         resume,
         finalize: false,
         dry_run,
+        asker,
     })
 }
 

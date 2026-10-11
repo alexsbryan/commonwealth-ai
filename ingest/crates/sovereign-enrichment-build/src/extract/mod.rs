@@ -158,7 +158,7 @@ pub async fn run_extract(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        let chapters = if policies.document_reading {
+        let chapters = if policies.reads_documents() {
             match rebuild_corpus_state(&cfg) {
                 Ok((chapters, _)) => chapters,
                 Err(error) => {
@@ -180,12 +180,38 @@ pub async fn run_extract(args: &[String]) -> i32 {
         return cmd_finalize(&cfg, &checkpoint_path).await;
     }
 
+    // A type only RESOLVE decides, with no claim kind about it, has no
+    // statements: building would leave it to 3a's merge, quietly. Refuse first.
+    if let Some(policies) = cfg.ontology.as_ref().map(|spec| spec.policies()) {
+        let orphans =
+            corpus_engine::enrichment::atlas::resolution_records::types_without_statements(
+                &policies,
+            );
+        if !orphans.is_empty() {
+            tracing::warn!(types = ?orphans, "extract: refused, a decided type has no claim kind");
+            eprintln!(
+                "error: RESOLVE decides {} by its identity_criterion, but no claim kind names it as \
+                 its `subject`, so no statement of it would be read. Declare a claim kind about it \
+                 (kind = \"claim\", a force, subject = \"{}\").",
+                orphans.join(", "),
+                orphans[0]
+            );
+            return 2;
+        }
+    }
+
     // Probe daemon — fail fast if it's down, and name SLOW separately
     // from DOWN (order enrich-probe-timeout): a probe that timed out
     // must not tell the user to start a daemon that is serving.
-    if let Some(err) = daemon_probe_error(&cfg.base_url, probe_daemon_status(&cfg.base_url).await) {
-        eprintln!("{err}");
-        return 2;
+    // A replayed or gold read answers from its store and never reaches the
+    // daemon, so it is not probed: a replay runs with the daemon stopped.
+    if parsed.asker.needs_daemon() {
+        if let Some(err) =
+            daemon_probe_error(&cfg.base_url, probe_daemon_status(&cfg.base_url).await)
+        {
+            eprintln!("{err}");
+            return 2;
+        }
     }
 
     // Build the pipeline + runner.
@@ -213,13 +239,24 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // OICP features before the first request (OICP v0.4). No-op for a
     // Sovereign daemon (advertises constraint:json_schema); matters
     // when `base_url` points at another OICP host.
-    let client = client.discover_capabilities().await;
+    let client = if parsed.asker.needs_daemon() {
+        client.discover_capabilities().await
+    } else {
+        client
+    };
     // Phase D2 — grab the cumulative token ledger before consuming
     // the client into closures. The Arc<TokenUsageLedger> is shared
     // with the closures, so each chat call bumps it and the flusher
     // task below sees the running totals.
     let usage_ledger = client.usage_ledger();
-    let (embed, chat) = client.into_closures();
+    let (embed, chat) =
+        match client.into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id)) {
+            Ok(ports) => ports,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
 
     let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
@@ -716,50 +753,5 @@ pub async fn run_with_closures_for_test(
 fn _hold_chapter_manifest(_: &ChapterManifest) {}
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn slow_probe_error_names_budget_and_load_not_down() {
-        let msg = daemon_probe_error("http://127.0.0.1:9740", DaemonProbe::Slow).unwrap();
-        assert_eq!(
-            msg,
-            "error: daemon at http://127.0.0.1:9740 answered slower than 5s — daemon under load?"
-        );
-        // Slow is not DOWN: no start-it hint on a daemon that may be
-        // serving — that hint is the DOWN case's alone.
-        assert!(!msg.contains("svrn daemon start"));
-    }
-
-    #[test]
-    fn down_probe_error_keeps_the_start_it_hint_verbatim() {
-        let msg = daemon_probe_error("http://127.0.0.1:9740", DaemonProbe::Down).unwrap();
-        assert_eq!(
-            msg,
-            "error: daemon is not responding at http://127.0.0.1:9740 — start it with `svrn daemon start` or equivalent"
-        );
-    }
-
-    #[test]
-    fn slow_and_down_never_share_a_message() {
-        let base = "http://127.0.0.1:9740";
-        assert_ne!(
-            daemon_probe_error(base, DaemonProbe::Slow),
-            daemon_probe_error(base, DaemonProbe::Down)
-        );
-        assert!(daemon_probe_error(base, DaemonProbe::Up).is_none());
-    }
-
-    #[test]
-    fn slow_message_budget_tracks_the_module_constant() {
-        // The "5s" in the message must stay glued to the probe's actual
-        // budget — one threshold, one name (the const at
-        // shared/crates/corpus-index/src/v1_models.rs).
-        let msg = daemon_probe_error("http://x", DaemonProbe::Slow).unwrap();
-        let expected = format!(
-            "error: daemon at http://x answered slower than {}s — daemon under load?",
-            V1_MODELS_TIMEOUT.as_secs()
-        );
-        assert_eq!(msg, expected);
-    }
-}
+#[path = "tests.rs"]
+mod tests;

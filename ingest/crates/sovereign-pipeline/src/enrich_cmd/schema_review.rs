@@ -25,8 +25,8 @@ const REPORT_HELP: Help = Help {
             "Print the §12.4 diagnostic table: coverage / depth / confidence / orphans / gaps.",
         )]),
         HelpSection::Notes(
-            "Requires a resolved atlas (run `svrn enrich atlas-resolve <corpus> \
-             --phase all` first). The report is computed on demand — retrofitting \
+            "Requires a resolved atlas (run `svrn enrich atlas-resolve <corpus>` \
+             first). The report is computed on demand — retrofitting \
              incremental writes into each phase is a follow-up. Also writes \
              `atlas/schema_validation.json` alongside the other atlas files.",
         ),

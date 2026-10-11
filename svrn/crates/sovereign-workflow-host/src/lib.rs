@@ -349,11 +349,28 @@ pub async fn run_workflow_in_process(
     // corpora over the protocol surface, not the internal :9742 route. Fall
     // back to `HttpCorpusInstaller::new()` (the loopback :9742 internal path)
     // for a v0.3 host, or one that serves a manifest without an ingest advert.
+    // The OICP path presents the CLI's one credential (`SOVEREIGN_API_KEY`):
+    // a named credential installs as itself, and on a daemon where loopback
+    // grants nothing the install is admitted at all (ADDRESSED_TEXT §5.5).
     let installer: Arc<dyn CorpusInstaller> = match manifest
         .as_ref()
         .and_then(|m| m.knowledge.as_ref())
-        .and_then(|k| HttpCorpusInstaller::from_manifest(daemon, k, None))
-    {
+        .and_then(|k| {
+            HttpCorpusInstaller::from_manifest(
+                daemon,
+                k,
+                sovereign_contracts::setup_config::client_credential(),
+            )
+        })
+        .map(|inst| {
+            // An authored recipe goes only to a host that said it takes one.
+            let takes_recipes = manifest.as_ref().is_some_and(|m| {
+                m.features
+                    .iter()
+                    .any(|f| f == sovereign_contracts::oicp::features::INGEST_RECIPE)
+            });
+            inst.accepting_recipes(takes_recipes)
+        }) {
         Some(inst) => {
             tracing::info!(
                 daemon,

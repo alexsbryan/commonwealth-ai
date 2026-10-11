@@ -16,7 +16,10 @@ build anything load-bearing.
 `POST /v1/chat/completions`, `POST /v1/responses` (the OpenAI
 Responses dialect), `POST /v1/embeddings`, and `GET /v1/models`. Any
 OpenAI-SDK client works. Non-loopback callers need a bearer token
-(`[daemon] client_token`).
+(`[daemon] client_token`). A presented credential decides from any address:
+a bearer starting with `svrn_` (every credential the daemon mints) that
+verifies nothing is a 401 from loopback too, while any other key a local
+client sends (`OPENAI_API_KEY=local`) is ignored.
 
 **Ollama-native shim** — the same port serves `/api/chat`,
 `/api/generate`, `/api/tags`, and friends, so Ollama-native clients
@@ -33,13 +36,39 @@ loopback-only: it exposes local dev tooling, not a remote service. A web
 page is not a local caller. A request carrying another origin's `Origin` or
 `Sec-Fetch-Site`, or addressed to a `Host` that is not loopback, is refused,
 as MCP's transport requires ("Servers MUST validate the `Origin` header").
+`/mcp` sits behind the same credential layer as the rest of `:9741`: a
+harness that presents a named credential (`svrn daemon key --add
+claude-code`, sent as `Authorization: Bearer svrn_…`) has its calls named
+in the tool's context and svrn's call log; one that presents nothing is the
+local owner, as before.
 
 **OICP** — `GET /oicp/v1/capabilities` plus the ingest extension. The
 spec ([cmnwlth/docs/oicp-v0.4.md](../cmnwlth/docs/oicp-v0.4.md),
-v0.3 as fallback) is CC0 — implement it freely on either side.
+v0.3 as fallback) is CC0 — implement it freely on either side. Under
+`ingest:recipe` (v0.5), `POST /oicp/v1/corpus/install` takes the recipe
+itself as `recipe_toml` and answers its `recipe_sha256`: the same recipe
+twice is `spawned: false`, a different one reingests, and a recipe that
+does not load is a 400. The host advertises `auth:named_client` too: a
+presented named credential decides, from any address.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you
-can lift wholesale to test your own implementation.
+can lift wholesale to test your own implementation. The v0.5 draft
+([cmnwlth/docs/oicp-v0.5.md](../cmnwlth/docs/oicp-v0.5.md)) adds the
+evidence extension, and the reference host serves all three of its
+features. `GET /oicp/v1/text/{text_sha256}` (`evidence:text`) reads a
+stored text by the sha256 of its bytes, whole or as a code-point range with
+context, from the corpora the caller may read, and refuses by name (`text
+not held`, `texts not stored`, `text not stored`, `range outside text`).
+`POST /oicp/v1/align` (`evidence:align`) aligns a quotation against the
+stored texts of those same corpora: each span is a code-point range with
+its `exact` slice and each difference is named, under the aligner's id and
+a `texts_digest` per corpus searched, and a corpus that could not be
+searched is named with its reason. Every knowledge-search hit carries
+`document`, its text's record with the metadata the extractor or the recipe
+declared (`knowledge:document`), local and peer-served alike, or names why
+it has none in `document_absent`. Recipes may carry their documents inline
+(`[acquire] type = "inline"`) so a host that shares no disk with you can
+install them.
 
 **Recipes** — the corpus-ingestion TOML format. The schema reference
 ([ingest/crates/sovereign-recipes/SCHEMA.md](../ingest/crates/sovereign-recipes/SCHEMA.md)) is

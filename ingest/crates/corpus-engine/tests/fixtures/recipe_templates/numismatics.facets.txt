@@ -5,3 +5,4 @@ identity: sceatta → canonical name (default; declare `identity = [...]` for an
 identity: ruler → canonical name (default; declare `identity = [...]` for an external key)
 identity: mint → canonical name (default; declare `identity = [...]` for an external key)
 question shapes: enumerate [coin, sceatta, ruler, mint]; relations [(none)]; events [(none)]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

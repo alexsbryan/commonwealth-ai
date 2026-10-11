@@ -93,7 +93,16 @@ pub(super) fn run_memory_notes_migration(conn: &Connection) -> rusqlite::Result<
         );
         CREATE INDEX IF NOT EXISTS idx_tool_call_log_called ON tool_call_log(called_at DESC);
         ",
-    )
+    )?;
+    // `caller`: who made the call (ADDRESSED_TEXT §5.5 rule 3). Additive, so a
+    // store written before it gains the column and its old rows read NULL.
+    if conn
+        .prepare("SELECT caller FROM tool_call_log LIMIT 0")
+        .is_err()
+    {
+        conn.execute_batch("ALTER TABLE tool_call_log ADD COLUMN caller TEXT")?;
+    }
+    Ok(())
 }
 
 /// A JSON-array column; a malformed one fails the read rather than reading
@@ -250,6 +259,42 @@ fn select_entries(
 }
 
 impl SqliteStateStore {
+    /// Append one call-log row naming `caller`, the principal label of who
+    /// made the call (`None` when no one was resolved). THE one writer of
+    /// svrn's call log: the port's `log_tool_call` comes through here with
+    /// `None`, and the daemon's MCP call log with the caller its auth layer
+    /// resolved (ADDRESSED_TEXT §5.5 rule 3).
+    pub async fn log_tool_call_by(
+        &self,
+        session_id: &str,
+        tool_name: &str,
+        outcome: &str,
+        caller: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT INTO tool_call_log (id, session_id, tool_name, outcome, called_at, caller)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                uuid::Uuid::new_v4().to_string(),
+                session_id,
+                tool_name,
+                outcome,
+                now(),
+                caller
+            ],
+        )
+        .map_err(map_db)?;
+        conn.execute(
+            "DELETE FROM tool_call_log WHERE id IN (
+                 SELECT id FROM tool_call_log ORDER BY called_at DESC, rowid DESC
+                 LIMIT -1 OFFSET ?1)",
+            rusqlite::params![CALL_LOG_KEEP],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
     /// Filtered read of svrn's memory notes in the wire shape `/v1/notes`
     /// serves.
     #[allow(clippy::too_many_arguments)]
@@ -551,34 +596,15 @@ impl AgentNotes for SqliteStateStore {
     }
 
     async fn log_tool_call(&self, session_id: &str, tool_name: &str, outcome: &str) -> Result<()> {
-        let conn = self.conn.lock().await;
-        conn.execute(
-            "INSERT INTO tool_call_log (id, session_id, tool_name, outcome, called_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![
-                uuid::Uuid::new_v4().to_string(),
-                session_id,
-                tool_name,
-                outcome,
-                now()
-            ],
-        )
-        .map_err(map_db)?;
-        conn.execute(
-            "DELETE FROM tool_call_log WHERE id IN (
-                 SELECT id FROM tool_call_log ORDER BY called_at DESC, rowid DESC
-                 LIMIT -1 OFFSET ?1)",
-            rusqlite::params![CALL_LOG_KEEP],
-        )
-        .map_err(map_db)?;
-        Ok(())
+        self.log_tool_call_by(session_id, tool_name, outcome, None)
+            .await
     }
 
     async fn tool_call_log_rows(&self, since: i64, limit: usize) -> Result<Vec<ToolCallLogRow>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
-                "SELECT id, session_id, tool_name, outcome, called_at FROM tool_call_log
+                "SELECT id, session_id, tool_name, outcome, called_at, caller FROM tool_call_log
                  WHERE called_at >= ?1 ORDER BY called_at DESC, rowid DESC LIMIT ?2",
             )
             .map_err(map_db)?;
@@ -590,6 +616,7 @@ impl AgentNotes for SqliteStateStore {
                     tool_name: r.get(2)?,
                     outcome: r.get(3)?,
                     called_at: r.get(4)?,
+                    caller: r.get(5)?,
                 })
             })
             .map_err(map_db)?

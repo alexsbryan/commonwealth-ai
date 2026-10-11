@@ -1939,12 +1939,18 @@ impl Runtime {
             // The refinement path (collaboration.rs) re-verifies
             // any gap-check rewrite. Empty doc_context (parametric
             // path) is a no-op.
+            // The guard's verdict is kept to the segments below, which
+            // address each quotation it verified in a stored text.
+            let quote_turn = crate::runtime::quote_surface::verify_against_turn(
+                engine_for_ledger.as_ref(),
+                &full_text,
+                &doc_context,
+                &crate::runtime::evidence::chunk_texts_for_verification(&chunks),
+                &crate::runtime::quote_surface::targets_of(&chunks),
+            )
+            .await;
             let (full_text, verified_spans) = {
-                let v = crate::quote_verification::verify_answer_against_turn_evidence(
-                    &full_text,
-                    &doc_context,
-                    &crate::runtime::evidence::chunk_texts_for_verification(&chunks),
-                );
+                let v = &quote_turn.verification;
                 if v.demoted_count > 0 {
                     tracing::warn!(
                         demoted = v.demoted_count,
@@ -1955,7 +1961,7 @@ impl Runtime {
                 // The passed spans feed the authority guard's quote
                 // exemption below — the filing's own verified sentence
                 // stays legal (§6.2(5)).
-                (v.rewritten, v.verified_spans)
+                (v.rewritten.clone(), v.verified_spans.clone())
             };
 
             // ── §9.6: name what we could not reach. CODE, not the model. ──
@@ -2119,6 +2125,10 @@ impl Runtime {
                         addressed += usize::from(address.is_some());
                     }
                 }
+                // Each quotation the guard verified in a stored text, at
+                // its address there (ADDRESSED_TEXT §5.2): what the reader
+                // opens through the text read.
+                crate::runtime::quote_surface::address_quotes(&mut segs, &full_text, &quote_turn);
                 tracing::debug!(
                     segments = segs.len(),
                     grounded,
@@ -3558,11 +3568,15 @@ impl Runtime {
             // retrieval) is a no-op. The refinement path
             // (collaboration.rs) re-verifies any gap-check rewrite.
             let (full_text, verified_spans) = {
-                let v = crate::quote_verification::verify_answer_against_turn_evidence(
+                let v = crate::runtime::quote_surface::verify_against_turn(
+                    engine_for_routes.as_ref(),
                     &full_text,
                     &evidence,
                     &crate::runtime::evidence::chunk_texts_for_verification(&kc.chunks),
-                );
+                    &crate::runtime::quote_surface::targets_of(&kc.chunks),
+                )
+                .await
+                .verification;
                 if v.demoted_count > 0 {
                     tracing::warn!(
                         demoted = v.demoted_count,

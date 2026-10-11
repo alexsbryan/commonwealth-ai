@@ -196,6 +196,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     // the incident this check exists to prevent.
     results.push(sov::check_daemon_supervised());
     results.push(cw::check_rails_boot_unit());
+    results.push(cw::check_loopback_posture());
     if probe::tcp_connectable("127.0.0.1", 9741).await {
         results.push(cw::check_daemon_running().await);
         results.push(sov::check_daemon_memory(&client_url).await);
@@ -539,5 +540,29 @@ mod tests {
                 CheckStatus::Passed
             );
         }
+    }
+
+    /// An undeclared posture that inferred `none` warns and names the line to
+    /// add; a declared one passes; an unknown spelling fails. Failing input:
+    /// pass every undeclared posture and the on-prem box that must declare
+    /// `none` is never told to.
+    #[test]
+    fn an_inferred_none_posture_warns_and_names_the_declaration() {
+        use sovereign_daemon::client_tokens::{Loopback, LoopbackPosture};
+        let inferred_none = cw::loopback_posture_result(Ok(LoopbackPosture {
+            loopback: Loopback::None,
+            declared: false,
+        }));
+        assert_eq!(inferred_none.status, CheckStatus::Warning);
+        assert!(
+            matches!(&inferred_none.repair, Repair::Manual(m) if m.contains("loopback = \"none\""))
+        );
+        let declared = cw::loopback_posture_result(Ok(LoopbackPosture {
+            loopback: Loopback::None,
+            declared: true,
+        }));
+        assert_eq!(declared.status, CheckStatus::Passed);
+        let unknown = cw::loopback_posture_result(LoopbackPosture::resolve(Some("nobody"), None));
+        assert_eq!(unknown.status, CheckStatus::Failed);
     }
 }

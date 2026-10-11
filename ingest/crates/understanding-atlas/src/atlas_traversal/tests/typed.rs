@@ -21,6 +21,7 @@ fn attr(name: &str, family: AttrFamily) -> AttrDecl {
         family,
         description: String::new(),
         derived: None,
+        by: None,
     }
 }
 

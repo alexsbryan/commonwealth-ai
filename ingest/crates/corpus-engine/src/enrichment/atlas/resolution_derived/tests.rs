@@ -391,3 +391,50 @@ fn each_fold_function_decides_or_names_its_absence() {
         DerivedOutcome::Decided { values, .. } if values == ["x", "y", "z"])
     );
 }
+
+/// Equal text is not the same occurrence: two messages of one section hold
+/// the same line, and the claim each was read from reaches the message its
+/// evidence names, so each takes its own message's party. Located by its
+/// words alone, either would land in both and reach neither.
+#[test]
+fn a_claim_reaches_its_own_message_when_another_holds_the_same_words() {
+    let line = "The Malin deal is agreed.";
+    let rows = [
+        row(
+            1,
+            "m1",
+            "2001-01-01T10:00:00Z",
+            "Ann Lee <ann@city.gov>",
+            "kim.ward@enron.com",
+            "",
+            line,
+        ),
+        row(
+            2,
+            "m2",
+            "2001-01-02T10:00:00Z",
+            "kim.ward@enron.com",
+            "carl@pge.com",
+            "",
+            line,
+        ),
+    ];
+    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64, 2][..])], &rows);
+    let p = policies();
+    let mut b = Build::new(&docs, &p);
+    b.claims = ["m1", "m2"]
+        .iter()
+        .map(|key| {
+            let mut c = claim(&format!("claim-{key}"), "s1", line);
+            c.evidence[0].source_doc_id = Some(key.to_string());
+            c
+        })
+        .collect();
+    b.derive(&docs, &p, DeriveStage::BeforeResolve);
+    let party = |c: &str| {
+        let claim = b.claims.iter().find(|x| x.id.as_str() == c).unwrap();
+        claim.attributes.get("party").cloned()
+    };
+    assert_eq!(party("claim-m1"), Some(json!(b.company("city.gov"))));
+    assert_eq!(party("claim-m2"), Some(json!(b.company("pge.com"))));
+}

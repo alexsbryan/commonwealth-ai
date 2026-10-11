@@ -1,0 +1,212 @@
+{
+ "atoms": [
+  {
+   "atom_type": "Entity",
+   "data": {
+    "id": "rec-death",
+    "entity_type": "happening",
+    "attributes": {
+     "kind": "a death or a killing"
+    }
+   }
+  },
+  {
+   "atom_type": "Entity",
+   "data": {
+    "id": "rec-fire",
+    "entity_type": "happening",
+    "attributes": {
+     "kind": "the incident as a whole"
+    }
+   }
+  },
+  {
+   "atom_type": "Entity",
+   "data": {
+    "id": "rec-odd",
+    "entity_type": "happening",
+    "attributes": {
+     "kind": "a value no declaration names"
+    }
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0001",
+    "claim_kind": "report",
+    "subject": "rec-death",
+    "anchor": "Emergency workers could not revive him . NEWLINE",
+    "attributes": {
+     "document_id": "b27405f9afd055f54cdab7c68ccff13e"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0002",
+    "claim_kind": "report",
+    "subject": "rec-death",
+    "anchor": "Police went into the home to investigate and found Hockman had been fatally wounded by a shotgun round .\nEMS arrived at the home a short time later , but were unable to save him . NEWLINE",
+    "attributes": {},
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": "5a0c56265670498621b7cd2f71e53902"
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0003",
+    "claim_kind": "report",
+    "subject": "rec-fire",
+    "anchor": "Police believe  the\nshooting was accidental .",
+    "attributes": {
+     "document_id": "b27405f9afd055f54cdab7c68ccff13e"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0004",
+    "claim_kind": "report",
+    "subject": "rec-fire",
+    "anchor": "A man is dead after a shooting in Mountain View , Missouri . NEWLINE",
+    "attributes": {
+     "document_id": "b27405f9afd055f54cdab7c68ccff13e"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0005",
+    "claim_kind": "report",
+    "subject": "rec-fire",
+    "anchor": "Man charged in Mountain View shooting death",
+    "attributes": {
+     "document_id": "5a0c56265670498621b7cd2f71e53902"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0006",
+    "claim_kind": "report",
+    "subject": "rec-death",
+    "anchor": "Police say",
+    "attributes": {
+     "document_id": "b27405f9afd055f54cdab7c68ccff13e"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0007",
+    "claim_kind": "report",
+    "subject": "rec-death",
+    "anchor": "a sentence no document holds",
+    "attributes": {
+     "document_id": "b27405f9afd055f54cdab7c68ccff13e"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0008",
+    "claim_kind": "report",
+    "subject": "rec-death",
+    "anchor": "Emergency workers could not revive him . NEWLINE",
+    "attributes": {
+     "document_id": "not-a-gvc-document"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0009",
+    "claim_kind": "report",
+    "subject": "entity-not-in-atlas",
+    "anchor": "Emergency workers could not revive him . NEWLINE",
+    "attributes": {
+     "document_id": "b27405f9afd055f54cdab7c68ccff13e"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  },
+  {
+   "atom_type": "Claim",
+   "data": {
+    "id": "claim-0010",
+    "claim_kind": "report",
+    "subject": "rec-odd",
+    "anchor": "later identified as 32-year - old Chet Hockman",
+    "attributes": {
+     "document_id": "5a0c56265670498621b7cd2f71e53902"
+    },
+    "evidence": [
+     {
+      "chunk_id": "sec_00001",
+      "source_doc_id": null
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,18 @@
+# The oicp-conformance fixture library (OICP v0.5 §6.1), and the spec's
+# normative example of a recipe that carries its documents inline. Rendered by
+# oicp-conformance from fixture/library.json; a test pins this file to it.
+[corpus]
+id = "{corpus_id}"
+name = "OICP conformance fixture library"
+description = "Three short documents and one planted misquote, installed by oicp-conformance."
+license = "CC0-1.0"
+mesh_sharing = false
+
+[acquire]
+type = "inline"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"

@@ -3,3 +3,4 @@ identity: organization → registry_id (external key, strict merge)
 identity: person → name + employer (descriptive keys, judged merge)
 identity: counterparty → canonical name (default; declare `identity = [...]` for an external key)
 question shapes: enumerate [organization, person, counterparty]; relations [(none)]; events [payment]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

@@ -112,10 +112,12 @@ pub struct IngestPortDouble {
     stranded_partitions: Option<Vec<String>>,
     pack_canonical: Option<Box<daemon::PackCanonicalFn>>,
     unpack_canonical: Option<Box<daemon::UnpackCanonicalFn>>,
+    texts_digest: Option<Box<daemon::TextsDigestFn>>,
     catalog_configs: Option<Vec<(String, CatalogConfig)>>,
     ingest_catalog_work: Option<Box<CatalogWorkFn>>,
     partition_path: Option<Box<CorpusFn<PathBuf>>>,
     prepare_registry_install: Option<Box<daemon::PrepareInstallFn>>,
+    prepare_recipe_install: Option<Box<daemon::PrepareRecipeInstallFn>>,
     corpus_disk_status: Option<Box<CorpusFn<super::daemon::CorpusDiskStatus>>>,
     cached_article_stats: Option<Box<CorpusFn<Option<super::daemon::ArticleStats>>>>,
     compute_article_stats: Option<Box<CorpusFn<Option<super::daemon::ArticleStats>>>>,
@@ -182,6 +184,26 @@ impl IngestPortDouble {
         self.open_index_for_corpus = Some(Box::new(move |corpus_id| {
             let path = dir.join(corpus_id);
             Box::pin(async move { CorpusIndex::open(&path).await })
+        }));
+        self
+    }
+
+    /// Program [`CorpusReadPort::open_index_for_corpus`] as the engine's
+    /// query-path opener after an embed probe reported `dims`: the leaf's
+    /// [`FsIndexSource`] with that width armed, whose geometry gate refuses an
+    /// index built at any other. What a daemon on a swapped embed model does.
+    /// Needs [`Self::with_index_dir`] first.
+    pub fn opening_indexes_at_embedding_width(mut self, dims: usize) -> Self {
+        let dir = self
+            .index_dir
+            .clone()
+            .expect("IngestPortDouble: with_index_dir before opening_indexes_at_embedding_width");
+        let source = Arc::new(FsIndexSource::new(dir.clone()));
+        source.set_expected_embedding_dimensions(dims);
+        self.open_index_for_corpus = Some(Box::new(move |corpus_id| {
+            let source = Arc::clone(&source);
+            let path = dir.join(corpus_id);
+            Box::pin(async move { source.open_index(&path).await })
         }));
         self
     }

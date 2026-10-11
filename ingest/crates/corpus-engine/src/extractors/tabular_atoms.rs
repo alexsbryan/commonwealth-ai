@@ -109,6 +109,7 @@ fn row_to_doc(row: &Map<String, Value>, cfg: &TabularAtomsConfig) -> ExtractedDo
         metadata: Some(Value::Object(row.clone())),
         source_file: None,
         embed_text: None,
+        source: super::DocSource::Record,
     }
 }
 

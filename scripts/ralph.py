@@ -25,6 +25,7 @@ Subcommands:
   stop       an operator stop (--drain: let running sessions finish)
   start      clear the operator stop and start the installed job
   unpark     release a row the loop parked for the operator
+  extend     give an awaiting unit's detached run more time (applied on the next tick)
   watch      the watchdog: the loop is down, or its heartbeat is stale
   models     show or set the models a queue runs on
   plan       print the queue's head and the model it routes to
@@ -1030,10 +1031,12 @@ class Paths:
     needs_human: str = "ralph/NEEDS_HUMAN.md"
     waiting: str = "ralph/waiting"
     parked: str = "ralph/parked"          # one <row-id>.md package per row waiting on the operator
+    extend: str = "ralph/extend"          # one <unit> file per operator extension of a run's budget
     models: str = "ralph/models.env"
     heartbeat: str = "ralph/.heartbeat"
     charter: str = "ralph/CHARTER.md"
     conflicts: str = "ralph/conflicts.txt"
+    merge_check: str = "ralph/merge-check"   # optional: run in the lane before it lands
     heavy: str = "ralph/heavy.txt"
     queue: str = ""                       # the --queue name; "" on a legacy launch line
     control_dir: str = "ralph"            # a queue's own: ralph/next/<name>/ctl
@@ -1054,6 +1057,7 @@ class Paths:
         return {"control_dir": control_dir, "done": f"{control_dir}/DONE",
                 "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
                 "waiting": f"{control_dir}/waiting", "parked": f"{control_dir}/parked",
+                "extend": f"{control_dir}/extend",
                 "heartbeat": f"{control_dir}/.heartbeat",
                 "director_commits": f"{control_dir}/.director-commits",
                 "log_dir": f"{control_dir}/log"}
@@ -1351,6 +1355,7 @@ class E(enum.Enum):
     MERGE_CLEAN = "merge-clean"
     MERGE_CONFLICT = "merge-conflict"
     MERGE_UNCOMMITTED = "merge-uncommitted"  # merged, but the loop's own done commit failed
+    MERGE_CHECK_FAILED = "merge-check-failed"  # the project's own pre-merge check was red in the lane
     # the operator
     OPERATOR_STOP = "operator-stop"
 
@@ -1407,6 +1412,7 @@ TRANSITIONS = {
 
     (U.MERGING, E.MERGE_CLEAN): (U.DONE, None),
     (U.MERGING, E.MERGE_CONFLICT): (U.READY, "strike"),
+    (U.MERGING, E.MERGE_CHECK_FAILED): (U.READY, "strike"),
     (U.MERGING, E.MERGE_UNCOMMITTED): (U.HELD, "park_unmarked"),
     # A merge runs inside one tick; a stop lets it finish.
     (U.MERGING, E.OPERATOR_STOP): (U.MERGING, None),
@@ -1444,7 +1450,8 @@ def _impossible():
                 out[(state, event)] = _NO_SESSION
             elif event in (E.RUN_ENDED, E.RUN_OVER_BUDGET):
                 out[(state, event)] = _NO_RUN
-            elif event in (E.MERGE_CLEAN, E.MERGE_CONFLICT, E.MERGE_UNCOMMITTED):
+            elif event in (E.MERGE_CLEAN, E.MERGE_CONFLICT, E.MERGE_UNCOMMITTED,
+                           E.MERGE_CHECK_FAILED):
                 out[(state, event)] = _NO_MERGE
             elif event in dispatch_events:
                 out[(state, event)] = _NOT_READY
@@ -1814,6 +1821,8 @@ def cmd_result(args):
 # The loop.
 
 TICK_S = 30
+MERGE_CHECK_TIMEOUT_S = 900    # a pre-merge check is the fast rows; a slow one is a finding
+MERGE_CHECK_RETRY_S = 600      # a check the host could not finish is retried after this
 DEFAULT_SESSION_TIMEOUT = 3600
 MAX_STRIKES = 3
 DIRECTOR_MAX = 2                # director sessions per unit, reset when it is done or unparked
@@ -2095,6 +2104,7 @@ class Loop:
             say(f"unit {unit}: {s['rejects']}")
             self.notifier("auto — permission rejects", f"{unit}: {rejects} auto-rejections",
                           self.notify_enabled)
+        self._save_uncommitted(unit, s)
         event, ctx = self.classify(unit, entry)
         if event is E.RESULT_AWAIT:
             try:
@@ -2103,6 +2113,34 @@ class Loop:
                 event, ctx = E.AWAIT_FAILED, {"why": f"the loop could not start "
                                                      f"{ctx['result']['argv']}: {e}"}
         self.fire(unit, event, **ctx)
+
+    def _save_uncommitted(self, unit, s):
+        """A lane worker that ended with no result and left TRACKED changes it
+        never committed: commit them on the lane's branch, named as saved by
+        the loop, so the next session starts from them and the end reads as
+        progress (a continuation), not as nothing (a strike). ersilia's
+        workers ended hour-long sessions mid-change on 2026-10-09:
+        r12-step-scale struck out, and r12-glassbox struck with 503 lines in
+        its tree. Untracked scratch is not swept in; the main tree is never
+        touched; the merge check still guards the base."""
+        if s.get("main") or s.get("role") != "worker":
+            return
+        if pathlib.Path(s["result"]).exists():
+            return
+        ws = s["workspace"]
+        if not (_git_out(ws, "status", "--porcelain", "--untracked-files=no") or "").strip():
+            return
+        subprocess.run(["git", "-C", str(ws), "add", "-u"], capture_output=True, text=True)
+        r = subprocess.run(["git", "-C", str(ws), "commit", "-q", "-m",
+                            f"ralph: {unit} session {s.get('n')}'s uncommitted work, saved by the "
+                            "loop when the session ended with no result"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            say(f"unit {unit}: session {s.get('n')} ended with uncommitted tracked changes — "
+                "saved as a commit on its lane")
+        else:
+            say(f"unit {unit}: could not save session {s.get('n')}'s uncommitted changes: "
+                f"{error_tail(r.stderr or r.stdout) or 'refused'}")
 
     def classify(self, unit, entry):
         """A session's end as one event: its result, else whether it left
@@ -2138,6 +2176,13 @@ class Loop:
         for unit in self.units_in(U.AWAITING):
             entry = self.ledger.units[unit]
             r = entry["run"]
+            ext = self._take_extension(unit)
+            if ext:
+                r["budget_s"] += ext
+                r["deadline"] += ext
+                say(f"unit {unit}: the operator extended its run's budget by {fmt_secs(ext)} "
+                    f"to {fmt_secs(r['budget_s'])}")
+                self.ledger.save()
             proc = Proc(r["pid"], r["started"])
             code = self._exit_code(r)
             if code is None:
@@ -2222,6 +2267,21 @@ class Loop:
         wt, branch = self.mech.lane_root / unit, f"ralph/{unit}"
         git = self.mech.git
         if git("merge-base", "--is-ancestor", branch, "HEAD").returncode != 0:
+            now = self.clock()
+            if entry.get("merge_check_retry_at", 0) > now:
+                return
+            verdict, why = self.mech.merge_check(unit, wt)
+            if verdict == "could_not_judge":
+                # The host, not the lane: no strike, and the base waits.
+                entry["merge_check_retry_at"] = now + MERGE_CHECK_RETRY_S
+                self.ledger.save()
+                say(f"unit {unit}: merge check could not judge — {why}; no strike, "
+                    f"retried in {fmt_secs(MERGE_CHECK_RETRY_S)}")
+                return
+            if verdict == "failed":
+                self.fire(unit, E.MERGE_CHECK_FAILED, why=why)
+                return
+            entry.pop("merge_check_retry_at", None)
             refused = self.mech.renumber_decisions(unit, wt, branch)
             if refused is not None:
                 self.fire(unit, E.MERGE_CONFLICT, why=refused)
@@ -2771,6 +2831,19 @@ class Loop:
             return None
         return t if r["begun"] <= t <= self.clock() else None
 
+    def _take_extension(self, unit):
+        """An operator's `extend`: seconds to add to the unit's run budget, read
+        once and removed; 0 when there is none, or it does not parse (named)."""
+        f = self.paths.p(self.paths.extend) / unit
+        if not f.exists():
+            return 0
+        text = f.read_text().strip()
+        f.unlink(missing_ok=True)
+        if not text.isdigit():
+            say(f"unit {unit}: extension {f} ignored — {text!r} is not a number of seconds")
+            return 0
+        return int(text)
+
     def _do_run_over_budget(self, unit, entry):
         r = entry["run"]
         why = (f"background run {r['argv']} passed its {fmt_secs(r['budget_s'])} budget and the "
@@ -2943,6 +3016,42 @@ class Lanes:
                 pass          # a tracked path the checkout does not hold (a submodule)
         say(f"lane {unit} target cloned from {src}; {touched} tracked files touched "
             "— the workspace crates rebuild once, external deps stay warm")
+
+    def merge_check(self, unit, wt):
+        """The project's own pre-merge check: `ralph/merge-check`, run in the
+        lane before its branch lands on the base. A project without one
+        merges as before. None when it passed (or is absent); otherwise why
+        it refused, in the check's own last lines, because "done" was the only
+        guard and ersilia merged r12-step-instruction with its lint and
+        discovery rows red on main (2026-10-09). The check is the BASE's copy,
+        run in the lane: a lane that weakens its own check does not land on
+        it. The lane's cargo lock and job share apply, as they do to the
+        lane's sessions. (verdict, why): `passed` (or no check), `failed` (red:
+        a strike), or `could_not_judge` (it did not finish: the host, not the
+        lane — retried, never struck)."""
+        script = self.paths.p(self.paths.merge_check)
+        if not script.is_file() or not os.access(script, os.X_OK):
+            return "passed", "no merge check"
+        env = dict(os.environ, SVRN_CARGO_LOCK_DIR=f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}")
+        jobs_file = wt / LANE_JOBS_FILE
+        if jobs_file.is_file():
+            env.update(line.split("=", 1) for line in jobs_file.read_text().splitlines()
+                       if "=" in line)
+        say(f"unit {unit}: merge check {self.paths.merge_check} in {wt}")
+        t0 = time.monotonic()
+        try:
+            r = subprocess.run([str(script)], cwd=wt, env=env, capture_output=True, text=True,
+                               timeout=MERGE_CHECK_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            return "could_not_judge", (f"{self.paths.merge_check} did not finish in "
+                                       f"{fmt_secs(MERGE_CHECK_TIMEOUT_S)}")
+        secs = time.monotonic() - t0
+        if r.returncode == 0:
+            say(f"unit {unit}: merge check passed in {secs:.0f}s")
+            return "passed", ""
+        tail = [l.strip() for l in (r.stdout + "\n" + r.stderr).splitlines() if l.strip()][-4:]
+        return "failed", (f"the merge check ({self.paths.merge_check}) exited {r.returncode} in "
+                          f"{secs:.0f}s, so the lane was not merged: " + " / ".join(tail)[:600])
 
     def renumber_decisions(self, unit, wt, branch):
         """Lanes in one wave each mint `<campaign>-<max+1>` from the same tree,
@@ -3247,7 +3356,7 @@ def state_dir_for(paths, label):
     return d
 
 
-RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md", "ralph/parked/",
+RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md", "ralph/parked/", "ralph/extend/",
                    "ralph/.heartbeat", "ralph/waiting", "ralph/models.env",
                    "ralph/log.txt", "ralph/.director-commits")
 
@@ -3724,6 +3833,30 @@ def cmd_start(args):
     return 0
 
 
+def request_extension(paths, unit, duration):
+    """`extend`: more time for a unit's detached run. One file per unit under
+    the control dir; the running loop adds it to the run's budget on its next
+    tick, logs it, and removes the file. Seconds requested, or ValueError."""
+    secs = parse_duration(duration)
+    if not secs:
+        raise ValueError(f"{duration!r} is not a duration (60, 30m, 2h)")
+    d = paths.p(paths.extend)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / unit).write_text(f"{secs}\n")
+    return secs
+
+
+def cmd_extend(args):
+    try:
+        secs = request_extension(paths_for(args), args.unit, args.duration)
+    except ValueError as e:
+        print(f"extend: {e}", file=sys.stderr)
+        return 2
+    say(f"extend: {args.unit} — {fmt_secs(secs)} more for its detached run, applied on the "
+        "loop's next tick")
+    return 0
+
+
 def cmd_unpark(args):
     paths = paths_for(args)
     pkg = paths.p(paths.parked) / f"{args.row}.md"
@@ -4019,6 +4152,12 @@ def build_parser():
     queue_flag(p)
     p.add_argument("row")
     p.set_defaults(fn=cmd_unpark)
+
+    p = sub.add_parser("extend", help="give an awaiting unit's detached run more time")
+    queue_flag(p)
+    p.add_argument("unit")
+    p.add_argument("duration")
+    p.set_defaults(fn=cmd_extend)
 
     p = sub.add_parser("models")
     queue_flag(p, label_default="")

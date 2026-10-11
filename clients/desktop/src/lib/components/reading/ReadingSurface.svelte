@@ -18,8 +18,10 @@
   import Breadcrumb from "./Breadcrumb.svelte";
   import ChunkRenderer from "./ChunkRenderer.svelte";
   import ConversationChunkRenderer from "./ConversationChunkRenderer.svelte";
+  import TextSliceRenderer from "./TextSliceRenderer.svelte";
 
   let reading = $derived(readingSession.currentReading);
+  let textReading = $derived(readingSession.currentText);
   let loading = $derived(readingSession.loading);
   let error = $derived(readingSession.error);
 
@@ -74,12 +76,14 @@
   <Breadcrumb />
 
   <div class="content">
-    {#if loading && !reading}
+    {#if loading && !reading && !textReading}
       <div class="status">Loading passage…</div>
     {:else if error}
       <div class="status error">
         {error}
       </div>
+    {:else if textReading}
+      <TextSliceRenderer reading={textReading} />
     {:else if reading}
       {#if isConversation}
         <ConversationChunkRenderer

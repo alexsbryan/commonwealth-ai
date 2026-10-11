@@ -27,6 +27,9 @@ oicp-types = { workspace = true }
 # Leaf items the engine re-exports (`types::*`, `error`, `index`, `corpus`,
 # `recipe::DisplayMeta`) — spelled at their owner now.
 corpus-index = { workspace = true }
+# `Sha256Hash`, the published identity the local-corpus staging states for
+# each file it reads (ADDRESSED_TEXT §3, `DocSource::Hashed`).
+kernel-types = { workspace = true }
 # The atlas vocabulary + its read door (`read_atlas_atoms`/`read_atlas_edges`)
 # — a two-crate leaf closure, so a reader of atoms.json need not name the
 # engine that writes it (domains dm-vocab-bypass-tools).

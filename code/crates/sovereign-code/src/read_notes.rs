@@ -492,13 +492,7 @@ mod tests {
     fn ctx() -> ToolContext {
         ToolContext {
             conversation_id: "read-notes-test".into(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            question: None,
-            corpus_scope: None,
+            ..Default::default()
         }
     }
 

@@ -104,6 +104,9 @@ name = "contract"
 crates = [
     "oicp-types",
     "kernel-types",
+    # The quote aligner: a matcher over `&str`, below every product crate
+    # that quotes (ADDRESSED_TEXT §5.3). It may name no workspace crate.
+    "quote-align",
     # cargo-hakari's workspace-hack (build-latency move bl-hakari, 2026-09-17):
     # ZERO source, third-party deps only, every member depends on it so a
     # `-p <crate>` build resolves the same third-party feature set as
@@ -875,6 +878,13 @@ name = "corpus-index"
 # (ingest_port/daemon.rs), its cancel flags and the newsworthy host port; the
 # allow list did not widen.
 allow = ["kernel-types", "oplog", "corpus-engine-yield", "sovereign-contracts"]
+
+[[package_leaf]]
+name = "quote-align"
+# The one quote aligner. Its whole dependency list is `unicode-normalization`
+# (third-party), and that is the contract: the four quote matchers converge
+# on it only if it drags no corpus, runtime or wire schema along.
+allow = []
 
 [[package_leaf]]
 name = "sovereign-time"

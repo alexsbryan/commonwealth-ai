@@ -103,7 +103,13 @@ impl Extractor for WikipediaApiArticleExtractor {
             Error::Extraction("wikipedia_api_article: missing `parse` field".into())
         })?;
 
-        let docs = build_docs(parse, &self.controversy_patterns, &self.factual_patterns);
+        let source = super::DocSource::File(source_path.to_path_buf());
+        let docs = build_docs(
+            parse,
+            &self.controversy_patterns,
+            &self.factual_patterns,
+            &source,
+        );
         Ok(Box::new(docs.into_iter().map(Ok)))
     }
 }
@@ -112,6 +118,7 @@ fn build_docs(
     parse: &Value,
     controversy_patterns: &[String],
     factual_patterns: &[String],
+    source: &super::DocSource,
 ) -> Vec<ExtractedDoc> {
     let title = parse
         .get("title")
@@ -224,6 +231,7 @@ fn build_docs(
             metadata: serde_json::to_value(&meta).ok(),
             source_file: None,
             embed_text: None,
+            source: source.clone(),
         });
     }
 
@@ -317,6 +325,7 @@ fn build_docs(
             metadata: serde_json::to_value(&meta).ok(),
             source_file: None,
             embed_text: None,
+            source: source.clone(),
         });
     }
 

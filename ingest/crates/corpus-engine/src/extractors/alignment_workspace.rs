@@ -183,6 +183,7 @@ fn read_md_file(path: &Path, root: &Path) -> Result<Option<ExtractedDoc>> {
         metadata: Some(json!({ "mtime": mtime })),
         source_file: None,
         embed_text: None,
+        source: super::DocSource::File(path.to_path_buf()),
     }))
 }
 

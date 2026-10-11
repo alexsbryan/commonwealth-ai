@@ -1,0 +1,696 @@
+{
+ "instrument_version": "ward-score-v3",
+ "run": "runs/ward-treatment2",
+ "tune_gold_files": 92,
+ "deals": {
+  "hit": 9,
+  "n": 39,
+  "recall": 0.231
+ },
+ "master_agreements": {
+  "hit": 0,
+  "n": 8,
+  "recall": 0.0
+ },
+ "stage_served": {
+  "hit": 2,
+  "n": 47,
+  "recall": 0.043
+ },
+ "stage_served_missed": {
+  "unmatched_deal": 38,
+  "wrong_stage": 6,
+  "unbacked": 0,
+  "unplaced": 0,
+  "provenance_unmapped": 0,
+  "no_decision": 0,
+  "pending": 1
+ },
+ "stage": {
+  "hit": 4,
+  "n": 101,
+  "recall": 0.04
+ },
+ "commitments": {
+  "hit": 0,
+  "n": 25,
+  "recall": 0.0
+ },
+ "made_up": {
+  "stage_updates": 13,
+  "commitments": 22
+ },
+ "deal_atoms_unmatched": 68,
+ "people": {
+  "hit": 215,
+  "n": 267,
+  "recall": 0.805
+ },
+ "companies": {
+  "hit": 42,
+  "n": 91,
+  "recall": 0.462
+ },
+ "claims": {
+  "stage_update": 92,
+  "commitment": 72
+ },
+ "deal_records": 77,
+ "deal_identity": {
+  "atlas_read": {
+   "claims": 92,
+   "documents_in_several_records": 20,
+   "records": 77
+  },
+  "gold_deals": 25,
+  "gold_files": 49,
+  "ambiguous_excluded": 21,
+  "scored": 18,
+  "membership_coverage": 0.367,
+  "ambiguous_predictions_excluded": 3,
+  "predictions_outside_fold": 2,
+  "no_deal_files": 22,
+  "no_deal_files_placed": 3,
+  "recovery_b_cubed": {
+   "precision": 0.833,
+   "recall": 0.199,
+   "f1": 0.322
+  },
+  "b_cubed": {
+   "precision": 1.0,
+   "recall": 0.778,
+   "f1": 0.875
+  },
+  "ceaf_e": {
+   "precision": 0.704,
+   "recall": 0.905,
+   "f1": 0.792
+  },
+  "lea": {
+   "precision": 0.556,
+   "recall": 0.556,
+   "f1": 0.556
+  },
+  "pairwise": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1": 0.0
+  }
+ },
+ "locate_deal_grain": {
+  "deals": 47,
+  "reach": 39,
+  "current_n": 47,
+  "current_located": 28,
+  "current_clean": 28
+ },
+ "locate_trace": {
+  "documents": 98,
+  "lines": 2522,
+  "stage_update_label": "A"
+ },
+ "cost": {
+  "documents_read": 98,
+  "phase1_wall_s": 1588.184,
+  "s_per_document": 16.21,
+  "calls_by_phase": {
+   "document_passes_locate": 2522,
+   "document_passes_choose": 184,
+   "resolve_read": 49
+  },
+  "model_s_by_phase": {
+   "document_passes_locate": 1462.4,
+   "document_passes_choose": 115.3,
+   "resolve_read": 25.5
+  },
+  "calls_per_document": 28.1
+ },
+ "deal_ladder": {
+  "n": 47,
+  "rungs": {
+   "latest_wrong_stage": 7,
+   "no_claim_on_any_message": 8,
+   "latest_not_located": 11,
+   "no_record_with_its_party": 19,
+   "served": 2
+  },
+  "reading_x_record": {
+   "latest_wrong_stage x pending": 1,
+   "no_claim_on_any_message x unmatched_deal": 8,
+   "latest_not_located x unmatched_deal": 7,
+   "latest_wrong_stage x unmatched_deal": 4,
+   "latest_wrong_stage x wrong_stage": 2,
+   "latest_not_located x wrong_stage": 4,
+   "latest_right_stage x unmatched_deal": 19,
+   "latest_right_stage x served": 2
+  },
+  "deals": [
+   {
+    "deal": "bhp-d1",
+    "stage": "proposal",
+    "latest": [
+     "bhp/7."
+    ],
+    "rung": "latest_wrong_stage",
+    "record": "pending",
+    "near": null
+   },
+   {
+    "deal": "bhp-d2",
+    "stage": "lead",
+    "latest": [
+     "bhp/1."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 30,
+     "best_p": 0.96
+    }
+   },
+   {
+    "deal": "bhp-d3",
+    "stage": "lead",
+    "latest": [
+     "bhp/1."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 30,
+     "best_p": 0.96
+    }
+   },
+   {
+    "deal": "bhp-d4",
+    "stage": "negotiating",
+    "latest": [
+     "bhp/10."
+    ],
+    "rung": "latest_not_located",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 1,
+     "lines": 10,
+     "best_p": 0.27
+    }
+   },
+   {
+    "deal": "bhp-d5",
+    "stage": "negotiating",
+    "latest": [
+     "bhp/11."
+    ],
+    "rung": "latest_not_located",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 1,
+     "lines": 26,
+     "best_p": 0.15
+    }
+   },
+   {
+    "deal": "mesa-d1",
+    "stage": "won",
+    "latest": [
+     "mesa/17."
+    ],
+    "rung": "latest_wrong_stage",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "mesa-d2",
+    "stage": "lost",
+    "latest": [
+     "mesa/2."
+    ],
+    "rung": "latest_wrong_stage",
+    "record": "wrong_stage",
+    "near": null
+   },
+   {
+    "deal": "mesa-d3",
+    "stage": "proposal",
+    "latest": [
+     "mesa/13."
+    ],
+    "rung": "latest_not_located",
+    "record": "wrong_stage",
+    "near": {
+     "documents": 1,
+     "lines": 29,
+     "best_p": 0.15
+    }
+   },
+   {
+    "deal": "mesa-d4",
+    "stage": "proposal",
+    "latest": [
+     "mesa/13."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 1,
+     "lines": 29,
+     "best_p": 0.15
+    }
+   },
+   {
+    "deal": "mesa-d5",
+    "stage": "lead",
+    "latest": [
+     "mesa/1."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 26,
+     "best_p": 0.06
+    }
+   },
+   {
+    "deal": "mesa-d6",
+    "stage": "lead",
+    "latest": [
+     "mesa/1."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 26,
+     "best_p": 0.06
+    }
+   },
+   {
+    "deal": "mesa-d7",
+    "stage": "won",
+    "latest": [
+     "mesa/14."
+    ],
+    "rung": "latest_wrong_stage",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "pasadena-d1",
+    "stage": "lead",
+    "latest": [
+     "pasadena/10."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "pasadena-d2",
+    "stage": "proposal",
+    "latest": [
+     "pasadena/7."
+    ],
+    "rung": "latest_wrong_stage",
+    "record": "wrong_stage",
+    "near": null
+   },
+   {
+    "deal": "pasadena-d3",
+    "stage": "won",
+    "latest": [
+     "pasadena/18."
+    ],
+    "rung": "latest_not_located",
+    "record": "wrong_stage",
+    "near": {
+     "documents": 1,
+     "lines": 10,
+     "best_p": 0.04
+    }
+   },
+   {
+    "deal": "pasadena-d4",
+    "stage": "negotiating",
+    "latest": [
+     "pasadena/15."
+    ],
+    "rung": "latest_not_located",
+    "record": "wrong_stage",
+    "near": {
+     "documents": 1,
+     "lines": 6,
+     "best_p": 0.36
+    }
+   },
+   {
+    "deal": "pasadena-d5",
+    "stage": "won",
+    "latest": [
+     "pasadena/3."
+    ],
+    "rung": "latest_not_located",
+    "record": "wrong_stage",
+    "near": {
+     "documents": 3,
+     "lines": 25,
+     "best_p": 0.08
+    }
+   },
+   {
+    "deal": "pasadena-d6",
+    "stage": "lead",
+    "latest": [
+     "pasadena/14."
+    ],
+    "rung": "served",
+    "record": "served",
+    "near": null
+   },
+   {
+    "deal": "pasadena-d7",
+    "stage": "won",
+    "latest": [
+     "pasadena/23."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 1,
+     "lines": 14,
+     "best_p": 0.15
+    }
+   },
+   {
+    "deal": "pasadena-d8",
+    "stage": "won",
+    "latest": [
+     "pasadena/37."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 2,
+     "lines": 18,
+     "best_p": 0.11
+    }
+   },
+   {
+    "deal": "smurfit-d1",
+    "stage": "proposal",
+    "latest": [
+     "smurfit/14."
+    ],
+    "rung": "latest_wrong_stage",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d2",
+    "stage": "negotiating",
+    "latest": [
+     "smurfit/20."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d3",
+    "stage": "proposal",
+    "latest": [
+     "smurfit/5."
+    ],
+    "rung": "latest_not_located",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 39,
+     "best_p": 0.44
+    }
+   },
+   {
+    "deal": "smurfit-d4",
+    "stage": "lead",
+    "latest": [
+     "smurfit/5."
+    ],
+    "rung": "latest_not_located",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 39,
+     "best_p": 0.44
+    }
+   },
+   {
+    "deal": "smurfit-d5",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d6",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d7",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d8",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d9",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d10",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d11",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d12",
+    "stage": "won",
+    "latest": [
+     "smurfit/23."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d13",
+    "stage": "lead",
+    "latest": [
+     "smurfit/20."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d14",
+    "stage": "negotiating",
+    "latest": [
+     "smurfit/25."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d15",
+    "stage": "negotiating",
+    "latest": [
+     "smurfit/26."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d16",
+    "stage": "won",
+    "latest": [
+     "smurfit/26."
+    ],
+    "rung": "latest_wrong_stage",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d17",
+    "stage": "lead",
+    "latest": [
+     "smurfit/4."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d18",
+    "stage": "lead",
+    "latest": [
+     "smurfit/20."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d19",
+    "stage": "lead",
+    "latest": [
+     "smurfit/20."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d20",
+    "stage": "lead",
+    "latest": [
+     "smurfit/20."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "smurfit-d21",
+    "stage": "lead",
+    "latest": [
+     "smurfit/20."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "tep-d1",
+    "stage": "negotiating",
+    "latest": [
+     "tep/14."
+    ],
+    "rung": "latest_not_located",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 1,
+     "lines": 12,
+     "best_p": 0.01
+    }
+   },
+   {
+    "deal": "tep-d2",
+    "stage": "negotiating",
+    "latest": [
+     "tep/6."
+    ],
+    "rung": "latest_not_located",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 14,
+     "best_p": 0.16
+    }
+   },
+   {
+    "deal": "tep-d3",
+    "stage": "negotiating",
+    "latest": [
+     "tep/9."
+    ],
+    "rung": "latest_not_located",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 3,
+     "lines": 12,
+     "best_p": 0.41
+    }
+   },
+   {
+    "deal": "tep-d4",
+    "stage": "lead",
+    "latest": [
+     "tep/10."
+    ],
+    "rung": "no_record_with_its_party",
+    "record": "unmatched_deal",
+    "near": null
+   },
+   {
+    "deal": "tep-d5",
+    "stage": "negotiating",
+    "latest": [
+     "tep/2."
+    ],
+    "rung": "no_claim_on_any_message",
+    "record": "unmatched_deal",
+    "near": {
+     "documents": 2,
+     "lines": 23,
+     "best_p": 0.1
+    }
+   },
+   {
+    "deal": "tep-d6",
+    "stage": "lead",
+    "latest": [
+     "tep/3."
+    ],
+    "rung": "served",
+    "record": "served",
+    "near": null
+   }
+  ]
+ }
+}

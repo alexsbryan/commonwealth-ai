@@ -57,6 +57,21 @@ pub struct VerificationResult {
     /// Additive field: `rewritten` and both counts are byte-identical
     /// to the pre-field behaviour on every input.
     pub verified_spans: Vec<String>,
+    /// Where each span of `verified_spans` stood, in the same order: the
+    /// source it was found in and the code points of it the span covers.
+    /// Additive, like `verified_spans`.
+    pub verified: Vec<VerifiedQuote>,
+}
+
+/// A quoted span that verified, and where.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedQuote {
+    /// The span as the answer writes it.
+    pub span: String,
+    /// Index of the source it stands in, in the order verified against.
+    pub source: usize,
+    /// The code points of that source the span covers, half-open.
+    pub source_range: std::ops::Range<usize>,
 }
 
 /// Scan `answer` for quoted spans of `min_chars` or more, verify each
@@ -69,8 +84,10 @@ pub struct VerificationResult {
 /// in addition to `source_chunks` so a verified verbatim span that
 /// happens to span a chunk boundary still passes.
 ///
-/// Normalisation: both the quote and the source are folded before
-/// substring comparison — whitespace runs collapse to a single space,
+/// Matching is the one aligner's exact mode ([`locate_verbatim`]): the
+/// quote verifies when it stands verbatim in some source. Normalisation
+/// (`norm_v0`): both sides are folded — NFC, whitespace runs collapse to a
+/// single space, words hyphenated across a line end are joined,
 /// typographic characters fold to ASCII (curly quotes/apostrophes,
 /// em/en dashes, `…`), and markdown emphasis markers (`*`, `` ` ``,
 /// `_`) are stripped. This handles markdown line breaks vs source
@@ -93,14 +110,31 @@ pub fn verify_quotes(
     extra_verbatim_spans: &[String],
     min_chars: usize,
 ) -> VerificationResult {
-    let mut result = VerificationResult::default();
-
-    // Pre-normalise the sources so we don't redo it per-quote.
-    let normalised_sources: Vec<String> = source_chunks
+    let sources: Vec<&str> = source_chunks
         .iter()
         .chain(extra_verbatim_spans.iter())
-        .map(|s| normalise_for_match(s))
+        .map(String::as_str)
         .collect();
+    verify_against(answer, &sources, min_chars)
+}
+
+/// [`verify_quotes`] over sources the caller holds as `&str`, in the order
+/// given: an earlier source wins where a quote stands in two, so a caller
+/// lists first the ones it wants a verified quote addressed into.
+fn verify_against(answer: &str, sources: &[&str], min_chars: usize) -> VerificationResult {
+    let mut result = VerificationResult::default();
+    // No surface, no verdict: with every source blank there is nothing to
+    // check a quote against, so the answer stands and nothing is demoted, as
+    // every caller's comment promises (`attached_doc`'s failed prefetch).
+    // Until ADDRESSED_TEXT's defect 6 this demoted every checked quote.
+    if sources.iter().all(|s| s.trim().is_empty()) {
+        tracing::debug!(
+            sources = sources.len(),
+            "quote_verification: no verification surface; the answer is left unchanged"
+        );
+        result.rewritten = answer.to_string();
+        return result;
+    }
 
     let mut out = String::with_capacity(answer.len());
     let chars: Vec<char> = answer.chars().collect();
@@ -117,17 +151,17 @@ pub fn verify_quotes(
             if let Some(close) = find_double_quote_close(&chars, i + 1) {
                 let inner: String = chars[i + 1..close].iter().collect();
                 if inner.chars().count() >= min_chars {
-                    let normalised_quote = trim_edge_ellipses(&normalise_for_match(&inner));
-                    let verified = !normalised_quote.is_empty()
-                        && normalised_sources
-                            .iter()
-                            .any(|src| src.contains(&normalised_quote));
-                    if verified {
+                    if let Some((source, source_range)) = locate_verbatim(&inner, sources) {
                         // Keep as-is: re-emit `"inner"`.
                         out.push(c);
                         out.push_str(&inner);
                         out.push(chars[close]);
                         result.verified_count += 1;
+                        result.verified.push(VerifiedQuote {
+                            span: inner.clone(),
+                            source,
+                            source_range,
+                        });
                         result.verified_spans.push(inner);
                     } else {
                         // Demote. Strip ellipsis-bridged composites
@@ -257,68 +291,168 @@ pub fn verify_answer_against_turn_evidence(
     verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)
 }
 
-/// Fold text for substring comparison. Applied symmetrically to
-/// quotes and sources:
-/// - whitespace runs collapse to a single space;
-/// - typographic characters fold to ASCII: `‘ ’ ʼ` → `'`, `“ ”` → `"`,
-///   `– —` → `-`, `…` → `...` — models routinely restyle these when
-///   quoting, and Gutenberg sources use the typographic forms;
-/// - markdown emphasis markers `*`, `` ` ``, `_` are dropped: models
-///   bold spans inside quotes, and Gutenberg renders italics as
-///   `_underscores_`. Dropping them on BOTH sides keeps the
-///   comparison symmetric, so a source's literal `_` can still match
-///   a quote that omitted it.
+/// [`verify_answer_against_turn_evidence`], with the stored texts the turn's
+/// chunks were cut from as sources too (ADDRESSED_TEXT §5.3, convergence
+/// commit 2; `runtime::quote_surface` reads them).
 ///
-/// Deliberately NOT folded: letter case (a case-mismatched "quote" is
-/// not verbatim) and interior punctuation (a spliced composite must
-/// keep failing).
-fn normalise_for_match(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut prev_was_space = false;
-    for c in s.chars() {
-        let mapped: Option<char> = match c {
-            '\u{2018}' | '\u{2019}' | '\u{02BC}' => Some('\''),
-            '\u{201C}' | '\u{201D}' => Some('"'),
-            '\u{2013}' | '\u{2014}' => Some('-'),
-            '*' | '`' | '_' => None,
-            '\u{2026}' => {
-                out.push_str("...");
-                prev_was_space = false;
-                continue;
-            }
-            c => Some(c),
+/// A chunk is a re-joined, overlapped, title-headed cut of its document, so a
+/// quote from the same document past the chunk's edge is verbatim source
+/// text the chunks cannot see: the GR-19/20 class one level out. The texts
+/// are listed FIRST, so a quote standing in one is addressed into it
+/// ([`VerifiedQuote::source`] below `texts.len()`). The set is a superset of
+/// the old one, so this only removes demotions; a composite stays
+/// non-contiguous in a text as in a chunk. The empty-`evidence` guard is
+/// unchanged.
+pub fn verify_answer_against_turn_texts(
+    answer: &str,
+    evidence: &str,
+    chunks: &[String],
+    texts: &[&str],
+) -> VerificationResult {
+    if evidence.trim().is_empty() {
+        return VerificationResult {
+            rewritten: answer.to_string(),
+            ..VerificationResult::default()
         };
-        match mapped {
-            Some(c) if c.is_whitespace() => {
-                if !prev_was_space {
-                    out.push(' ');
-                    prev_was_space = true;
-                }
-            }
-            Some(c) => {
-                out.push(c);
-                prev_was_space = false;
-            }
-            None => {}
-        }
     }
-    out.trim().to_string()
+    let sources: Vec<&str> = texts
+        .iter()
+        .copied()
+        .chain(std::iter::once(evidence))
+        .chain(chunks.iter().map(String::as_str))
+        .collect();
+    verify_against(answer, &sources, DEFAULT_MIN_QUOTE_CHARS)
 }
 
-/// Trim leading/trailing ellipsis runs (plus surrounding whitespace)
-/// from a normalised quote. `"...the spectre took its crawl..."` is
-/// honest edge-elision, not a composite — the elided part is OUTSIDE
-/// the quoted span. Interior ellipses are untouched, so spliced
-/// composites keep failing verification.
-fn trim_edge_ellipses(s: &str) -> String {
-    s.trim_matches(|c: char| c == '.' || c.is_whitespace())
-        .trim()
-        .to_string()
+/// The aligner's knobs, compiled in from `quote-align/align.toml`; that
+/// crate's `the_shipped_file_loads` pins that they load, so `None` is a build
+/// defect. It fails closed: with no aligner no quote is verified, so every
+/// checked quote is demoted, and the error says why once.
+pub(crate) fn align_config() -> Option<&'static quote_align::AlignConfig> {
+    static CFG: std::sync::OnceLock<Option<quote_align::AlignConfig>> = std::sync::OnceLock::new();
+    CFG.get_or_init(|| match quote_align::AlignConfig::shipped() {
+        Ok(cfg) => Some(cfg),
+        Err(e) => {
+            tracing::error!(error = %e, "quote guard: the shipped align.toml does not load; no quote can be verified");
+            None
+        }
+    })
+    .as_ref()
+}
+
+/// Where `quote` stands verbatim in `sources`, its edge ellipses trimmed
+/// first ([`trim_edge_ellipses`]): [`align_exact`] with case kept — a
+/// case-mismatched "quote" is not verbatim. An interior ellipsis the source
+/// does not have is not in the source, so a spliced composite never
+/// verifies.
+pub(crate) fn locate_verbatim(
+    quote: &str,
+    sources: &[&str],
+) -> Option<(usize, std::ops::Range<usize>)> {
+    align_exact(trim_edge_ellipses(quote), sources)
+}
+
+/// The one aligner (`quote_align::align`, ADDRESSED_TEXT §5.3) in exact
+/// mode: where `quote` stands verbatim in `sources`, as the first source in
+/// order and its code points. The aligner says where the quote stands; it
+/// stands there verbatim when its `norm_v0` form occurs in the source's
+/// `norm_v0` form overlapping that stretch, and the range returned is
+/// exactly that occurrence.
+///
+/// `norm_v0` is the fold this module used to spell itself (NFC; whitespace
+/// runs, curly quotes, dashes and `…` folded; `*` `` ` `` `_` dropped; case
+/// kept). Deciding on the folded strings, rather than on the aligner's
+/// differences, keeps what a substring test accepted: a quote that starts or
+/// ends inside a word, or quotes an ellipsis or a bracket the source itself
+/// has (`every_stretch_of_a_source_is_located_where_it_stands`).
+pub(crate) fn align_exact(
+    quote: &str,
+    sources: &[&str],
+) -> Option<(usize, std::ops::Range<usize>)> {
+    let needle = quote_align::norm_v0(quote);
+    let n = needle.len();
+    if n == 0 {
+        return None;
+    }
+    let mut found = quote_align::align(quote, sources, align_config()?).alignments;
+    found.sort_by_key(|a| (a.text, a.source.start));
+    let mut hay: Option<(usize, quote_align::NormText)> = None;
+    found.into_iter().find_map(|a| {
+        if hay.as_ref().map(|(text, _)| *text) != Some(a.text) {
+            hay = Some((a.text, quote_align::norm_v0(sources[a.text])));
+        }
+        let (_, hay) = hay.as_ref()?;
+        // An occurrence overlapping the aligned stretch lies within the quote's
+        // length of it either side, edge words the aligner left out included.
+        let from = norm_position(hay, a.source.start).saturating_sub(n);
+        let to = (norm_position(hay, a.source.end) + n).min(hay.len());
+        let at = hay.chars()[from..to]
+            .windows(n)
+            .position(|w| w == needle.chars())?;
+        Some((a.text, hay.origin(from + at..from + at + n)))
+    })
+}
+
+/// `s` lowercased one code point at a time, keeping any character whose
+/// lowercase is not exactly one code point. Every code point stays where it
+/// was, so a range [`align_exact`] reports in folded copies is the same range
+/// of the originals. For a caller that matches case-insensitively: case is
+/// the caller's call, and the aligner keeps it.
+pub(crate) fn fold_case(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            let mut lower = c.to_lowercase();
+            match (lower.next(), lower.next()) {
+                (Some(l), None) => l,
+                _ => c,
+            }
+        })
+        .collect()
+}
+
+/// The first normalised position of `hay` made from input code point `at` or
+/// later (`hay.len()` when none is): `norm_v0`'s map back is in input order.
+fn norm_position(hay: &quote_align::NormText, at: usize) -> usize {
+    let (mut lo, mut hi) = (0, hay.len());
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if hay.origin(mid..mid + 1).start < at {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    lo
+}
+
+/// `quote` without its leading and trailing runs of `.` and whitespace, as
+/// `norm_v0` sees them (so `…` counts). `"...the spectre took its crawl..."`
+/// is honest edge-elision, not a composite — the elided part is OUTSIDE the
+/// quoted span. Interior ellipses are untouched. The cut is made on the
+/// quote's own characters through `norm_v0`'s map back to them.
+fn trim_edge_ellipses(quote: &str) -> &str {
+    let norm = quote_align::norm_v0(quote);
+    let kept = |c: &char| *c != '.' && *c != ' ';
+    let (Some(first), Some(last)) = (
+        norm.chars().iter().position(kept),
+        norm.chars().iter().rposition(kept),
+    ) else {
+        return "";
+    };
+    quote_align::code_point_slice(quote, norm.origin(first..last + 1)).unwrap_or("")
+}
+
+/// The fold this module once spelled itself, now `norm_v0`'s. Kept for the
+/// unmodified witness `normalise_for_match_folds`, which pins that the
+/// convergence folds exactly what the old one did on its cases.
+#[cfg(test)]
+fn normalise_for_match(s: &str) -> String {
+    quote_align::norm_v0(s).to_string()
 }
 
 /// `true` if `c` is a double-quote character that opens a span we
 /// should verify.
-fn is_double_quote_open(c: char) -> bool {
+pub(crate) fn is_double_quote_open(c: char) -> bool {
     c == '"' || c == '\u{201C}' || c == '\u{201D}'
 }
 
@@ -344,349 +478,8 @@ fn find_double_quote_close(chars: &[char], from: usize) -> Option<usize> {
     None
 }
 
-// ─── Tests ────────────────────────────────────────────────────
-
+// The tests live in a sibling file, so this one stays under its size band
+// (ARCH §3.1). `#[path]`, so the names are unchanged.
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_evidence_leaves_answer_unchanged() {
-        // Parametric / retrieval-miss path: doc_context is empty. Even a
-        // long quoted span must NOT be demoted — there is no source to
-        // verify against, so demotion would be a false accusation.
-        let answer = r#"Kant argues that "the categorical imperative binds all rational agents unconditionally and without exception.""#;
-        let r = verify_answer_against_evidence(answer, "");
-        assert_eq!(r.demoted_count, 0);
-        assert_eq!(r.verified_count, 0);
-        assert_eq!(r.rewritten, answer);
-        // Whitespace-only evidence is treated the same as empty.
-        let r2 = verify_answer_against_evidence(answer, "   \n  ");
-        assert_eq!(r2.rewritten, answer);
-        assert_eq!(r2.demoted_count, 0);
-    }
-
-    #[test]
-    fn fabricated_quote_against_evidence_is_demoted() {
-        // SEP-shaped evidence: a real passage the model was shown. The
-        // answer fabricates a verbatim-looking quote that never appears.
-        let evidence =
-            "Compatibilism is the thesis that free will is compatible with determinism. \
-             Classical compatibilists analyse the freedom to do otherwise as a hypothetical: \
-             an agent could have done otherwise if she had chosen to.";
-        let answer = r#"On this view, Frankfurt holds that "moral responsibility floats entirely free of any ability to do otherwise whatsoever.""#;
-        let r = verify_answer_against_evidence(answer, evidence);
-        assert_eq!(r.demoted_count, 1);
-        assert!(r.rewritten.contains("[unverified excerpt:"));
-    }
-
-    #[test]
-    fn verbatim_quote_against_evidence_passes() {
-        let evidence =
-            "Compatibilism is the thesis that free will is compatible with determinism. \
-             Classical compatibilists analyse the freedom to do otherwise as a hypothetical.";
-        let answer = r#"The entry defines it directly: "free will is compatible with determinism" is the core claim."#;
-        let r = verify_answer_against_evidence(answer, evidence);
-        assert_eq!(r.demoted_count, 0);
-        assert_eq!(r.verified_count, 1);
-        assert_eq!(r.rewritten, answer);
-    }
-
-    #[test]
-    fn verified_quote_passes_through_unchanged() {
-        let source = "Stevie sat at a deal table, drawing circles, circles, circles; innumerable circles, concentric, eccentric.".to_string();
-        let answer = r#"The narrator says "drawing circles, circles, circles; innumerable circles, concentric, eccentric" in chapter one."#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.demoted_count, 0);
-        assert_eq!(r.verified_count, 1);
-        assert!(r.rewritten.contains(
-            r#""drawing circles, circles, circles; innumerable circles, concentric, eccentric""#
-        ));
-    }
-
-    #[test]
-    fn unverified_quote_is_demoted() {
-        let source = "He walked through the empty streets.".to_string();
-        let answer = r#"As Conrad writes, "the professor seized the policeman by the throat with great violence and intent.""#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.demoted_count, 1);
-        assert_eq!(r.verified_count, 0);
-        assert!(r.rewritten.contains("[unverified excerpt:"));
-        assert!(!r.rewritten.contains(r#""the professor seized"#));
-    }
-
-    #[test]
-    fn composite_quote_with_ellipsis_fails_verification() {
-        // The two fragments are real; the composite isn't continuous
-        // anywhere in the source — exactly the failure mode this
-        // module is built to catch.
-        let chunk_a = "He smiled no longer his enigmatic and mocking smile.".to_string();
-        let chunk_b = "It was a sad-faced, miserable little man who emerged.".to_string();
-        let answer = r#"Conrad writes, "He smiled no longer his enigmatic mocking smile... It was a sad-faced, miserable little man who emerged.""#;
-        let r = verify_quotes(answer, &[chunk_a, chunk_b], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.demoted_count, 1, "composite quotes must be demoted");
-        assert!(r.rewritten.contains("[unverified excerpt:"));
-    }
-
-    #[test]
-    fn short_quotes_below_min_chars_pass_through() {
-        let source = "The professor walks alone.".to_string();
-        let answer = r#"The "professor" is the focus."#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        // Quote is shorter than DEFAULT_MIN_QUOTE_CHARS — neither
-        // verified nor demoted; just passed through.
-        assert_eq!(r.demoted_count, 0);
-        assert_eq!(r.verified_count, 0);
-        assert!(r.rewritten.contains(r#""professor""#));
-    }
-
-    #[test]
-    fn whitespace_normalised_quote_verifies() {
-        // Source has a hard line break inside the quoted phrase.
-        let source = "He found himself walking\nthrough the empty streets at dawn.".to_string();
-        let answer =
-            r#"Conrad says he was "walking through the empty streets at dawn" — a key moment."#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.verified_count, 1);
-        assert_eq!(r.demoted_count, 0);
-    }
-
-    #[test]
-    fn curly_quotes_are_recognised() {
-        // Sources use straight quotes; answer uses smart curly quotes.
-        let source = "She found the wedding ring hidden in her pocket.".to_string();
-        let answer = "He recalls Winnie\u{201C}found the wedding ring hidden in her pocket\u{201D} in chapter twelve.";
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.verified_count, 1);
-    }
-
-    #[test]
-    fn extra_verbatim_spans_supplement_chunks() {
-        // The full chunk doesn't contain the quote, but a RAPTOR
-        // quote_span does — verification should still pass.
-        let chunk = "Something else entirely from the document.".to_string();
-        let raptor_span = "the haunting fear of his sinister loneliness".to_string();
-        let answer = r#"The professor is described with "the haunting fear of his sinister loneliness" in the encounter."#;
-        let r = verify_quotes(answer, &[chunk], &[raptor_span], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.verified_count, 1);
-        assert_eq!(r.demoted_count, 0);
-    }
-
-    #[test]
-    fn multiple_quotes_in_one_answer_independent_outcomes() {
-        let source =
-            "Stevie drew his circles, circles, circles all afternoon long in silence.".to_string();
-        let answer = r#"The narrator says "Stevie drew his circles, circles, circles all afternoon" but also "the moon rose over the empty hills above the silent town" later."#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.verified_count, 1);
-        assert_eq!(r.demoted_count, 1);
-        assert!(r
-            .rewritten
-            .contains(r#""Stevie drew his circles, circles, circles all afternoon""#));
-        assert!(r.rewritten.contains("[unverified excerpt: the moon"));
-    }
-
-    #[test]
-    fn normalise_for_match_folds() {
-        assert_eq!(normalise_for_match("a  b\t\nc"), "a b c");
-        assert_eq!(
-            normalise_for_match("  leading and trailing  "),
-            "leading and trailing"
-        );
-        assert_eq!(normalise_for_match(""), "");
-        assert_eq!(
-            normalise_for_match("Mrs Verloc\u{2019}s \u{201C}gaze\u{201D} \u{2014} steady"),
-            "Mrs Verloc's \"gaze\" - steady"
-        );
-        assert_eq!(
-            normalise_for_match("**bold** and _italic_"),
-            "bold and italic"
-        );
-        assert_eq!(normalise_for_match("wait\u{2026} what"), "wait... what");
-    }
-
-    #[test]
-    fn curly_apostrophe_in_source_matches_straight_in_quote() {
-        // Gutenberg text uses U+2019; models quote with '. Observed
-        // false demotion class #1 on the 2026-07-23 eye test.
-        let source =
-            "Winnie\u{2019}s philosophy consisted in not taking notice of the inside of facts."
-                .to_string();
-        let answer = r#"The narrator notes that "Winnie's philosophy consisted in not taking notice of the inside of facts.""#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.demoted_count, 0);
-        assert_eq!(r.verified_count, 1);
-    }
-
-    #[test]
-    fn markdown_bold_inside_quote_matches_plain_source() {
-        let source =
-            "where that spectre took its constitutional crawl every fine morning.".to_string();
-        let answer = r#"Conrad writes "that spectre took its **constitutional crawl** every fine morning" of Yundt."#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.demoted_count, 0);
-        assert_eq!(r.verified_count, 1);
-    }
-
-    #[test]
-    fn gutenberg_underscore_italics_match_unmarked_quote() {
-        let source = "He read the _Morning Post_ with an air of complete detachment.".to_string();
-        let answer =
-            r#"He is seen reading: "He read the Morning Post with an air of complete detachment.""#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.verified_count, 1);
-        assert_eq!(r.demoted_count, 0);
-    }
-
-    /// `verified_spans` carries exactly the spans that PASSED — verbatim as
-    /// written in the answer — and nothing else: demoted spans and spans
-    /// under the length floor never appear (order authority-guard-at-exit).
-    /// The failing input, by name: a fabricated figure wrapped in quote
-    /// marks ("Net sales were $999,999 million and rose despite this")
-    /// is demoted, so it earns no exemption downstream.
-    #[test]
-    fn verified_spans_lists_passed_spans_only() {
-        let source =
-            "Mac net sales increased during 2025 compared to 2024 due primarily to higher \
-             net sales of MacBook Air."
-                .to_string();
-        let answer = r#"Per the filing, "Mac net sales increased during 2025 compared to 2024 due primarily to higher net sales of MacBook Air." A short "so-called" aside, and a fake: "Net sales were $999,999 million and rose despite this headwind"."#;
-        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.verified_count, 1);
-        assert_eq!(r.demoted_count, 1);
-        assert_eq!(
-            r.verified_spans,
-            vec![
-                "Mac net sales increased during 2025 compared to 2024 due primarily to \
-                 higher net sales of MacBook Air."
-                    .to_string()
-            ],
-            "only the passed span, verbatim; the demoted and short spans are absent"
-        );
-    }
-
-    #[test]
-    fn edge_ellipses_trimmed_interior_composites_still_fail() {
-        let source = "Jolly lucky for Yundt that she had persisted in coming up time after time."
-            .to_string();
-        // Edge elision: honest quoting, must verify.
-        let edge = r#"As the text says, "...she had persisted in coming up time after time..." throughout."#;
-        let r = verify_quotes(edge, &[source.clone()], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r.verified_count, 1, "edge ellipses are not composites");
-        assert_eq!(r.demoted_count, 0);
-        // Interior splice: still a composite, still demoted.
-        let spliced = r#"As the text says, "Jolly lucky for Yundt... coming up time after time again and again.""#;
-        let r2 = verify_quotes(spliced, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
-        assert_eq!(r2.demoted_count, 1, "interior splices must keep failing");
-    }
-
-    /// THE 600-CHAR SPLIT. Both arms in one test, because the point is not
-    /// "the new function works" but "the old surface is why correct citations
-    /// were called unverified". Measured 2026-08-05: 50 of 80 released
-    /// citations demoted, 55 of 55 of those spans verbatim in the evidence,
-    /// zero fabrications. The discriminator was purely the quote's offset
-    /// inside its own chunk (kept at 273; demoted at 792 and 1708).
-    ///
-    /// Built from the REAL `truncate_chunk_content`, so this cannot drift if
-    /// `MAX_CHUNK_CHARS` moves — it tests the relationship, not the number.
-    /// covers: GR-19, GR-20
-    #[test]
-    fn a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted() {
-        let filler = "The ledger was kept in a fair hand, and the entries ran on \
-                      without remark from one quarter to the next. ";
-        let mut chunk = filler.repeat(24);
-        let offset = chunk.len();
-        let sentence = "Widow Hetch, who kept The Cold Lantern, gave her evidence \
-                        at her own bar with her arms folded.";
-        chunk.push_str(sentence);
-        assert!(
-            offset > crate::runtime::text_utils::MAX_CHUNK_CHARS,
-            "the fixture must put the sentence past the truncation to test anything"
-        );
-        let doc_context = crate::runtime::text_utils::truncate_chunk_content(&chunk);
-        let answer = format!("It was her own bar.\n\nGrounded in the source:\n  \"{sentence}\"");
-
-        // The prompt rendering genuinely cannot see it — this is the defect.
-        let old = verify_answer_against_evidence(&answer, &doc_context);
-        assert_eq!(
-            old.demoted_count, 1,
-            "if this stops demoting, the fixture no longer reproduces the bug"
-        );
-
-        // The turn's evidence can.
-        let fixed = verify_answer_against_turn_evidence(&answer, &doc_context, &[chunk]);
-        assert_eq!(
-            fixed.demoted_count, 0,
-            "verbatim source text must not be called unverified"
-        );
-        assert_eq!(fixed.verified_count, 1);
-        assert!(fixed.rewritten.contains(&format!("\"{sentence}\"")));
-    }
-
-    /// An unclosed quote must not pair with the next paragraph's opener. The
-    /// 2026-09-13 chaos soak (step 239), reconstructed from the rewritten
-    /// answer: the model opened a quote in its value line and never closed it,
-    /// so the span ran to the excerpt's opening mark and the demotion swallowed
-    /// the `Grounded in the source:` header.
-    #[test]
-    fn an_unclosed_quote_does_not_capture_the_next_paragraph() {
-        let excerpt = "Research in Agricultural Engineering Current issue 2026/2 Archive Search";
-        let answer = format!(
-            "Current issue year and number for \"Research in Agricultural Engineering: \
-             2026, Issue 2\n\nGrounded in the source:\n  \"{excerpt}\""
-        );
-        let r = verify_quotes(
-            &answer,
-            &[format!("Journal home. {excerpt} Contact.")],
-            &[],
-            20,
-        );
-        assert!(
-            !r.rewritten
-                .contains("[unverified excerpt: Research in Agricultural Engineering: 2026"),
-            "the value line must not be demoted as a quote: {}",
-            r.rewritten
-        );
-        assert!(
-            r.rewritten.contains("\n\nGrounded in the source:\n"),
-            "{}",
-            r.rewritten
-        );
-        assert_eq!(
-            r.verified_count, 1,
-            "the real excerpt still verifies: {}",
-            r.rewritten
-        );
-        assert_eq!(r.demoted_count, 0, "{}", r.rewritten);
-    }
-
-    /// The widening must not reach the failure this guard exists for. A
-    /// composite — real fragments spliced with an interior ellipsis — is
-    /// non-contiguous in the source under any normalisation, so passing the
-    /// FULL chunks alongside the rendering leaves it demoted.
-    /// covers: GR-21
-    #[test]
-    fn a_composite_quote_is_still_demoted_against_the_full_chunks() {
-        let chunk = "The ledger was kept in a fair hand. Many pages later, and after \
-                     much else besides, the auditor came out from Saltern Cross."
-            .to_string();
-        let answer = "As recorded: \"The ledger was kept in a fair hand ... the auditor \
-                      came out from Saltern Cross.\"";
-        let r = verify_answer_against_turn_evidence(answer, &chunk, &[chunk.clone()]);
-        assert_eq!(
-            r.demoted_count, 1,
-            "a spliced quote is still a spliced quote"
-        );
-        assert!(r.rewritten.contains("[unverified excerpt:"));
-    }
-
-    /// The parametric / retrieval-miss path must stay untouched: the
-    /// empty-surface guard is keyed on `evidence`, not on `chunks`.
-    #[test]
-    fn empty_evidence_still_leaves_the_answer_alone() {
-        let answer = "No sources here, but \"this is a long enough quoted span to check\".";
-        let r = verify_answer_against_turn_evidence(answer, "", &["something".to_string()]);
-        assert_eq!(r.rewritten, answer);
-        assert_eq!(r.demoted_count, 0);
-    }
-}
+#[path = "quote_verification/tests.rs"]
+mod tests;

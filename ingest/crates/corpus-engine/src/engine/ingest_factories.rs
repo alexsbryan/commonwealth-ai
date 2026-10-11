@@ -82,6 +82,7 @@ impl CorpusEngine {
                 acq.download(download_dir, &recipe.corpus.id, progress)
                     .await
             }
+            AcquirerConfig::Inline => crate::acquirers::inline::materialize(recipe, download_dir),
             AcquirerConfig::WebCrawl { .. } => Err(Error::Recipe(
                 "Web crawl acquirer not yet implemented".into(),
             )),
@@ -134,6 +135,19 @@ impl CorpusEngine {
                 let rendered = render_json_against_parameters(params, recipe)?;
                 (acquirer)(rendered, download_dir.to_path_buf()).await
             }
+        }
+    }
+
+    /// The extractor a recipe's documents are read with: its `[extract]`,
+    /// run over each inline document alone when the recipe carries them
+    /// ([`crate::acquirers::inline::InlineExtractor`]).
+    pub(crate) fn recipe_extractor(&self, recipe: &Recipe) -> Box<dyn Extractor> {
+        let inner = self.make_extractor(&recipe.extract, &recipe.corpus.id);
+        match recipe.acquire {
+            AcquirerConfig::Inline => Box::new(crate::acquirers::inline::InlineExtractor::new(
+                inner, recipe,
+            )),
+            _ => inner,
         }
     }
 

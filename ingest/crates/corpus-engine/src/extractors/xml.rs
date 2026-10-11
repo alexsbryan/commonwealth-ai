@@ -209,6 +209,7 @@ impl WikiDumpIterator {
                 metadata: None,
                 source_file: None,
                 embed_text: None,
+                source: super::DocSource::Record,
             });
         }
     }
@@ -460,6 +461,7 @@ impl Iterator for StackExchangeIterator {
                             })),
                             source_file: None,
                             embed_text: None,
+                            source: super::DocSource::Record,
                         });
                         continue;
                     }
@@ -889,6 +891,7 @@ fn build_grouped_doc(qid: u64, q: &QMeta, answers: &[AMeta]) -> ExtractedDoc {
         metadata: Some(metadata),
         source_file: None,
         embed_text: Some(embed),
+        source: super::DocSource::Record,
     }
 }
 

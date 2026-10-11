@@ -24,12 +24,77 @@ use crate::recipe::{ExtractorConfig, Recipe};
 /// authoring-harness runner call it, so the two paths cannot drift — the
 /// load-bearing seam behind the harness's "no second pipeline" invariant.
 pub(crate) fn chunk_doc(chunker: &dyn Chunker, doc: &ExtractedDoc) -> Vec<String> {
-    let cleaned = super::normalize_content(&doc.content);
+    chunk_text(
+        chunker,
+        doc.title.as_deref(),
+        &normalize_content(&doc.content),
+    )
+}
+
+/// Cut a document's chunks from its canonical text — the string the text
+/// store keeps — and title-head each one. [`chunk_doc`] is this over
+/// `normalize_content(doc.content)`; the ingest loop calls it directly so the
+/// text it stores and the text it chunks are one string.
+pub(crate) fn chunk_text(chunker: &dyn Chunker, title: Option<&str>, text: &str) -> Vec<String> {
     chunker
-        .chunk(&cleaned)
+        .chunk(text)
         .into_iter()
-        .map(|tc| corpus_index::chunkers::title_headed(doc.title.as_deref(), &tc.content))
+        .map(|tc| corpus_index::chunkers::title_headed(title, &tc.content))
         .collect()
+}
+
+/// A text's position among its source's texts. Extractors emit one source's
+/// texts consecutively, so the count restarts when the source changes; it is
+/// advanced for every document the loop sees, resumed-past ones included, so
+/// a resumed ingest numbers a document as a fresh one did.
+#[derive(Default)]
+pub(crate) struct SourceOrdinals {
+    last: Option<String>,
+    next: u32,
+}
+
+impl SourceOrdinals {
+    pub(crate) fn next(&mut self, source_id: &str) -> u32 {
+        if self.last.as_deref() != Some(source_id) {
+            self.last = Some(source_id.to_string());
+            self.next = 0;
+        }
+        self.next += 1;
+        self.next - 1
+    }
+}
+
+/// Strip model-generated artifacts from raw corpus text before chunking.
+/// Some HuggingFace datasets contain LLM-generated content with `<think>`
+/// blocks; storing those verbatim pollutes every chunk and breaks enrichment.
+///
+/// An unclosed `<think>` is not a block: it and everything after it are kept
+/// verbatim. Dropping the tail would delete text on a guess (a document may
+/// quote the tag), and the result is the text ingest stores and names.
+pub(crate) fn normalize_content(s: &str) -> String {
+    if !s.contains("<think>") {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("</think>") {
+            Some(rel_end) => {
+                rest = &rest[start + rel_end + "</think>".len()..];
+            }
+            None => {
+                tracing::debug!(
+                    at_byte = s.len() - rest.len() + start,
+                    "normalize_content: unclosed <think> kept verbatim"
+                );
+                rest = &rest[start..];
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Set the `shard_indices` field on a recipe's `WikipediaJsonl` extractor
@@ -168,5 +233,41 @@ pub(crate) fn mark_complete_shards(
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_content, SourceOrdinals};
+
+    #[test]
+    fn ordinals_count_within_a_source_and_restart_on_the_next() {
+        let mut o = SourceOrdinals::default();
+        let got: Vec<u32> = ["a", "a", "a", "b", "c", "c"]
+            .iter()
+            .map(|s| o.next(s))
+            .collect();
+        assert_eq!(got, [0, 1, 2, 0, 0, 1]);
+    }
+
+    #[test]
+    fn normalize_content_strips_closed_think_blocks() {
+        assert_eq!(normalize_content("a<think>x</think>b"), "ab");
+        assert_eq!(normalize_content("no tags"), "no tags");
+    }
+
+    /// An unclosed `<think>` is kept verbatim, and the text before it once.
+    /// Before the fix the `break` left `rest` unadvanced, so the text before
+    /// the tag was pushed twice — a stored text that duplicates itself.
+    #[test]
+    fn normalize_content_keeps_text_before_an_unclosed_think_once() {
+        assert_eq!(
+            normalize_content("intro <think>unfinished"),
+            "intro <think>unfinished"
+        );
+        assert_eq!(
+            normalize_content("a<think>x</think>b<think>y"),
+            "ab<think>y"
+        );
     }
 }

@@ -54,6 +54,7 @@ mod synthetic {
             metadata: None,
             source_file: None,
             embed_text: None,
+            source: corpus_engine::extractors::DocSource::Record,
         }
     }
 }

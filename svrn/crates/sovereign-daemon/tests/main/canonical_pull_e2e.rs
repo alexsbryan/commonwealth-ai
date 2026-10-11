@@ -69,6 +69,7 @@ async fn create_synthetic_canonical(index_dir: &Path, corpus_id: &str) -> String
             source_file: None,
             code: corpus_index::index::InsertCodeMeta::default(),
             unit_id: None,
+            text_sha256: None,
         },
         embedding: vec.to_vec(),
     };

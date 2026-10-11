@@ -52,6 +52,8 @@ mod http_api_pagination_e2e;
 mod index_cache_residency;
 #[path = "main/ingest_failure_modes.rs"]
 mod ingest_failure_modes;
+#[path = "main/inline_recipe_e2e.rs"]
+mod inline_recipe_e2e;
 #[path = "main/investigation_pipeline_e2e.rs"]
 mod investigation_pipeline_e2e;
 #[path = "main/newsworthy_integration.rs"]
@@ -115,10 +117,14 @@ mod daemon_port_parity;
 mod install_lifecycle_port_parity;
 #[path = "main/local_corpus_port_parity.rs"]
 mod local_corpus_port_parity;
+#[path = "main/recipe_install_port.rs"]
+mod recipe_install_port;
 #[path = "main/source_tree.rs"]
 mod source_tree;
 #[path = "main/svrn_recipe_shapes.rs"]
 mod svrn_recipe_shapes;
+#[path = "main/text_store_e2e.rs"]
+mod text_store_e2e;
 #[path = "main/tiered_entity_extractor_seam.rs"]
 mod tiered_entity_extractor_seam;
 #[path = "main/watcher_e2e.rs"]

@@ -1,0 +1,26 @@
+{
+ "blind-s2-e2e": {
+  "b_cubed": 0.7,
+  "ceaf_e": 0.407,
+  "conll_f1": 0.664,
+  "gold_unlinked_singletons": 2,
+  "kind": "e2e",
+  "lea": 0.635,
+  "muc": 0.886,
+  "placed": 366,
+  "run": "runs/converge-s2/blind/gvc",
+  "units": 977
+ },
+ "ours-s2-e2e": {
+  "b_cubed": 0.607,
+  "ceaf_e": 0.315,
+  "conll_f1": 0.615,
+  "gold_unlinked_singletons": 10,
+  "kind": "e2e",
+  "lea": 0.567,
+  "muc": 0.922,
+  "placed": 782,
+  "run": "runs/converge-s2/ours/gvc",
+  "units": 977
+ }
+}

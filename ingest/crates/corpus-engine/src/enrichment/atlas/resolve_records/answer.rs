@@ -15,13 +15,6 @@ use crate::enrichment::pipeline::types::ChatPrompt;
 
 const SYSTEM: &str = include_str!("../resolve_records_prompt.md");
 
-/// How much of a candidate the model is shown: its distinct surfaces, its
-/// first cites, and the passages around its statements from this many
-/// documents. Cost knobs: they bound the prompt, they decide nothing.
-const SHOWN_SURFACES: usize = 4;
-const SHOWN_CITES: usize = 3;
-const SHOWN_DOCUMENTS: usize = 2;
-
 /// Whether `cite`, with our statement markers removed and whitespace folded,
 /// is non-empty and occurs in the folded body, as written or inside the one
 /// pair of quotation marks it is wrapped in. Exact otherwise: case and
@@ -95,7 +88,7 @@ pub(super) fn prompt(
         u.push_str(&format!(
             "- {} {}",
             rec.handle,
-            describe(rec, &reasons(proposal))
+            describe(rec, &reasons(proposal), doc.id)
         ));
     }
     let mut marks: Vec<(usize, usize)> = asked
@@ -185,49 +178,85 @@ pub(super) fn reasons(proposal: &Proposal) -> String {
     why.join("; ")
 }
 
+/// How many of a candidate's statements the model is shown: its distinct
+/// surfaces, as the pre-C2 renderer bounded them. A cost knob: it bounds the
+/// prompt, it decides nothing.
+const SHOWN_SURFACES: usize = 4;
+
+/// The label every quote of another document carries in a RESOLVE question.
+pub const QUOTE_LABEL: &str = "quoted from another document";
+
 /// A candidate record as every RESOLVE question shows it: why it was
-/// offered, its distinct surfaces, its first cites, and the passages around
-/// its statements in up to `SHOWN_DOCUMENTS` documents. One renderer for the
-/// partition and the forced choice, so the two arms differ only in the question.
-pub(super) fn describe(rec: &Record, why: &str) -> String {
-    let mut surfaces: Vec<&str> = Vec::new();
-    for e in &rec.evidence {
-        if surfaces.len() < SHOWN_SURFACES && !surfaces.contains(&e.surface.as_str()) {
-            surfaces.push(&e.surface);
-        }
-    }
-    let cites: Vec<String> = rec
-        .evidence
+/// offered, how many statements of how many documents it holds, the values
+/// declared structure gave it, and up to `SHOWN_SURFACES` of its distinct
+/// statements' quotes from other documents, one line each, marked as quoted
+/// from that document. A quote is the whole lines its statement's span lies
+/// on (`passage::lines_of`), the lines the statement cites, so nothing else of
+/// that document is shown (C2, narrowed 2026-10-10): a RESOLVE answer is a choice, never a
+/// citation, and code checks every cite against the asked statement's own
+/// document (`cite_found`). This question's own document is already in the
+/// question, so none of it is quoted. One renderer for the partition and the
+/// forced choice, so the two arms differ only in the question.
+pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
+    let documents: BTreeSet<&str> = rec.evidence.iter().map(|e| e.document.as_str()).collect();
+    let values: Vec<String> = rec
+        .keys
         .iter()
-        .filter_map(|e| e.cite.as_deref())
-        .take(SHOWN_CITES)
-        .map(|c| format!("{:?}", fold_ws(c)))
+        .chain(rec.fields.iter())
+        .map(|(k, vs)| {
+            format!(
+                "{k}: {}",
+                vs.iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            )
+        })
         .collect();
     let mut out = format!(
-        "({why}), said as {}; cited: {}\n",
-        surfaces
-            .iter()
-            .map(|s| format!("{s:?}"))
-            .collect::<Vec<_>>()
-            .join(", "),
-        if cites.is_empty() {
-            "nothing".to_string()
+        "({why}), {} statement(s) in {} document(s); {}\n",
+        rec.statements.len().max(rec.evidence.len()),
+        documents.len(),
+        if values.is_empty() {
+            "no declared value".to_string()
         } else {
-            cites.join(" | ")
+            values.join("; ")
         }
     );
-    let mut documents: Vec<&str> = Vec::new();
-    for e in &rec.evidence {
-        if documents.contains(&e.document.as_str()) || documents.len() == SHOWN_DOCUMENTS {
+    let mut shown: Vec<String> = Vec::new();
+    let mut withheld = 0usize;
+    for e in rec.evidence.iter().filter(|e| e.document != this_document) {
+        let quote = e.quote.clone();
+        if shown.contains(&quote) {
             continue;
         }
-        documents.push(&e.document);
-        match &e.title {
-            Some(t) => out.push_str(&format!("    {t:?}: \"…{}…\"\n", e.context)),
-            None => out.push_str(&format!("    \"…{}…\"\n", e.context)),
+        if shown.len() == SHOWN_SURFACES {
+            withheld += 1;
+            continue;
         }
+        match &e.title {
+            Some(t) => out.push_str(&format!("    {QUOTE_LABEL} {t:?}: {quote:?}\n")),
+            None => out.push_str(&format!("    {QUOTE_LABEL}: {quote:?}\n")),
+        }
+        shown.push(quote);
     }
+    debug!(
+        record = %rec.id,
+        quoted = shown.len(),
+        withheld,
+        quotes = ?shown,
+        "atlas/resolve: a candidate's spans from other documents, quoted up to SHOWN_SURFACES"
+    );
     out
+}
+
+/// A record this document opened earlier, shown by its own words in this
+/// document: the one document the question holds.
+pub(super) fn describe_opened(surface: &str, context: &str) -> String {
+    format!(
+        "(opened earlier in this document), said as {:?}\n    \"…{context}…\"\n",
+        fold_ws(surface)
+    )
 }
 
 /// Below this TF-IDF similarity a shared wording is not proposed as the same

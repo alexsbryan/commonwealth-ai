@@ -237,6 +237,7 @@ mod tests {
             metadata: None,
             source_file: None,
             embed_text: None,
+            source: crate::extractors::DocSource::Record,
         }
     }
 
@@ -261,6 +262,7 @@ mod tests {
             metadata: None,
             source_file: None,
             embed_text: None,
+            source: crate::extractors::DocSource::Record,
         };
         assert_eq!(doc_title_for_filter(&d).as_deref(), Some("photosynthesis"));
     }

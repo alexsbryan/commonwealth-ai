@@ -12,13 +12,31 @@ fn criterion(keys: &[&str]) -> Criterion {
         description: String::new(),
         same_when: Some("the same act by the same parties at the same time and place".into()),
         keys: keys.iter().map(|k| k.to_string()).collect(),
-        evidential: vec![],
         bar: None,
-        model_choice: None,
-        reasoned_choice: None,
-        proposed_answer: None,
         necessary: vec![],
     }
+}
+
+/// A resolver weighing at chosen weights: fitted back from pairs made at
+/// these rates (prior .4, `estimate::expected_pairs`); `over` replaces a
+/// source's (m, u).
+fn weights(over: &[(&str, f64, f64)]) -> Resolver {
+    let mut sources = vec![
+        ("model_choice", 0.9, 0.05),
+        ("reasoned_choice", 0.9, 0.05),
+        ("proposed_answer", 0.7, 0.2),
+        ("document_thread", 0.9, 0.05),
+        ("document_date", 0.3, 0.2),
+        ("necessary:kind", 0.95, 0.4),
+    ];
+    for &(name, m, u) in over {
+        let at = sources
+            .iter()
+            .position(|s| s.0 == name)
+            .expect("a seeded source");
+        sources[at] = (name, m, u);
+    }
+    Resolver::seeded(super::estimate::expected_pairs(0.4, &sources))
 }
 
 fn doc<'a>(id: &'a str, body: &'a str) -> Document<'a> {
@@ -48,6 +66,7 @@ fn stmt(id: &str, body: &str, surface: &str, nth: usize, keys: &[(&str, &str)]) 
         .expect("surface in body")
         .0;
     Statement {
+        read: Default::default(),
         id: id.into(),
         start,
         end: start + surface.len(),
@@ -145,7 +164,7 @@ async fn a_declared_key_decides_without_a_call() {
 
 #[tokio::test]
 async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
-    let b1 = "A man was shot in Salisbury on Sunday. The shooting left him dead.";
+    let b1 = "A man was shot in Salisbury on Sunday.\nNeighbours heard nothing.\nThe shooting left him dead.";
     let b2 = "Police said the Salisbury shooting on Sunday was a dispute.";
     let (infer, seen) = scripted(vec![
         answer(vec![part(
@@ -204,13 +223,15 @@ async fn one_call_groups_a_document_and_joins_a_shown_candidate() {
         "{}",
         prompts[0].user
     );
-    assert!(
-        prompts[1]
-            .user
-            .contains("- r0 (document similarity 1.00), said as \"shot\", \"shooting\"; cited: \"shot in Salisbury on Sunday\" | \"The shooting\"\n    \"…A man was shot in Salisbury on Sunday. The shooting left him dead.…\""),
-        "{}",
-        prompts[1].user
-    );
+    // C2 narrowed: shown by what it holds and the lines its statements cite,
+    // each marked as a quote; no other words of the earlier document.
+    let shown = "- r0 (document similarity 1.00), 2 statement(s) in 1 document(s); \
+                 no declared value\n    quoted from another document: \
+                 \"A man was shot in Salisbury on Sunday.\"\n    quoted from another document: \
+                 \"The shooting left him dead.\"\n";
+    let u = &prompts[1].user;
+    assert!(u.contains(shown), "{u}");
+    assert!(!u.contains("Neighbours"), "{u}");
     assert_eq!(
         prompts[1].response_schema.as_ref().unwrap()["properties"]["particulars"]["items"]
             ["properties"]["same_as"]["enum"],
@@ -240,6 +261,65 @@ async fn an_uncitable_cite_refuses_its_statement_only_never_defaulted() {
         .await;
     assert_eq!(labels(&r), ["refused:cite_not_found", "opened"]);
     assert_eq!(res.records()[0].statements, ["b"]);
+}
+
+#[test]
+fn a_quote_is_the_whole_lines_its_statement_lies_on() {
+    let body = "Title line\nA man was shot in Salisbury.\nPolice  came.\nLast line";
+    let at = body.find("shot").unwrap();
+    assert_eq!(lines_of(body, at, at + 4), "A man was shot in Salisbury.");
+    let from = body.find("A man").unwrap();
+    let to = body.find("came.").unwrap() + "came.".len();
+    assert_eq!(
+        lines_of(body, from, to),
+        "A man was shot in Salisbury. Police came."
+    );
+    // A folded body has no lines: the span is the reader's cited lines.
+    assert_eq!(lines_of("a folded body", 2, 8), "folded");
+}
+
+/// C2, narrowed: a candidate's quote is shown, but a cite copied from it is
+/// checked against the asked statement's own document and refused there.
+#[tokio::test]
+async fn a_cite_copied_from_a_candidates_quote_is_refused_never_a_citation() {
+    let b1 = "A man was shot in Salisbury on Sunday.\nIt rained.";
+    let b2 = "Police said it was a dispute.";
+    let (infer, seen) = scripted(vec![
+        answer(vec![part(
+            "none",
+            &[("s0", "shot in Salisbury"), ("s1", "on Sunday")],
+        )]),
+        answer(vec![part("r0", &[("s0", "shot in Salisbury")])]),
+    ]);
+    let mut res = Resolver::default();
+    let c = criterion(&[]);
+    res.resolve_document(
+        &c,
+        doc("d1", b1),
+        &[
+            stmt("a", b1, "shot in Salisbury", 0, &[]),
+            stmt("b", b1, "Sunday", 0, &[]),
+        ],
+        &[],
+        Answerer::Model(&infer),
+    )
+    .await;
+    let two = res
+        .resolve_document(
+            &c,
+            doc("d2", b2),
+            &[stmt("c", b2, "dispute", 0, &[])],
+            &[prop("a")],
+            Answerer::Model(&infer),
+        )
+        .await;
+    let shown = seen.lock().unwrap()[1].user.clone();
+    assert!(
+        shown.contains("quoted from another document: \"A man was shot in Salisbury on Sunday.\""),
+        "{shown}"
+    );
+    assert_eq!(labels(&two), ["refused:cite_not_found"]);
+    assert_eq!(res.records()[0].statements, ["a", "b"]);
 }
 
 #[tokio::test]
@@ -356,6 +436,7 @@ async fn no_criterion_asks_nothing_and_a_failed_call_refuses_the_batch() {
 async fn a_span_outside_the_body_is_unreadable() {
     let (infer, _) = scripted(vec![]);
     let s = Statement {
+        read: Default::default(),
         id: "a".into(),
         start: 4,
         end: 99,
@@ -451,12 +532,13 @@ fn record(id: &str, surface: &str) -> Record {
         statements: vec![],
         keys: Default::default(),
         fields: Default::default(),
+        supplied: Default::default(),
         evidence: vec![Evidence {
             document: "d0".into(),
             title: None,
             surface: surface.into(),
             cite: None,
-            context: "Police said the shooting happened at noon.".into(),
+            quote: surface.into(),
         }],
     }
 }
@@ -559,7 +641,8 @@ async fn a_forced_choice_per_statement_offers_what_the_document_opened_and_keeps
         json!({"A": 0.3, "0": 0.7}),
         Value::String("A".into()),
     ]);
-    let mut res = Resolver::default();
+    // A proposed answer worth little, so the model is asked each time.
+    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
     let c = criterion(&[]);
     let b0 = "A fire broke out downtown; the blaze spread.";
     let r0 = res
@@ -634,47 +717,6 @@ async fn a_forced_choice_per_statement_offers_what_the_document_opened_and_keeps
 }
 
 #[tokio::test]
-async fn the_most_probable_shown_record_is_selected_with_its_probability() {
-    let (infer, _) = scripted(vec![json!({"A": 0.2, "B": 0.7, "0": 0.1})]);
-    let mut res = Resolver::default();
-    let c = criterion(&[]);
-    let seed = "Fire downtown. Flood uptown.";
-    let (s, _) = scripted(vec![answer(vec![
-        part("none", &[("s0", "Fire downtown")]),
-        part("none", &[("s1", "Flood uptown")]),
-    ])]);
-    res.resolve_document(
-        &c,
-        doc("d0", seed),
-        &[
-            stmt("x", seed, "Fire", 0, &[]),
-            stmt("y", seed, "Flood", 0, &[]),
-        ],
-        &[],
-        Answerer::Model(&s),
-    )
-    .await;
-    let b = "The flood receded.";
-    let r = res
-        .resolve_document(
-            &c,
-            doc("d1", b),
-            &[stmt("z", b, "flood", 0, &[])],
-            &[similar("x", 0.4), similar("y", 0.6)],
-            Answerer::Select(&infer),
-        )
-        .await;
-    assert_eq!(
-        r.outcomes[0].outcome,
-        Outcome::Decided(Decision::Selected {
-            record: "y".into(),
-            probability: 0.7
-        })
-    );
-    assert_eq!(res.records()[1].statements, ["y", "z"]);
-}
-
-#[tokio::test]
 async fn a_distribution_that_leaves_a_shown_label_out_is_refused_not_read_as_zero() {
     let mut res = Resolver::default();
     let c = criterion(&[]);
@@ -709,18 +751,17 @@ async fn a_distribution_that_leaves_a_shown_label_out_is_refused_not_read_as_zer
     assert_eq!(res.records().len(), 1);
 }
 
-/// A criterion weighing the declared thread at `precision` against `bar`.
-fn thread_evidence(precision: f64, bar: f64) -> Criterion {
+/// The type's bar at .5.
+fn barred() -> Criterion {
     Criterion {
-        evidential: vec![(DocumentStamp::Thread, precision)],
-        bar: Some(bar),
+        bar: Some(0.5),
         ..criterion(&[])
     }
 }
 
 #[tokio::test]
-async fn an_evidential_field_one_earlier_record_holds_links_without_a_call() {
-    let mut res = Resolver::default();
+async fn a_declared_field_one_earlier_record_holds_links_without_a_call() {
+    let mut res = weights(&[]);
     let a = "Install fails on Windows.";
     res.resolve_document(
         &criterion(&[]),
@@ -732,10 +773,11 @@ async fn an_evidential_field_one_earlier_record_holds_links_without_a_call() {
     .await;
     // Any call would refuse: no answer is scripted.
     let (infer, _) = scripted(vec![]);
+    let thread = res.estimate().precision("document_thread").unwrap();
     let b = "labeled bug";
     let r = res
         .resolve_document(
-            &thread_evidence(0.83, 0.5),
+            &barred(),
             threaded("d1", b, "7"),
             &[stmt("z", b, "labeled bug", 0, &[])],
             &[],
@@ -743,21 +785,34 @@ async fn an_evidential_field_one_earlier_record_holds_links_without_a_call() {
         )
         .await;
     assert_eq!(r.calls, 0);
-    assert_eq!(
-        r.outcomes[0].outcome,
-        Outcome::Decided(Decision::Field {
-            record: "x".into(),
-            field: "document_thread",
-            value: "7".into(),
-            precision: 0.83
-        })
-    );
+    // The thread agrees; the proposed answer, shown nothing, proposed none.
+    match &r.outcomes[0].outcome {
+        Outcome::Decided(Decision::Weighed {
+            record,
+            posterior,
+            sources,
+        }) => {
+            assert_eq!(record, "x");
+            assert!(*posterior > 0.5, "{posterior}");
+            assert_eq!(
+                sources,
+                &[Vote {
+                    source: "document_thread".into(),
+                    record: "x".into(),
+                    precision: thread
+                }]
+            );
+        }
+        o => panic!("{o:?}"),
+    }
     assert_eq!(res.records()[0].statements, ["x", "z"]);
     assert_eq!(res.records()[0].fields["document_thread"].len(), 1);
 }
 
 #[tokio::test]
-async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
+async fn a_field_weighed_below_the_bar_or_held_by_two_records_settles_nothing() {
+    // Two records hold thread 7 (made with nothing weighed yet), then the
+    // thread is weighed at a high weight: it agrees with both alike.
     let mut res = Resolver::default();
     for (id, body) in [("d0", "Install fails."), ("d1", "Lockfile drifts.")] {
         res.resolve_document(
@@ -769,11 +824,13 @@ async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
         )
         .await;
     }
+    let seeded = weights(&[]);
+    res.estimate = seeded.estimate.clone();
     let b = "labeled bug";
-    // Held by two records: the answerer decides (alone, no candidate: opened).
+    // Held by two records: a tie, so the answerer decides (alone, no candidate: opened).
     let two = res
         .resolve_document(
-            &thread_evidence(0.83, 0.5),
+            &barred(),
             threaded("d2", b, "7"),
             &[stmt("z", b, b, 0, &[])],
             &[],
@@ -782,7 +839,8 @@ async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
         .await;
     assert_eq!(two.outcomes[0].outcome.label(), "opened");
 
-    let mut one = Resolver::default();
+    // A thread estimated to be worth little on this corpus.
+    let mut one = weights(&[("document_thread", 0.45, 0.35)]);
     one.resolve_document(
         &criterion(&[]),
         threaded("d0", "Install fails.", "7"),
@@ -793,7 +851,7 @@ async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
     .await;
     let below = one
         .resolve_document(
-            &thread_evidence(0.4, 0.5),
+            &barred(),
             threaded("d1", b, "7"),
             &[stmt("y", b, b, 0, &[])],
             &[],
@@ -806,45 +864,17 @@ async fn a_field_below_the_bar_or_held_by_two_records_settles_nothing() {
 /// A criterion with `kind` necessary over two values.
 fn kind_necessary() -> Criterion {
     Criterion {
-        necessary: vec![("kind".into(), vec!["firing".into(), "death".into()])],
+        necessary: vec![ClosedAttr {
+            name: "kind".into(),
+            description: String::new(),
+            values: vec!["firing".into(), "death".into()],
+        }],
         ..criterion(&[])
     }
 }
 
-#[tokio::test]
-async fn a_candidate_whose_read_kind_differs_is_not_offered() {
-    let mut res = Resolver::default();
-    let a = "The victim died.";
-    // d0's statement is READ as a death (B), then opens: no candidate.
-    let (read0, _) = scripted(vec![json!({"A": 0.1, "B": 0.85, "0": 0.05})]);
-    res.resolve_document(
-        &kind_necessary(),
-        doc("d0", a),
-        &[stmt("x", a, "died", 0, &[])],
-        &[],
-        Answerer::Select(&read0),
-    )
-    .await;
-    assert_eq!(res.records()[0].fields["kind"].len(), 1);
-    // d1's is READ as a firing (A): the death is not offered, so no choice is asked.
-    let (read1, seen) = scripted(vec![json!({"A": 0.9, "B": 0.05, "0": 0.05})]);
-    let b = "Shots were fired.";
-    let r = res
-        .resolve_document(
-            &kind_necessary(),
-            doc("d1", b),
-            &[stmt("z", b, "Shots", 0, &[])],
-            &[similar("x", 0.6)],
-            Answerer::Select(&read1),
-        )
-        .await;
-    assert_eq!((r.vetoed, r.calls, seen.lock().unwrap().len()), (1, 1, 1));
-    assert_eq!(r.outcomes[0].outcome.label(), "opened");
-}
-
 /// d0 opens record "x" said as "Fire downtown"; returns the resolver.
-async fn fire_downtown() -> Resolver {
-    let mut res = Resolver::default();
+async fn fire_downtown(mut res: Resolver) -> Resolver {
     let a = "Fire downtown.";
     res.resolve_document(
         &criterion(&[]),
@@ -858,77 +888,8 @@ async fn fire_downtown() -> Resolver {
 }
 
 #[tokio::test]
-async fn a_choice_below_the_bar_is_not_asked_and_the_proposed_answer_decides() {
-    let mut res = fire_downtown().await;
-    let c = Criterion {
-        bar: Some(0.5),
-        model_choice: Some(0.3),
-        proposed_answer: Some(0.8),
-        ..criterion(&[])
-    };
-    let (infer, seen) = scripted(vec![]);
-    let b = "Fire downtown, again.";
-    let r = res
-        .resolve_document(
-            &c,
-            doc("d1", b),
-            &[stmt("z", b, "Fire downtown", 0, &[])],
-            &[similar("x", 0.6)],
-            Answerer::Select(&infer),
-        )
-        .await;
-    assert_eq!((r.calls, seen.lock().unwrap().len()), (0, 0));
-    assert_eq!(
-        r.outcomes[0].outcome,
-        Outcome::Decided(Decision::Proposed {
-            record: "x".into(),
-            precision: 0.8
-        })
-    );
-}
-
-#[tokio::test]
-async fn of_the_choice_and_the_proposed_answer_the_more_precise_decides() {
-    for (model_choice, want) in [(0.9, "selected"), (0.7, "proposed")] {
-        let mut res = fire_downtown().await;
-        let y = "Flood uptown.";
-        res.resolve_document(
-            &criterion(&[]),
-            doc("d0b", y),
-            &[stmt("y", y, "Flood uptown", 0, &[])],
-            &[],
-            Answerer::Proposed,
-        )
-        .await;
-        let c = Criterion {
-            bar: Some(0.5),
-            model_choice: Some(model_choice),
-            proposed_answer: Some(0.8),
-            ..criterion(&[])
-        };
-        // The proposed answer names x (same wording); the model's argmax is y (B).
-        let (infer, _) = scripted(vec![json!({"A": 0.1, "B": 0.8, "0": 0.1})]);
-        let b = "Fire downtown, again.";
-        let r = res
-            .resolve_document(
-                &c,
-                doc("d1", b),
-                &[stmt("z", b, "Fire downtown", 0, &[])],
-                &[similar("x", 0.6), similar("y", 0.5)],
-                Answerer::Select(&infer),
-            )
-            .await;
-        assert_eq!(
-            r.outcomes[0].outcome.label(),
-            want,
-            "model_choice {model_choice}"
-        );
-    }
-}
-
-#[tokio::test]
-async fn of_two_fields_that_settle_on_different_records_the_more_precise_decides() {
-    let mut res = Resolver::default();
+async fn of_two_fields_that_name_different_records_the_one_estimated_worth_more_decides() {
+    let mut res = weights(&[]);
     let stamps = |t: &str, d: &str| -> &'static [(DocumentStamp, String)] {
         Vec::leak(vec![
             (DocumentStamp::Thread, t.to_string()),
@@ -951,15 +912,8 @@ async fn of_two_fields_that_settle_on_different_records_the_more_precise_decides
         )
         .await;
     }
-    // Thread 7 is held by x, the date by y: the thread is the more precise.
-    let c = Criterion {
-        evidential: vec![
-            (DocumentStamp::Date, 16.0 / 18.0),
-            (DocumentStamp::Thread, 191.0 / 212.0),
-        ],
-        bar: Some(0.5),
-        ..criterion(&[])
-    };
+    // Thread 7 is held by x, the date by y: the thread is worth more here.
+    let c = barred();
     let b = "merged";
     let r = res
         .resolve_document(
@@ -980,7 +934,7 @@ async fn of_two_fields_that_settle_on_different_records_the_more_precise_decides
 
 #[tokio::test]
 async fn a_reasoned_choice_is_read_after_the_models_own_reasoning() {
-    let mut res = fire_downtown().await;
+    let mut res = fire_downtown(weights(&[])).await;
     // First the reasoning (generated), then the forced choice read after it.
     let (infer, seen) = scripted(vec![
         json!("Both are the downtown fire; the rule holds. A"),
@@ -1012,3 +966,9 @@ async fn a_reasoned_choice_is_read_after_the_models_own_reasoning() {
 
 #[path = "necessary_tests.rs"]
 mod necessary_tests;
+
+#[path = "weighed_tests.rs"]
+mod weighed_tests;
+
+#[path = "settle_tests.rs"]
+mod settle_tests;

@@ -459,7 +459,8 @@ fn ontology_schema(descriptor: &Value) -> Value {
                         "properties": {
                             "date":   { "type": "string" },
                             "thread": { "type": "string" },
-                            "id":     { "type": "string" }
+                            "id":     { "type": "string" },
+                            "author": { "type": "string" }
                         }
                     }
                 }
@@ -627,21 +628,10 @@ fn ontology_type_schema(descriptor: &Value) -> Value {
             "identity":          str_array.clone(),
             "identity_fallback": str_array.clone(),
             // RESOLVE (`ONTOLOGY_METHOD.md`): the criterion in words, the
-            // evidence each kind of link carries with its counts, the bar a
-            // link's expected precision must clear, and the extracted
+            // bar a link's posterior must clear (what each source is worth
+            // is estimated on the corpus, never declared), and the extracted
             // fields a mention must fill before it can be linked.
             "identity_criterion":  { "type": "string" },
-            "identity_evidential": { "type": "array", "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["evidence", "right", "of", "measured_on"],
-                "properties": {
-                    "evidence":    { "type": "string" },
-                    "right":       { "type": "integer", "minimum": 0 },
-                    "of":          { "type": "integer", "minimum": 0 },
-                    "measured_on": { "type": "string" }
-                }
-            } },
             "identity_bar":        { "type": "number", "minimum": 0, "maximum": 1 },
             "identity_necessary":  str_array.clone(),
             "force":            { "enum": desc_ontology(descriptor, "force") },
@@ -666,6 +656,8 @@ fn ontology_attr_schema(descriptor: &Value) -> Value {
             "description": { "type": "string" },
             // A declared path or fold id that fills the attribute (no model).
             "derived":     { "type": "string" },
+            // How a record folds what its statements read of the field.
+            "by":          { "enum": ["agree", "all", "most", "earliest", "latest"] },
             "values":      { "type": "array", "items": { "type": "string" } },
             "unit":        { "type": "string" },
             "range":       { "type": "boolean" },

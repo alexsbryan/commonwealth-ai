@@ -1,0 +1,97 @@
+{
+ "run": "/private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/529adbbe-7581-47dd-b4e0-ea456446e06e/scratchpad/runs/gvc-treatment2/resolve",
+ "documents": 78,
+ "statements": 977,
+ "within_doc_links": {
+  "p": 0.558,
+  "r": 0.309,
+  "f1": 0.398,
+  "n": 1011
+ },
+ "cross_doc_links": {
+  "p": 0.427,
+  "r": 0.286,
+  "f1": 0.342,
+  "n": 1157
+ },
+ "records": 337,
+ "gold_chains": 271,
+ "calls_per_document": 24.91,
+ "proposer_recall": 0.988,
+ "joinable": 434,
+ "tally": {
+  "held": 31,
+  "opened": 617,
+  "weighed": 329
+ },
+ "tokens": {
+  "calls": 1943,
+  "prompt_tokens": 1611246,
+  "completion_tokens": 0,
+  "total_tokens": 1611246
+ },
+ "wall_seconds": 1753,
+ "verdict": {
+  "pairs": 11492,
+  "base_rate_same": 0.056,
+  "says_same": 329,
+  "precision": 0.462,
+  "recall": 0.238,
+  "lr_plus_nats": 2.68,
+  "lr_plus_ci90": [
+   2.23,
+   3.22
+  ],
+  "lr_minus_nats": -0.26,
+  "lr_minus_ci90": [
+   -0.4,
+   -0.16
+  ],
+  "brier": 0.1087,
+  "ece": 0.1022,
+  "mean_p": 0.088,
+  "auc": 0.838,
+  "detect_auc": 0.692,
+  "top_right_given_same": 0.871
+ },
+ "er": {
+  "b_cubed": {
+   "precision": 0.7119491392265187,
+   "recall": 0.5638869242156612,
+   "f1": 0.6293266381470696,
+   "n_aligned": 977,
+   "unmatched_predicted": [],
+   "unmatched_gold": []
+  },
+  "recovery_b_cubed": {
+   "precision": 0.7119491392265187,
+   "recall": 0.5638869242156612,
+   "f1": 0.6293266381470696,
+   "n_aligned": 977,
+   "unmatched_predicted": [],
+   "unmatched_gold": []
+  },
+  "pairwise": {
+   "precision": 0.48800738007380073,
+   "recall": 0.29777652687869405,
+   "f1": 0.3698654081454291,
+   "n_aligned_pairs": 476776
+  },
+  "ceaf_e": {
+   "precision": 0.4269596507611381,
+   "recall": 0.5797828467900326,
+   "f1": 0.49177199211298533
+  },
+  "lea": {
+   "precision": 0.4791913761207518,
+   "recall": 0.4007147520965331,
+   "f1": 0.4364534973249016
+  },
+  "muc": {
+   "precision": 0.729064039408867,
+   "recall": 0.6288951841359773,
+   "f1": 0.6752851711026616
+  },
+  "conll_f1": 0.5987946004542388
+ }
+}

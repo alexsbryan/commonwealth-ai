@@ -46,22 +46,28 @@ from `<data_dir>/client-token`. `GET /status` and `GET
 /oicp/v1/capabilities` are exempt so a peer can probe before
 authenticating. No token configured plus a remote caller fails closed.
 
-**Lending the API to one machine.** `client_token` is one secret every
-caller shares, so taking it back from a laptop takes it back from the
-desktop and the editor too. Give the machine its own instead:
+**Lending the API to one machine, or naming a tool.** `client_token` is
+one secret every caller shares, so taking it back from a laptop takes it
+back from the desktop and the editor too. Give each client its own named
+credential instead:
 
 ```bash
-svrn mesh token --new laptop     # prints the bearer once
-svrn mesh token --list           # labels, never tokens
-svrn mesh token --revoke laptop  # that one stops working on its next request
+svrn daemon key --add laptop     # prints the key once (svrn_…)
+svrn daemon key --list           # names and groups, never keys
+svrn daemon key --revoke laptop  # that one stops working on its next request
 ```
 
-A named token is the whole client API, for a machine you own — for
-lending a model to someone else, `svrn mesh grant` is the scoped,
+The client sends it as `Authorization: Bearer <key>`, from any address,
+and its calls are logged by its name. Minting needs `[daemon] loopback`
+declared in config.toml: `"owner"` on a desktop, where a local process
+presenting nothing is the owner, or `"none"` where every caller presents a
+key. A named credential is the whole client API, for a client you own —
+for lending a model to someone else, `svrn mesh grant` is the scoped,
 expiring version. Revoking takes effect immediately; no restart, and no
-other token is disturbed. The shared token keeps working alongside
-these until you set `[daemon] client_tokens = "named-only"`, after
-which it is refused with a sentence saying so.
+other credential is disturbed. The shared token keeps working alongside
+these until you set `[daemon] client_tokens = "named-only"`, after which
+it is refused with a sentence saying so. (`svrn mesh token`, the older
+verb, is retired and says so.)
 
 **Some routes are loopback-only regardless of token.** `/mcp`,
 `/v1/mesh/*`, `/v1/admin/*`, `/v1/solve/*` and everything under
@@ -85,7 +91,7 @@ CC0: implement it freely on either side, no obligations.
 
 ## 1. Point any OpenAI client at the local model
 
-The universal recipe. Base URL, any non-empty key (loopback ignores it):
+The universal recipe. Base URL, any non-empty key not starting with `svrn_`; on loopback it is ignored:
 
 ```sh
 export OPENAI_BASE_URL=http://localhost:9741/v1

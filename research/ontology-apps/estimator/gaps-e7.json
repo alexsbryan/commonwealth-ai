@@ -1,0 +1,2998 @@
+{
+ "verdict": "NOT WORTH (stop fired)",
+ "chosen": null,
+ "stop": [
+  "c2-lines-gvc-resolve-alone/proposed_answer: entity 0.596 <= 0.607",
+  "c2-lines-gvc-resolve-alone/model_choice: entity 0.401 <= 0.677"
+ ],
+ "lookalikes": {
+  "c2-lines-gvc-resolve-alone": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 498,
+     "same": 289,
+     "different": 209,
+     "text_precision": 0.58,
+     "entity": {
+      "agrees_on": 483,
+      "precision": 0.596,
+      "recall_same": 0.997,
+      "false_links_left": 14,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 148,
+      "precision": 0.493,
+      "recall_same": 0.253,
+      "false_links_left": 134,
+      "judged": true
+     },
+     "necessary:kind": {
+      "agrees_on": 341,
+      "precision": 0.607,
+      "recall_same": 0.716,
+      "false_links_left": 75,
+      "judged": true
+     }
+    },
+    "model_choice": {
+     "agreed": 216,
+     "same": 87,
+     "different": 129,
+     "text_precision": 0.403,
+     "entity": {
+      "agrees_on": 212,
+      "precision": 0.401,
+      "recall_same": 0.977,
+      "false_links_left": 2,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 23,
+      "precision": 0.565,
+      "recall_same": 0.149,
+      "false_links_left": 119,
+      "judged": true
+     },
+     "necessary:kind": {
+      "agrees_on": 96,
+      "precision": 0.677,
+      "recall_same": 0.747,
+      "false_links_left": 98,
+      "judged": true
+     }
+    }
+   },
+   "lines": {
+    "proposed_answer": {
+     "agreed": 498,
+     "same": 289,
+     "different": 209,
+     "text_precision": 0.58,
+     "entity": {
+      "agrees_on": 31,
+      "precision": 0.806,
+      "recall_same": 0.087,
+      "false_links_left": 203,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 148,
+      "precision": 0.493,
+      "recall_same": 0.253,
+      "false_links_left": 134,
+      "judged": true
+     },
+     "necessary:kind": {
+      "agrees_on": 341,
+      "precision": 0.607,
+      "recall_same": 0.716,
+      "false_links_left": 75,
+      "judged": true
+     }
+    },
+    "model_choice": {
+     "agreed": 216,
+     "same": 87,
+     "different": 129,
+     "text_precision": 0.403,
+     "entity": {
+      "agrees_on": 30,
+      "precision": 0.1,
+      "recall_same": 0.034,
+      "false_links_left": 102,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 23,
+      "precision": 0.565,
+      "recall_same": 0.149,
+      "false_links_left": 119,
+      "judged": true
+     },
+     "necessary:kind": {
+      "agrees_on": 96,
+      "precision": 0.677,
+      "recall_same": 0.747,
+      "false_links_left": 98,
+      "judged": true
+     }
+    }
+   }
+  },
+  "blind-r2--gvc-resolve-alone": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 510,
+     "same": 146,
+     "different": 364,
+     "text_precision": 0.286,
+     "entity": {
+      "agrees_on": 491,
+      "precision": 0.293,
+      "recall_same": 0.986,
+      "false_links_left": 17,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 181,
+      "precision": 0.271,
+      "recall_same": 0.336,
+      "false_links_left": 232,
+      "judged": true
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 364,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 502,
+     "same": 125,
+     "different": 377,
+     "text_precision": 0.249,
+     "entity": {
+      "agrees_on": 500,
+      "precision": 0.248,
+      "recall_same": 0.992,
+      "false_links_left": 1,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 19,
+      "precision": 0.105,
+      "recall_same": 0.016,
+      "false_links_left": 360,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 377,
+      "judged": false
+     }
+    }
+   },
+   "lines": {
+    "proposed_answer": {
+     "agreed": 510,
+     "same": 146,
+     "different": 364,
+     "text_precision": 0.286,
+     "entity": {
+      "agrees_on": 27,
+      "precision": 0.333,
+      "recall_same": 0.062,
+      "false_links_left": 346,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 181,
+      "precision": 0.271,
+      "recall_same": 0.336,
+      "false_links_left": 232,
+      "judged": true
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 364,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 502,
+     "same": 125,
+     "different": 377,
+     "text_precision": 0.249,
+     "entity": {
+      "agrees_on": 34,
+      "precision": 0.176,
+      "recall_same": 0.048,
+      "false_links_left": 349,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 19,
+      "precision": 0.105,
+      "recall_same": 0.016,
+      "false_links_left": 360,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 377,
+      "judged": false
+     }
+    }
+   }
+  },
+  "c2-lines--ward-tune": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 4,
+     "same": 2,
+     "different": 2,
+     "text_precision": 0.5,
+     "entity": {
+      "agrees_on": 4,
+      "precision": 0.5,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 2,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 2,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 8,
+     "same": 8,
+     "different": 0,
+     "text_precision": 1.0,
+     "entity": {
+      "agrees_on": 8,
+      "precision": 1.0,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 0,
+      "judged": false
+     }
+    }
+   }
+  },
+  "c2-lines--uv-third": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 54,
+     "same": 49,
+     "different": 5,
+     "text_precision": 0.907,
+     "entity": {
+      "agrees_on": 1,
+      "precision": 1.0,
+      "recall_same": 0.02,
+      "false_links_left": 5,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 5,
+      "precision": 1.0,
+      "recall_same": 0.102,
+      "false_links_left": 5,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 5,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 5,
+     "same": 3,
+     "different": 2,
+     "text_precision": 0.6,
+     "entity": {
+      "agrees_on": 3,
+      "precision": 1.0,
+      "recall_same": 1.0,
+      "false_links_left": 2,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 2,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 2,
+      "judged": false
+     }
+    }
+   }
+  },
+  "c2-lines--gvc": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 9,
+     "same": 5,
+     "different": 4,
+     "text_precision": 0.556,
+     "entity": {
+      "agrees_on": 9,
+      "precision": 0.556,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 9,
+      "precision": 0.556,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 4,
+      "precision": 0.5,
+      "recall_same": 0.4,
+      "false_links_left": 2,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 26,
+     "same": 10,
+     "different": 16,
+     "text_precision": 0.385,
+     "entity": {
+      "agrees_on": 25,
+      "precision": 0.4,
+      "recall_same": 1.0,
+      "false_links_left": 1,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 3,
+      "precision": 1.0,
+      "recall_same": 0.3,
+      "false_links_left": 16,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 6,
+      "precision": 0.5,
+      "recall_same": 0.3,
+      "false_links_left": 13,
+      "judged": false
+     }
+    }
+   },
+   "lines": {
+    "proposed_answer": {
+     "agreed": 9,
+     "same": 5,
+     "different": 4,
+     "text_precision": 0.556,
+     "entity": {
+      "agrees_on": 1,
+      "precision": 1.0,
+      "recall_same": 0.2,
+      "false_links_left": 4,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 9,
+      "precision": 0.556,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 4,
+      "precision": 0.5,
+      "recall_same": 0.4,
+      "false_links_left": 2,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 26,
+     "same": 10,
+     "different": 16,
+     "text_precision": 0.385,
+     "entity": {
+      "agrees_on": 3,
+      "precision": 1.0,
+      "recall_same": 0.3,
+      "false_links_left": 16,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 3,
+      "precision": 1.0,
+      "recall_same": 0.3,
+      "false_links_left": 16,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 6,
+      "precision": 0.5,
+      "recall_same": 0.3,
+      "false_links_left": 13,
+      "judged": false
+     }
+    }
+   }
+  },
+  "blind-r2--ward-tune": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 21,
+     "same": 13,
+     "different": 8,
+     "text_precision": 0.619,
+     "entity": {
+      "agrees_on": 21,
+      "precision": 0.619,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 8,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 8,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 14,
+     "same": 14,
+     "different": 0,
+     "text_precision": 1.0,
+     "entity": {
+      "agrees_on": 14,
+      "precision": 1.0,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 0,
+      "judged": false
+     }
+    }
+   }
+  },
+  "blind-r2--uv-third": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 993,
+     "same": 750,
+     "different": 243,
+     "text_precision": 0.755,
+     "entity": {
+      "agrees_on": 99,
+      "precision": 0.909,
+      "recall_same": 0.12,
+      "false_links_left": 234,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 6,
+      "precision": 1.0,
+      "recall_same": 0.008,
+      "false_links_left": 243,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 243,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 129,
+     "same": 121,
+     "different": 8,
+     "text_precision": 0.938,
+     "entity": {
+      "agrees_on": 105,
+      "precision": 1.0,
+      "recall_same": 0.868,
+      "false_links_left": 8,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 8,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 8,
+      "judged": false
+     }
+    }
+   }
+  },
+  "blind-r2--gvc": {
+   "document": {
+    "proposed_answer": {
+     "agreed": 2,
+     "same": 1,
+     "different": 1,
+     "text_precision": 0.5,
+     "entity": {
+      "agrees_on": 2,
+      "precision": 0.5,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 2,
+      "precision": 0.5,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 1,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 39,
+     "same": 18,
+     "different": 21,
+     "text_precision": 0.462,
+     "entity": {
+      "agrees_on": 38,
+      "precision": 0.474,
+      "recall_same": 1.0,
+      "false_links_left": 1,
+      "judged": true
+     },
+     "document_date": {
+      "agrees_on": 5,
+      "precision": 0.4,
+      "recall_same": 0.111,
+      "false_links_left": 18,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 21,
+      "judged": false
+     }
+    }
+   },
+   "lines": {
+    "proposed_answer": {
+     "agreed": 2,
+     "same": 1,
+     "different": 1,
+     "text_precision": 0.5,
+     "entity": {
+      "agrees_on": 1,
+      "precision": 1.0,
+      "recall_same": 1.0,
+      "false_links_left": 1,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 2,
+      "precision": 0.5,
+      "recall_same": 1.0,
+      "false_links_left": 0,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 1,
+      "judged": false
+     }
+    },
+    "model_choice": {
+     "agreed": 39,
+     "same": 18,
+     "different": 21,
+     "text_precision": 0.462,
+     "entity": {
+      "agrees_on": 4,
+      "precision": 0.75,
+      "recall_same": 0.167,
+      "false_links_left": 20,
+      "judged": false
+     },
+     "document_date": {
+      "agrees_on": 5,
+      "precision": 0.4,
+      "recall_same": 0.111,
+      "false_links_left": 18,
+      "judged": false
+     },
+     "necessary:kind": {
+      "agrees_on": 0,
+      "precision": null,
+      "recall_same": 0.0,
+      "false_links_left": 21,
+      "judged": false
+     }
+    }
+   }
+  }
+ },
+ "results": {
+  "c2-lines-gvc-resolve-alone": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.155,
+      "labelled": 0.141,
+      "agreed": 2368,
+      "ci90": [
+       0.091,
+       0.188
+      ],
+      "judged": true,
+      "gap": 0.014
+     },
+     "model_choice": {
+      "estimated": 0.753,
+      "labelled": 0.403,
+      "agreed": 216,
+      "ci90": [
+       0.349,
+       0.455
+      ],
+      "judged": true,
+      "gap": 0.35
+     },
+     "necessary:kind": {
+      "estimated": 0.182,
+      "labelled": 0.218,
+      "agreed": 3268,
+      "ci90": [
+       0.192,
+       0.244
+      ],
+      "judged": true,
+      "gap": 0.036
+     },
+     "proposed_answer": {
+      "estimated": 0.989,
+      "labelled": 0.58,
+      "agreed": 498,
+      "ci90": [
+       0.528,
+       0.638
+      ],
+      "judged": true,
+      "gap": 0.408
+     }
+    },
+    "largest_gap": [
+     0.408,
+     "proposed_answer"
+    ]
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.311,
+      "labelled": 0.141,
+      "agreed": 2368,
+      "ci90": [
+       0.091,
+       0.188
+      ],
+      "judged": true,
+      "gap": 0.169
+     },
+     "entity": {
+      "estimated": 0.157,
+      "labelled": 0.124,
+      "agreed": 9895,
+      "ci90": [
+       0.108,
+       0.141
+      ],
+      "judged": true,
+      "gap": 0.033
+     },
+     "model_choice": {
+      "estimated": 0.991,
+      "labelled": 0.403,
+      "agreed": 216,
+      "ci90": [
+       0.349,
+       0.455
+      ],
+      "judged": true,
+      "gap": 0.588
+     },
+     "necessary:kind": {
+      "estimated": 0.264,
+      "labelled": 0.218,
+      "agreed": 3268,
+      "ci90": [
+       0.192,
+       0.244
+      ],
+      "judged": true,
+      "gap": 0.047
+     },
+     "proposed_answer": {
+      "estimated": 0.995,
+      "labelled": 0.58,
+      "agreed": 498,
+      "ci90": [
+       0.528,
+       0.638
+      ],
+      "judged": true,
+      "gap": 0.414
+     }
+    },
+    "largest_gap": [
+     0.588,
+     "model_choice"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.755,
+      "labelled": 0.141,
+      "agreed": 2368,
+      "ci90": [
+       0.091,
+       0.188
+      ],
+      "judged": true,
+      "gap": 0.613
+     },
+     "entity:Location": {
+      "estimated": 0.889,
+      "labelled": 0.183,
+      "agreed": 6555,
+      "ci90": [
+       0.161,
+       0.205
+      ],
+      "judged": true,
+      "gap": 0.706
+     },
+     "entity:Organization": {
+      "estimated": 0.643,
+      "labelled": 0.13,
+      "agreed": 7853,
+      "ci90": [
+       0.111,
+       0.152
+      ],
+      "judged": true,
+      "gap": 0.513
+     },
+     "entity:Person": {
+      "estimated": 0.859,
+      "labelled": 0.168,
+      "agreed": 5997,
+      "ci90": [
+       0.148,
+       0.192
+      ],
+      "judged": true,
+      "gap": 0.69
+     },
+     "model_choice": {
+      "estimated": 0.98,
+      "labelled": 0.403,
+      "agreed": 216,
+      "ci90": [
+       0.349,
+       0.455
+      ],
+      "judged": true,
+      "gap": 0.577
+     },
+     "necessary:kind": {
+      "estimated": 0.458,
+      "labelled": 0.218,
+      "agreed": 3268,
+      "ci90": [
+       0.192,
+       0.244
+      ],
+      "judged": true,
+      "gap": 0.24
+     },
+     "proposed_answer": {
+      "estimated": 0.94,
+      "labelled": 0.58,
+      "agreed": 498,
+      "ci90": [
+       0.528,
+       0.638
+      ],
+      "judged": true,
+      "gap": 0.359
+     }
+    },
+    "largest_gap": [
+     0.706,
+     "entity:Location"
+    ]
+   },
+   "E5L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.174,
+      "labelled": 0.141,
+      "agreed": 2368,
+      "ci90": [
+       0.091,
+       0.188
+      ],
+      "judged": true,
+      "gap": 0.032
+     },
+     "entity": {
+      "estimated": 0.258,
+      "labelled": 0.238,
+      "agreed": 303,
+      "ci90": [
+       0.197,
+       0.274
+      ],
+      "judged": true,
+      "gap": 0.02
+     },
+     "model_choice": {
+      "estimated": 0.852,
+      "labelled": 0.403,
+      "agreed": 216,
+      "ci90": [
+       0.349,
+       0.455
+      ],
+      "judged": true,
+      "gap": 0.45
+     },
+     "necessary:kind": {
+      "estimated": 0.192,
+      "labelled": 0.218,
+      "agreed": 3268,
+      "ci90": [
+       0.192,
+       0.244
+      ],
+      "judged": true,
+      "gap": 0.026
+     },
+     "proposed_answer": {
+      "estimated": 0.991,
+      "labelled": 0.58,
+      "agreed": 498,
+      "ci90": [
+       0.528,
+       0.638
+      ],
+      "judged": true,
+      "gap": 0.411
+     }
+    },
+    "largest_gap": [
+     0.45,
+     "model_choice"
+    ]
+   },
+   "E6L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.19,
+      "labelled": 0.141,
+      "agreed": 2368,
+      "ci90": [
+       0.091,
+       0.188
+      ],
+      "judged": true,
+      "gap": 0.048
+     },
+     "entity:Location": {
+      "estimated": 0.338,
+      "labelled": 0.263,
+      "agreed": 179,
+      "ci90": [
+       0.218,
+       0.315
+      ],
+      "judged": true,
+      "gap": 0.076
+     },
+     "entity:Organization": {
+      "estimated": 0.416,
+      "labelled": 0.169,
+      "agreed": 77,
+      "ci90": [
+       0.083,
+       0.26
+      ],
+      "judged": true,
+      "gap": 0.247
+     },
+     "entity:Person": {
+      "estimated": 0.429,
+      "labelled": 0.275,
+      "agreed": 80,
+      "ci90": [
+       0.183,
+       0.371
+      ],
+      "judged": true,
+      "gap": 0.154
+     },
+     "model_choice": {
+      "estimated": 0.865,
+      "labelled": 0.403,
+      "agreed": 216,
+      "ci90": [
+       0.349,
+       0.455
+      ],
+      "judged": true,
+      "gap": 0.462
+     },
+     "necessary:kind": {
+      "estimated": 0.208,
+      "labelled": 0.218,
+      "agreed": 3268,
+      "ci90": [
+       0.192,
+       0.244
+      ],
+      "judged": true,
+      "gap": 0.01
+     },
+     "proposed_answer": {
+      "estimated": 0.991,
+      "labelled": 0.58,
+      "agreed": 498,
+      "ci90": [
+       0.528,
+       0.638
+      ],
+      "judged": true,
+      "gap": 0.411
+     }
+    },
+    "largest_gap": [
+     0.462,
+     "model_choice"
+    ]
+   }
+  },
+  "blind-r2--gvc-resolve-alone": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.816,
+      "labelled": 0.237,
+      "agreed": 916,
+      "ci90": [
+       0.161,
+       0.283
+      ],
+      "judged": true,
+      "gap": 0.58
+     },
+     "model_choice": {
+      "estimated": 0.986,
+      "labelled": 0.249,
+      "agreed": 502,
+      "ci90": [
+       0.204,
+       0.292
+      ],
+      "judged": true,
+      "gap": 0.737
+     },
+     "proposed_answer": {
+      "estimated": 0.773,
+      "labelled": 0.286,
+      "agreed": 510,
+      "ci90": [
+       0.245,
+       0.325
+      ],
+      "judged": true,
+      "gap": 0.487
+     }
+    },
+    "largest_gap": [
+     0.737,
+     "model_choice"
+    ]
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.804,
+      "labelled": 0.237,
+      "agreed": 916,
+      "ci90": [
+       0.161,
+       0.283
+      ],
+      "judged": true,
+      "gap": 0.567
+     },
+     "entity": {
+      "estimated": 0.207,
+      "labelled": 0.074,
+      "agreed": 7308,
+      "ci90": [
+       0.055,
+       0.099
+      ],
+      "judged": true,
+      "gap": 0.134
+     },
+     "model_choice": {
+      "estimated": 0.997,
+      "labelled": 0.249,
+      "agreed": 502,
+      "ci90": [
+       0.204,
+       0.292
+      ],
+      "judged": true,
+      "gap": 0.748
+     },
+     "proposed_answer": {
+      "estimated": 0.859,
+      "labelled": 0.286,
+      "agreed": 510,
+      "ci90": [
+       0.245,
+       0.325
+      ],
+      "judged": true,
+      "gap": 0.573
+     }
+    },
+    "largest_gap": [
+     0.748,
+     "model_choice"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.912,
+      "labelled": 0.237,
+      "agreed": 916,
+      "ci90": [
+       0.161,
+       0.283
+      ],
+      "judged": true,
+      "gap": 0.675
+     },
+     "entity:Location": {
+      "estimated": 0.732,
+      "labelled": 0.164,
+      "agreed": 3241,
+      "ci90": [
+       0.122,
+       0.218
+      ],
+      "judged": true,
+      "gap": 0.567
+     },
+     "entity:Organization": {
+      "estimated": 0.329,
+      "labelled": 0.075,
+      "agreed": 6219,
+      "ci90": [
+       0.054,
+       0.106
+      ],
+      "judged": true,
+      "gap": 0.254
+     },
+     "entity:Person": {
+      "estimated": 0.732,
+      "labelled": 0.178,
+      "agreed": 2696,
+      "ci90": [
+       0.134,
+       0.241
+      ],
+      "judged": true,
+      "gap": 0.554
+     },
+     "model_choice": {
+      "estimated": 0.986,
+      "labelled": 0.249,
+      "agreed": 502,
+      "ci90": [
+       0.204,
+       0.292
+      ],
+      "judged": true,
+      "gap": 0.737
+     },
+     "proposed_answer": {
+      "estimated": 0.935,
+      "labelled": 0.286,
+      "agreed": 510,
+      "ci90": [
+       0.245,
+       0.325
+      ],
+      "judged": true,
+      "gap": 0.649
+     }
+    },
+    "largest_gap": [
+     0.737,
+     "model_choice"
+    ]
+   },
+   "E5L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.831,
+      "labelled": 0.237,
+      "agreed": 916,
+      "ci90": [
+       0.161,
+       0.283
+      ],
+      "judged": true,
+      "gap": 0.594
+     },
+     "entity": {
+      "estimated": 0.599,
+      "labelled": 0.259,
+      "agreed": 112,
+      "ci90": [
+       0.143,
+       0.353
+      ],
+      "judged": true,
+      "gap": 0.34
+     },
+     "model_choice": {
+      "estimated": 0.987,
+      "labelled": 0.249,
+      "agreed": 502,
+      "ci90": [
+       0.204,
+       0.292
+      ],
+      "judged": true,
+      "gap": 0.738
+     },
+     "proposed_answer": {
+      "estimated": 0.8,
+      "labelled": 0.286,
+      "agreed": 510,
+      "ci90": [
+       0.245,
+       0.325
+      ],
+      "judged": true,
+      "gap": 0.514
+     }
+    },
+    "largest_gap": [
+     0.738,
+     "model_choice"
+    ]
+   },
+   "E6L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.857,
+      "labelled": 0.237,
+      "agreed": 916,
+      "ci90": [
+       0.161,
+       0.283
+      ],
+      "judged": true,
+      "gap": 0.62
+     },
+     "entity:Location": {
+      "estimated": 0.785,
+      "labelled": 0.338,
+      "agreed": 77,
+      "ci90": [
+       0.188,
+       0.444
+      ],
+      "judged": true,
+      "gap": 0.448
+     },
+     "entity:Organization": {
+      "estimated": 0.311,
+      "labelled": 0.032,
+      "agreed": 31,
+      "ci90": [
+       0.0,
+       0.087
+      ],
+      "judged": true,
+      "gap": 0.278
+     },
+     "entity:Person": {
+      "estimated": 0.706,
+      "labelled": 0.3,
+      "agreed": 10,
+      "ci90": [
+       0.0,
+       0.556
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.987,
+      "labelled": 0.249,
+      "agreed": 502,
+      "ci90": [
+       0.204,
+       0.292
+      ],
+      "judged": true,
+      "gap": 0.738
+     },
+     "proposed_answer": {
+      "estimated": 0.819,
+      "labelled": 0.286,
+      "agreed": 510,
+      "ci90": [
+       0.245,
+       0.325
+      ],
+      "judged": true,
+      "gap": 0.533
+     }
+    },
+    "largest_gap": [
+     0.738,
+     "model_choice"
+    ]
+   }
+  },
+  "c2-lines--ward-tune": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.665,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.665,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.665,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.62,
+      "labelled": 1.0,
+      "agreed": 8,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "necessary:term": {
+      "estimated": 0.116,
+      "labelled": 0.5,
+      "agreed": 4,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "proposed_answer": {
+      "estimated": 0.729,
+      "labelled": 0.5,
+      "agreed": 4,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": null
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.665,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.665,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.665,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity": {
+      "estimated": 0.06,
+      "labelled": 0.213,
+      "agreed": 122,
+      "ci90": [
+       0.102,
+       0.366
+      ],
+      "judged": true,
+      "gap": 0.153
+     },
+     "model_choice": {
+      "estimated": 0.628,
+      "labelled": 1.0,
+      "agreed": 8,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "necessary:term": {
+      "estimated": 0.117,
+      "labelled": 0.5,
+      "agreed": 4,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "proposed_answer": {
+      "estimated": 0.731,
+      "labelled": 0.5,
+      "agreed": 4,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.153,
+     "entity"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.682,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.682,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.682,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity:Location": {
+      "estimated": 0.174,
+      "labelled": 0.32,
+      "agreed": 25,
+      "ci90": [
+       0.125,
+       0.524
+      ],
+      "judged": true,
+      "gap": 0.146
+     },
+     "entity:Organization": {
+      "estimated": 0.153,
+      "labelled": 0.348,
+      "agreed": 66,
+      "ci90": [
+       0.157,
+       0.584
+      ],
+      "judged": true,
+      "gap": 0.195
+     },
+     "entity:Person": {
+      "estimated": 0.101,
+      "labelled": 0.234,
+      "agreed": 111,
+      "ci90": [
+       0.11,
+       0.398
+      ],
+      "judged": true,
+      "gap": 0.133
+     },
+     "model_choice": {
+      "estimated": 0.944,
+      "labelled": 1.0,
+      "agreed": 8,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "necessary:term": {
+      "estimated": 0.154,
+      "labelled": 0.5,
+      "agreed": 4,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "proposed_answer": {
+      "estimated": 0.839,
+      "labelled": 0.5,
+      "agreed": 4,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.195,
+     "entity:Organization"
+    ]
+   }
+  },
+  "c2-lines--uv-third": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.884,
+      "labelled": 1.0,
+      "agreed": 6,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.493,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.978,
+      "labelled": 0.927,
+      "agreed": 55,
+      "ci90": [
+       0.875,
+       0.982
+      ],
+      "judged": true,
+      "gap": 0.051
+     },
+     "model_choice": {
+      "estimated": 0.593,
+      "labelled": 0.6,
+      "agreed": 5,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "proposed_answer": {
+      "estimated": 0.963,
+      "labelled": 0.907,
+      "agreed": 54,
+      "ci90": [
+       0.849,
+       0.965
+      ],
+      "judged": true,
+      "gap": 0.055
+     }
+    },
+    "largest_gap": [
+     0.055,
+     "proposed_answer"
+    ]
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.884,
+      "labelled": 1.0,
+      "agreed": 6,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.493,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.978,
+      "labelled": 0.927,
+      "agreed": 55,
+      "ci90": [
+       0.875,
+       0.982
+      ],
+      "judged": true,
+      "gap": 0.051
+     },
+     "entity": {
+      "estimated": 0.23,
+      "labelled": 0.421,
+      "agreed": 19,
+      "ci90": [
+       0.174,
+       0.632
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.593,
+      "labelled": 0.6,
+      "agreed": 5,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "proposed_answer": {
+      "estimated": 0.963,
+      "labelled": 0.907,
+      "agreed": 54,
+      "ci90": [
+       0.849,
+       0.965
+      ],
+      "judged": true,
+      "gap": 0.055
+     }
+    },
+    "largest_gap": [
+     0.055,
+     "proposed_answer"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.21,
+      "labelled": 1.0,
+      "agreed": 6,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.639,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.042,
+      "labelled": 0.927,
+      "agreed": 55,
+      "ci90": [
+       0.875,
+       0.982
+      ],
+      "judged": true,
+      "gap": 0.885
+     },
+     "entity:Location": {
+      "estimated": 0.595,
+      "labelled": 0.75,
+      "agreed": 4,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "entity:Organization": {
+      "estimated": 0.225,
+      "labelled": 0.471,
+      "agreed": 17,
+      "ci90": [
+       0.2,
+       0.7
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "entity:Person": {
+      "estimated": 0.112,
+      "labelled": 0.667,
+      "agreed": 3,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.345,
+      "labelled": 0.6,
+      "agreed": 5,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "proposed_answer": {
+      "estimated": 0.024,
+      "labelled": 0.907,
+      "agreed": 54,
+      "ci90": [
+       0.849,
+       0.965
+      ],
+      "judged": true,
+      "gap": 0.884
+     }
+    },
+    "largest_gap": [
+     0.885,
+     "document_thread"
+    ]
+   }
+  },
+  "c2-lines--gvc": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.618,
+      "labelled": 0.157,
+      "agreed": 115,
+      "ci90": [
+       0.091,
+       0.222
+      ],
+      "judged": true,
+      "gap": 0.462
+     },
+     "document_id": {
+      "estimated": 0.57,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.85,
+      "labelled": 0.385,
+      "agreed": 26,
+      "ci90": [
+       0.219,
+       0.56
+      ],
+      "judged": true,
+      "gap": 0.466
+     },
+     "necessary:kind": {
+      "estimated": 0.104,
+      "labelled": 0.031,
+      "agreed": 510,
+      "ci90": [
+       0.019,
+       0.045
+      ],
+      "judged": true,
+      "gap": 0.073
+     },
+     "proposed_answer": {
+      "estimated": 0.964,
+      "labelled": 0.556,
+      "agreed": 9,
+      "ci90": [
+       0.429,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.466,
+     "model_choice"
+    ]
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.862,
+      "labelled": 0.157,
+      "agreed": 115,
+      "ci90": [
+       0.091,
+       0.222
+      ],
+      "judged": true,
+      "gap": 0.706
+     },
+     "document_id": {
+      "estimated": 0.559,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity": {
+      "estimated": 0.216,
+      "labelled": 0.043,
+      "agreed": 952,
+      "ci90": [
+       0.031,
+       0.059
+      ],
+      "judged": true,
+      "gap": 0.173
+     },
+     "model_choice": {
+      "estimated": 0.974,
+      "labelled": 0.385,
+      "agreed": 26,
+      "ci90": [
+       0.219,
+       0.56
+      ],
+      "judged": true,
+      "gap": 0.589
+     },
+     "necessary:kind": {
+      "estimated": 0.158,
+      "labelled": 0.031,
+      "agreed": 510,
+      "ci90": [
+       0.019,
+       0.045
+      ],
+      "judged": true,
+      "gap": 0.127
+     },
+     "proposed_answer": {
+      "estimated": 0.967,
+      "labelled": 0.556,
+      "agreed": 9,
+      "ci90": [
+       0.429,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.706,
+     "document_date"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.92,
+      "labelled": 0.157,
+      "agreed": 115,
+      "ci90": [
+       0.091,
+       0.222
+      ],
+      "judged": true,
+      "gap": 0.764
+     },
+     "document_id": {
+      "estimated": 0.626,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity:Location": {
+      "estimated": 0.757,
+      "labelled": 0.105,
+      "agreed": 389,
+      "ci90": [
+       0.075,
+       0.139
+      ],
+      "judged": true,
+      "gap": 0.652
+     },
+     "entity:Organization": {
+      "estimated": 0.488,
+      "labelled": 0.047,
+      "agreed": 700,
+      "ci90": [
+       0.034,
+       0.062
+      ],
+      "judged": true,
+      "gap": 0.441
+     },
+     "entity:Person": {
+      "estimated": 0.714,
+      "labelled": 0.091,
+      "agreed": 386,
+      "ci90": [
+       0.059,
+       0.142
+      ],
+      "judged": true,
+      "gap": 0.624
+     },
+     "model_choice": {
+      "estimated": 0.985,
+      "labelled": 0.385,
+      "agreed": 26,
+      "ci90": [
+       0.219,
+       0.56
+      ],
+      "judged": true,
+      "gap": 0.601
+     },
+     "necessary:kind": {
+      "estimated": 0.324,
+      "labelled": 0.031,
+      "agreed": 510,
+      "ci90": [
+       0.019,
+       0.045
+      ],
+      "judged": true,
+      "gap": 0.293
+     },
+     "proposed_answer": {
+      "estimated": 0.97,
+      "labelled": 0.556,
+      "agreed": 9,
+      "ci90": [
+       0.429,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.764,
+     "document_date"
+    ]
+   },
+   "E5L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.617,
+      "labelled": 0.157,
+      "agreed": 115,
+      "ci90": [
+       0.091,
+       0.222
+      ],
+      "judged": true,
+      "gap": 0.46
+     },
+     "document_id": {
+      "estimated": 0.572,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity": {
+      "estimated": 0.485,
+      "labelled": 0.2,
+      "agreed": 25,
+      "ci90": [
+       0.083,
+       0.308
+      ],
+      "judged": true,
+      "gap": 0.285
+     },
+     "model_choice": {
+      "estimated": 0.945,
+      "labelled": 0.385,
+      "agreed": 26,
+      "ci90": [
+       0.219,
+       0.56
+      ],
+      "judged": true,
+      "gap": 0.56
+     },
+     "necessary:kind": {
+      "estimated": 0.117,
+      "labelled": 0.031,
+      "agreed": 510,
+      "ci90": [
+       0.019,
+       0.045
+      ],
+      "judged": true,
+      "gap": 0.086
+     },
+     "proposed_answer": {
+      "estimated": 0.963,
+      "labelled": 0.556,
+      "agreed": 9,
+      "ci90": [
+       0.429,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.56,
+     "model_choice"
+    ]
+   },
+   "E6L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.582,
+      "labelled": 0.157,
+      "agreed": 115,
+      "ci90": [
+       0.091,
+       0.222
+      ],
+      "judged": true,
+      "gap": 0.426
+     },
+     "document_id": {
+      "estimated": 0.576,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity:Location": {
+      "estimated": 0.636,
+      "labelled": 0.231,
+      "agreed": 13,
+      "ci90": [
+       0.0,
+       0.444
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "entity:Organization": {
+      "estimated": 0.401,
+      "labelled": 0.273,
+      "agreed": 11,
+      "ci90": [
+       0.071,
+       0.5
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "entity:Person": {
+      "estimated": 0.497,
+      "labelled": 0.0,
+      "agreed": 3,
+      "ci90": [
+       0.0,
+       0.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.935,
+      "labelled": 0.385,
+      "agreed": 26,
+      "ci90": [
+       0.219,
+       0.56
+      ],
+      "judged": true,
+      "gap": 0.55
+     },
+     "necessary:kind": {
+      "estimated": 0.112,
+      "labelled": 0.031,
+      "agreed": 510,
+      "ci90": [
+       0.019,
+       0.045
+      ],
+      "judged": true,
+      "gap": 0.081
+     },
+     "proposed_answer": {
+      "estimated": 0.963,
+      "labelled": 0.556,
+      "agreed": 9,
+      "ci90": [
+       0.429,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.55,
+     "model_choice"
+    ]
+   }
+  },
+  "blind-r2--ward-tune": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.507,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.507,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.507,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.513,
+      "labelled": 1.0,
+      "agreed": 14,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "necessary:direction": {
+      "estimated": 0.101,
+      "labelled": 0.248,
+      "agreed": 145,
+      "ci90": [
+       0.1,
+       0.45
+      ],
+      "judged": true,
+      "gap": 0.147
+     },
+     "proposed_answer": {
+      "estimated": 0.784,
+      "labelled": 0.619,
+      "agreed": 21,
+      "ci90": [
+       0.273,
+       0.963
+      ],
+      "judged": true,
+      "gap": 0.165
+     }
+    },
+    "largest_gap": [
+     0.165,
+     "proposed_answer"
+    ]
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.514,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.514,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.514,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity": {
+      "estimated": 0.099,
+      "labelled": 0.361,
+      "agreed": 438,
+      "ci90": [
+       0.214,
+       0.526
+      ],
+      "judged": true,
+      "gap": 0.262
+     },
+     "model_choice": {
+      "estimated": 0.636,
+      "labelled": 1.0,
+      "agreed": 14,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "necessary:direction": {
+      "estimated": 0.144,
+      "labelled": 0.248,
+      "agreed": 145,
+      "ci90": [
+       0.1,
+       0.45
+      ],
+      "judged": true,
+      "gap": 0.104
+     },
+     "proposed_answer": {
+      "estimated": 0.853,
+      "labelled": 0.619,
+      "agreed": 21,
+      "ci90": [
+       0.273,
+       0.963
+      ],
+      "judged": true,
+      "gap": 0.234
+     }
+    },
+    "largest_gap": [
+     0.262,
+     "entity"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.691,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.691,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.691,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity:Location": {
+      "estimated": 0.995,
+      "labelled": 0.38,
+      "agreed": 187,
+      "ci90": [
+       0.172,
+       0.629
+      ],
+      "judged": true,
+      "gap": 0.615
+     },
+     "entity:Organization": {
+      "estimated": 0.8,
+      "labelled": 0.419,
+      "agreed": 246,
+      "ci90": [
+       0.256,
+       0.589
+      ],
+      "judged": true,
+      "gap": 0.381
+     },
+     "entity:Person": {
+      "estimated": 0.744,
+      "labelled": 0.374,
+      "agreed": 422,
+      "ci90": [
+       0.225,
+       0.542
+      ],
+      "judged": true,
+      "gap": 0.369
+     },
+     "model_choice": {
+      "estimated": 0.98,
+      "labelled": 1.0,
+      "agreed": 14,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "necessary:direction": {
+      "estimated": 0.777,
+      "labelled": 0.248,
+      "agreed": 145,
+      "ci90": [
+       0.1,
+       0.45
+      ],
+      "judged": true,
+      "gap": 0.528
+     },
+     "proposed_answer": {
+      "estimated": 0.969,
+      "labelled": 0.619,
+      "agreed": 21,
+      "ci90": [
+       0.273,
+       0.963
+      ],
+      "judged": true,
+      "gap": 0.35
+     }
+    },
+    "largest_gap": [
+     0.615,
+     "entity:Location"
+    ]
+   }
+  },
+  "blind-r2--uv-third": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.442,
+      "labelled": 0.733,
+      "agreed": 15,
+      "ci90": [
+       0.533,
+       0.909
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.497,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.995,
+      "labelled": 0.687,
+      "agreed": 1345,
+      "ci90": [
+       0.588,
+       0.783
+      ],
+      "judged": true,
+      "gap": 0.308
+     },
+     "model_choice": {
+      "estimated": 0.968,
+      "labelled": 0.938,
+      "agreed": 129,
+      "ci90": [
+       0.875,
+       0.969
+      ],
+      "judged": true,
+      "gap": 0.03
+     },
+     "proposed_answer": {
+      "estimated": 0.998,
+      "labelled": 0.755,
+      "agreed": 993,
+      "ci90": [
+       0.693,
+       0.811
+      ],
+      "judged": true,
+      "gap": 0.243
+     }
+    },
+    "largest_gap": [
+     0.308,
+     "document_thread"
+    ]
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.443,
+      "labelled": 0.733,
+      "agreed": 15,
+      "ci90": [
+       0.533,
+       0.909
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.499,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.995,
+      "labelled": 0.687,
+      "agreed": 1345,
+      "ci90": [
+       0.588,
+       0.783
+      ],
+      "judged": true,
+      "gap": 0.308
+     },
+     "entity": {
+      "estimated": 0.442,
+      "labelled": 0.907,
+      "agreed": 482,
+      "ci90": [
+       0.779,
+       0.962
+      ],
+      "judged": true,
+      "gap": 0.465
+     },
+     "model_choice": {
+      "estimated": 0.973,
+      "labelled": 0.938,
+      "agreed": 129,
+      "ci90": [
+       0.875,
+       0.969
+      ],
+      "judged": true,
+      "gap": 0.035
+     },
+     "proposed_answer": {
+      "estimated": 0.998,
+      "labelled": 0.755,
+      "agreed": 993,
+      "ci90": [
+       0.693,
+       0.811
+      ],
+      "judged": true,
+      "gap": 0.243
+     }
+    },
+    "largest_gap": [
+     0.465,
+     "entity"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.314,
+      "labelled": 0.733,
+      "agreed": 15,
+      "ci90": [
+       0.533,
+       0.909
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "document_id": {
+      "estimated": 0.784,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "document_thread": {
+      "estimated": 0.112,
+      "labelled": 0.687,
+      "agreed": 1345,
+      "ci90": [
+       0.588,
+       0.783
+      ],
+      "judged": true,
+      "gap": 0.575
+     },
+     "entity:Location": {
+      "estimated": 0.957,
+      "labelled": 1.0,
+      "agreed": 80,
+      "ci90": [
+       1.0,
+       1.0
+      ],
+      "judged": true,
+      "gap": 0.043
+     },
+     "entity:Organization": {
+      "estimated": 0.371,
+      "labelled": 0.926,
+      "agreed": 391,
+      "ci90": [
+       0.755,
+       0.979
+      ],
+      "judged": true,
+      "gap": 0.555
+     },
+     "entity:Person": {
+      "estimated": 0.25,
+      "labelled": 0.852,
+      "agreed": 108,
+      "ci90": [
+       0.725,
+       0.956
+      ],
+      "judged": true,
+      "gap": 0.602
+     },
+     "model_choice": {
+      "estimated": 0.724,
+      "labelled": 0.938,
+      "agreed": 129,
+      "ci90": [
+       0.875,
+       0.969
+      ],
+      "judged": true,
+      "gap": 0.214
+     },
+     "proposed_answer": {
+      "estimated": 0.046,
+      "labelled": 0.755,
+      "agreed": 993,
+      "ci90": [
+       0.693,
+       0.811
+      ],
+      "judged": true,
+      "gap": 0.709
+     }
+    },
+    "largest_gap": [
+     0.709,
+     "proposed_answer"
+    ]
+   }
+  },
+  "blind-r2--gvc": {
+   "E0": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.701,
+      "labelled": 0.2,
+      "agreed": 40,
+      "ci90": [
+       0.077,
+       0.368
+      ],
+      "judged": true,
+      "gap": 0.501
+     },
+     "document_id": {
+      "estimated": 0.619,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.641,
+      "labelled": 0.462,
+      "agreed": 39,
+      "ci90": [
+       0.326,
+       0.6
+      ],
+      "judged": true,
+      "gap": 0.179
+     },
+     "proposed_answer": {
+      "estimated": 0.846,
+      "labelled": 0.5,
+      "agreed": 2,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.501,
+     "document_date"
+    ]
+   },
+   "E5": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.734,
+      "labelled": 0.2,
+      "agreed": 40,
+      "ci90": [
+       0.077,
+       0.368
+      ],
+      "judged": true,
+      "gap": 0.534
+     },
+     "document_id": {
+      "estimated": 0.635,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity": {
+      "estimated": 0.361,
+      "labelled": 0.121,
+      "agreed": 239,
+      "ci90": [
+       0.084,
+       0.165
+      ],
+      "judged": true,
+      "gap": 0.24
+     },
+     "model_choice": {
+      "estimated": 0.968,
+      "labelled": 0.462,
+      "agreed": 39,
+      "ci90": [
+       0.326,
+       0.6
+      ],
+      "judged": true,
+      "gap": 0.506
+     },
+     "proposed_answer": {
+      "estimated": 0.886,
+      "labelled": 0.5,
+      "agreed": 2,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.534,
+     "document_date"
+    ]
+   },
+   "E6": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.808,
+      "labelled": 0.2,
+      "agreed": 40,
+      "ci90": [
+       0.077,
+       0.368
+      ],
+      "judged": true,
+      "gap": 0.608
+     },
+     "document_id": {
+      "estimated": 0.634,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity:Location": {
+      "estimated": 0.68,
+      "labelled": 0.236,
+      "agreed": 123,
+      "ci90": [
+       0.169,
+       0.323
+      ],
+      "judged": true,
+      "gap": 0.444
+     },
+     "entity:Organization": {
+      "estimated": 0.441,
+      "labelled": 0.126,
+      "agreed": 199,
+      "ci90": [
+       0.08,
+       0.183
+      ],
+      "judged": true,
+      "gap": 0.315
+     },
+     "entity:Person": {
+      "estimated": 0.865,
+      "labelled": 0.28,
+      "agreed": 75,
+      "ci90": [
+       0.194,
+       0.373
+      ],
+      "judged": true,
+      "gap": 0.585
+     },
+     "model_choice": {
+      "estimated": 0.956,
+      "labelled": 0.462,
+      "agreed": 39,
+      "ci90": [
+       0.326,
+       0.6
+      ],
+      "judged": true,
+      "gap": 0.495
+     },
+     "proposed_answer": {
+      "estimated": 0.907,
+      "labelled": 0.5,
+      "agreed": 2,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.608,
+     "document_date"
+    ]
+   },
+   "E5L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.67,
+      "labelled": 0.2,
+      "agreed": 40,
+      "ci90": [
+       0.077,
+       0.368
+      ],
+      "judged": true,
+      "gap": 0.47
+     },
+     "document_id": {
+      "estimated": 0.607,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity": {
+      "estimated": 0.68,
+      "labelled": 0.545,
+      "agreed": 11,
+      "ci90": [
+       0.3,
+       0.786
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.609,
+      "labelled": 0.462,
+      "agreed": 39,
+      "ci90": [
+       0.326,
+       0.6
+      ],
+      "judged": true,
+      "gap": 0.148
+     },
+     "proposed_answer": {
+      "estimated": 0.831,
+      "labelled": 0.5,
+      "agreed": 2,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.47,
+     "document_date"
+    ]
+   },
+   "E6L": {
+    "sources": {
+     "document_date": {
+      "estimated": 0.581,
+      "labelled": 0.2,
+      "agreed": 40,
+      "ci90": [
+       0.077,
+       0.368
+      ],
+      "judged": true,
+      "gap": 0.381
+     },
+     "document_id": {
+      "estimated": 0.598,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "entity:Location": {
+      "estimated": 0.819,
+      "labelled": 0.625,
+      "agreed": 8,
+      "ci90": [
+       0.333,
+       0.875
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "entity:Organization": {
+      "estimated": 0.446,
+      "labelled": 0.4,
+      "agreed": 5,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     },
+     "entity:Person": {
+      "estimated": 0.66,
+      "labelled": null,
+      "agreed": 0,
+      "ci90": null,
+      "judged": false,
+      "gap": null
+     },
+     "model_choice": {
+      "estimated": 0.514,
+      "labelled": 0.462,
+      "agreed": 39,
+      "ci90": [
+       0.326,
+       0.6
+      ],
+      "judged": true,
+      "gap": 0.053
+     },
+     "proposed_answer": {
+      "estimated": 0.812,
+      "labelled": 0.5,
+      "agreed": 2,
+      "ci90": [
+       0.0,
+       1.0
+      ],
+      "judged": false,
+      "gap": null
+     }
+    },
+    "largest_gap": [
+     0.381,
+     "document_date"
+    ]
+   }
+  }
+ }
+}

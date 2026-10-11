@@ -19,6 +19,12 @@
 //! Per-peer errors (timeout, 503, unreachable) are swallowed into
 //! `corpora_unavailable` — one sleepy peer must not take the whole
 //! query down.
+//!
+//! The local corpora searched are the ones this caller may read
+//! ([`crate::oicp_evidence::readable_corpora`], the evidence routes' own
+//! decider). A requested corpus held here but outside that set is never
+//! fanned out either; it comes back unavailable and unhosted, exactly like
+//! a corpus nobody holds.
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -53,6 +59,7 @@ fn empty_knowledge_response() -> KnowledgeSearchResponse {
 
 pub async fn knowledge_search(
     State(state): State<AppState>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(mut request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     let limit = request.effective_limit() as usize;
@@ -105,17 +112,18 @@ pub async fn knowledge_search(
     let self_id = state.inner.fabric.identity.current();
 
     // Step 1: figure out what corpora are locally installed, keyed
-    // by id. This drives the "search here vs. fan out" split.
-    let local_corpora: HashSet<String> = match &state.inner.node.corpus_engine {
-        Some(e) => e
-            .installed_indexes()
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(|i| i.corpus_id)
-            .collect(),
-        None => HashSet::new(),
+    // by id. This drives the "search here vs. fan out" split; of those, the
+    // ones this caller may read are the ones searched here.
+    let installed = match &state.inner.node.corpus_engine {
+        Some(e) => e.installed_indexes().await.unwrap_or_default(),
+        None => Vec::new(),
     };
+    let local_corpora: HashSet<String> = installed.iter().map(|i| i.corpus_id.clone()).collect();
+    let principal = attached.as_ref().map(|axum::Extension(p)| &p.0);
+    let readable_local: HashSet<String> =
+        crate::oicp_evidence::readable_corpora(&state, principal, &installed)
+            .into_iter()
+            .collect();
 
     // Step 2: scan live mesh members for peers hosting additional
     // corpora. We clone what we need out of the lock so we can drop
@@ -136,7 +144,7 @@ pub async fn knowledge_search(
     };
     let (peer_offerings, target_corpora_if_unconstrained, peer_roster) = {
         let mut offerings: Vec<PeerOffering> = Vec::new();
-        let mut union: HashSet<String> = local_corpora.clone();
+        let mut union: HashSet<String> = readable_local.clone();
         let mut roster: Vec<(String, String, Vec<String>)> = Vec::new();
         for member in &members {
             if member.node_id == self_id {
@@ -204,9 +212,19 @@ pub async fn knowledge_search(
     // Step 4: search locally for target corpora we host.
     let local_targets: Vec<String> = target_corpora
         .iter()
-        .filter(|c| local_corpora.contains(*c))
+        .filter(|c| readable_local.contains(*c))
         .cloned()
         .collect();
+    let unreadable = target_corpora
+        .iter()
+        .filter(|c| local_corpora.contains(*c) && !readable_local.contains(*c))
+        .count();
+    if unreadable > 0 {
+        tracing::debug!(
+            unreadable,
+            "knowledge: held here, outside this caller's read scope; not searched"
+        );
+    }
     let mut all_results: Vec<KnowledgeResult> = Vec::new();
     let mut corpora_searched: HashSet<String> = HashSet::new();
     let mut corpora_unavailable: HashSet<String> = HashSet::new();
@@ -221,32 +239,11 @@ pub async fn knowledge_search(
                     {
                         Ok(results) => {
                             corpora_searched.insert(corpus_id.clone());
-                            all_results.extend(results.into_iter().map(|r| {
-                                KnowledgeResult {
-                                    // Provenance the SERVING index stamped,
-                                    // forwarded rather than dropped (TOPOLOGY §10
-                                    // rung 9.1). `stamped_custody` and not
-                                    // `custody` so "this index recorded no class"
-                                    // stays ABSENT on the wire rather than
-                                    // becoming the string "unknown" — the
-                                    // requester joins absence into a refusal.
-                                    custody: r
-                                        .provenance
-                                        .stamped_custody()
-                                        .map(|c| c.as_str().to_string()),
-                                    grain: Some(r.provenance.grain().as_str().to_string()),
-                                    content: r.content,
-                                    title: r.title,
-                                    corpus_id: corpus_id.clone(),
-                                    url: r.url,
-                                    score: r.score,
-                                    metadata: HashMap::new(),
-                                    chunk_id: r.chunk_id,
-                                    source_doc_id: r.source_doc_id,
-                                    peer_name: None,
-                                    peer_node_id: None,
-                                }
-                            }));
+                            // Each hit carries its text's record (v0.5 §3).
+                            all_results.extend(
+                                crate::oicp_evidence::knowledge_results(&index, corpus_id, results)
+                                    .await,
+                            );
                         }
                         Err(e) => {
                             tracing::warn!(

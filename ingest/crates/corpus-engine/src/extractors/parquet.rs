@@ -301,6 +301,7 @@ impl Iterator for ParquetIterator {
                     metadata: None,
                     source_file: self.source_file.clone(),
                     embed_text: None,
+                    source: super::DocSource::Record,
                 });
                 self.row_counter += 1;
             }

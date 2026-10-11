@@ -571,6 +571,7 @@ mod tests {
                 family: AttrFamily::Time { range: true },
                 description: String::new(),
                 derived: None,
+                by: None,
             }],
             ..Default::default()
         });

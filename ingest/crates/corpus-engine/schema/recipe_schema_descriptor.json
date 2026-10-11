@@ -24,6 +24,10 @@
       ]
     },
     {
+      "key": "inline",
+      "required": []
+    },
+    {
       "key": "huggingface_dataset",
       "required": [
         "repo"
@@ -176,7 +180,8 @@
     "attribute": [
       "name",
       "description",
-      "derived"
+      "derived",
+      "by"
     ],
     "attribute_families": [
       {
@@ -331,7 +336,6 @@
       "identity",
       "identity_fallback",
       "identity_criterion",
-      "identity_evidential",
       "identity_bar",
       "identity_necessary",
       "force",
@@ -346,7 +350,6 @@
       "vocabulary",
       "must_not",
       "types",
-      "document_reading",
       "max_entities_per_section",
       "voices",
       "change",

@@ -127,6 +127,7 @@ fn insert_chunk_for(e: &SymbolEnrichment, key: &str, content: String) -> InsertC
             mtime: None,
         },
         unit_id: None,
+        text_sha256: None,
     }
 }
 

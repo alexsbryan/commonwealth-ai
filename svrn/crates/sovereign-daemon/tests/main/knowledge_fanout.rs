@@ -240,6 +240,7 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
             source_file: None,
             code: Default::default(),
             unit_id: None,
+            text_sha256: None,
         }],
     )
     .await;

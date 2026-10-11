@@ -283,6 +283,7 @@ fn build_doc(record: &csv::StringRecord, cols: &ColumnIndex) -> Option<Extracted
         metadata: Some(metadata),
         source_file: None,
         embed_text: Some(embed_text),
+        source: super::DocSource::Record,
     })
 }
 

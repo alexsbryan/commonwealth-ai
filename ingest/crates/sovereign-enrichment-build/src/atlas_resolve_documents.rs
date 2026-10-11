@@ -10,7 +10,7 @@ use std::io::Write;
 use std::path::Path;
 
 use corpus_engine::enrichment::atlas::resolution_derived::{
-    derive_attributes, DeriveStage, DerivedReport,
+    derive_attributes, derives, DeriveStage, DerivedReport,
 };
 use corpus_engine::enrichment::atlas::resolution_records::{resolve_declared_types, BuildAtoms};
 use corpus_engine::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
@@ -51,13 +51,33 @@ pub(crate) fn load(
     policies: &OntologyPolicies,
     stamps: bool,
 ) -> Result<DocumentInputs, String> {
+    from_documents(
+        || {
+            super::corpus_io::section_documents(cfg)
+                .map_err(|e| format!("loading section documents: {e}"))
+        },
+        policies,
+        &cfg.corpus_id,
+        stamps,
+    )
+}
+
+/// [`load`] over documents the caller supplies: the corpus's own rows on the
+/// CLI path, a fixture's in the contract tests (`layer_contract_tests`).
+/// `documents` is called only when the declaration reads them.
+pub(crate) fn from_documents(
+    documents: impl FnOnce() -> Result<SectionDocuments, String>,
+    policies: &OntologyPolicies,
+    corpus_id: &str,
+    stamps: bool,
+) -> Result<DocumentInputs, String> {
     let sourced = policies
         .shape
         .types
         .iter()
         .any(|t| matches!(t.source, Some(SourceDecl::Metadata(_))));
     let read = policies.change.document.is_some()
-        || !policies.derivation.derived.is_empty()
+        || derives(policies)
         || policies
             .shape
             .types
@@ -70,10 +90,9 @@ pub(crate) fn load(
             participants: Participants::new(),
         });
     }
-    let documents = super::corpus_io::section_documents(cfg)
-        .map_err(|e| format!("loading section documents: {e}"))?;
+    let documents = documents()?;
     let mut projection = if sourced {
-        Some(project_source_atoms(&documents, policies, &cfg.corpus_id)?)
+        Some(project_source_atoms(&documents, policies, corpus_id)?)
     } else {
         None
     };
@@ -116,7 +135,7 @@ pub(crate) async fn apply(
         .types
         .iter()
         .any(|t| t.identity_criterion.is_some());
-    let derives = !policies.derivation.derived.is_empty();
+    let derives = derives(policies);
     let mut derived = derives
         .then(|| Jsonl::create(atlas_dir.join(DERIVED_FILE)))
         .transpose()?;

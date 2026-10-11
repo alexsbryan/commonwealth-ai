@@ -607,7 +607,7 @@ pub(crate) async fn run_test(
     });
 
     // ── Phase 4: Extract ─────────────────────────────────────────────────────
-    let extractor = engine.make_extractor(&recipe.extract, &recipe.corpus.id);
+    let extractor = engine.recipe_extractor(&recipe);
     let doc_iter = match extractor.extract(&source_path) {
         Ok(iter) => iter,
         Err(e) => {
@@ -820,6 +820,7 @@ pub(crate) async fn run_test(
                             source_file: None,
                             code: crate::index::InsertCodeMeta::default(),
                             unit_id: None,
+                            text_sha256: None,
                         },
                         emb,
                     ));
@@ -1286,6 +1287,7 @@ pub(crate) fn acquirer_source_url(recipe: &Recipe) -> String {
             }
         }
         AcquirerConfig::LocalFile { path } => format!("file://{path}"),
+        AcquirerConfig::Inline => format!("inline:{} documents", recipe.documents.len()),
         AcquirerConfig::Custom { kind, .. } => format!("custom:{kind}"),
     }
 }

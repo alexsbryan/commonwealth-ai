@@ -23,19 +23,24 @@ use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use kernel_types::NodeId;
-use sovereign_daemon::client_tokens::{ClientTokenStore, ClientTokens};
+use sovereign_daemon::client_tokens::{ClientTokenStore, ClientTokens, Loopback, LoopbackPosture};
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, NodeSeed};
 use tower::ServiceExt;
 
 const LAN_PEER: &str = "192.168.1.50:44444";
+/// A desktop's posture, declared: minting needs a declaration.
+const OWNER: LoopbackPosture = LoopbackPosture {
+    loopback: Loopback::Owner,
+    declared: true,
+};
 const SHARED: &str = "shared-deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
 
 /// A node with a shared token, a posture, and a named-token store rooted in
 /// `dir` — the three things this bar is about, and nothing else.
 fn state(dir: &std::path::Path, posture: ClientTokens) -> (AppState, Arc<ClientTokenStore>) {
     let node = NodeId::from_u128(1);
-    let tokens = Arc::new(ClientTokenStore::load(Some(dir.to_path_buf())));
+    let tokens = Arc::new(ClientTokenStore::load(Some(dir.to_path_buf()), OWNER));
     let state = AppState::new_with_node(
         node,
         NodeSeed {
@@ -74,8 +79,8 @@ fn is_auth_rejection(s: StatusCode) -> bool {
 async fn two_named_tokens_each_admit_a_remote_caller() {
     let tmp = tempfile::tempdir().unwrap();
     let (state, tokens) = state(&tmp.path().join("client-tokens"), ClientTokens::default());
-    tokens.mint("laptop", "tok-laptop".into()).unwrap();
-    tokens.mint("tablet", "tok-tablet".into()).unwrap();
+    tokens.mint("laptop", &[], "tok-laptop".into()).unwrap();
+    tokens.mint("tablet", &[], "tok-tablet".into()).unwrap();
 
     for token in ["tok-laptop", "tok-tablet"] {
         assert!(
@@ -97,8 +102,8 @@ async fn two_named_tokens_each_admit_a_remote_caller() {
 async fn revoking_one_refuses_it_in_the_same_lifetime_and_leaves_the_other() {
     let tmp = tempfile::tempdir().unwrap();
     let (state, tokens) = state(&tmp.path().join("client-tokens"), ClientTokens::default());
-    tokens.mint("laptop", "tok-laptop".into()).unwrap();
-    tokens.mint("tablet", "tok-tablet".into()).unwrap();
+    tokens.mint("laptop", &[], "tok-laptop".into()).unwrap();
+    tokens.mint("tablet", &[], "tok-tablet".into()).unwrap();
     assert!(!is_auth_rejection(
         get_as_remote(state.clone(), "tok-laptop").await
     ));
@@ -145,7 +150,7 @@ async fn the_admitting_label_appears_in_the_log_line_and_the_token_does_not() {
 
     let tmp = tempfile::tempdir().unwrap();
     let (state, tokens) = state(&tmp.path().join("client-tokens"), ClientTokens::default());
-    tokens.mint("laptop", "tok-laptop".into()).unwrap();
+    tokens.mint("laptop", &[], "tok-laptop".into()).unwrap();
 
     let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
@@ -160,7 +165,7 @@ async fn the_admitting_label_appears_in_the_log_line_and_the_token_does_not() {
     let captured = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
     let admit: Vec<&str> = captured
         .lines()
-        .filter(|l| l.contains("named client token admitted"))
+        .filter(|l| l.contains("named credential admitted"))
         .collect();
     assert_eq!(
         admit.len(),
@@ -191,7 +196,7 @@ async fn the_shared_token_admits_by_default_and_is_refused_under_named_only() {
     );
 
     let (strict, tokens) = state(&tmp.path().join("strict"), ClientTokens::NamedOnly);
-    tokens.mint("laptop", "tok-laptop".into()).unwrap();
+    tokens.mint("laptop", &[], "tok-laptop".into()).unwrap();
     let mut req = Request::get("/v1/models")
         .header(
             axum::http::header::AUTHORIZATION,

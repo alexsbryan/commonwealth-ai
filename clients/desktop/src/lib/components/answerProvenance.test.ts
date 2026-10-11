@@ -130,6 +130,59 @@ describe("readAnswerProvenance", () => {
   });
 });
 
+describe("verified quotes on a segment", () => {
+  const sha = "a".repeat(64);
+  const wire = {
+    answer_range: { start: 22, end: 60 },
+    corpus_id: "saltgrass",
+    text_sha256: sha,
+    start: 1040,
+    end: 1078,
+    exact: "Widow Hetch gave her evidence at her bar",
+  };
+
+  it("carries each quote's address into a stored text", () => {
+    const p = readAnswerProvenance(
+      {
+        answer_segments: [
+          { ...seg(0, 10, { kind: "inference" }), quotes: [wire] },
+          seg(10, 20, { kind: "parametric" }),
+        ],
+      },
+      "x".repeat(20),
+    );
+    expect(p?.rows[0].quotes).toEqual([
+      {
+        corpusId: "saltgrass",
+        textSha256: sha,
+        start: 1040,
+        end: 1078,
+        exact: "Widow Hetch gave her evidence at her bar",
+      },
+    ]);
+    expect(p?.rows[1].quotes).toEqual([]);
+  });
+
+  it("drops a malformed address rather than opening a guess", () => {
+    const p = readAnswerProvenance(
+      {
+        answer_segments: [
+          {
+            ...seg(0, 10, { kind: "inference" }),
+            quotes: [
+              { ...wire, text_sha256: "not-a-name" },
+              { ...wire, start: 9, end: 3 },
+              { ...wire, exact: undefined },
+            ],
+          },
+        ],
+      },
+      "x".repeat(10),
+    );
+    expect(p?.rows[0].quotes).toEqual([]);
+  });
+});
+
 describe("readTypedAbstention", () => {
   it("is null on released turns and on turns with no gate", () => {
     expect(readTypedAbstention({})).toBeNull();

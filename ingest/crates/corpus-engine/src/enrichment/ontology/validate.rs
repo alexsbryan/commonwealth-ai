@@ -90,6 +90,8 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         ));
     }
 
+    super::validate_layer::layer_warnings(block, &policies, &mut out.warnings);
+
     let labels_set = policies.derivation.tension.label.is_some()
         || policies.shape.types.iter().any(|t| t.label.is_some());
     if block.body.contains_key("vocabulary") && labels_set {
@@ -113,6 +115,7 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         check_evidential(&policies, &mut out.errors);
         derived_facets(&policies, &mut out.notes);
         super::validate_derived::check(&policies, &mut out.errors, &mut out.notes);
+        super::validate_layer::fill_warnings(&policies, &mut out.warnings, &mut out.notes);
     }
     out.notes.extend(document_note);
     out
@@ -122,10 +125,17 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
 /// attribute under a key a stamp would overwrite.
 fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &mut Vec<String>) {
     let keys = DocumentStamp::ALL.map(DocumentStamp::key).join(", ");
-    if d.declared().next().is_none() {
+    if d.declared().next().is_none() && d.author.is_none() {
         errors.push(format!(
-            "change.document names no field. Declare at least one of {keys}, or drop the key."
+            "change.document names no field. Declare at least one of {keys}, author, or drop \
+             the key."
         ));
+    }
+    if d.author.as_deref().is_some_and(|f| f.trim().is_empty()) {
+        errors.push(
+            "change.document.author is blank. Name the metadata field your documents carry."
+                .to_string(),
+        );
     }
     for (stamp, field) in d.declared() {
         if field.trim().is_empty() {
@@ -154,65 +164,15 @@ fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &
     }
 }
 
-/// `identity_evidential`: each source a stamp `change.document` declares,
-/// `model_choice` or `proposed_answer`, each with its counts measured
-/// somewhere named, and a bar beside them in (0, 1]. `identity_necessary`:
-/// each a declared attribute with `values`, the closed set READ chooses from.
+/// `identity_bar` in (0, 1]. `identity_necessary`: each a declared attribute
+/// with `values`, the closed set READ chooses from.
 fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
-    // No `change.document` declares no stamp, so every stamp source is unfilled.
-    let declared: Vec<DocumentStamp> = match &p.change.document {
-        Some(d) => d.declared().map(|(s, _)| s).collect(),
-        None => Vec::new(),
-    };
-    let sources = DocumentStamp::ALL
-        .map(DocumentStamp::attr)
-        .into_iter()
-        .chain(NON_STAMP_EVIDENCE)
-        .collect::<Vec<_>>()
-        .join(", ");
     for t in &p.shape.types {
-        for e in &t.identity_evidential {
-            match DocumentStamp::from_attr(&e.evidence) {
-                Some(s) if declared.contains(&s) => {}
-                Some(s) => errors.push(format!(
-                    "ontology type `{}` lists evidence `{}`, which change.document.{} would \
-                     fill, and it is not declared. Declare it, or drop the source.",
-                    t.name,
-                    e.evidence,
-                    s.key()
-                )),
-                None if NON_STAMP_EVIDENCE.contains(&e.evidence.as_str()) => {}
-                None => errors.push(format!(
-                    "ontology type `{}` lists evidence `{}`, which is no source: {sources}.",
-                    t.name, e.evidence
-                )),
-            }
-            if e.of == 0 || e.right > e.of {
-                errors.push(format!(
-                    "ontology type `{}`: evidence `{}` declares {} right of {}; it needs at least \
-                     one measured link and no more right than measured.",
-                    t.name, e.evidence, e.right, e.of
-                ));
-            }
-            if e.measured_on.trim().is_empty() {
-                errors.push(format!(
-                    "ontology type `{}`: evidence `{}` says nothing in `measured_on`. Name the \
-                     labelled fold and the count behind its precision.",
-                    t.name, e.evidence
-                ));
-            }
-        }
-        match (t.identity_evidential.is_empty(), t.identity_bar) {
-            (false, None) => errors.push(format!(
-                "ontology type `{}` lists identity evidence and no `identity_bar`. Declare the \
-                 precision a link decided by evidence alone must have.",
-                t.name
-            )),
-            (_, Some(b)) if !(b > 0.0 && b <= 1.0) => errors.push(format!(
+        if let Some(b) = t.identity_bar.filter(|b| !(*b > 0.0 && *b <= 1.0)) {
+            errors.push(format!(
                 "ontology type `{}`: identity_bar {b} is not in (0, 1].",
                 t.name
-            )),
-            _ => {}
+            ));
         }
         for n in &t.identity_necessary {
             let readable = t.attributes.iter().any(|a| {
@@ -229,9 +189,6 @@ fn check_evidential(p: &OntologyPolicies, errors: &mut Vec<String>) {
         }
     }
 }
-
-/// Evidence sources that are no document stamp (`identity_evidential`).
-const NON_STAMP_EVIDENCE: [&str; 3] = ["model_choice", "reasoned_choice", "proposed_answer"];
 
 /// A metadata `source`: on an entity type, naming its fields, filling only
 /// declared attributes, and reading every identity key — the last through
@@ -275,6 +232,16 @@ fn check_sources(p: &OntologyPolicies, errors: &mut Vec<String>) {
         }
         if let Err(e) = s.identity_readers(index.effective_identity(&t.name)) {
             errors.push(at(e));
+        }
+        for list in s.exclude.iter().filter_map(|e| e.strip_prefix("@bundled:")) {
+            if crate::recipe_source::default_assets()
+                .bundled_asset(list)
+                .is_none()
+            {
+                errors.push(at(format!(
+                    "`exclude` names `@bundled:{list}`, which is no bundled list"
+                )));
+            }
         }
         for (attr, r) in &s.refs {
             let family = index
@@ -324,9 +291,19 @@ fn document_fields_note(d: &DocumentFieldsDecl) -> String {
             DocumentStamp::Thread | DocumentStamp::Id => format!("{} ← `{field}`", stamp.attr()),
         })
         .collect();
+    let author = d
+        .author
+        .as_deref()
+        .map(|f| {
+            format!(
+                "; author ← `{f}`, read by the reader only, among each document's \
+                 declared facts"
+            )
+        })
+        .unwrap_or_default();
     format!(
         "document fields: {} — stamped on each claim from the one document its evidence \
-         lands in; a claim in none or several is left unstamped and counted",
+         lands in; a claim in none or several is left unstamped and counted{author}",
         join_or_none(pairs.iter().map(String::as_str))
     )
 }
@@ -671,7 +648,15 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         ));
     }
 
-    for t in p.shape.types.iter().filter(|t| t.kind == TypeKind::Entity) {
+    let decided = |name: &str| {
+        crate::enrichment::atlas::resolution_records::decides(&TypeIndex::from_policies(p), name)
+    };
+    for t in p
+        .shape
+        .types
+        .iter()
+        .filter(|t| t.kind == TypeKind::Entity || decided(&t.name))
+    {
         if let Some(SourceDecl::Metadata(s)) = &t.source {
             let read: Vec<String> = s
                 .attributes
@@ -722,40 +707,6 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         }
         notes.push(line);
     }
-    for t in p
-        .shape
-        .types
-        .iter()
-        .filter(|t| !t.identity_evidential.is_empty())
-    {
-        // A missing bar is already an error from `check_evidential`.
-        let Some(bar) = t.identity_bar else { continue };
-        let fields: Vec<String> = t
-            .identity_evidential
-            .iter()
-            .map(|e| {
-                let acts = if e.precision() >= bar {
-                    "links"
-                } else {
-                    "below the bar"
-                };
-                format!(
-                    "{} ({} of {}, expected precision {:.3}, {}; {acts})",
-                    e.evidence,
-                    e.right,
-                    e.of,
-                    e.precision(),
-                    e.measured_on
-                )
-            })
-            .collect();
-        notes.push(format!(
-            "identity evidence: {} ← {} at bar {bar:.2}",
-            t.name,
-            fields.join(", ")
-        ));
-    }
-
     let by_kind = |k: TypeKind| {
         join_or_none(
             p.shape

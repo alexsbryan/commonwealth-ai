@@ -77,6 +77,7 @@ pub(crate) async fn build_partition(path: &Path, content: &str, hash: &str) {
         source_file: None,
         code: InsertCodeMeta::default(),
         unit_id: None,
+        text_sha256: None,
     };
     index
         .insert_batch(&[(chunk, embedding(1.0))])

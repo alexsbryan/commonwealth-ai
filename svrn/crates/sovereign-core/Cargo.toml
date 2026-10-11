@@ -16,6 +16,9 @@ host-kit = { workspace = true }
 # rather than re-declaring the same four variants and the same wire form
 # (noun-convergence rung nc-10-judgement). Layer 0: this edge points DOWN.
 kernel-types = { workspace = true }
+# The one quote aligner: the post-synthesis quote guard asks it, so "is this
+# quote in that text" has one decider (ADDRESSED_TEXT §5.3). Layer 0.
+quote-align = { workspace = true }
 # The Tier-0 wall-clock leaf. `src/time.rs` was a byte-identical twin of
 # `sovereign_time`; it is now a re-export so there is ONE implementation
 # (ARCH principle 8, domains row dm-time-reexport).
@@ -92,6 +95,8 @@ workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hac
 
 [dev-dependencies]
 tokio = { workspace = true }
+# `runtime::quote_surface`'s test reads stored texts through the port double.
+corpus-index = { workspace = true, features = ["test-doubles"] }
 # The binder-replay harness installs a subscriber so the production `t5 binder`
 # stage timings are readable from the test run; without one they are discarded
 # and the harness can only report a total.

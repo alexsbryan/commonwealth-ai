@@ -10,13 +10,14 @@ use chrono::Utc;
 use crate::error::{Error, Result};
 use crate::extractors::ExtractedDoc;
 use crate::filters::build_filter_pipeline;
-use crate::index::{CorpusIndex, InsertChunk};
+use crate::index::{CorpusIndex, InsertChunk, TextWriter};
 use crate::progress::{IngestProgress, ProgressCallback, SourceFileManifest, SourceFileStatus};
 use crate::recipe::{AcquirerConfig, ExtractorConfig, Recipe};
 use crate::types::{CorpusSpec, IngestResult};
 
 use super::ingest_helpers::{
-    apply_jsonl_shard_override, chunk_doc, mark_complete_files, mark_complete_shards,
+    apply_jsonl_shard_override, chunk_text, mark_complete_files, mark_complete_shards,
+    normalize_content, SourceOrdinals,
 };
 use super::yield_gate;
 use super::{blake3_hex, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
@@ -591,7 +592,7 @@ impl CorpusEngine {
         let source_path = self.acquire_source(recipe, &download_dir, progress).await?;
 
         // Step 2: Extract documents.
-        let extractor = self.make_extractor(&recipe.extract, &recipe.corpus.id);
+        let extractor = self.recipe_extractor(recipe);
         let doc_iter = extractor.extract(&source_path)?;
 
         // Step 2.5: Apply document-level filters (recipe scope).
@@ -1048,6 +1049,12 @@ impl CorpusEngine {
         let mut pending_texts: Vec<String> = Vec::new();
         let mut index_buffer: Vec<(InsertChunk, Vec<f32>)> = Vec::new();
         let mut embed_timer = Instant::now();
+        // The text store's one writer (ADDRESSED_TEXT §3), and each text's
+        // position among its source's texts.
+        let tag = crate::text_store::extractor_tag(&recipe.extract);
+        let mut texts = TextWriter::open(&index, tag, recipe.index.store_texts).await?;
+        let declared = crate::recipe_documents::DeclaredMetadata::of(recipe, Some(&source_path));
+        let mut ordinals = SourceOrdinals::default();
 
         // ── Embed-side dedup gate ───────────────────────────────
         //
@@ -1242,6 +1249,9 @@ impl CorpusEngine {
                 }
             }
 
+            let source_doc_id = doc.url.clone().or_else(|| Some(doc.source_id.clone()));
+            let ordinal = ordinals.next(source_doc_id.as_deref().unwrap_or_default());
+
             // Skip documents that were already committed in a previous run.
             // Boundary detection above keeps `file_boundary_iter_pos`
             // populated even for these fast-forwarded docs, so
@@ -1272,9 +1282,18 @@ impl CorpusEngine {
 
             docs_processed += 1;
 
-            // Normalize + chunk + title-prepend via the shared helper that
-            // the authoring-harness runner also calls (no-drift seam).
-            let chunk_texts = chunk_doc(chunker.as_ref(), &doc);
+            // The canonical text is stored, then chunked: one string, so the
+            // chunks name the text they were cut from (`chunk_doc` is the
+            // same transform, for the authoring-harness runner).
+            let text = normalize_content(&doc.content);
+            let text_sha256 = texts.store_document(declared.input(
+                &text,
+                source_doc_id.as_deref().unwrap_or_default(),
+                ordinal,
+                &doc.source,
+                doc.metadata.as_ref(),
+            ))?;
+            let chunk_texts = chunk_text(chunker.as_ref(), doc.title.as_deref(), &text);
 
             // `doc.embed_text` is honored only when the configured chunker
             // yields exactly one chunk for this document — i.e. the
@@ -1289,7 +1308,6 @@ impl CorpusEngine {
                 None
             };
 
-            let source_doc_id = doc.url.clone().or_else(|| Some(doc.source_id.clone()));
             for content in chunk_texts {
                 let content_hash = blake3_hex(&content);
                 let chunk_key =
@@ -1324,6 +1342,7 @@ impl CorpusEngine {
                     source_file: doc.source_file.clone(),
                     code,
                     unit_id,
+                    text_sha256,
                 });
                 // Track chunk count per source file for manifest reporting.
                 if let Some(ref sf) = doc.source_file {
@@ -1483,6 +1502,7 @@ impl CorpusEngine {
                 if index_buffer.len() >= INDEX_FLUSH_SIZE {
                     let flush_count = index_buffer.len();
                     let insert_start = Instant::now();
+                    texts.flush(&index).await?; // records before the chunks naming them
                     index.insert_batch(&index_buffer).await?;
                     let insert_ms = insert_start.elapsed().as_millis();
                     if !unit_scoped {
@@ -1554,7 +1574,9 @@ impl CorpusEngine {
             }
         }
 
-        // Flush remaining index buffer.
+        // Flush remaining records (even when every chunk was deduped), then
+        // the remaining index buffer.
+        texts.flush(&index).await?;
         if !index_buffer.is_empty() {
             let flush_count = index_buffer.len();
             total_chunks += flush_count as u64;

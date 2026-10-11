@@ -1,198 +1,166 @@
-# crm-proof and the ontology layer: a brief for review (2026-10-07)
+# Ontology layer: status brief for outside review (2026-10-10)
 
-Written for a reader who has not seen this work. It says what we are trying to build, how we are going
-about it, what four days of work produced, where it is stuck, and the questions we would most like a second
-opinion on. Numbers are from `~/.svrnmesh/comaintainer/bar-measurements.jsonl`,
-`research/ontology-apps/resolve-prereg.md` and the commit log; where something is unmeasured it says so.
+Written for reviewers who have not followed the work. Numbers come from runs on this repo; every figure has a
+commit or run directory behind it, and the campaign log (`.sovereign/features/ontology-layer/campaign.md`,
+local) holds the dated decisions. The previous brief, written 2026-10-07 for the crm-proof phase, is kept
+as `REVIEW_BRIEF_2026-10-07.md`.
 
-## What we are building
+## 1. What we are trying to build
 
-A layer that turns raw documents plus a declared ontology into typed, cited records: a CRM's people,
-companies, deals and their stages from a mailbox; a support tracker's cases from issues, comments and
-timeline events. The premise is that most SaaS records are kept by hand through forms, and that they could
-instead be read out of the documents people already write, with every field citing the text it came from.
-The CRM and the tracker are test examples, not the product domain. The layer runs entirely on a local model
-served by our own daemon; no external model is in the production path.
+A general layer that turns a pile of documents into typed, cited records:
+- the deals in a sales mailbox;
+- the cases in an issue tracker;
+- the events in a news archive.
 
-The campaign (`quality/campaigns/crm-proof.toml`) opened 2026-10-03 and was re-scoped on 2026-10-05 from "a
-CRM from a mailbox" to "the first check of the ontology and extraction layer" (`svrn/docs/specs/ONTOLOGY_METHOD.md`).
-It is done when four bars read met on held-out data through the production interface: crm-people,
-crm-deals, crm-stage and crm-cost. It should stop if the layer's next rungs do not move deals and stage on
-the support example and on the mail.
+The user does not train a model or write extraction rules. They write one declarative **recipe**:
+- the kinds of things their documents are about (entity and event types);
+- what makes two mentions the same thing (an identity criterion, in words, plus declared keys);
+- how a thing's state changes over time (a protocol);
+- which statements to look for (claim kinds, with closed or open values).
 
-## The examples
+Then they run the CLI's default commands. The records come out with every value and link citing the passage
+and source behind it.
 
-- **crm-ward**: 1,000 messages from one Enron gas-origination mailbox (Kim Ward, CMU maildir), 790 sections.
-  Gold drafted by a different model family than the extractor and reviewed by the operator
-  (`ward/GOLD_SPEC.md`): 79 deals (transactions) across customer folders, 266 stage updates, 102
-  commitments; folders split into tune and holdout.
-- **uv-support**: 152 issues from astral-sh/uv as 2,954 documents (150 issues, 1,391 comments, 1,413
-  timeline events), 163 hand-labelled cases, 83 tune and 80 read (`support/GOLD_SPEC.md`). A case is one
-  underlying problem however many issues report it.
-- **GVC and ECB+**: public cross-document event-coreference benchmarks we did not label, added on
-  2026-10-05 so "best in class" can be read against the literature.
+The objective has four parts:
+1. **General:** the same code serves unlike domains. No domain word in code; domain knowledge lives only in the recipe.
+2. **Author-independent:** two people who understand the domain and the syntax, writing separate recipes, get very similar records.
+3. **No tuning in recipes:** a recipe carries no numbers measured on data and no mechanism switches.
+4. **Local and auditable:** runs on a local model, every model answer is recorded, and a run replays byte for byte without the model.
 
-## Method
+## 2. The design (the method)
 
-The method was agreed with the operator on 2026-10-05 and 2026-10-06 (`ONTOLOGY_METHOD.md`, 116 lines; worth
-reading whole). In short:
+- **Declared structure first.** Code settles everything the recipe's structure can settle: fields, keys, threads, declared references, derived roles, order, state folds.
+- **The model answers only small closed questions,** about one document at a time. Each answer is a distribution over single-token labels in one forward pass, or a pointer to words that code then verifies are in the text. The reader's plan of questions is a pure function of the recipe:
+  - **Locate** which lines state each claim kind;
+  - **Choose** each closed value;
+  - **Point** at each open value;
+  - **Mention** entity types that references target;
+  - **Pick** each reference among candidates code proposes.
+- **Identity is decided in one place (RESOLVE).**
+  - Each statement is resolved to an existing record or a new one.
+  - Candidates are proposed from declared structure and generic similarity.
+  - Evidence from each source (declared fields, the model's choice, a similarity-based proposal) is weighed by a log-likelihood ratio. The weights are estimated on the corpus being read, without labels, so they are never numbers the author supplies.
+  - A posterior above a bar links. Otherwise the statement opens a new record, or is held and settled after all documents are read.
+  - The model never decides identity on its own: its verdict is one weighed source.
+- **Six contracts, enforced as tests.**
+  1. A question asks only what declared structure leaves open.
+  2. A reading turn holds one document's text. A resolution turn may show a candidate's own cited lines, marked as quotes.
+  3. Every value and link carries its source and that source's precision: declared, estimated, or unmeasured.
+  4. Records do not depend on document order.
+  5. A run replays without the model.
+  6. Renaming every type and attribute changes only the names.
 
-**The core.** Records are declared types, each with an identity criterion (keys that suffice, and the
-criterion in the author's words) and a protocol. Documents are READ into cited statements; each statement
-is RESOLVED to an open record, or to none (which opens one), under its type's criterion, against candidates
-the declared structure proposes; records FOLD their statements into state through the protocol. RESOLVE is
-grouping and joining as one step; "is this new?" is RESOLVE answering "none of these".
+## 3. How we measure
 
-**What code may do.** Code reads what the recipe declares, proposes candidates from declared structure (same
-thread, same party, a declared reference) or domain-free retrieval, verifies that what the model points at is
-in the text, weighs evidence by its measured precision, and folds by the declared protocol. Code never
-decides identity by an undeclared pattern (no "duplicate of #N" matcher), and a model verdict is evidence,
-never a decision.
+Three gold-labelled corpora, used as instruments, not as training targets:
 
-**Invariants.** The code knows no domain (rename every type in a recipe and the composition is the same up
-to the renaming). Identity is decided by declared fields in one place: a sufficient field that agrees links,
-a necessary field that differs forbids, evidential agreement links only where its measured precision clears
-the type's bar. Every decision is traced and counted; an answer code cannot verify is refused, never
-defaulted. One table per loop over three systems, model calls per document beside the measures; a change is
-adopted only if no example regresses.
+| System | Corpus | What gold marks |
+|---|---|---|
+| Ward | ~1,000 Enron emails from one gas trader's mailbox | 47 deals in the tune split, each with counterparty, stage over time and the messages about it |
+| uv | GitHub issues, comments and timeline events from the `uv` project | Support cases and their state over time; we score a fixed third: 61 sections, 132 states |
+| GVC | The Gun Violence Corpus | Cross-document event coreference, 977 event mentions in its 78 dev documents; gold splits one incident into sub-events (shooting, injury, death) |
 
-**The loop.** Bars are written before data (pre-registration); each arm runs once on every example's tune
-fold; adopt or refuse, and a refusal ships its data. Held-out folds are opened once per adopted design.
-Bars score only what a user gets through the bare production interface (recipe plus CLI, built end to end),
-never a research script's composition.
+For each system, a stage ladder shows where each gold item is lost:
+- **read:** the right statement was found;
+- **place:** it landed on the record of its gold particular;
+- **fold:** the record's state is right.
 
-**The pipeline as built.** Ingest chunks and indexes the documents; `enrich init` groups chunks into
-chapters; Phase 1 sends each chapter to the model once and gets back a structured sketch (entities, their
-states, relations, events, claims, questions, plus the recipe's declared types); the atlas build then
-projects typed atoms from document fields with no model (people by email, companies by domain), RESOLVEs
-types that declare a criterion, and fills derived attributes (paths, sets and folds over the build's graph,
-e.g. a message's party is the first outside company among its addressees).
+GVC is also scored as **RESOLVE alone**: gold mentions are given as statements, which isolates identity from reading.
 
-## What was done, in order
+Author independence is tested with **blind authors**. A fresh LLM session gets only the domain description, the authoring guide and the validator, then writes a recipe that we run through the same default commands. We compare its records with ours.
 
-- **10-03.** Baseline on Ward through the existing pipeline: people .584, companies .615, deals .029, stage
-  0, commitments .125, 17.86 s of model time per message.
-- **10-03 to 10-05.** Python research prototypes of deal composition (a facet file, a ledger composer,
-  oracle ablations, grouping and stage folds). The ablation found the act reader, not grouping, loses the
-  most. Retired on 10-05 by operator direction: research drives the core through recipes and does not
-  reimplement it.
-- **10-04 to 10-05.** The second example's gold (uv-support, 163 cases), its scorer, CEAF-e and LEA beside
-  B³ in one shared scorer (`svrn bench er-score`), zero-model baselines.
-- **10-05.** Structural wins on Ward with no model calls: people and companies read from the headers,
-  Contact → Account joined by address domain, a bundled list of mailbox providers so no recipe enumerates
-  domains, a typed-reference fix. People .584 → .801, companies → .769, contacts .169 → .578.
-- **10-05 to 10-06.** RESOLVE built in rings with bars before data (`resolve-prereg.md`), first in the
-  gold-mention setting (gold statements in, records out) on all three systems: Ring 0 (one forced choice per
-  statement), 1a (declared document fields weighed by code), 1b (a read necessary field as a veto, the
-  model's choice weighed), 2a (precision from counts), 1c (reasoning before the choice). Results below.
-- **10-06.** RESOLVE moved into the production atlas build, and derived attributes landed: Ward deals
-  .072 → .232, stage .010 → .019.
-- **10-07.** Before running the first production build on uv-support, three ingest defects that would have
-  invalidated it were fixed (below), plus a chapter-size cap; that build is running now.
+## 4. Where we are
 
-About 65 commits are tied to the campaign. Three change sets moved a system bar: the header sources, the
-contact join, and RESOLVE plus derived party. The 10-05 scorer correction (match a gold company by its own
-written forms) moved companies and deals as well, but that is the instrument, not the system.
+**Built and tested (unit tests plus the six contracts, all committed):**
+- the default command path end to end;
+- the answer recorder and byte-identical replay;
+- the full reader plan above (Point, Mention and Pick landed last, on 2026-10-10);
+- RESOLVE with corpus-estimated weights, candidates' own lines as quotes, and held statements settled after the last document;
+- protocol folds;
+- a validator that names, for every declared attribute, what fills it, and warns when nothing does.
 
-## Results
+One specified piece is unfinished: 13 older identity routines in the general extractor still decide types that have no identity criterion.
 
-Ward, holdout, production interface:
+**Results on the instruments.** The newest run, with Point, Mention and Pick, is still in progress.
 
-| bar | 10-03 | now | target |
+| Measure | Baseline (2026-10-09) | Best so far | Notes |
 |---|---|---|---|
-| crm-people | .584 | .801 | .9 |
-| crm-companies | .615 | .769 | .8 |
-| crm-contacts | .169 | .578 | .8 |
-| crm-deals | .029 | .232 | .6 |
-| crm-stage | 0 | .019 | .6 |
-| crm-commitments | .125 | .125 | .5 |
-| crm-cost, s/message | 17.86 | 17.86 | 1.7 |
+| Ward: deals whose current stage is served right | 2 of 47 | 3 of 47 | The motivating CRM case; essentially not working |
+| Ward: deals matched to gold | 9 of 39 | 8 of 39 (ours), 10 of 39 (blind, round 3) | |
+| uv: gold states hit (fixed third) | 30 of 132 | 67 of 132 | The latest build regressed to 54 through a defect (section 5) |
+| GVC RESOLVE alone, CoNLL F1 | .599 | .607 | Floor with no model calls: .572 |
+| GVC end to end, B3 | — | about .45 to .47 | 179 of 324 statements span more than one gold event |
 
-RESOLVE in the gold-mention setting (tune folds; B³ and CoNLL F1; "floor" uses no model, only declared
-structure and domain-free similarity):
+**Blind authors, round 3.**
 
-| system | floor B³ | best model arm B³ | floor CoNLL | adopted design |
-|---|---|---|---|---|
-| Ward | .654 | .659 (v5) | .436 | equals the floor |
-| uv | .845 | .647 (v5) | .801 | equals the floor |
-| GVC dev | .616 | .509 (v5) | .572 | .599 CoNLL, above the floor |
+Agreement with our records, as B3 between the two partitions over items both placed. Our own recipe agrees with itself across two builds at GVC .720 and uv .975, which gives the scale.
 
-The adopted design (Ring 2a) asks the model only where its measured precision clears the type's bar. On
-Ward and uv it never clears, so the model is never asked and the result equals the zero-model floor; on
-GVC the model adds a little. Held-out folds, opened once, matched their floors. The diagnosis: the model
-resolves one level coarser than the criterion (on GVC it joins a shooting's firing, injury and death; on
-Ward 11 of 13 wrong links keep the counterparty and miss the deal), and shown a strong free signal (uv's
-thread, right .83 of the time) it departs from it about 152 times and is right about 29.
+| System | Agreement with ours |
+|---|---|
+| GVC end to end | .900 |
+| uv | .976 |
+| Ward | 1.0, over only 5 items |
+| GVC RESOLVE alone | .445 |
 
-uv-support end to end: no production read yet; the first build is running (2026-10-07). The zero-model
-baseline it must beat is one case per thread, B³ .836, CEAF-e .645 on tune.
+Scored against gold at the concept each author declared:
 
-## Challenges
+| Measure | Blind author | Our recipe |
+|---|---|---|
+| GVC RESOLVE alone, against gold incidents (B3) | .814 | .328 |
+| Ward deals matched (of 39) | 10 | 8 |
+| uv states hit (of 132) | 56 | 67 |
 
-**The read is the binding constraint, and it has not been attacked directly.** Phase 1 produces a few
-claims per chapter, not one per message or document, and often leaves declared attributes empty. Evidence
-from three independent places: of Ward's 266 gold stage updates, 96 have no claim on their message and 103
-claims carry no stage; RESOLVE's Ring 0 refusal reads "the read, not the argmax, is the limit"; and a
-four-chapter trial on uv returned 2-3 case claims for thread chapters of 13-14 comments, some naming the
-case by its section id. RESOLVE and derived attributes can only group what the read produces. We expect the
-running uv build to place fewer than half of the 1,489 tune gold documents in any case.
+The validator's warnings worked as feedback: the authors fixed declarations nothing would fill, and their recipes contain no tuned numbers.
 
-**The model adds little to identity where structure is strong.** On uv, the thread alone is a better
-identity signal than the model's choice; on Ward, the model confuses "same counterparty" with "same deal".
-The current design handles this honestly (measured precision gates the model out) but it means the layer's
-identity results on the two product examples are structure's results.
+## 5. What has gone wrong
 
-**Cost has had no work.** 17.86 s per message against a target of 1.7, ten times over, all of it Phase 1:
-one generic seven-category sketch per section where the recipe needs only its declared types.
+**Process.**
+- We spent much of two days measuring rather than building. Components the method specified (Point, Mention, Pick) were held back behind exploratory probes with pass bars we invented. The probes said "not worth building", but the method already called for these components. They were built only on the last day, so most results predate them.
+- We chased each system's largest residual, which produced one-system levers and drift away from the general objective.
+- We froze our own recipes to avoid fitting to gold. That kept a known modelling error in every "ours" row (below).
+- Some green numbers were artifacts. Ward's deal-identity score of .875 is what you get when every message is its own deal: it scored well with zero correct links.
 
-**The production interface hid defects until a full build was attempted.** Found 10-07 on uv: ingest
-deduplicated chunks by text alone, dropping 369 of 2,954 documents (every "closed" or "labeled bug" event
-after the first; 13-15% of gold documents); documents were keyed by url, and 475 shared one (timeline
-events carrying the url of the issue they link to), so foreign events merged into an issue and took its
-thread; the JSONL extractor stripped the record id, so the declared document id was unreadable; and a
-chapter was a whole thread, up to 21,454 words over 234 documents in one model call. Earlier: a recipe edit
-re-resolved nothing until the atlas was deleted by hand (fixed 10-05). All are fixed, but each surfaced
-only at the end of a long path.
+**Technical.**
+- **Ward's identifying information is in free text.** A deal is a counterparty, product, delivery point and term. In this mailbox they sit in message bodies spread across threads, and much of the mail is internal discussion of an outside deal.
+  - Our recipe derives the counterparty from email headers. For none of the 25 deals lost at placing is the counterparty in the latest message's headers, and 19 of those companies never appear in any header.
+  - With no declared evidence to link two messages, and the model not allowed to decide identity alone, RESOLVE opens a new record for almost every statement: 84 of 92.
+- **GVC's statement unit does not match gold's.** We make statements from whole lines, while gold marks individual mentions and splits incidents into sub-events. 179 of 324 statements already span several gold events before resolution.
+- **Reader capability.** The local model is a 35B-parameter mixture-of-experts (about 3B active), quantised to 4 bits, answering one closed question at a time. Offline probes on our recorded data:
+  - picking a deal's counterparty from text is right .44 of the time (.52 with a looser name match);
+  - pointing at event mentions has .59 precision;
+  - its "these are the same" verdict on candidate pairs has precision of about .45 to .54.
+- **Label-free reliability estimation does not identify the text-reading sources.** The model's choice and the similarity proposal make false links that look like true ones on every feature we have (date, event kind, shared named entities). Every label-free estimator we tried leaves a gap of .4 to .7 between estimated and true precision on some run.
+- **The newest build's line filter regressed uv.** It drops any line whose text appears in an earlier document. That removes the only line of formulaic tracker events ("closed", "labeled bug"), so 12 states went unread again. The fix is clear and structural; it is not applied yet.
+- **Operations.** A shared host repeatedly ran low on disk, from other projects' builds and swap growth. That stopped one full test run and constrained builds. The full test suite at the latest commit has 4 failures and 5 timeouts, all outside this layer's code.
 
-**Example gaps.** Ward's holdout has 69 deals, so one deal moves the bar by .014. Ward's "thread" stamp is
-the Message-ID (mail threads were never reconstructed), so thread evidence carries nothing there. Gold
-granularity for deals (164 records for 177 statements on one read) is still under discussion.
+## 6. Open questions for reviewers
 
-**Rate of results.** Pre-registration, refusals with data, three systems and a heavy gate suite make each
-step trustworthy and slow. Four days produced well-documented negative results on RESOLVE and few bar
-moves; the bar moves that did happen came from small structural changes.
+1. **Architecture vs ceiling.**
+   - Does "declared structure decides, the model answers only closed questions, and never decides identity alone" cap quality on free-text-heavy domains such as deals in email?
+   - Would letting the model reason over several documents, or generate and then verify, be worth the loss of auditability?
+2. **Is the reader model the bottleneck?** The pipeline can run unchanged with a stronger model behind the same questions. Is that the right next experiment, and what would its result mean either way?
+3. **Measuring "similar records whoever wrote the recipe."** Two reasonable authors chose different granularity (whole incident vs. sub-event) and so got different records. Should author independence be scored as:
+   - each author's records against gold at the concept that author declared;
+   - agreement only where the authors declared the same concept;
+   - or something else?
+4. **Label-free reliability of dependent, pre-selected evidence.** Candidate pairs are proposed by similarity, and two sources read the same text. Are there known estimators (beyond Fellegi–Sunter EM with independence) that work here, or should unmeasurable sources be refused rather than weighed?
+5. **The statement unit.** A line, a sentence or a mention: how should a general system choose the unit of a statement in event-dense text without a domain rule?
+6. **Gold as target.** These benchmarks encode particular concepts (GVC's sub-events, Ward's deal boundaries). How much should a general system be judged on matching them, rather than on being right at the author's own concept?
+7. **Legacy identity routines.** Should the general extractor's older identity routines, used for types with no declared criterion, be folded into the single decider (which then needs a default criterion), or retired?
 
-## Open questions
+## 7. Formal objectives (the campaign's bars)
 
-1. **Should READ change shape?** Today it is one generic sketch per chapter with the declared types as an
-   appendix. The alternative we lean toward: for a recipe that declares its types, read only those, once per
-   document within its chapter, attributes required where the text states them. That targets stage,
-   deals, commitments, cost and uv coverage at once. Is there a reason it would not, or a better shape
-   (per-document closed questions, a two-pass read)?
-2. **Is "the model reads, declared fields decide" too conservative for identity?** The model is evidence
-   only and is gated out wherever its measured precision is below the bar, which is everywhere on our two
-   product examples. Is the single-token forced-choice interface the right way to ask, or are we measuring
-   the interface rather than the model?
-3. **Is the domain-free invariant costing results a recipe could legitimately buy?** A maintainer's
-   "Duplicate of #N" is a convention of that tracker. Today no code may match it; should a recipe be able to
-   declare such a pattern, as it declares fields?
-4. **How should uv be scored end to end?** The scorer computes B³ over documents the atlas places and
-   reports unplaced ones separately. Should an unplaced document count as a singleton, so coverage is in
-   the headline number?
-5. **Is uv a good test of the layer?** One case per thread already scores B³ .836. A layer can look good
-   there by not interfering with structure. Is the remaining 16% the right place to measure, or is uv mainly
-   a regression guard?
-6. **Is the third system worth its cost now?** GVC and ECB+ make "best in class" comparable to the
-   literature, but they tripled instrument work before the second example had a production read.
-7. **Is crm-cost (1.7 s per message on local hardware) reachable?** And by which path: a smaller model,
-   fewer calls, a declared-types-only read, or structure first with the model only on what structure leaves?
-8. **Is the process producing learning fast enough?** What would you cut to get more results per day
-   without losing the guarantees that make the results believable?
+The campaign is met when each bar reads met on its newest measured row:
 
-## Where to look
+| Bar | What it measures |
+|---|---|
+| layer-identity-ward | A blind author's Ward deal identity, at or above the 2026-10-09 baseline |
+| layer-identity-uv | A blind author's uv case identity, at or above the 2026-10-09 baseline |
+| layer-identity-gvc | A blind author's GVC identity, at or above the 2026-10-09 baseline |
+| layer-no-tuning | No measured numbers or switches in recipes: now 0, met |
+| layer-default-path | All three systems run through the default commands: met |
+| layer-invariants | The six contracts pass: met |
+| layer-author-gap | Blind-vs-ours agreement at least our own cross-build agreement: now .595 against 1.0, bound by GVC RESOLVE alone |
+| layer-estimator | Estimated vs true source precision within .1: not yet measurable on all systems |
 
-`svrn/docs/specs/ONTOLOGY_METHOD.md` (the method), `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md` §8 (derived
-attributes), `research/ontology-apps/resolve-prereg.md` (every RESOLVE ring with its bars and verdict),
-`research/ontology-apps/ward/recipe.toml` and `support/recipe.toml` (the two declarations),
-`research/ontology-apps/ward/score.py` and `support/score.py` (the scorers),
-`quality/campaigns/crm-proof.toml` (bars, floors and targets).
+The working judgement in this brief is that the bars and ladders are proxies. The objective is section 1.

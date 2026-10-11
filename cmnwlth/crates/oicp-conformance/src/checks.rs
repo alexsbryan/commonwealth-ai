@@ -5,18 +5,22 @@
 //! `ProviderManifest` (unit-tested here, no network), and the **async runners**
 //! that make the HTTP calls and turn results into [`Check`]s. Each runner is
 //! gated: a check for an un-advertised feature returns `Skip`, never `Fail`.
+//! The v0.5 checks live beside it (`ingest_checks`, `evidence_checks`,
+//! `auth_checks`) and run from [`run_all`] after these.
 
 use oicp_types::{features, ProviderManifest};
 use serde_json::json;
 
 use crate::args::{self, Args};
+use crate::fixture::Library;
 use crate::report::{Check, Level};
+use crate::{auth_checks, evidence_checks, ingest_checks};
 
 /// A thin HTTP client bound to one host + optional bearer.
 pub struct Host {
-    base: String,
+    pub(crate) base: String,
     token: Option<String>,
-    client: reqwest::Client,
+    pub(crate) client: reqwest::Client,
 }
 
 impl Host {
@@ -28,7 +32,7 @@ impl Host {
         }
     }
 
-    fn req(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
+    pub(crate) fn req(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
         let mut r = self.client.request(method, url);
         if let Some(t) = &self.token {
             r = r.bearer_auth(t);
@@ -37,7 +41,7 @@ impl Host {
     }
 
     /// Join an origin-relative endpoint (`/oicp/…`) or pass an absolute URL.
-    fn url(&self, path: &str) -> String {
+    pub(crate) fn url(&self, path: &str) -> String {
         if path.starts_with("http://") || path.starts_with("https://") {
             path.to_string()
         } else if let Some(rest) = path.strip_prefix('/') {
@@ -112,6 +116,7 @@ pub fn feature_failures(m: &ProviderManifest) -> Vec<String> {
             );
         }
     }
+    f.extend(evidence_checks::v05_feature_failures(m));
     f
 }
 
@@ -153,7 +158,8 @@ pub async fn run_all(host: &Host, args: &Args) -> Vec<Check> {
     };
 
     let Some(m) = manifest else {
-        // Without a manifest nothing else is applicable.
+        // Without a manifest nothing else is applicable, except the one
+        // check every host that trusts loopback owes.
         for id in [
             "manifest.features",
             "manifest.embed_model",
@@ -161,6 +167,7 @@ pub async fn run_all(host: &Host, args: &Args) -> Vec<Check> {
         ] {
             out.push(Check::skip(id, Level::Must, "no manifest"));
         }
+        out.push(auth_checks::check_auth_local_peer(host, None).await);
         return out;
     };
 
@@ -215,6 +222,43 @@ pub async fn run_all(host: &Host, args: &Args) -> Vec<Check> {
     // auth.posture (gated on a non-loopback host)
     out.push(check_auth_posture(host, &m, args).await);
 
+    // v0.5: the fixture library first, then the checks that read it.
+    out.extend(v05_checks(host, &m, args).await);
+    out
+}
+
+/// The v0.5 checks (oicp-v0.5.md §6), in dependency order: installing the
+/// fixture library is itself `ingest.recipe`, and every evidence check
+/// judges that library or says why it could not.
+async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check> {
+    let mut out = Vec::new();
+    match Library::load() {
+        Ok(lib) => {
+            let (recipe, fixture) = ingest_checks::check_ingest_recipe(host, m, args, &lib).await;
+            out.push(recipe);
+            out.push(ingest_checks::check_ingest_recipe_test(host, m, args, &lib).await);
+            out.push(evidence_checks::check_knowledge_document(host, m, &lib, &fixture).await);
+            out.push(evidence_checks::check_evidence_text(host, m, &lib, &fixture).await);
+            out.push(evidence_checks::check_evidence_align(host, m, &lib, &fixture).await);
+        }
+        Err(e) => {
+            for id in [
+                "ingest.recipe",
+                "ingest.recipe_test",
+                "knowledge.document",
+                "evidence.text",
+                "evidence.align",
+            ] {
+                out.push(Check::fail(
+                    id,
+                    Level::Feature,
+                    format!("the fixture library: {e}"),
+                ));
+            }
+        }
+    }
+    out.push(auth_checks::check_auth_named_client(host, m, args).await);
+    out.push(auth_checks::check_auth_local_peer(host, Some(m)).await);
     out
 }
 
@@ -571,6 +615,19 @@ async fn check_knowledge_search(host: &Host, m: &ProviderManifest) -> Check {
     if !has_results {
         return Check::fail(id, Level::Feature, format!("no results/chunks array: {v}"));
     }
+    // v0.5 §3: with knowledge:document, every hit is typed and carries its
+    // text's record.
+    let hits = v
+        .get("results")
+        .and_then(|x| x.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if m.has_feature(features::KNOWLEDGE_DOCUMENT) {
+        let bad = evidence_checks::typed_hit_failures(&hits);
+        if !bad.is_empty() {
+            return Check::fail(id, Level::Feature, bad.join("; "));
+        }
+    }
     // `corpora_searched` vs the advertised set: the spec does NOT require
     // searched ⊆ advertised. A mesh-federated host legitimately searches
     // peer-hosted corpora absent from its own manifest, and a host need
@@ -718,89 +775,5 @@ async fn check_auth_posture(host: &Host, m: &ProviderManifest, args: &Args) -> C
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oicp_types::{
-        CapabilityClaim, CapabilityHint, IngestEndpoints, KnowledgeManifest, LatencyClass,
-        ModelStatus, ProviderModel,
-    };
-
-    fn model(id: &str, ctx: u32, claims: Vec<CapabilityClaim>) -> ProviderModel {
-        ProviderModel {
-            id: id.into(),
-            base_model: None,
-            quantization: None,
-            context_tokens: ctx,
-            status: ModelStatus {
-                available: true,
-                loaded: true,
-                estimated_tokens_per_sec: None,
-                estimated_ttft_ms: None,
-                estimated_load_time_sec: None,
-            },
-            size_gb: None,
-            claims,
-            fingerprint: None,
-        }
-    }
-
-    fn claim(affinity: f32, max_context: u32) -> CapabilityClaim {
-        CapabilityClaim {
-            hint: CapabilityHint::general(),
-            latency_class: LatencyClass::Normal,
-            max_context,
-            max_output: 512,
-            affinity,
-        }
-    }
-
-    #[test]
-    fn clean_manifest_has_no_invariant_failures() {
-        let m = ProviderManifest::new(vec![model("m", 8192, vec![claim(0.9, 8000)])]);
-        assert!(manifest_invariant_failures(&m).is_empty());
-    }
-
-    #[test]
-    fn affinity_out_of_range_is_flagged() {
-        let m = ProviderManifest::new(vec![model("m", 8192, vec![claim(1.5, 8000)])]);
-        assert_eq!(manifest_invariant_failures(&m).len(), 1);
-    }
-
-    #[test]
-    fn claim_context_exceeding_model_is_flagged() {
-        let m = ProviderManifest::new(vec![model("m", 8192, vec![claim(0.5, 9000)])]);
-        let f = manifest_invariant_failures(&m);
-        assert_eq!(f.len(), 1);
-        assert!(f[0].contains("exceeds context_tokens"));
-    }
-
-    #[test]
-    fn unknown_feature_is_flagged_but_x_prefix_is_ok() {
-        let mut m = ProviderManifest::new(vec![model("m", 8192, vec![])]);
-        m.features = vec!["x:custom-thing".into(), "not-a-real-feature".into()];
-        let f = feature_failures(&m);
-        assert_eq!(f.len(), 1);
-        assert!(f[0].contains("not-a-real-feature"));
-    }
-
-    #[test]
-    fn ingest_feature_must_match_ingest_section() {
-        // ingest:v1 advertised but no knowledge.ingest → failure.
-        let mut m = ProviderManifest::new(vec![model("m", 8192, vec![])]);
-        m.features = vec![features::INGEST_V1.into()];
-        assert_eq!(feature_failures(&m).len(), 1);
-
-        // Now add the section → consistent.
-        m.knowledge = Some(KnowledgeManifest {
-            corpora: vec![],
-            search_endpoint: "/v1/knowledge/search".into(),
-            embed_model: None,
-            ingest: Some(IngestEndpoints {
-                install_endpoint: "/oicp/v1/corpus/install".into(),
-                progress_endpoint: "/oicp/v1/corpus/progress".into(),
-                test_endpoint: None,
-            }),
-        });
-        assert!(feature_failures(&m).is_empty());
-    }
-}
+#[path = "checks_tests.rs"]
+mod tests;

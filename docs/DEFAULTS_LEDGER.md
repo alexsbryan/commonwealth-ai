@@ -92,28 +92,24 @@ field. Until then the operator says so.
 
 **Review by 2026-11-10.**
 
-### `[enrichment.ontology].document_reading` — false unless a recipe opts in (2026-10-07)
+### ~~`[enrichment.ontology].document_reading` / `document_reader`~~ — RETIRED 2026-10-09: reading is chosen by the declaration
 
-**What ships.** In a version-1 recipe, `[enrichment.ontology]` may set
-`document_reading = true` to use the accountable reader over hydrated source
-documents. Absent or false preserves the shared Phase-1 path.
-Ward's commissive `commitment` binds only to an existing projected person by
-the declared email identity; missing or ambiguous identity remains unbound and
-counted, never a name fallback or a duplicate person atom.
+**What ships.** No switch. A version-1 recipe whose claim kinds all have a
+force and a subject RESOLVE or a metadata source identifies is read by the
+passes reader (Locate per numbered line, Choose per closed-valued field); one
+with no such claim kind is read by the general extractor; a mix refuses at
+parse (`OntologyPolicies::reads_documents`, `recipe_ontology/language.rs`).
+The one-shot reader is deleted. Both keys still load, are ignored, and are
+named by `recipe validate` and on every load (`V1_RETIRED_KEYS`).
 
-**Why false.** The per-document reader has not yet been measured end to end on
-the Ward and uv tune documents. Enabling it by default would change reads for
-recipes whose force, evidence and membership needs have not been evaluated.
+**Why.** Operator, 2026-10-09 (campaign ontology-layer, scaffold): no build step
+gated on a test made up for it; the reader ONTOLOGY_METHOD §Reading specifies is
+passes, and one-shot lost on Ward in crm-proof loops 7-10c. The flip conditions
+these two rows carried (Arm D, loop 16's Locate bars) were per-step gates the
+re-shaped campaign retired; their bars are tuning targets on the scaffold's runs.
 
-**Flip condition.** Enable the option only for a recipe whose Arm D, on the same
-tune documents, model and identity policy, has both higher membership coverage
-and lower whole-build cost per document than the current reader, while preserving
-declared force, document evidence, local references, and no-state membership.
-Otherwise keep the recipe opted out. Settled by the production READ comparison
-in `research/ontology-apps/TASK_MODEL.md` §Hypotheses and §Implementation order
-(Arms C and D); the parent will run it after implementation.
-
-**Review by 2026-10-31.**
+**Closure.** Order 3 of campaign ontology-layer removes the two keys from
+`V1_RETIRED_KEYS` once no recipe carries them. **Review by 2026-10-31.**
 
 ### Recipe-declared qualified scalar protocol fold — off unless a recipe opts in (2026-10-07)
 

@@ -192,6 +192,7 @@ fn process_one_file(
                 })),
                 source_file: Some(file_label.to_string()),
                 embed_text: None,
+                source: super::DocSource::File(file.to_path_buf()),
             });
         }
     }
@@ -215,6 +216,7 @@ fn process_one_file(
                     })),
                     source_file: Some(file_label.to_string()),
                     embed_text: None,
+                    source: super::DocSource::File(file.to_path_buf()),
                 });
             }
         }

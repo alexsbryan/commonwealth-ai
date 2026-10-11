@@ -1,0 +1,98 @@
+# The frozen bank behind golden.txt. Inputs only: what the aligner says about
+# them is golden.txt, blessed by UPDATE_QUOTE_ALIGN_GOLDEN=1 and reviewed case
+# by case. Adding a case is free; changing one is changing the instrument.
+#
+# Format: `=== name`, then one or more `text:` lines and one `quote:` line.
+# Escapes: \n, \\, and \u{XXXX}.
+
+=== verbatim
+text: The river keeps its own counsel, and the town keeps its own.
+quote: the town keeps its own
+
+=== substituted_word
+text: The river keeps its own counsel, and the town keeps its own.
+quote: The river keeps her own counsel
+
+=== substituted_two_for_one
+text: The committee will consider the proposal at its next regular meeting.
+quote: The committee will review carefully the proposal at its next regular meeting
+
+=== added_word
+text: The river keeps its own counsel, and the town keeps its own.
+quote: The river keeps all its own counsel
+
+=== omitted_word
+text: The river keeps its own counsel, and the town keeps its own.
+quote: The river keeps its counsel
+
+=== substituted_at_the_end
+text: The river keeps its own counsel, and the town keeps its own.
+quote: The river keeps its own secrets
+
+=== case_only
+text: The river keeps its own counsel, and the town keeps its own.
+quote: the river keeps its own counsel
+
+=== punctuation_added
+text: We hold these truths to be self-evident that all men are created equal.
+quote: We hold these truths to be self-evident, that all men are created equal
+
+=== elided_interior
+text: It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness.
+quote: It was the best of times \u{2026} it was the age of foolishness
+
+=== elided_spaced_dots
+text: It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness.
+quote: it was the worst of times . . . the age of foolishness
+
+=== elided_at_the_edges_is_honest
+text: It was the best of times, it was the worst of times, it was the age of wisdom.
+quote: ...the worst of times, it was the age...
+
+=== bracketed_capital
+text: and the river keeps its own counsel when the town sleeps.
+quote: [T]he river keeps its own counsel when the town sleeps
+
+=== bracketed_replacement
+text: The Joint Standing Committee on Finance voted against the measure on Tuesday.
+quote: [The committee] voted against the measure on Tuesday
+
+=== bracketed_sic
+text: The goverment has announced its intention to proceed with the plan.
+quote: The goverment [sic] has announced its intention to proceed
+
+=== folds_quotes_dashes_emphasis
+text: Mrs Verloc\u{2019}s \u{201C}gaze\u{201D} \u{2014} steady and _unwavering_ \u{2014} held him there.
+quote: Mrs Verloc's "gaze" - steady and **unwavering** - held him
+
+=== nfc_composed_against_decomposed
+text: The caf\u{0065}\u{0301} on the corner served the whole street until dawn.
+quote: The caf\u{00E9} on the corner served the whole street
+
+=== pdf_hyphen_join
+text: the principle of mutual co-\noperation between the several states of the union
+quote: the principle of mutual cooperation between the several states
+
+=== best_of_two_texts
+text: A different river keeps nothing at all to itself, ever.
+text: The river keeps its own counsel, and the town keeps its own.
+quote: and the town keeps its own
+
+=== two_occurrences
+text: She keeps her own counsel. Years later, she still keeps her own counsel.
+quote: keeps her own counsel
+
+=== below_the_floor
+text: The river keeps its own counsel, and the town keeps its own.
+quote: The river keeps nothing whatsoever back from anyone
+
+=== unrelated
+text: The river keeps its own counsel, and the town keeps its own.
+quote: an entirely unrelated sentence about the tax code
+
+# A word cut at the quote's edge, and an ellipsis and a bracket the source
+# itself has: the one three-word run holds the cut word, so it has no exact
+# 3-gram; the two-word run between the gaps does.
+=== edge_cut_word_between_gaps
+text: Mr Verloc\u{2019}s shop\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stood in a street of \u{201C}grimy\u{201D} brick houses.
+quote: hop\u{2014}small, dim\u{2026} and _quiet_ [sic]\n  stoo

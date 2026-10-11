@@ -303,7 +303,7 @@ pub fn stamp_claim_documents(
     };
     for claim in claims.iter_mut() {
         let subject = format!("atom:{}", claim.id.as_str());
-        let doc = match locate_for_stamp(claim, documents) {
+        let doc = match locate(claim, documents) {
             Ok(doc) => doc,
             Err(reason) => {
                 debug!(
@@ -376,34 +376,12 @@ pub(super) fn failure(subject: String, kind: PhaseFailureKind, reason: String) -
     }
 }
 
-/// The document a claim's own document-read identity names, when it has one;
-/// otherwise the fuzzy evidence anchor. An accountable read knows which
-/// document it read, and stamping must not guess among a section's several.
-fn locate_for_stamp<'d>(
-    claim: &Claim,
-    documents: &'d SectionDocuments,
-) -> Result<&'d SourceDocument, String> {
-    let document_id = claim
-        .attributes
-        .get(crate::enrichment::pipeline::document_read::SOURCE_DOCUMENT_ATTRIBUTE)
-        .and_then(Value::as_str);
-    let Some(document_id) = document_id else {
-        return locate(claim, documents);
-    };
-    let section = claim
-        .evidence
-        .first()
-        .map(|evidence| evidence.chunk_id.as_str())
-        .ok_or_else(|| "accountable claim carries no section evidence".to_string())?;
-    documents
-        .document_for_section(section, document_id)
-        .ok_or_else(|| {
-            format!("accountable document `{document_id}` is not present in evidence section `{section}`")
-        })
-}
-
 /// The one document `claim`'s evidence lands in, or why there is not one.
-/// RESOLVE places its statements with it too (`resolution_records`).
+/// Evidence that names its document (`source_doc_id`, stamped in 3b from the
+/// read that cited it) is in that document, whatever else holds the same
+/// words: equal text is not the same occurrence. Other evidence is placed by
+/// its anchor, in the one document of its section that holds it. Stamping,
+/// derivation and RESOLVE all place a claim with this.
 pub(super) fn locate<'d>(
     claim: &Claim,
     documents: &'d SectionDocuments,
@@ -412,6 +390,16 @@ pub(super) fn locate<'d>(
     let mut misses: Vec<String> = Vec::new();
     for ev in &claim.evidence {
         let section = ev.chunk_id.as_str();
+        if let Some(named) = ev.source_doc_id.as_deref() {
+            match documents.document_for_section(section, named) {
+                Some(doc) if found.iter().any(|f| f.key == doc.key) => {}
+                Some(doc) => found.push(doc),
+                None => misses.push(format!(
+                    "the evidence names document `{named}`, which section `{section}` does not hold"
+                )),
+            }
+            continue;
+        }
         let docs = documents
             .by_section
             .get(section)

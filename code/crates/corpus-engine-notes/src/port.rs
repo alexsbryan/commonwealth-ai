@@ -93,6 +93,7 @@ fn to_port_log_row(r: ToolCallLogRow) -> PortToolCallLogRow {
         tool_name: r.tool_name,
         outcome: r.outcome,
         called_at: r.called_at,
+        caller: r.caller,
     }
 }
 
@@ -403,6 +404,7 @@ mod tests {
             tool_name: "blast".into(),
             outcome: "success".into(),
             called_at: 42,
+            caller: Some("asserted:claude-code".into()),
         };
         let r = to_port_log_row(st.clone());
         assert_eq!(r.id, st.id);
@@ -410,5 +412,6 @@ mod tests {
         assert_eq!(r.tool_name, st.tool_name);
         assert_eq!(r.outcome, st.outcome);
         assert_eq!(r.called_at, st.called_at);
+        assert_eq!(r.caller, st.caller, "who called crosses the seam");
     }
 }

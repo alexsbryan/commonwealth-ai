@@ -384,6 +384,7 @@ async fn a_canonical_packed_through_the_port_unpacks_to_its_own_fingerprint() {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 vec,
             )

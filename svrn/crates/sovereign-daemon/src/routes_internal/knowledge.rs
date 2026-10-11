@@ -110,6 +110,7 @@ pub async fn knowledge_search(
     // spends another's reciprocity. A caller with no verified identity
     // is served and credited to nobody — the dimensional ledger is
     // intra-mesh-only per the spec scope.
+    let principal = attached.as_ref().map(|axum::Extension(p)| p.0.clone());
     let requester = crate::admission::requester(attached);
 
     let engine = match &state.inner.node.corpus_engine {
@@ -138,11 +139,19 @@ pub async fn knowledge_search(
     // argument cannot bypass it (defence in depth behind the client-side seal).
     // We still filter against what `installed_indexes` reports so we never try
     // to open an index we don't have.
-    let installed: Vec<(String, u64)> = engine
-        .installed_indexes()
-        .await
-        .unwrap_or_default()
+    //
+    // Only the corpora this caller may read are candidates
+    // (`oicp_evidence::readable_corpora`): a member reaches the ones declared
+    // `query_sharing`, an unverified claimant none. One held here outside that
+    // set answers exactly like one not held.
+    let installed_all = engine.installed_indexes().await.unwrap_or_default();
+    let readable: std::collections::HashSet<String> =
+        crate::oicp_evidence::readable_corpora(&state, principal.as_ref(), &installed_all)
+            .into_iter()
+            .collect();
+    let installed: Vec<(String, u64)> = installed_all
         .into_iter()
+        .filter(|i| readable.contains(&i.corpus_id))
         .map(|i| (i.corpus_id, i.chunk_count))
         .collect();
     let installed_ids: std::collections::HashSet<String> =
@@ -174,31 +183,12 @@ pub async fn knowledge_search(
                     .await
                 {
                     Ok(results) => {
-                        all_results.extend(results.into_iter().map(|r| {
-                            KnowledgeResult {
-                                // Provenance the SERVING index stamped, forwarded
-                                // rather than dropped (TOPOLOGY §10 rung 9.1).
-                                // `stamped_custody` and not `custody` so "this
-                                // index recorded no class" stays ABSENT on the
-                                // wire instead of becoming the string "unknown" —
-                                // the requester joins absence into a refusal.
-                                custody: r
-                                    .provenance
-                                    .stamped_custody()
-                                    .map(|c| c.as_str().to_string()),
-                                grain: Some(r.provenance.grain().as_str().to_string()),
-                                content: r.content,
-                                title: r.title,
-                                corpus_id: corpus_id.clone(),
-                                url: r.url,
-                                score: r.score,
-                                metadata: Default::default(),
-                                chunk_id: r.chunk_id,
-                                source_doc_id: r.source_doc_id,
-                                peer_name: None,
-                                peer_node_id: None,
-                            }
-                        }));
+                        // The same projection the client route serves, so a
+                        // peer's hits keep their records (v0.5 §3).
+                        all_results.extend(
+                            crate::oicp_evidence::knowledge_results(&index, corpus_id, results)
+                                .await,
+                        );
                     }
                     Err(e) => {
                         tracing::warn!(

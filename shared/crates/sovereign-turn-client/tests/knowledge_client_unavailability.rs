@@ -59,6 +59,8 @@ fn substituted_hit(score: f32) -> KnowledgeResult {
         source_doc_id: None,
         peer_name: None,
         peer_node_id: None,
+        document: None,
+        document_absent: None,
     }
 }
 

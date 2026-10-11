@@ -166,7 +166,7 @@ pub(super) async fn run(
     // every other edge.
     let prior_edges = read_atlas_edges(atlas_dir).map_err(|e| {
         format!(
-            "reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
+            "reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {}` first.",
             atlas_dir.display(),
             cfg.corpus_id
         )

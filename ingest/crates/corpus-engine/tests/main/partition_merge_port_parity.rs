@@ -70,6 +70,7 @@ async fn build_partition(path: &Path, rows: &[(&str, &str, &str)]) {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 embedding(1.0),
             )

@@ -571,6 +571,7 @@ mod tests {
             resolved_parameters: Default::default(),
             display: None,
             retrieval: Default::default(),
+            documents: Vec::new(),
         }
     }
 

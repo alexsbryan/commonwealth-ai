@@ -1,0 +1,4 @@
+{"t": "pass", "n": "layer_contract_tests::every_fixture_runs_the_default_path_and_resolve_makes_records"}
+{"t": "pass", "n": "crate_dirs::crate_dirs_tests::a_member_no_row_claims_is_named"}
+{"t": "pass", "n": "crate_dirs::crate_dirs_tests::a_home_must_be_one_top_level_dir"}
+{"t": "pass", "n": "crate_dirs::crate_dirs_tests::a_v6_map_without_the_table_is_refused"}

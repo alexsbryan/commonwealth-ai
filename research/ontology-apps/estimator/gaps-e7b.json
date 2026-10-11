@@ -1,0 +1,522 @@
+{
+ "rule": {
+  "max_fire_on_same": 0.1,
+  "min_different_when_fired": 0.9,
+  "min_lookalikes_flagged": 0.3
+ },
+ "verdict": "NOT WORTH",
+ "rates": {
+  "c2-lines-gvc-resolve-alone": {
+   "either": {
+    "labelled": 14651,
+    "same": 1270,
+    "different": 13381,
+    "fires": 1561,
+    "fire_on_same": 0.12,
+    "different_when_fired": 0.903,
+    "lookalikes": 338,
+    "lookalikes_flagged": 21,
+    "lookalikes_flagged_share": 0.062,
+    "true_text_links": 373,
+    "true_text_links_flagged": 48,
+    "judged": true,
+    "meets": false
+   },
+   "Person": {
+    "labelled": 14651,
+    "same": 1270,
+    "different": 13381,
+    "fires": 966,
+    "fire_on_same": 0.066,
+    "different_when_fired": 0.913,
+    "lookalikes": 338,
+    "lookalikes_flagged": 9,
+    "lookalikes_flagged_share": 0.027,
+    "true_text_links": 373,
+    "true_text_links_flagged": 22,
+    "judged": true,
+    "meets": false
+   },
+   "Location": {
+    "labelled": 14651,
+    "same": 1270,
+    "different": 13381,
+    "fires": 616,
+    "fire_on_same": 0.059,
+    "different_when_fired": 0.878,
+    "lookalikes": 338,
+    "lookalikes_flagged": 12,
+    "lookalikes_flagged_share": 0.036,
+    "true_text_links": 373,
+    "true_text_links_flagged": 27,
+    "judged": true,
+    "meets": false
+   }
+  },
+  "blind-r2--gvc-resolve-alone": {
+   "either": {
+    "labelled": 10312,
+    "same": 552,
+    "different": 9760,
+    "fires": 662,
+    "fire_on_same": 0.109,
+    "different_when_fired": 0.909,
+    "lookalikes": 669,
+    "lookalikes_flagged": 56,
+    "lookalikes_flagged_share": 0.084,
+    "true_text_links": 234,
+    "true_text_links_flagged": 25,
+    "judged": true,
+    "meets": false
+   },
+   "Person": {
+    "labelled": 10312,
+    "same": 552,
+    "different": 9760,
+    "fires": 277,
+    "fire_on_same": 0.058,
+    "different_when_fired": 0.884,
+    "lookalikes": 669,
+    "lookalikes_flagged": 5,
+    "lookalikes_flagged_share": 0.007,
+    "true_text_links": 234,
+    "true_text_links_flagged": 9,
+    "judged": true,
+    "meets": false
+   },
+   "Location": {
+    "labelled": 10312,
+    "same": 552,
+    "different": 9760,
+    "fires": 388,
+    "fire_on_same": 0.051,
+    "different_when_fired": 0.928,
+    "lookalikes": 669,
+    "lookalikes_flagged": 51,
+    "lookalikes_flagged_share": 0.076,
+    "true_text_links": 234,
+    "true_text_links_flagged": 16,
+    "judged": true,
+    "meets": false
+   }
+  },
+  "c2-lines--gvc": {
+   "either": {
+    "labelled": 1676,
+    "same": 43,
+    "different": 1633,
+    "fires": 405,
+    "fire_on_same": 0.233,
+    "different_when_fired": 0.975,
+    "lookalikes": 20,
+    "lookalikes_flagged": 7,
+    "lookalikes_flagged_share": 0.35,
+    "true_text_links": 15,
+    "true_text_links_flagged": 2,
+    "judged": true,
+    "meets": false
+   },
+   "Person": {
+    "labelled": 1676,
+    "same": 43,
+    "different": 1633,
+    "fires": 150,
+    "fire_on_same": 0.14,
+    "different_when_fired": 0.96,
+    "lookalikes": 20,
+    "lookalikes_flagged": 1,
+    "lookalikes_flagged_share": 0.05,
+    "true_text_links": 15,
+    "true_text_links_flagged": 0,
+    "judged": true,
+    "meets": false
+   },
+   "Location": {
+    "labelled": 1676,
+    "same": 43,
+    "different": 1633,
+    "fires": 302,
+    "fire_on_same": 0.116,
+    "different_when_fired": 0.983,
+    "lookalikes": 20,
+    "lookalikes_flagged": 6,
+    "lookalikes_flagged_share": 0.3,
+    "true_text_links": 15,
+    "true_text_links_flagged": 2,
+    "judged": true,
+    "meets": false
+   }
+  },
+  "blind-r2--gvc": {
+   "either": {
+    "labelled": 481,
+    "same": 31,
+    "different": 450,
+    "fires": 160,
+    "fire_on_same": 0.226,
+    "different_when_fired": 0.956,
+    "lookalikes": 22,
+    "lookalikes_flagged": 5,
+    "lookalikes_flagged_share": 0.227,
+    "true_text_links": 19,
+    "true_text_links_flagged": 5,
+    "judged": true,
+    "meets": false
+   },
+   "Person": {
+    "labelled": 481,
+    "same": 31,
+    "different": 450,
+    "fires": 27,
+    "fire_on_same": 0.0,
+    "different_when_fired": 1.0,
+    "lookalikes": 22,
+    "lookalikes_flagged": 0,
+    "lookalikes_flagged_share": 0.0,
+    "true_text_links": 19,
+    "true_text_links_flagged": 0,
+    "judged": true,
+    "meets": false
+   },
+   "Location": {
+    "labelled": 481,
+    "same": 31,
+    "different": 450,
+    "fires": 145,
+    "fire_on_same": 0.226,
+    "different_when_fired": 0.952,
+    "lookalikes": 22,
+    "lookalikes_flagged": 5,
+    "lookalikes_flagged_share": 0.227,
+    "true_text_links": 19,
+    "true_text_links_flagged": 5,
+    "judged": true,
+    "meets": false
+   }
+  }
+ },
+ "fits": {
+  "c2-lines-gvc-resolve-alone": {
+   "E0": [
+    0.408,
+    "proposed_answer"
+   ],
+   "E0+differs": [
+    0.427,
+    "model_choice"
+   ],
+   "E0+differs_without_feature_row": [
+    0.427,
+    "model_choice"
+   ],
+   "sources": {
+    "document_date": {
+     "estimated": 0.171,
+     "labelled": 0.141,
+     "agreed": 2368,
+     "ci90": [
+      0.091,
+      0.188
+     ],
+     "judged": true,
+     "gap": 0.029
+    },
+    "entity_differs": {
+     "estimated": 0.193,
+     "labelled": 0.264,
+     "agreed": 242,
+     "ci90": [
+      0.223,
+      0.309
+     ],
+     "judged": true,
+     "gap": 0.072
+    },
+    "model_choice": {
+     "estimated": 0.83,
+     "labelled": 0.403,
+     "agreed": 216,
+     "ci90": [
+      0.349,
+      0.455
+     ],
+     "judged": true,
+     "gap": 0.427
+    },
+    "necessary:kind": {
+     "estimated": 0.19,
+     "labelled": 0.218,
+     "agreed": 3268,
+     "ci90": [
+      0.192,
+      0.244
+     ],
+     "judged": true,
+     "gap": 0.028
+    },
+    "proposed_answer": {
+     "estimated": 0.991,
+     "labelled": 0.58,
+     "agreed": 498,
+     "ci90": [
+      0.528,
+      0.638
+     ],
+     "judged": true,
+     "gap": 0.41
+    }
+   }
+  },
+  "blind-r2--gvc-resolve-alone": {
+   "E0": [
+    0.737,
+    "model_choice"
+   ],
+   "E0+differs": [
+    0.74,
+    "model_choice"
+   ],
+   "E0+differs_without_feature_row": [
+    0.74,
+    "model_choice"
+   ],
+   "sources": {
+    "document_date": {
+     "estimated": 0.858,
+     "labelled": 0.237,
+     "agreed": 916,
+     "ci90": [
+      0.161,
+      0.283
+     ],
+     "judged": true,
+     "gap": 0.621
+    },
+    "entity_differs": {
+     "estimated": 0.586,
+     "labelled": 0.333,
+     "agreed": 87,
+     "ci90": [
+      0.2,
+      0.434
+     ],
+     "judged": true,
+     "gap": 0.252
+    },
+    "model_choice": {
+     "estimated": 0.989,
+     "labelled": 0.249,
+     "agreed": 502,
+     "ci90": [
+      0.204,
+      0.292
+     ],
+     "judged": true,
+     "gap": 0.74
+    },
+    "proposed_answer": {
+     "estimated": 0.813,
+     "labelled": 0.286,
+     "agreed": 510,
+     "ci90": [
+      0.245,
+      0.325
+     ],
+     "judged": true,
+     "gap": 0.527
+    }
+   }
+  },
+  "c2-lines--gvc": {
+   "E0": [
+    0.466,
+    "model_choice"
+   ],
+   "E0+differs": [
+    0.536,
+    "model_choice"
+   ],
+   "E0+differs_without_feature_row": [
+    0.536,
+    "model_choice"
+   ],
+   "sources": {
+    "document_date": {
+     "estimated": 0.61,
+     "labelled": 0.157,
+     "agreed": 115,
+     "ci90": [
+      0.091,
+      0.222
+     ],
+     "judged": true,
+     "gap": 0.453
+    },
+    "document_id": {
+     "estimated": 0.572,
+     "labelled": null,
+     "agreed": 0,
+     "ci90": null,
+     "judged": false,
+     "gap": null
+    },
+    "entity_differs": {
+     "estimated": 0.39,
+     "labelled": 0.214,
+     "agreed": 14,
+     "ci90": [
+      0.0,
+      0.385
+     ],
+     "judged": false,
+     "gap": null
+    },
+    "model_choice": {
+     "estimated": 0.92,
+     "labelled": 0.385,
+     "agreed": 26,
+     "ci90": [
+      0.219,
+      0.56
+     ],
+     "judged": true,
+     "gap": 0.536
+    },
+    "necessary:kind": {
+     "estimated": 0.113,
+     "labelled": 0.031,
+     "agreed": 510,
+     "ci90": [
+      0.019,
+      0.045
+     ],
+     "judged": true,
+     "gap": 0.081
+    },
+    "proposed_answer": {
+     "estimated": 0.963,
+     "labelled": 0.556,
+     "agreed": 9,
+     "ci90": [
+      0.429,
+      1.0
+     ],
+     "judged": false,
+     "gap": null
+    }
+   }
+  },
+  "blind-r2--gvc": {
+   "E0": [
+    0.501,
+    "document_date"
+   ],
+   "E0+differs": [
+    0.478,
+    "document_date"
+   ],
+   "E0+differs_without_feature_row": [
+    0.478,
+    "document_date"
+   ],
+   "sources": {
+    "document_date": {
+     "estimated": 0.678,
+     "labelled": 0.2,
+     "agreed": 40,
+     "ci90": [
+      0.077,
+      0.368
+     ],
+     "judged": true,
+     "gap": 0.478
+    },
+    "document_id": {
+     "estimated": 0.616,
+     "labelled": null,
+     "agreed": 0,
+     "ci90": null,
+     "judged": false,
+     "gap": null
+    },
+    "entity_differs": {
+     "estimated": 0.804,
+     "labelled": 0.625,
+     "agreed": 8,
+     "ci90": [
+      0.333,
+      0.875
+     ],
+     "judged": false,
+     "gap": null
+    },
+    "model_choice": {
+     "estimated": 0.655,
+     "labelled": 0.462,
+     "agreed": 39,
+     "ci90": [
+      0.326,
+      0.6
+     ],
+     "judged": true,
+     "gap": 0.193
+    },
+    "proposed_answer": {
+     "estimated": 0.845,
+     "labelled": 0.5,
+     "agreed": 2,
+     "ci90": [
+      0.0,
+      1.0
+     ],
+     "judged": false,
+     "gap": null
+    }
+   }
+  }
+ },
+ "vetoes": {
+  "c2-lines-gvc-resolve-alone": {
+   "weighed_links": 324,
+   "vetoed": 46,
+   "vetoed_right": 14,
+   "vetoed_wrong": 32,
+   "vetoed_unscorable": 0,
+   "before": {
+    "conll": 0.607,
+    "muc": 0.702,
+    "b3": 0.635,
+    "ceaf_e": 0.483,
+    "lea": 0.448
+   },
+   "after": {
+    "conll": 0.578,
+    "muc": 0.662,
+    "b3": 0.618,
+    "ceaf_e": 0.454,
+    "lea": 0.412
+   }
+  },
+  "blind-r2--gvc-resolve-alone": {
+   "weighed_links": 471,
+   "vetoed": 46,
+   "vetoed_right": 33,
+   "vetoed_wrong": 13,
+   "vetoed_unscorable": 0,
+   "before": {
+    "conll": 0.505,
+    "muc": 0.781,
+    "b3": 0.479,
+    "ceaf_e": 0.254,
+    "lea": 0.364
+   },
+   "after": {
+    "conll": 0.507,
+    "muc": 0.748,
+    "b3": 0.499,
+    "ceaf_e": 0.273,
+    "lea": 0.342
+   }
+  }
+ }
+}

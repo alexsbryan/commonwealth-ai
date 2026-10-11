@@ -187,6 +187,7 @@ mod tests {
             metadata: Some(meta),
             source_file: None,
             embed_text: None,
+            source: crate::extractors::DocSource::Record,
         }
     }
 
@@ -297,6 +298,7 @@ mod tests {
             metadata: None,
             source_file: None,
             embed_text: None,
+            source: crate::extractors::DocSource::Record,
         };
         assert!(f.accept(&d));
     }

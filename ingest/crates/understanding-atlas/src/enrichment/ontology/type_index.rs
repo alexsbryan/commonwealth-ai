@@ -294,6 +294,7 @@ mod tests {
             family: AttrFamily::Text { values: Vec::new() },
             description: String::new(),
             derived: None,
+            by: None,
         }
     }
 

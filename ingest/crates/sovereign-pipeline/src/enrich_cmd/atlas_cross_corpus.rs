@@ -53,7 +53,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Notes(
             "Both corpora must have been resolved via `svrn enrich atlas-resolve \
-             <corpus> --phase all`. Zero LLM calls — the Grounding detector is \
+             <corpus>`. Zero LLM calls — the Grounding detector is \
              fully deterministic. Framing + Provenance detectors land in follow-ups.",
         ),
     ],
@@ -100,7 +100,7 @@ pub async fn cmd_atlas_cross_corpus(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!(
                 "error: reading local atlas at {}: {e}. Run `svrn enrich atlas-resolve \
-                 {} --phase all` first.",
+                 {}` first.",
                 local_dir.display(),
                 local_cfg.corpus_id
             );
@@ -112,7 +112,7 @@ pub async fn cmd_atlas_cross_corpus(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!(
                 "error: reading peer atlas at {}: {e}. Run `svrn enrich atlas-resolve \
-                 {} --phase all` first.",
+                 {}` first.",
                 peer_dir.display(),
                 peer_cfg.corpus_id
             );

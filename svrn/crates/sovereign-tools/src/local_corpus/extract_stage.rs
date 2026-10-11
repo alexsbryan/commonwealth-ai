@@ -19,12 +19,13 @@
 //!
 //! `id` and `title` are picked up by `JsonlExtractor`; everything else
 //! becomes chunk metadata (see `ingest/crates/corpus-engine/src/extractors/json.rs`).
+//! Each line also states `source_sha256` and `extractor` ([`stated_source`]):
+//! this staging read the bytes, so it says what they were, and the text
+//! store records the document as `DocSource::Hashed`.
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-
-use serde::{Deserialize, Serialize};
 
 use super::config::LocalCorpusConfig;
 use super::ocr::{OcrCtx, PageProgressCallback};
@@ -35,13 +36,8 @@ use super::progress::RuntimeFailure;
 /// completion screen as a named skip list (spec §9).
 pub type StageFailure = RuntimeFailure;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct StagedLine<'a> {
-    id: &'a str,
-    title: &'a str,
-    content: &'a str,
-    source_path: &'a str,
-}
+pub use super::staged_line::stated_source;
+use super::staged_line::StagedLine;
 
 /// Result of one staging run.
 #[derive(Debug, Default)]
@@ -96,11 +92,15 @@ pub fn stage_blocking(
                 // never be delta-deleted, and same-named notes in
                 // different folders collided into one doc id.
                 let source_id = relative.clone();
+                let (sha, extractor) = stated_source(&meta.path, false)?;
+                let sha = sha.to_hex();
                 let line = StagedLine {
                     id: &source_id,
                     title: &meta.display_name,
                     content: &text,
                     source_path: &relative,
+                    source_sha256: &sha,
+                    extractor: &extractor,
                 };
                 let json = serde_json::to_string(&line)
                     .map_err(|e| std::io::Error::other(format!("serialize: {e}")))?;
@@ -762,11 +762,15 @@ pub async fn append_ocr_to_staging(
                 // never be delta-deleted, and same-named notes in
                 // different folders collided into one doc id.
                 let source_id = relative.clone();
+                let (sha, extractor) = stated_source(&meta.path, true)?;
+                let sha = sha.to_hex();
                 let line = StagedLine {
                     id: &source_id,
                     title: &meta.display_name,
                     content: &text,
                     source_path: &relative,
+                    source_sha256: &sha,
+                    extractor: &extractor,
                 };
                 let json = serde_json::to_string(&line)
                     .map_err(|e| std::io::Error::other(format!("serialize: {e}")))?;

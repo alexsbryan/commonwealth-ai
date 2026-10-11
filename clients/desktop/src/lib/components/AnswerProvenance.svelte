@@ -42,6 +42,7 @@
     readAnswerProvenance,
     readStageAttribution,
     readTypedAbstention,
+    type QuoteAddress,
   } from "./answerProvenance";
 
   interface Props {
@@ -53,9 +54,12 @@
     /** Opens a chunk in the reading surface. Unset = rows render
      *  un-clickable (the strip still reports what resolved). */
     onOpenCitation?: (corpusId: string, chunkId: number) => void;
+    /** Opens a verified quotation at its address in a stored text. Unset =
+     *  the quote is listed but not openable. */
+    onOpenQuote?: (quote: QuoteAddress) => void;
   }
 
-  let { metadata, answerText, onOpenCitation }: Props = $props();
+  let { metadata, answerText, onOpenCitation, onOpenQuote }: Props = $props();
 
   let prov = $derived(readAnswerProvenance(metadata, answerText));
   let abstention = $derived(readTypedAbstention(metadata));
@@ -125,6 +129,19 @@
                  that pool slot. Said plainly rather than linked to a
                  guess. -->
             <span class="ap-noaddr">no openable address</span>
+          {/if}
+          {#if onOpenQuote}
+            {#each row.quotes as quote, qi (qi)}
+              <button
+                type="button"
+                class="ap-open"
+                data-testid="open-quote"
+                title={quote.exact}
+                onclick={() => onOpenQuote(quote)}
+              >
+                open quote
+              </button>
+            {/each}
           {/if}
           <span class="ap-text">{row.text}</span>
         </li>

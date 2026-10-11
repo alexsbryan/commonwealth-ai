@@ -62,6 +62,7 @@ fn attr(name: &str, derived: Option<&str>) -> AttrDecl {
         },
         description: String::new(),
         derived: derived.map(str::to_string),
+        by: None,
     }
 }
 
@@ -166,4 +167,21 @@ fn cycles_and_unknown_ids_are_refused() {
         .unwrap_err()
         .contains("no declared path or fold"));
     assert!(d.reads("ours").unwrap_err().contains("is a set"));
+}
+
+/// Pick's exclusion sets (order ontology-layer-15 step 5): a set a path drops
+/// by is one; a set only kept by, or named by no path, is not.
+#[test]
+fn the_exclusion_sets_are_the_sets_a_path_or_fold_drops_by() {
+    let mut d = policy();
+    assert_eq!(d.exclusion_sets().into_iter().collect::<Vec<_>>(), ["ours"]);
+    d.sets.push(SetDecl {
+        id: "kept".into(),
+        of: "company".into(),
+        conditions: Default::default(),
+    });
+    d.folds[1].from = vec!["^subject / party [kept]".into()];
+    assert_eq!(d.exclusion_sets().into_iter().collect::<Vec<_>>(), ["ours"]);
+    d.paths.clear();
+    assert!(d.exclusion_sets().is_empty());
 }

@@ -166,73 +166,28 @@ pub fn resolve_span(span: &str, chunks: &[String]) -> SpanResolution {
 /// Find `span` as one contiguous phrase inside a single chunk, returning
 /// `(chunk_index, start_byte, end_byte)` in the ORIGINAL chunk text.
 ///
-/// Matching folds case and collapses whitespace runs on both sides, because
-/// chunk text carries the corpus's own line wrapping ("Karl\n\nYundt") and a
-/// citation should survive it. It does not fold punctuation, so a spliced
-/// composite phrase still fails — the same choice `quote_verification.rs`
-/// makes for quoted spans, and for the same reason.
+/// The one aligner (ADDRESSED_TEXT §5.3) in exact mode
+/// (`quote_verification::align_exact`) over case-folded copies of both
+/// sides (`quote_verification::fold_case`): this caller ignores case, because
+/// chunk text carries the corpus's own capitals and wrapping ("Karl\n\nYundt")
+/// and a citation should survive them. Whitespace runs, curly quotes, dashes
+/// and emphasis markers fold inside `norm_v0`; other punctuation does not, so
+/// a spliced composite phrase still fails, as it does for quoted spans.
 ///
 /// First match wins, scanning chunks in order, so the result is a deterministic
 /// function of the inputs.
 fn locate_verbatim(span: &str, chunks: &[String]) -> Option<(usize, usize, usize)> {
-    let needle = fold(span).0;
-    if needle.is_empty() {
-        return None;
-    }
-    for (i, chunk) in chunks.iter().enumerate() {
-        let (hay, map) = fold(chunk);
-        if let Some(at) = hay.find(&needle) {
-            // `map` carries one (src_start, src_end) per BYTE of `hay`, so the
-            // folded range maps back without a second scan.
-            let start = map[at].0;
-            let end = map[at + needle.len() - 1].1;
-            return Some((i, start, end));
-        }
-    }
-    None
+    use crate::quote_verification::{align_exact, fold_case};
+    let folded: Vec<String> = chunks.iter().map(|c| fold_case(c)).collect();
+    let texts: Vec<&str> = folded.iter().map(String::as_str).collect();
+    let (i, range) = align_exact(&fold_case(span.trim()), &texts)?;
+    let chunk = &chunks[i];
+    Some((i, byte_at(chunk, range.start), byte_at(chunk, range.end)))
 }
 
-/// Lowercase and collapse whitespace, carrying a byte-for-byte map back to the
-/// source.
-///
-/// Returns the folded string and a vector with one `(src_start, src_end)` entry
-/// per byte of that string — the byte offsets in `s` of the character that
-/// produced it. Lowercasing can change a character's byte length (and its
-/// character count), which is exactly why the map is built during the fold
-/// rather than recomputed from lengths afterwards.
-fn fold(s: &str) -> (String, Vec<(usize, usize)>) {
-    let mut out = String::with_capacity(s.len());
-    let mut map: Vec<(usize, usize)> = Vec::with_capacity(s.len());
-    let mut pending_ws: Option<(usize, usize)> = None;
-    for (off, c) in s.char_indices() {
-        let src = (off, off + c.len_utf8());
-        if c.is_whitespace() {
-            // Extend the current run; emit one ' ' for the whole of it, and
-            // only once we know a non-space follows (so trailing space is
-            // dropped without a second pass).
-            pending_ws = Some(match pending_ws {
-                Some((a, _)) => (a, src.1),
-                None => src,
-            });
-            continue;
-        }
-        if let Some(ws) = pending_ws.take() {
-            // Leading whitespace produces no separator — `out.is_empty()`.
-            if !out.is_empty() {
-                out.push(' ');
-                map.push(ws);
-            }
-        }
-        for lc in c.to_lowercase() {
-            let n = lc.len_utf8();
-            out.push(lc);
-            for _ in 0..n {
-                map.push(src);
-            }
-        }
-    }
-    debug_assert_eq!(out.len(), map.len(), "fold map must be one entry per byte");
-    (out, map)
+/// The byte offset of code point `cp` in `s` (its length when past the end).
+fn byte_at(s: &str, cp: usize) -> usize {
+    s.char_indices().nth(cp).map_or(s.len(), |(b, _)| b)
 }
 
 #[cfg(test)]
@@ -416,6 +371,24 @@ mod tests {
         }
     }
 
+    /// The locator folds what the quote guard folds (`norm_v0`, through the
+    /// one aligner), so a span written with a straight apostrophe and a
+    /// hyphen is addressed in a source that has the typographic ones, at the
+    /// source's own bytes. Red against the old whitespace-and-case fold, which
+    /// called this present but unaddressable (`Fuzzy`).
+    #[test]
+    fn a_span_with_straight_quotes_is_addressed_in_a_typographic_source() {
+        let cs = vec!["It was Mr Verloc\u{2019}s shop\u{2014}small and dim.".to_string()];
+        let r = resolve_span("Mr Verloc's shop-small", &cs);
+        let SpanResolution::Verbatim { chunk, start, end } = r else {
+            panic!("expected an address, got {r:?}");
+        };
+        assert_eq!(
+            &cs[chunk][start..end],
+            "Mr Verloc\u{2019}s shop\u{2014}small"
+        );
+    }
+
     // ── determinism (§7.4: HARD verdicts come from deterministic facets) ─────
 
     #[test]
@@ -425,27 +398,6 @@ mod tests {
             let a = resolve_span(span, &cs);
             let b = resolve_span(span, &cs);
             assert_eq!(a, b, "repeat resolution of {span:?} diverged");
-        }
-    }
-
-    #[test]
-    fn the_fold_map_is_one_entry_per_folded_byte() {
-        for s in [
-            "Karl Yundt",
-            "  leading and   collapsed\n\nruns  ",
-            "ÉLAN vital",
-            "",
-            "\n\n\n",
-        ] {
-            let (folded, map) = super::fold(s);
-            assert_eq!(
-                folded.len(),
-                map.len(),
-                "fold({s:?}) map/byte-count mismatch"
-            );
-            for &(a, b) in &map {
-                assert!(a < b && b <= s.len(), "map entry ({a},{b}) escapes {s:?}");
-            }
         }
     }
 }

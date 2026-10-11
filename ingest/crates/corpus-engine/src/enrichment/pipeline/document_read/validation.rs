@@ -22,9 +22,9 @@ pub fn validate_and_stamp(
     policies: &OntologyPolicies,
     extraction: &mut SectionExtraction,
 ) -> Result<()> {
-    if !policies.document_reading {
+    if !policies.reads_documents() {
         return Err(Error::InvalidInput(
-            "document-read output arrived while document_reading is disabled".into(),
+            "document-read output arrived for a declaration that reads no documents".into(),
         ));
     }
     let expected_contract = super::cache::contract_fingerprint(policies);
@@ -61,7 +61,6 @@ pub fn validate_and_stamp(
                 actual.len()
             )));
         }
-        let expand_handles = read.context_fingerprint.is_empty();
         let mut seen: BTreeSet<String> = BTreeSet::new();
         for outcome in &mut read.documents {
             if !seen.insert(outcome.document_id.clone()) {
@@ -76,7 +75,7 @@ pub fn validate_and_stamp(
                     outcome.document_id
                 ))
             })?;
-            reproject |= validate_outcome(outcome, document, policies, expand_handles)?;
+            reproject |= validate_outcome(outcome, document, policies)?;
         }
         if seen.len() != actual.len() {
             let missing: Vec<&str> = actual
@@ -100,12 +99,11 @@ pub fn validate_and_stamp(
 }
 
 /// Validate one outcome and its claims. Returns whether any claim was
-/// refused or source handles expanded; either requires compatibility reprojection.
+/// refused, which requires compatibility reprojection.
 fn validate_outcome(
     outcome: &mut DocumentReadOutcome,
     document: &SourceDocument,
     policies: &OntologyPolicies,
-    expand_handles: bool,
 ) -> Result<bool> {
     match outcome.status {
         DocumentReadStatus::Read if outcome.claims.is_empty() => {
@@ -147,19 +145,7 @@ fn validate_outcome(
     let mut refused = Vec::new();
     let mut local_subjects: HashMap<(String, String), (String, Map<String, Value>)> =
         HashMap::new();
-    let mut expanded = false;
-    for mut claim in outcome.claims.drain(..) {
-        let binding_error = if expand_handles {
-            match super::citations::expand(&mut claim, document) {
-                Ok(changed) => {
-                    expanded |= changed;
-                    None
-                }
-                Err(reason) => Some(reason),
-            }
-        } else {
-            None
-        };
+    for claim in outcome.claims.drain(..) {
         let subject_key = (claim.subject_type.clone(), claim.subject_local_ref.clone());
         let supported: Map<String, Value> = claim
             .subject_fields
@@ -182,9 +168,8 @@ fn validate_outcome(
             }
             Some(_) => None,
         };
-        let refusal = binding_error
-            .or(refusal)
-            .or_else(|| verify_claim(&claim, document, policies, &eligible, &index).err());
+        let refusal =
+            refusal.or_else(|| verify_claim(&claim, document, policies, &eligible, &index).err());
         match refusal {
             None => kept.push(claim),
             Some(reason) => {
@@ -209,7 +194,7 @@ fn validate_outcome(
             "every claim ({before}) was refused: its citation did not verify in this document"
         ));
     }
-    Ok(expanded || before > outcome.claims.len())
+    Ok(before > outcome.claims.len())
 }
 
 /// Why one claim cannot be projected, or `Ok(())` when its citation, voice
@@ -317,7 +302,9 @@ pub(super) fn validate_fields(
     }
     for attr in attrs.into_iter().filter(|attr| attr.derived.is_none()) {
         match &fields[&attr.name] {
-            DocumentReadField::Supported { value, evidence } => {
+            DocumentReadField::Supported {
+                value, evidence, ..
+            } => {
                 if evidence.trim().is_empty() || !value_matches(&attr.family, value) {
                     return Err(Error::Serialization(format!(
                         "{context} field `{}` has an unsupported value or no field evidence",

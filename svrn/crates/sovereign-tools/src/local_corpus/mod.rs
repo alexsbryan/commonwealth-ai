@@ -37,6 +37,7 @@ pub mod pre_scanner;
 pub mod preview;
 pub mod progress;
 pub mod recipe_extractor;
+mod staged_line;
 pub mod watched;
 pub mod writeback;
 

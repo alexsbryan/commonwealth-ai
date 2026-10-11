@@ -1,0 +1,16 @@
+Validating recipe: /Users/alexsbryan/blind-author-20261009-r2/gvc/recipe.toml
+✓ Validation passed
+
+Derived from your declarations:
+  clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+  tension selector: embedding top-k (k = 10, floor = 0.5) over incident_account, identification, harm_outcome, legal_status — cross-document declared corpora select the embedding net; the classifier judges each pair
+  identity: incident → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  identity: person → RESOLVE under its identity_criterion, over the claims declaring it their subject; atoms Phase 1 named are retired
+  question shapes: enumerate [incident, person]; relations [(none)]; events [(none)]; aggregate [identification by incident, harm_outcome by incident, legal_status by incident]
+  fill: incident: incident_type ← Choose on incident_account; occurred_at ← Point on incident_account; address ← Point on incident_account; city ← Point on incident_account; state ← Point on incident_account; venue ← Point on incident_account; killed ← Point on incident_account; injured ← Point on incident_account
+  fill: person: name ← Point on harm_outcome, identification, legal_status; age ← Point on harm_outcome, identification, legal_status; gender ← Choose on harm_outcome, identification, legal_status; residence ← Point on harm_outcome, identification, legal_status; incident ← Pick on harm_outcome, identification, legal_status (candidates: Mention)
+  fill: incident_account: subject `incident` ← RESOLVE; occurred_at ← Point on incident_account; address ← Point on incident_account; city ← Point on incident_account; state ← Point on incident_account; killed ← Point on incident_account; injured ← Point on incident_account; incident_type ← Choose on incident_account
+  fill: identification: subject `person` ← RESOLVE; name ← Point on identification; age ← Point on identification; gender ← Choose on identification; role ← Choose on identification; incident ← Pick on identification (candidates: Mention)
+  fill: harm_outcome: subject `person` ← RESOLVE; outcome ← Choose on harm_outcome; wound ← Point on harm_outcome; incident ← Pick on harm_outcome (candidates: Mention)
+  fill: legal_status: subject `person` ← RESOLVE; status ← Choose on legal_status; charge ← Point on legal_status; incident ← Pick on legal_status (candidates: Mention)
+  document fields: document_date ← `created_at` (RFC 2822 or ISO 8601, written as ISO 8601), document_id ← `id` — stamped on each claim from the one document its evidence lands in; a claim in none or several is left unstamped and counted

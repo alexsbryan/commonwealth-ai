@@ -31,6 +31,12 @@ const HELP: Help = Help {
             ("--same-wording-similarity", "The proposed answer joins a wording to a record said so from a document at least this alike. Default 0.4."),
             ("--similar", "The proposed answer joins any wording to the most similar record at or above this. Default off."),
             ("--limit", "Resolve only the first N documents."),
+            (
+                "--asker <daemon|replay|gold>",
+                "Where RESOLVE's answers come from: the model, every answer recorded in \
+                 <out>/answers.jsonl (the default); that store, never calling the daemon; or \
+                 <out>/answers.gold.jsonl. A question with no stored answer is refused.",
+            ),
         ]),
         HelpSection::Examples(&[(
             "svrn enrich resolve-statements --recipe research/ontology-apps/cdcr/recipe-gvc.toml --type happening \

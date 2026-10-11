@@ -31,6 +31,14 @@ use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
 #[path = "resolution_derived/protocol.rs"]
 mod protocol;
+#[path = "resolution_derived/read_fields.rs"]
+mod read_fields;
+
+/// Whether `policies` derive anything in the atlas build: a declared path or
+/// fold, or a field whose readings a record folds (`AttrDecl::by`).
+pub fn derives(policies: &OntologyPolicies) -> bool {
+    !policies.derivation.derived.is_empty() || !read_fields::declared(policies).is_empty()
+}
 
 /// Which side of RESOLVE a derivation runs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -135,6 +143,10 @@ pub struct DerivedValue {
     /// Rule, source, and assignment lineage for a protocol fold.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<DerivedProtocolAudit>,
+    /// The derivation as the value's source (C3). Code computes it from the
+    /// declared path and fold, over inputs whose own precisions they carry;
+    /// no precision of the fold's output is declared or estimated yet.
+    pub by: crate::enrichment::atlas::precision::SourcePrecision,
 }
 
 /// Per attribute, what one stage did.
@@ -165,6 +177,19 @@ pub fn derive_attributes(
     let index = TypeIndex::from_policies(policies);
     let order = declared.order(&policies.shape.types)?;
     let mut report = DerivedReport::new();
+    // First, so a declared derivation after RESOLVE reads a record's folded
+    // fields as it reads any attribute.
+    if stage == DeriveStage::AfterResolve {
+        read_fields::derive(
+            atoms,
+            documents,
+            participants,
+            policies,
+            &index,
+            &mut report,
+            sink,
+        )?;
+    }
     for (type_name, attr, id) in order {
         let after = decides(&index, type_name);
         if (stage == DeriveStage::AfterResolve) != after {
@@ -231,6 +256,10 @@ pub fn derive_attributes(
                 excluded: excluded.into_iter().collect(),
                 replaced,
                 protocol,
+                by: crate::enrichment::atlas::precision::SourcePrecision::new(
+                    format!("derived:{id}"),
+                    crate::enrichment::atlas::precision::Precision::Unmeasured,
+                ),
             });
         }
         info!(r#type = type_name, attribute = attr, derived = id, ?stage, atoms = tally.atoms, outcomes = ?tally.outcomes, excluded = tally.excluded, unjudged = tally.unjudged, "atlas/derive: attribute done");
@@ -583,28 +612,40 @@ impl<'a> Graph<'a> {
             }
             _ => return Some(false),
         };
-        for (attr, cond) in &set.conditions {
-            let values: Vec<String> = scalars(fields.get(attr))
-                .iter()
-                .filter_map(|v| fold_identity_value(v))
-                .collect();
-            if values.is_empty() {
-                return None;
-            }
-            let wanted = |w: &str| fold_identity_value(w);
-            let holds = values.iter().any(|v| match cond {
-                Condition::Is(w) => wanted(w).as_deref() == Some(v.as_str()),
-                Condition::In(ws) => ws.iter().any(|w| wanted(w).as_deref() == Some(v.as_str())),
-                Condition::Suffix { suffix } => {
-                    wanted(suffix).is_some_and(|s| *v == s || v.ends_with(&format!(" {s}")))
-                }
-            });
-            if !holds {
-                return Some(false);
-            }
-        }
-        Some(true)
+        conditions_hold(set, fields)
     }
+}
+
+/// Whether `fields` meet every condition of `set`: `None` when a condition's
+/// attribute is absent, which is no answer either way. The one reading of a
+/// set: a derived step's filter here, and the passes reader's prefill and Pick
+/// exclusions (`pipeline/document_read/`).
+pub fn conditions_hold(set: &SetDecl, fields: &serde_json::Map<String, Value>) -> Option<bool> {
+    for (attr, cond) in &set.conditions {
+        let values: Vec<String> = scalars(fields.get(attr))
+            .iter()
+            .filter_map(|v| fold_identity_value(v))
+            .collect();
+        if values.is_empty() {
+            return None;
+        }
+        if !condition_holds(cond, &values) {
+            return Some(false);
+        }
+    }
+    Some(true)
+}
+
+/// Whether any of `values` (already identity-folded) meets `cond`.
+fn condition_holds(cond: &Condition, values: &[String]) -> bool {
+    let wanted = |w: &str| fold_identity_value(w);
+    values.iter().any(|v| match cond {
+        Condition::Is(w) => wanted(w).as_deref() == Some(v.as_str()),
+        Condition::In(ws) => ws.iter().any(|w| wanted(w).as_deref() == Some(v.as_str())),
+        Condition::Suffix { suffix } => {
+            wanted(suffix).is_some_and(|s| *v == s || v.ends_with(&format!(" {s}")))
+        }
+    })
 }
 
 /// The fold registry's arms. `inputs[k]` maps each value input `k` reached to

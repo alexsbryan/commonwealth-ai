@@ -122,7 +122,7 @@ pub async fn capture(
     // One bounded extraction pass for per-doc metadata (I2: same extractor the
     // production ingest builds). Failures here are tolerated per-doc; the
     // Acquire/Extract verdicts (later increments) judge what this records.
-    let extractor = engine.make_extractor(&recipe.extract, &recipe.corpus.id);
+    let extractor = engine.recipe_extractor(recipe);
     let docs: Vec<CapturedDoc> = extractor
         .extract(&source_path)?
         .take(sample_size)

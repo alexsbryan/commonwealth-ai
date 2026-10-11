@@ -38,9 +38,9 @@ pub(super) fn extract_cache_matches_document_reads(
         .as_ref()
         .map(|spec| spec.policies())
         .unwrap_or_default();
-    if !policies.document_reading {
+    if !policies.reads_documents() {
         return if has_document_reads {
-            Err("cached Phase-1 output was produced with document_reading enabled".into())
+            Err("cached Phase-1 output was produced by a declared reading this declaration no longer asks for".into())
         } else {
             Ok(())
         };

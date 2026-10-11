@@ -144,6 +144,7 @@ fn extract_sections(
                                 .and_then(|s| s.to_str())
                                 .map(|s| s.to_string()),
                             embed_text: None,
+                            source: super::DocSource::File(path.to_path_buf()),
                         });
                     }
                 }

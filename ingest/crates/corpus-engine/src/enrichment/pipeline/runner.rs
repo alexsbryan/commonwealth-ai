@@ -627,7 +627,7 @@ impl PhaseRunner {
     }
 
     /// The corpus's body-word floor for Phase 1 (`min_section_body_words`);
-    /// `0` sends every section.
+    /// `0` sends every section. The passes reader is never floored.
     pub fn with_min_body_words(mut self, words: usize) -> Self {
         self.min_body_words = words;
         self
@@ -794,7 +794,17 @@ impl PhaseRunner {
         // runs with an empty bank (no few-shot context) the first time
         // through.
         let policies = self.pipeline.declaration();
-        let document_reading = policies.document_reading;
+        let document_reading = policies.reads_documents();
+        // The reader's line classes need every document a run reads, so they
+        // are indexed over all chapters, whichever are targeted.
+        let line_classes = if document_reading {
+            super::document_read::LineClasses::of(
+                chapters.iter().flat_map(|c| c.source_documents.iter()),
+                &policies,
+            )
+        } else {
+            super::document_read::LineClasses::default()
+        };
         let exemplar_path = self.exemplar_path(PipelinePhase::Questions);
         let bank =
             runner_load_exemplar_bank(document_reading, targets.len(), &exemplar_path, &self.embed)
@@ -861,8 +871,9 @@ impl PhaseRunner {
             // schema-template echo — not a real analysis. Register the
             // skip as a failure so the run file surfaces it rather
             // than silently caching `"..."`.
+            // The passes reader asks per line and has no floor (abfe32a14: it skipped 12 uv states).
             let words = approx_word_count(&chapter.text);
-            if words < self.min_body_words {
+            if !document_reading && words < self.min_body_words {
                 let floor = self.min_body_words;
                 tracing::debug!(
                     chapter = %chapter.chapter_id,
@@ -951,7 +962,13 @@ impl PhaseRunner {
             // version + model id. Only the default retry mode
             // consults the cache — terse retries are by definition
             // a different prompt shape and would corrupt the entry.
-            let cache_text = runner_cache_text(document_reading, &policies, chapter, &prompt)?;
+            let cache_text = runner_cache_text(
+                document_reading,
+                &policies,
+                chapter,
+                &line_classes.digest(&chapter.source_documents),
+                &prompt,
+            )?;
             let section_cache_key = if retry_mode.is_none() {
                 self.section_cache.as_ref().map(|cfg| {
                     crate::enrichment::atlas::section_cache::cache_key(
@@ -1001,6 +1018,13 @@ impl PhaseRunner {
 
             let chat_result: Result<String> = if let Some(cached) = cached_response {
                 Ok(cached)
+            } else if document_reading {
+                // The one reader of a declaration (ONTOLOGY_METHOD §Reading):
+                // many small questions through the chat port, answered into
+                // the envelope the parse, validation and cache below read.
+                tracing::debug!(chapter_id = %chapter.chapter_id, "phase1.document_read_passes");
+                super::document_read::read_passes(chapter, &policies, &line_classes, &self.chat)
+                    .await
             } else {
                 match retry_mode {
                     Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {

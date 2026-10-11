@@ -90,10 +90,13 @@ def atlas_pred(corpus, claim_kind="case_state"):
     """{document id: case record} from a built atlas, as an app reads it: each claim of `claim_kind` puts the
     document its evidence landed in (the `document_id` stamp) into the record it is about. Partition scoring
     leaves a document naming several records unplaced and counts it; it never chooses one by vote."""
-    path = pathlib.Path(corpus)
-    if not path.is_file():
-        path = pathlib.Path.home() / ".svrnmesh/indexes" / corpus / "atlas/atoms.json"
-    atoms = json.loads(path.read_text())["atoms"]
+    if isinstance(corpus, list):  # the atoms themselves (a ladder's view of a run, ladder.atlas_view)
+        atoms = corpus
+    else:
+        path = pathlib.Path(corpus)
+        if not path.is_file():
+            path = pathlib.Path.home() / ".svrnmesh/indexes" / corpus / "atlas/atoms.json"
+        atoms = json.loads(path.read_text())["atoms"]
     records = {a["data"]["id"] for a in atoms if a.get("atom_type") == "Entity"
                and (a.get("data") or {}).get("entity_type") == "case"}
     votes, counts = collections.defaultdict(collections.Counter), collections.Counter()

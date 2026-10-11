@@ -66,4 +66,10 @@ pub struct ToolContext {
     /// `working_directory`: that names a path filesystem tools act in.
     #[serde(default)]
     pub corpus_scope: Option<String>,
+    /// Who asked, as the transport's auth layer resolved it: the non-secret
+    /// principal label (`asserted:claude-code` for a named client). MCP fills
+    /// it from the request context; in-process callers leave it `None`. A
+    /// record of who, never a permission input.
+    #[serde(default)]
+    pub caller: Option<String>,
 }

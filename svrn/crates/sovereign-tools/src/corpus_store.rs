@@ -164,6 +164,7 @@ impl CorpusStoreTool {
                         source_file: None,
                         code: Default::default(),
                         unit_id: None,
+                        text_sha256: None,
                     },
                     emb,
                 )

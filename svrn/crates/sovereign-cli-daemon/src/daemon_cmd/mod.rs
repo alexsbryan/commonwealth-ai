@@ -58,7 +58,14 @@ use sovereign_daemon::bootstrap;
 ///                                    the explicit `run` token.
 /// - `svrn daemon <known>`     → start/stop/restart/reload/status as
 ///                                    before.
+/// - `svrn daemon key ...`     → routed ahead of this verb's own help,
+///                                    since `wants_help` matches a help
+///                                    token anywhere and `key --help` must
+///                                    print `key`'s flags, not these.
 pub async fn run(launch: &Launch, args: &[String]) -> i32 {
+    if args.first().map(String::as_str) == Some("key") {
+        return key::cmd_key(&args[1..]).await;
+    }
     if sovereign_cli_shared::help::wants_help(args) {
         sovereign_cli_shared::help::print(&HELP);
         return 0;
@@ -70,7 +77,6 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
         Some("restart") => after_ready(restart_daemon(&args[1..]).await),
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
-        Some("key") => key::cmd_key(&args[1..]),
         // Sizing, not lifecycle: what VRAM would a loadout need, and which
         // card holds it. Lives under `daemon` because it answers the same
         // question the serving boot's preflight asks (`sovereign_compute::preflight`),
@@ -150,7 +156,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("stop",    "Stop the daemon cleanly (SIGTERM). Tries the PID file first, then looks up the listener on :9741 via lsof/ss, then falls back to launchctl / systemctl."),
             ("reload",  "Apply config changes without a restart (POST /v1/admin/reload)."),
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests."),
-            ("key",     "Add, revoke or list on-prem API keys (`svrn daemon key --help`). A daemon holding any key identifies every caller by key."),
+            ("key",     "Add, revoke or list the named credentials this daemon admits (`svrn daemon key --help`)."),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Logs: ~/.svrnmesh/logs/daemon.log. To register as a launchd/systemd service, run `svrn install-service`.",

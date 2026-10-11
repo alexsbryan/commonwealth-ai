@@ -6,6 +6,7 @@
 //! named positions, detects fault lines and open questions.
 
 pub mod alignment;
+pub mod asker;
 pub mod atlas;
 pub mod checkpoint;
 pub mod chunk_ner;

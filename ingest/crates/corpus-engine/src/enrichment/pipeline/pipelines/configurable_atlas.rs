@@ -230,7 +230,7 @@ impl CustomOntology {
         include_exemplars: bool,
         phase_id: &str,
     ) -> Option<ChatPrompt> {
-        if self.policies.document_reading {
+        if self.policies.reads_documents() {
             return Some(super::super::document_read::compose(
                 chapter,
                 &self.policies,
@@ -666,7 +666,7 @@ impl super::genre::AtlasGenre for CustomOntology {
     /// declared slots, so the reader is the SAME one — parameterised by the
     /// policy those slots were generated from.
     fn parse_phase1(&self, response: &str) -> Option<crate::error::Result<Phase1ChapterResult>> {
-        if self.policies.document_reading {
+        if self.policies.reads_documents() {
             let parsed = super::super::document_read::parse_response(response, &self.policies);
             if let Err(error) = &parsed {
                 tracing::warn!(error = %error, "phase1.document_read_parse_failed");

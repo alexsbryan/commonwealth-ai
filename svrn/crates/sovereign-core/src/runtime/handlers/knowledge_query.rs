@@ -1949,11 +1949,15 @@ impl Runtime {
         // no-op — nothing to verify against. See
         // `quote_verification::verify_answer_against_turn_evidence`.
         let (final_content, verified_spans) = {
-            let v = crate::quote_verification::verify_answer_against_turn_evidence(
+            let v = crate::runtime::quote_surface::verify_against_turn(
+                self.corpus_engine.as_ref(),
                 &final_content,
                 &plan.doc_context,
                 &crate::runtime::evidence::chunk_texts_for_verification(&plan.chunks),
-            );
+                &crate::runtime::quote_surface::targets_of(&plan.chunks),
+            )
+            .await
+            .verification;
             if v.demoted_count > 0 {
                 tracing::warn!(
                     demoted = v.demoted_count,

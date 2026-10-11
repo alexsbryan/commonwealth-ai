@@ -1,0 +1,2158 @@
+{
+ "rule": "random.Random(13).sample of 100 per stratum, lines sorted by (doc, n)",
+ "population": {
+  "multi": 236,
+  "single": 262,
+  "zero": 131,
+  "located_report_not_in_body": 31,
+  "located_report_mapped": 629,
+  "located_none_not_in_body": 1
+ },
+ "lines": {
+  "multi": [
+   {
+    "doc": "47cd556677ed22a440ff250b26c27ad9",
+    "n": 7,
+    "start": 439,
+    "end": 632,
+    "text": "The child was in a car at 6:15 p.m. in the 6100 block of South Kimbark Avenue when someone in a passing car opened fire , hitting the child in the right shoulder , according to police . NEWLINE",
+    "mentions": [
+     "47cd556677ed22a440ff250b26c27ad9/s5t23-25",
+     "47cd556677ed22a440ff250b26c27ad9/s5t26-27"
+    ]
+   },
+   {
+    "doc": "4a3283c9adfa72dec85f6296ce819c9c",
+    "n": 8,
+    "start": 508,
+    "end": 643,
+    "text": "A crew from Rural/Metro pronounced him dead at the scene , and his body was taken to the Knox County Regional Forensic Center . NEWLINE",
+    "mentions": [
+     "4a3283c9adfa72dec85f6296ce819c9c/s7t13-14",
+     "4a3283c9adfa72dec85f6296ce819c9c/s7t6-7"
+    ]
+   },
+   {
+    "doc": "c0c1941b209d6d8a3cf28c4d83b36097",
+    "n": 5,
+    "start": 434,
+    "end": 588,
+    "text": "Preliminary autopsy results show that the two children , 5-year - old Thomas Horn and 11-year - old Corinne Horn , both died from gunshot wounds . NEWLINE",
+    "mentions": [
+     "c0c1941b209d6d8a3cf28c4d83b36097/s4t1-2",
+     "c0c1941b209d6d8a3cf28c4d83b36097/s4t22-23",
+     "c0c1941b209d6d8a3cf28c4d83b36097/s4t24-25",
+     "c0c1941b209d6d8a3cf28c4d83b36097/s4t25-26"
+    ]
+   },
+   {
+    "doc": "ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "n": 2,
+    "start": 58,
+    "end": 163,
+    "text": "Police are investigating a shooting in Madisonville late Friday night that left two people dead . NEWLINE",
+    "mentions": [
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s1t14-15",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s1t4-5"
+    ]
+   },
+   {
+    "doc": "ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "n": 3,
+    "start": 164,
+    "end": 322,
+    "text": "At least 1 dead , several injured in Madisonville shooting Photos Police in Madisonville are investigating a deadly shooting that killed at least one person .",
+    "mentions": [
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s2t17-18",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s2t18-19",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s2t20-21",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s2t3-4",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s2t6-7",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s2t9-10"
+    ]
+   },
+   {
+    "doc": "e162ad62b8a8a18663a885f0b050dc7d",
+    "n": 18,
+    "start": 1676,
+    "end": 1745,
+    "text": "All three had suffered gunshot wounds to their upper bodies . NEWLINE",
+    "mentions": [
+     "e162ad62b8a8a18663a885f0b050dc7d/s17t4-5",
+     "e162ad62b8a8a18663a885f0b050dc7d/s17t5-6"
+    ]
+   },
+   {
+    "doc": "f123522b3d905fc67cb6f0cc5ba40a64",
+    "n": 5,
+    "start": 453,
+    "end": 583,
+    "text": "Pass police are investigating after a man shot his wife and 11-year - old stepdaughter before turning the gun on himself . NEWLINE",
+    "mentions": [
+     "f123522b3d905fc67cb6f0cc5ba40a64/s4t16-20",
+     "f123522b3d905fc67cb6f0cc5ba40a64/s4t7-8"
+    ]
+   },
+   {
+    "doc": "f7c7fbcf9514fbd5ac8a908532734696",
+    "n": 1,
+    "start": 0,
+    "end": 53,
+    "text": "Boy , 3 , killed by father in double murder - suicide",
+    "mentions": [
+     "f7c7fbcf9514fbd5ac8a908532734696/s0t4-5",
+     "f7c7fbcf9514fbd5ac8a908532734696/s0t9-12"
+    ]
+   },
+   {
+    "doc": "316932156a3da5a8b02094f0f1c97ec0",
+    "n": 4,
+    "start": 324,
+    "end": 438,
+    "text": "When officers arrived , they found Diego Gomez - Martinez suffering from a gunshot wound in an apartment . NEWLINE",
+    "mentions": [
+     "316932156a3da5a8b02094f0f1c97ec0/s3t13-14",
+     "316932156a3da5a8b02094f0f1c97ec0/s3t14-15"
+    ]
+   },
+   {
+    "doc": "bc1b3a7f460907712248bf91bb3dad60",
+    "n": 2,
+    "start": 137,
+    "end": 305,
+    "text": "17-year - old Chalmette male arrested in accidental shooting of 16-year - old girl , who is hospitalized ; shooter held on $ 25,000 bond NEWLINE Posted : January 19th ,",
+    "mentions": [
+     "bc1b3a7f460907712248bf91bb3dad60/s1t17-18",
+     "bc1b3a7f460907712248bf91bb3dad60/s1t19-20",
+     "bc1b3a7f460907712248bf91bb3dad60/s1t8-9"
+    ]
+   },
+   {
+    "doc": "456f3dd976b192f2be0be5d1639cdcc5",
+    "n": 3,
+    "start": 47,
+    "end": 85,
+    "text": "To 3-Year - Old Killed By Stray Bullet",
+    "mentions": [
+     "456f3dd976b192f2be0be5d1639cdcc5/s1t4-5",
+     "456f3dd976b192f2be0be5d1639cdcc5/s1t6-8"
+    ]
+   },
+   {
+    "doc": "be72bc254d808cdf561a42cec76fdeae",
+    "n": 1,
+    "start": 0,
+    "end": 100,
+    "text": "Three Dead in Aransas Pass Murder - Suicide - KiiiTV.com South Texas , Corpus Christi , Coastal Bend",
+    "mentions": [
+     "be72bc254d808cdf561a42cec76fdeae/s0t1-2",
+     "be72bc254d808cdf561a42cec76fdeae/s0t5-8"
+    ]
+   },
+   {
+    "doc": "2b1f309f668e0781682f523994146b8a",
+    "n": 9,
+    "start": 914,
+    "end": 975,
+    "text": "All three suffered gunshot wounds to the upper body . NEWLINE",
+    "mentions": [
+     "2b1f309f668e0781682f523994146b8a/s8t3-4",
+     "2b1f309f668e0781682f523994146b8a/s8t4-5"
+    ]
+   },
+   {
+    "doc": "f2aedab9724c967c9a8c38d87d6a39b4",
+    "n": 5,
+    "start": 324,
+    "end": 464,
+    "text": "Police say a Salt Lake man shot an 8-year - old boy and then himself in a murder - suicide Tuesday inside a Capitol Hill apartment . NEWLINE",
+    "mentions": [
+     "f2aedab9724c967c9a8c38d87d6a39b4/s4t17-20",
+     "f2aedab9724c967c9a8c38d87d6a39b4/s4t6-7"
+    ]
+   },
+   {
+    "doc": "4440cd0bd02b1ebf657260e02627d925",
+    "n": 5,
+    "start": 293,
+    "end": 379,
+    "text": "They say the man had been target shooting and accidentally shot himself once . NEWLINE",
+    "mentions": [
+     "4440cd0bd02b1ebf657260e02627d925/s4t10-11",
+     "4440cd0bd02b1ebf657260e02627d925/s4t7-8"
+    ]
+   },
+   {
+    "doc": "b27405f9afd055f54cdab7c68ccff13e",
+    "n": 3,
+    "start": 129,
+    "end": 224,
+    "text": "Police say Chet Hockman , of Mountain View , died from a gunshot wound to the chest at a home .",
+    "mentions": [
+     "b27405f9afd055f54cdab7c68ccff13e/s2t12-13",
+     "b27405f9afd055f54cdab7c68ccff13e/s2t13-14",
+     "b27405f9afd055f54cdab7c68ccff13e/s2t9-10"
+    ]
+   },
+   {
+    "doc": "c69d14366d741ecd9e55646f5903fe8c",
+    "n": 11,
+    "start": 577,
+    "end": 629,
+    "text": "The parents were notified about the fatal shooting .",
+    "mentions": [
+     "c69d14366d741ecd9e55646f5903fe8c/s10t6-7",
+     "c69d14366d741ecd9e55646f5903fe8c/s10t7-8"
+    ]
+   },
+   {
+    "doc": "f7c7fbcf9514fbd5ac8a908532734696",
+    "n": 4,
+    "start": 84,
+    "end": 261,
+    "text": "State police say a man killed his ex - girlfriend and inflicted a fatal gunshot wound on their 3-year - old son before taking his own life in northeastern Pennsylvania . NEWLINE",
+    "mentions": [
+     "f7c7fbcf9514fbd5ac8a908532734696/s3t13-14",
+     "f7c7fbcf9514fbd5ac8a908532734696/s3t14-15",
+     "f7c7fbcf9514fbd5ac8a908532734696/s3t15-16",
+     "f7c7fbcf9514fbd5ac8a908532734696/s3t23-27",
+     "f7c7fbcf9514fbd5ac8a908532734696/s3t5-6"
+    ]
+   },
+   {
+    "doc": "2804a2b0992e09edb4e94ee531889332",
+    "n": 1,
+    "start": 0,
+    "end": 48,
+    "text": "Police : Boy accidentally shoots , kills himself",
+    "mentions": [
+     "2804a2b0992e09edb4e94ee531889332/s0t4-5",
+     "2804a2b0992e09edb4e94ee531889332/s0t6-7"
+    ]
+   },
+   {
+    "doc": "1ddb2825d2518ee2df29ddae2a66c2e9",
+    "n": 7,
+    "start": 514,
+    "end": 610,
+    "text": "Antoine said the gun accidentally went off , striking Anderson , who died at the scene . NEWLINE",
+    "mentions": [
+     "1ddb2825d2518ee2df29ddae2a66c2e9/s5t12-13",
+     "1ddb2825d2518ee2df29ddae2a66c2e9/s5t5-7",
+     "1ddb2825d2518ee2df29ddae2a66c2e9/s5t8-9"
+    ]
+   },
+   {
+    "doc": "8a82a70b851c000fd66f5871d2a7c32a",
+    "n": 39,
+    "start": 4275,
+    "end": 4443,
+    "text": "The boy was one of several injured in a bloody Mother 's Day weekend in Detroit that left seven people dead and 14 others hurt in 17 shootings across the city . NEWLINE",
+    "mentions": [
+     "8a82a70b851c000fd66f5871d2a7c32a/s36t20-21",
+     "8a82a70b851c000fd66f5871d2a7c32a/s36t24-25",
+     "8a82a70b851c000fd66f5871d2a7c32a/s36t27-28",
+     "8a82a70b851c000fd66f5871d2a7c32a/s36t6-7"
+    ]
+   },
+   {
+    "doc": "43ed9cbb9540f5aef57ee54b24c9e45d",
+    "n": 4,
+    "start": 433,
+    "end": 551,
+    "text": "As Dabill was handling his gun , it discharged , hitting Schriefer in the chest , witnesses told Weatherford . NEWLINE",
+    "mentions": [
+     "43ed9cbb9540f5aef57ee54b24c9e45d/s3t10-11",
+     "43ed9cbb9540f5aef57ee54b24c9e45d/s3t8-9"
+    ]
+   },
+   {
+    "doc": "c8d02ec56d873583e4fb7d9970f8d2dc",
+    "n": 5,
+    "start": 367,
+    "end": 627,
+    "text": "Salt Lake police detective Greg Wilking said the weapon used in the killings was an \" improvised firearm \" rather than a traditional gun , though he declined to elaborate further about the device or the fatal injuries sustained by the man and the boy . NEWLINE",
+    "mentions": [
+     "c8d02ec56d873583e4fb7d9970f8d2dc/s4t12-13",
+     "c8d02ec56d873583e4fb7d9970f8d2dc/s4t36-37",
+     "c8d02ec56d873583e4fb7d9970f8d2dc/s4t37-38"
+    ]
+   },
+   {
+    "doc": "4cb4e8c2adc7e6a6b545d4ff0264bcc3",
+    "n": 1,
+    "start": 0,
+    "end": 34,
+    "text": "Person found shot to death in Gary",
+    "mentions": [
+     "4cb4e8c2adc7e6a6b545d4ff0264bcc3/s0t2-3",
+     "4cb4e8c2adc7e6a6b545d4ff0264bcc3/s0t4-5"
+    ]
+   },
+   {
+    "doc": "150f030a0c018862ea5b3b1604231026",
+    "n": 2,
+    "start": 78,
+    "end": 217,
+    "text": "Michael Kassner was arrested after a man was found dead from a gunshot in a Grove City parking lot ( Courtesy : Grove City police ) NEWLINE",
+    "mentions": [
+     "150f030a0c018862ea5b3b1604231026/s1t12-13",
+     "150f030a0c018862ea5b3b1604231026/s1t9-10"
+    ]
+   },
+   {
+    "doc": "772591405acd0c43d28f61c737d563a0",
+    "n": 4,
+    "start": 263,
+    "end": 407,
+    "text": "Two teenagers have been charged with the fatal shooting of Congressman Danny Davis\u2019 15-year - old grandson in Englewood Friday evening . NEWLINE",
+    "mentions": [
+     "772591405acd0c43d28f61c737d563a0/s3t7-8",
+     "772591405acd0c43d28f61c737d563a0/s3t8-9"
+    ]
+   },
+   {
+    "doc": "2500ae9282f44f560e3716e4ba117385",
+    "n": 7,
+    "start": 867,
+    "end": 1008,
+    "text": "As Dabill was handling his Taurus .40 caliber handgun , it discharged , hitting Schriefer in the chest , \u201d the press release stated . NEWLINE",
+    "mentions": [
+     "2500ae9282f44f560e3716e4ba117385/s6t11-12",
+     "2500ae9282f44f560e3716e4ba117385/s6t13-14"
+    ]
+   },
+   {
+    "doc": "ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "n": 1,
+    "start": 0,
+    "end": 57,
+    "text": "One of shooters among men killed in Madisonville shooting",
+    "mentions": [
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s0t2-3",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s0t5-6",
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s0t8-9"
+    ]
+   },
+   {
+    "doc": "a1eac7c03830c460eafd1f57a95aad8f",
+    "n": 4,
+    "start": 345,
+    "end": 431,
+    "text": "Four people were shot and hospitalized after shots rang out during a Halloween party .",
+    "mentions": [
+     "a1eac7c03830c460eafd1f57a95aad8f/s3t3-4",
+     "a1eac7c03830c460eafd1f57a95aad8f/s3t5-6",
+     "a1eac7c03830c460eafd1f57a95aad8f/s3t7-8"
+    ]
+   },
+   {
+    "doc": "07a85009c53e962b417cb8b545c51af9",
+    "n": 2,
+    "start": 58,
+    "end": 168,
+    "text": "A 3-year - old girl was shot and killed while riding in a car with her family , Stockton police said . NEWLINE",
+    "mentions": [
+     "07a85009c53e962b417cb8b545c51af9/s1t6-7",
+     "07a85009c53e962b417cb8b545c51af9/s1t8-9"
+    ]
+   },
+   {
+    "doc": "48aae1a3e266f1af6cecda03c6048db7",
+    "n": 4,
+    "start": 353,
+    "end": 492,
+    "text": "A 17-year - old was arrested Saturday night in connection with the shooting death of Devin Anderson on Birch Street , police said . NEWLINE",
+    "mentions": [
+     "48aae1a3e266f1af6cecda03c6048db7/s3t12-13",
+     "48aae1a3e266f1af6cecda03c6048db7/s3t13-14"
+    ]
+   },
+   {
+    "doc": "f2aedab9724c967c9a8c38d87d6a39b4",
+    "n": 7,
+    "start": 588,
+    "end": 848,
+    "text": "Salt Lake police detective Greg Wilking said the weapon used in the killings was an \" improvised firearm \" rather than a traditional gun , though he declined to elaborate further about the device or the fatal injuries sustained by the man and the boy . NEWLINE",
+    "mentions": [
+     "f2aedab9724c967c9a8c38d87d6a39b4/s6t12-13",
+     "f2aedab9724c967c9a8c38d87d6a39b4/s6t36-37"
+    ]
+   },
+   {
+    "doc": "20451ad9563e2c4d870f7fc84d396c89",
+    "n": 2,
+    "start": 95,
+    "end": 314,
+    "text": "Please enable Javascript to watch this video NEWLINE KANSAS CITY , Mo. -- A 4-year - old boy was shot and killed early Monday morning near 8th Street and The Paseo , the innocent victim of a rolling gun battle . NEWLINE",
+    "mentions": [
+     "20451ad9563e2c4d870f7fc84d396c89/s1t19-20",
+     "20451ad9563e2c4d870f7fc84d396c89/s1t21-22"
+    ]
+   },
+   {
+    "doc": "47cd556677ed22a440ff250b26c27ad9",
+    "n": 12,
+    "start": 1081,
+    "end": 1200,
+    "text": "Both the Chicago Police Department and the University of Chicago police responded to a call of shots fired at 6:15 p.m.",
+    "mentions": [
+     "47cd556677ed22a440ff250b26c27ad9/s10t16-17",
+     "47cd556677ed22a440ff250b26c27ad9/s10t17-18"
+    ]
+   },
+   {
+    "doc": "7d726113c5779da0c25328489ee6cb5f",
+    "n": 3,
+    "start": 194,
+    "end": 355,
+    "text": "Kenneth Murphy was charged late Tuesday night with the shooting death of Christopher Rodriguez , 20 , at a home in Pittsburgh 's Allentown neighborhood . NEWLINE",
+    "mentions": [
+     "7d726113c5779da0c25328489ee6cb5f/s2t10-11",
+     "7d726113c5779da0c25328489ee6cb5f/s2t9-10"
+    ]
+   },
+   {
+    "doc": "f03d228accae8f19bab8d465c831e930",
+    "n": 4,
+    "start": 404,
+    "end": 516,
+    "text": "Musselshell County Sheriff Mike Thomas on Thursday said both died from a gunshot wound to the forehead . NEWLINE",
+    "mentions": [
+     "f03d228accae8f19bab8d465c831e930/s3t12-13",
+     "f03d228accae8f19bab8d465c831e930/s3t13-14",
+     "f03d228accae8f19bab8d465c831e930/s3t9-10"
+    ]
+   },
+   {
+    "doc": "772591405acd0c43d28f61c737d563a0",
+    "n": 8,
+    "start": 683,
+    "end": 784,
+    "text": "Police say a dispute over gym shoes led to the fatal shooting of 15-year - old Javon Wilson . NEWLINE",
+    "mentions": [
+     "772591405acd0c43d28f61c737d563a0/s7t10-11",
+     "772591405acd0c43d28f61c737d563a0/s7t11-12"
+    ]
+   },
+   {
+    "doc": "2882e636369a3cbbabde4e1dabdbdfab",
+    "n": 1,
+    "start": 0,
+    "end": 53,
+    "text": "2-year - old killed in overnight Little Rock shooting",
+    "mentions": [
+     "2882e636369a3cbbabde4e1dabdbdfab/s0t3-4",
+     "2882e636369a3cbbabde4e1dabdbdfab/s0t8-9"
+    ]
+   },
+   {
+    "doc": "47cd556677ed22a440ff250b26c27ad9",
+    "n": 6,
+    "start": 277,
+    "end": 438,
+    "text": "A three - year - old was shot in the shoulder Sunday night in a drive - by shooting in Woodlawn , leaving the child in critical condition , police said . NEWLINE",
+    "mentions": [
+     "47cd556677ed22a440ff250b26c27ad9/s4t15-19",
+     "47cd556677ed22a440ff250b26c27ad9/s4t26-28",
+     "47cd556677ed22a440ff250b26c27ad9/s4t7-8"
+    ]
+   },
+   {
+    "doc": "54aafae5ecfb4ea7b63b0feb3cc1f804",
+    "n": 4,
+    "start": 225,
+    "end": 532,
+    "text": "Todd McInturf / The Detroit News)Buy Photo NEWLINE Wayne County Prosecutor Kym Worthy pleaded Wednesday with gun owners to keep firearms secure and unloaded around children as she announced criminal charges against four adults in two incidents in which youngsters accessed guns and shot themselves . NEWLINE",
+    "mentions": [
+     "54aafae5ecfb4ea7b63b0feb3cc1f804/s3t36-37",
+     "54aafae5ecfb4ea7b63b0feb3cc1f804/s3t43-44"
+    ]
+   },
+   {
+    "doc": "f6fe00ab356f2779eb7947484abc2204",
+    "n": 2,
+    "start": 31,
+    "end": 158,
+    "text": "Meanwhile , a Rice County deputy stopped a vehicle containing two men with gunshot wounds , northeast of where Nery was found .",
+    "mentions": [
+     "f6fe00ab356f2779eb7947484abc2204/s1t13-14",
+     "f6fe00ab356f2779eb7947484abc2204/s1t14-15"
+    ]
+   },
+   {
+    "doc": "89cd74707f3695461502759237df180d",
+    "n": 3,
+    "start": 158,
+    "end": 368,
+    "text": "View Full Caption DNAinfo/Alex Nitkin / Chicago Police Department NEWLINE WOODLAWN \u2014 A man has been charged in a Father 's Day shooting that left a 3-year - old boy paralyzed in Woodlawn , police said . NEWLINE",
+    "mentions": [
+     "89cd74707f3695461502759237df180d/s2t22-23",
+     "89cd74707f3695461502759237df180d/s2t30-31"
+    ]
+   },
+   {
+    "doc": "d09d10134bc7030ee3e45f840b8e9f9d",
+    "n": 7,
+    "start": 710,
+    "end": 806,
+    "text": "It was the second apparently accidental gunshot death of a young person this month in Hamilton .",
+    "mentions": [
+     "d09d10134bc7030ee3e45f840b8e9f9d/s6t6-7",
+     "d09d10134bc7030ee3e45f840b8e9f9d/s6t7-8"
+    ]
+   },
+   {
+    "doc": "8aaf0296fc3a08a43aa6ecc1eedecc59",
+    "n": 13,
+    "start": 1552,
+    "end": 1737,
+    "text": "An autopsy performed by Burlington County Medical Examiner Dr. Ian Hood concluded the manner of death was homicide and the cause was a gunshot wound to the chest , police said . NEWLINE",
+    "mentions": [
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s12t1-2",
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s12t15-16",
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s12t17-18",
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s12t23-24",
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s12t24-25"
+    ]
+   },
+   {
+    "doc": "95e01170da8c0929a442ef28b93be9e1",
+    "n": 3,
+    "start": 69,
+    "end": 201,
+    "text": "Vermont State Police say a Montpelier teenager suffered minor injuries when she was shot by a shotgun while turkey hunting . NEWLINE",
+    "mentions": [
+     "95e01170da8c0929a442ef28b93be9e1/s2t13-14",
+     "95e01170da8c0929a442ef28b93be9e1/s2t9-10"
+    ]
+   },
+   {
+    "doc": "772591405acd0c43d28f61c737d563a0",
+    "n": 2,
+    "start": 57,
+    "end": 237,
+    "text": "Two teens charged with murder of grandson of Danny Davis NEWLINE Javon Wilson , 15 , U.S. Rep. Danny Davis ' grandson , was shot and killed inside his home in Englewood on Friday .",
+    "mentions": [
+     "772591405acd0c43d28f61c737d563a0/s1t24-25",
+     "772591405acd0c43d28f61c737d563a0/s1t26-27",
+     "772591405acd0c43d28f61c737d563a0/s1t4-5"
+    ]
+   },
+   {
+    "doc": "be72bc254d808cdf561a42cec76fdeae",
+    "n": 2,
+    "start": 101,
+    "end": 224,
+    "text": "Three are dead in what police are ruling a murder - suicide , and the identity of the shooter is shocking to many . NEWLINE",
+    "mentions": [
+     "be72bc254d808cdf561a42cec76fdeae/s1t18-19",
+     "be72bc254d808cdf561a42cec76fdeae/s1t2-3",
+     "be72bc254d808cdf561a42cec76fdeae/s1t9-12"
+    ]
+   },
+   {
+    "doc": "5565a2d05c26f71871509eb0f6ce67e9",
+    "n": 1,
+    "start": 0,
+    "end": 70,
+    "text": "Family identifies 2-year - old killed in suspected drive - by shooting",
+    "mentions": [
+     "5565a2d05c26f71871509eb0f6ce67e9/s0t11-12",
+     "5565a2d05c26f71871509eb0f6ce67e9/s0t5-6"
+    ]
+   },
+   {
+    "doc": "e577d21b7f6fc154b42022aaf582d13f",
+    "n": 1,
+    "start": 0,
+    "end": 70,
+    "text": "Teen accidentally shoots and kills himself while taking selfie - KCTV5",
+    "mentions": [
+     "e577d21b7f6fc154b42022aaf582d13f/s0t2-3",
+     "e577d21b7f6fc154b42022aaf582d13f/s0t4-5"
+    ]
+   },
+   {
+    "doc": "b27405f9afd055f54cdab7c68ccff13e",
+    "n": 2,
+    "start": 60,
+    "end": 128,
+    "text": "A man is dead after a shooting in Mountain View , Missouri . NEWLINE",
+    "mentions": [
+     "b27405f9afd055f54cdab7c68ccff13e/s1t3-4",
+     "b27405f9afd055f54cdab7c68ccff13e/s1t6-7"
+    ]
+   },
+   {
+    "doc": "53b97d585a4890c82818045870a999b6",
+    "n": 3,
+    "start": 85,
+    "end": 279,
+    "text": "An 18-year - old man accused of fatally shooting his friend Monday night in Allentown told police the gun accidentally went off while the two were playing around on the victim 's porch . NEWLINE",
+    "mentions": [
+     "53b97d585a4890c82818045870a999b6/s2t20-22",
+     "53b97d585a4890c82818045870a999b6/s2t7-8",
+     "53b97d585a4890c82818045870a999b6/s2t8-9"
+    ]
+   },
+   {
+    "doc": "bc1b3a7f460907712248bf91bb3dad60",
+    "n": 3,
+    "start": 306,
+    "end": 612,
+    "text": "2016 | Filed under : SBSO News NEWLINE A 17-year - old Chalmette male was arrested and booked on three charges after he accidentally shot and wounded a 16-year girl while showing off a handgun to her and a 14-year - old girl in the back yard of his home Monday night , Sheriff James Pohlmann said . NEWLINE",
+    "mentions": [
+     "bc1b3a7f460907712248bf91bb3dad60/s2t24-25",
+     "bc1b3a7f460907712248bf91bb3dad60/s2t26-27"
+    ]
+   },
+   {
+    "doc": "2500ae9282f44f560e3716e4ba117385",
+    "n": 1,
+    "start": 0,
+    "end": 124,
+    "text": "No foul play suspected in Tyler County accidental shooting death - KSLA News 12 Shreveport , Louisiana News Weather & Sports",
+    "mentions": [
+     "2500ae9282f44f560e3716e4ba117385/s0t8-9",
+     "2500ae9282f44f560e3716e4ba117385/s0t9-10"
+    ]
+   },
+   {
+    "doc": "5427240fe9a6199c11f4bfa5667ef9a3",
+    "n": 24,
+    "start": 1970,
+    "end": 2067,
+    "text": "The police incident report states that the five survivors were shot inside of the lodge . NEWLINE",
+    "mentions": [
+     "5427240fe9a6199c11f4bfa5667ef9a3/s22t10-11",
+     "5427240fe9a6199c11f4bfa5667ef9a3/s22t2-3"
+    ]
+   },
+   {
+    "doc": "a11a696e95ec883a2bdda0a9861ebb09",
+    "n": 2,
+    "start": 61,
+    "end": 274,
+    "text": "By Kristen Dressel NEWLINE WJAX - Jacksonville NEWLINE A 6-year - old girl is fighting for her life after her father shot her in the head Sunday during a murder - suicide in Georgia , according to police . NEWLINE",
+    "mentions": [
+     "a11a696e95ec883a2bdda0a9861ebb09/s1t14-18",
+     "a11a696e95ec883a2bdda0a9861ebb09/s1t21-22",
+     "a11a696e95ec883a2bdda0a9861ebb09/s1t29-32"
+    ]
+   },
+   {
+    "doc": "b27405f9afd055f54cdab7c68ccff13e",
+    "n": 1,
+    "start": 0,
+    "end": 59,
+    "text": "Man dies from gunshot wound in Mountain View ; one arrested",
+    "mentions": [
+     "b27405f9afd055f54cdab7c68ccff13e/s0t1-2",
+     "b27405f9afd055f54cdab7c68ccff13e/s0t3-4",
+     "b27405f9afd055f54cdab7c68ccff13e/s0t4-5"
+    ]
+   },
+   {
+    "doc": "dfb3aed53fc8a4de2c1295bc74555263",
+    "n": 2,
+    "start": 94,
+    "end": 199,
+    "text": "Detroit police say a child has died after she accidentally shot herself with her grandma 's gun . NEWLINE",
+    "mentions": [
+     "dfb3aed53fc8a4de2c1295bc74555263/s1t10-11",
+     "dfb3aed53fc8a4de2c1295bc74555263/s1t6-7"
+    ]
+   },
+   {
+    "doc": "c0c1941b209d6d8a3cf28c4d83b36097",
+    "n": 6,
+    "start": 589,
+    "end": 694,
+    "text": "Their father , 48-year - old Joseph Horn , died from an apparent self - inflicted gunshot wound . NEWLINE",
+    "mentions": [
+     "c0c1941b209d6d8a3cf28c4d83b36097/s5t16-17",
+     "c0c1941b209d6d8a3cf28c4d83b36097/s5t17-18",
+     "c0c1941b209d6d8a3cf28c4d83b36097/s5t9-10"
+    ]
+   },
+   {
+    "doc": "7d726113c5779da0c25328489ee6cb5f",
+    "n": 2,
+    "start": 75,
+    "end": 193,
+    "text": "An 18-year - old man is charged with shooting and killing a man he\u2019d been friends with since the sixth grade . NEWLINE",
+    "mentions": [
+     "7d726113c5779da0c25328489ee6cb5f/s1t10-11",
+     "7d726113c5779da0c25328489ee6cb5f/s1t8-9"
+    ]
+   },
+   {
+    "doc": "90f05cdd91998283674d95244279e798",
+    "n": 4,
+    "start": 57,
+    "end": 303,
+    "text": "A Minneapolis rap musician who put together a big bash on the edge of the south metro where four people were shot said Monday that the weekend bloodshed compels him to disavow violent messages through his music \u201c from this day forward . \u201d NEWLINE",
+    "mentions": [
+     "90f05cdd91998283674d95244279e798/s2t21-22",
+     "90f05cdd91998283674d95244279e798/s2t27-28"
+    ]
+   },
+   {
+    "doc": "a670bf96acee9267204544c8ecda3d10",
+    "n": 1,
+    "start": 0,
+    "end": 78,
+    "text": "Bristol man admits to heavy drinking and accidentally shooting his friend dead",
+    "mentions": [
+     "a670bf96acee9267204544c8ecda3d10/s0t11-12",
+     "a670bf96acee9267204544c8ecda3d10/s0t8-9"
+    ]
+   },
+   {
+    "doc": "2804a2b0992e09edb4e94ee531889332",
+    "n": 2,
+    "start": 49,
+    "end": 190,
+    "text": "- The Gwinnett County Police Department is investigating after an accidental shooting left a 12-year - old boy dead inside his home . NEWLINE",
+    "mentions": [
+     "2804a2b0992e09edb4e94ee531889332/s1t11-12",
+     "2804a2b0992e09edb4e94ee531889332/s1t18-19"
+    ]
+   },
+   {
+    "doc": "772591405acd0c43d28f61c737d563a0",
+    "n": 29,
+    "start": 2475,
+    "end": 2615,
+    "text": "More than 3,290 people have been injured in those shootings , and that does not include the 629 who died as a result of being shot . NEWLINE",
+    "mentions": [
+     "772591405acd0c43d28f61c737d563a0/s27t19-20",
+     "772591405acd0c43d28f61c737d563a0/s27t25-26",
+     "772591405acd0c43d28f61c737d563a0/s27t6-7",
+     "772591405acd0c43d28f61c737d563a0/s27t9-10"
+    ]
+   },
+   {
+    "doc": "7d726113c5779da0c25328489ee6cb5f",
+    "n": 1,
+    "start": 0,
+    "end": 74,
+    "text": "Police : Suspect in fatal Allentown shooting was victim 's longtime friend",
+    "mentions": [
+     "7d726113c5779da0c25328489ee6cb5f/s0t4-5",
+     "7d726113c5779da0c25328489ee6cb5f/s0t6-7"
+    ]
+   },
+   {
+    "doc": "8aaf0296fc3a08a43aa6ecc1eedecc59",
+    "n": 1,
+    "start": 0,
+    "end": 70,
+    "text": "Pemberton HS grad shot his ex - wrestling teammate to death , cops say",
+    "mentions": [
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s0t10-11",
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s0t3-4"
+    ]
+   },
+   {
+    "doc": "316932156a3da5a8b02094f0f1c97ec0",
+    "n": 1,
+    "start": 0,
+    "end": 72,
+    "text": "Bladensburg High student killed Thursday in possible accidental shooting",
+    "mentions": [
+     "316932156a3da5a8b02094f0f1c97ec0/s0t3-4",
+     "316932156a3da5a8b02094f0f1c97ec0/s0t8-9"
+    ]
+   },
+   {
+    "doc": "f03d228accae8f19bab8d465c831e930",
+    "n": 2,
+    "start": 116,
+    "end": 241,
+    "text": "The woman who shot her son , then herself in an apparent murder - suicide in Roundup last week have been identified . NEWLINE",
+    "mentions": [
+     "f03d228accae8f19bab8d465c831e930/s1t12-15",
+     "f03d228accae8f19bab8d465c831e930/s1t3-4"
+    ]
+   },
+   {
+    "doc": "3a81fc725917cbf89cbfab9775e6ba50",
+    "n": 4,
+    "start": 50,
+    "end": 222,
+    "text": "Vermont State Police say a 16-year - old girl suffered minor injuries after she was struck by several shotgun pellets while turkey hunting from a camouflage blind . NEWLINE",
+    "mentions": [
+     "3a81fc725917cbf89cbfab9775e6ba50/s2t11-12",
+     "3a81fc725917cbf89cbfab9775e6ba50/s2t15-16"
+    ]
+   },
+   {
+    "doc": "f2aedab9724c967c9a8c38d87d6a39b4",
+    "n": 11,
+    "start": 1092,
+    "end": 1238,
+    "text": "When officers arrived inside the apartment , they found the man deceased , the child injured and the boy 's mother , who was not injured . NEWLINE",
+    "mentions": [
+     "f2aedab9724c967c9a8c38d87d6a39b4/s10t11-12",
+     "f2aedab9724c967c9a8c38d87d6a39b4/s10t15-16",
+     "f2aedab9724c967c9a8c38d87d6a39b4/s10t25-26"
+    ]
+   },
+   {
+    "doc": "8a82a70b851c000fd66f5871d2a7c32a",
+    "n": 33,
+    "start": 3683,
+    "end": 3828,
+    "text": "Then on April 17 , 6-month old Miracle Murray was killed as shots were fired at a house on Winthrop near Clarita , also on Detroit 's west side .",
+    "mentions": [
+     "8a82a70b851c000fd66f5871d2a7c32a/s31t10-11",
+     "8a82a70b851c000fd66f5871d2a7c32a/s31t12-13",
+     "8a82a70b851c000fd66f5871d2a7c32a/s31t14-15"
+    ]
+   },
+   {
+    "doc": "d1f844f36f140bb5da494dbe47b127fd",
+    "n": 3,
+    "start": 157,
+    "end": 311,
+    "text": "Around 8:30 p.m. Tuesday , Little Rock Police officers received a call from UAMS saying they were treating a two - year - old for gunshot wounds . NEWLINE",
+    "mentions": [
+     "d1f844f36f140bb5da494dbe47b127fd/s2t17-18",
+     "d1f844f36f140bb5da494dbe47b127fd/s2t25-26",
+     "d1f844f36f140bb5da494dbe47b127fd/s2t26-27"
+    ]
+   },
+   {
+    "doc": "47cd556677ed22a440ff250b26c27ad9",
+    "n": 4,
+    "start": 63,
+    "end": 220,
+    "text": "A 3-year - old was shot on Sunday night on the 6100 block of South Kimbark Avenue , where neighbors said at least 20 shots were fired during a May shootout .",
+    "mentions": [
+     "47cd556677ed22a440ff250b26c27ad9/s2t24-25",
+     "47cd556677ed22a440ff250b26c27ad9/s2t26-27",
+     "47cd556677ed22a440ff250b26c27ad9/s2t30-31",
+     "47cd556677ed22a440ff250b26c27ad9/s2t5-6"
+    ]
+   },
+   {
+    "doc": "5565a2d05c26f71871509eb0f6ce67e9",
+    "n": 3,
+    "start": 199,
+    "end": 402,
+    "text": "Police say RaMaya Reed was killed while riding in a vehicle with her mother , her mother 's cousin , and four other juveniles when several shots were fired into their vehicle from a passing car . NEWLINE",
+    "mentions": [
+     "5565a2d05c26f71871509eb0f6ce67e9/s2t26-29",
+     "5565a2d05c26f71871509eb0f6ce67e9/s2t5-6"
+    ]
+   },
+   {
+    "doc": "810c1a1ffe404eb28d6bc39dd4f387c6",
+    "n": 1,
+    "start": 0,
+    "end": 89,
+    "text": "Danny Davis , Chicago congressman , grieves after grandson dies in home invasion shooting",
+    "mentions": [
+     "810c1a1ffe404eb28d6bc39dd4f387c6/s0t13-14",
+     "810c1a1ffe404eb28d6bc39dd4f387c6/s0t6-7",
+     "810c1a1ffe404eb28d6bc39dd4f387c6/s0t9-10"
+    ]
+   },
+   {
+    "doc": "c1ec0f094473e56a028650468640db6d",
+    "n": 3,
+    "start": 175,
+    "end": 290,
+    "text": "Police in Waterbury are searching for a man accused in the deadly shooting of a 17-year - old on Saturday . NEWLINE",
+    "mentions": [
+     "c1ec0f094473e56a028650468640db6d/s2t11-12",
+     "c1ec0f094473e56a028650468640db6d/s2t12-13"
+    ]
+   },
+   {
+    "doc": "e56fec8e36214f810fd580ab08d3e1b5",
+    "n": 1,
+    "start": 0,
+    "end": 49,
+    "text": "Fatal shooting at Burbank hotel ruled an accident",
+    "mentions": [
+     "e56fec8e36214f810fd580ab08d3e1b5/s0t0-1",
+     "e56fec8e36214f810fd580ab08d3e1b5/s0t1-2",
+     "e56fec8e36214f810fd580ab08d3e1b5/s0t7-8"
+    ]
+   },
+   {
+    "doc": "48aae1a3e266f1af6cecda03c6048db7",
+    "n": 8,
+    "start": 851,
+    "end": 995,
+    "text": "A 17-year - old was found dead on the front porch of a Birch Street home after a shooting Saturday afternoon , Baton Rouge police said . NEWLINE",
+    "mentions": [
+     "48aae1a3e266f1af6cecda03c6048db7/s7t18-19",
+     "48aae1a3e266f1af6cecda03c6048db7/s7t6-7"
+    ]
+   },
+   {
+    "doc": "622e463d4866570f7c682a6543e4e8b0",
+    "n": 2,
+    "start": 58,
+    "end": 233,
+    "text": "Please enable Javascript to watch this video NEWLINE WILKES - BARRE -- A mother , father , and toddler were found dead following a murder - suicide in Luzerne County . NEWLINE",
+    "mentions": [
+     "622e463d4866570f7c682a6543e4e8b0/s1t21-22",
+     "622e463d4866570f7c682a6543e4e8b0/s1t24-27"
+    ]
+   },
+   {
+    "doc": "f7c7fbcf9514fbd5ac8a908532734696",
+    "n": 6,
+    "start": 407,
+    "end": 545,
+    "text": "They said responding troopers found 23-year - old Zackary Charles Yashkus in the driver \u2019s seat with a gunshot wound to his head . NEWLINE",
+    "mentions": [
+     "f7c7fbcf9514fbd5ac8a908532734696/s5t18-19",
+     "f7c7fbcf9514fbd5ac8a908532734696/s5t19-20"
+    ]
+   },
+   {
+    "doc": "9f47096fc23b0730c1120df0e8d10061",
+    "n": 2,
+    "start": 72,
+    "end": 127,
+    "text": "FILE : 3-year - old child shot and killed in Hamilton .",
+    "mentions": [
+     "9f47096fc23b0730c1120df0e8d10061/s1t6-7",
+     "9f47096fc23b0730c1120df0e8d10061/s1t8-9"
+    ]
+   },
+   {
+    "doc": "89cd74707f3695461502759237df180d",
+    "n": 8,
+    "start": 853,
+    "end": 924,
+    "text": "Police on Thursday said the boy was paralyzed in the shooting . NEWLINE",
+    "mentions": [
+     "89cd74707f3695461502759237df180d/s7t10-11",
+     "89cd74707f3695461502759237df180d/s7t7-8"
+    ]
+   },
+   {
+    "doc": "d09d10134bc7030ee3e45f840b8e9f9d",
+    "n": 3,
+    "start": 77,
+    "end": 208,
+    "text": "An Ohio prosecutor says he will take the case of the self - inflicted gunshot death of a 3-year - old boy to a grand jury . NEWLINE",
+    "mentions": [
+     "d09d10134bc7030ee3e45f840b8e9f9d/s2t14-15",
+     "d09d10134bc7030ee3e45f840b8e9f9d/s2t15-16"
+    ]
+   },
+   {
+    "doc": "456f3dd976b192f2be0be5d1639cdcc5",
+    "n": 4,
+    "start": 86,
+    "end": 224,
+    "text": "2 p.m. UPDATE : Stockton Police have identified the man shot and killed on Tuesday night in Stockton as 32-year - old Jose Nunez . NEWLINE",
+    "mentions": [
+     "456f3dd976b192f2be0be5d1639cdcc5/s2t10-11",
+     "456f3dd976b192f2be0be5d1639cdcc5/s2t12-13"
+    ]
+   },
+   {
+    "doc": "c8d02ec56d873583e4fb7d9970f8d2dc",
+    "n": 9,
+    "start": 871,
+    "end": 1017,
+    "text": "When officers arrived inside the apartment , they found the man deceased , the child injured and the boy 's mother , who was not injured . NEWLINE",
+    "mentions": [
+     "c8d02ec56d873583e4fb7d9970f8d2dc/s8t11-12",
+     "c8d02ec56d873583e4fb7d9970f8d2dc/s8t15-16"
+    ]
+   },
+   {
+    "doc": "a11a696e95ec883a2bdda0a9861ebb09",
+    "n": 4,
+    "start": 376,
+    "end": 522,
+    "text": "Her father , 24-year - old Jesus Diaz , shot her and her mother , 21-year - old Emiko Diaz , before killing himself , investigators said . NEWLINE",
+    "mentions": [
+     "a11a696e95ec883a2bdda0a9861ebb09/s3t22-23",
+     "a11a696e95ec883a2bdda0a9861ebb09/s3t9-10"
+    ]
+   },
+   {
+    "doc": "33840bbd5a82d9e0643b6d9f34f9d106",
+    "n": 1,
+    "start": 0,
+    "end": 37,
+    "text": "Teenager shot and killed in Waterbury",
+    "mentions": [
+     "33840bbd5a82d9e0643b6d9f34f9d106/s0t1-2",
+     "33840bbd5a82d9e0643b6d9f34f9d106/s0t3-4"
+    ]
+   },
+   {
+    "doc": "c8d02ec56d873583e4fb7d9970f8d2dc",
+    "n": 1,
+    "start": 0,
+    "end": 85,
+    "text": "Salt Lake man shoots 8-year - old boy , then himself in murder - suicide , police say",
+    "mentions": [
+     "c8d02ec56d873583e4fb7d9970f8d2dc/s0t12-15",
+     "c8d02ec56d873583e4fb7d9970f8d2dc/s0t3-4"
+    ]
+   },
+   {
+    "doc": "a670bf96acee9267204544c8ecda3d10",
+    "n": 2,
+    "start": 79,
+    "end": 402,
+    "text": "Please enable Javascript to watch this video NEWLINE BRISTOL - Standing silently before a judge on Monday afternoon , 35-year old Chad Couture of Bristol was arraigned after police say he shot and killed his friend , 63-year - old Daniel Caron , in the driveway of his parents ' home on Woodland Street in Bristol . NEWLINE",
+    "mentions": [
+     "a670bf96acee9267204544c8ecda3d10/s1t31-32",
+     "a670bf96acee9267204544c8ecda3d10/s1t33-34"
+    ]
+   },
+   {
+    "doc": "f123522b3d905fc67cb6f0cc5ba40a64",
+    "n": 1,
+    "start": 0,
+    "end": 123,
+    "text": "Husband kills wife and stepdaughter in Aransas Pass murder - suici - KRISTV.com | Continuous News Coverage | Corpus Christi",
+    "mentions": [
+     "f123522b3d905fc67cb6f0cc5ba40a64/s0t1-2",
+     "f123522b3d905fc67cb6f0cc5ba40a64/s0t8-11"
+    ]
+   },
+   {
+    "doc": "f123522b3d905fc67cb6f0cc5ba40a64",
+    "n": 26,
+    "start": 2574,
+    "end": 2740,
+    "text": "Authorities confirmed that Steven Dolan with CCFD killed Brenda Dolan yesterday in AP. Steven also shot step daughter & killed himself \u2014 Anayeli Ruiz ( @AnayeliNews )",
+    "mentions": [
+     "f123522b3d905fc67cb6f0cc5ba40a64/s24t15-16",
+     "f123522b3d905fc67cb6f0cc5ba40a64/s24t19-20",
+     "f123522b3d905fc67cb6f0cc5ba40a64/s24t7-8"
+    ]
+   },
+   {
+    "doc": "810c1a1ffe404eb28d6bc39dd4f387c6",
+    "n": 2,
+    "start": 90,
+    "end": 249,
+    "text": "CHICAGO -- The grandson of Illinois U.S. Rep. Danny Davis was fatally shot in a home invasion in Chicago , the Democratic congressman and police said . NEWLINE",
+    "mentions": [
+     "810c1a1ffe404eb28d6bc39dd4f387c6/s1t11-12",
+     "810c1a1ffe404eb28d6bc39dd4f387c6/s1t12-13"
+    ]
+   },
+   {
+    "doc": "5a0c56265670498621b7cd2f71e53902",
+    "n": 6,
+    "start": 431,
+    "end": 535,
+    "text": "Police went into the home to investigate and found Hockman had been fatally wounded by a shotgun round .",
+    "mentions": [
+     "5a0c56265670498621b7cd2f71e53902/s5t12-13",
+     "5a0c56265670498621b7cd2f71e53902/s5t13-14"
+    ]
+   },
+   {
+    "doc": "0103fecb38fd0263f899b3917555b0d2",
+    "n": 1,
+    "start": 0,
+    "end": 51,
+    "text": "Family of Father of 4 Killed in Shooting Speaks Out",
+    "mentions": [
+     "0103fecb38fd0263f899b3917555b0d2/s0t5-6",
+     "0103fecb38fd0263f899b3917555b0d2/s0t7-8"
+    ]
+   },
+   {
+    "doc": "662672852b984c058a02869c92096d86",
+    "n": 2,
+    "start": 23,
+    "end": 192,
+    "text": "Javon Wilson , the teenage grandson of U.S. Rep. Danny Davis , was shot to death over what police called an arugment over sneakers in his Englewood home Friday evening .",
+    "mentions": [
+     "662672852b984c058a02869c92096d86/s1t13-14",
+     "662672852b984c058a02869c92096d86/s1t15-16"
+    ]
+   },
+   {
+    "doc": "18c9c2ab4f33be988e704f7b482b5ed9",
+    "n": 1,
+    "start": 0,
+    "end": 43,
+    "text": "Burbank hotel shooting death may be suicide",
+    "mentions": [
+     "18c9c2ab4f33be988e704f7b482b5ed9/s0t2-3",
+     "18c9c2ab4f33be988e704f7b482b5ed9/s0t3-4",
+     "18c9c2ab4f33be988e704f7b482b5ed9/s0t6-7"
+    ]
+   },
+   {
+    "doc": "f2aedab9724c967c9a8c38d87d6a39b4",
+    "n": 4,
+    "start": 206,
+    "end": 323,
+    "text": "10PM : Salt Lake man shoots 8-year - old boy , then himself in murder - suicide , police say NEWLINE SALT LAKE CITY \u2014",
+    "mentions": [
+     "f2aedab9724c967c9a8c38d87d6a39b4/s3t14-17",
+     "f2aedab9724c967c9a8c38d87d6a39b4/s3t5-6"
+    ]
+   },
+   {
+    "doc": "2882e636369a3cbbabde4e1dabdbdfab",
+    "n": 3,
+    "start": 130,
+    "end": 209,
+    "text": "A two - year - old is dead after an overnight shooting in Little Rock . NEWLINE",
+    "mentions": [
+     "2882e636369a3cbbabde4e1dabdbdfab/s2t11-12",
+     "2882e636369a3cbbabde4e1dabdbdfab/s2t7-8"
+    ]
+   },
+   {
+    "doc": "8a82a70b851c000fd66f5871d2a7c32a",
+    "n": 3,
+    "start": 210,
+    "end": 469,
+    "text": "( Photo : Regina H. Boone , Detroit Free Press)Buy Photo NEWLINE Several charges have been filed in two separate shooting cases \u2014 one fatal and one non - fatal \u2014 of two Detroit children who shot themselves after finding unsecured guns in their homes . NEWLINE",
+    "mentions": [
+     "8a82a70b851c000fd66f5871d2a7c32a/s2t20-21",
+     "8a82a70b851c000fd66f5871d2a7c32a/s2t24-25",
+     "8a82a70b851c000fd66f5871d2a7c32a/s2t36-37"
+    ]
+   },
+   {
+    "doc": "be72bc254d808cdf561a42cec76fdeae",
+    "n": 7,
+    "start": 688,
+    "end": 763,
+    "text": "When they arrived , Dolan was found dead from a gunshot wound to the head .",
+    "mentions": [
+     "be72bc254d808cdf561a42cec76fdeae/s6t10-11",
+     "be72bc254d808cdf561a42cec76fdeae/s6t11-12",
+     "be72bc254d808cdf561a42cec76fdeae/s6t7-8"
+    ]
+   },
+   {
+    "doc": "f2aedab9724c967c9a8c38d87d6a39b4",
+    "n": 1,
+    "start": 0,
+    "end": 85,
+    "text": "Salt Lake man shoots 8-year - old boy , then himself in murder - suicide , police say",
+    "mentions": [
+     "f2aedab9724c967c9a8c38d87d6a39b4/s0t12-15",
+     "f2aedab9724c967c9a8c38d87d6a39b4/s0t3-4"
+    ]
+   }
+  ],
+  "single": [
+   {
+    "doc": "33840bbd5a82d9e0643b6d9f34f9d106",
+    "n": 6,
+    "start": 359,
+    "end": 433,
+    "text": "The male victim was taken to Waterbury Hospital where he died at 6:40 p.m.",
+    "mentions": [
+     "33840bbd5a82d9e0643b6d9f34f9d106/s5t10-11"
+    ]
+   },
+   {
+    "doc": "c69d14366d741ecd9e55646f5903fe8c",
+    "n": 4,
+    "start": 191,
+    "end": 242,
+    "text": "The teen was shot at at his home at around 7:15pm .",
+    "mentions": [
+     "c69d14366d741ecd9e55646f5903fe8c/s3t3-4"
+    ]
+   },
+   {
+    "doc": "622e463d4866570f7c682a6543e4e8b0",
+    "n": 24,
+    "start": 2140,
+    "end": 2248,
+    "text": "So far investigators have not released what may have motivated Yashkus to take those two lives and his own .",
+    "mentions": [
+     "622e463d4866570f7c682a6543e4e8b0/s22t12-16"
+    ]
+   },
+   {
+    "doc": "9f47096fc23b0730c1120df0e8d10061",
+    "n": 8,
+    "start": 648,
+    "end": 794,
+    "text": "Reid recounted to media that she saw the boy \u2019s mother run out of the apartment carrying the boy and screaming that he shot himself in the chest .",
+    "mentions": [
+     "9f47096fc23b0730c1120df0e8d10061/s7t23-24"
+    ]
+   },
+   {
+    "doc": "533dc1a9518e4defd149a1e1c2a40766",
+    "n": 2,
+    "start": 42,
+    "end": 209,
+    "text": "KOKOMO , Ind. ( June 15 , 2014 ) \u2014 Kokomo police want to know more about what led up to a shooting outside a nightclub , that put four people in the hospital . NEWLINE",
+    "mentions": [
+     "533dc1a9518e4defd149a1e1c2a40766/s1t22-23"
+    ]
+   },
+   {
+    "doc": "bc1b3a7f460907712248bf91bb3dad60",
+    "n": 8,
+    "start": 1109,
+    "end": 1252,
+    "text": "Carroll was booked by sheriff \u2019s detectives with negligent injury , illegal use of a weapon and contributing to the delinquency of a juvenile .",
+    "mentions": [
+     "bc1b3a7f460907712248bf91bb3dad60/s7t9-10"
+    ]
+   },
+   {
+    "doc": "2bbecd575f30b22c041e138ad53c45f7",
+    "n": 5,
+    "start": 306,
+    "end": 401,
+    "text": "It happened in the 5500 block of West Old National Road in Raysville near Knightstown . NEWLINE",
+    "mentions": [
+     "2bbecd575f30b22c041e138ad53c45f7/s4t0-1"
+    ]
+   },
+   {
+    "doc": "e577d21b7f6fc154b42022aaf582d13f",
+    "n": 4,
+    "start": 376,
+    "end": 430,
+    "text": "Jones was rushed to the hospital where he later died .",
+    "mentions": [
+     "e577d21b7f6fc154b42022aaf582d13f/s3t9-10"
+    ]
+   },
+   {
+    "doc": "f2b153b06d80107947dbe64693abb899",
+    "n": 7,
+    "start": 497,
+    "end": 591,
+    "text": "Riviera Beach Police said Amirra picked up a gun from a bed , before killing herself . NEWLINE",
+    "mentions": [
+     "f2b153b06d80107947dbe64693abb899/s6t14-15"
+    ]
+   },
+   {
+    "doc": "9f47096fc23b0730c1120df0e8d10061",
+    "n": 13,
+    "start": 1122,
+    "end": 1160,
+    "text": "The boy died at the hospital . NEWLINE",
+    "mentions": [
+     "9f47096fc23b0730c1120df0e8d10061/s12t2-3"
+    ]
+   },
+   {
+    "doc": "89cd74707f3695461502759237df180d",
+    "n": 5,
+    "start": 580,
+    "end": 637,
+    "text": "Devon was struck in his right shoulder , Tannehill said .",
+    "mentions": [
+     "89cd74707f3695461502759237df180d/s4t2-3"
+    ]
+   },
+   {
+    "doc": "2882e636369a3cbbabde4e1dabdbdfab",
+    "n": 8,
+    "start": 712,
+    "end": 770,
+    "text": "This is the second murder within 24 hours in Little Rock .",
+    "mentions": [
+     "2882e636369a3cbbabde4e1dabdbdfab/s7t4-5"
+    ]
+   },
+   {
+    "doc": "a1eac7c03830c460eafd1f57a95aad8f",
+    "n": 3,
+    "start": 242,
+    "end": 344,
+    "text": "It happened early Sunday morning at the Underground nightclub on Junction and Belmont Avenue . NEWLINE",
+    "mentions": [
+     "a1eac7c03830c460eafd1f57a95aad8f/s2t0-1"
+    ]
+   },
+   {
+    "doc": "622e463d4866570f7c682a6543e4e8b0",
+    "n": 22,
+    "start": 1786,
+    "end": 2012,
+    "text": "After Thompson was discovered dead , neighbors held out hope for hours that her son would be found safe , but as more stunned relatives arrived , breaking down in tears , the full horror of what happened was revealed . NEWLINE",
+    "mentions": [
+     "622e463d4866570f7c682a6543e4e8b0/s20t4-5"
+    ]
+   },
+   {
+    "doc": "2500ae9282f44f560e3716e4ba117385",
+    "n": 8,
+    "start": 1009,
+    "end": 1069,
+    "text": "Schriefer was pronounced dead at the Tyler County Hospital .",
+    "mentions": [
+     "2500ae9282f44f560e3716e4ba117385/s7t3-4"
+    ]
+   },
+   {
+    "doc": "dfb3aed53fc8a4de2c1295bc74555263",
+    "n": 3,
+    "start": 200,
+    "end": 296,
+    "text": "Family at the scene says 5-year - old Mariah Davis shot herself in the neck late Tuesday night .",
+    "mentions": [
+     "dfb3aed53fc8a4de2c1295bc74555263/s2t10-11"
+    ]
+   },
+   {
+    "doc": "8a82a70b851c000fd66f5871d2a7c32a",
+    "n": 8,
+    "start": 1042,
+    "end": 1204,
+    "text": "Davis and McNeal have been charged with one count of involuntary manslaughter , three counts of second - degree child abuse and one count each of felony firearm .",
+    "mentions": [
+     "8a82a70b851c000fd66f5871d2a7c32a/s7t11-12"
+    ]
+   },
+   {
+    "doc": "0b3b5a80431913c99c9776d1accd2906",
+    "n": 3,
+    "start": 166,
+    "end": 368,
+    "text": "Kenneth Murphy , 18 , had a preliminary hearing today before District Judge James Motznik on charges that he killed Christopher Rodriguez , 20 , in the 1500 block of Arlington Avenue on Aug. 1 . NEWLINE",
+    "mentions": [
+     "0b3b5a80431913c99c9776d1accd2906/s2t19-20"
+    ]
+   },
+   {
+    "doc": "8974b84a606f82cac1e7dec3fe72fcba",
+    "n": 2,
+    "start": 0,
+    "end": 60,
+    "text": "15-year - old accidentally shoots self while taking selfie \u2013",
+    "mentions": [
+     "8974b84a606f82cac1e7dec3fe72fcba/s0t4-5"
+    ]
+   },
+   {
+    "doc": "ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "n": 11,
+    "start": 1008,
+    "end": 1091,
+    "text": "Police said Murphy was one of the shooters and Washington was a bystander . NEWLINE",
+    "mentions": [
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s10t7-8"
+    ]
+   },
+   {
+    "doc": "8974b84a606f82cac1e7dec3fe72fcba",
+    "n": 13,
+    "start": 882,
+    "end": 1100,
+    "text": "Investigators believe the shooting to be accidental and give credence to the selfie theory because Jones\u2019 older brothers told their father about the idea and because police found a cellphone near the teenager . NEWLINE",
+    "mentions": [
+     "8974b84a606f82cac1e7dec3fe72fcba/s11t3-4"
+    ]
+   },
+   {
+    "doc": "0b3b5a80431913c99c9776d1accd2906",
+    "n": 1,
+    "start": 0,
+    "end": 52,
+    "text": "Pittsburgh man to stand trial for Allentown homicide",
+    "mentions": [
+     "0b3b5a80431913c99c9776d1accd2906/s0t7-8"
+    ]
+   },
+   {
+    "doc": "474192e8ed58d492d1bccacae3863c5a",
+    "n": 16,
+    "start": 1620,
+    "end": 1661,
+    "text": "\" Somebody 's child got shot last night .",
+    "mentions": [
+     "474192e8ed58d492d1bccacae3863c5a/s15t5-6"
+    ]
+   },
+   {
+    "doc": "8974b84a606f82cac1e7dec3fe72fcba",
+    "n": 4,
+    "start": 68,
+    "end": 130,
+    "text": "\u00d7 15-year - old accidentally shoots self while taking selfie \u2013",
+    "mentions": [
+     "8974b84a606f82cac1e7dec3fe72fcba/s2t5-6"
+    ]
+   },
+   {
+    "doc": "a670bf96acee9267204544c8ecda3d10",
+    "n": 4,
+    "start": 541,
+    "end": 643,
+    "text": "Couture is now charged with first - degree manslaughter and criminal possession of a firearm . NEWLINE",
+    "mentions": [
+     "a670bf96acee9267204544c8ecda3d10/s3t8-9"
+    ]
+   },
+   {
+    "doc": "810c1a1ffe404eb28d6bc39dd4f387c6",
+    "n": 3,
+    "start": 250,
+    "end": 388,
+    "text": "Jovan Wilson , 15 , died Friday night at the scene in the Englewood neighborhood on the city \u2019s South Side , CBS Chicago reports . NEWLINE",
+    "mentions": [
+     "810c1a1ffe404eb28d6bc39dd4f387c6/s2t5-6"
+    ]
+   },
+   {
+    "doc": "474192e8ed58d492d1bccacae3863c5a",
+    "n": 1,
+    "start": 0,
+    "end": 96,
+    "text": "Neighborhood leaders call for an end to violence after shooting at a Toledo after - hours lounge",
+    "mentions": [
+     "474192e8ed58d492d1bccacae3863c5a/s0t9-10"
+    ]
+   },
+   {
+    "doc": "20451ad9563e2c4d870f7fc84d396c89",
+    "n": 9,
+    "start": 1218,
+    "end": 1231,
+    "text": "Life lost . \"",
+    "mentions": [
+     "20451ad9563e2c4d870f7fc84d396c89/s8t1-2"
+    ]
+   },
+   {
+    "doc": "30a91b897e071a1916f5108a8f7c1698",
+    "n": 4,
+    "start": 181,
+    "end": 471,
+    "text": "Baby shot in act of road rage NEWLINE According to a GoFundMe page set up to benefit the family , Ava Schowalter , her parents and sister had just left the Milwaukee County Zoo and were heading home to Sheboygan County , when something happened on Interstate 43 near Capitol Drive . NEWLINE",
+    "mentions": [
+     "30a91b897e071a1916f5108a8f7c1698/s3t1-2"
+    ]
+   },
+   {
+    "doc": "2234f0e17887d5296178b85cb1012bea",
+    "n": 3,
+    "start": 191,
+    "end": 356,
+    "text": "Police said that an officer heard several gunshots at 3:37 a.m. Sunday coming from The Underground , a club at Belmont and Junction avenues in central city . NEWLINE",
+    "mentions": [
+     "2234f0e17887d5296178b85cb1012bea/s2t7-8"
+    ]
+   },
+   {
+    "doc": "1f5a0cb5862fc782d4a0e466748db618",
+    "n": 5,
+    "start": 499,
+    "end": 692,
+    "text": "They said they were driving in the area of East 8th Street and The Paseo when they unwittingly found themselves in the middle of a shootout between the occupants of two other vehicles . NEWLINE",
+    "mentions": [
+     "1f5a0cb5862fc782d4a0e466748db618/s4t25-26"
+    ]
+   },
+   {
+    "doc": "c1ec0f094473e56a028650468640db6d",
+    "n": 5,
+    "start": 463,
+    "end": 569,
+    "text": "Based on the investigation , police identified his alleged shooter as 21-year - old Erick Malone . NEWLINE",
+    "mentions": [
+     "c1ec0f094473e56a028650468640db6d/s4t9-10"
+    ]
+   },
+   {
+    "doc": "91153f512a483bcc383595f6927fd0b5",
+    "n": 5,
+    "start": 341,
+    "end": 433,
+    "text": "Law enforcement and emergency medical services responded to reports of two gunshot victims .",
+    "mentions": [
+     "91153f512a483bcc383595f6927fd0b5/s4t11-12"
+    ]
+   },
+   {
+    "doc": "7d726113c5779da0c25328489ee6cb5f",
+    "n": 5,
+    "start": 472,
+    "end": 573,
+    "text": "That same witness said that they got a call 20 minutes later saying Rodriguez had been shot . NEWLINE",
+    "mentions": [
+     "7d726113c5779da0c25328489ee6cb5f/s4t16-17"
+    ]
+   },
+   {
+    "doc": "15d09e57d28a5da15051d475d5681c85",
+    "n": 19,
+    "start": 1812,
+    "end": 1886,
+    "text": "Investigators did say the bodies were found throughout the house . NEWLINE",
+    "mentions": [
+     "15d09e57d28a5da15051d475d5681c85/s18t4-5"
+    ]
+   },
+   {
+    "doc": "2804a2b0992e09edb4e94ee531889332",
+    "n": 6,
+    "start": 484,
+    "end": 549,
+    "text": "The boy \u2019s mother heard the shots and ran to the garage . NEWLINE",
+    "mentions": [
+     "2804a2b0992e09edb4e94ee531889332/s5t6-7"
+    ]
+   },
+   {
+    "doc": "f03d228accae8f19bab8d465c831e930",
+    "n": 1,
+    "start": 0,
+    "end": 115,
+    "text": "Report : Woman , son involved in Roundup murder - suicide identified - KXLF.com | Continuous News | Butte , Montana",
+    "mentions": [
+     "f03d228accae8f19bab8d465c831e930/s0t8-11"
+    ]
+   },
+   {
+    "doc": "150f030a0c018862ea5b3b1604231026",
+    "n": 7,
+    "start": 704,
+    "end": 776,
+    "text": "The shot is believed to have come from inside the Lost Souls clubhouse .",
+    "mentions": [
+     "150f030a0c018862ea5b3b1604231026/s6t1-2"
+    ]
+   },
+   {
+    "doc": "5427240fe9a6199c11f4bfa5667ef9a3",
+    "n": 11,
+    "start": 998,
+    "end": 1117,
+    "text": "The other victims , Wayne Evans , 52 , Cameron Green , 23 , and Jerry Oliphant , 57 , did not know the gunmen . NEWLINE",
+    "mentions": [
+     "5427240fe9a6199c11f4bfa5667ef9a3/s10t24-25"
+    ]
+   },
+   {
+    "doc": "8aaf0296fc3a08a43aa6ecc1eedecc59",
+    "n": 6,
+    "start": 713,
+    "end": 823,
+    "text": "Coleman was pronounced dead a short time later at Deborah Hospital in Pemberton Township , they said . NEWLINE",
+    "mentions": [
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s5t3-4"
+    ]
+   },
+   {
+    "doc": "89cd74707f3695461502759237df180d",
+    "n": 1,
+    "start": 0,
+    "end": 67,
+    "text": "Man Charged With Shooting 3-Year - Old Boy in Woodlawn , Police Say",
+    "mentions": [
+     "89cd74707f3695461502759237df180d/s0t3-4"
+    ]
+   },
+   {
+    "doc": "e56fec8e36214f810fd580ab08d3e1b5",
+    "n": 5,
+    "start": 488,
+    "end": 547,
+    "text": "He was pronounced dead at the scene by paramedics . NEWLINE",
+    "mentions": [
+     "e56fec8e36214f810fd580ab08d3e1b5/s4t3-4"
+    ]
+   },
+   {
+    "doc": "c657b5e13384a329d6909243da721285",
+    "n": 22,
+    "start": 1873,
+    "end": 1975,
+    "text": "In her post , Hoopes also criticized the lack of funding for mental health treatment in Utah . NEWLINE",
+    "mentions": [
+     "c657b5e13384a329d6909243da721285/s21t14-15"
+    ]
+   },
+   {
+    "doc": "772591405acd0c43d28f61c737d563a0",
+    "n": 10,
+    "start": 1032,
+    "end": 1154,
+    "text": "Wilson was pronounced dead at the scene at 7:32 p.m. , according to the Cook County medical examiner \u2019s office . NEWLINE \u201c",
+    "mentions": [
+     "772591405acd0c43d28f61c737d563a0/s9t3-4"
+    ]
+   },
+   {
+    "doc": "95e01170da8c0929a442ef28b93be9e1",
+    "n": 1,
+    "start": 0,
+    "end": 57,
+    "text": "Teenage girl shot during turkey hunt : Times Argus Online",
+    "mentions": [
+     "95e01170da8c0929a442ef28b93be9e1/s0t2-3"
+    ]
+   },
+   {
+    "doc": "f123522b3d905fc67cb6f0cc5ba40a64",
+    "n": 20,
+    "start": 1874,
+    "end": 2016,
+    "text": "Prior to Tuesday 's incident , police were called to the home two other times , but at the time they were not believed to be domestic issues .",
+    "mentions": [
+     "f123522b3d905fc67cb6f0cc5ba40a64/s18t4-5"
+    ]
+   },
+   {
+    "doc": "5427240fe9a6199c11f4bfa5667ef9a3",
+    "n": 18,
+    "start": 1635,
+    "end": 1706,
+    "text": "He said he heard more than 25 shots in a five - minute period . NEWLINE",
+    "mentions": [
+     "5427240fe9a6199c11f4bfa5667ef9a3/s17t7-8"
+    ]
+   },
+   {
+    "doc": "ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "n": 13,
+    "start": 1224,
+    "end": 1311,
+    "text": "Investigators said multiple people were shot before the assailant was subdued . NEWLINE",
+    "mentions": [
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s12t5-6"
+    ]
+   },
+   {
+    "doc": "f123522b3d905fc67cb6f0cc5ba40a64",
+    "n": 2,
+    "start": 124,
+    "end": 375,
+    "text": "Officers responded to calls of a possible shooting after 10 p.m. Tuesday in the 1700 block of West Highland Avenue off of South Avenue A. NEWLINE The husband has been identified as Corpus Christi firefighter Steven Dolan and the wife is Brenda Dolan .",
+    "mentions": [
+     "f123522b3d905fc67cb6f0cc5ba40a64/s1t7-8"
+    ]
+   },
+   {
+    "doc": "8aaf0296fc3a08a43aa6ecc1eedecc59",
+    "n": 9,
+    "start": 1087,
+    "end": 1278,
+    "text": "The shooting was initially reported to police as having occurred during an assault on Coleman , Salas and the third individual by three masked intruders who entered the garage , police said .",
+    "mentions": [
+     "8aaf0296fc3a08a43aa6ecc1eedecc59/s8t1-2"
+    ]
+   },
+   {
+    "doc": "15d09e57d28a5da15051d475d5681c85",
+    "n": 3,
+    "start": 169,
+    "end": 304,
+    "text": "Officials in Henry County are investigating after three bodies were found in a home just east of Knightstown Thursday morning . NEWLINE",
+    "mentions": [
+     "15d09e57d28a5da15051d475d5681c85/s2t8-9"
+    ]
+   },
+   {
+    "doc": "7599d2c270380b8c4d56a28eb49d910f",
+    "n": 11,
+    "start": 766,
+    "end": 879,
+    "text": "The child was taken to Children 's Hospital with what officials say are non - life threatening injuries . NEWLINE",
+    "mentions": [
+     "7599d2c270380b8c4d56a28eb49d910f/s10t17-18"
+    ]
+   },
+   {
+    "doc": "0103fecb38fd0263f899b3917555b0d2",
+    "n": 3,
+    "start": 146,
+    "end": 254,
+    "text": "It was a friend , that Caron \u2019s family says killed the 63-year - old father of four Friday evening . NEWLINE",
+    "mentions": [
+     "0103fecb38fd0263f899b3917555b0d2/s2t10-11"
+    ]
+   },
+   {
+    "doc": "18c9c2ab4f33be988e704f7b482b5ed9",
+    "n": 4,
+    "start": 325,
+    "end": 414,
+    "text": "Officers found a man \u2019s body and recovered a gun at the scene , said Burbank police Sgt .",
+    "mentions": [
+     "18c9c2ab4f33be988e704f7b482b5ed9/s3t5-6"
+    ]
+   },
+   {
+    "doc": "33840bbd5a82d9e0643b6d9f34f9d106",
+    "n": 4,
+    "start": 151,
+    "end": 226,
+    "text": "The shooting happened in the area of 30 Porter Street just before 4:30 p.m.",
+    "mentions": [
+     "33840bbd5a82d9e0643b6d9f34f9d106/s3t1-2"
+    ]
+   },
+   {
+    "doc": "18c9c2ab4f33be988e704f7b482b5ed9",
+    "n": 3,
+    "start": 188,
+    "end": 324,
+    "text": "Police responded around 11 p.m. Thursday to a call of shots fired at the Los Angeles Marriott Burbank Airport at 2500 N. Hollywood Way .",
+    "mentions": [
+     "18c9c2ab4f33be988e704f7b482b5ed9/s2t10-12"
+    ]
+   },
+   {
+    "doc": "53b97d585a4890c82818045870a999b6",
+    "n": 1,
+    "start": 0,
+    "end": 33,
+    "text": "Allentown man charged in shooting",
+    "mentions": [
+     "53b97d585a4890c82818045870a999b6/s0t4-5"
+    ]
+   },
+   {
+    "doc": "316932156a3da5a8b02094f0f1c97ec0",
+    "n": 3,
+    "start": 165,
+    "end": 323,
+    "text": "Bladensburg police responded to a report of an accidental shooting about 8 p.m. in the 4200 block of 58th Avenue , said Bladensburg Police Chief Tracy Stone .",
+    "mentions": [
+     "316932156a3da5a8b02094f0f1c97ec0/s2t9-10"
+    ]
+   },
+   {
+    "doc": "2bbecd575f30b22c041e138ad53c45f7",
+    "n": 2,
+    "start": 66,
+    "end": 145,
+    "text": "Three bodies were found in a home in Henry County Thursday , August 27 , 2015 .",
+    "mentions": [
+     "2bbecd575f30b22c041e138ad53c45f7/s1t1-2"
+    ]
+   },
+   {
+    "doc": "7d726113c5779da0c25328489ee6cb5f",
+    "n": 12,
+    "start": 1307,
+    "end": 1365,
+    "text": "Murphy faces several charges including criminal homicide .",
+    "mentions": [
+     "7d726113c5779da0c25328489ee6cb5f/s11t6-7"
+    ]
+   },
+   {
+    "doc": "dfb3aed53fc8a4de2c1295bc74555263",
+    "n": 6,
+    "start": 530,
+    "end": 618,
+    "text": "Police say she found the gun underneath a pillow and accidentally shot herself . NEWLINE",
+    "mentions": [
+     "dfb3aed53fc8a4de2c1295bc74555263/s5t11-12"
+    ]
+   },
+   {
+    "doc": "9f47096fc23b0730c1120df0e8d10061",
+    "n": 4,
+    "start": 248,
+    "end": 376,
+    "text": "\u2013 Hamilton police say a 3-year - old boy shot himself while playing with a handgun he found inside his mother \u2019s purse . NEWLINE",
+    "mentions": [
+     "9f47096fc23b0730c1120df0e8d10061/s3t9-10"
+    ]
+   },
+   {
+    "doc": "150f030a0c018862ea5b3b1604231026",
+    "n": 9,
+    "start": 882,
+    "end": 1003,
+    "text": "According to police , they do not believe Stevens was targeted , saying it may have been an accidental shooting . NEWLINE",
+    "mentions": [
+     "150f030a0c018862ea5b3b1604231026/s8t19-20"
+    ]
+   },
+   {
+    "doc": "558c3b514b0c387be30701c97c321a14",
+    "n": 6,
+    "start": 750,
+    "end": 848,
+    "text": "She was taken to a New Orleans hospital with a bullet wound behind her left ear , officials said .",
+    "mentions": [
+     "558c3b514b0c387be30701c97c321a14/s5t11-12"
+    ]
+   },
+   {
+    "doc": "7599d2c270380b8c4d56a28eb49d910f",
+    "n": 2,
+    "start": 102,
+    "end": 273,
+    "text": "Please enable Javascript to watch this video NEWLINE MILWAUKEE -- A two - month - old girl was shot while in a vehicle on I-43 on Sunday evening , September 11th . NEWLINE",
+    "mentions": [
+     "7599d2c270380b8c4d56a28eb49d910f/s1t18-19"
+    ]
+   },
+   {
+    "doc": "47cd556677ed22a440ff250b26c27ad9",
+    "n": 8,
+    "start": 633,
+    "end": 838,
+    "text": "Police said the child was taken to the University of Chicago Medical Center and later transferred to Comer Children \u2019s Hospital and the last condition provided to police as of Sunday night was \u201c critical .",
+    "mentions": [
+     "47cd556677ed22a440ff250b26c27ad9/s6t24-35"
+    ]
+   },
+   {
+    "doc": "d1f844f36f140bb5da494dbe47b127fd",
+    "n": 5,
+    "start": 504,
+    "end": 705,
+    "text": "The mother 's cousin , who was driving the car , said that she and the child 's mother were driving toward Van Buren St. when they turned a corner and heard several gunshots as a car drove by . NEWLINE",
+    "mentions": [
+     "d1f844f36f140bb5da494dbe47b127fd/s4t33-34"
+    ]
+   },
+   {
+    "doc": "07a85009c53e962b417cb8b545c51af9",
+    "n": 3,
+    "start": 169,
+    "end": 287,
+    "text": "\" ( It was a ) senseless act of violence committed by cowards with guns , \" Stockton police spokesman Joe Silva said .",
+    "mentions": [
+     "07a85009c53e962b417cb8b545c51af9/s2t2-3"
+    ]
+   },
+   {
+    "doc": "ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "n": 14,
+    "start": 1312,
+    "end": 1353,
+    "text": "Officials said five others were injured .",
+    "mentions": [
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s13t5-6"
+    ]
+   },
+   {
+    "doc": "4440cd0bd02b1ebf657260e02627d925",
+    "n": 6,
+    "start": 380,
+    "end": 430,
+    "text": "Rural/Metro pronounced the man dead on the scene .",
+    "mentions": [
+     "4440cd0bd02b1ebf657260e02627d925/s5t4-5"
+    ]
+   },
+   {
+    "doc": "1ddb2825d2518ee2df29ddae2a66c2e9",
+    "n": 4,
+    "start": 85,
+    "end": 134,
+    "text": "17-Year - Old Man Charged With Negligent Homicide",
+    "mentions": [
+     "1ddb2825d2518ee2df29ddae2a66c2e9/s2t7-8"
+    ]
+   },
+   {
+    "doc": "f7c7fbcf9514fbd5ac8a908532734696",
+    "n": 8,
+    "start": 646,
+    "end": 746,
+    "text": "He was taken to Geisinger Hospital Plains , where he died shortly after 6:30 a.m. Saturday . NEWLINE",
+    "mentions": [
+     "f7c7fbcf9514fbd5ac8a908532734696/s7t10-11"
+    ]
+   },
+   {
+    "doc": "7d726113c5779da0c25328489ee6cb5f",
+    "n": 8,
+    "start": 849,
+    "end": 1003,
+    "text": "He said he had agreed to buy the gun from Rodriguez for $ 450 and the two were playing with weapons and negotiating prices when one of the guns went off .",
+    "mentions": [
+     "7d726113c5779da0c25328489ee6cb5f/s7t29-31"
+    ]
+   },
+   {
+    "doc": "772591405acd0c43d28f61c737d563a0",
+    "n": 1,
+    "start": 0,
+    "end": 56,
+    "text": "Two teens charged with murder of grandson of Danny Davis",
+    "mentions": [
+     "772591405acd0c43d28f61c737d563a0/s0t4-5"
+    ]
+   },
+   {
+    "doc": "7599d2c270380b8c4d56a28eb49d910f",
+    "n": 1,
+    "start": 0,
+    "end": 101,
+    "text": "2-month - old girl shot while in vehicle on I-43 , interstate temporarily shut down for investigation",
+    "mentions": [
+     "7599d2c270380b8c4d56a28eb49d910f/s0t4-5"
+    ]
+   },
+   {
+    "doc": "5a0c56265670498621b7cd2f71e53902",
+    "n": 5,
+    "start": 262,
+    "end": 430,
+    "text": "Collins ran to the department and told police he had accidentally shot a man , later identified as 32-year - old Chet Hockman , at Collins\u2019 home on 2nd Street . NEWLINE",
+    "mentions": [
+     "5a0c56265670498621b7cd2f71e53902/s4t11-12"
+    ]
+   },
+   {
+    "doc": "e162ad62b8a8a18663a885f0b050dc7d",
+    "n": 17,
+    "start": 1603,
+    "end": 1675,
+    "text": "They then discovered Mata \u2019s and Hank \u2019s bodies in an upstairs bedroom .",
+    "mentions": [
+     "e162ad62b8a8a18663a885f0b050dc7d/s16t8-9"
+    ]
+   },
+   {
+    "doc": "90f05cdd91998283674d95244279e798",
+    "n": 15,
+    "start": 1268,
+    "end": 1379,
+    "text": "One guy came out of the house with an AR-15 and started shooting in the air and said , \u2018 Everyone has to go,\u2019 \u201d",
+    "mentions": [
+     "90f05cdd91998283674d95244279e798/s13t12-13"
+    ]
+   },
+   {
+    "doc": "2500ae9282f44f560e3716e4ba117385",
+    "n": 4,
+    "start": 413,
+    "end": 554,
+    "text": "TCSO deputies were dispatched out Sunday in reference to a 911 call in which the caller said that had been accidentally shot with a handgun .",
+    "mentions": [
+     "2500ae9282f44f560e3716e4ba117385/s3t21-22"
+    ]
+   },
+   {
+    "doc": "f03d228accae8f19bab8d465c831e930",
+    "n": 13,
+    "start": 1601,
+    "end": 1708,
+    "text": "They were then transported to a Billings hospital for care , where they were both pronounced dead . NEWLINE",
+    "mentions": [
+     "f03d228accae8f19bab8d465c831e930/s12t16-17"
+    ]
+   },
+   {
+    "doc": "07a85009c53e962b417cb8b545c51af9",
+    "n": 23,
+    "start": 1818,
+    "end": 1916,
+    "text": "\" NEWLINE Officers do not believe the vehicle was in the intended target of the gunshots . NEWLINE",
+    "mentions": [
+     "07a85009c53e962b417cb8b545c51af9/s22t15-16"
+    ]
+   },
+   {
+    "doc": "48aae1a3e266f1af6cecda03c6048db7",
+    "n": 5,
+    "start": 493,
+    "end": 669,
+    "text": "Ahmad Antoine , 17 , of 1915 Birch St. , was charged with negligent homicide and booked in the East Baton Rouge Parish Prison , the Baton Rouge Police Department said . NEWLINE",
+    "mentions": [
+     "48aae1a3e266f1af6cecda03c6048db7/s4t14-15"
+    ]
+   },
+   {
+    "doc": "ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "n": 12,
+    "start": 1092,
+    "end": 1223,
+    "text": "Witnesses said the shooting happened during an adult 's birthday party after an unidentified and uninvited person arrived . NEWLINE",
+    "mentions": [
+     "ff3e1d8a3de2e9c6fc87f832e9478ea5/s11t3-4"
+    ]
+   },
+   {
+    "doc": "1f5a0cb5862fc782d4a0e466748db618",
+    "n": 2,
+    "start": 91,
+    "end": 253,
+    "text": "A child riding in the backseat of a vehicle died Monday morning after getting caught up in a rolling gun battle between two other vehicles , police said . NEWLINE",
+    "mentions": [
+     "1f5a0cb5862fc782d4a0e466748db618/s1t9-10"
+    ]
+   },
+   {
+    "doc": "1ddb2825d2518ee2df29ddae2a66c2e9",
+    "n": 2,
+    "start": 0,
+    "end": 49,
+    "text": "17-Year - Old Man Charged With Negligent Homicide",
+    "mentions": [
+     "1ddb2825d2518ee2df29ddae2a66c2e9/s0t7-8"
+    ]
+   },
+   {
+    "doc": "2b1f309f668e0781682f523994146b8a",
+    "n": 6,
+    "start": 553,
+    "end": 796,
+    "text": "According to the San Diego Police Department , the bodies of 54-year - old Mark Mata , 42-year - old Min Haung and 6-year - old Hank Mata were discovered during a welfare check late Tuesday morning in the 9500 block of High Park Lane . NEWLINE",
+    "mentions": [
+     "2b1f309f668e0781682f523994146b8a/s5t9-10"
+    ]
+   },
+   {
+    "doc": "5427240fe9a6199c11f4bfa5667ef9a3",
+    "n": 8,
+    "start": 620,
+    "end": 682,
+    "text": "Murphy was a suspect in a July incident also in Madisonville .",
+    "mentions": [
+     "5427240fe9a6199c11f4bfa5667ef9a3/s7t7-8"
+    ]
+   },
+   {
+    "doc": "2500ae9282f44f560e3716e4ba117385",
+    "n": 9,
+    "start": 1070,
+    "end": 1203,
+    "text": "Justice of the Peace Greg Dawson ordered an autopsy to be performed on Schriefer at the Forensic Medical Center in Beaumont . NEWLINE",
+    "mentions": [
+     "2500ae9282f44f560e3716e4ba117385/s8t8-9"
+    ]
+   },
+   {
+    "doc": "91153f512a483bcc383595f6927fd0b5",
+    "n": 6,
+    "start": 434,
+    "end": 580,
+    "text": "The woman and her child were taken to the hospital in Roundup and then transported to hospitals in Billings where they died early Monday . NEWLINE",
+    "mentions": [
+     "91153f512a483bcc383595f6927fd0b5/s5t21-22"
+    ]
+   },
+   {
+    "doc": "e577d21b7f6fc154b42022aaf582d13f",
+    "n": 3,
+    "start": 224,
+    "end": 375,
+    "text": "According to authorities , Jones , his two older brothers , and his younger half - sister were home alone on June 1 when the tragedy occurred . NEWLINE",
+    "mentions": [
+     "e577d21b7f6fc154b42022aaf582d13f/s2t25-26"
+    ]
+   },
+   {
+    "doc": "8974b84a606f82cac1e7dec3fe72fcba",
+    "n": 7,
+    "start": 340,
+    "end": 422,
+    "text": "The shooting happened Friday , June 3 around 7:30 p.m. in the 9500 block of Page .",
+    "mentions": [
+     "8974b84a606f82cac1e7dec3fe72fcba/s5t1-2"
+    ]
+   },
+   {
+    "doc": "f6fe00ab356f2779eb7947484abc2204",
+    "n": 8,
+    "start": 692,
+    "end": 803,
+    "text": "According to the preliminary investigation , a party was taking place in the area at the time of the incident .",
+    "mentions": [
+     "f6fe00ab356f2779eb7947484abc2204/s7t19-20"
+    ]
+   },
+   {
+    "doc": "f123522b3d905fc67cb6f0cc5ba40a64",
+    "n": 14,
+    "start": 1417,
+    "end": 1495,
+    "text": "Police said they believe the couple was arguing before the shooting happened .",
+    "mentions": [
+     "f123522b3d905fc67cb6f0cc5ba40a64/s13t10-11"
+    ]
+   },
+   {
+    "doc": "2b1f309f668e0781682f523994146b8a",
+    "n": 1,
+    "start": 0,
+    "end": 116,
+    "text": "Family in Rancho Penasquitos murder - suicide identified - CBS News 8 - San Diego , CA News Station - KFMB Channel 8",
+    "mentions": [
+     "2b1f309f668e0781682f523994146b8a/s0t4-7"
+    ]
+   },
+   {
+    "doc": "f123522b3d905fc67cb6f0cc5ba40a64",
+    "n": 28,
+    "start": 2817,
+    "end": 2900,
+    "text": "Officials will release more info on the murder suicide pic.twitter.com/OqPaHIqEjS \u2014",
+    "mentions": [
+     "f123522b3d905fc67cb6f0cc5ba40a64/s26t7-9"
+    ]
+   },
+   {
+    "doc": "2bbecd575f30b22c041e138ad53c45f7",
+    "n": 25,
+    "start": 2065,
+    "end": 2154,
+    "text": "Deputies have not said how the children died or where everyone was found inside . NEWLINE",
+    "mentions": [
+     "2bbecd575f30b22c041e138ad53c45f7/s23t7-8"
+    ]
+   },
+   {
+    "doc": "e162ad62b8a8a18663a885f0b050dc7d",
+    "n": 2,
+    "start": 58,
+    "end": 170,
+    "text": "Police have identified the three found dead in a Rancho Penasquitos home as a 6-year - old boy and his parents .",
+    "mentions": [
+     "e162ad62b8a8a18663a885f0b050dc7d/s1t6-7"
+    ]
+   },
+   {
+    "doc": "2234f0e17887d5296178b85cb1012bea",
+    "n": 20,
+    "start": 1989,
+    "end": 2111,
+    "text": "Mr. Wright was listed in critical condition early today at Mercy Health St. Vincent Medical Center , police said . NEWLINE",
+    "mentions": [
+     "2234f0e17887d5296178b85cb1012bea/s18t5-7"
+    ]
+   },
+   {
+    "doc": "474192e8ed58d492d1bccacae3863c5a",
+    "n": 9,
+    "start": 932,
+    "end": 1024,
+    "text": "In the aftermath , bullet ridden vehicles line the parking lot where the shooting happened .",
+    "mentions": [
+     "474192e8ed58d492d1bccacae3863c5a/s8t13-14"
+    ]
+   },
+   {
+    "doc": "90f05cdd91998283674d95244279e798",
+    "n": 18,
+    "start": 1434,
+    "end": 1499,
+    "text": "Online invitation for party where four people were shot . NEWLINE",
+    "mentions": [
+     "90f05cdd91998283674d95244279e798/s16t8-9"
+    ]
+   }
+  ]
+ }
+}

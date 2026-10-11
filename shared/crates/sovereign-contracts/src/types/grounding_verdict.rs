@@ -121,6 +121,40 @@ pub struct AnswerSegment {
     pub kind: SegmentKind,
     /// Reranker sentence margin, when this segment was scored.
     pub margin: Option<f32>,
+    /// The verified quotations whose first byte lies in this stretch, each
+    /// at its address in a stored text. Empty when none verified against a
+    /// stored text; absent on the wire from a runtime older than the field,
+    /// which reads as empty.
+    #[serde(default)]
+    pub quotes: Vec<QuoteAddress>,
+}
+
+/// A verified quotation inside a stretch of the released answer, and where it
+/// stands in a stored text (ADDRESSED_TEXT §5.2's second user: the reader
+/// opens a quote where it stands).
+///
+/// The text half names its range as OICP v0.5's `evidence::Span` does, with
+/// the same field names and units: a text by content (`text_sha256`), a
+/// half-open range of code points, and `exact`, so a reader checks what it
+/// opened by comparing strings. It carries none of `Span`'s record or
+/// context: a reader gets both from the text read
+/// (`GET {text_endpoint}/{text_sha256}`, whose `TextSlice` holds them), so a
+/// segment does not repeat a document's metadata once per quotation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuoteAddress {
+    /// Byte range of the quoted words within the released answer text.
+    pub answer_range: Range<usize>,
+    /// The corpus whose chunk named the text: where to read it (the read's
+    /// `corpus` hint), never its name.
+    pub corpus_id: String,
+    /// The stored text's name.
+    pub text_sha256: kernel_types::Sha256Hash,
+    /// First code point of the quotation in the text.
+    pub start: u64,
+    /// One past its last code point.
+    pub end: u64,
+    /// The text's `[start, end)`, exactly.
+    pub exact: String,
 }
 
 /// One decider's output. Everything downstream reads this (§6).
@@ -306,16 +340,26 @@ mod tests {
                         }),
                     },
                     margin: Some(1.4),
+                    quotes: vec![QuoteAddress {
+                        answer_range: 0..12,
+                        corpus_id: "saltgrass".into(),
+                        text_sha256: kernel_types::Sha256Hash::of_str("the stored text"),
+                        start: 4,
+                        end: 10,
+                        exact: "stored".into(),
+                    }],
                 },
                 AnswerSegment {
                     text_range: 12..30,
                     kind: SegmentKind::Parametric,
                     margin: None,
+                    quotes: Vec::new(),
                 },
                 AnswerSegment {
                     text_range: 30..44,
                     kind: SegmentKind::Unverified,
                     margin: Some(-0.8),
+                    quotes: Vec::new(),
                 },
             ],
         };
@@ -327,6 +371,32 @@ mod tests {
         assert!(json.contains(r#""decided_by":"agreement_gate""#), "{json}");
         assert!(json.contains(r#""kind":"grounded""#), "{json}");
         assert!(json.contains(r#""kind":"unverified""#), "{json}");
+    }
+
+    /// A segment from a runtime older than `quotes` still decodes, as one
+    /// that quotes nothing, and a quotation's text name is the one hex
+    /// encoding on the wire.
+    #[test]
+    fn a_segment_without_quotes_decodes_as_quoting_nothing() {
+        let old =
+            r#"{"text_range":{"start":0,"end":5},"kind":{"kind":"parametric"},"margin":null}"#;
+        let s: AnswerSegment = serde_json::from_str(old).unwrap();
+        assert!(s.quotes.is_empty());
+        let sha = kernel_types::Sha256Hash::of_str("t");
+        let q = QuoteAddress {
+            answer_range: 1..2,
+            corpus_id: "c".into(),
+            text_sha256: sha,
+            start: 0,
+            end: 1,
+            exact: "t".into(),
+        };
+        let json = serde_json::to_value(&q).unwrap();
+        assert_eq!(json["text_sha256"], sha.to_hex());
+        assert_eq!(
+            json["answer_range"],
+            serde_json::json!({"start": 1, "end": 2})
+        );
     }
 
     #[test]

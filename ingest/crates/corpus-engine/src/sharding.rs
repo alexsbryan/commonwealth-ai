@@ -49,7 +49,7 @@ use crate::types::{ChunkRange, IndexInfo, IndexStats, ShardInfo};
 ///
 /// | collision | resolution |
 /// |---|---|
-/// | `_corpus_meta.json`, `chunks.lance` | refuse — a real ambiguity about which index *is* the corpus |
+/// | `_corpus_meta.json`, `chunks.lance`, `documents.lance` | refuse — a real ambiguity about which index *is* the corpus |
 /// | two plain directories | recurse, so unrelated siblings on both sides survive |
 /// | two byte-identical files | drop the partition copy |
 /// | two `*.jsonl` logs | union — canonical lines, then unseen partition lines |
@@ -171,7 +171,7 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
 /// same-name collision on one of these means two candidate indexes
 /// claim the same corpus, and no rule short of a human can say which
 /// one is real — so promotion refuses and touches nothing.
-const CORPUS_DATA_ENTRIES: [&str; 2] = ["_corpus_meta.json", "chunks.lance"];
+const CORPUS_DATA_ENTRIES: [&str; 3] = ["_corpus_meta.json", "chunks.lance", "documents.lance"];
 
 /// Suffix for the copy that loses a same-name collision. Nothing reads
 /// it back; it exists so promotion never destroys bytes and an
@@ -778,6 +778,7 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
     ) {
         let dedup_count =
             merge_shards_source_doc_id_newest_mtime(&merged, shard_paths, dim, output_path).await?;
+        crate::text_store::carry_texts(&merged, shard_paths, true).await?;
         let result = merged.info().await?;
         tracing::info!(
             corpus_id = %result.corpus_id,
@@ -927,6 +928,7 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
                     // produced it. Legacy shards without the column get a
                     // NULL-filled replacement via col_or_null_i32.
                     col_or_null_i32("unit_id"),
+                    col_or_null_str("text_sha256"),
                 ],
             )
             .map_err(|e| Error::Serialization(format!("merge batch: {e}")))?;
@@ -947,6 +949,7 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
             "merge_shards: deduplication dropped {} duplicate chunks", dedup_count,
         );
     }
+    crate::text_store::carry_texts(&merged, shard_paths, true).await?;
 
     let result = merged.info().await?;
     tracing::info!(
@@ -1168,6 +1171,7 @@ async fn merge_shards_source_doc_id_newest_mtime(
                     col_or_null_str("language"),
                     col_or_null_i64("mtime"),
                     col_or_null_i32("unit_id"),
+                    col_or_null_str("text_sha256"),
                 ],
             )
             .map_err(|e| Error::Serialization(format!("mutable merge batch: {e}")))?;
@@ -1663,6 +1667,7 @@ pub async fn append_partition_to_canonical(
                 col_or_null_str("language"),
                 col_or_null_i64("mtime"),
                 col_or_null_i32("unit_id"),
+                col_or_null_str("text_sha256"),
             ],
         )
         .map_err(|e| Error::Serialization(format!("append batch: {e}")))?;
@@ -1677,6 +1682,8 @@ pub async fn append_partition_to_canonical(
         chunks_inserted += keep_count as u64;
     }
 
+    let was_empty = pre_info.chunk_count == 0;
+    crate::text_store::carry_texts(&canonical, &[source_path.to_path_buf()], was_empty).await?;
     let post_info = canonical.info().await?;
 
     Ok(AppendReport {
@@ -1730,6 +1737,7 @@ mod tests {
                         source_file: None,
                         code: crate::index::InsertCodeMeta::default(),
                         unit_id: None,
+                        text_sha256: None,
                     },
                     make_test_embedding(i as f32),
                 )
@@ -2515,6 +2523,7 @@ mod tests {
                             ..Default::default()
                         },
                         unit_id: None,
+                        text_sha256: None,
                     },
                     make_test_embedding(*mtime as f32),
                 )
@@ -2639,6 +2648,7 @@ mod tests {
                         source_file: None,
                         code: crate::index::InsertCodeMeta::default(),
                         unit_id: None,
+                        text_sha256: None,
                     },
                     make_test_embedding(1.0),
                 )])

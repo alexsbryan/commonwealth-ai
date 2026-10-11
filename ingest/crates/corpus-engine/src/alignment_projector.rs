@@ -417,6 +417,7 @@ mod tests {
                             ..Default::default()
                         },
                         unit_id: None,
+                        text_sha256: None,
                     },
                     make_test_embedding(*mtime as f32),
                 )
@@ -572,6 +573,7 @@ mod tests {
                         ..Default::default()
                     },
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_test_embedding(1.0),
             )])
@@ -618,6 +620,7 @@ mod tests {
                     source_file: None,
                     code: InsertCodeMeta::default(),
                     unit_id: None,
+                    text_sha256: None,
                 },
                 make_test_embedding(1.0),
             )])

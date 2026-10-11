@@ -21,8 +21,9 @@ use super::cancel::CancellationRegistry;
 use super::merge::PartitionMergePort;
 use super::newsworthy::NewsworthyHost;
 use super::{CatalogIngestPort, LocalCorpusPort, ProgressCallback};
-use crate::index::CorpusIndex;
+use crate::index::{CorpusIndex, TextLookup};
 use crate::Result;
+use kernel_types::Sha256Hash;
 
 // ─── Ingest Result ──────────────────────────────────────
 
@@ -216,6 +217,10 @@ pub enum InstallRefusal {
     RecipeNotFound(String),
     /// The parameters did not coerce or did not validate against the recipe.
     InvalidParameters(String),
+    /// A supplied recipe TOML did not load (`Recipe::from_toml`, the one load
+    /// boundary), or names another corpus than the one it was asked to
+    /// install as.
+    InvalidRecipe(String),
 }
 
 /// One registry ingest, started by [`PreparedInstall::run`].
@@ -322,6 +327,10 @@ pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
     async fn diagnose_indexes(&self) -> String;
     /// Retry `index`'s recorded field-skeleton failures: `(retried, fixed)`.
     fn reprocess_skeleton_failures(&self, index: &CorpusIndex) -> Result<(usize, usize)>;
+    /// `index`'s library digest (OICP v0.5 §2.4), or the absence that stops
+    /// it. The engine derives it (through `oicp_types`, which this crate does
+    /// not name), so the daemon's align route asks for it here.
+    async fn texts_digest(&self, index: &CorpusIndex) -> Result<TextLookup<Sha256Hash>>;
     /// Stream `canonical_path` as a zstd tar at `compression_level`; the
     /// bytes read.
     fn pack_canonical(
@@ -367,6 +376,16 @@ pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
     async fn prepare_registry_install(
         self: Arc<Self>,
         corpus_id: &str,
+        parameters: &BTreeMap<String, serde_json::Value>,
+    ) -> std::result::Result<PreparedInstall, InstallRefusal>;
+    /// Load `recipe_toml` (it must name `corpus_id`), resolve `parameters`
+    /// against it, and hand back the ingest to run. The run writes the recipe
+    /// into the local registry, ingests it, and stamps `recipe_sha256` of
+    /// its text on the corpus (`Corpus::stamp_recipe_sha256`).
+    async fn prepare_recipe_install(
+        self: Arc<Self>,
+        corpus_id: &str,
+        recipe_toml: &str,
         parameters: &BTreeMap<String, serde_json::Value>,
     ) -> std::result::Result<PreparedInstall, InstallRefusal>;
 

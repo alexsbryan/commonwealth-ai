@@ -105,6 +105,11 @@ pub struct McpRequestContext {
     /// [`MCP_EFFECTS_HEADER`] was [`MCP_EFFECTS_READ`]: no tool whose effect
     /// is not `Read` is listed or called.
     pub read_only: bool,
+    /// Who asked, as the host's auth layer resolved it: the non-secret label
+    /// of its principal (`asserted:claude-code` for a named client). `None`
+    /// when the transport resolved no one (stdio, a host with no auth layer).
+    /// Never read from a header the client types.
+    pub caller: Option<String>,
 }
 
 /// What the call log is told about a call that executed a tool. It never goes

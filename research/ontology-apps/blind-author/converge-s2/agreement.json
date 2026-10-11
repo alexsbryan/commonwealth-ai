@@ -1,0 +1,420 @@
+{
+ "classes": {
+  "gvc unclassed": 657,
+  "uv unclassed": 153,
+  "ward unclassed": 20
+ },
+ "gvc": {
+  "agreement": {
+   "b_cubed": {
+    "f1": 0.864,
+    "precision": 0.876,
+    "recall": 0.853
+   },
+   "blind_placed": 366,
+   "both_placed": 344,
+   "ceaf_e": {
+    "f1": 0.759,
+    "precision": 0.734,
+    "recall": 0.785
+   },
+   "differences": 657,
+   "differences_by_kind": {
+    "blind_joins": 99,
+    "blind_splits": 88,
+    "blind_unplaced": 438,
+    "ours_unplaced": 22,
+    "regrouped": 10
+   },
+   "joint_placement_coverage": 0.352,
+   "lea": {
+    "f1": 0.817,
+    "precision": 0.819,
+    "recall": 0.815
+   },
+   "ours_placed": 782,
+   "unit": "gold event mention",
+   "units": 977,
+   "units_only_blind": 0,
+   "units_only_ours": 0
+  },
+  "blind": {
+   "bars": null,
+   "could_not_judge": {
+    "fold": 159
+   },
+   "documents_read": 78,
+   "hit": 0,
+   "identity": {
+    "b_cubed": 0.543,
+    "ceaf_e": 0.372,
+    "coverage": 0.375,
+    "gold": 977,
+    "lea": 0.305,
+    "recovery_b_cubed": 0.232,
+    "scored": 366,
+    "several_records": 5
+   },
+   "lost": {
+    "fold": 0,
+    "place": 212,
+    "read": 606
+   },
+   "n": 977,
+   "population": "gold event mentions (gold.json) on the documents of the run's 77 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/blind/gvc",
+   "status": "judged",
+   "vocabulary": {
+    "map": "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-apps/blind-author/r3-mapping.json (blind-author-20261010-r3/gvc)",
+    "translated": {
+     "claims_prefixed": 410,
+     "records_mapped": 113,
+     "records_prefixed": 136
+    }
+   }
+  },
+  "ours": {
+   "bars": null,
+   "could_not_judge": {
+    "fold": 42
+   },
+   "documents_read": 78,
+   "hit": 40,
+   "identity": {
+    "b_cubed": 0.458,
+    "ceaf_e": 0.326,
+    "coverage": 0.8,
+    "gold": 977,
+    "lea": 0.305,
+    "recovery_b_cubed": 0.397,
+    "scored": 782,
+    "several_records": 1
+   },
+   "lost": {
+    "fold": 240,
+    "place": 461,
+    "read": 194
+   },
+   "n": 977,
+   "population": "gold event mentions (gold.json) on the documents of the run's 77 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/gvc",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  }
+ },
+ "gvc-resolve-alone": {
+  "agreement": "could-not-judge: a run is missing",
+  "blind": {
+   "reason": "runs/converge-s2/blind/gvc-resolve-alone/resolve/clustering.json does not exist",
+   "status": "never-ran"
+  },
+  "ours": {
+   "reason": "runs/converge-s2/ours-resolve-alone/resolve/clustering.json does not exist",
+   "status": "never-ran"
+  }
+ },
+ "uv": {
+  "agreement": {
+   "b_cubed": {
+    "f1": 0.975,
+    "precision": 0.952,
+    "recall": 1.0
+   },
+   "blind_placed": 186,
+   "both_placed": 113,
+   "ceaf_e": {
+    "f1": 0.954,
+    "precision": 0.989,
+    "recall": 0.923
+   },
+   "differences": 153,
+   "differences_by_kind": {
+    "blind_joins": 14,
+    "blind_unplaced": 66,
+    "ours_unplaced": 73
+   },
+   "joint_placement_coverage": 0.232,
+   "lea": {
+    "f1": 0.967,
+    "precision": 0.944,
+    "recall": 0.991
+   },
+   "ours_placed": 179,
+   "unit": "tune gold document",
+   "units": 488,
+   "units_only_blind": 0,
+   "units_only_ours": 0
+  },
+  "blind": {
+   "bars": null,
+   "could_not_judge": {},
+   "documents_read": 956,
+   "hit": 59,
+   "identity": {
+    "b_cubed": 0.916,
+    "ceaf_e": 0.797,
+    "coverage": 0.381,
+    "gold": 488,
+    "gold_left_out": 1001,
+    "lea": 0.889,
+    "recovery_b_cubed": 0.283,
+    "scored": 186
+   },
+   "lost": {
+    "fold": 16,
+    "place": 15,
+    "read": 42
+   },
+   "n": 132,
+   "population": "tune gold case states on the documents of the run's 61 sections (sections.ids) of /Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/uv-third",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/blind/uv-third",
+   "status": "judged",
+   "vocabulary": {
+    "map": "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-apps/blind-author/r3-mapping.json (blind-author-20261010-r3/uv)",
+    "translated": {
+     "claims_mapped": 449,
+     "claims_prefixed": 191,
+     "records_mapped": 98,
+     "records_prefixed": 1532,
+     "values_unmapped": 37
+    }
+   }
+  },
+  "blind_on_its_own_sections": {
+   "bars": null,
+   "could_not_judge": {},
+   "documents_read": 956,
+   "hit": 74,
+   "identity": {
+    "b_cubed": 0.889,
+    "ceaf_e": 0.722,
+    "coverage": 0.334,
+    "gold": 848,
+    "gold_left_out": 641,
+    "lea": 0.867,
+    "recovery_b_cubed": 0.221,
+    "scored": 283
+   },
+   "lost": {
+    "fold": 18,
+    "place": 25,
+    "read": 65
+   },
+   "n": 182,
+   "population": "tune gold case states on the documents of the run's 55 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/blind/uv-third",
+   "status": "judged",
+   "vocabulary": {
+    "map": "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-apps/blind-author/r3-mapping.json (blind-author-20261010-r3/uv)",
+    "translated": {
+     "claims_mapped": 449,
+     "claims_prefixed": 191,
+     "records_mapped": 98,
+     "records_prefixed": 1532,
+     "values_unmapped": 37
+    }
+   }
+  },
+  "ours": {
+   "bars": null,
+   "could_not_judge": {},
+   "documents_read": 554,
+   "hit": 58,
+   "identity": {
+    "b_cubed": 0.898,
+    "ceaf_e": 0.797,
+    "coverage": 0.367,
+    "gold": 488,
+    "gold_left_out": 1001,
+    "lea": 0.866,
+    "recovery_b_cubed": 0.248,
+    "scored": 179
+   },
+   "lost": {
+    "fold": 15,
+    "place": 32,
+    "read": 27
+   },
+   "n": 132,
+   "population": "tune gold case states on the documents of the run's 61 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/uv-third",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  }
+ },
+ "ward": {
+  "agreement": {
+   "b_cubed": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "blind_placed": 20,
+   "both_placed": 6,
+   "ceaf_e": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "differences": 20,
+   "differences_by_kind": {
+    "blind_unplaced": 6,
+    "ours_unplaced": 14
+   },
+   "joint_placement_coverage": 0.122,
+   "lea": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "ours_placed": 12,
+   "unit": "tune gold file in one deal",
+   "units": 49,
+   "units_only_blind": 0,
+   "units_only_ours": 0
+  },
+  "blind": {
+   "bars": {
+    "commitments": {
+     "hit": 0,
+     "n": 25,
+     "recall": 0.0
+    },
+    "deal_atoms_unmatched": 147,
+    "deals": {
+     "hit": 11,
+     "n": 39,
+     "recall": 0.282
+    },
+    "made_up": {
+     "commitments": 2,
+     "stage_updates": 4
+    },
+    "master_agreements": {
+     "could_not_judge": "the blind recipe declares no master or enabling agreement apart from a deal (condition_term area master_agreement is a claim about a deal, not a record)"
+    },
+    "stage": {
+     "hit": 2,
+     "n": 101,
+     "recall": 0.02
+    },
+    "stage_served": {
+     "hit": 2,
+     "n": 47,
+     "recall": 0.043
+    },
+    "stage_served_missed": {
+     "no_decision": 0,
+     "nothing": 9,
+     "provenance_unmapped": 0,
+     "unbacked": 0,
+     "unmatched_deal": 34,
+     "unplaced": 1,
+     "wrong_stage": 1
+    }
+   },
+   "could_not_judge": {},
+   "documents_read": 99,
+   "hit": 1,
+   "identity": {
+    "b_cubed": 0.806,
+    "ceaf_e": 0.708,
+    "coverage": 0.408,
+    "gold_left_out": 0,
+    "lea": 0.464,
+    "recovery_b_cubed": 0.327,
+    "scored": 20
+   },
+   "lost": {
+    "fold": 1,
+    "place": 1,
+    "read": 44
+   },
+   "n": 47,
+   "population": "tune gold deals with a current stage on the documents of the run's 81 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/blind/ward-tune",
+   "status": "judged",
+   "vocabulary": {
+    "map": "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-apps/blind-author/r3-mapping.json (blind-author-20261010-r3/ward)",
+    "translated": {
+     "claims_mapped": 35,
+     "claims_prefixed": 270,
+     "records_mapped": 1603
+    }
+   }
+  },
+  "ours": {
+   "bars": {
+    "commitments": {
+     "hit": 0,
+     "n": 25,
+     "recall": 0.0
+    },
+    "deal_atoms_unmatched": 73,
+    "deals": {
+     "hit": 5,
+     "n": 39,
+     "recall": 0.128
+    },
+    "made_up": {
+     "commitments": 15,
+     "stage_updates": 1
+    },
+    "master_agreements": {
+     "hit": 2,
+     "n": 8,
+     "recall": 0.25
+    },
+    "stage": {
+     "hit": 7,
+     "n": 101,
+     "recall": 0.069
+    },
+    "stage_served": {
+     "hit": 7,
+     "n": 47,
+     "recall": 0.149
+    },
+    "stage_served_missed": {
+     "no_decision": 0,
+     "provenance_unmapped": 0,
+     "unbacked": 0,
+     "unmatched_deal": 40,
+     "unplaced": 0,
+     "wrong_stage": 0
+    }
+   },
+   "could_not_judge": {},
+   "documents_read": 99,
+   "hit": 5,
+   "identity": {
+    "b_cubed": 0.957,
+    "ceaf_e": 0.928,
+    "coverage": 0.245,
+    "gold_left_out": 0,
+    "lea": 0.833,
+    "recovery_b_cubed": 0.233,
+    "scored": 12
+   },
+   "lost": {
+    "fold": 0,
+    "place": 28,
+    "read": 14
+   },
+   "n": 47,
+   "population": "tune gold deals with a current stage on the documents of the run's 81 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/ward-tune",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  }
+ }
+}

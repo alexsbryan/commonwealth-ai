@@ -249,14 +249,14 @@ pub fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, String>
     let atoms = read_atlas_atoms(&atlas_dir).map_err(|e| {
         format!(
             "reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
-             {corpus_id} --phase all` first.",
+             {corpus_id}` first.",
             atlas_dir.display()
         )
     })?;
     let edges = read_atlas_edges(&atlas_dir).map_err(|err| {
         format!(
             "reading {}/edges.json: {err}. Run `svrn enrich atlas-resolve \
-             {corpus_id} --phase all` first.",
+             {corpus_id}` first.",
             atlas_dir.display()
         )
     })?;

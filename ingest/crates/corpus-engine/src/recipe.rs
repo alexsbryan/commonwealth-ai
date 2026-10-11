@@ -260,6 +260,11 @@ pub struct Recipe {
     /// corpus. `#[serde(default)]` so recipes pre-dating the block parse.
     #[serde(default)]
     pub retrieval: RetrievalConfig,
+
+    /// `[[document]]` blocks: inline documents, or metadata declared for the
+    /// files the acquirer yields ([`crate::recipe_documents`]).
+    #[serde(default, rename = "document", skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<crate::recipe_documents::DeclaredDocument>,
 }
 
 // The settings the index persists are DEFINED in the `corpus-index` leaf and
@@ -563,7 +568,7 @@ pub struct EnrichmentConfig {
     #[serde(default, rename = "patterns")]
     pub patterns: Vec<PatternDecl>,
 
-    /// Architecture-over-Enron Phase 4: multi-origin reconciliation
+    /// Multi-origin reconciliation
     /// policy. `None` (the default) skips reconciliation entirely;
     /// pipelines that don't carry [`crate::enrichment::atlas::atoms::SignalProvenance`]
     /// on their entity atoms produce nothing to reconcile across
@@ -1162,6 +1167,11 @@ pub enum AcquirerConfig {
     },
     #[serde(rename = "local_file")]
     LocalFile { path: String },
+    /// The recipe carries its documents as `[[document]]` blocks with `name`
+    /// and `text` (OICP v0.5 §4.1), so a host that shares no disk with the
+    /// client can install it. See [`crate::recipe_documents`].
+    #[serde(rename = "inline")]
+    Inline,
     /// Download all parquet shards for a public HuggingFace dataset.
     /// Uses the HF dataset API to enumerate shards, then downloads each
     /// with resume support, returning a directory of parquet files.
@@ -1296,6 +1306,12 @@ pub enum ExtractorConfig {
         #[serde(default)]
         tag_filter: Option<Vec<String>>,
     },
+    /// One document per line of a JSON Lines file. Its text is the record's
+    /// `content_field` (else `content`, else `text`); a record with none is
+    /// skipped. Metadata: every other field of the record under its own key,
+    /// except `content`, `title`, `url` and `text`; `id` is kept. Those keys
+    /// are the names `change.document` and `source.metadata` read; `recipe
+    /// validate --corpus <path>` lists them for a real file.
     #[serde(rename = "jsonl")]
     Jsonl {
         #[serde(default)]
@@ -1312,6 +1328,9 @@ pub enum ExtractorConfig {
     /// `[acquire.follow]` is absent), runs `document_path` over it as
     /// JSONPath, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
     /// per matching object using `content_field` for the body text.
+    /// Metadata: every other field of the object under its own key, except
+    /// the fields `content_field`, `title_field`, `url_field` and `id_field`
+    /// name.
     /// See [`crate::extractors::json_api::JsonApiExtractor`].
     #[serde(rename = "json")]
     Json {
@@ -1393,6 +1412,9 @@ pub enum ExtractorConfig {
         #[serde(default)]
         title_selector: Option<String>,
     },
+    /// One document per row, its text the `content_column` cell; a row
+    /// with an empty cell is skipped. Metadata: none, so a recipe over a CSV
+    /// declares no `change.document` or `source.metadata` field.
     #[serde(rename = "csv")]
     Csv {
         content_column: String,
@@ -1535,12 +1557,14 @@ pub enum ExtractorConfig {
         #[serde(default)]
         params: serde_json::Value,
     },
-    /// Architecture-over-Enron Phase 2: RFC-5322 / MIME email
+    /// RFC-5322 / MIME email
     /// extractor. Walks `source_path` recursively (maildir layout,
     /// raw `.eml` files), parses each through `mailparse`, and
     /// emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
-    /// per message. Metadata carries the parsed headers + a
-    /// `thread_id` derived from In-Reply-To / References. When the
+    /// per message. Metadata fields: `message_id`, `thread_id` (derived
+    /// from In-Reply-To / References), `from`, `to`, `cc`, `bcc`, `date`,
+    /// `subject`, `in_reply_to`, `references`, `doc_type`,
+    /// `body_was_truncated`, `attachments`, `source_path`. When the
     /// engine has an [`crate::asset_store::AssetStore`] + an
     /// [`crate::extractors::described_asset::AssetSubExtractorRegistry`]
     /// installed (the default after Phase 1), attachments dispatch
@@ -1558,7 +1582,7 @@ pub enum ExtractorConfig {
         #[serde(default)]
         max_attachment_bytes: u64,
     },
-    /// Architecture-over-Enron AD-3: the described-asset dispatcher.
+    /// The described-asset dispatcher.
     /// Walks `source_path` (one mixed-binary folder), hashes each
     /// file, picks a sub-extractor from the engine's
     /// [`AssetSubExtractorRegistry`](crate::extractors::described_asset::AssetSubExtractorRegistry)
@@ -1732,6 +1756,11 @@ pub struct IndexConfig {
     pub embedding_model: String,
     #[serde(default = "default_embedding_dimensions")]
     pub embedding_dimensions: usize,
+    /// Keep each document's canonical text in the corpus's `texts/` store,
+    /// readable by its sha256. `false` keeps only the documents' records, and
+    /// their texts answer `text not stored`.
+    #[serde(default = "default_true")]
+    pub store_texts: bool,
 }
 
 impl Default for IndexConfig {
@@ -1741,6 +1770,7 @@ impl Default for IndexConfig {
             vector: default_true(),
             embedding_model: default_embedding_model(),
             embedding_dimensions: default_embedding_dimensions(),
+            store_texts: default_true(),
         }
     }
 }
@@ -1793,6 +1823,9 @@ impl Recipe {
     ///    refused with the valid set listed, instead of being run as
     ///    `field_model` by one site and `tiered` by another.
     ///    See [`check_enrichment_type`](crate::recipe_parsing::check_enrichment_type).
+    /// 6. Document gate — each `[[document]]` carries `text` or `source`,
+    ///    never both, and an inline recipe only inline ones
+    ///    ([`check_documents`](crate::recipe_documents::check_documents)).
     ///
     /// This is the ONE recipe load boundary: [`Self::from_file`],
     /// the bundled recipe source, and the desktop recipe author's validate
@@ -1805,6 +1838,7 @@ impl Recipe {
                 crate::recipe_parsing::check_ontology_block(&recipe)?;
                 crate::recipe_parsing::check_enrichment_type(&recipe)?;
                 crate::recipe_parsing::check_enrichment_domain(&recipe)?;
+                crate::recipe_documents::check_documents(&recipe)?;
                 Ok(recipe)
             }
             Err(e) => Err(translate_parse_error(e)),

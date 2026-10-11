@@ -15,9 +15,10 @@
 //!
 //! # The decision
 //!
-//! A daemon whose key store holds at least one API key
-//! ([`ClientTokenStore::is_keyed`](crate::client_tokens::ClientTokenStore::is_keyed))
-//! is KEYED for its lifetime, and [`seal`] wraps the WHOLE merged client
+//! A daemon under `[daemon] loopback = "none"` — declared, or inferred on an
+//! undeclared install whose store holds a legacy `<sub>.key` file
+//! ([`LoopbackPosture::resolve`](crate::client_tokens::LoopbackPosture::resolve))
+//! — is KEYED for its lifetime, and [`seal`] wraps the WHOLE merged client
 //! router in [`keyed_auth_layer`]:
 //!
 //! - loopback grants nothing: the one edge resolver runs under
@@ -95,15 +96,16 @@ pub fn key_scope_permits(method: &Method, path: &str) -> bool {
     })
 }
 
-/// Wrap the fully merged client router in [`keyed_auth_layer`] when this
-/// daemon holds keys; return it untouched when it holds none.
+/// Wrap the fully merged client router in [`keyed_auth_layer`] when loopback
+/// grants nothing on this daemon; return it untouched when loopback is the
+/// owner.
 pub fn seal(router: Router, state: &AppState) -> Router {
     if !state.inner.node.named_client_tokens.is_keyed() {
-        tracing::debug!("api_keys: no API keys — the client surface is unkeyed");
+        tracing::debug!("api_keys: loopback is the owner — the client surface is unkeyed");
         return router;
     }
     tracing::info!(
-        "api_keys: this daemon holds API keys — every client route requires one, \
+        "api_keys: loopback = none — every client route requires a named credential, \
          and loopback grants nothing"
     );
     router.layer(axum::middleware::from_fn_with_state(
@@ -167,8 +169,17 @@ pub async fn keyed_auth_layer(
     request
         .extensions_mut()
         .insert(AttachedPrincipal(principal.clone()));
+    request.extensions_mut().insert(KeySealed);
     next.run(request).await
 }
+
+/// Marks a request [`keyed_auth_layer`] admitted. Only a keyed daemon's
+/// callers are owned by their key ([`Caller::Keyed`]): since 2026-10-08 the
+/// client auth layer attaches `Principal::Asserted` for a named client on an
+/// `owner` daemon too, and reading that alone would let a remote named client
+/// past the turn and document families' loopback guard.
+#[derive(Debug, Clone, Copy)]
+struct KeySealed;
 
 /// 401 for a caller that presented no key, or a bearer that is not one.
 fn key_required(presented: bool) -> Response {
@@ -196,6 +207,7 @@ pub async fn local_or_keyed(request: Request, next: Next) -> Response {
 }
 
 fn asserted_sub(ext: &axum::http::Extensions) -> Option<String> {
+    ext.get::<KeySealed>()?;
     match ext.get::<AttachedPrincipal>() {
         Some(AttachedPrincipal(Principal::Asserted { sub, .. })) => Some(sub.clone()),
         _ => None,
@@ -251,6 +263,44 @@ impl Caller {
                 .and_then(|r| r.strip_prefix(':')),
         }
     }
+}
+
+/// The turn's owner resolver and mesh knowledge leg, by the loopback posture
+/// the node seed also reads (`client_tokens::loopback_grants_nothing`). Where
+/// loopback grants nothing, a conversation is owned by the `{sub}:` prefix its
+/// key wrote, every key's grant is `[retrieval] corpora`, and the mesh leg is
+/// not wired — it dials this daemon's own `/v1/knowledge/search`, whose hits
+/// fold in past the ceiling. `start_daemon` refuses a keyed store over an
+/// unkeyed Runtime. Moved out of `daemon_cmd/boot.rs`, which is in its size
+/// band, unchanged but for the posture it reads.
+#[allow(clippy::type_complexity)]
+pub fn turn_ownership(
+    config: &sovereign_core::setup_config::SetupConfig,
+    data_dir: &std::path::Path,
+) -> Result<
+    (
+        std::sync::Arc<dyn sovereign_core::traits::PrincipalResolver>,
+        Option<std::sync::Arc<dyn sovereign_core::traits::MeshKnowledgeSource>>,
+    ),
+    crate::client_tokens::UnknownLoopback,
+> {
+    let keyed =
+        crate::client_tokens::loopback_grants_nothing(config.daemon.loopback.as_deref(), data_dir)?;
+    if keyed {
+        tracing::info!(
+            grant = ?config.retrieval.corpora,
+            "daemon: loopback = none — turns are owned by key and bounded by [retrieval] corpora; no mesh knowledge leg"
+        );
+        let grant = config.retrieval.corpora.clone();
+        return Ok((std::sync::Arc::new(KeyedOwners { grant }), None));
+    }
+    Ok((
+        std::sync::Arc::new(crate::principal::LocalOwnerPrincipal),
+        sovereign_turn_client::knowledge_client::daemon_knowledge_source(&format!(
+            "http://127.0.0.1:{}",
+            config.daemon.client_port
+        )),
+    ))
 }
 
 /// The turn's `PrincipalResolver` on a keyed daemon: the owner is the

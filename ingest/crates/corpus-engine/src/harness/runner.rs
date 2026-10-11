@@ -48,9 +48,7 @@ impl<'a> HarnessRunner<'a> {
         let source_path = self.frozen.materialize(work_dir)?;
 
         // ── Extract (same factory as ingest) ─────────────────────────────
-        let extractor = self
-            .engine
-            .make_extractor(&self.recipe.extract, &self.recipe.corpus.id);
+        let extractor = self.engine.recipe_extractor(self.recipe);
         let mut docs = Vec::new();
         let mut errors = Vec::new();
         let mut attempted = 0usize;
@@ -174,6 +172,7 @@ impl<'a> HarnessRunner<'a> {
                         source_file: None,
                         code: InsertCodeMeta::default(),
                         unit_id: None,
+                        text_sha256: None,
                     },
                     vec![0.0f32; DIM],
                 )

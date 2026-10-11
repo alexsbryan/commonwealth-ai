@@ -1,0 +1,425 @@
+{
+ "classes": {
+  "gvc unclassed": 654,
+  "gvc-resolve-alone unclassed": 680,
+  "uv unclassed": 8
+ },
+ "gvc": {
+  "agreement": {
+   "b_cubed": {
+    "f1": 0.72,
+    "precision": 0.752,
+    "recall": 0.691
+   },
+   "blind_placed": 787,
+   "both_placed": 787,
+   "ceaf_e": {
+    "f1": 0.609,
+    "precision": 0.562,
+    "recall": 0.664
+   },
+   "differences": 654,
+   "differences_by_kind": {
+    "blind_joins": 176,
+    "blind_splits": 278,
+    "blind_unplaced": 6,
+    "regrouped": 194
+   },
+   "lea": {
+    "f1": 0.673,
+    "precision": 0.698,
+    "recall": 0.649
+   },
+   "ours_placed": 793,
+   "unit": "gold event mention",
+   "units": 977,
+   "units_only_blind": 0,
+   "units_only_ours": 0
+  },
+  "blind": {
+   "bars": null,
+   "could_not_judge": {
+    "fold": 313
+   },
+   "documents_read": 78,
+   "hit": 0,
+   "identity": {
+    "b_cubed": 0.464,
+    "ceaf_e": 0.344,
+    "coverage": 0.806,
+    "gold": 977,
+    "lea": 0.273,
+    "scored": 787,
+    "several_records": 10
+   },
+   "lost": {
+    "fold": 0,
+    "place": 484,
+    "read": 180
+   },
+   "n": 977,
+   "population": "gold event mentions (gold.json) on the documents of the run's 77 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/scaffold-3sys/gvc",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  },
+  "ours": {
+   "bars": null,
+   "could_not_judge": {
+    "fold": 329
+   },
+   "documents_read": 78,
+   "hit": 0,
+   "identity": {
+    "b_cubed": 0.469,
+    "ceaf_e": 0.341,
+    "coverage": 0.812,
+    "gold": 977,
+    "lea": 0.306,
+    "scored": 793,
+    "several_records": 4
+   },
+   "lost": {
+    "fold": 0,
+    "place": 468,
+    "read": 180
+   },
+   "n": 977,
+   "population": "gold event mentions (gold.json) on the documents of the run's 77 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/c2-lines/gvc",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  }
+ },
+ "gvc-resolve-alone": {
+  "agreement": {
+   "b_cubed": {
+    "f1": 0.748,
+    "precision": 0.748,
+    "recall": 0.748
+   },
+   "blind_placed": 977,
+   "both_placed": 977,
+   "ceaf_e": {
+    "f1": 0.656,
+    "precision": 0.634,
+    "recall": 0.68
+   },
+   "differences": 680,
+   "differences_by_kind": {
+    "blind_joins": 219,
+    "blind_splits": 246,
+    "regrouped": 215
+   },
+   "lea": {
+    "f1": 0.587,
+    "precision": 0.567,
+    "recall": 0.608
+   },
+   "ours_placed": 977,
+   "unit": "gold event mention (gold.json)",
+   "units": 977
+  },
+  "blind": {
+   "b_cubed": 0.579,
+   "ceaf_e": 0.436,
+   "conll_f1": 0.5396637653890101,
+   "lea": 0.369,
+   "muc": 0.604,
+   "run": "runs/scaffold-3sys/gvc-resolve-alone",
+   "status": "judged"
+  },
+  "ours": {
+   "b_cubed": 0.635,
+   "ceaf_e": 0.483,
+   "conll_f1": 0.6066519392600399,
+   "lea": 0.448,
+   "muc": 0.702,
+   "run": "runs/c2-lines-gvc-resolve-alone",
+   "status": "judged"
+  }
+ },
+ "uv": {
+  "agreement": {
+   "b_cubed": {
+    "f1": 0.975,
+    "precision": 0.951,
+    "recall": 1.0
+   },
+   "blind_placed": 79,
+   "both_placed": 79,
+   "ceaf_e": {
+    "f1": 0.929,
+    "precision": 0.98,
+    "recall": 0.882
+   },
+   "differences": 8,
+   "differences_by_kind": {
+    "blind_joins": 7,
+    "blind_unplaced": 1
+   },
+   "lea": {
+    "f1": 0.947,
+    "precision": 0.932,
+    "recall": 0.962
+   },
+   "ours_placed": 80,
+   "unit": "tune gold document",
+   "units": 488,
+   "units_only_blind": 0,
+   "units_only_ours": 0
+  },
+  "blind": {
+   "bars": null,
+   "could_not_judge": {},
+   "documents_read": 535,
+   "hit": 30,
+   "identity": {
+    "b_cubed": 0.907,
+    "ceaf_e": 0.834,
+    "coverage": 0.162,
+    "gold": 488,
+    "gold_left_out": 1001,
+    "lea": 0.854,
+    "scored": 79
+   },
+   "lost": {
+    "fold": 8,
+    "place": 10,
+    "read": 84
+   },
+   "n": 132,
+   "population": "tune gold case states on the documents of the run's 61 sections (sections.ids) of /Users/alexsbryan/dev/commonwealth-ai/runs/c2-lines/uv-third",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/scaffold-3sys/uv-third",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  },
+  "blind_on_its_own_sections": {
+   "bars": null,
+   "could_not_judge": {},
+   "documents_read": 535,
+   "hit": 30,
+   "identity": {
+    "b_cubed": 0.907,
+    "ceaf_e": 0.834,
+    "coverage": 0.162,
+    "gold": 488,
+    "gold_left_out": 1001,
+    "lea": 0.854,
+    "scored": 79
+   },
+   "lost": {
+    "fold": 8,
+    "place": 10,
+    "read": 84
+   },
+   "n": 132,
+   "population": "tune gold case states on the documents of the run's 61 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/scaffold-3sys/uv-third",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  },
+  "ours": {
+   "bars": null,
+   "could_not_judge": {},
+   "documents_read": 535,
+   "hit": 32,
+   "identity": {
+    "b_cubed": 0.921,
+    "ceaf_e": 0.876,
+    "coverage": 0.164,
+    "gold": 488,
+    "gold_left_out": 1001,
+    "lea": 0.881,
+    "scored": 80
+   },
+   "lost": {
+    "fold": 8,
+    "place": 8,
+    "read": 84
+   },
+   "n": 132,
+   "population": "tune gold case states on the documents of the run's 61 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/c2-lines/uv-third",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  }
+ },
+ "ward": {
+  "agreement": {
+   "b_cubed": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "blind_placed": 18,
+   "both_placed": 18,
+   "ceaf_e": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "differences": 0,
+   "differences_by_kind": {},
+   "lea": {
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "ours_placed": 18,
+   "unit": "tune gold file in one deal",
+   "units": 49,
+   "units_only_blind": 0,
+   "units_only_ours": 0
+  },
+  "blind": {
+   "bars": {
+    "commitments": {
+     "hit": 0,
+     "n": 25,
+     "recall": 0.0
+    },
+    "deal_atoms_unmatched": 68,
+    "deals": {
+     "hit": 9,
+     "n": 39,
+     "recall": 0.231
+    },
+    "made_up": {
+     "commitments": 22,
+     "stage_updates": 13
+    },
+    "master_agreements": {
+     "hit": 0,
+     "n": 8,
+     "recall": 0.0
+    },
+    "stage": {
+     "hit": 4,
+     "n": 101,
+     "recall": 0.04
+    },
+    "stage_served": {
+     "hit": 2,
+     "n": 47,
+     "recall": 0.043
+    },
+    "stage_served_missed": {
+     "no_decision": 0,
+     "pending": 1,
+     "provenance_unmapped": 0,
+     "unbacked": 0,
+     "unmatched_deal": 38,
+     "unplaced": 0,
+     "wrong_stage": 6
+    }
+   },
+   "could_not_judge": {},
+   "documents_read": 98,
+   "hit": 2,
+   "identity": {
+    "b_cubed": 0.875,
+    "ceaf_e": 0.792,
+    "coverage": 0.367,
+    "gold_left_out": 0,
+    "lea": 0.556,
+    "scored": 18
+   },
+   "lost": {
+    "fold": 1,
+    "place": 25,
+    "read": 19
+   },
+   "n": 47,
+   "population": "tune gold deals with a current stage on the documents of the run's 81 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/scaffold-3sys/ward-tune",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  },
+  "ours": {
+   "bars": {
+    "commitments": {
+     "hit": 0,
+     "n": 25,
+     "recall": 0.0
+    },
+    "deal_atoms_unmatched": 65,
+    "deals": {
+     "hit": 9,
+     "n": 39,
+     "recall": 0.231
+    },
+    "made_up": {
+     "commitments": 22,
+     "stage_updates": 13
+    },
+    "master_agreements": {
+     "hit": 0,
+     "n": 8,
+     "recall": 0.0
+    },
+    "stage": {
+     "hit": 4,
+     "n": 101,
+     "recall": 0.04
+    },
+    "stage_served": {
+     "hit": 2,
+     "n": 47,
+     "recall": 0.043
+    },
+    "stage_served_missed": {
+     "no_decision": 0,
+     "pending": 1,
+     "provenance_unmapped": 0,
+     "unbacked": 0,
+     "unmatched_deal": 38,
+     "unplaced": 0,
+     "wrong_stage": 6
+    }
+   },
+   "could_not_judge": {},
+   "documents_read": 98,
+   "hit": 2,
+   "identity": {
+    "b_cubed": 0.875,
+    "ceaf_e": 0.792,
+    "coverage": 0.367,
+    "gold_left_out": 0,
+    "lea": 0.556,
+    "scored": 18
+   },
+   "lost": {
+    "fold": 1,
+    "place": 25,
+    "read": 19
+   },
+   "n": 47,
+   "population": "tune gold deals with a current stage on the documents of the run's 81 sections (sections.ids)",
+   "run": "/Users/alexsbryan/dev/commonwealth-ai/runs/c2-lines/ward-tune",
+   "status": "judged",
+   "vocabulary": {
+    "map": "identity (our recipe)",
+    "translated": null
+   }
+  }
+ }
+}

@@ -122,7 +122,7 @@ pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, Str
     let atlas_dir = atlas_dir_for(&cfg.corpus_id);
     let atoms = read_atlas_atoms(&atlas_dir).map_err(|e| {
         format!(
-            "reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
+            "reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve {}` first.",
             atlas_dir.display(),
             cfg.corpus_id
         )

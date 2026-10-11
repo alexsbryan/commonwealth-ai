@@ -11,7 +11,7 @@ Beside them: the proposer's recall (a statement whose gold chain already sat in 
 is reachable when that record was among the document's candidates), the refusals, and the model calls per
 document. A refused statement is scored alone (summary.json says so).
 """
-import argparse, bisect, itertools, json, math, pathlib, random, subprocess, sys
+import argparse, bisect, itertools, json, math, pathlib, random, re, subprocess, sys
 
 
 def main():
@@ -19,6 +19,8 @@ def main():
     ap.add_argument("run", type=pathlib.Path)
     ap.add_argument("gold", type=pathlib.Path)
     ap.add_argument("--svrn", default="svrn")
+    ap.add_argument("--trace", type=pathlib.Path,
+                    help="the run's debug log: reads each source's say on each weighed pair (layer-estimator)")
     a = ap.parse_args()
     gold = json.loads(a.gold.read_text())
     summary = json.loads((a.run / "summary.json").read_text())
@@ -73,13 +75,64 @@ def main():
            "proposer_recall": round(reachable / joinable, 3) if joinable else None, "joinable": joinable,
            "tally": summary["tally"], "tokens": summary["tokens"], "wall_seconds": round(summary["wall_seconds"]),
            "verdict": verdict, "er": er}
+    if a.trace:
+        row["estimator"] = estimator_block(a.trace, gold, summary)
     print(json.dumps(row, indent=1))
+
+
+WEIGHED = re.compile(r'atlas/resolve: the sources weighed document=(\S+) statement=(.+?) alternatives=(\[.*?\]) '
+                     r'comparisons=(\[.*\]) zone=')
+
+
+def estimator_block(trace, gold, summary, reps=500, seed=7):
+    """layer-estimator: each source's precision as RESOLVE estimated it on this run, with no labels
+    (summary.json `estimate`), against its precision measured under gold over the same weighed pairs: of the
+    pairs where it agreed, the share gold puts in one chain; 90% bootstrap over documents. A pair counts only
+    where gold names both the statement's chain and the alternative's opening statement's. The largest gap is
+    the row's number."""
+    by_doc = {}
+    with open(trace, errors="replace") as f:
+        for raw in f:
+            m = WEIGHED.search(raw)
+            if not m:
+                continue
+            stmt = m.group(2)
+            alts, comps = json.loads(m.group(3)), json.loads(m.group(4))
+            for alt, comp in zip(alts, comps):
+                if gold.get(stmt) is None or gold.get(alt) is None:
+                    continue
+                same = gold[stmt] == gold[alt]
+                by_doc.setdefault(m.group(1), []).extend((src, same) for src, agree in comp.items() if agree)
+    if not by_doc:
+        return None
+    docs = list(by_doc.values())
+
+    def precision(sample):
+        t = {}
+        for agreed in sample:
+            for src, same in agreed:
+                t.setdefault(src, [0, 0])[same] += 1
+        return {s: (n[1] / (n[0] + n[1]), n[0] + n[1]) for s, n in t.items()}
+
+    point = precision(docs)
+    rng = random.Random(seed)
+    boots = [precision([rng.choice(docs) for _ in docs]) for _ in range(reps)]
+    est = summary.get("estimate", {}).get("sources", {})
+    rows = {}
+    for s, (p, n) in sorted(point.items()):
+        b = sorted(x[s][0] for x in boots if s in x)
+        e = est.get(s, {}).get("precision")
+        rows[s] = {"estimated": round(e, 3) if e is not None else None, "labelled": round(p, 3), "agreed_pairs": n,
+                   "labelled_ci90": [round(b[int(q * (len(b) - 1))], 3) for q in (.05, .95)],
+                   "gap": round(abs(e - p), 3) if e is not None else None}
+    gaps = [(r["gap"], s) for s, r in rows.items() if r["gap"] is not None]
+    return {"sources": rows, "largest_gap": max(gaps) if gaps else None}
 
 
 def verdict_block(run, gold, reps=500, seed=7):
     """How much the model's verdict tells, the same way for every answer form: over each statement's shown
     candidates (a candidate is the same particular when gold puts its opening statement in the statement's chain),
-    the verdict says "same" for the candidate it decided on (cited, selected, or linked by an evidential field). LR+ = P(says same | same) / P(says same | different),
+    the verdict says "same" for the candidate it decided on (cited, selected, linked by an evidential field, or weighed by Ring 2's decider). LR+ = P(says same | same) / P(says same | different),
     LR- likewise for not choosing; in nats, with a 90% bootstrap over documents. Where a forced choice left its
     distribution, Brier and expected calibration error (10 bins) of p(candidate) over the same pairs, and per
     statement: detection AUC (1 - p(none) between statements shown a same candidate and those not) and how often
@@ -90,7 +143,7 @@ def verdict_block(run, gold, reps=500, seed=7):
         pairs, probs = [], []
         for o in d["outcomes"]:
             dec = o["outcome"].get("decided")
-            chose = dec["record"] if dec and dec["decision"] in ("cited", "selected", "field", "proposed") else None
+            chose = dec["record"] if dec and dec["decision"] in ("cited", "selected", "field", "proposed", "weighed") else None
             p_of = dict(map(tuple, o["choice"]["candidates"])) if o.get("choice") else {}
             if p_of:
                 is_same = lambda c: gold.get(c) is not None and gold.get(c) == gold.get(o["statement"])  # noqa: E731

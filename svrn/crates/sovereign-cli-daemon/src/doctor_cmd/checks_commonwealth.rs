@@ -289,4 +289,67 @@ pub(super) async fn check_activity_reporting(internal_url: &str) -> CheckResult 
     }
 }
 
+/// Is `[daemon] loopback` declared? Undeclared, an install that holds API key
+/// files keeps `none` (loopback grants nothing) and one that holds none keeps
+/// `owner`, exactly as before the declaration existed; but minting a
+/// credential refuses until it is declared. File-level, so it answers with
+/// the daemon down.
+pub(super) fn check_loopback_posture() -> CheckResult {
+    let config = sovereign_contracts::setup_config::SetupConfig::load()
+        .unwrap_or_else(|_| sovereign_contracts::setup_config::SetupConfig::unconfigured());
+    let dir = sovereign_daemon::client_tokens::client_tokens_dir(&config.data.dir);
+    let posture = sovereign_daemon::client_tokens::LoopbackPosture::resolve(
+        config.daemon.loopback.as_deref(),
+        Some(&dir),
+    );
+    tracing::debug!(posture = ?posture, dir = %dir.display(), "doctor: loopback posture");
+    loopback_posture_result(posture)
+}
+
+/// The check's verdict for one resolution of the posture.
+pub(super) fn loopback_posture_result(
+    posture: Result<
+        sovereign_daemon::client_tokens::LoopbackPosture,
+        sovereign_daemon::client_tokens::UnknownLoopback,
+    >,
+) -> CheckResult {
+    use sovereign_daemon::client_tokens::Loopback;
+    let (status, message, repair) = match posture {
+        Err(e) => (
+            CheckStatus::Failed,
+            e.to_string(),
+            Repair::Manual(
+                "set `loopback = \"owner\"` or `loopback = \"none\"` under [daemon]".into(),
+            ),
+        ),
+        Ok(p) if p.declared => (
+            CheckStatus::Passed,
+            format!("[daemon] loopback = \"{}\", declared", p.loopback.as_str()),
+            Repair::None,
+        ),
+        Ok(p) if p.loopback == Loopback::None => (
+            CheckStatus::Warning,
+            "[daemon] loopback is not declared and this daemon holds API keys, so loopback \
+             grants nothing (\"none\"), as before; declare it, or minting refuses"
+                .to_string(),
+            Repair::Manual("add `loopback = \"none\"` under [daemon] in config.toml".into()),
+        ),
+        Ok(_) => (
+            CheckStatus::Passed,
+            "[daemon] loopback is not declared and this daemon holds no API keys, so a local \
+             process is the owner (\"owner\"), as before; declare it before minting a \
+             credential (`svrn daemon key --add`)"
+                .to_string(),
+            Repair::None,
+        ),
+    };
+    CheckResult {
+        name: "loopback_posture",
+        layer: Layer::Commonwealth,
+        status,
+        message,
+        repair,
+    }
+}
+
 // OmO checks

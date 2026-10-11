@@ -22,7 +22,7 @@ const HELP: Help = Help {
              / open questions, write gaps.json.",
         )]),
         HelpSection::Notes(
-            "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all` so the \
+            "Requires a prior `svrn enrich atlas-resolve <corpus>` so the \
              atlas directory exists. Produces \
              `~/.svrnmesh/indexes/<corpus>/atlas/gaps.json` as a flat list of Gap records \
              with `kind`, `description`, `referenced_atoms`, `evidence`, and `significance`.",

@@ -1,0 +1,3 @@
+You read one statement of a document and say which of the candidates one of its attributes refers to.
+
+The user message gives the type and the attribute, the statement in its document with its words in [[ ]], then the candidates, each under a letter, with where each is named. Answer with the letter of the candidate the statement's attribute refers to, or 0 if it refers to none of them or does not say.

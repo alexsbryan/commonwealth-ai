@@ -600,6 +600,30 @@ class PoolTests(unittest.TestCase):
     def rig(self, state, **kw):
         return Rig(self.tmp.name, state, lane_mode=True, lanes=kw.pop("lanes", 2), **kw)
 
+    def test_a_lane_session_that_ends_with_uncommitted_work_is_saved_not_struck(self):
+        # ersilia's workers (2026-10-09) ended hour-long sessions mid-change: no
+        # commit, so a strike, and the work left loose in the lane
+        # (r12-step-scale struck out; r12-glassbox struck with 503 lines in its
+        # tree). The loop commits the TRACKED changes on the lane's branch, so
+        # the end reads as progress; untracked scratch stays out.
+        rig = self.rig("- [ ] a — depends []\n", lanes=1, session_timeout=60,
+                       extra={"code.txt": "v1\n"})
+
+        def half_done(s):
+            write(s.cwd, "code.txt", "v2, half done\n")
+            write(s.cwd, "scratch.tmp", "untracked\n")
+            return FOREVER
+
+        rig.procs.sessions += [half_done, lambda s: FOREVER]
+        rig.tick(3)                                   # 60s: killed
+        self.assertEqual(len(rig.procs.killed), 1)
+        self.assertEqual(rig.entry("a").get("strikes", 0), 0)
+        self.assertEqual(rig.entry("a")["continuations"], 1)
+        lane = rig.tmp / "lanes" / "a"
+        self.assertIn("saved by the loop", git(lane, "log", "-1", "--format=%s"))
+        self.assertEqual(git(lane, "show", "HEAD:code.txt"), "v2, half done")
+        self.assertIn("scratch.tmp", git(lane, "status", "--porcelain"))   # not swept in
+
     def test_two_lanes_run_at_once_and_each_lands_on_the_base(self):
         rig = self.rig("- [ ] a — depends []\n- [ ] b — depends []\n")
         rig.procs.sessions += [lambda s: (s.commit("a.txt"), s.result("done"))[1],
@@ -1043,6 +1067,100 @@ class IncidentTests(unittest.TestCase):
         self.assertIs(rig.row("a").status, ralph.Status.DONE)
         self.assertEqual(rig.entry("a"), {})           # done: its counters go with it
         self.assertEqual((rig.wd / "shared.txt").read_text(), "both\n")
+
+    def test_a_merge_check_that_cannot_finish_is_retried_not_struck(self):
+        # ersilia's first checked landing took 695s of a 900s bound at load 87
+        # (2026-10-09): a check that cannot finish is could_not_judge — the
+        # host, not the lane — so the unit stays merging, unstruck and
+        # unmerged, and retries after a cool-down.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", lane_mode=True, lanes=1)
+        check = write(rig.wd, "ralph/merge-check", "#!/bin/sh\nsleep 5\n")
+        check.chmod(0o755)
+        git(rig.wd, "add", "ralph/merge-check")
+        git(rig.wd, "commit", "-q", "-m", "a slow merge check")
+
+        def done(s):
+            s.commit("work.txt", "lane\n")
+            s.result("done")
+
+        rig.procs.sessions += [done]
+        with mock.patch.object(ralph, "MERGE_CHECK_TIMEOUT_S", 1):
+            rig.tick()
+            rig.tick()
+        self.assertIs(rig.state("a"), U.MERGING)
+        self.assertEqual(rig.entry("a").get("strikes", 0), 0)
+        self.assertFalse((rig.wd / "work.txt").exists())
+        # The host recovers; inside the cool-down nothing is retried.
+        write(rig.wd, "ralph/merge-check", "#!/bin/sh\nexit 0\n")
+        git(rig.wd, "commit", "-q", "-am", "the check is fast again")
+        rig.tick()
+        self.assertIs(rig.state("a"), U.MERGING)
+        rig.clock.advance(ralph.MERGE_CHECK_RETRY_S)
+        rig.tick()
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertTrue((rig.wd / "work.txt").exists())
+
+    def test_an_operator_extension_keeps_a_run_past_its_first_budget(self):
+        # A detached run the operator expects to overrun (ersilia's battery on
+        # a loaded host, 2026-10-09) gets more time, logged, not killed; the
+        # extended deadline still binds.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        rig.procs.sessions += [lambda s: s.result("await", "60", "--", "true") and 0]
+        rig.procs.runs.append(lambda argv, cwd, env: (FOREVER, None))
+        rig.tick(2)
+        self.assertIs(rig.state("a"), U.AWAITING)
+        ralph.request_extension(ralph.Paths(rig.wd), "a", "2m")   # what `extend a 2m` writes
+        rig.tick(3)
+        self.assertIs(rig.state("a"), U.AWAITING)        # past 60s, inside 60s + 120s
+        self.assertEqual(rig.procs.killed, [])
+        self.assertEqual(rig.entry("a")["run"]["budget_s"], 180)
+        self.assertFalse((rig.wd / "ralph/extend/a").exists())   # applied once
+        rig.tick(4)
+        self.assertEqual(len(rig.procs.killed), 1)       # the extended deadline still binds
+        self.assertIn("passed its 3m00s budget", rig.entry("a")["strike_why"][0])
+
+    def test_a_red_merge_check_sends_the_lane_back_unmerged(self):
+        # The project's own pre-merge check (ralph/merge-check, optional) runs
+        # in the lane before its branch lands. Red is a strike carrying the
+        # check's own words, and the base never sees the lane: ersilia merged
+        # r12-step-instruction with its lint and discovery rows red on main
+        # (2026-10-09) because "done" was the only guard.
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", lane_mode=True, lanes=1)
+        check = write(rig.wd, "ralph/merge-check",
+                      "#!/bin/sh\n[ -f fixed.txt ] && exit 0\n"
+                      "echo 'row lint failed: fmt diff in cluster.rs:700'\nexit 1\n")
+        check.chmod(0o755)
+        git(rig.wd, "add", "ralph/merge-check")
+        git(rig.wd, "commit", "-q", "-m", "a merge check")
+
+        def done_but_red(s):
+            s.commit("work.txt", "lane\n")
+            # A lane that weakens its own check does not merge on it: the
+            # check that governs a landing is the base's.
+            p = write(s.cwd, "ralph/merge-check", "#!/bin/sh\nexit 0\n")
+            p.chmod(0o755)
+            git(s.cwd, "commit", "-q", "-am", "weaken the check")
+            s.result("done")
+
+        def fix(s):
+            write(s.cwd, "ralph/merge-check",
+                  (rig.wd / "ralph/merge-check").read_text())
+            git(s.cwd, "commit", "-q", "-am", "the check restored")
+            self.assertIn("ralph/merge-check", s.prompt)
+            self.assertIn("fmt diff in cluster.rs:700", s.prompt)
+            s.commit("fixed.txt", "fixed\n")
+            s.result("done")
+
+        rig.procs.sessions += [done_but_red, fix]
+        rig.tick()
+        rig.tick()
+        self.assertIs(rig.state("a"), U.RUNNING)          # struck, back to its lane at once
+        self.assertEqual(rig.entry("a")["strikes"], 1)
+        self.assertFalse((rig.wd / "work.txt").exists())   # the base never saw the red lane
+        rig.tick()
+        self.assertIs(rig.row("a").status, ralph.Status.DONE)
+        self.assertTrue((rig.wd / "work.txt").exists())
+        self.assertTrue((rig.wd / "fixed.txt").exists())
 
     def test_a_run_that_fails_resumes_its_lane_with_the_code_and_the_log(self):
         rig = Rig(self.tmp.name, "- [ ] r12-release-preview — depends []\n",

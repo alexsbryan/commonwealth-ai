@@ -55,6 +55,9 @@ use crate::types::IndexInfo;
 /// it cost to not have this constant.
 pub const CORPUS_META_FILENAME: &str = "_corpus_meta.json";
 
+/// The directory of stored texts inside an index directory.
+pub const TEXTS_DIRNAME: &str = "texts";
+
 /// Infix in a partition directory name: `<id>-partition-<node>`.
 const PARTITION_INFIX: &str = "-partition-";
 
@@ -115,6 +118,19 @@ impl Corpus {
     /// enumerating or sweeping `<id>-partition-*`.
     pub fn partition_prefix(&self) -> String {
         format!("{}{PARTITION_INFIX}", self.id)
+    }
+
+    /// The stored texts of the canonical directory: `<root>/texts`, one file
+    /// per text, named by the sha256 of its bytes. Per corpus, so promote,
+    /// merge, snapshot and removal carry them with the directory.
+    pub fn texts_dir(&self) -> PathBuf {
+        Self::texts_in(self.root())
+    }
+
+    /// The texts directory inside an arbitrary index directory — a partition,
+    /// a shard, an unpacked snapshot. The ONE join for this name.
+    pub fn texts_in(dir: impl AsRef<Path>) -> PathBuf {
+        dir.as_ref().join(TEXTS_DIRNAME)
     }
 
     /// Metadata sidecar inside the canonical directory.
@@ -184,12 +200,81 @@ pub fn corpus_chunk_count(dir: &Path) -> Option<(usize, &'static str)> {
         .map(|n| (n as usize, "next_chunk_id - 1"))
 }
 
+/// Sidecar in a corpus's canonical directory naming the sha256 of the recipe
+/// TOML it was installed from (ADDRESSED_TEXT §5.6): one line, 64 lowercase
+/// hex. Written by an install that carried its recipe; absent for one by
+/// registry id, or built before the stamp existed. A file beside the meta
+/// rather than a meta field, because the meta is rewritten whole by its own
+/// struct; it travels with the directory, so a snapshot ships it and reads it
+/// back as `source_recipe_sha256`.
+pub const RECIPE_STAMP_FILENAME: &str = "_recipe.sha256";
+
+/// The sha256 of a recipe's TOML text in the published encoding
+/// (`kernel_types::Sha256Hash`, D3): THE one spelling of a recipe's identity,
+/// stamped by the install and compared by the install route, so the two
+/// cannot disagree.
+pub fn recipe_sha256(recipe_toml: &str) -> String {
+    kernel_types::Sha256Hash::of_str(recipe_toml).to_hex()
+}
+
+impl Corpus {
+    /// The recipe stamp inside the canonical directory.
+    pub fn recipe_stamp_path(&self) -> PathBuf {
+        Self::recipe_stamp_in(self.root())
+    }
+
+    /// The recipe stamp inside an arbitrary index directory (a snapshot's
+    /// source, an unpacked archive).
+    pub fn recipe_stamp_in(dir: impl AsRef<Path>) -> PathBuf {
+        dir.as_ref().join(RECIPE_STAMP_FILENAME)
+    }
+
+    /// The recipe sha256 stamped under `dir`, or `None` when there is no
+    /// stamp. A stamp that is not 64 lowercase hex is named and read as
+    /// none, never trusted.
+    pub fn recipe_sha256_in(dir: impl AsRef<Path>) -> Option<String> {
+        let path = Self::recipe_stamp_in(dir);
+        let raw = std::fs::read_to_string(&path).ok()?;
+        let parsed = kernel_types::Sha256Hash::from_hex(raw.trim());
+        if parsed.is_none() {
+            tracing::warn!(path = %path.display(), "corpus: recipe stamp is not a sha256, ignored");
+        }
+        parsed.map(|h| h.to_hex())
+    }
+
+    /// Stamp `sha` as the recipe this corpus was installed from, by
+    /// temp-and-rename. The canonical directory must exist.
+    pub fn stamp_recipe_sha256(&self, sha: &str) -> std::io::Result<()> {
+        let target = self.recipe_stamp_path();
+        let tmp = target.with_extension("tmp");
+        std::fs::write(&tmp, format!("{sha}\n"))?;
+        std::fs::rename(&tmp, &target)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn corpus() -> Corpus {
         Corpus::named("/idx", "wikipedia").expect("non-empty id")
+    }
+
+    /// The stamp names the recipe's bytes, round-trips through the canonical
+    /// directory, and a stamp that is not a sha256 reads as none.
+    #[test]
+    fn a_recipe_stamp_round_trips_and_a_bad_one_reads_as_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let c = Corpus::named(tmp.path(), "notes").unwrap();
+        std::fs::create_dir_all(c.root()).unwrap();
+        assert_eq!(Corpus::recipe_sha256_in(c.root()), None, "no stamp yet");
+        let sha = recipe_sha256("[corpus]\nid = \"notes\"\n");
+        assert_eq!(sha.len(), 64);
+        assert_ne!(sha, recipe_sha256("[corpus]\nid = \"notes\" \n"));
+        c.stamp_recipe_sha256(&sha).unwrap();
+        assert_eq!(Corpus::recipe_sha256_in(c.root()), Some(sha));
+        std::fs::write(c.recipe_stamp_path(), "not-a-sha\n").unwrap();
+        assert_eq!(Corpus::recipe_sha256_in(c.root()), None);
     }
 
     #[test]
@@ -215,6 +300,11 @@ mod tests {
         assert_eq!(
             Corpus::meta_in("/anywhere"),
             PathBuf::from("/anywhere/_corpus_meta.json")
+        );
+        assert_eq!(c.texts_dir(), PathBuf::from("/idx/wikipedia/texts"));
+        assert_eq!(
+            Corpus::texts_in("/anywhere"),
+            PathBuf::from("/anywhere/texts")
         );
     }
 

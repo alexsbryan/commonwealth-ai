@@ -7,9 +7,10 @@
 //! sit, and what are the source's own characters for that span?
 //!
 //! It is a closed unit. `ci_ws_match_at`, `continuations_after`,
-//! `whitespace_tolerant_match_at` and `exact_span_in` have no caller outside
-//! this file and stay private to it; only what the parent and its tests
-//! reach is `pub(super)`.
+//! `whitespace_tolerant_match_at` and `longest_clean_run` have no caller
+//! outside this file and stay private to it; only what the parent and its
+//! tests reach is `pub(super)`. Where a quote stands is the one aligner's
+//! answer (`quote_align`, ADDRESSED_TEXT §5.3), asked over case-folded copies.
 
 use super::{MAX_TAIL_RUN, MIN_VERBATIM_RUN};
 
@@ -179,72 +180,201 @@ pub(super) enum QuoteMatch {
     AcrossChunks,
 }
 
-/// Is `quote` a verbatim span of the passages, and if so, where? Full
-/// normalised substring, or a run of ≥`MIN_VERBATIM_RUN` consecutive words
-/// (the model trimmed the edges). A paraphrase or a fabricated "quote"
+/// Is `quote` a verbatim span of the passages, and if so, where? The whole
+/// quote in one passage, or a run of ≥`MIN_VERBATIM_RUN` consecutive words of
+/// it (the model trimmed the edges). A paraphrase or a fabricated "quote"
 /// matches neither.
 ///
-/// THE GROUNDING DECISION IS UNCHANGED by returning a location. The set of
-/// quotes that ground is exactly what it was before locators existed: pass 2
-/// below IS the original per-chunk test, and pass 3 IS the original joined-
-/// haystack test. Pass 1 only *refines* a match pass 2 would have accepted
-/// anyway — it never admits one pass 2 would reject, because it is gated on the
-/// same `hay.contains(&q)`. Tightening to per-chunk-only would have moved a
-/// fabrication guard while claiming to add a label (ARCH_PRINCIPLES §10.6 —
-/// one decider; this is the same decider, saying more).
+/// Asked of the one aligner (ADDRESSED_TEXT §5.3) over case-folded copies of
+/// both sides (`quote_verification::fold_case`): this path has always matched
+/// case-insensitively, and case is the caller's call. Each pass keeps the
+/// order and the question it had before the convergence:
+/// 1. **Exact** — the whole quote in one passage, in exact mode
+///    (`quote_verification::align_exact`), handed back as the passage's OWN
+///    characters for that range;
+/// 2. **Partial** — the first passage (then position) where the aligner
+///    matched `MIN_VERBATIM_RUN` consecutive words of the quote with no
+///    difference among them ([`longest_clean_run`]);
+/// 3. **AcrossChunks** — either question of the passages joined, so a quote
+///    that straddles a chunk boundary still grounds, unattributed.
+///
+/// Pass 1 grounds nothing the other two would not: a whole quote verbatim in
+/// one passage is verbatim in the passages joined (pass 3), and when it has
+/// six or more words it is a run of six (pass 2). The grounding decision is
+/// the run test, asked of the aligner's differences instead of a substring
+/// of a fold.
 pub(super) fn locate_quote_in_chunks(quote: &str, chunks: &[String]) -> Option<QuoteMatch> {
-    let q = normalize(quote);
-    let words: Vec<&str> = q.split(' ').filter(|w| !w.is_empty()).collect();
-    if words.len() < 3 {
+    use crate::quote_verification::{align_exact, fold_case};
+    let words = normalize(quote)
+        .split(' ')
+        .filter(|w| !w.is_empty())
+        .count();
+    if words < 3 {
         return None; // too short to be a genuine supporting sentence
     }
-    let present_in = |hay: &str| -> bool {
-        hay.contains(&q)
-            || (words.len() >= MIN_VERBATIM_RUN
-                && words
-                    .windows(MIN_VERBATIM_RUN)
-                    .any(|w| hay.contains(&w.join(" "))))
+    let quote = quote.trim();
+    let folded_quote = fold_case(quote);
+    let folded: Vec<String> = chunks.iter().map(|c| fold_case(c)).collect();
+    let texts: Vec<&str> = folded.iter().map(String::as_str).collect();
+    // Pass 1 — the whole quote in one passage, as the SOURCE's own characters
+    // (the folded copies keep every code point where it was).
+    if let Some((chunk, range)) = align_exact(&folded_quote, &texts) {
+        if let Some(verbatim) = quote_align::code_point_slice(&chunks[chunk], range) {
+            return Some(QuoteMatch::Exact {
+                chunk,
+                verbatim: verbatim.to_string(),
+            });
+        }
+    }
+    let cfg = run_config()?;
+    let has_run = |a: &quote_align::QuoteAlignment| {
+        longest_clean_run(&folded_quote, &a.edits) >= MIN_VERBATIM_RUN
     };
-    let normalised: Vec<String> = chunks.iter().map(|c| normalize(c)).collect();
-    // Pass 1 — the whole quote in one passage, recovered as the SOURCE's own
-    // characters. `hay.contains(&q)` is the cheap gate; `exact_span_in` then
-    // re-finds the span in the raw chunk so we can hand back untouched source
-    // text rather than the model's copy of it.
-    for (i, hay) in normalised.iter().enumerate() {
-        if hay.contains(&q) {
-            if let Some(verbatim) = exact_span_in(&chunks[i], quote) {
-                return Some(QuoteMatch::Exact { chunk: i, verbatim });
-            }
+    // Pass 2 — a run inside one passage, first passage then first position.
+    if words >= MIN_VERBATIM_RUN {
+        let mut found = quote_align::align(&folded_quote, &texts, cfg).alignments;
+        found.sort_by_key(|a| (a.text, a.source.start));
+        if let Some(a) = found.iter().find(|a| has_run(a)) {
+            return Some(QuoteMatch::Partial { chunk: a.text });
         }
     }
-    // Pass 2 — the original per-chunk decision, unchanged.
-    for (i, hay) in normalised.iter().enumerate() {
-        if present_in(hay) {
-            return Some(QuoteMatch::Partial { chunk: i });
-        }
-    }
-    // Pass 3 — the original joined-haystack decision, unchanged.
-    present_in(&normalize(&chunks.join(" "))).then_some(QuoteMatch::AcrossChunks)
+    // Pass 3 — either question of the joined passages.
+    let joined = fold_case(&chunks.join(" "));
+    let across = align_exact(&folded_quote, &[joined.as_str()]).is_some()
+        || (words >= MIN_VERBATIM_RUN
+            && quote_align::align(&folded_quote, &[joined.as_str()], cfg)
+                .alignments
+                .iter()
+                .any(has_run));
+    across.then_some(QuoteMatch::AcrossChunks)
 }
 
-/// The source's OWN text for the span `quote` occupies in `chunk`, if the whole
-/// quote sits there as one contiguous run (case-insensitively, any whitespace
-/// run matching any other).
-///
-/// Why the source's characters and not the model's: what we print is what the
-/// downstream strict re-check reads back. A copy that differs from the source in
-/// case alone passes the citation path's case-insensitive test and then FAILS
-/// the strict re-check, which is case-sensitive — and the answer ships with a
-/// confident section heading glued to an `[unverified excerpt: …]`. Returning
-/// the source span makes "the released quote is verbatim" structural rather than
-/// hoped-for (ARCH_PRINCIPLES §7).
-fn exact_span_in(chunk: &str, quote: &str) -> Option<String> {
-    let n: Vec<char> = quote.trim().chars().collect();
-    if n.is_empty() {
-        return None;
+/// The aligner's knobs with the coverage floor at its least: a run covers as
+/// little of the quote as six of its words, and this path decides on the run,
+/// not on coverage. `None` as the shipped knobs are (`align_config`).
+fn run_config() -> Option<&'static quote_align::AlignConfig> {
+    static CFG: std::sync::OnceLock<Option<quote_align::AlignConfig>> = std::sync::OnceLock::new();
+    CFG.get_or_init(|| {
+        crate::quote_verification::align_config().map(|c| quote_align::AlignConfig {
+            coverage_floor: f32::MIN_POSITIVE,
+            ..c.clone()
+        })
+    })
+    .as_ref()
+}
+
+/// The most consecutive whitespace-separated words of `quote` the aligner
+/// matched with no difference touching them or the gaps between them. A word
+/// is clean when no difference overlaps it; two clean words are consecutive
+/// when no difference lies between them, an omission (an empty range in the
+/// quote) included, since then the source has words the quote skipped.
+fn longest_clean_run(quote: &str, edits: &[quote_align::QuoteEdit]) -> usize {
+    // Each word's code-point range in `quote`.
+    let mut words: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut at = 0usize;
+    for c in quote.chars() {
+        match (c.is_whitespace(), start) {
+            (false, None) => start = Some(at),
+            (true, Some(s)) => {
+                words.push(s..at);
+                start = None;
+            }
+            _ => {}
+        }
+        at += 1;
     }
-    let h: Vec<char> = chunk.chars().collect();
-    (0..h.len())
-        .find_map(|start| ci_ws_match_at(&h, start, &n).map(|end| (start, end)))
-        .map(|(start, end)| h[start..end].iter().collect())
+    if let Some(s) = start {
+        words.push(s..at);
+    }
+    let touches = |span: std::ops::Range<usize>| {
+        edits.iter().any(|e| {
+            if e.quote.is_empty() {
+                span.start < e.quote.start && e.quote.start < span.end
+            } else {
+                e.quote.start < span.end && span.start < e.quote.end
+            }
+        })
+    };
+    let (mut best, mut run) = (0usize, 0usize);
+    for (k, w) in words.iter().enumerate() {
+        if touches(w.clone()) {
+            run = 0;
+            continue;
+        }
+        // The gap from the previous word, both ends included, so an
+        // omission at either edge of it breaks the run.
+        let joined = k > 0 && run > 0 && !touches(words[k - 1].end - 1..w.start + 1);
+        run = if joined { run + 1 } else { 1 };
+        best = best.max(run);
+    }
+    best
+}
+
+#[cfg(test)]
+mod tests {
+    use quote_align::{QuoteEdit, QuoteEditKind};
+
+    use super::{locate_quote_in_chunks, longest_clean_run, QuoteMatch};
+
+    /// The citation path folds what the quote guard folds (`norm_v0`, through
+    /// the one aligner): a quote copied with a straight apostrophe grounds in
+    /// a passage that has the typographic one, and the release prints the
+    /// passage's own characters. Red against the old lowercase-and-whitespace
+    /// substring test, which found no run of six words without the apostrophe.
+    #[test]
+    fn a_straight_apostrophe_quote_grounds_in_a_typographic_passage() {
+        let chunks = vec!["It was Mr Verloc\u{2019}s shop then, small and dim.".to_string()];
+        assert_eq!(
+            locate_quote_in_chunks("It was Mr Verloc's shop then", &chunks),
+            Some(QuoteMatch::Exact {
+                chunk: 0,
+                verbatim: "It was Mr Verloc\u{2019}s shop then".to_string(),
+            })
+        );
+    }
+
+    /// A quote that silently skips a source word between two runs of four is
+    /// no run of six: the passage does not say those six words in a row.
+    #[test]
+    fn a_quote_that_skips_a_source_word_is_not_a_run() {
+        let chunks =
+            vec!["Tabb greased the eastern pawls before the gulls woke properly.".to_string()];
+        assert_eq!(
+            locate_quote_in_chunks("greased the eastern pawls the gulls woke properly", &chunks),
+            None
+        );
+    }
+
+    fn edit(kind: QuoteEditKind, quote: std::ops::Range<usize>) -> QuoteEdit {
+        QuoteEdit {
+            kind,
+            quote,
+            source: 0..0,
+        }
+    }
+
+    /// A difference on a word ends the run at it, and an omission between
+    /// two words ends it between them: the source has words the quote
+    /// skipped there.
+    #[test]
+    fn a_run_stops_at_a_difference_and_at_an_omission() {
+        let q = "one two three four five six seven eight";
+        assert_eq!(longest_clean_run(q, &[]), 8);
+        // "four" substituted: runs of three and four.
+        assert_eq!(
+            longest_clean_run(q, &[edit(QuoteEditKind::Substituted, 14..18)]),
+            4
+        );
+        // Words omitted between "five" and "six" (the point after "five").
+        assert_eq!(
+            longest_clean_run(q, &[edit(QuoteEditKind::Omitted, 23..23)]),
+            5
+        );
+        // An omission at the quote's very start breaks nothing.
+        assert_eq!(
+            longest_clean_run(q, &[edit(QuoteEditKind::Omitted, 0..0)]),
+            8
+        );
+    }
 }

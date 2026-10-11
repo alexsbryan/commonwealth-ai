@@ -88,6 +88,7 @@ pub fn export_notes_as_docs(notes_db: &Path) -> Result<Vec<ExtractedDoc>> {
             metadata: Some(serde_json::json!({ "mtime": n.updated_at })),
             source_file: None,
             embed_text: None,
+            source: crate::extractors::DocSource::Record,
         });
     }
     Ok(docs)

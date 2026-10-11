@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::derived::FoldBy;
 pub use super::source::{FieldReader, MetadataSourceDecl, SourceDecl, SourceRef, TableSourceDecl};
 use super::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
@@ -243,14 +244,6 @@ pub struct OntologyV1 {
     /// specializing one atom kind.
     #[serde(default)]
     pub types: Vec<OntologyTypeDecl>,
-    /// Opt in at `[enrichment.ontology]` with `document_reading = true` to read
-    /// claims whose subjects are either source-free records with an
-    /// `identity_criterion` or metadata-sourced entities with declared identity
-    /// fields, preserving each type's force. Validation refuses and names
-    /// unsupported declarations. Default false preserves the shared Phase-1
-    /// prompt and output bytes.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub document_reading: bool,
     /// How many entities one section may introduce in Phase 1. Absent takes
     /// the shipped schema's cap of 15 — raise it for a corpus whose sections
     /// enumerate (a data table, a list of recipients). Outside
@@ -326,7 +319,6 @@ impl OntologyV1 {
                 types: self.types,
                 max_entities_per_section: self.max_entities_per_section,
             },
-            document_reading: self.document_reading,
             assertion: AssertionPolicy {
                 voices: self.voices,
                 must_not: self.must_not,
@@ -363,30 +355,6 @@ impl OntologyV1 {
             },
             navigation: self.navigation,
         }
-    }
-}
-
-/// A source of identity evidence and what its links were measured to be worth
-/// on the live rule: `{ evidence = "document_thread", right = 190, of = 210,
-/// measured_on = "…" }`. The source is a `change.document` stamp,
-/// `model_choice` (the forced choice's most probable candidate),
-/// `reasoned_choice` (the same, read after the model's own reasoning) or
-/// `proposed_answer` (threads, wording and similarity alone); `right` of `of`
-/// links were right where `measured_on` says.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EvidentialFieldDecl {
-    pub evidence: String,
-    pub right: u32,
-    pub of: u32,
-    pub measured_on: String,
-}
-
-impl EvidentialFieldDecl {
-    /// The expected precision given the counts: the posterior mean under a
-    /// uniform prior, (right + 1) / (of + 2). Not right / of, which overstates
-    /// few links (15 of 16 is .938, but .889 expected; 190 of 210 is .901).
-    pub fn precision(&self) -> f64 {
-        (self.right as f64 + 1.0) / (self.of as f64 + 2.0)
     }
 }
 
@@ -451,12 +419,9 @@ pub struct OntologyTypeDecl {
     /// settles the question (ONTOLOGY_METHOD.md §The core).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_criterion: Option<String>,
-    /// Fields whose agreement is evidence that two mentions are one particular,
-    /// each with the precision measured for it (ONTOLOGY_METHOD.md §Identity).
-    /// RESOLVE links on one only where that precision clears `identity_bar`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub identity_evidential: Vec<EvidentialFieldDecl>,
-    /// The precision a link decided by evidence alone must have.
+    /// The posterior a link decided by evidence must reach; RESOLVE weighs
+    /// every source at what it is estimated to be worth on the corpus
+    /// (ONTOLOGY_METHOD.md §Identity). Absent: the most probable decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_bar: Option<f64>,
     /// Attributes whose values must agree: two mentions whose values differ,
@@ -514,7 +479,15 @@ impl OntologyTypeDecl {
                             }
                             Some(SourceDecl::Table(_)) => false,
                         };
-                        subject.kind == TypeKind::Entity && resolvable_subject
+                        // RESOLVE decides an entity or an event it identifies by
+                        // criterion; a metadata source projects entities only.
+                        match subject.kind {
+                            TypeKind::Entity => resolvable_subject,
+                            TypeKind::Event => {
+                                subject.source.is_none() && subject.identity_criterion.is_some()
+                            }
+                            _ => false,
+                        }
                     })
             })
     }
@@ -555,6 +528,12 @@ pub struct AttrDecl {
     /// (`derived.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub derived: Option<String>,
+    /// How a record holds what its statements read of this field: `agree`,
+    /// `all`, `most`, `earliest` or `latest`, decided as a fold's `by` is
+    /// over each statement's reading. Absent, each statement keeps its own
+    /// reading and the record holds none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<FoldBy>,
 }
 
 /// The four value families an attribute can take.
@@ -682,8 +661,8 @@ pub struct ChangeDecl {
     #[serde(default)]
     pub supersedes: BTreeMap<String, String>,
     /// The metadata fields each document carries that place a claim in time
-    /// and in its thread (`{ date = "date", thread = "thread_id", id =
-    /// "message_id" }` for mail). Every claim is stamped from the ONE
+    /// and in its thread (`{ date = "published", thread = "series", id =
+    /// "report_no" }` for a run of hoard reports). Every claim is stamped from the ONE
     /// document its evidence lands in. Omit when documents carry no metadata.
     #[serde(default)]
     pub document: Option<DocumentFieldsDecl>,
@@ -708,6 +687,11 @@ pub struct DocumentFieldsDecl {
     /// `document_id`.
     #[serde(default)]
     pub id: Option<String>,
+    /// The field naming who wrote the document (`from`, `author`). Not
+    /// stamped: the reader shows it among the document's declared facts
+    /// (ONTOLOGY_METHOD §Reading, prefill).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
 }
 
 /// `[enrichment.ontology.tension]` — which claims can conflict, and what makes
@@ -791,6 +775,7 @@ fn text_attrs(keys: &[String]) -> Vec<AttrDecl> {
             family: AttrFamily::Text { values: Vec::new() },
             description: String::new(),
             derived: None,
+            by: None,
         })
         .collect()
 }

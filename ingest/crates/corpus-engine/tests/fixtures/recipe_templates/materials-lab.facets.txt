@@ -4,3 +4,4 @@ identity: material → cas_number (external key, strict merge)
 identity: catalyst → cas_number (external key, strict merge) — inherited from `material`
 identity: method → canonical name (default; declare `identity = [...]` for an external key)
 question shapes: enumerate [material, catalyst, method]; relations [(none)]; events [(none)]; aggregate [measurement by method]
+fill: the general extractor reads this declaration (no claim kind the passes reader reads), so which attributes get a value is not analysed

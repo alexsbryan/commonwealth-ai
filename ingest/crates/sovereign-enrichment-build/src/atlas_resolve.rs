@@ -4,21 +4,21 @@
 //!
 //! Reads the cached `Phase1Output` (section-level sketches),
 //! resolves entity + event sketches into canonical atoms with
-//! `Involves` edges (Step 3a), and — when `--phase 3b` or
-//! `--phase all` is in effect — extends resolution with
-//! state/relation/claim/question atoms + Transition/Grounds edges +
-//! a populated trajectories index (Step 3b).
+//! `Involves` edges (Step 3a), and — by default — extends resolution
+//! with state/relation/claim/question atoms + Transition/Grounds edges,
+//! the recipe's typed records (document stamps, RESOLVE, derived folds)
+//! and a populated trajectories index (Step 3b). `--phase 3a` is the
+//! explicit opt-in for entities and events alone.
 //!
 //! Idempotent: the writer overwrites atomically. Re-running on the
 //! same cache reproduces the same atoms (modulo embedding
 //! non-determinism, which the daemon's embed slot does not
-//! introduce). `--phase all` runs 3a and 3b in one shot and writes
-//! the union; `--phase 3b` assumes a prior `--phase 3a` but
-//! recomputes 3a internally so the atom ids remain consistent
-//! across the two passes.
+//! introduce). The default runs 3a and 3b in one shot and writes the
+//! union; 3a is recomputed every time so atom ids stay consistent.
 
 use std::path::{Path, PathBuf};
 
+use corpus_engine::enrichment::asker::Asker;
 use corpus_engine::enrichment::atlas::resolution_records::BuildAtoms;
 use corpus_engine::enrichment::atlas::{
     ann_store::AtlasSeeding, resolve_entities_and_events_with, resolve_step_3b_with, write_atlas,
@@ -103,7 +103,8 @@ pub async fn run(parsed: &ParsedResolve) -> Result<ResolveReport, String> {
     // used by `extract`.
     let client = DaemonInferenceClient::from_enrich_config(&cfg)
         .map_err(|e| format!("building daemon client: {e}"))?;
-    let (embed, chat) = client.into_closures();
+    let (embed, chat) =
+        client.into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id))?;
 
     // Resolve into the live atlas dir. The `enrich delta` command
     // calls `resolve_into_dir` directly with a staging tempdir; this
@@ -127,7 +128,7 @@ pub async fn run(parsed: &ParsedResolve) -> Result<ResolveReport, String> {
 ///
 /// Behaviour for the live-dir caller is identical to the pre-refactor
 /// in-lined body: 3a always runs; 3b/typed extensions run when
-/// `phase` is `P3b`/`All`; the writer overwrites atomically; failures
+/// `phase` is `All`; the writer overwrites atomically; failures
 /// are always persisted (even empty) so the aggregator can tell
 /// "ran cleanly" from "never ran".
 ///
@@ -152,7 +153,7 @@ pub enum ResolveReport {
         failures: usize,
         sources: SourceCounts,
     },
-    /// `--phase 3b` or `all`: 3a plus the typed extensions.
+    /// The default (`All`): 3a plus the typed extensions.
     Full {
         entities: usize,
         events: usize,
@@ -239,6 +240,28 @@ pub async fn resolve_into_dir(
     target_atlas_dir: &Path,
     phase: ResolvePhase,
 ) -> Result<ResolveReport, String> {
+    let policies = cfg
+        .ontology
+        .as_ref()
+        .map(|spec| spec.policies())
+        .unwrap_or_default();
+    let want_3b = matches!(phase, ResolvePhase::All);
+    let inputs = super::atlas_resolve_documents::load(cfg, &policies, want_3b)?;
+    resolve_with_inputs(cfg, sections, inputs, embed, infer, target_atlas_dir, phase).await
+}
+
+/// [`resolve_into_dir`] with the documents' own inputs already loaded: the
+/// one body both the CLI (the corpus's rows) and the contract tests (a
+/// fixture's rows) run.
+pub(crate) async fn resolve_with_inputs(
+    cfg: &EnrichConfig,
+    sections: &[SectionExtraction],
+    mut inputs: super::atlas_resolve_documents::DocumentInputs,
+    embed: &EmbedFn,
+    infer: &InferenceFn,
+    target_atlas_dir: &Path,
+    phase: ResolvePhase,
+) -> Result<ResolveReport, String> {
     // The declared ontology, read once. Every resolver pass that reads it is
     // inert when nothing is declared, so a version-0 corpus (and every
     // prebuilt one) resolves through exactly the code it always did.
@@ -288,14 +311,13 @@ pub async fn resolve_into_dir(
         }
     }
 
-    let want_3b = matches!(phase, ResolvePhase::P3b | ResolvePhase::All);
+    let want_3b = matches!(phase, ResolvePhase::All);
     // Collect structured drops across both resolution phases so the
     // aggregator (`svrn enrich errors`) can surface them grouped
     // by kind. Empty in the clean-run case.
     let mut resolution_failures: Vec<corpus_engine::enrichment::pipeline::PhaseFailure> =
         Vec::new();
 
-    let mut inputs = super::atlas_resolve_documents::load(cfg, &policies, want_3b)?;
     let sources = inputs
         .projection
         .as_ref()
@@ -530,7 +552,7 @@ pub async fn resolve_into_dir(
         println!("  ✓ wrote {}", written.trajectories_path.display());
     } else {
         println!(
-            "  ✓ wrote {} (empty — --phase 3b or all populates it)",
+            "  ✓ wrote {} (empty — --phase 3a skips it; the default populates it)",
             written.trajectories_path.display()
         );
     }
@@ -582,11 +604,30 @@ fn atlas_dir_for(corpus_id: &str) -> PathBuf {
     paths::index_root(corpus_id).join(ATLAS_DIRNAME)
 }
 
+/// What one resolve run does. ONE decider for it: `All` is the default
+/// everywhere (the verb, `enrich build`, the workflow leaf, `enrich
+/// delta`), and `P3a` is an explicit opt-in. The old `P3b` behaved
+/// exactly as `All` and was deleted (order ontology-layer-2-one-path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResolvePhase {
     P3a,
-    P3b,
     All,
+}
+
+impl ResolvePhase {
+    /// Parse a `--phase` / `phase` value. `3b` names the phase that was
+    /// folded into the default; it refuses with that said rather than
+    /// running as a silent synonym.
+    pub fn parse(val: &str) -> Result<Self, String> {
+        match val {
+            "3a" => Ok(ResolvePhase::P3a),
+            "all" => Ok(ResolvePhase::All),
+            "3b" => Err("phase `3b` was removed: the default runs the whole layer; \
+                 drop --phase, or pass --phase 3a for entities and events alone"
+                .to_string()),
+            other => Err(format!("unknown phase `{other}`; expected 3a or all")),
+        }
+    }
 }
 
 /// `atlas_resolve` — literary-atlas **Phase 3a/3b** as a workflow leaf: resolve
@@ -630,14 +671,9 @@ impl AtlasResolveTool {
             .ok_or_else(|| Error::Execution("atlas_resolve: missing required `corpus`".into()))?;
         // Parse the phase up front (pure) so a bad value fails before any IO.
         let phase = match params.get("phase").and_then(|v| v.as_str()) {
-            Some("3a") => ResolvePhase::P3a,
-            Some("3b") => ResolvePhase::P3b,
-            Some("all") | None => ResolvePhase::All,
-            Some(other) => {
-                return Err(Error::Execution(format!(
-                    "atlas_resolve: unknown phase `{other}` (expected 3a|3b|all)"
-                )))
-            }
+            None => ResolvePhase::All,
+            Some(v) => ResolvePhase::parse(v)
+                .map_err(|e| Error::Execution(format!("atlas_resolve: {e}")))?,
         };
 
         // Calls the same `run` the CLI verb calls. This block used to be
@@ -649,6 +685,7 @@ impl AtlasResolveTool {
         let report = run(&ParsedResolve {
             corpus_id: corpus.to_string(),
             phase,
+            asker: Asker::Daemon,
         })
         .await
         .map_err(|e| Error::Execution(format!("atlas_resolve: {e}")))?;
@@ -667,11 +704,15 @@ impl AtlasResolveTool {
 pub struct ParsedResolve {
     pub corpus_id: String,
     pub phase: ResolvePhase,
+    /// Where RESOLVE's answers and the build's embeddings come from
+    /// (`--asker`, `corpus_engine::enrichment::asker`); `daemon` records.
+    pub asker: Asker,
 }
 
 pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
     let mut corpus_id: Option<String> = None;
-    let mut phase = ResolvePhase::P3a;
+    let mut phase = ResolvePhase::All;
+    let mut asker = Asker::default();
 
     let mut i = 0;
     while i < args.len() {
@@ -680,17 +721,15 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
             "--phase" => {
                 let val = args
                     .get(i + 1)
-                    .ok_or("--phase requires a value (3a|3b|all)".to_string())?;
-                phase = match val.as_str() {
-                    "3a" => ResolvePhase::P3a,
-                    "3b" => ResolvePhase::P3b,
-                    "all" => ResolvePhase::All,
-                    other => {
-                        return Err(format!(
-                            "unknown phase `{other}`; expected one of 3a, 3b, all"
-                        ));
-                    }
-                };
+                    .ok_or("--phase requires a value (3a|all)".to_string())?;
+                phase = ResolvePhase::parse(val)?;
+                i += 2;
+            }
+            "--asker" => {
+                let val = args
+                    .get(i + 1)
+                    .ok_or("--asker requires a value (daemon|replay|gold)".to_string())?;
+                asker = Asker::parse(val)?;
                 i += 2;
             }
             other if other.starts_with("--") => {
@@ -708,86 +747,13 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
     }
 
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
-    Ok(ParsedResolve { corpus_id, phase })
+    Ok(ParsedResolve {
+        corpus_id,
+        phase,
+        asker,
+    })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use sovereign_contracts::traits::Tool;
-
-    #[test]
-    fn parse_args_defaults_to_phase_3a() {
-        let p = parse_args(&["brothers_karamazov".into()]).unwrap();
-        assert_eq!(p.corpus_id, "brothers_karamazov");
-        assert_eq!(p.phase, ResolvePhase::P3a);
-    }
-
-    #[test]
-    fn parse_args_accepts_explicit_phase_3a() {
-        let p = parse_args(&["bk".into(), "--phase".into(), "3a".into()]).unwrap();
-        assert_eq!(p.phase, ResolvePhase::P3a);
-    }
-
-    #[test]
-    fn parse_args_accepts_phase_3b_and_all_at_parse_time() {
-        // The command refuses to run these today (they're not
-        // implemented), but the parser accepts them so the error
-        // path is reachable — we want the operator to see a clear
-        // "not yet implemented" message, not a parse failure.
-        let p = parse_args(&["bk".into(), "--phase".into(), "3b".into()]).unwrap();
-        assert_eq!(p.phase, ResolvePhase::P3b);
-        let p = parse_args(&["bk".into(), "--phase".into(), "all".into()]).unwrap();
-        assert_eq!(p.phase, ResolvePhase::All);
-    }
-
-    #[test]
-    fn parse_args_rejects_unknown_phase() {
-        let err = parse_args(&["bk".into(), "--phase".into(), "42".into()]).unwrap_err();
-        assert!(err.contains("unknown phase"), "got: {err}");
-    }
-
-    #[test]
-    fn parse_args_requires_corpus_id() {
-        let err = parse_args(&[]).unwrap_err();
-        assert!(err.contains("corpus-id"), "got: {err}");
-    }
-
-    /// The `atlas_resolve` workflow leaf validates its params before any IO: a
-    /// missing `corpus`, a bogus `phase`, and an unknown corpus all fail loudly.
-    /// (The happy path needs the daemon + a resolved Phase-1 cache — exercised by
-    /// the integration run, not a unit test.)
-    #[tokio::test]
-    async fn atlas_resolve_leaf_validates_params() {
-        let ctx = ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        };
-        assert!(AtlasResolveTool
-            .declared()
-            .execute(&serde_json::json!({}), &ctx)
-            .await
-            .is_err());
-        assert!(AtlasResolveTool
-            .declared()
-            .execute(
-                &serde_json::json!({ "corpus": "x", "phase": "bogus" }),
-                &ctx
-            )
-            .await
-            .is_err());
-        assert!(AtlasResolveTool
-            .declared()
-            .execute(
-                &serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }),
-                &ctx
-            )
-            .await
-            .is_err());
-    }
-}
+#[path = "atlas_resolve_tests.rs"]
+mod tests;

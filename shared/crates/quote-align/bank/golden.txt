@@ -1,0 +1,104 @@
+aligner: align/2 norm/0
+
+=== verbatim
+anchors=4 below_floor=1
+alignment text=0 source=[37, 59) coverage=1.0000 "the town keeps its own"
+
+=== substituted_word
+anchors=1 below_floor=0
+alignment text=0 source=[0, 31) coverage=0.8333 "The river keeps its own counsel"
+  substituted quote=[16, 19) "her" source=[16, 19) "its"
+
+=== substituted_two_for_one
+anchors=4 below_floor=0
+alignment text=0 source=[0, 68) coverage=0.8333 "The committee will consider the proposal at its next regular meeting"
+  substituted quote=[19, 35) "review carefully" source=[19, 27) "consider"
+
+=== added_word
+anchors=2 below_floor=0
+alignment text=0 source=[0, 31) coverage=0.8571 "The river keeps its own counsel"
+  added quote=[16, 19) "all" source=[15, 15) ""
+
+=== omitted_word
+anchors=2 below_floor=0
+alignment text=0 source=[0, 31) coverage=1.0000 "The river keeps its own counsel"
+  omitted quote=[19, 19) "" source=[20, 23) "own"
+
+=== substituted_at_the_end
+anchors=4 below_floor=1
+alignment text=0 source=[0, 31) coverage=0.8333 "The river keeps its own counsel"
+  substituted quote=[24, 31) "secrets" source=[24, 31) "counsel"
+
+=== case_only
+anchors=4 below_floor=1
+alignment text=0 source=[0, 31) coverage=0.8333 "The river keeps its own counsel"
+  substituted quote=[0, 3) "the" source=[0, 3) "The"
+
+=== punctuation_added
+anchors=4 below_floor=0
+alignment text=0 source=[0, 70) coverage=0.9375 "We hold these truths to be self-evident that all men are created equal"
+  added quote=[39, 40) "," source=[39, 39) ""
+
+=== elided_interior
+anchors=4 below_floor=0
+alignment text=0 source=[0, 108) coverage=1.0000 "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness"
+  elided quote=[25, 26) "…" source=[24, 78) ", it was the worst of times, it was the age of wisdom,"
+
+=== elided_spaced_dots
+anchors=4 below_floor=0
+alignment text=0 source=[26, 108) coverage=1.0000 "it was the worst of times, it was the age of wisdom, it was the age of foolishness"
+  elided quote=[26, 31) ". . ." source=[51, 85) ", it was the age of wisdom, it was"
+
+=== elided_at_the_edges_is_honest
+anchors=5 below_floor=0
+alignment text=0 source=[33, 67) coverage=1.0000 "the worst of times, it was the age"
+
+=== bracketed_capital
+anchors=4 below_floor=0
+alignment text=0 source=[4, 56) coverage=1.0000 "the river keeps its own counsel when the town sleeps"
+  bracketed quote=[0, 5) "[T]he" source=[4, 7) "the"
+
+=== bracketed_replacement
+anchors=4 below_floor=0
+alignment text=0 source=[0, 76) coverage=1.0000 "The Joint Standing Committee on Finance voted against the measure on Tuesday"
+  bracketed quote=[0, 15) "[The committee]" source=[0, 39) "The Joint Standing Committee on Finance"
+
+=== bracketed_sic
+anchors=4 below_floor=0
+alignment text=0 source=[0, 52) coverage=1.0000 "The goverment has announced its intention to proceed"
+  bracketed quote=[14, 19) "[sic]" source=[13, 13) ""
+
+=== folds_quotes_dashes_emphasis
+anchors=4 below_floor=0
+alignment text=0 source=[0, 56) coverage=1.0000 "Mrs Verloc’s “gaze” — steady and _unwavering_ — held him"
+
+=== nfc_composed_against_decomposed
+anchors=4 below_floor=0
+alignment text=0 source=[0, 47) coverage=1.0000 "The cafe\u{301} on the corner served the whole street"
+
+=== pdf_hyphen_join
+anchors=4 below_floor=0
+alignment text=0 source=[0, 64) coverage=1.0000 "the principle of mutual co-\noperation between the several states"
+
+=== best_of_two_texts
+anchors=5 below_floor=1
+alignment text=1 source=[33, 59) coverage=1.0000 "and the town keeps its own"
+
+=== two_occurrences
+anchors=4 below_floor=0
+alignment text=0 source=[4, 25) coverage=1.0000 "keeps her own counsel"
+alignment text=0 source=[50, 71) coverage=1.0000 "keeps her own counsel"
+
+=== below_the_floor
+anchors=1 below_floor=1
+
+=== unrelated
+anchors=0 below_floor=0
+
+=== edge_cut_word_between_gaps
+anchors=1 below_floor=0
+alignment text=0 source=[12, 46) coverage=0.7500 "shop—small, dim… and _quiet_ [sic]"
+  substituted quote=[0, 3) "hop" source=[12, 16) "shop"
+  elided quote=[14, 15) "…" source=[27, 28) "…"
+  bracketed quote=[28, 33) "[sic]" source=[41, 45) "[sic"
+  substituted quote=[36, 40) "stoo" source=[45, 46) "]"

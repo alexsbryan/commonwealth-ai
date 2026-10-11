@@ -1,0 +1,614 @@
+{
+ "c2-lines-gvc-resolve-alone": {
+  "run": "runs/c2-lines-gvc-resolve-alone",
+  "name": "c2-lines-gvc-resolve-alone",
+  "system": "gvc",
+  "judged_type": "happening",
+  "path": "resolve-statements",
+  "author": "ours",
+  "log_half": "whole log",
+  "types": {
+   "happening": 14651
+  },
+  "counts": {},
+  "pairs": 14651,
+  "labelled_pairs": 14651,
+  "unlabelled_pairs": 0,
+  "base_rate_labelled": 0.0867,
+  "prior_recorded": 0.0572,
+  "sources": {
+   "document_date": {
+    "estimated": 0.155,
+    "labelled": 0.141,
+    "agreed_pairs": 2368,
+    "gap": 0.014,
+    "labelled_m": 0.4539,
+    "labelled_u": 0.1784,
+    "estimated_m": 0.544,
+    "estimated_u": 0.1794,
+    "spoke_labelled": 12135
+   },
+   "model_choice": {
+    "estimated": 0.753,
+    "labelled": 0.403,
+    "agreed_pairs": 216,
+    "gap": 0.35,
+    "labelled_m": 0.1891,
+    "labelled_u": 0.0198,
+    "estimated_m": 0.7488,
+    "estimated_u": 0.0149,
+    "spoke_labelled": 6961
+   },
+   "necessary:kind": {
+    "estimated": 0.182,
+    "labelled": 0.218,
+    "agreed_pairs": 3268,
+    "gap": 0.036,
+    "labelled_m": 0.64,
+    "labelled_u": 0.2124,
+    "estimated_m": 0.7919,
+    "estimated_u": 0.2164,
+    "spoke_labelled": 13149
+   },
+   "proposed_answer": {
+    "estimated": 0.989,
+    "labelled": 0.58,
+    "agreed_pairs": 498,
+    "gap": 0.408,
+    "labelled_m": 0.229,
+    "labelled_u": 0.0157,
+    "estimated_m": 0.5938,
+    "estimated_u": 0.0004,
+    "spoke_labelled": 14559
+   }
+  },
+  "largest_gap": [
+   0.408,
+   "proposed_answer"
+  ]
+ },
+ "blind-r2--gvc-resolve-alone": {
+  "run": "runs/blind-r2/gvc-resolve-alone",
+  "name": "blind-r2--gvc-resolve-alone",
+  "system": "gvc",
+  "judged_type": "incident",
+  "path": "resolve-statements",
+  "author": "ours",
+  "log_half": "whole log",
+  "types": {
+   "incident": 10312
+  },
+  "counts": {},
+  "pairs": 10312,
+  "labelled_pairs": 10312,
+  "unlabelled_pairs": 0,
+  "base_rate_labelled": 0.0535,
+  "prior_recorded": 0.1397,
+  "sources": {
+   "document_date": {
+    "estimated": 0.816,
+    "labelled": 0.237,
+    "agreed_pairs": 916,
+    "gap": 0.58,
+    "labelled_m": 0.6596,
+    "labelled_u": 0.077,
+    "estimated_m": 0.6797,
+    "estimated_u": 0.0248,
+    "spoke_labelled": 9406
+   },
+   "model_choice": {
+    "estimated": 0.986,
+    "labelled": 0.249,
+    "agreed_pairs": 502,
+    "gap": 0.737,
+    "labelled_m": 0.4266,
+    "labelled_u": 0.0618,
+    "estimated_m": 0.8654,
+    "estimated_u": 0.002,
+    "spoke_labelled": 6392
+   },
+   "proposed_answer": {
+    "estimated": 0.773,
+    "labelled": 0.286,
+    "agreed_pairs": 510,
+    "gap": 0.487,
+    "labelled_m": 0.2645,
+    "labelled_u": 0.0373,
+    "estimated_m": 0.2747,
+    "estimated_u": 0.0131,
+    "spoke_labelled": 10312
+   }
+  },
+  "largest_gap": [
+   0.737,
+   "model_choice"
+  ]
+ },
+ "c2-lines--ward-tune": {
+  "run": "runs/c2-lines/ward-tune",
+  "name": "c2-lines--ward-tune",
+  "system": "ward",
+  "judged_type": "deal",
+  "path": "atlas-resolve",
+  "author": "ours",
+  "log_half": "whole log",
+  "types": {
+   "deal": 527
+  },
+  "counts": {},
+  "pairs": 527,
+  "labelled_pairs": 123,
+  "unlabelled_pairs": 404,
+  "base_rate_labelled": 0.2114,
+  "prior_recorded": 0.0593,
+  "sources": {
+   "document_date": {
+    "estimated": 0.665,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0684,
+    "estimated_u": 0.0022,
+    "spoke_labelled": 114
+   },
+   "document_id": {
+    "estimated": 0.665,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0684,
+    "estimated_u": 0.0022,
+    "spoke_labelled": 114
+   },
+   "document_thread": {
+    "estimated": 0.665,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0684,
+    "estimated_u": 0.0022,
+    "spoke_labelled": 114
+   },
+   "model_choice": {
+    "estimated": 0.62,
+    "labelled": 1.0,
+    "agreed_pairs": 8,
+    "gap": 0.38,
+    "labelled_m": 0.3333,
+    "labelled_u": 0.0,
+    "estimated_m": 0.7621,
+    "estimated_u": 0.0295,
+    "spoke_labelled": 121
+   },
+   "necessary:term": {
+    "estimated": 0.116,
+    "labelled": 0.5,
+    "agreed_pairs": 4,
+    "gap": 0.384,
+    "labelled_m": 0.4,
+    "labelled_u": 0.1818,
+    "estimated_m": 0.8212,
+    "estimated_u": 0.396,
+    "spoke_labelled": 16
+   },
+   "proposed_answer": {
+    "estimated": 0.729,
+    "labelled": 0.5,
+    "agreed_pairs": 4,
+    "gap": 0.229,
+    "labelled_m": 0.0769,
+    "labelled_u": 0.0206,
+    "estimated_m": 0.413,
+    "estimated_u": 0.0097,
+    "spoke_labelled": 123
+   }
+  },
+  "largest_gap": [
+   0.384,
+   "necessary:term"
+  ]
+ },
+ "c2-lines--uv-third": {
+  "run": "runs/c2-lines/uv-third",
+  "name": "c2-lines--uv-third",
+  "system": "uv",
+  "judged_type": "case",
+  "path": "atlas-resolve",
+  "author": "ours",
+  "log_half": "whole log",
+  "types": {
+   "case": 282
+  },
+  "counts": {},
+  "pairs": 282,
+  "labelled_pairs": 211,
+  "unlabelled_pairs": 71,
+  "base_rate_labelled": 0.2796,
+  "prior_recorded": 0.2304,
+  "sources": {
+   "document_date": {
+    "estimated": 0.884,
+    "labelled": 1.0,
+    "agreed_pairs": 6,
+    "gap": 0.116,
+    "labelled_m": 0.1111,
+    "labelled_u": 0.0,
+    "estimated_m": 0.1205,
+    "estimated_u": 0.0048,
+    "spoke_labelled": 206
+   },
+   "document_id": {
+    "estimated": 0.493,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0151,
+    "estimated_u": 0.0047,
+    "spoke_labelled": 206
+   },
+   "document_thread": {
+    "estimated": 0.978,
+    "labelled": 0.927,
+    "agreed_pairs": 55,
+    "gap": 0.051,
+    "labelled_m": 0.9444,
+    "labelled_u": 0.0263,
+    "estimated_m": 0.9752,
+    "estimated_u": 0.0066,
+    "spoke_labelled": 206
+   },
+   "model_choice": {
+    "estimated": 0.593,
+    "labelled": 0.6,
+    "agreed_pairs": 5,
+    "gap": 0.007,
+    "labelled_m": 0.5,
+    "labelled_u": 0.0303,
+    "estimated_m": 0.3105,
+    "estimated_u": 0.0638,
+    "spoke_labelled": 72
+   },
+   "proposed_answer": {
+    "estimated": 0.963,
+    "labelled": 0.907,
+    "agreed_pairs": 54,
+    "gap": 0.055,
+    "labelled_m": 0.8305,
+    "labelled_u": 0.0329,
+    "estimated_m": 0.9569,
+    "estimated_u": 0.0111,
+    "spoke_labelled": 211
+   }
+  },
+  "largest_gap": [
+   0.116,
+   "document_date"
+  ]
+ },
+ "c2-lines--gvc": {
+  "run": "runs/c2-lines/gvc",
+  "name": "c2-lines--gvc",
+  "system": "gvc",
+  "judged_type": "happening",
+  "path": "atlas-resolve",
+  "author": "ours",
+  "log_half": "whole log",
+  "types": {
+   "happening": 2890
+  },
+  "counts": {},
+  "pairs": 2890,
+  "labelled_pairs": 1676,
+  "unlabelled_pairs": 1214,
+  "base_rate_labelled": 0.0257,
+  "prior_recorded": 0.0911,
+  "sources": {
+   "document_date": {
+    "estimated": 0.618,
+    "labelled": 0.157,
+    "agreed_pairs": 115,
+    "gap": 0.462,
+    "labelled_m": 0.6923,
+    "labelled_u": 0.0623,
+    "estimated_m": 0.9677,
+    "estimated_u": 0.0598,
+    "spoke_labelled": 1584
+   },
+   "document_id": {
+    "estimated": 0.57,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0056,
+    "estimated_u": 0.0004,
+    "spoke_labelled": 1584
+   },
+   "model_choice": {
+    "estimated": 0.85,
+    "labelled": 0.385,
+    "agreed_pairs": 26,
+    "gap": 0.466,
+    "labelled_m": 0.3125,
+    "labelled_u": 0.0118,
+    "estimated_m": 0.8628,
+    "estimated_u": 0.0152,
+    "spoke_labelled": 1391
+   },
+   "necessary:kind": {
+    "estimated": 0.104,
+    "labelled": 0.031,
+    "agreed_pairs": 510,
+    "gap": 0.073,
+    "labelled_m": 0.4,
+    "labelled_u": 0.3494,
+    "estimated_m": 0.418,
+    "estimated_u": 0.3599,
+    "spoke_labelled": 1454
+   },
+   "proposed_answer": {
+    "estimated": 0.964,
+    "labelled": 0.556,
+    "agreed_pairs": 9,
+    "gap": 0.408,
+    "labelled_m": 0.1163,
+    "labelled_u": 0.0024,
+    "estimated_m": 0.1203,
+    "estimated_u": 0.0005,
+    "spoke_labelled": 1676
+   }
+  },
+  "largest_gap": [
+   0.466,
+   "model_choice"
+  ]
+ },
+ "blind-r2--ward-tune": {
+  "run": "runs/blind-r2/ward-tune",
+  "name": "blind-r2--ward-tune",
+  "system": "ward",
+  "judged_type": "deal",
+  "path": "atlas-resolve",
+  "author": "blind",
+  "log_half": "recorded (stopped at replay_extract)",
+  "types": {
+   "deal": 1966,
+   "blind:open_item": 574
+  },
+  "counts": {},
+  "pairs": 1966,
+  "labelled_pairs": 450,
+  "unlabelled_pairs": 1516,
+  "base_rate_labelled": 0.3511,
+  "prior_recorded": 0.0654,
+  "sources": {
+   "document_date": {
+    "estimated": 0.507,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0096,
+    "estimated_u": 0.0007,
+    "spoke_labelled": 356
+   },
+   "document_id": {
+    "estimated": 0.507,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0096,
+    "estimated_u": 0.0007,
+    "spoke_labelled": 356
+   },
+   "document_thread": {
+    "estimated": 0.507,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0096,
+    "estimated_u": 0.0007,
+    "spoke_labelled": 356
+   },
+   "model_choice": {
+    "estimated": 0.513,
+    "labelled": 1.0,
+    "agreed_pairs": 14,
+    "gap": 0.487,
+    "labelled_m": 0.1053,
+    "labelled_u": 0.0,
+    "estimated_m": 0.287,
+    "estimated_u": 0.019,
+    "spoke_labelled": 359
+   },
+   "necessary:direction": {
+    "estimated": 0.101,
+    "labelled": 0.248,
+    "agreed_pairs": 145,
+    "gap": 0.147,
+    "labelled_m": 0.7347,
+    "labelled_u": 0.8321,
+    "estimated_m": 0.9514,
+    "estimated_u": 0.5897,
+    "spoke_labelled": 180
+   },
+   "proposed_answer": {
+    "estimated": 0.784,
+    "labelled": 0.619,
+    "agreed_pairs": 21,
+    "gap": 0.165,
+    "labelled_m": 0.0823,
+    "labelled_u": 0.0274,
+    "estimated_m": 0.3937,
+    "estimated_u": 0.0076,
+    "spoke_labelled": 450
+   }
+  },
+  "largest_gap": [
+   0.487,
+   "model_choice"
+  ]
+ },
+ "blind-r2--uv-third": {
+  "run": "runs/blind-r2/uv-third",
+  "name": "blind-r2--uv-third",
+  "system": "uv",
+  "judged_type": "case",
+  "path": "atlas-resolve",
+  "author": "blind",
+  "log_half": "recorded (stopped at replay_extract)",
+  "types": {
+   "case": 4173
+  },
+  "counts": {},
+  "pairs": 4173,
+  "labelled_pairs": 3955,
+  "unlabelled_pairs": 218,
+  "base_rate_labelled": 0.3381,
+  "prior_recorded": 0.3591,
+  "sources": {
+   "document_date": {
+    "estimated": 0.442,
+    "labelled": 0.733,
+    "agreed_pairs": 15,
+    "gap": 0.291,
+    "labelled_m": 0.0111,
+    "labelled_u": 0.0015,
+    "estimated_m": 0.0058,
+    "estimated_u": 0.0041,
+    "spoke_labelled": 3612
+   },
+   "document_id": {
+    "estimated": 0.497,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0007,
+    "estimated_u": 0.0004,
+    "spoke_labelled": 3612
+   },
+   "document_thread": {
+    "estimated": 0.995,
+    "labelled": 0.687,
+    "agreed_pairs": 1345,
+    "gap": 0.308,
+    "labelled_m": 0.9296,
+    "labelled_u": 0.1608,
+    "estimated_m": 0.999,
+    "estimated_u": 0.0026,
+    "spoke_labelled": 3612
+   },
+   "model_choice": {
+    "estimated": 0.968,
+    "labelled": 0.938,
+    "agreed_pairs": 129,
+    "gap": 0.03,
+    "labelled_m": 0.3333,
+    "labelled_u": 0.0081,
+    "estimated_m": 0.9862,
+    "estimated_u": 0.0185,
+    "spoke_labelled": 1349
+   },
+   "proposed_answer": {
+    "estimated": 0.998,
+    "labelled": 0.755,
+    "agreed_pairs": 993,
+    "gap": 0.243,
+    "labelled_m": 0.561,
+    "labelled_u": 0.0928,
+    "estimated_m": 0.6813,
+    "estimated_u": 0.0008,
+    "spoke_labelled": 3955
+   }
+  },
+  "largest_gap": [
+   0.308,
+   "document_thread"
+  ]
+ },
+ "blind-r2--gvc": {
+  "run": "runs/blind-r2/gvc",
+  "name": "blind-r2--gvc",
+  "system": "gvc",
+  "judged_type": "happening",
+  "path": "atlas-resolve",
+  "author": "blind",
+  "log_half": "recorded (stopped at replay_extract)",
+  "types": {
+   "happening": 695,
+   "blind:person": 2300
+  },
+  "counts": {},
+  "pairs": 695,
+  "labelled_pairs": 481,
+  "unlabelled_pairs": 214,
+  "base_rate_labelled": 0.0644,
+  "prior_recorded": 0.1377,
+  "sources": {
+   "document_date": {
+    "estimated": 0.701,
+    "labelled": 0.2,
+    "agreed_pairs": 40,
+    "gap": 0.501,
+    "labelled_m": 0.4,
+    "labelled_u": 0.0741,
+    "estimated_m": 0.8776,
+    "estimated_u": 0.0598,
+    "spoke_labelled": 452
+   },
+   "document_id": {
+    "estimated": 0.619,
+    "labelled": null,
+    "agreed_pairs": 0,
+    "gap": null,
+    "labelled_m": 0.0,
+    "labelled_u": 0.0,
+    "estimated_m": 0.0179,
+    "estimated_u": 0.0018,
+    "spoke_labelled": 452
+   },
+   "model_choice": {
+    "estimated": 0.641,
+    "labelled": 0.462,
+    "agreed_pairs": 39,
+    "gap": 0.179,
+    "labelled_m": 0.6923,
+    "labelled_u": 0.0566,
+    "estimated_m": 0.8448,
+    "estimated_u": 0.0755,
+    "spoke_labelled": 397
+   },
+   "proposed_answer": {
+    "estimated": 0.846,
+    "labelled": 0.5,
+    "agreed_pairs": 2,
+    "gap": 0.346,
+    "labelled_m": 0.0323,
+    "labelled_u": 0.0022,
+    "estimated_m": 0.0961,
+    "estimated_u": 0.0028,
+    "spoke_labelled": 481
+   }
+  },
+  "largest_gap": [
+   0.501,
+   "document_date"
+  ]
+ }
+}

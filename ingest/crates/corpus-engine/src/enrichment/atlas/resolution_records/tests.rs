@@ -79,6 +79,7 @@ fn policies() -> OntologyPolicies {
         date: Some("date".into()),
         thread: Some("thread".into()),
         id: None,
+        author: None,
     });
     p
 }
@@ -173,6 +174,13 @@ impl Build {
     }
 
     async fn resolve(&mut self) -> (Vec<RecordsReport>, Vec<PhaseFailure>, Vec<String>) {
+        self.resolve_with(&policies()).await
+    }
+
+    async fn resolve_with(
+        &mut self,
+        policies: &OntologyPolicies,
+    ) -> (Vec<RecordsReport>, Vec<PhaseFailure>, Vec<String>) {
         let (mut ars, mut positions, mut oppositions) = (Vec::new(), Vec::new(), Vec::new());
         let mut atoms = BuildAtoms {
             entities: &mut self.entities,
@@ -191,7 +199,7 @@ impl Build {
         let (reports, failures) = resolve_declared_types(
             &mut atoms,
             &documents(),
-            &policies(),
+            policies,
             CORPUS,
             Answerer::Proposed,
             &mut sink,
@@ -338,12 +346,62 @@ async fn a_rebuild_with_renumbered_claims_mints_the_same_records() {
     assert_eq!(by_anchor(&a), by_anchor(&b));
 }
 
+/// PRIMITIVES §0: an event is a full subject of claims, identified again by
+/// its criterion like an entity. The same statements decide the same
+/// partition; the records are events, and the Phase-1 events of the type go.
+#[tokio::test]
+async fn an_event_type_is_decided_and_its_records_are_events() {
+    let mut as_entity = Build::new();
+    as_entity.resolve().await;
+    let mut b = Build::new();
+    b.events[0].event_type = EventType::from_str_repr("deal");
+    let mut p = policies();
+    p.shape.types[0].kind = TypeKind::Event;
+    assert!(decides(&TypeIndex::from_policies(&p), "deal"));
+    let (reports, _, seen) = b.resolve_with(&p).await;
+    assert_eq!(seen, ["deal:m1", "deal:m2", "deal:m3"]);
+    // Both Phase-1 atoms named `deal` go: the event, and the entity a sketch
+    // named it as (the reader's compatibility projection does exactly that).
+    assert_eq!((reports[0].records, reports[0].retired), (2, 2));
+    let deals: Vec<&Event> = b
+        .events
+        .iter()
+        .filter(|e| e.event_type.as_str_repr() == "deal")
+        .collect();
+    assert_eq!(deals.len(), 2, "{:?}", b.events);
+    assert!(deals.iter().all(|e| e.id.as_str() != "event-0001"));
+    assert!(b.entities.iter().all(|e| e.id.as_str() != "entity-0001"));
+    // The partition is the entity type's: claims 1 and 2 one record, 3 another.
+    let (one, two, three) = (
+        b.subject("claim-0001"),
+        b.subject("claim-0002"),
+        b.subject("claim-0003"),
+    );
+    assert!(one.is_some() && one == two && three.is_some() && three != one);
+    assert!(deals.iter().any(|e| Some(e.id.as_str()) == one.as_deref()));
+    let same = |x: &Build, a: &str, b: &str| x.subject(a) == x.subject(b);
+    for (a, c) in [("claim-0001", "claim-0002"), ("claim-0001", "claim-0003")] {
+        assert_eq!(same(&b, a, c), same(&as_entity, a, c), "{a} {c}");
+    }
+}
+
 #[test]
 fn resolve_decides_entity_types_with_a_criterion_and_no_source() {
     let mut p = policies();
     let index = TypeIndex::from_policies(&p);
     assert!(decides(&index, "deal"));
     assert!(!decides(&index, "person"), "no criterion");
+    let mut as_event = p.clone();
+    as_event.shape.types[0].kind = TypeKind::Event;
+    assert!(
+        decides(&TypeIndex::from_policies(&as_event), "deal"),
+        "an event type"
+    );
+    as_event.shape.types[0].kind = TypeKind::State;
+    assert!(
+        !decides(&TypeIndex::from_policies(&as_event), "deal"),
+        "a state type"
+    );
     assert!(!decides(&index, "stage_update"), "a claim type");
     assert!(!decides(&index, "nothing"), "undeclared");
     p.shape.types[0].source = Some(SourceDecl::Metadata(MetadataSourceDecl::default()));
@@ -351,4 +409,21 @@ fn resolve_decides_entity_types_with_a_criterion_and_no_source() {
         !decides(&TypeIndex::from_policies(&p), "deal"),
         "a sourced type"
     );
+}
+
+/// The trap order ontology-layer-2-one-path step 6 names: a type only RESOLVE
+/// decides, with no claim kind about it, has no statements, so a build would
+/// leave it to 3a's merge. It is named so the build can refuse it.
+#[test]
+fn a_decided_type_with_no_claim_kind_about_it_is_named() {
+    let p = policies();
+    assert!(types_without_statements(&p).is_empty());
+    let mut orphaned = p.clone();
+    orphaned
+        .shape
+        .types
+        .retain(|t| t.subject.as_deref() != Some("deal"));
+    assert_eq!(types_without_statements(&orphaned), ["deal"]);
+    orphaned.shape.types[0].kind = TypeKind::Event;
+    assert_eq!(types_without_statements(&orphaned), ["deal"]);
 }

@@ -160,7 +160,7 @@ mod search_privacy;
 pub use search_privacy::SearchPrivacy;
 mod grounding_verdict;
 pub use grounding_verdict::{
-    AnswerSegment, DeciderId, GroundingDecision, GroundingVerdict, SegmentKind,
+    AnswerSegment, DeciderId, GroundingDecision, GroundingVerdict, QuoteAddress, SegmentKind,
 };
 mod stage_attribution;
 pub use stage_attribution::{

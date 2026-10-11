@@ -492,6 +492,7 @@ mod tests {
                     family: AttrFamily::Text { values: Vec::new() },
                     description: String::new(),
                     derived: None,
+                    by: None,
                 },
                 AttrDecl {
                     name: "party_derived".into(),
@@ -500,6 +501,7 @@ mod tests {
                     },
                     description: String::new(),
                     derived: Some("party_of_message".into()),
+                    by: None,
                 },
             ],
             ..Default::default()

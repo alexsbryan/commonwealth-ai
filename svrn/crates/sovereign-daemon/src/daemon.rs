@@ -117,7 +117,6 @@ fn resolve_client_bind_posture(
 
 use crate::admin_http::ConfigDiff;
 use crate::daemon_services::DaemonServices;
-use crate::mcp_router;
 
 /// The embedded Commonwealth daemon — the ONE daemon implementation, shared
 /// by `sovereign daemon run`, the desktop's Local mode, and `svrn mesh`.
@@ -1166,6 +1165,8 @@ impl EmbeddedDaemon {
         // Ingest's atlas port, when the distribution composed ingest here
         // (pb-ingest-dial-daemon); the atlas routes name its absence.
         node_seed.atlas = self.atlas().cloned();
+        // What an OICP caller may read is the turn's own corpus decider.
+        node_seed.corpus_principal = self.runtime().and_then(|r| r.corpus_principal.clone());
         // Fabric's part is constructed before `AppState` and held on the
         // daemon, so it survives `stop_inner` (DC §4.1; DC §4.2 "Construction
         // is staged, and parts are total"). The membership operations that
@@ -1628,31 +1629,14 @@ impl EmbeddedDaemon {
         self.client_listener.send_replace(ClientListener::Pending);
         let listener_outcome = self.client_listener.clone();
         let serve_handle = tokio::spawn(async move {
-            let mut client_router = crate::server::client_router(app_state_clone.clone());
-            // A sealed posture withholds the ROUTE, by name; the mount stays
-            // for `notes_store()` (phase-b-87).
-            if let (Some(_), Some(_)) = (&mcp_mount, posture.withheld()) {
-                client_router = client_router.merge(crate::posture::mcp_withheld_router());
-            } else if let Some(m) = mcp_mount {
-                // Phase 5b: a fresh `McpNotifier` with no producer is
-                // fine — the daemon doesn't drive list-changed
-                // notifications today (that's the per-project
-                // standalone serve's job). Subscribers connect
-                // harmlessly and idle until something publishes.
-                client_router = client_router.merge(mcp_router::mcp_router(
-                    m.tools,
-                    m.notes as Arc<dyn sovereign_contracts::notes::AgentNotes>,
-                    m.session_id,
-                    m.code,
-                    mcp_router::McpNotifier::new(),
-                ));
-            }
-            for router in mounted {
-                client_router = client_router.merge(router);
-            }
-            // After EVERY merge: a layer wraps only the routes present when it
-            // is applied, so the keyed gate goes on the finished router.
-            let client_router = crate::api_keys::seal(client_router, &app_state_clone);
+            // `/mcp` and every mounted family behind the one auth layer, the
+            // keyed seal last (`client_surface::operator_listener_router`).
+            let client_router = crate::client_surface::operator_listener_router(
+                &app_state_clone,
+                mcp_mount,
+                posture,
+                mounted,
+            );
             // ConnectInfo: `internal_principal_layer` reads the peer address as
             // half the "is this my own acceptor's hop" tie, and fails closed
             // without it. Same requirement the client listeners document above.

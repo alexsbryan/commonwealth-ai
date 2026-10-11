@@ -8,8 +8,9 @@ use kernel_types::NodeId;
 use oicp_types::features::{self, EMBEDDED_FEATURES};
 use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
-    FederatedMeshDescriptor, FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass,
-    ModelStatus, ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
+    EvidenceEndpoints, FederatedMeshDescriptor, FederationManifest, IngestEndpoints,
+    KnowledgeManifest, LatencyClass, ModelStatus, ProviderInfo, ProviderManifest, ProviderModel,
+    ProviderType, OICP_VERSION,
 };
 
 use crate::state::AppState;
@@ -158,6 +159,10 @@ async fn apply_v04_enrichment(
     .iter()
     .map(|s| s.to_string())
     .collect();
+    // v0.5 §5.1: a presented named credential decides, from any address, on
+    // every route `client_auth` guards (`client_principal::presented`).
+    // Structural on this daemon, so unconditional.
+    feats.push(features::AUTH_NAMED_CLIENT.to_string());
 
     // §5 ingest surface — advertised iff a corpus engine is wired on this
     // node (the routes 503 without one). The `knowledge.ingest` endpoints
@@ -167,10 +172,27 @@ async fn apply_v04_enrichment(
     let ingest = state.inner.node.corpus_engine.is_some().then(|| {
         feats.push(features::INGEST_V1.to_string());
         feats.push(features::INGEST_RECIPE_TEST.to_string());
+        // v0.5 §4: install accepts `recipe_toml` (`routes_oicp_ingest`).
+        feats.push(features::INGEST_RECIPE.to_string());
         IngestEndpoints {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
             test_endpoint: Some("/oicp/v1/recipe/test".into()),
+        }
+    });
+    // v0.5 §2.2-2.3 stored texts, read by name and aligned against, on the
+    // same condition: each feature and its endpoint are derived together or
+    // not at all. `evidence:align` requires `evidence:text`: an alignment's
+    // span is only checkable by reading its text back.
+    let evidence = state.inner.node.corpus_engine.is_some().then(|| {
+        feats.push(features::EVIDENCE_TEXT.to_string());
+        feats.push(features::EVIDENCE_ALIGN.to_string());
+        // §3: every local hit carries its text's record
+        // (`oicp_evidence::knowledge_results`).
+        feats.push(features::KNOWLEDGE_DOCUMENT.to_string());
+        EvidenceEndpoints {
+            text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
+            align_endpoint: Some("/oicp/v1/align".into()),
         }
     });
     manifest.features = feats;
@@ -192,7 +214,7 @@ async fn apply_v04_enrichment(
     // daemon at bootstrap; a client reconstructs bit-compatible query
     // embeddings from it for federated search.
     let embed_model = state.local_embed_model().await?;
-    if embed_model.is_some() || ingest.is_some() {
+    if embed_model.is_some() || ingest.is_some() || evidence.is_some() {
         match &mut manifest.knowledge {
             Some(k) => {
                 if embed_model.is_some() {
@@ -201,6 +223,9 @@ async fn apply_v04_enrichment(
                 if ingest.is_some() {
                     k.ingest = ingest;
                 }
+                if evidence.is_some() {
+                    k.evidence = evidence;
+                }
             }
             None => {
                 manifest.knowledge = Some(KnowledgeManifest {
@@ -208,6 +233,7 @@ async fn apply_v04_enrichment(
                     search_endpoint: "/v1/knowledge/search".into(),
                     embed_model,
                     ingest,
+                    evidence,
                 });
             }
         }
@@ -351,6 +377,7 @@ pub async fn capabilities(
             search_endpoint: "/v1/knowledge/search".into(),
             embed_model: None,
             ingest: None,
+            evidence: None,
         }),
         federation,
         features: Vec::new(),

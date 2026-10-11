@@ -58,6 +58,7 @@ async fn install_catalog(indexes: &std::path::Path) {
                 source_file: None,
                 code: Default::default(),
                 unit_id: None,
+                text_sha256: None,
             },
             vec![0.5; DIM],
         )])
