@@ -52,7 +52,7 @@ attributes = [
     "a wound, an injury, or a person's medical condition after being hurt",
     "a death or a killing",
     "the incident as a whole",
-  ] },
+  ], by = "agree" },
 ]
 
 [[enrichment.ontology.types]]

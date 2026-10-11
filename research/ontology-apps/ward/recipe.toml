@@ -66,14 +66,16 @@ identity_criterion = "Two mentions are one deal when they are about the same tra
 identity_bar = 0.5
 identity_necessary = ["term"]
 attributes = [
-  { name = "counterparty", type = "ref", of = "company", derived = "party_of_deal" },
-  { name = "amount", type = "quantity", unit = "USD" },
+  { name = "counterparty", type = "ref", of = "company", description = "the outside company the deal is with", by = "most" },
+  { name = "amount", type = "quantity", unit = "USD", by = "latest" },
+  { name = "product", type = "text", description = "what is traded: the commodity or service", by = "most" },
+  { name = "delivery_point", type = "text", description = "where it is delivered: a hub, pipeline point or place", by = "most" },
   { name = "term", type = "text", values = [
     "month to month, daily or spot, with no fixed term",
     "a fixed term shorter than a year (a month, a season, some months)",
     "a fixed term of a year or more",
     "a master, credit or enabling agreement with no term of its own",
-  ] },
+  ], by = "agree" },
   { name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost"], derived = "deal_stage" },
 ]
 
@@ -104,7 +106,9 @@ document = { date = "date", thread = "thread_id", id = "message_id" }
 between = ["stage_update"]
 
 # Derived attributes (ONTOLOGY_PRIMITIVES.md §8): the other side of a message is who took part in it, read from
-# its address fields, never from a mention; a deal's party is the one its messages name most.
+# its address fields, never from a mention. A deal's counterparty is read from each statement about it (Pick, among
+# the companies the message's headers name and the ones its text names, never our own) and the deal holds the one
+# its statements pick most, as it holds the latest amount and the term they agree on.
 [[enrichment.ontology.sets]]
 id = "ours"
 type = "company"
@@ -118,11 +122,6 @@ path = "document / (from | to | cc) / employer [!ours]"
 id = "party_of_message"
 by = "first"
 from = ["outside_parties"]
-
-[[enrichment.ontology.folds]]
-id = "party_of_deal"
-by = "most"
-from = ["^subject / party"]
 
 # A deal's current stage is its latest report by document date, projected by the protocol fold: only a stage the
 # reader supported with field evidence counts, and a deal with any unqualified report stays pending. A transition is
