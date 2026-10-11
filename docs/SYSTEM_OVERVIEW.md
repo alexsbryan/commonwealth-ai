@@ -793,7 +793,11 @@ question the pipeline asks about a type is a method on the resolved
   outcome typed in `atlas/derived_decisions.jsonl`. A decided type's read field
   that declares `by` is folded onto each record first, over what its statements
   read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
-  and event records alike); RESOLVE itself writes no record value. When
+  and event records alike); a `ref` reading counts as the record of the
+  referenced type that its statement's document names in its fields and whose
+  identity values it folds equal to (`key_name`, the projection's own naming),
+  and as its words otherwise, never a minted record; RESOLVE itself writes no
+  record value. When
   `change.document` declares a thread and an id, a record also holds each
   document the run read that states nothing of its type and whose thread's
   statements all sit on it, by declared id under `thread_documents`

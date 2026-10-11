@@ -129,7 +129,9 @@ only who took part, so it is not), one choice per asked line then pointed at, a 
 field (the subject's identity fields included) as a distribution over its declared values and "not stated",
 **Pick** each reference field from candidates code proposes (the records the referenced type's metadata source
 reads from this document's fields, plus this document's mentions that name no listed record, less any record in
-a declared exclusion set, a set a declared path drops by; `pick.rs`), and **Point** at each open-valued field
+a declared exclusion set, a set a declared path drops by; `pick.rs`; a record folding the field holds the record a
+pick names and a mention's words, never a record minted from them, `read_fields.rs`, 2026-10-11: on Ward's 47 deals
+5 served with words only, 1 with records only, 6 with both), and **Point** at each open-valued field
 (text, quantity, time): its start word, then its end word, among the statement's own words shown under labels,
 "not stated" when no start is chosen; the value is read out of the words by the declared family, a quantity as
 the one number they write in digits (refused when they hold none or several), a time as ISO 8601 when code reads

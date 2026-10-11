@@ -454,7 +454,7 @@ impl Accum {
 /// The name of a projected atom no document named: its identity values in key
 /// order. One decider for naming it (`into_entity`) and for recognising it in
 /// the fold, so the two cannot drift.
-fn key_name<'a>(
+pub(super) fn key_name<'a>(
     attributes: &Map<String, Value>,
     keys: impl IntoIterator<Item = &'a str>,
 ) -> String {
