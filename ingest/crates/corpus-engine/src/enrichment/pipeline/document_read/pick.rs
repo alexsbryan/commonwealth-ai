@@ -31,6 +31,7 @@ use crate::enrichment::atlas::resolution_derived::conditions_hold;
 use crate::enrichment::atlas::resolution_sources::field_records;
 use crate::enrichment::atlas::resolve_records::{decision_call, marked_context, LABELS, NONE};
 use crate::enrichment::atlas::SourceDocument;
+use crate::enrichment::ontology::derived::SUBJECT;
 use crate::enrichment::ontology::{
     AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex,
 };
@@ -230,13 +231,86 @@ pub(super) async fn pick(
     of: &str,
     calls: &mut u32,
 ) -> DocumentReadField {
-    let empty = Candidates::default();
-    let offered = ask.candidates.get(of).unwrap_or(&empty);
+    match chosen(ask, owner, attr, of, calls).await {
+        Ok(candidate) => {
+            let (value, evidence) = candidate.answer();
+            supported(value, evidence)
+        }
+        Err(unknown) => unknown,
+    }
+}
+
+/// Pick the subject of the statement `ask` holds, a statement of `kind` about
+/// a `of` whose metadata source names its records: the Pick question of a
+/// reference named `subject` on `kind`, its answer written as the readings of
+/// the subject's identity fields `keys`. A record gives its identity values; a
+/// mention, its words when one field identifies; none, every field unknown.
+pub(super) async fn pick_subject(
+    ask: &Ask<'_>,
+    kind: &OntologyTypeDecl,
+    of: &str,
+    keys: &[&AttrDecl],
+    calls: &mut u32,
+) -> Vec<(String, DocumentReadField)> {
+    let attr = AttrDecl {
+        name: SUBJECT.into(),
+        family: crate::enrichment::ontology::AttrFamily::Ref { of: of.into() },
+        description: String::new(),
+        derived: None,
+        by: None,
+    };
+    let each = |read: &dyn Fn(usize) -> DocumentReadField| {
+        keys.iter()
+            .enumerate()
+            .map(|(i, k)| (k.name.clone(), read(i)))
+            .collect()
+    };
+    match chosen(ask, kind, &attr, of, calls).await {
+        Ok(Candidate::Record {
+            identity, scalar, ..
+        }) if identity.len() == keys.len() => {
+            each(&|i| supported(identity[i].clone(), scalar.clone()))
+        }
+        Ok(Candidate::Mention { text, .. }) if keys.len() == 1 => {
+            each(&|_| supported(text.clone(), text.clone()))
+        }
+        Ok(other) => {
+            debug!(document = ask.document, statement = ask.statement, of, picked = %other.shown(of), "document_read/pick: the picked subject fills no identity field");
+            each(&|_| DocumentReadField::Unknown {
+                reason: format!(
+                    "the picked subject ({}) fills no identity field",
+                    other.shown(of)
+                ),
+            })
+        }
+        Err(unknown) => each(&|_| unknown.clone()),
+    }
+}
+
+fn supported(value: String, evidence: String) -> DocumentReadField {
+    DocumentReadField::Supported {
+        value: Value::String(value),
+        evidence,
+        by: Some(SourcePrecision::new("reader_pick", Precision::Unmeasured)),
+    }
+}
+
+/// Ask the Pick question of `attr` and return the candidate chosen, or the
+/// reading that says why there is none.
+async fn chosen<'c>(
+    ask: &'c Ask<'_>,
+    owner: &OntologyTypeDecl,
+    attr: &AttrDecl,
+    of: &str,
+    calls: &mut u32,
+) -> Result<&'c Candidate, DocumentReadField> {
+    let empty = &EMPTY;
+    let offered = ask.candidates.get(of).unwrap_or(empty);
     if offered.shown.is_empty() {
         debug!(document = ask.document, statement = ask.statement, field = %attr.name, of, "document_read/pick: no candidate");
-        return DocumentReadField::Unknown {
+        return Err(DocumentReadField::Unknown {
             reason: format!("not asked: the document offers no `{of}` candidate"),
-        };
+        });
     }
     let labels: Vec<&str> = LABELS[..offered.shown.len()]
         .iter()
@@ -255,31 +329,33 @@ pub(super) async fn pick(
     );
     *calls += 1;
     match decision_call(ask.infer, &prompt, &labels, ask.document, ask.statement).await {
-        Err(refusal) => DocumentReadField::Unknown {
+        Err(refusal) => Err(DocumentReadField::Unknown {
             reason: format!("refused: {refusal:?}"),
-        },
+        }),
         Ok(dist) => match argmax(&labels, &dist) {
             (best, p) if best < offered.shown.len() => {
-                let (value, evidence) = offered.shown[best].answer();
+                let value = offered.shown[best].answer().0;
                 debug!(document = ask.document, statement = ask.statement, field = %attr.name, %value, p, dist = %render(&dist), dropped = offered.dropped, "document_read/pick: picked");
-                DocumentReadField::Supported {
-                    value: Value::String(value),
-                    evidence,
-                    by: Some(SourcePrecision::new("reader_pick", Precision::Unmeasured)),
-                }
+                Ok(&offered.shown[best])
             }
             (_, p) => {
                 debug!(document = ask.document, statement = ask.statement, field = %attr.name, p, dist = %render(&dist), "document_read/pick: none of the candidates");
-                DocumentReadField::Unknown {
+                Err(DocumentReadField::Unknown {
                     reason: format!(
                         "the reader picked none of the candidates: {}",
                         render(&dist)
                     ),
-                }
+                })
             }
         },
     }
 }
+
+/// No candidates: what a document offers a type it names nothing of.
+static EMPTY: Candidates = Candidates {
+    shown: Vec::new(),
+    dropped: 0,
+};
 
 /// The Pick question on a fixed sample, for the read contract's fingerprint.
 pub(super) fn contract_sample() -> Value {

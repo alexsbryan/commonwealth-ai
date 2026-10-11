@@ -134,7 +134,10 @@ field (the subject's identity fields included) as a distribution over its declar
 reads from this document's fields, plus this document's mentions that name no listed record, less any record in
 a declared exclusion set, a set a declared path drops by; `pick.rs`; a record folding the field holds the record a
 pick names and a mention's words, never a record minted from them, `read_fields.rs`, 2026-10-11: on Ward's 47 deals
-5 served with words only, 1 with records only, 6 with both), and **Point** at each open-valued field
+5 served with words only, 1 with records only, 6 with both), and Pick the subject whose type has a metadata source
+among the records that source reads from this document, its answer written as the subject's identity readings
+(the statement's words rarely write the address that identifies a person: of Ward's 64 commitments, 59 pointed at no
+word and none reached its person, 2026-10-11), and **Point** at each open-valued field
 (text, quantity, time): its start word, then its end word, among the statement's own words shown under labels,
 "not stated" when no start is chosen; the value is read out of the words by the declared family, a quantity as
 the one number they write in digits (refused when they hold none or several), a time as ISO 8601 when code reads

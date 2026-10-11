@@ -37,13 +37,14 @@ pub(super) struct Ask<'q> {
 }
 
 impl Ask<'_> {
+    /// The readings `field` gives: one, or a picked subject's identity fields.
     pub(super) async fn field(
         &self,
         owner: &OntologyTypeDecl,
         field: &FieldPlan<'_>,
         calls: &mut u32,
-    ) -> (String, DocumentReadField) {
-        match field {
+    ) -> Vec<(String, DocumentReadField)> {
+        let one = match field {
             FieldPlan::Unasked(attr) => (
                 attr.name.clone(),
                 DocumentReadField::Unknown {
@@ -63,7 +64,11 @@ impl Ask<'_> {
                 attr.name.clone(),
                 super::pick::pick(self, owner, attr, of, calls).await,
             ),
-        }
+            FieldPlan::Subject(kind, of, keys) => {
+                return super::pick::pick_subject(self, kind, of, keys, calls).await;
+            }
+        };
+        vec![one]
     }
 
     async fn choose(

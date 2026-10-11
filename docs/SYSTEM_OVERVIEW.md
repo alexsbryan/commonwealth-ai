@@ -648,7 +648,10 @@ question the pipeline asks about a type is a method on the resolved
   Point at an open one's start and end words and read the value by the family
   (`point.rs`), Pick a reference among the records the target's metadata source
   reads from this document plus its mentions, less declared exclusion sets
-  (`pick.rs`); every question goes through the census funnel (`decision_call`)
+  (`pick.rs`), and Pick a subject whose type has a metadata source among that
+  source's records in this document, written as the subject's identity readings
+  (`pick_subject`; the words of a statement rarely hold an address); every
+  question goes through the census funnel (`decision_call`)
   and every read value carries `reader_choose` / `reader_point` / `reader_pick`
   at `Precision::Unmeasured`. A closed set wider than one forced choice is
   Unknown with that reason. Its

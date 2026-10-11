@@ -118,6 +118,11 @@ pub(super) enum FieldPlan<'a> {
     Point(&'a AttrDecl),
     /// A reference: one choice among the candidates code proposes.
     Pick(&'a AttrDecl, &'a str),
+    /// The subject of a claim kind (the first), when its type (the second)
+    /// has a metadata source: one Pick among the records that source reads
+    /// from the document, written as the readings of the identity fields (the
+    /// third), which the statement's words rarely hold.
+    Subject(&'a OntologyTypeDecl, &'a str, Vec<&'a AttrDecl>),
     /// A closed set wider than one forced choice shows: not asked, said why.
     Unasked(&'a AttrDecl),
 }
@@ -141,15 +146,17 @@ impl<'a> FieldPlan<'a> {
         match self {
             FieldPlan::Choose(_) => Some("Choose"),
             FieldPlan::Point(_) => Some("Point"),
-            FieldPlan::Pick(..) => Some("Pick"),
+            FieldPlan::Pick(..) | FieldPlan::Subject(..) => Some("Pick"),
             FieldPlan::Unasked(_) => None,
         }
     }
 
-    pub(super) fn name(&self) -> &str {
+    /// The fields it reads: one, or a subject's identity fields.
+    pub(super) fn names(&self) -> Vec<&str> {
         match self {
-            FieldPlan::Choose(c) => &c.name,
-            FieldPlan::Point(a) | FieldPlan::Pick(a, _) | FieldPlan::Unasked(a) => &a.name,
+            FieldPlan::Choose(c) => vec![&c.name],
+            FieldPlan::Point(a) | FieldPlan::Pick(a, _) | FieldPlan::Unasked(a) => vec![&a.name],
+            FieldPlan::Subject(_, _, keys) => keys.iter().map(|a| a.name.as_str()).collect(),
         }
     }
 }
@@ -171,15 +178,18 @@ impl<'a> Plan<'a> {
             .filter(|ty| super::schema::eligible_claim(ty, policies))
             .filter_map(|decl| {
                 let subject = policies.type_decl(decl.subject.as_deref()?)?;
+                let keys = super::schema::subject_read_attributes(policies, &index, &subject.name);
+                let subject_fields = match &subject.source {
+                    Some(SourceDecl::Metadata(_)) if !keys.is_empty() => {
+                        vec![FieldPlan::Subject(decl, subject.name.as_str(), keys)]
+                    }
+                    _ => fields(keys),
+                };
                 Some(KindPlan {
                     decl,
                     subject,
                     fields: fields(index.extracted_attributes(&decl.name)),
-                    subject_fields: fields(super::schema::subject_read_attributes(
-                        policies,
-                        &index,
-                        &subject.name,
-                    )),
+                    subject_fields,
                 })
             })
             .collect::<Vec<KindPlan<'a>>>();
@@ -196,6 +206,28 @@ impl<'a> Plan<'a> {
             }
         }
         Self { kinds, picked }
+    }
+
+    /// The subject types statements of `kinds` pick (`FieldPlan::Subject`),
+    /// each once.
+    pub(super) fn subjects_for(
+        &self,
+        kinds: &[usize],
+        policies: &'a OntologyPolicies,
+    ) -> Vec<&'a OntologyTypeDecl> {
+        let mut out: Vec<&'a OntologyTypeDecl> = Vec::new();
+        for k in kinds {
+            for f in &self.kinds[*k].subject_fields {
+                if let FieldPlan::Subject(_, of, _) = f {
+                    if let Some(t) = policies.type_decl(of) {
+                        if !out.iter().any(|o| o.name == t.name) {
+                            out.push(t);
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// The types the Pick fields of statements of `kinds` target.
@@ -495,7 +527,14 @@ async fn read_document(
         &mut calls,
     )
     .await;
-    let candidates = pick::per_type(document, policies, &picked, &mentions);
+    let mut candidates = pick::per_type(document, policies, &picked, &mentions);
+    // A picked subject is one of the records its source reads from the
+    // document; a mention of it names no record, so none is asked for it.
+    for t in plan.subjects_for(&kinds, policies) {
+        candidates
+            .entry(t.name.clone())
+            .or_insert_with(|| pick::candidates(document, policies, t, &[]));
+    }
     let folded = Folded::of(&raw);
     let mut claims = Vec::with_capacity(found.len());
     for (kind, span) in &found {
@@ -518,13 +557,11 @@ async fn read_document(
         };
         let mut fields = BTreeMap::new();
         for field in &kind.fields {
-            let (name, read) = ask.field(kind.decl, field, &mut calls).await;
-            fields.insert(name, read);
+            fields.extend(ask.field(kind.decl, field, &mut calls).await);
         }
         let mut subject_fields = BTreeMap::new();
         for field in &kind.subject_fields {
-            let (name, read) = ask.field(kind.subject, field, &mut calls).await;
-            subject_fields.insert(name, read);
+            subject_fields.extend(ask.field(kind.subject, field, &mut calls).await);
         }
         claims.push(DocumentReadClaim {
             kind: kind.decl.name.clone(),
@@ -611,12 +648,14 @@ pub fn read_fields(
         for (owner, fields) in sides {
             for field in fields.iter() {
                 if let Some(pass) = field.pass() {
-                    out.push((
-                        kind.decl.name.clone(),
-                        owner.name.clone(),
-                        field.name().to_string(),
-                        pass,
-                    ));
+                    for name in field.names() {
+                        out.push((
+                            kind.decl.name.clone(),
+                            owner.name.clone(),
+                            name.to_string(),
+                            pass,
+                        ));
+                    }
                 }
             }
         }

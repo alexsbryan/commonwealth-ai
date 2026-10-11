@@ -71,12 +71,19 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
                 && subject_names.contains(ty.name.as_str())
         })
         .map(|ty| {
-            json!({
+            let mut subject = json!({
                 "name": ty.name,
                 "description": ty.description,
                 "source": ty.source,
                 "attributes": attrs_value(subject_read_attributes(policies, &index, &ty.name)),
-            })
+            });
+            // A subject its metadata source names is picked among the
+            // source's records, no longer pointed at in the statement's words
+            // (2026-10-11): only such a contract's fingerprint moves.
+            if matches!(ty.source, Some(SourceDecl::Metadata(_))) {
+                subject["read"] = json!("pick");
+            }
+            subject
         })
         .collect();
     let metadata_sources: Vec<Value> = policies

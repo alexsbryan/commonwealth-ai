@@ -41,7 +41,7 @@ fn the_plan_is_generated_from_the_contract() {
     let subject: Vec<(&str, Option<&str>)> = status
         .subject_fields
         .iter()
-        .map(|f| (f.name(), f.pass()))
+        .flat_map(|f| f.names().into_iter().map(|n| (n, f.pass())))
         .collect();
     assert_eq!(
         subject,
@@ -282,4 +282,85 @@ async fn facts_open_every_question_and_a_quoted_line_is_never_located() {
     assert!(!prompts
         .iter()
         .any(|p| p.user.contains("Line 1: \"> The case")));
+}
+
+/// A subject its type's metadata source names (ONTOLOGY_METHOD §Reading): a
+/// promise's person is picked among the people the message's fields name, not
+/// pointed at in the promising sentence, and the pick is written as the
+/// person's identity reading, which validation keeps.
+#[tokio::test]
+async fn a_sourced_subject_is_picked_among_the_records_its_source_reads() {
+    let p: OntologyPolicies = toml::from_str::<crate::enrichment::ontology::OntologyV1>(
+        r#"
+[[types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "address", type = "text" }]
+identity = ["address"]
+source = { metadata = ["sender", "copied"], attributes = { address = "address" } }
+
+[[types]]
+name = "promise"
+kind = "claim"
+force = "commissive"
+subject = "person"
+"#,
+    )
+    .unwrap()
+    .into_policies();
+    let plan = Plan::of(&p);
+    let promise = &plan.kinds[0];
+    assert!(
+        matches!(&promise.subject_fields[..], [FieldPlan::Subject(k, "person", keys)]
+            if k.name == "promise" && keys.iter().map(|a| a.name.as_str()).eq(["address"])),
+        "the person is picked, never pointed at"
+    );
+    let body = "Hello\nI will send the signed contract by Friday.\nAnn";
+    let metadata = r#"{"sender": "Ann <ann@away.example>", "copied": "Bo <bo@desk.example>"}"#;
+    let chapter = input_chapter(&[row(1, "doc-1", body, metadata)]);
+    let (infer, seen) = scripted(vec![
+        json!({"A": 0.05, "0": 0.95}),
+        json!({"A": 0.9, "0": 0.1}),
+        json!({"A": 0.05, "0": 0.95}),
+        json!({"A": 0.9, "B": 0.05, "0": 0.05}),
+    ]);
+    let envelope = read_all(&chapter, &p, &infer).await.unwrap();
+    let mut extraction = super::super::parse_response(&envelope, &p)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    super::super::validate_and_stamp(&chapter, &p, &mut extraction).unwrap();
+    let outcome = &extraction.document_read.as_ref().unwrap().documents[0];
+    assert_eq!(outcome.status, DocumentReadStatus::Read, "{outcome:?}");
+    assert!(outcome.refused.is_empty(), "{:?}", outcome.refused);
+    assert_eq!(
+        outcome.claims[0].subject_fields["address"],
+        DocumentReadField::Supported {
+            value: json!("ann@away.example"),
+            evidence: "Ann <ann@away.example>".into(),
+            by: Some(crate::enrichment::atlas::precision::SourcePrecision::new(
+                "reader_pick",
+                crate::enrichment::atlas::precision::Precision::Unmeasured
+            )),
+        }
+    );
+    let prompts = seen.lock().unwrap();
+    assert_eq!(
+        prompts.len(),
+        4,
+        "three lines located, then the subject picked"
+    );
+    assert_eq!(prompts[3].phase_id.as_deref(), Some(pick::PICK_PHASE));
+    assert!(
+        prompts[3]
+            .user
+            .contains("Type: promise\nAttribute: subject, one person")
+            && prompts[3].user.contains(
+                "Which person does the statement's subject refer to?\n\
+                 A person ann@away.example, named in the field `sender`\n\
+                 B person bo@desk.example, named in the field `copied`\n"
+            ),
+        "{}",
+        prompts[3].user
+    );
 }
