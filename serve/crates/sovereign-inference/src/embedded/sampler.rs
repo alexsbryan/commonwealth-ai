@@ -107,6 +107,25 @@ pub struct ConstrainedSampler {
     /// constraint is active. Populated by `build_sampler` when the
     /// `SOVEREIGN_BLOCK_NON_LATIN` env var is set.
     non_latin_denylist: Option<std::sync::Arc<Vec<bool>>>,
+    /// Every token accepted, collected only while a conformance sink is
+    /// installed (`engine_observe`) and reported when the sampler drops.
+    /// `accept` is the one point every decode loop commits a token through,
+    /// forced and jumped tokens included.
+    observed_tokens: Option<Vec<i64>>,
+}
+
+fn observing_tokens() -> Option<Vec<i64>> {
+    sovereign_contracts::engine_observe::is_observing().then(Vec::new)
+}
+
+impl Drop for ConstrainedSampler {
+    fn drop(&mut self) {
+        if let Some(ids) = self.observed_tokens.take() {
+            sovereign_contracts::engine_observe::observe(|| {
+                sovereign_contracts::engine_observe::Observation::GeneratedTokens { ids }
+            });
+        }
+    }
 }
 
 impl ConstrainedSampler {
@@ -182,6 +201,9 @@ impl ConstrainedSampler {
     /// sync regardless of which role produced this token) and the
     /// constraint state machine.
     pub fn accept(&mut self, token: LlamaToken) {
+        if let Some(ids) = self.observed_tokens.as_mut() {
+            ids.push(i64::from(token.0));
+        }
         self.inner_explore.accept(token);
         self.inner_content.accept(token);
         // Constraint accept mirrors `sample`'s mask dispatch.
@@ -284,6 +306,22 @@ struct ResolvedSampling {
     top_k: i32,
     top_p: f32,
     presence_pen: f32,
+}
+
+/// Record the sampler this request got, in the canonical form the
+/// conformance battery compares (`engine_observe::canonical_sampler`), with
+/// the caller's grammar text.
+fn observe_sampler(raw: &[(&str, f64)], order: &[&str], request: &CompletionRequest) {
+    use sovereign_contracts::engine_observe::{canonical_sampler, observe, Observation};
+    observe(|| {
+        let raw = raw.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let (params, order) = canonical_sampler(&raw, order);
+        Observation::Sampler {
+            params,
+            order,
+            grammar: request.lark_grammar.clone(),
+        }
+    });
 }
 
 pub(crate) fn build_sampler(
@@ -443,6 +481,31 @@ pub(crate) fn build_sampler(
         && request.sampling_mode.is_none()
     {
         let server = super::server_sampling::ServerSampling::for_model(model, request);
+        observe_sampler(
+            &[
+                ("temperature", f64::from(server.temp)),
+                ("top_k", f64::from(server.top_k)),
+                ("top_p", f64::from(server.top_p)),
+                ("min_p", f64::from(server.min_p)),
+                ("repeat_penalty", f64::from(server.penalty_repeat)),
+                ("repeat_last_n", f64::from(server.penalty_last_n)),
+                ("frequency_penalty", 0.0),
+                ("presence_penalty", 0.0),
+            ],
+            if server.temp <= 0.0 {
+                &["penalties", "greedy"]
+            } else {
+                &[
+                    "penalties",
+                    "top_k",
+                    "top_p",
+                    "min_p",
+                    "temperature",
+                    "dist",
+                ]
+            },
+            request,
+        );
         return Ok(ConstrainedSampler {
             inner_explore: server.chain(model, rand_seed()),
             inner_content: server.chain(model, rand_seed()),
@@ -450,6 +513,7 @@ pub(crate) fn build_sampler(
             url_constraint,
             evidence_id_constraint,
             non_latin_denylist,
+            observed_tokens: observing_tokens(),
         });
     }
     let no_tools_mode = match request.enable_thinking {
@@ -585,6 +649,42 @@ pub(crate) fn build_sampler(
         LlamaSampler::chain_simple(samplers)
     };
 
+    let mut raw = vec![
+        ("temperature", f64::from(explore.temp)),
+        ("top_k", f64::from(explore.top_k)),
+        ("top_p", f64::from(explore.top_p)),
+        ("min_p", f64::from(min_p_threshold)),
+        ("repeat_penalty", f64::from(rep_pen)),
+        ("repeat_last_n", 128.0),
+        ("frequency_penalty", f64::from(freq_pen)),
+        ("presence_penalty", f64::from(explore.presence_pen)),
+        ("dry_multiplier", 0.8),
+        ("dry_base", 1.75),
+        ("dry_allowed_length", 2.0),
+        ("dry_penalty_last_n", -1.0),
+    ];
+    if has_tools {
+        // The split sampler: JSON string content samples at its own
+        // temperature, which a one-sampler server has no counterpart for.
+        raw.push(("content_temperature", f64::from(content_temp)));
+    }
+    observe_sampler(
+        &raw,
+        if explore.temp < 0.01 {
+            &["dry", "penalties", "greedy"]
+        } else {
+            &[
+                "dry",
+                "penalties",
+                "top_k",
+                "min_p",
+                "top_p",
+                "temperature",
+                "dist",
+            ]
+        },
+        request,
+    );
     Ok(ConstrainedSampler {
         inner_explore: build_chain(&explore, explore.temp),
         inner_content: build_chain(&content, content_temp),
@@ -592,6 +692,7 @@ pub(crate) fn build_sampler(
         url_constraint,
         evidence_id_constraint,
         non_latin_denylist,
+        observed_tokens: observing_tokens(),
     })
 }
 

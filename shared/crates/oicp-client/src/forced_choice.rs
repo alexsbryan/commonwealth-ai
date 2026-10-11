@@ -91,13 +91,21 @@ impl RemoteApiProvider {
         body["logprobs"] = json!(true);
         body["top_logprobs"] = json!(TOP_LOGPROBS);
         body["chat_template_kwargs"] = json!({"enable_thinking": false});
+        crate::chat_wire::observe_wire_request(&body);
         let response = self
             .send_honouring_shed(
                 || admitted.post(url).json(&body),
                 "Forced-choice logprobs request",
             )
             .await?;
-        let answer: Value = response.json().await.map_err(|e| {
+        let status = response.status().as_u16();
+        let raw = response.text().await.map_err(|e| {
+            Error::Inference(format!(
+                "Failed to read forced-choice logprobs response: {e}"
+            ))
+        })?;
+        crate::chat_wire::observe_wire_response(status, &raw);
+        let answer: Value = serde_json::from_str(&raw).map_err(|e| {
             Error::Inference(format!(
                 "Failed to parse forced-choice logprobs response: {e}"
             ))

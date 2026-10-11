@@ -37,6 +37,9 @@ pub mod containment;
 pub mod daemon_wire;
 pub mod data_roots;
 pub mod decode_allowlist;
+/// What an engine did with one request, recorded where it did it, for the
+/// engine conformance battery.
+pub mod engine_observe;
 /// `TestProvider`, the builder-style `InferenceProvider` double.
 #[cfg(feature = "test-fixtures")]
 pub mod double;

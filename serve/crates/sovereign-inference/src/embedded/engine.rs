@@ -3085,55 +3085,57 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .await?;
             let request = request.clone();
             let slot_label_owned = slot_name.clone();
-            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
-                let start = Instant::now();
-                // Stamp last_used at dispatch start. Using start
-                // (rather than completion) makes the LRU eviction
-                // policy treat a long-running request as still-warm
-                // throughout — preferred behaviour for batch atlas
-                // pipelines that fire 5-10min Phase 1 calls.
-                slot.last_used
-                    .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
-                let mut ctx_lock = slot.context.blocking_lock();
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(
-                        &slot.model,
-                        &slot.model_id,
-                        &mut ctx_lock,
-                        &request,
-                        &quirks,
-                    )
-                }));
-                let outcome: GenerationOutcome = match result {
-                    Ok(Ok(r)) => r,
-                    Ok(Err(e)) => {
-                        tracing::warn!(slot = %slot_label_owned, error = %e, "inference error");
-                        return Err(e);
-                    }
-                    Err(_) => {
-                        tracing::error!(
-                            slot = %slot_label_owned,
-                            "inference panicked — likely context overflow"
-                        );
-                        return Err(Error::Inference(
+            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(
+                sovereign_contracts::engine_observe::carry(move || {
+                    let start = Instant::now();
+                    // Stamp last_used at dispatch start. Using start
+                    // (rather than completion) makes the LRU eviction
+                    // policy treat a long-running request as still-warm
+                    // throughout — preferred behaviour for batch atlas
+                    // pipelines that fire 5-10min Phase 1 calls.
+                    slot.last_used
+                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                    let mut ctx_lock = slot.context.blocking_lock();
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        ModelSlot::generate_sync(
+                            &slot.model,
+                            &slot.model_id,
+                            &mut ctx_lock,
+                            &request,
+                            &quirks,
+                        )
+                    }));
+                    let outcome: GenerationOutcome = match result {
+                        Ok(Ok(r)) => r,
+                        Ok(Err(e)) => {
+                            tracing::warn!(slot = %slot_label_owned, error = %e, "inference error");
+                            return Err(e);
+                        }
+                        Err(_) => {
+                            tracing::error!(
+                                slot = %slot_label_owned,
+                                "inference panicked — likely context overflow"
+                            );
+                            return Err(Error::Inference(
                             "Model inference failed: prompt may exceed the model's context window. \
                              Try a shorter message or reduce conversation history."
                                 .to_string(),
                         ));
-                    }
-                };
-                let latency_ms = start.elapsed().as_millis() as u64;
-                Ok(CompletionResponse {
-                    text: outcome.text,
-                    tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
-                    prompt_tokens: outcome.prompt_tokens,
-                    model_id: slot.model_id.clone(),
-                    latency_ms,
-                    oicp_meta: None,
-                    finish_reason: Some(outcome.finish_reason),
-                    completion_tokens: Some(outcome.completion_tokens as u32),
-                })
-            })
+                        }
+                    };
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    Ok(CompletionResponse {
+                        text: outcome.text,
+                        tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
+                        prompt_tokens: outcome.prompt_tokens,
+                        model_id: slot.model_id.clone(),
+                        latency_ms,
+                        oicp_meta: None,
+                        finish_reason: Some(outcome.finish_reason),
+                        completion_tokens: Some(outcome.completion_tokens as u32),
+                    })
+                }),
+            )
             .await
             .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
             if let Ok(ref resp) = result {
@@ -3234,7 +3236,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 )
                 .await?;
                 let request = request.clone();
-                let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
+                let result: Result<CompletionResponse> = tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
                     let _permit = _permit;
                     let start = Instant::now();
                     slot.last_used
@@ -3284,7 +3286,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         finish_reason: Some(outcome.finish_reason),
                         completion_tokens: Some(outcome.completion_tokens as u32),
                     })
-                })
+                }))
                 .await
                 .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
                 if let Ok(ref resp) = result {
@@ -3343,8 +3345,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let loaded_path = Arc::clone(&self.primary_loaded_path);
             let request = request.clone();
 
-            let result: Result<(CompletionResponse, &'static str)> =
-                tokio::task::spawn_blocking(move || {
+            let result: Result<(CompletionResponse, &'static str)> = tokio::task::spawn_blocking(
+                sovereign_contracts::engine_observe::carry(move || {
                     let start = Instant::now();
 
                     // Hot-swap check: if the lazy slot is holding a
@@ -3434,9 +3436,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         },
                         slot_label,
                     ))
-                })
-                .await
-                .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+                }),
+            )
+            .await
+            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
 
             match result {
                 Ok((resp, slot_label)) => {
@@ -3471,52 +3474,54 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let request = request.clone();
             let quirks = self.fast_quirks.clone();
 
-            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
-                let start = Instant::now();
-                let mut ctx_lock = slot.context.blocking_lock();
+            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(
+                sovereign_contracts::engine_observe::carry(move || {
+                    let start = Instant::now();
+                    let mut ctx_lock = slot.context.blocking_lock();
 
-                // Catch panics from llama.cpp (e.g., context overflow assertions).
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(
-                        &slot.model,
-                        &slot.model_id,
-                        &mut ctx_lock,
-                        &request,
-                        &quirks,
-                    )
-                }));
+                    // Catch panics from llama.cpp (e.g., context overflow assertions).
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        ModelSlot::generate_sync(
+                            &slot.model,
+                            &slot.model_id,
+                            &mut ctx_lock,
+                            &request,
+                            &quirks,
+                        )
+                    }));
 
-                let outcome: GenerationOutcome = match result {
-                    Ok(Ok(r)) => r,
-                    Ok(Err(e)) => {
-                        tracing::warn!(slot = "fast", error = %e, "inference error");
-                        return Err(e);
-                    }
-                    Err(_) => {
-                        tracing::error!(
-                            slot = "fast",
-                            "inference panicked — likely context overflow"
-                        );
-                        return Err(Error::Inference(
+                    let outcome: GenerationOutcome = match result {
+                        Ok(Ok(r)) => r,
+                        Ok(Err(e)) => {
+                            tracing::warn!(slot = "fast", error = %e, "inference error");
+                            return Err(e);
+                        }
+                        Err(_) => {
+                            tracing::error!(
+                                slot = "fast",
+                                "inference panicked — likely context overflow"
+                            );
+                            return Err(Error::Inference(
                             "Model inference failed: prompt may exceed the model's context window. \
                              Try a shorter message or reduce conversation history.".to_string(),
                         ));
-                    }
-                };
+                        }
+                    };
 
-                let latency_ms = start.elapsed().as_millis() as u64;
+                    let latency_ms = start.elapsed().as_millis() as u64;
 
-                Ok(CompletionResponse {
-                    text: outcome.text,
-                    tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
-                    prompt_tokens: outcome.prompt_tokens,
-                    model_id: slot.model_id.clone(),
-                    latency_ms,
-                    oicp_meta: None,
-                    finish_reason: Some(outcome.finish_reason),
-                    completion_tokens: Some(outcome.completion_tokens as u32),
-                })
-            })
+                    Ok(CompletionResponse {
+                        text: outcome.text,
+                        tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
+                        prompt_tokens: outcome.prompt_tokens,
+                        model_id: slot.model_id.clone(),
+                        latency_ms,
+                        oicp_meta: None,
+                        finish_reason: Some(outcome.finish_reason),
+                        completion_tokens: Some(outcome.completion_tokens as u32),
+                    })
+                }),
+            )
             .await
             .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
 
@@ -3619,7 +3624,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             )
             .await?;
             let slot_label_owned = slot_name.clone();
-            tokio::task::spawn_blocking(move || {
+            tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
                 let _permit = _permit;
                 let start = Instant::now();
                 slot.last_used
@@ -3663,7 +3668,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         "inference.complete_stream_with_finish: done"
                     );
                 }
-            });
+            }));
             return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
         }
 
@@ -3708,41 +3713,43 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 )
                 .await?;
                 let quirks = self.primary_quirks.clone();
-                tokio::task::spawn_blocking(move || {
-                    // Hold the permit for the streaming task's lifetime.
-                    let _permit = _permit;
-                    let start = Instant::now();
-                    slot.last_used
-                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
-                    let mut ctx_lock = slot.context.blocking_lock();
-                    // No Raw/FIM fork here: FIM rides the fast/alias slot
-                    // (INLINE_COMPLETION.md §4/D8), mirroring the lazy
-                    // primary branch below which also dispatches
-                    // unconditionally.
-                    if let Err(e) = ModelSlot::generate_stream_dispatch(
-                        &slot.model,
-                        &slot.model_id,
-                        &mut ctx_lock,
-                        &request,
-                        &tx,
-                        &quirks,
-                        None,
-                    ) {
-                        tracing::warn!(slot = "primary", sibling_idx, error = %e, "stream error");
-                        let _ = tx.blocking_send(StreamFrame::Finish {
-                            reason: FinishReason::Error(format!("{e}")),
-                            usage: None,
-                        });
-                    } else {
-                        tracing::info!(
-                            slot = "primary",
-                            sibling_idx,
-                            pool_size,
-                            latency_ms = start.elapsed().as_millis() as u64,
-                            "inference.complete_stream_with_finish: done"
-                        );
-                    }
-                });
+                tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(
+                    move || {
+                        // Hold the permit for the streaming task's lifetime.
+                        let _permit = _permit;
+                        let start = Instant::now();
+                        slot.last_used
+                            .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                        let mut ctx_lock = slot.context.blocking_lock();
+                        // No Raw/FIM fork here: FIM rides the fast/alias slot
+                        // (INLINE_COMPLETION.md §4/D8), mirroring the lazy
+                        // primary branch below which also dispatches
+                        // unconditionally.
+                        if let Err(e) = ModelSlot::generate_stream_dispatch(
+                            &slot.model,
+                            &slot.model_id,
+                            &mut ctx_lock,
+                            &request,
+                            &tx,
+                            &quirks,
+                            None,
+                        ) {
+                            tracing::warn!(slot = "primary", sibling_idx, error = %e, "stream error");
+                            let _ = tx.blocking_send(StreamFrame::Finish {
+                                reason: FinishReason::Error(format!("{e}")),
+                                usage: None,
+                            });
+                        } else {
+                            tracing::info!(
+                                slot = "primary",
+                                sibling_idx,
+                                pool_size,
+                                latency_ms = start.elapsed().as_millis() as u64,
+                                "inference.complete_stream_with_finish: done"
+                            );
+                        }
+                    },
+                ));
                 return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
             }
         }
@@ -3783,7 +3790,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let last_use = Arc::clone(&self.last_primary_use);
             let loaded_path = Arc::clone(&self.primary_loaded_path);
 
-            tokio::task::spawn_blocking(move || {
+            tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
                 let _permit = _permit;
                 let start = Instant::now();
 
@@ -3855,7 +3862,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         "inference.complete_stream_with_finish: done"
                     );
                 }
-            });
+            }));
         } else {
             let family = self.fast_family("complete_stream_with_finish/fast").await?;
             let slot = Arc::clone(&family.slot);
@@ -3866,7 +3873,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             )
             .await?;
             let quirks = self.fast_quirks.clone();
-            tokio::task::spawn_blocking(move || {
+            tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
                 let _permit = _permit;
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
@@ -3907,7 +3914,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         "inference.complete_stream_with_finish: done"
                     );
                 }
-            });
+            }));
         }
 
         Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
@@ -3920,7 +3927,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
         tracing::debug!(text_chars = text_len, "inference.embed: call");
 
-        tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
             let start = Instant::now();
             let mut ctx_lock = slot.contexts[0].blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -3955,7 +3962,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     ))
                 }
             }
-        })
+        }))
         .await
         .map_err(|e| Error::Inference(format!("Embed task failed: {e}")))?
     }
@@ -3964,7 +3971,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let slot = self.embed_handle("embed_query").await?;
         let query = query.to_string();
 
-        tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
             let mut ctx_lock = slot.contexts[0].blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_query_sync(
@@ -3985,7 +3992,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         .to_string(),
                 )),
             }
-        })
+        }))
         .await
         .map_err(|e| Error::Inference(format!("Embed task failed: {e}")))?
     }
@@ -3994,7 +4001,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let slot = self.embed_handle("embed_batch").await?;
         let texts = texts.to_vec();
 
-        tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::run_embed_batch_sync(&slot, &texts)
             }));
@@ -4007,7 +4014,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         .to_string(),
                 )),
             }
-        })
+        }))
         .await
         .map_err(|e| Error::Inference(format!("Embed batch task failed: {e}")))?
     }
@@ -4201,44 +4208,46 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // Load on a blocking thread — `ModelSlot::load` is
         // synchronous llama.cpp work and can take 10–90s on a 35B.
         // Mirrors the dispatch path's blocking section.
-        tokio::task::spawn_blocking(move || -> Result<()> {
-            let mut primary = primary_lock.blocking_lock();
-            let mut loaded = loaded_path.blocking_lock();
-            // Already warm with the right model? Idempotent fast
-            // path — no log spam, no work.
-            if loaded.as_deref() == Some(target_path.as_path()) && primary.is_some() {
-                return Ok(());
-            }
-            let prior = loaded.clone();
-            tracing::info!(
-                slot = "primary",
-                from = ?prior.as_ref().map(|p| p.display().to_string()),
-                to = %target_path.display(),
-                "warmup_primary: loading lazy slot ahead of first request"
-            );
-            // If a different model is currently resident (e.g. a
-            // Code-slot hot-swap left it loaded), drop it before
-            // loading the primary — same eviction step the dispatch
-            // path runs on hot-swap.
-            *primary = None;
-            let started = Instant::now();
-            let s = ModelSlot::load(
-                "primary",
-                &backend,
-                &target_path,
-                ctx_size,
-                gpu_layers,
-                distributable,
-            )?;
-            *primary = Some(s);
-            *loaded = Some(target_path.clone());
-            tracing::info!(
-                slot = "primary",
-                latency_ms = started.elapsed().as_millis() as u64,
-                "warmup_primary: lazy slot ready"
-            );
-            Ok(())
-        })
+        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(
+            move || -> Result<()> {
+                let mut primary = primary_lock.blocking_lock();
+                let mut loaded = loaded_path.blocking_lock();
+                // Already warm with the right model? Idempotent fast
+                // path — no log spam, no work.
+                if loaded.as_deref() == Some(target_path.as_path()) && primary.is_some() {
+                    return Ok(());
+                }
+                let prior = loaded.clone();
+                tracing::info!(
+                    slot = "primary",
+                    from = ?prior.as_ref().map(|p| p.display().to_string()),
+                    to = %target_path.display(),
+                    "warmup_primary: loading lazy slot ahead of first request"
+                );
+                // If a different model is currently resident (e.g. a
+                // Code-slot hot-swap left it loaded), drop it before
+                // loading the primary — same eviction step the dispatch
+                // path runs on hot-swap.
+                *primary = None;
+                let started = Instant::now();
+                let s = ModelSlot::load(
+                    "primary",
+                    &backend,
+                    &target_path,
+                    ctx_size,
+                    gpu_layers,
+                    distributable,
+                )?;
+                *primary = Some(s);
+                *loaded = Some(target_path.clone());
+                tracing::info!(
+                    slot = "primary",
+                    latency_ms = started.elapsed().as_millis() as u64,
+                    "warmup_primary: lazy slot ready"
+                );
+                Ok(())
+            },
+        ))
         .await
         .map_err(|e| Error::Inference(format!("warmup join failed: {e}")))?
     }

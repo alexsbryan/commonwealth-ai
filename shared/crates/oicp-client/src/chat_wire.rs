@@ -21,6 +21,24 @@ pub use sovereign_contracts::setup_config::StructuredOutputMode;
 /// token estimators; sending it put the whole agent history in one user turn
 /// labelled `Tool[id]:`, and the model ran on inside its own tool call,
 /// writing fake results and turns (e2e-swe arm D, 2026-10-09).
+/// Record the body this client sends, for the engine conformance battery
+/// (`engine_observe`); a no-op unless a sink is installed.
+pub(crate) fn observe_wire_request(body: &Value) {
+    sovereign_contracts::engine_observe::observe(|| {
+        sovereign_contracts::engine_observe::Observation::WireRequest { body: body.clone() }
+    });
+}
+
+/// Record the raw body this client received.
+pub(crate) fn observe_wire_response(status: u16, body: &str) {
+    sovereign_contracts::engine_observe::observe(|| {
+        sovereign_contracts::engine_observe::Observation::WireResponse {
+            status,
+            body: body.to_string(),
+        }
+    });
+}
+
 pub(crate) fn request_messages(request: &CompletionRequest) -> Vec<Value> {
     if let Some(PromptShape::Conversation { messages }) = &request.prompt_shape {
         tracing::debug!(
@@ -287,6 +305,7 @@ impl RemoteApiProvider {
         // The whole body, so a run can be replayed by hand (§9.1). Debug: it
         // carries the full prompt and any schema.
         tracing::debug!(target: "oicp_client", %url, %body, "chat request body");
+        observe_wire_request(&body);
         let send = |b: &Value| admitted.post(url).json(b);
         let refusal = match self.send_honouring_shed_raw(|| send(&body), what).await? {
             Ok(response) => return Ok((response, mode)),
@@ -308,6 +327,7 @@ impl RemoteApiProvider {
             "host refused a json_schema request (400); asking once more with the schema as a forced function call"
         );
         tracing::debug!(target: "oicp_client", %url, body = %retry, "chat request body");
+        observe_wire_request(&retry);
         match self.send_honouring_shed_raw(|| send(&retry), what).await? {
             Ok(response) => {
                 self.json_schema_refused.store(true, Ordering::Relaxed);

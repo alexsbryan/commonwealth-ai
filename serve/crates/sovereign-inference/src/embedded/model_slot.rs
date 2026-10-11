@@ -2697,9 +2697,7 @@ impl ModelSlot {
         let (full_prompt, turn_opener) =
             format_prompt(model, model_id, request, quirks)?.into_parts();
 
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
@@ -3517,9 +3515,7 @@ impl ModelSlot {
 
         let (full_prompt, turn_opener) =
             format_prompt(model, model_id, request, quirks)?.into_parts();
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
         if tokens.is_empty() {
             return Err(Error::Inference("MTP: empty prompt".into()));
         }
@@ -3547,6 +3543,8 @@ impl ModelSlot {
         let (plan, repin) =
             super::prefix_pin::plan_for(model, request, &full_prompt, &tokens, false, prefix_state);
         let mut prefix_base: usize = 0;
+        // Tokens decoded into a pin this call are evaluated, not reused.
+        let mut learned_pin = false;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {
                 session.target_context_mut().clear_kv_cache(); // kv-phase: PrefixStateRestore
@@ -3625,6 +3623,7 @@ impl ModelSlot {
                         );
                     }
                     prefix_base = pin_len;
+                    learned_pin = true;
                 } else {
                     tracing::warn!(
                         target: "prefix_state",
@@ -3754,6 +3753,13 @@ impl ModelSlot {
             .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::SessionBegin);
 
+        let reused = if learned_pin { 0 } else { prefix_base };
+        sovereign_contracts::engine_observe::observe(|| {
+            sovereign_contracts::engine_observe::Observation::Prefill {
+                evaluated: (tokens.len() - reused) as u64,
+                reused: reused as u64,
+            }
+        });
         // Sample the first token from prefill's last logit position.
         // Use ConstrainedSampler::Explore — no JSON-schema mask is
         // installed on this path (dispatcher filtered structured
@@ -4678,6 +4684,8 @@ impl ModelSlot {
             prefix_state,
         );
         let mut state_prefix_ready = false;
+        // Tokens decoded into a pin this call are evaluated, not reused.
+        let mut learned_pin = false;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {
                 ctx.clear_kv_cache(); // kv-phase: PrefixStateRestore
@@ -4751,6 +4759,7 @@ impl ModelSlot {
                         );
                     }
                     lcp = pin_len;
+                    learned_pin = true;
                     state_prefix_ready = true;
                 } else {
                     tracing::warn!(
@@ -4844,6 +4853,13 @@ impl ModelSlot {
         // each token), but we DON'T add generated tokens to
         // cached_tokens because they're not part of the *prompt* the
         // next request will share. Only the prompt is comparable.
+        let reused = if learned_pin { 0 } else { lcp };
+        sovereign_contracts::engine_observe::observe(|| {
+            sovereign_contracts::engine_observe::Observation::Prefill {
+                evaluated: (tokens.len() - reused) as u64,
+                reused: reused as u64,
+            }
+        });
         *cached_tokens = tokens.to_vec();
         Ok(())
     }
@@ -4899,9 +4915,7 @@ impl ModelSlot {
 
         let (full_prompt, turn_opener) =
             format_prompt(model, model_id, request, quirks)?.into_parts();
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
@@ -5001,9 +5015,7 @@ impl ModelSlot {
 
         // A raw FIM prompt opens no turn: its opener is always empty.
         let (full_prompt, _) = format_prompt(model, model_id, request, quirks)?.into_parts();
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;

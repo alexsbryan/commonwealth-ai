@@ -1052,9 +1052,13 @@ impl InferenceProvider for RemoteApiProvider {
         }
         let (response, mode) = self.send_chat(&admitted, &url, request).await?;
 
-        let chat_response: ChatCompletionResponse = response
-            .json()
+        let status = response.status().as_u16();
+        let raw = response
+            .text()
             .await
+            .map_err(|e| Error::Inference(format!("Failed to read API response: {e}")))?;
+        chat_wire::observe_wire_response(status, &raw);
+        let chat_response: ChatCompletionResponse = serde_json::from_str(&raw)
             .map_err(|e| Error::Inference(format!("Failed to parse API response: {e}")))?;
 
         let first_choice = chat_response.choices.first();
@@ -1127,6 +1131,7 @@ impl InferenceProvider for RemoteApiProvider {
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request)?;
         body["stream"] = serde_json::json!(true);
+        chat_wire::observe_wire_request(&body);
 
         let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
         let response = self
@@ -1137,6 +1142,7 @@ impl InferenceProvider for RemoteApiProvider {
             .await?;
         lap.mark("headers");
 
+        let status = response.status().as_u16();
         let byte_stream = response.bytes_stream();
         // Carry parser state across the byte-stream's filter_map by
         // streaming into a channel: parsing SSE line-by-line is
@@ -1145,63 +1151,74 @@ impl InferenceProvider for RemoteApiProvider {
         // mutable state across yields cleanly. Channel-driven actor
         // keeps the parser straightforward.
         let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(32);
-        tokio::spawn(async move {
-            use futures::StreamExt;
-            let mut byte_stream = byte_stream;
-            let mut buf = String::new();
-            let mut finish_reason: Option<FinishReason> = None;
-            let mut usage: Option<StreamUsage> = None;
-            'outer: while let Some(chunk) = byte_stream.next().await {
-                let Ok(bytes) = chunk else { continue };
-                lap.first("first byte");
-                buf.push_str(&String::from_utf8_lossy(&bytes));
-                // Process complete lines; leave the tail in buf for
-                // the next iteration so a chunk-split SSE line
-                // doesn't drop tokens.
-                while let Some(pos) = buf.find('\n') {
-                    let line = buf[..pos].trim().to_string();
-                    buf.drain(..=pos);
-                    if line == "data: [DONE]" {
-                        break 'outer;
+        tokio::spawn(sovereign_contracts::engine_observe::carry_future(
+            async move {
+                use futures::StreamExt;
+                let mut byte_stream = byte_stream;
+                let mut buf = String::new();
+                // The raw stream, kept only while a conformance sink is installed.
+                let mut raw = sovereign_contracts::engine_observe::is_observing().then(String::new);
+                let mut finish_reason: Option<FinishReason> = None;
+                let mut usage: Option<StreamUsage> = None;
+                'outer: while let Some(chunk) = byte_stream.next().await {
+                    let Ok(bytes) = chunk else { continue };
+                    lap.first("first byte");
+                    buf.push_str(&String::from_utf8_lossy(&bytes));
+                    if let Some(raw) = raw.as_mut() {
+                        raw.push_str(&String::from_utf8_lossy(&bytes));
                     }
-                    let Some(data) = line.strip_prefix("data: ") else {
-                        continue;
-                    };
-                    let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) else {
-                        continue;
-                    };
-                    if let Some(u) = parsed.usage {
-                        usage = Some(StreamUsage {
-                            prompt_tokens: u.prompt_tokens as u32,
-                            completion_tokens: u.completion_tokens,
-                            total_tokens: u.total_tokens as u32,
-                        });
-                    }
-                    for choice in parsed.choices {
-                        if let Some(text) = choice.delta.content {
-                            lap.first("first frame parsed");
-                            if !text.is_empty() && tx.send(StreamFrame::Token(text)).await.is_err()
-                            {
-                                return;
-                            }
+                    // Process complete lines; leave the tail in buf for
+                    // the next iteration so a chunk-split SSE line
+                    // doesn't drop tokens.
+                    while let Some(pos) = buf.find('\n') {
+                        let line = buf[..pos].trim().to_string();
+                        buf.drain(..=pos);
+                        if line == "data: [DONE]" {
+                            break 'outer;
                         }
-                        if let Some(reason_str) = choice.finish_reason {
-                            finish_reason = FinishReason::from_openai_str(&reason_str);
-                            tracing::debug!(
-                                finish_reason = %reason_str,
-                                "remote: stream - terminal finish_reason captured"
-                            );
+                        let Some(data) = line.strip_prefix("data: ") else {
+                            continue;
+                        };
+                        let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) else {
+                            continue;
+                        };
+                        if let Some(u) = parsed.usage {
+                            usage = Some(StreamUsage {
+                                prompt_tokens: u.prompt_tokens as u32,
+                                completion_tokens: u.completion_tokens,
+                                total_tokens: u.total_tokens as u32,
+                            });
+                        }
+                        for choice in parsed.choices {
+                            if let Some(text) = choice.delta.content {
+                                lap.first("first frame parsed");
+                                if !text.is_empty()
+                                    && tx.send(StreamFrame::Token(text)).await.is_err()
+                                {
+                                    return;
+                                }
+                            }
+                            if let Some(reason_str) = choice.finish_reason {
+                                finish_reason = FinishReason::from_openai_str(&reason_str);
+                                tracing::debug!(
+                                    finish_reason = %reason_str,
+                                    "remote: stream - terminal finish_reason captured"
+                                );
+                            }
                         }
                     }
                 }
-            }
-            let _ = tx
-                .send(StreamFrame::Finish {
-                    reason: finish_reason.unwrap_or(FinishReason::Stop),
-                    usage,
-                })
-                .await;
-        });
+                if let Some(raw) = raw {
+                    chat_wire::observe_wire_response(status, &raw);
+                }
+                let _ = tx
+                    .send(StreamFrame::Finish {
+                        reason: finish_reason.unwrap_or(FinishReason::Stop),
+                        usage,
+                    })
+                    .await;
+            },
+        ));
         Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
     }
 

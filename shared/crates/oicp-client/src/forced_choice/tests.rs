@@ -93,6 +93,51 @@ async fn a_host_that_answers_with_the_map_is_asked_once() {
     assert_eq!(hits.load(SeqCst), 1);
 }
 
+/// Under a conformance sink the client records each body it sends and each
+/// raw body it receives, in order: here the native call and the logprobs
+/// call that follows it.
+#[tokio::test]
+async fn every_wire_exchange_is_observed_in_order() {
+    use sovereign_contracts::engine_observe::{observed, Observation};
+    let chat = move |axum::Json(body): axum::Json<Value>| async move {
+        axum::Json(if body.get("logprobs") == Some(&json!(true)) {
+            json!({"choices": [{"message": {"content": "A"}, "logprobs": {"content": [{"token": "A",
+                "top_logprobs": [{"token": "A", "logprob": 0.9f64.ln()}, {"token": "B", "logprob": 0.1f64.ln()}]}]}}]})
+        } else {
+            json!({"choices": [{"message": {"content": "\"A\""}}]})
+        })
+    };
+    let url = serve(chat).await;
+    let provider = RemoteApiProvider::new(&url, None, "m", 8192).originating();
+    let request = CompletionRequest {
+        prompt: "is it A or B?".into(),
+        structured_output: Some(forced_choice::schema(&["A", "B"])),
+        ..Default::default()
+    };
+
+    let (answer, seen) = observed(provider.complete(&request)).await;
+    answer.unwrap();
+    let kinds: Vec<&str> = seen
+        .iter()
+        .map(|o| match o {
+            Observation::WireRequest { body } if body.get("logprobs").is_some() => {
+                "logprobs request"
+            }
+            Observation::WireRequest { .. } => "native request",
+            Observation::WireResponse { status: 200, .. } => "response",
+            _ => "other",
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        ["native request", "response", "logprobs request", "response"]
+    );
+    let Observation::WireRequest { body } = &seen[0] else {
+        unreachable!()
+    };
+    assert_eq!(body["messages"][0]["content"], "is it A or B?");
+}
+
 async fn serve<H, T>(chat: H) -> String
 where
     H: axum::handler::Handler<T, ()>,

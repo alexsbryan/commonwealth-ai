@@ -308,6 +308,25 @@ pub(crate) fn add_bos_for(request: &CompletionRequest) -> AddBos {
     }
 }
 
+/// The prompt's token ids, as every generation path decodes them. The one
+/// place a prompt is tokenized, so the conformance battery's observation of
+/// what the model was given is taken where it happens.
+pub(crate) fn tokenize_prompt(
+    model: &LlamaModel,
+    full_prompt: &str,
+    request: &CompletionRequest,
+) -> Result<Vec<LlamaToken>> {
+    let tokens = model
+        .str_to_token(full_prompt, add_bos_for(request))
+        .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+    sovereign_contracts::engine_observe::observe(|| {
+        sovereign_contracts::engine_observe::Observation::PromptTokens {
+            ids: tokens.iter().map(|t| i64::from(t.0)).collect(),
+        }
+    });
+    Ok(tokens)
+}
+
 pub(crate) fn format_prompt(
     model: &LlamaModel,
     model_id: &str,
