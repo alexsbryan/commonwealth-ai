@@ -105,7 +105,22 @@ by Pick (header companies less `ours`, and the body's mentions) as a field of th
 lands; the fold walker follows atom ids only (resolution_derived.rs `step`), so a picked value on the claim would not
 fold onto the deal without new code.
 
-**S1.5 Typed handoff:** next.
+**Record values: d256c8d72.** An attribute declares `by` (agree, all, most, earliest, latest) and the derivation writer
+folds its statements' readings onto each record after RESOLVE, entity and event records alike, each outcome a
+derived_decisions line citing its documents; a conflict under agree leaves no value and says so. **S1.4: 9945afc92.**
+GVC's happening kind by agree; Ward's counterparty read by Pick (header companies less `ours`, and the text's
+mentions) and held by most instead of derived from headers only, amount by latest, term by agree, product and
+delivery point by most. Both recipes validate with no warning.
+
+**S1.5 Typed handoff: settled on the passes path, by S1.3.** The reader sketches no subject, so 3a makes no atom of a
+type RESOLVE decides and RESOLVE retires none (replay: 5/6/3 → 0). Every recipe Session 2 runs, ours and the three
+round-3 blind ones, is read by the passes reader (`recipe validate`, 2026-10-10). On the general extractor path 3a
+still merges such sketches and RESOLVE retires them (`resolution_records/retire.rs`): that is the generic
+legacy-resolution redesign the handoff leaves outside this order, and retire.rs stays for it.
+
+Push note: `scripts/pre-push.sh` blocks on arch-gate (runner.rs 2289 → 2355, AGENTS.md bytes, approach-band totals)
+and clock-gate (`code/crates/sovereign-code/src/dry_report/tests.rs`), all from commits outside this order; rustfmt,
+the scoped lint and the other ratchets pass.
 
 **Order of the remaining Session 1 work** (reuse audit, Sovereign note 17c216ff, every file:line there):
 1. S1.3, claim side: subject readings ride the claim in the claim fields' own shape (`DocumentReadField`, under
