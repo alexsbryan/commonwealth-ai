@@ -99,3 +99,10 @@ Reported, no bar: agreement between W1 and W2 on the cited unit, and the hit rat
 differ; the share answered 0; the mean lines a cited unit covers (against one line for Locate).
 Pass: act-kind citation in M3 is this question, and per-line Locate retires for act kinds. Miss: not tuned; misses
 are classed (cited a neighbour of the gold unit; cited 0; cited a far unit) and the next tool chosen by class.
+
+## Amendment 2 (2026-10-12, before any chat call): the same question over physical lines
+
+ec's act pass (in build) cites by one forced choice over the document's lines. Arm L asks M2's question with the
+asked lines as the marked candidates (Locate's own set, paged by 25), everything else identical, W1 and W2. Bars 1-2
+apply to L as to the unit arm; the two are compared on the same items, a difference read only beyond the larger of
+their wording floors. A hit for L is a cited gold line.
