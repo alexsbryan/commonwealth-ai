@@ -2,7 +2,10 @@
 //! `[engine] kind = "llama-server"` end to end (ENGINE_SWAP_PLAN step 1,
 //! slice e): the stock daemon boots on the shipped llama-server, verifies its
 //! build, serves a completion and an embedding through the router, names it
-//! in `/status`, and when the daemon is SIGKILLed no llama-server outlives it.
+//! in `/status`, reports the router's facts as its own (context size against
+//! the server's slot, the code model, embed among the resident, an exact token
+//! count from `/tokenize`), and when the daemon is SIGKILLed no llama-server
+//! outlives it.
 //!
 //! Boots `sovereign-stock` with the argv the sovereign-daemon binary takes
 //! (`run --config <path>`) on a temp root: its own ports, data dir and HOME,
@@ -207,7 +210,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         &config,
         format!(
             "[engine]\nkind = \"llama-server\"\n\n[models]\nprimary = \"{m}/{CHAT_MODEL}\"\n\
-             embed = \"{m}/{EMBED_MODEL}\"\ncontext_size = 4096\n\n[daemon]\n\
+             code = \"{m}/{CHAT_MODEL}\"\nembed = \"{m}/{EMBED_MODEL}\"\ncontext_size = 4096\n\n[daemon]\n\
              client_port = {svrn}\ninternal_port = {internal}\n\
              rails_base = \"http://127.0.0.1:{dead_rails}\"\n\n[data]\ndir = \"{d}\"\n",
             m = models.display(),
@@ -300,6 +303,75 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         .map_or(0, Vec::len);
     assert!(dims > 0, "the embedding is empty: {embedded}");
 
+    // Host truth (ENGINE_SWAP_PLAN A1, A5): what the daemon reports about
+    // its engine is what the router says, asked through the replay route the
+    // conformance battery uses.
+    let replay = |method: &str, input: Value| -> Value {
+        let r = post_json(
+            &format!("http://127.0.0.1:{svrn}/internal/engine/replay"),
+            serde_json::json!({ "method": method, "input": input }),
+        )
+        .unwrap_or_else(|e| panic!("{e}\n{}", log_tail(&log)));
+        assert_eq!(r["outcome"]["kind"], "ok", "{method}: {r}");
+        r["answer"].clone()
+    };
+    let (chat, embed) = (
+        CHAT_MODEL.trim_end_matches(".gguf"),
+        EMBED_MODEL.trim_end_matches(".gguf"),
+    );
+    let router_port = router["port"].as_u64().expect("the router's port");
+    let host = replay("host", serde_json::json!({}));
+    let props: Value = client()
+        .get(format!("http://127.0.0.1:{router_port}/props?model={chat}"))
+        .send()
+        .and_then(|r| r.json())
+        .expect("the router's /props for the chat model");
+    let slot_ctx = props["default_generation_settings"]["n_ctx"].clone();
+    assert_eq!(
+        host["effective_context_size"], slot_ctx,
+        "the context the daemon budgets against is not the server's slot: {host} / {props}"
+    );
+    let trained = host["n_ctx_train"].as_u64().unwrap_or(0);
+    assert!(
+        trained >= slot_ctx.as_u64().unwrap_or(u64::MAX),
+        "n_ctx_train {trained} is unread, or below the slot the server opened: {host}"
+    );
+    assert_eq!(
+        host["code_model"], chat,
+        "the configured code model: {host}"
+    );
+    let resident: Vec<&str> = host["resident_models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(
+        resident.contains(&chat) && resident.contains(&embed),
+        "residency does not list both loaded models: {host}"
+    );
+    // A text whose chars/4 estimate is not its count, so an estimate passed
+    // off as exact fails here.
+    let text = "tokenizers split words, numbers like 1234567 and punctuation!?";
+    let exact = replay("count_tokens_exact", serde_json::json!({ "text": text }));
+    let tokenized = post_json(
+        &format!("http://127.0.0.1:{router_port}/tokenize"),
+        serde_json::json!({ "model": chat, "content": text }),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let truth = tokenized["tokens"].as_array().map_or(0, Vec::len) as u64;
+    let estimate = replay("count_tokens", serde_json::json!({ "text": text }));
+    assert_eq!(
+        exact.as_u64(),
+        Some(truth),
+        "count_tokens_exact against /tokenize"
+    );
+    assert_ne!(
+        estimate.as_u64(),
+        Some(truth),
+        "the text no longer tells the estimate apart"
+    );
+
     // The processes: the router and one child per loaded model, all under
     // the daemon.
     let servers = llama_servers_under(daemon);
@@ -309,7 +381,9 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         "expected the router and two model processes under the daemon, found {servers:?}"
     );
     eprintln!(
-        "booted: {generated} tokens generated, {dims}-dim embedding, llama-servers {:?}",
+        "booted: {generated} tokens generated, {dims}-dim embedding, ctx {slot_ctx} of \
+         n_ctx_train {trained}, code {chat}, resident {resident:?}, {truth} tokens exact \
+         (estimate {estimate}), llama-servers {:?}",
         servers.keys()
     );
 

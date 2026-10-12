@@ -280,15 +280,27 @@ impl InferenceProvider for RouterProvider {
 
 #[cfg(test)]
 mod tests {
+    /// The host facts the router answers itself instead of the remote half
+    /// (ENGINE_SWAP_PLAN A1, A5), in trait order.
+    const ANSWERED_HERE: [&str; 7] = [
+        "n_ctx_train_for_primary",
+        "count_tokens_exact",
+        "code_model_id",
+        "warmup_primary",
+        "load_extra_slot",
+        "unload_extra_slot",
+        "primary_slot_status",
+    ];
+
     #[test]
-    fn the_router_provider_forwards_every_inference_provider_method() {
-        let missing = sovereign_contracts::reloadable_provider::unforwarded_methods(
+    fn the_router_provider_forwards_every_method_it_does_not_answer_itself() {
+        let unforwarded = sovereign_contracts::reloadable_provider::unforwarded_methods(
             include_str!("provider.rs"),
             "impl InferenceProvider for RouterProvider",
         );
-        assert!(
-            missing.is_empty(),
-            "RouterProvider does not forward: {missing:?}"
+        assert_eq!(
+            unforwarded, ANSWERED_HERE,
+            "RouterProvider leaves a default in place, or forwards a fact it should answer"
         );
     }
 }

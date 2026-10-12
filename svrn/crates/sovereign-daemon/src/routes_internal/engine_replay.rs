@@ -146,7 +146,9 @@ async fn run(
                 .map(|v| json!(v))
         }
         ReplayMethod::CountTokens => Ok(json!(p.count_tokens(&text("text")?))),
-        ReplayMethod::CountTokensExact => p.count_tokens_exact(&text("text")?).await.map(|n| json!(n)),
+        ReplayMethod::CountTokensExact => {
+            p.count_tokens_exact(&text("text")?).await.map(|n| json!(n))
+        }
         ReplayMethod::Host => Ok(host_report(p).await),
         ReplayMethod::Probe => {
             let probe: ProbeRequest = serde_json::from_value(req.input.clone()).map_err(|e| {
