@@ -51,7 +51,7 @@ pub struct HardwareView {
 
 /// `GET /v1/admin/hardware` — what the SERVING machine can run.
 ///
-/// Detection walks `/proc` (or the llama.cpp backend device list), so it goes
+/// Detection walks `/proc` (and once runs `llama-server --list-devices`), so it goes
 /// to a blocking thread rather than the reactor — the same call
 /// `setup_cmd` makes, through the same free function.
 pub async fn hardware() -> Response {

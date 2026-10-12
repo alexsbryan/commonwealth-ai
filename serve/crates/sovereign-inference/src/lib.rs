@@ -11,6 +11,7 @@ pub mod evidence_id_constraint;
 pub mod fim;
 pub mod gguf_meta;
 pub use sovereign_contracts::gguf_validator;
+pub mod gpu_probe;
 pub mod hardware;
 pub mod llama;
 /// One decision about how much llama.cpp says, applied at every backend
