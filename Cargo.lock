@@ -12631,6 +12631,7 @@ dependencies = [
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-serving-host",
+ "sovereign-time",
  "tempfile",
  "tokio",
  "tokio-util",

@@ -368,6 +368,9 @@ fn the_host_truth_is_what_the_router_serves() {
 
 #[test]
 fn a_forced_choice_records_its_label_probabilities_and_other_methods_no_completion_reasons() {
+    // judge-funnel: instrument-of-the-mechanism — the conformance battery
+    // replays the sentinel as a client sent it, to compare what each engine
+    // does with it; this case is that wire shape, not a judge.
     let c = case(
         "complete",
         json!({"prompt": "q", "structured_output": {"type": "string", "enum": ["A", "B"], "x_forced_choice": true}}),

@@ -700,56 +700,8 @@ fn distributed_primary_model_ids(stem: &str) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod distributed_primary_routing_tests {
-    use super::*;
-
-    /// The literal string `svrn mesh bench` sends (`mesh_bench::PRIMARY_ALIAS`),
-    /// and the one `build_self_manifest` advertises to mesh peers.
-    const BENCH_AND_MESH_ALIAS: &str = "commonwealth/primary";
-
-    #[test]
-    fn the_child_claims_the_advertised_primary_alias() {
-        let ids = distributed_primary_model_ids("Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003");
-
-        assert!(
-            ids.iter().any(|m| m == BENCH_AND_MESH_ALIAS),
-            "a node whose primary is child-distributed advertises `{BENCH_AND_MESH_ALIAS}` \
-             to peers and resolves it locally; if the child does not CLAIM it, the request \
-             falls through to the in-process engine and the fast slot answers with a \
-             different model and no error. Got: {ids:?}"
-        );
-        // The bare form too — OpenAI clients and opencode configs use it.
-        assert!(ids.iter().any(|m| m == "primary"), "got: {ids:?}");
-        // And the concrete id, which is how a peer addresses this exact GGUF.
-        assert!(
-            ids.iter()
-                .any(|m| m == "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003"),
-            "got: {ids:?}"
-        );
-    }
-
-    /// Whatever `SLOT_ALIAS_POLICY` says is resolvable for `primary` must be
-    /// claimable. Adding a synonym there without this passing means that synonym
-    /// silently reaches the wrong model.
-    #[test]
-    fn every_resolvable_primary_alias_is_claimable() {
-        let ids = distributed_primary_model_ids("some-model");
-        for alias in sovereign_contracts::venue::resolution_alias_keys("primary") {
-            assert!(
-                ids.contains(&alias),
-                "`{alias}` resolves to the primary slot but would not route to the \
-                 distributed child"
-            );
-        }
-    }
-
-    #[test]
-    fn a_stem_that_collides_with_an_alias_is_not_duplicated() {
-        let ids = distributed_primary_model_ids("primary");
-        let count = ids.iter().filter(|m| *m == "primary").count();
-        assert_eq!(count, 1, "got: {ids:?}");
-    }
-}
+#[path = "assembly/distributed_primary_routing_tests.rs"]
+mod distributed_primary_routing_tests;
 // A sibling file: inline, it put this file past the 800-line band (ARCH §3.1).
 #[cfg(test)]
 #[path = "assembly/reload_builds_tests.rs"]
@@ -781,77 +733,5 @@ mod serves_rerank_tests;
 /// enforced where it can be — over the source — in the same shape
 /// `embedded::ffi_trace` already uses for the KV-clear rule.
 #[cfg(test)]
-mod idle_monitor_coverage {
-    /// The provider build, by source: the text before the first test module.
-    /// This module spells every monitor it looks for, so scanning the whole
-    /// file would pass with all four production calls deleted.
-    fn production_src() -> &'static str {
-        let src = include_str!("assembly.rs");
-        let end = src
-            .find("#[cfg(test)]")
-            .expect("assembly.rs has a test module");
-        &src[..end]
-    }
-
-    /// Every idle monitor the embedded engine exposes. Adding a slot with
-    /// an idle monitor means adding it here, which is the point: the list
-    /// is the checklist.
-    const MONITORS: [&str; 4] = [
-        "start_idle_monitor(",
-        "start_extras_idle_monitor(",
-        "start_fast_idle_monitor(",
-        "start_embed_idle_monitor(",
-    ];
-
-    /// A call, not a mention: comments explaining a monitor must not
-    /// satisfy the gate. A gate that would pass with the ability it
-    /// guards fully removed is not a gate.
-    fn calls(src: &str, monitor: &str) -> bool {
-        src.lines()
-            .filter(|l| {
-                let t = l.trim_start();
-                !t.starts_with("//") && !t.starts_with("///") && !t.starts_with('*')
-            })
-            .any(|l| l.contains(monitor))
-    }
-
-    #[test]
-    fn the_cold_start_path_arms_every_idle_monitor() {
-        let missing: Vec<&str> = MONITORS
-            .iter()
-            .copied()
-            .filter(|m| !calls(production_src(), m))
-            .collect();
-        assert!(
-            missing.is_empty(),
-            "cold-start provider build never calls: {missing:?} — those slots stay \
-             resident for the life of the daemon"
-        );
-    }
-
-    #[test]
-    fn each_monitor_reads_its_own_configured_window() {
-        // One knob per monitor, read from config — not a literal, and not
-        // another slot's knob. A monitor wired to the wrong field looks
-        // armed and sweeps on someone else's schedule.
-        for (monitor, knob) in [
-            ("start_idle_monitor(", "primary_idle_secs"),
-            ("start_extras_idle_monitor(", "extras_idle_secs"),
-            ("start_fast_idle_monitor(", "fast_idle_secs"),
-            ("start_embed_idle_monitor(", "embed_idle_secs"),
-        ] {
-            let wired = production_src()
-                .lines()
-                .filter(|l| {
-                    let t = l.trim_start();
-                    !t.starts_with("//") && !t.starts_with("///")
-                })
-                .any(|l| l.contains(monitor) && l.contains(knob));
-            assert!(
-                wired,
-                "`{monitor}` is never called with `{knob}` — it is either hardcoded or \
-                 reading another slot's window"
-            );
-        }
-    }
-}
+#[path = "assembly/idle_monitor_coverage_tests.rs"]
+mod idle_monitor_coverage;
