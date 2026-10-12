@@ -170,11 +170,14 @@ ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
 # and llama-server.manifest.toml, into /usr/local/bin: the daemon looks beside
 # its own executable and verifies the manifest against the pin it was compiled
 # with (sovereign-compute llama_router/live.rs, resolve_binary).
+# RUSTFLAGS is the daemon's link flags; unset here, since llguidance's own
+# cargo build would apply them to its proc-macros (with -no-pie a -shared
+# proc-macro fails to link: rust-lld, undefined symbol main).
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
-    serve/crates/sovereign-compute/llama-server/build.sh --backend rocm --install-dir /usr/local/bin
+    env -u RUSTFLAGS serve/crates/sovereign-compute/llama-server/build.sh --backend rocm --install-dir /usr/local/bin
 
 # BuildKit cache mounts persist the cargo registry, git checkouts,
 # target dir, and sccache across rebuilds. See Containerfile.cuda for

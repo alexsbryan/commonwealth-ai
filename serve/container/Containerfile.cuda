@@ -291,11 +291,14 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 # daemon looks beside its own executable and verifies the manifest against the
 # pin it was compiled with (sovereign-compute llama_router/live.rs,
 # resolve_binary).
+# RUSTFLAGS is the daemon's link flags; unset here, since llguidance's own
+# cargo build would apply them to every artifact it links, proc-macros
+# included (the ROCm image's -no-pie broke exactly that way).
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
-    serve/crates/sovereign-compute/llama-server/build.sh --backend cuda --install-dir /usr/local/bin
+    env -u RUSTFLAGS serve/crates/sovereign-compute/llama-server/build.sh --backend cuda --install-dir /usr/local/bin
 
 # THE `rm -rf` IS LOAD-BEARING — DO NOT DROP IT AS A TIDY-UP (2026-08-28).
 # /workspace/target is a persistent cache mount, and build.rs extracts
