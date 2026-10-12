@@ -1,0 +1,48 @@
+ggml-vulkan: the graph optimizer must not reorder a read past an in-place
+write to the same tensor through a different view. Against llama.cpp 035e227;
+apply from the source root with `patch -p1`.
+
+ggml_vk_graph_optimize pulls later nodes ahead of earlier ones it judges
+independent. Its dependency test saw a direct src edge, or two views of the
+same tensor, but not a node that READS one view of a tensor while an earlier
+node WRITES another view of it in place. In the hybrid recurrent cache that is
+build_rs: an in-place SCALE by 0 zeroes a fresh state's row (a view of the
+cache), and GET_ROWS then reads the states through another view. The
+optimizer pulled GET_ROWS ahead of the zeroing, so a new sequence read the
+previous request's state. The CPU backend runs nodes in insertion order and
+never showed it.
+
+Measured with `probes.py leak` (bench/lanes/engine-swap), Qwen3.5-4B MTP, -np 1:
+  vanilla, Vulkan                         drift > 2 nats (':' -1.3108 on request 2)
+  vanilla, CPU (-ngl 0)                   drift 0.0
+  vanilla, GGML_VK_DISABLE_GRAPH_OPTIMIZE drift 0.0035
+  this patch, optimizer on                drift 0.0035, the same five values
+The 0.0035 left is separate (issue E2: stale attention-cache data, also
+Vulkan-only, not flash attention); zeroing the attention data at slot start
+takes it to 0.0.
+
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp	2026-08-26 08:09:53.000000000 -0700
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp	2026-10-11 20:16:16.824193383 -0700
+@@ -17550,6 +17550,22 @@
+         if (dst2 == src2) {
+             return true;
+         }
++        // implicit dependency through an alias: dst reads memory that src
++        // writes (src is an in-place op on a view, dst reads another view of
++        // the same tensor), or dst writes memory that src reads. Without this
++        // the recurrent-state read (GET_ROWS on a view of the cache) could be
++        // pulled ahead of the in-place zeroing of a fresh state (SCALE on a
++        // row view of the same cache), and a new sequence read stale state.
++        for (uint32_t s = 0; s < GGML_MAX_SRC; ++s) {
++            const ggml_tensor *ds = dst->src[s];
++            if (ds && (ds->view_src ? ds->view_src : ds) == src2) {
++                return true;
++            }
++            const ggml_tensor *ss = src->src[s];
++            if (ss && (ss->view_src ? ss->view_src : ss) == dst2) {
++                return true;
++            }
++        }
+         return false;
+     };
+ 
