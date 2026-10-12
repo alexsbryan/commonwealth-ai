@@ -34,6 +34,8 @@ pub mod membership;
 mod outcome;
 #[path = "resolution_derived/protocol.rs"]
 mod protocol;
+#[path = "resolution_derived/protocol_support.rs"]
+mod protocol_support;
 #[path = "resolution_derived/read_fields.rs"]
 mod read_fields;
 
