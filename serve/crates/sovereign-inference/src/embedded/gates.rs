@@ -346,7 +346,7 @@ pub(crate) fn mtp_dispatch_eligible(
     !env_flag_truthy(&env_get, "SOVEREIGN_MTP_DISABLE")
         && slot_is_speculative
         && request.tools.as_ref().is_none_or(|t| t.is_empty())
-        && forced_choice_candidates(request).is_none()
+        && request.forced_choice_feature().is_none()
 }
 
 /// Classify an MTP-path error as "draft side broken on this slot,

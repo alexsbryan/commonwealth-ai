@@ -464,24 +464,28 @@ impl CompletionRequest {
     /// `x:forced_choice` (colon). Hoisted here from the engine so the
     /// mesh scheduler and the local slot picker share one detector.
     pub fn forced_choice_candidates(&self) -> Option<Vec<String>> {
-        let so = self.structured_output.as_ref()?;
-        if so
-            .get(crate::forced_choice::SENTINEL)
-            .and_then(|v| v.as_bool())
-            != Some(true)
-        {
-            return None;
-        }
-        let cands: Vec<String> = so
-            .get("enum")?
-            .as_array()?
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect();
-        if cands.is_empty() {
-            None
+        crate::forced_choice::candidates(self.structured_output.as_ref()?)
+    }
+
+    /// The branches of a forced-choice wave (`forced_choice::wave`): several
+    /// closed questions answered off one decoded prompt. `None` for every
+    /// request that declares no wave; `Err` for one that declares a wave it
+    /// does not spell, which an engine refuses.
+    pub fn forced_choice_wave(&self) -> Option<Result<Vec<crate::forced_choice::Branch>, String>> {
+        crate::forced_choice::wave_branches(self.structured_output.as_ref()?)
+    }
+
+    /// The feature a host must advertise to answer this request's forced
+    /// choice: `x:forced_choice` for one question, `x:forced_choice_wave` for
+    /// a wave, `None` when the request asks none. What routing reads, so a
+    /// wave never reaches a host that would answer it as an ordinary schema.
+    pub fn forced_choice_feature(&self) -> Option<&'static str> {
+        if self.forced_choice_wave().is_some() {
+            Some(crate::features::X_FORCED_CHOICE_WAVE)
+        } else if self.forced_choice_candidates().is_some() {
+            Some(crate::features::X_FORCED_CHOICE)
         } else {
-            Some(cands)
+            None
         }
     }
 

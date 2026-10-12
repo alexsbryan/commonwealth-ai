@@ -75,6 +75,14 @@ pub mod features {
     /// dispatch (SLOT_POLICY §6).
     pub const X_FORCED_CHOICE: &str = "x:forced_choice";
 
+    /// Extension: a request may carry a forced-choice WAVE
+    /// (`structured_output: {"x_forced_choice_wave": [...]}`, built by
+    /// `forced_choice::wave`): several closed questions over one shared
+    /// prompt, answered as a list of distributions off one decoded state.
+    /// A host that does not advertise it would read the body as an ordinary
+    /// schema, so routing excludes it (`CompletionRequest::forced_choice_feature`).
+    pub const X_FORCED_CHOICE_WAVE: &str = "x:forced_choice_wave";
+
     /// OICP v0.4 §2.1 features the *embedded* llama.cpp inference path
     /// honours. The embedded sampler enforces JSON-Schema and Lark grammars
     /// and the sampler allow-lists, consumes the `oicp` request envelope,
@@ -100,6 +108,8 @@ pub mod features {
         // Commonwealth-local: the embedded path answers the forced-choice
         // sentinel with a one-pass calibrated distribution (see model_slot).
         X_FORCED_CHOICE,
+        // ... and a wave of them off one decoded prompt (model_slot, decide_wave).
+        X_FORCED_CHOICE_WAVE,
     ];
 
     /// What an OpenAI-compatible backend honours whatever is behind it (a

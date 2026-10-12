@@ -889,7 +889,7 @@ pub(crate) fn pick_slot(
     // Primary. This MUST precede the FastShort gate for exactly that
     // reason. On a primary-less host it falls through to the normal
     // gates (best-effort) rather than failing.
-    if request.forced_choice_candidates().is_some() && has_primary {
+    if request.forced_choice_feature().is_some() && has_primary {
         if request.preferred_speed == Speed::Fast {
             tracing::warn!(
                 "forced_choice sentinel declared Speed::Fast — overriding to the \

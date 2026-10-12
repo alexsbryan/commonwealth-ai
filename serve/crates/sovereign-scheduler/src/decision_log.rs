@@ -573,8 +573,9 @@ pub enum ExclusionReason {
     ManifestUnavailable,
     /// The manifest parsed but no claim could serve this request.
     NoClaimMatch,
-    /// Forced-choice sentinel, and the peer does not advertise
-    /// `x:forced_choice`.
+    /// A forced choice (one question or a wave), and the peer does not
+    /// advertise the feature it needs (`x:forced_choice` or
+    /// `x:forced_choice_wave`).
     NoForcedChoice,
     /// The peer refused a recent hop with `yielded_to_local` and the
     /// `retry_after_secs` it asked for has not elapsed. Self-clearing

@@ -7,6 +7,7 @@
 pub mod capabilities;
 mod compute_backend;
 mod control_vector;
+mod decide_wave;
 mod embed_only;
 mod embed_slot;
 mod engine;

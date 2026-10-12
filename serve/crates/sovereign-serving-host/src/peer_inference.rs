@@ -1682,12 +1682,13 @@ impl InferenceRouter {
         let peer_obs_snapshot = self.peer_observations.read().await.clone();
         // Forced-choice sentinel (SLOT_POLICY §6): a request eliciting a
         // calibrated one-pass distribution can only be honoured by a peer
-        // whose manifest advertises `x:forced_choice`. Compute the need
+        // whose manifest advertises `x:forced_choice` (`x:forced_choice_wave`
+        // for a wave of them). Compute the need
         // once; the core excludes non-advertising peers so the sentinel
         // never crosses to a peer that would silently fall back to
         // K-sampling. (Explicit `model_id` dispatch is honoured by name
         // and never reaches this scorer, so it is not filtered here.)
-        let needs_forced_choice = request.forced_choice_candidates().is_some();
+        let forced_choice_feature = request.forced_choice_feature();
         // CONCURRENT, and ORDER-PRESERVING (`buffered`, not
         // `buffer_unordered`). This loop was serial, so a mesh of P
         // peers put P × MANIFEST_FETCH_TIMEOUT (800ms) of worst-case
@@ -1731,7 +1732,7 @@ impl InferenceRouter {
                 now_unix,
                 oicp_request_id,
                 req: req_oicp,
-                needs_forced_choice,
+                forced_choice_feature,
                 // Production still ranks on the product. §4.1's
                 // predicted-time objective is measured as a Tier-1 arm
                 // first (`SCHEDULER_QUALITY.md` §6: behavioural work
