@@ -10,6 +10,9 @@
 //! them: [`recipe_author`](crate::runtime::handlers::recipe_author),
 //! [`Executor::execute_delegate`](crate::executor::Executor),
 //! `Executor::execute_reason_with_tools` and the attached-document turn.
+//! The two executor loops have moved to the native shape: they send a
+//! conversation ([`conversation_request`]) and read each reply with
+//! [`parse_conversation_reply`]; the other two still parse the envelope.
 //!
 //! # The fork this replaced (2026-09-08)
 //!
@@ -31,7 +34,7 @@
 
 use serde_json::Value as JsonValue;
 
-use crate::types::{StepOutput, ToolDescriptor, ToolSchema};
+use crate::types::{CompletionRequest, PromptShape, StepOutput, ToolDescriptor, ToolSchema};
 
 /// A tool call parsed from assistant text: a tool `name` plus its full
 /// `arguments` object. The arguments reach the tool intact — nothing here
@@ -412,6 +415,91 @@ pub(crate) fn tool_schemas_for(descriptors: &[ToolDescriptor]) -> Vec<ToolSchema
             parameters: d.parameters.clone(),
         })
         .collect()
+}
+
+/// A request that sends `messages` whole (`PromptShape::Conversation`) with
+/// `tools`: the model's own template renders the turns, the calls and the
+/// tool instructions, on the embedded engine and on llama-server alike.
+/// `prompt` carries the same turns flattened, for token estimators and peers
+/// that predate the shape. Thinking stays off, as it was for these loops on
+/// the single-turn path, so their `max_tokens` buys the same reply.
+pub(crate) fn conversation_request(
+    messages: Vec<JsonValue>,
+    tools: &[ToolSchema],
+) -> CompletionRequest {
+    let prompt = messages
+        .iter()
+        .map(|m| {
+            let role = m["role"].as_str().unwrap_or_default();
+            let calls = m["tool_calls"].as_array().into_iter().flatten();
+            let calls = calls.map(|c| format!("\n<tool_call>{}</tool_call>", c["function"]));
+            format!(
+                "{role}: {}{}",
+                m["content"].as_str().unwrap_or_default(),
+                calls.collect::<String>()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mut req = CompletionRequest::new(&prompt);
+    req.prompt_shape = Some(PromptShape::Conversation { messages });
+    req.tools = (!tools.is_empty()).then(|| tools.to_vec());
+    req.enable_thinking = Some(false);
+    req
+}
+
+/// One assistant turn of a conversation, parsed by the native path's own
+/// parser (`chat_turn`): the model's call format as the embedded engine
+/// returns it raw, or the `<tool_call>` JSON a remote host re-renders its
+/// `tool_calls` as. A call body that parses as neither is traced, not
+/// dropped silently.
+pub(crate) fn parse_conversation_reply(
+    text: &str,
+    tools: &[ToolSchema],
+) -> (String, Vec<ParsedToolCall>) {
+    let turn = sovereign_contracts::oicp::chat_turn::parse_assistant_turn(text, tools);
+    for body in &turn.unparsed {
+        tracing::warn!(
+            target: "tool_loop",
+            body = %body.chars().take(200).collect::<String>(),
+            "tool_call block did not parse — call dropped"
+        );
+    }
+    let calls = turn
+        .tool_calls
+        .into_iter()
+        .map(|c| ParsedToolCall {
+            arguments: serde_json::from_str(&c.arguments).unwrap_or(JsonValue::String(c.arguments)),
+            name: c.name,
+        })
+        .collect();
+    (turn.content.trim().to_string(), calls)
+}
+
+/// The assistant turn that made `calls`, each under the id at the same
+/// index of `ids`, in the OpenAI shape a conversation carries.
+pub(crate) fn assistant_message(
+    content: &str,
+    calls: &[ParsedToolCall],
+    ids: &[String],
+) -> JsonValue {
+    let tool_calls: Vec<JsonValue> = calls
+        .iter()
+        .zip(ids)
+        .map(|(c, id)| {
+            serde_json::json!({
+                "id": id,
+                "type": "function",
+                "function": { "name": c.name, "arguments": c.arguments.to_string() },
+            })
+        })
+        .collect();
+    serde_json::json!({ "role": "assistant", "content": content, "tool_calls": tool_calls })
+}
+
+/// The result of the call `id`, as a conversation's `tool` turn.
+pub(crate) fn tool_message(id: &str, content: &str) -> JsonValue {
+    serde_json::json!({ "role": "tool", "tool_call_id": id, "content": content })
 }
 
 #[cfg(test)]

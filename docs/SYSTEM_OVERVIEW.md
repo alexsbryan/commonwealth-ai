@@ -944,10 +944,14 @@ a crash interrupted it, so the executor halts rather than blind-replaying an
 email send.
 
 **Delegate is the context firewall.** It runs a scoped tool loop in its OWN
-context: raw observations accumulate in the worker's local transcript and only
-a typed contract — the `return_schema` fields plus an always-present
+context: raw observations accumulate in the worker's local conversation and
+only a typed contract — the `return_schema` fields plus an always-present
 `anomalies` channel — flows back. `crate::tool_loop` is the crate's ONE
-tool-call protocol, and all four loops drive it.
+tool-call protocol, and all four loops drive it: the executor's two send a
+conversation (`PromptShape::Conversation`, the model's template writes the
+call format) and read replies with the native path's parser, `chat_turn`;
+recipe_author and the attached-document turn still parse the `<tool_call>`
+envelope.
 
 **The router classifier stack has one wiring path.** Before the coarse→refine
 LLM cascade, `classify` consults five embedding-centroid pre-checks — embed
