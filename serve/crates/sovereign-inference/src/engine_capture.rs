@@ -169,6 +169,10 @@ impl InferenceProvider for RecordingProvider {
         self.inner.serving_locus()
     }
 
+    fn conversation_keeps_call_and_budget(&self) -> bool {
+        self.inner.conversation_keeps_call_and_budget()
+    }
+
     fn effective_context_size(&self) -> Option<u32> {
         self.inner.effective_context_size()
     }

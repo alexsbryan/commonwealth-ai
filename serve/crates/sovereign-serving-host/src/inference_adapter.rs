@@ -337,7 +337,7 @@ impl SovereignInferenceAdapter {
         // An external client's conversation goes to the model's own
         // template whole (llama-server parity); in-repo callers keep the
         // flattened Hermes path below. One decider: `conversation`.
-        let hermes_reason = conversation::hermes_path_reason(request);
+        let hermes_reason = conversation::hermes_path_reason(request, self.provider.as_ref());
         tracing::debug!(
             conversation = hermes_reason.is_none(),
             hermes_reason = hermes_reason.unwrap_or(""),
@@ -556,7 +556,7 @@ impl SovereignInferenceAdapter {
         // `enable_thinking: false` in `apply_chat_template_oaicompat`.
         req.enable_thinking = extract_enable_thinking(request.chat_template_kwargs.as_ref());
         if hermes_reason.is_none() {
-            conversation::into_conversation(&mut req, request);
+            conversation::into_conversation(&mut req, request, self.provider.as_ref());
         }
         let (speed, slot_picker) = if req.tools.is_some() {
             (sovereign_contracts::types::Speed::Slow, "tools_bias_slow")
@@ -1363,10 +1363,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
 
         // A conversation streams live, tools or not
         // (`conversation::stream_turn`). The Hermes path's tool turns
-        // (in-repo callers) parse their envelope after generation, so
-        // they run the non-streaming `chat_completion` and replay it as
+        // (in-repo callers) parse their envelope after generation, and a
+        // forced call is checked on a whole reply, so both run whole and replay as
         // an OpenAI-shaped stream.
-        if tools_present && conversation::hermes_path_reason(&request).is_some() {
+        if conversation::runs_whole_before_streaming(&request, self.provider.as_ref()) {
             // Tools path delegates to chat_completion; the compactor
             // runs there. Don't compact twice.
             let resp = self.chat_completion(request).await?;
@@ -1525,6 +1525,10 @@ impl InferenceProvider for SovereignInferenceAdapter {
 
     fn serving_locus(&self) -> ServingLocus {
         self.provider.serving_locus()
+    }
+
+    fn conversation_keeps_call_and_budget(&self) -> bool {
+        self.provider.conversation_keeps_call_and_budget()
     }
 
     fn effective_context_size(&self) -> Option<u32> {
