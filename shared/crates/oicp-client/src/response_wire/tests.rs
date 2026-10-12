@@ -261,6 +261,76 @@ async fn a_streamed_request_asks_for_usage_and_the_finish_frame_carries_it() {
     );
 }
 
+// ── projection.stream-tool-calls and C1 ─────────────────────────────────
+
+/// Battery case 005b4492621e, as llama-server streamed it: the call in
+/// `delta.tool_calls` fragments (id and name first, then the arguments in
+/// pieces), and `tool_calls` as the finish reason. It arrived as a bare
+/// Finish frame. It must arrive as the envelope the non-stream path
+/// re-emits, and finish as the engine does (C1).
+#[tokio::test]
+async fn a_streamed_tool_call_arrives_as_the_one_envelope() {
+    let call = |f: Value| json!({"tool_calls": [f]});
+    let (url, _) = sse_server(vec![
+        chunk(json!({"reasoning_content": "Read it."}), None),
+        chunk(
+            call(json!({"index": 0, "id": "abc", "type": "function",
+                "function": {"name": "read_file"}})),
+            None,
+        ),
+        chunk(
+            call(json!({"index": 0, "function": {"arguments": "{\"path\":"}})),
+            None,
+        ),
+        chunk(
+            call(json!({"index": 0, "function": {"arguments": "\"src/main.rs\"}"}})),
+            None,
+        ),
+        chunk(json!({}), Some("tool_calls")),
+    ])
+    .await;
+    let (text, terminal) = stream(&url, &ask("Read src/main.rs.")).await;
+    let turn = parse_assistant_turn(&text, &[]);
+    assert_eq!(
+        turn.reasoning_content.as_deref(),
+        Some("Read it."),
+        "{text:?}"
+    );
+    assert_eq!(turn.content, "");
+    assert_eq!(turn.tool_calls.len(), 1, "{text:?}");
+    assert_eq!(turn.tool_calls[0].name, "read_file");
+    let args: Value = serde_json::from_str(&turn.tool_calls[0].arguments).unwrap();
+    assert_eq!(args, json!({"path": "src/main.rs"}));
+    assert!(
+        matches!(
+            terminal,
+            StreamFrame::Finish {
+                reason: FinishReason::Stop,
+                ..
+            }
+        ),
+        "the engine reports stop for a call it ended at EOS: {terminal:?}"
+    );
+}
+
+/// C1 on the non-stream path (case 595a3db924f6): llama-server says
+/// `tool_calls`, the engine `stop`, for the same call. The call is carried
+/// in the text, and the adapter derives `tool_calls` from it for either.
+#[tokio::test]
+async fn a_tool_call_finishes_as_the_engine_does() {
+    let url = json_server(json!({
+        "choices": [{"index": 0, "finish_reason": "tool_calls", "message": {"role": "assistant",
+            "content": "", "tool_calls": [{"id": "c", "type": "function",
+            "function": {"name": "read_file", "arguments": "{\"path\":\"README.md\"}"}}]}}],
+        "usage": {"prompt_tokens": 280, "completion_tokens": 70, "total_tokens": 350},
+    }))
+    .await;
+    let response = provider(&url).complete(&ask("README")).await.unwrap();
+    assert_eq!(response.finish_reason, Some(FinishReason::Stop));
+    let turn = parse_assistant_turn(&response.text, &[]);
+    assert_eq!(turn.tool_calls[0].name, "read_file");
+}
+
 // ── projection.stream-error ─────────────────────────────────────────────
 
 /// llama-server reports a failure mid-stream as one `data: {"error": …}`

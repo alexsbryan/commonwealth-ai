@@ -962,17 +962,12 @@ impl ChatMessage {
         }
         let mut out = prose;
         for call in &self.tool_calls {
-            let args: serde_json::Value = match call.function.arguments.as_deref() {
-                Some(raw) => serde_json::from_str(raw)
-                    .unwrap_or_else(|_| serde_json::Value::String(raw.to_string())),
-                None => serde_json::json!({}),
-            };
             if !out.is_empty() && !out.ends_with('\n') {
                 out.push('\n');
             }
-            out.push_str(&format!(
-                "<tool_call>{}</tool_call>",
-                serde_json::json!({ "name": call.function.name, "arguments": args })
+            out.push_str(&response_wire::tool_call_envelope(
+                &call.function.name,
+                call.function.arguments.as_deref(),
             ));
         }
         out
@@ -1049,7 +1044,7 @@ impl InferenceProvider for RemoteApiProvider {
         };
         let finish_reason = first_choice
             .and_then(|c| c.finish_reason.as_deref())
-            .and_then(FinishReason::from_openai_str);
+            .and_then(response_wire::provider_finish);
 
         let (tokens_used, prompt_tokens, completion_tokens) = chat_response
             .usage

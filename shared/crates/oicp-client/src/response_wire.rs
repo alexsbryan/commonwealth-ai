@@ -54,6 +54,66 @@ struct StreamChoice {
 struct StreamDelta {
     content: Option<String>,
     reasoning_content: Option<String>,
+    /// A fragment of a native call: llama-server sends the id and name
+    /// first, then the arguments in pieces, each tagged with the call's
+    /// `index` (`server-chat.cpp:607`).
+    #[serde(default)]
+    tool_calls: Vec<ToolCallDelta>,
+}
+
+#[derive(Deserialize)]
+struct ToolCallDelta {
+    #[serde(default)]
+    index: usize,
+    #[serde(default)]
+    function: FunctionDelta,
+}
+
+#[derive(Deserialize, Default)]
+struct FunctionDelta {
+    name: Option<String>,
+    arguments: Option<String>,
+}
+
+/// A native call as the `<tool_call>{"name":..,"arguments":{..}}</tool_call>`
+/// envelope every tool loop parses, the shape both paths re-emit native
+/// calls in (`ChatMessage::as_text`). Arguments arrive JSON-encoded as a
+/// string and are re-parsed into an object; an unparseable string is
+/// carried as a string rather than dropped.
+pub(crate) fn tool_call_envelope(name: &str, arguments: Option<&str>) -> String {
+    let args: serde_json::Value = match arguments {
+        Some(raw) => {
+            serde_json::from_str(raw).unwrap_or_else(|_| serde_json::Value::String(raw.to_string()))
+        }
+        None => serde_json::json!({}),
+    };
+    format!(
+        "<tool_call>{}</tool_call>",
+        serde_json::json!({ "name": name, "arguments": args })
+    )
+}
+
+/// A server's finish reason as the provider contract states it.
+///
+/// `tool_calls` is folded into `stop` (C1). The engine reports `stop` for a
+/// turn that ended at EOS with a call in it; llama-server reports
+/// `tool_calls` for exactly that case and no other (EOS or a stop word with
+/// calls, `server-task.cpp:465`). At this layer a call is carried in the
+/// text, and the one decider of `tool_calls` is the adapter, which derives
+/// it from the parsed text for every provider (`inference_adapter.rs`, the
+/// non-stream finish, and `conversation.rs` `stream_turn`). No caller of a
+/// provider reads `ToolCalls` from it.
+pub(crate) fn provider_finish(wire: &str) -> Option<FinishReason> {
+    match FinishReason::from_openai_str(wire) {
+        Some(FinishReason::ToolCalls) => {
+            tracing::debug!(
+                target: "oicp_client",
+                "remote: finish_reason tool_calls reported as stop; the call is in the text"
+            );
+            Some(FinishReason::Stop)
+        }
+        other => other,
+    }
 }
 
 /// How the client writes reasoning back into the text: the block the
@@ -115,6 +175,10 @@ pub(crate) struct SseReader {
     thinking: bool,
     /// Reasoning not written, for a request that does not take it inline.
     reasoning_dropped: usize,
+    /// Native calls by index: name and arguments, accumulated.
+    calls: std::collections::BTreeMap<usize, (String, String)>,
+    /// The text written so far is empty or ends a line.
+    ends_line: bool,
 }
 
 impl SseReader {
@@ -128,6 +192,8 @@ impl SseReader {
             inline_reasoning,
             thinking: false,
             reasoning_dropped: 0,
+            calls: std::collections::BTreeMap::new(),
+            ends_line: true,
         }
     }
 
@@ -194,11 +260,17 @@ impl SseReader {
                 self.reasoning(r, out);
             }
             if let Some(text) = choice.delta.content.filter(|t| !t.is_empty()) {
+                self.ends_line = text.ends_with('\n');
                 out.push(self.close_think() + &text);
+            }
+            for call in choice.delta.tool_calls {
+                let (name, arguments) = self.calls.entry(call.index).or_default();
+                name.push_str(call.function.name.as_deref().unwrap_or(""));
+                arguments.push_str(call.function.arguments.as_deref().unwrap_or(""));
             }
             if let Some(reason) = choice.finish_reason {
                 tracing::debug!(finish_reason = %reason, "remote: stream - terminal finish_reason captured");
-                self.finish = FinishReason::from_openai_str(&reason);
+                self.finish = provider_finish(&reason);
             }
         }
     }
@@ -231,6 +303,25 @@ impl SseReader {
             // A last line the server did not end with a newline.
             let line = std::mem::take(&mut self.pending);
             self.line(String::from_utf8_lossy(&line).trim(), &mut tail);
+        }
+        if !self.calls.is_empty() {
+            // The calls whole, once no fragment can follow, as the envelope
+            // the non-stream path writes (`projection.stream-tool-calls`).
+            let mut text = self.close_think();
+            let mut ends_line = self.ends_line || !text.is_empty();
+            for (name, arguments) in self.calls.values() {
+                if !ends_line {
+                    text.push('\n');
+                }
+                text.push_str(&tool_call_envelope(name, Some(arguments)));
+                ends_line = false;
+            }
+            tracing::debug!(
+                target: "oicp_client",
+                calls = self.calls.len(),
+                "remote stream: native tool calls written as envelopes"
+            );
+            tail.push(text);
         }
         if self.reasoning_dropped > 0 {
             tracing::debug!(
