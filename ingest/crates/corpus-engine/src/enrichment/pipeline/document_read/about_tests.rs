@@ -432,7 +432,10 @@ async fn pointing_stopped_by_its_bound_is_incomplete_and_stopped_by_none_is_comp
     let (about, _) = about_deals(&infer).await;
     assert_eq!(about.count, Count::Several);
     assert_eq!(about.particulars.len(), MAX_PARTICULARS);
-    assert!(!about.complete, "a sixth and seventh deal were never asked for");
+    assert!(
+        !about.complete,
+        "a sixth and seventh deal were never asked for"
+    );
     let infer = about_oracle(Some("B"), |k| if k < 2 { AT[k] } else { "0" });
     let (about, _) = about_deals(&infer).await;
     assert_eq!(about.particulars.len(), 2);
