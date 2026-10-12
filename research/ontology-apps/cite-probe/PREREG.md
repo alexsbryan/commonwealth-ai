@@ -53,3 +53,11 @@ Bars, fixed now.
 Pass 1 and 2: S3 replaces Locate's ranking for these kinds and goes to M3 on sentence units. Miss: not tuned; misses
 are classed by shape (gold ranked 4-6; gold ranked far; gold excluded as furniture) and the next tool is chosen by
 that class. Furniture is also read by eye on the seat sample (research/ontology-apps/seat/), listed in the output.
+
+## Amendment 1 (2026-10-12, before any unit is embedded): Ward items carry their value
+
+Five of Ward's 31 (document, kind) items hold gold lines of two stage values, so Qv has no single value there. Ward
+stage_update items become (document, stage_update, value), each with its own gold lines: 32 items. Locate's
+baseline at that grain, recomputed from the trace (its ranking is value-blind, by p(stage_update)): 24 of 32, .750,
+chance .215. Bar 1 for Ward reads: U at least 24 of 32. The 26 (document, kind) items stay reported, U counting a
+hit when any of the item's values hits, which is Locate's rule.
