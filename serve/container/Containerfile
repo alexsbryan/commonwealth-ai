@@ -165,6 +165,17 @@ COPY vendor/              ./vendor/
 # read it (sovereign-cli main.rs), and a worker pod runs none of them.
 ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
 
+# The llama-server the daemon ships for kind = "llama-server", built from the
+# pin by build.sh in its ROCm mode (GPU_TARGETS above), with ggml-rpc-server
+# and llama-server.manifest.toml, into /usr/local/bin: the daemon looks beside
+# its own executable and verifies the manifest against the pin it was compiled
+# with (sovereign-compute llama_router/live.rs, resolve_binary).
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
+    --mount=type=cache,target=/workspace/target \
+    serve/crates/sovereign-compute/llama-server/build.sh --backend rocm --install-dir /usr/local/bin
+
 # BuildKit cache mounts persist the cargo registry, git checkouts,
 # target dir, and sccache across rebuilds. See Containerfile.cuda for
 # the full explanation. Binary copied out of the cached target dir into
@@ -207,6 +218,8 @@ COPY --from=build /usr/local/bin/sovereign-cli          /usr/local/bin/sovereign
 COPY --from=build /usr/local/bin/sovereign-cli-daemon   /usr/local/bin/sovereign-cli-daemon
 COPY --from=build /usr/local/bin/sovereign-stock        /usr/local/bin/sovereign-stock
 COPY --from=build /usr/local/bin/sovereign-pod-worker   /usr/local/bin/sovereign-pod-worker
+COPY --from=build /usr/local/bin/llama-server /usr/local/bin/ggml-rpc-server \
+                  /usr/local/bin/llama-server.manifest.toml /usr/local/bin/
 
 # Workspace volume — RunPod mounts /workspace by default; our entrypoint
 # arranges /workspace/models for owner uploads and /workspace/data for
