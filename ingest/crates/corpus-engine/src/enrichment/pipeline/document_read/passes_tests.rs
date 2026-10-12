@@ -33,6 +33,8 @@ fn the_plan_is_generated_from_the_contract() {
     let plan = Plan::of(&p);
     let kinds: Vec<&str> = plan.kinds.iter().map(|k| k.decl.name.as_str()).collect();
     assert_eq!(kinds, ["membership", "reported_status"]);
+    let decided: Vec<&str> = plan.decided.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(decided, ["case"], "About asks of each decided subject once");
     let status = &plan.kinds[1];
     assert_eq!(status.subject.name, "case");
     assert!(
@@ -87,6 +89,8 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         none(),
         json!({"A": 0.1, "B": 0.85, "0": 0.05}),
         none(),
+        // About: the document is about no case, so the statement is its own.
+        none(),
         json!({"A": 0.1, "B": 0.8, "0": 0.1}),
         // `number` is pointed at: none of the statement's five words.
         json!({"A": 0.02, "B": 0.02, "C": 0.02, "D": 0.02, "E": 0.02, "0": 0.9}),
@@ -137,8 +141,8 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
     let prompts = seen.lock().unwrap();
     assert_eq!(
         prompts.len(),
-        6,
-        "three lines located, then status chosen, number pointed at, project chosen"
+        7,
+        "three lines located, About asked, then status chosen, number pointed at, project chosen"
     );
     assert_eq!(
         prompts[0].phase_id.as_deref(),
@@ -152,24 +156,28 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         .contains("A membership\nB reported_status\n   status: open, closed\n0 none of them"));
     assert_eq!(
         prompts[3].phase_id.as_deref(),
-        Some("document_passes_choose")
-    );
-    assert!(prompts[3]
-        .user
-        .contains("Type: reported_status\nAttribute: status"));
-    assert!(
-        prompts[3].user.contains("[[The case is closed now.]]"),
-        "{}",
-        prompts[3].user
+        Some("document_passes_about")
     );
     assert_eq!(
         prompts[4].phase_id.as_deref(),
-        Some("document_passes_point")
+        Some("document_passes_choose")
     );
     assert!(prompts[4]
         .user
-        .contains("Type: case (A support case.)\nAttribute: number, words of the statement"));
+        .contains("Type: reported_status\nAttribute: status"));
+    assert!(
+        prompts[4].user.contains("[[The case is closed now.]]"),
+        "{}",
+        prompts[4].user
+    );
+    assert_eq!(
+        prompts[5].phase_id.as_deref(),
+        Some("document_passes_point")
+    );
     assert!(prompts[5]
+        .user
+        .contains("Type: case (A support case.)\nAttribute: number, words of the statement"));
+    assert!(prompts[6]
         .user
         .contains("Type: case (A support case.)\nAttribute: project"));
 }
@@ -220,6 +228,7 @@ fn the_locate_system_prompt_names_values_only_when_a_kind_shows_them() {
             .filter(|k| k.fields.is_empty())
             .collect(),
         picked: Vec::new(),
+        decided: Vec::new(),
     };
     assert_eq!(bare.kinds.len(), 1, "membership declares no field");
     let without = locate_system(&bare);
@@ -259,26 +268,30 @@ async fn facts_open_every_question_and_a_quoted_line_is_never_located() {
     let (infer, seen) = scripted(vec![
         none(),
         json!({"A": 0.1, "B": 0.85, "0": 0.05}),
+        // About doc-1: no case.
+        none(),
         json!({"A": 0.1, "B": 0.8, "0": 0.1}),
         json!({"A": 0.02, "B": 0.02, "C": 0.02, "D": 0.02, "E": 0.02, "0": 0.9}),
         json!({"A": 0.2, "B": 0.1, "0": 0.7}),
         none(),
+        // About doc-2: no case.
+        none(),
     ]);
     read_all(&chapter, &p, &infer).await.unwrap();
     let prompts = seen.lock().unwrap();
-    assert_eq!(prompts.len(), 6, "doc-2's quoted line is not asked");
+    assert_eq!(prompts.len(), 8, "doc-2's quoted line is not asked");
     for (i, prompt) in prompts.iter().enumerate() {
-        let from = if i < 5 { "a@x" } else { "b@y" };
+        let from = if i < 6 { "a@x" } else { "b@y" };
         assert!(
             prompt.user.starts_with(&format!(
                 "Declared facts of this document:\ndate: 2026-01-0{}\nfrom: {from}.example\n\n",
-                if i < 5 { 1 } else { 2 }
+                if i < 6 { 1 } else { 2 }
             )),
             "{}",
             prompt.user
         );
     }
-    assert!(prompts[5].user.contains("Line 2: \"Thanks\""));
+    assert!(prompts[6].user.contains("Line 2: \"Thanks\""));
     assert!(!prompts
         .iter()
         .any(|p| p.user.contains("Line 1: \"> The case")));
@@ -309,6 +322,10 @@ subject = "person"
     .unwrap()
     .into_policies();
     let plan = Plan::of(&p);
+    assert!(
+        plan.decided.is_empty(),
+        "a sourced subject's particulars are its source's, never asked About"
+    );
     let promise = &plan.kinds[0];
     assert!(
         matches!(&promise.subject_fields[..], [FieldPlan::Subject(k, "person", keys)]

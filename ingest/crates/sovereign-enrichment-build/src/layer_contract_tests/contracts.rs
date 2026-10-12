@@ -73,6 +73,7 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
                         | "document_passes_choose"
                         | "document_passes_point"
                         | "document_passes_pick"
+                        | "document_passes_about"
                         | "resolve_select"
                 ),
                 "{shape}: a question the plan does not generate: `{phase}`"

@@ -273,7 +273,7 @@ async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
         .await
         .unwrap();
     assert!(result.failures.is_empty(), "{:?}", result.failures);
-    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 4);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 7);
 }
 
 #[tokio::test]
@@ -305,9 +305,10 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .await
         .unwrap();
 
-    // One Locate per line, then per field the located kind and its subject
-    // declare: `number` (open) pointed at, start and end; `project` chosen.
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    // One Locate per line; About: one case, first named on line 1, its
+    // words pointed at, start and end ("Issue"); then the case's fields, at
+    // those words: `number` (open) pointed at among one word, `project` chosen.
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
     assert!(result.output.questions_by_chapter[0].questions.is_empty());
     let read = result.output.questions_by_chapter[0]
         .section_extraction
@@ -336,7 +337,10 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         phases,
         [
             "document_passes_locate",
-            "document_passes_point",
+            "document_passes_about",
+            "document_passes_about",
+            "document_passes_about",
+            "document_passes_about",
             "document_passes_point",
             "document_passes_choose"
         ]
@@ -431,7 +435,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         )
         .await
         .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
 
     let panic_chat: crate::types::InferenceFn =
         Arc::new(|_, _| panic!("identical accountable read must use the section cache"));
@@ -440,7 +444,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
 
     let mut identity_policy = policies.clone();
     identity_policy
@@ -458,7 +462,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
 }
 
 #[tokio::test]

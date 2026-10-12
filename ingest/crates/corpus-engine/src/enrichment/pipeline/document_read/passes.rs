@@ -32,9 +32,11 @@ use serde_json::{json, Value};
 use tracing::{debug, info};
 
 use super::ask::Ask;
+use super::folded::Folded;
 use super::line_classes::{LineClass, LineClasses};
-use super::{mention, pick, point, prefill};
-use super::{DocumentReadClaim, DocumentReadOutcome, DocumentReadStatus};
+use super::{about, mention, pick, point, prefill};
+use super::{DocumentReadClaim, DocumentReadField, DocumentReadOutcome, DocumentReadStatus};
+use crate::enrichment::atlas::resolution_records::decides;
 use crate::enrichment::atlas::resolve_records::{
     choice_question, decision_call, decision_wave, ClosedAttr, LABELS, NONE,
 };
@@ -101,6 +103,9 @@ pub(super) struct Plan<'a> {
     pub(super) kinds: Vec<KindPlan<'a>>,
     /// Every type a read reference (a Pick field) targets, each once.
     pub(super) picked: Vec<&'a OntologyTypeDecl>,
+    /// Every subject of a kind whose identity RESOLVE decides
+    /// (`resolution_records::decides`), each once: what About asks for.
+    pub(super) decided: Vec<&'a OntologyTypeDecl>,
 }
 
 pub(super) struct KindPlan<'a> {
@@ -205,7 +210,19 @@ impl<'a> Plan<'a> {
                 }
             }
         }
-        Self { kinds, picked }
+        let mut decided: Vec<&'a OntologyTypeDecl> = Vec::new();
+        for kind in &kinds {
+            if decides(&index, &kind.subject.name)
+                && !decided.iter().any(|d| d.name == kind.subject.name)
+            {
+                decided.push(kind.subject);
+            }
+        }
+        Self {
+            kinds,
+            picked,
+            decided,
+        }
     }
 
     /// The subject types statements of `kinds` pick (`FieldPlan::Subject`),
@@ -518,6 +535,17 @@ async fn read_document(
     }
     let found = statements(&located);
     debug!(document = %id, lines = lines.len(), refused, classed = ?classed, statements = found.len(), "document_read/passes: statements");
+    let folded = Folded::of(&raw);
+    let view = numbered(&raw, &lines);
+    let doc = about::Doc {
+        infer,
+        facts: &facts,
+        document: &id,
+        body: &raw,
+        lines: &lines,
+        view: &view,
+    };
+    let abouts = about::about(&doc, &plan.decided, &mut calls).await;
     if found.is_empty() {
         return (
             outcome(
@@ -554,16 +582,34 @@ async fn read_document(
             .entry(t.name.clone())
             .or_insert_with(|| pick::candidates(document, policies, t, &[]));
     }
-    let folded = Folded::of(&raw);
-    let view = numbered(&raw, &lines);
+    let said: Vec<(&str, &str, (usize, usize))> = found
+        .iter()
+        .map(|(kind, span)| {
+            let (first, last) = (&lines[span.start], &lines[span.end - 1]);
+            (
+                plan.kinds[*kind].subject.name.as_str(),
+                &folded.text[folded.span(first.start..last.end)],
+                (first.n, last.n),
+            )
+        })
+        .collect();
+    let particular_of = about::particular_of(&doc, &plan.decided, &abouts, &said, &mut calls).await;
+    // A particular's identifying fields are read once, at its words.
+    let mut read_once: BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>> =
+        BTreeMap::new();
     let mut claims = Vec::with_capacity(found.len());
-    for (kind, span) in &found {
+    for ((kind, span), particular) in found.iter().zip(particular_of) {
         let kind = &plan.kinds[*kind];
         let (first, last) = (&lines[span.start], &lines[span.end - 1]);
         let evidence = raw[first.start..last.end].to_string();
-        // The statement's own lines, never its place among what was located:
-        // RESOLVE keys a statement by its document, span and this reference.
-        let local_ref = format!("l{}-{}", first.n, last.n);
+        // The particular the statement is about, by where it is first named;
+        // a statement about none is its own lines, never its place among what
+        // was located. RESOLVE keys a statement by its document, span and
+        // this reference, and joins one reference's spans (`local_subjects`).
+        let local_ref = match particular {
+            Some((t, p)) => abouts[t].particulars[p].local_ref(),
+            None => format!("l{}-{}", first.n, last.n),
+        };
         let at = folded.span(first.start..last.end);
         let ask = Ask {
             infer,
@@ -581,10 +627,32 @@ async fn read_document(
         for field in &kind.fields {
             fields.extend(ask.field(kind.decl, field, &mut calls).await);
         }
-        let mut subject_fields = BTreeMap::new();
-        for field in &kind.subject_fields {
-            subject_fields.extend(ask.field(kind.subject, field, &mut calls).await);
-        }
+        let subject_fields = match particular {
+            Some(key) if read_once.contains_key(&key) => read_once[&key].clone(),
+            Some((t, p)) => {
+                let named = &abouts[t].particulars[p];
+                let words = &raw[named.span.clone()];
+                let at_words = Ask {
+                    lines: (named.line, named.line),
+                    at: folded.span(named.span.clone()),
+                    evidence: words,
+                    ..ask
+                };
+                let mut read = BTreeMap::new();
+                for field in &kind.subject_fields {
+                    read.extend(at_words.field(kind.subject, field, &mut calls).await);
+                }
+                read_once.insert((t, p), read.clone());
+                read
+            }
+            None => {
+                let mut read = BTreeMap::new();
+                for field in &kind.subject_fields {
+                    read.extend(ask.field(kind.subject, field, &mut calls).await);
+                }
+                read
+            }
+        };
         claims.push(DocumentReadClaim {
             kind: kind.decl.name.clone(),
             content: folded.text[folded.span(first.start..last.end)].to_string(),
@@ -607,45 +675,6 @@ async fn read_document(
         },
         calls,
     )
-}
-
-/// The body whitespace-folded as RESOLVE reads it (`SourceDocument::body`),
-/// with each word's raw span, so a statement located on raw lines is asked
-/// over the folded text its question was measured on.
-struct Folded {
-    text: String,
-    /// (raw start, raw end, folded start) per word.
-    words: Vec<(usize, usize, usize)>,
-}
-
-impl Folded {
-    fn of(raw: &str) -> Self {
-        let mut text = String::with_capacity(raw.len());
-        let mut words = Vec::new();
-        for word in raw.split_whitespace() {
-            // A word is a subslice of `raw`: its offset is exact, never searched for.
-            let start = word.as_ptr() as usize - raw.as_ptr() as usize;
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            words.push((start, start + word.len(), text.len()));
-            text.push_str(word);
-        }
-        Self { text, words }
-    }
-
-    /// The folded span of the words a raw span covers.
-    fn span(&self, raw: Range<usize>) -> Range<usize> {
-        let inside: Vec<&(usize, usize, usize)> = self
-            .words
-            .iter()
-            .filter(|(s, e, _)| *s >= raw.start && *e <= raw.end)
-            .collect();
-        match (inside.first(), inside.last()) {
-            (Some(first), Some(last)) => first.2..last.2 + (last.1 - last.0),
-            _ => 0..0,
-        }
-    }
 }
 
 /// Every field the plan asks, as `(claim kind, type, attribute, pass)`: the
@@ -729,6 +758,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         "mention": mention::contract_sample(body, &lines),
         "point": point::contract_sample(),
         "pick": pick::contract_sample(),
+        "about": about::contract_sample(body, &lines),
     })
 }
 

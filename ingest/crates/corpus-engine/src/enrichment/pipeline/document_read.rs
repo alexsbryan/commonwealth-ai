@@ -6,8 +6,10 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+mod about;
 mod ask;
 mod cache;
+mod folded;
 mod line_classes;
 mod mention;
 mod passes;

@@ -645,7 +645,15 @@ question the pipeline asks about a type is a method on the resolved
   type a read reference targets it names, pointing at the words (`mention.rs`;
   no type a table source holds); each of the two asks a document's lines as one
   forced-choice wave (`decision_wave`, below), since no line's question needs
-  another's answer. Per statement each field is asked by its
+  another's answer. About (`about.rs`) asks, per document and per subject type
+  RESOLVE decides (`resolution_records::decides`), whether the document is
+  about none, one or more than one, points at where each particular is first
+  named (a line, then its words; at most five), and with several asks each
+  statement of the type which it is about; a statement's local reference is its
+  particular's (`l{line}:{words}`), so `local_subjects.rs` joins one
+  particular's statements, and the particular's identifying fields are read
+  once, at its words. A statement about none keeps its own lines as its
+  reference (`l{a}-{b}`). Per statement each field is asked by its
   declared family (`ask.rs`), every such question showing the whole document,
   numbered as Locate shows it, with the statement named by its lines (never a
   window around it): Choose a closed value with RESOLVE's READ question,
