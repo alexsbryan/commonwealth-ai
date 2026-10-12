@@ -356,6 +356,12 @@ WORDINGS = {
            "{noun} that most directly supports the fact, or 0 if none of the tagged {noun}s supports it.",
            "Which tagged {noun} supports the fact? Reply with its tag, or 0 if none does."),
 }
+# Amendment 3: the same wordings with the 0 label and its clause removed, nothing else changed.
+WORDINGS["W1N"] = (WORDINGS["W1"][0].replace(", or 0 if no marked {noun} shows it", ""),
+                   WORDINGS["W1"][1].replace(", or 0 if none does", ""))
+WORDINGS["W2N"] = (WORDINGS["W2"][0].replace(", or 0 if none of the tagged {noun}s supports it", ""),
+                   WORDINGS["W2"][1].replace(", or 0 if none does", ""))
+ARM_WORDINGS = {"U": ["W1", "W2", "W1N", "W2N"], "L": ["W1", "W2"]}
 NOUN = {"U": "sentence", "L": "line"}
 M2 = OUT / "m2"
 
@@ -399,7 +405,8 @@ def act_question(it, arm, wording, marked):
     shown = "\n".join(f"[{letter[i]}] {t}" if i in letter else t for i, t in enumerate(texts))
     sysp, q = (w.format(noun=NOUN[arm]) for w in WORDINGS[wording])
     user = f"{it['facts']}Document:\n<<<\n{shown}\n>>>\n\nFact: {it['fact']}\n\n{q}"
-    return sysp, user, [letter[c] for c in marked] + [L.NONE], {v: k for k, v in letter.items()}
+    labels = [letter[c] for c in marked] + ([] if wording.endswith("N") else [L.NONE])
+    return sysp, user, labels, {v: k for k, v in letter.items()}
 
 
 def cite(it, arm, wording, root=M2):
@@ -419,6 +426,8 @@ def cite(it, arm, wording, root=M2):
         top = max(d, key=d.get)
         return (None if top == L.NONE else back[top]), d
 
+    if wording.endswith("N") and len(cands) == 1:
+        return cands[0], 0, []
     pages = [cands[i:i + len(L.LABELS)] for i in range(0, len(cands), len(L.LABELS))] or [[]]
     for page in pages:
         if not page:
@@ -481,7 +490,7 @@ def cmd_score_act(_):
         res = {}
         cited = {}
         for arm in ("U", "L"):
-            for wording in ("W1", "W2"):
+            for wording in ARM_WORDINGS[arm]:
                 agg = collections.defaultdict(lambda: collections.Counter())
                 for it in items:
                     c, calls, dists = cite(it, arm, wording)
@@ -511,12 +520,15 @@ def cmd_score_act(_):
                                               "diag_letters_top1": a["diag_top1"], "diag_letters_top3": a["diag_top3"],
                                               "lines_per_cited": round(a["lines"] / max(a["n"] - a["zero"] - a["unanswered"], 1), 2)}
                                           for k, a in sorted(agg.items())}
-            agree = [(cited[(arm, "W1", it["doc"], it["kind"], it["value"])] == cited[(arm, "W2", it["doc"], it["kind"], it["value"])], it)
-                     for it in items]
-            hit1 = lambda it: (lambda c: c not in (None, "unanswered") and bool(it[arm][2][c] & it["gold"]))(cited[(arm, "W1", it["doc"], it["kind"], it["value"])])  # noqa: E731
-            res[f"{arm}_agreement"] = {"agree": sum(a for a, _ in agree), "of": len(agree),
-                                       "W1_hit_where_agree": sum(hit1(it) for a, it in agree if a),
-                                       "W1_hit_where_differ": sum(hit1(it) for a, it in agree if not a)}
+            for w1, w2 in (("W1", "W2"), ("W1N", "W2N")):
+                if w1 not in ARM_WORDINGS[arm]:
+                    continue
+                key = lambda it, w: (arm, w, it["doc"], it["kind"], it["value"])  # noqa: E731
+                agree = [(cited[key(it, w1)] == cited[key(it, w2)], it) for it in items]
+                hit1 = lambda it: (lambda c: c not in (None, "unanswered") and bool(it[arm][2][c] & it["gold"]))(cited[key(it, w1)])  # noqa: E731
+                res[f"{arm}_agreement_{w1}_{w2}"] = {"agree": sum(a for a, _ in agree), "of": len(agree),
+                                                    f"{w1}_hit_where_agree": sum(hit1(it) for a, it in agree if a),
+                                                    f"{w1}_hit_where_differ": sum(hit1(it) for a, it in agree if not a)}
         report[system] = res
         print(json.dumps({system: res}, indent=1))
     (DATA / "score-act.json").write_text(json.dumps(report, indent=1) + "\n")
