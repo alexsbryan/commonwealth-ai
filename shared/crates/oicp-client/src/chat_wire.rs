@@ -353,14 +353,15 @@ impl ChatMessage {
     /// The assistant turn as the caller's answer. A schema that rode a
     /// function call comes back as that call's arguments, the JSON the caller
     /// asked for whichever spelling the host needed; anything else is
-    /// [`ChatMessage::as_text`].
+    /// [`ChatMessage::as_text`] with the reasoning in front of it, as the
+    /// engine writes it (`response_wire::with_reasoning`).
     pub(crate) fn answer(&self, request: &CompletionRequest, mode: StructuredOutputMode) -> String {
         let Some(schema) = request
             .structured_output
             .as_ref()
             .filter(|_| mode.via_tool())
         else {
-            return self.as_text();
+            return self.with_reasoning(request);
         };
         let name = schema_function_name(schema);
         let call = self.tool_calls.iter().find(|c| c.function.name == name);
@@ -375,7 +376,15 @@ impl ChatMessage {
             ?mode,
             "schema offered as a function call but the model answered in text; schema not enforced on this call"
         );
-        self.as_text()
+        self.with_reasoning(request)
+    }
+
+    fn with_reasoning(&self, request: &CompletionRequest) -> String {
+        crate::response_wire::with_reasoning(
+            self.reasoning_content.as_deref(),
+            self.as_text(),
+            request,
+        )
     }
 }
 

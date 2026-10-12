@@ -920,6 +920,10 @@ struct ChatMessage {
     /// become one.
     #[serde(default)]
     tool_calls: Vec<WireToolCall>,
+    /// The thinking, which llama-server's default reasoning format moves out
+    /// of `content`. [`ChatMessage::answer`] writes it back inline.
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1112,6 +1116,7 @@ impl InferenceProvider for RemoteApiProvider {
 
         let status = response.status().as_u16();
         let byte_stream = response.bytes_stream();
+        let inline_reasoning = response_wire::inlines_reasoning(request);
         // Carry parser state across the byte-stream's filter_map by
         // streaming into a channel: parsing SSE line-by-line is
         // stateful (finish_reason + usage may land on any chunk
@@ -1123,7 +1128,7 @@ impl InferenceProvider for RemoteApiProvider {
             async move {
                 use futures::StreamExt;
                 let mut byte_stream = byte_stream;
-                let mut reader = response_wire::SseReader::new();
+                let mut reader = response_wire::SseReader::new(inline_reasoning);
                 // The raw stream, kept only while a conformance sink is installed.
                 let mut raw = sovereign_contracts::engine_observe::is_observing().then(String::new);
                 while !reader.ended() {
@@ -1176,6 +1181,7 @@ impl InferenceProvider for RemoteApiProvider {
 
         Ok(Box::pin(response_wire::text_stream(
             response.bytes_stream(),
+            response_wire::SseReader::new(response_wire::inlines_reasoning(request)),
         )))
     }
 

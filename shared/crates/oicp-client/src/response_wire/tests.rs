@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use futures::StreamExt;
 use serde_json::{json, Value};
+use sovereign_contracts::oicp::chat_turn::parse_assistant_turn;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, FinishReason, StreamFrame};
 
@@ -61,6 +62,15 @@ async fn sse_server(chunks: Vec<String>) -> (String, Arc<Mutex<Vec<Value>>>) {
         }
     };
     (serve(chat).await, seen)
+}
+
+/// A llama-server answering every chat call with `body`.
+async fn json_server(body: Value) -> String {
+    serve(move || {
+        let body = body.clone();
+        async move { axum::Json(body) }
+    })
+    .await
 }
 
 async fn serve<H, T>(chat: H) -> String
@@ -149,6 +159,73 @@ async fn stream(url: &str, request: &CompletionRequest) -> (String, StreamFrame)
         text,
         terminal.expect("every stream ends in a terminal frame"),
     )
+}
+
+// ── projection.reasoning ────────────────────────────────────────────────
+
+/// llama-server moves thinking into `reasoning_content` (its default
+/// reasoning format). The engine returns it inline, opening the text with
+/// the `<think>` its prompt left open, and every caller (the adapter's
+/// `parse_reply` and `stream_turn`, the battery's judge) splits it from there.
+/// Before this the client read `content` alone and the thinking was lost.
+#[tokio::test]
+async fn a_reasoning_reply_reaches_the_caller_as_the_engines_think_block() {
+    let url = json_server(json!({
+        "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant",
+            "content": "Paris.", "reasoning_content": "The capital of France is Paris."}}],
+        "usage": {"prompt_tokens": 12, "completion_tokens": 9, "total_tokens": 21},
+    }))
+    .await;
+    let text = provider(&url)
+        .complete(&ask("capital?"))
+        .await
+        .unwrap()
+        .text;
+    let turn = parse_assistant_turn(&text, &[]);
+    assert_eq!(
+        turn.reasoning_content.as_deref(),
+        Some("The capital of France is Paris."),
+        "{text:?}"
+    );
+    assert_eq!(turn.content, "Paris.");
+}
+
+#[tokio::test]
+async fn a_streamed_reasoning_reply_reaches_the_caller_as_the_engines_think_block() {
+    let (url, _) = sse_server(vec![
+        chunk(json!({"role": "assistant", "content": null}), None),
+        chunk(json!({"reasoning_content": "The capital"}), None),
+        chunk(json!({"reasoning_content": " is Paris."}), None),
+        chunk(json!({"content": "Paris"}), None),
+        chunk(json!({"content": "."}), None),
+        chunk(json!({}), Some("stop")),
+    ])
+    .await;
+    let (text, _) = stream(&url, &ask("capital?")).await;
+    let turn = parse_assistant_turn(&text, &[]);
+    assert_eq!(
+        turn.reasoning_content.as_deref(),
+        Some("The capital is Paris."),
+        "{text:?}"
+    );
+    assert_eq!(turn.content, "Paris.");
+}
+
+/// A structured answer is the JSON the caller parses: the thinking beside
+/// it is not put in front of it. A guard, true before and after.
+#[tokio::test]
+async fn a_structured_answer_stays_the_json_alone() {
+    let url = json_server(json!({
+        "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant",
+            "content": "{\"answer\":\"Paris\"}", "reasoning_content": "Easy."}}],
+    }))
+    .await;
+    let request = CompletionRequest {
+        structured_output: Some(json!({"type": "object"})),
+        ..ask("capital?")
+    };
+    let text = provider(&url).complete(&request).await.unwrap().text;
+    assert_eq!(text, "{\"answer\":\"Paris\"}");
 }
 
 // ── projection.stream-usage ─────────────────────────────────────────────

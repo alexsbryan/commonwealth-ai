@@ -9,11 +9,19 @@
 //! across two (`projection.stream-split-line`), and both skipped an error
 //! chunk or a broken connection and ended as a clean `Stop`
 //! (`projection.stream-error`), where the engine ends in `Finish{Error}`.
+//!
+//! Reasoning: llama-server moves thinking into `reasoning_content`; the
+//! engine returns it inline, opening its text with the `<think>` the prompt
+//! left open. The provider contract is the engine's: the client writes
+//! `reasoning_content` back as that block, and the adapter's turn parser
+//! (`oicp_types::chat_turn`) is the one place that splits it out again,
+//! into Reasoning frames and the wire's `reasoning_content`, with the
+//! answer alone as content (`projection.reasoning`).
 
 use futures::{Stream, StreamExt};
 use serde::Deserialize;
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
+use sovereign_contracts::types::{CompletionRequest, FinishReason, StreamFrame, StreamUsage};
 
 use crate::UsageInfo;
 
@@ -45,6 +53,40 @@ struct StreamChoice {
 #[derive(Deserialize, Default)]
 struct StreamDelta {
     content: Option<String>,
+    reasoning_content: Option<String>,
+}
+
+/// How the client writes reasoning back into the text: the block the
+/// engine's text opens with, and its close before the answer.
+const THINK_OPEN: &str = "<think>\n";
+const THINK_CLOSE: &str = "\n</think>\n\n";
+
+/// Whether a reply to `request` carries its reasoning inline. A structured
+/// answer does not: its text is the JSON the caller parses, and a think
+/// block in front of it would break that parse.
+pub(crate) fn inlines_reasoning(request: &CompletionRequest) -> bool {
+    request.structured_output.is_none()
+}
+
+/// `answer` with the host's `reasoning` in front of it as the engine writes
+/// it, when `request` takes reasoning inline.
+pub(crate) fn with_reasoning(
+    reasoning: Option<&str>,
+    answer: String,
+    request: &CompletionRequest,
+) -> String {
+    let Some(reasoning) = reasoning.filter(|r| !r.trim().is_empty()) else {
+        return answer;
+    };
+    if !inlines_reasoning(request) {
+        tracing::debug!(
+            target: "oicp_client",
+            reasoning_chars = reasoning.len(),
+            "remote: a structured answer; the host's reasoning_content is not put in front of it"
+        );
+        return answer;
+    }
+    format!("{THINK_OPEN}{reasoning}{THINK_CLOSE}{answer}")
 }
 
 /// Make `body` a streamed request that asks for usage. llama-server, like
@@ -67,16 +109,25 @@ pub(crate) struct SseReader {
     error: Option<String>,
     /// `[DONE]` was read.
     done: bool,
+    /// Whether reasoning is written into the text ([`inlines_reasoning`]).
+    inline_reasoning: bool,
+    /// A think block is open in the text written so far.
+    thinking: bool,
+    /// Reasoning not written, for a request that does not take it inline.
+    reasoning_dropped: usize,
 }
 
 impl SseReader {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(inline_reasoning: bool) -> Self {
         Self {
             pending: Vec::new(),
             finish: None,
             usage: None,
             error: None,
             done: false,
+            inline_reasoning,
+            thinking: false,
+            reasoning_dropped: 0,
         }
     }
 
@@ -139,13 +190,36 @@ impl SseReader {
             });
         }
         for choice in chunk.choices {
+            if let Some(r) = choice.delta.reasoning_content.filter(|r| !r.is_empty()) {
+                self.reasoning(r, out);
+            }
             if let Some(text) = choice.delta.content.filter(|t| !t.is_empty()) {
-                out.push(text);
+                out.push(self.close_think() + &text);
             }
             if let Some(reason) = choice.finish_reason {
                 tracing::debug!(finish_reason = %reason, "remote: stream - terminal finish_reason captured");
                 self.finish = FinishReason::from_openai_str(&reason);
             }
+        }
+    }
+
+    fn reasoning(&mut self, piece: String, out: &mut Vec<String>) {
+        if !self.inline_reasoning {
+            self.reasoning_dropped += piece.len();
+        } else if self.thinking {
+            out.push(piece);
+        } else {
+            self.thinking = true;
+            out.push(format!("{THINK_OPEN}{piece}"));
+        }
+    }
+
+    /// The close of an open think block, before what follows it.
+    fn close_think(&mut self) -> String {
+        if std::mem::take(&mut self.thinking) {
+            THINK_CLOSE.to_string()
+        } else {
+            String::new()
         }
     }
 
@@ -157,6 +231,13 @@ impl SseReader {
             // A last line the server did not end with a newline.
             let line = std::mem::take(&mut self.pending);
             self.line(String::from_utf8_lossy(&line).trim(), &mut tail);
+        }
+        if self.reasoning_dropped > 0 {
+            tracing::debug!(
+                target: "oicp_client",
+                reasoning_chars = self.reasoning_dropped,
+                "remote stream: a structured answer; the host's reasoning_content is not put in front of it"
+            );
         }
         let reason = match self.error {
             Some(cause) => {
@@ -184,12 +265,13 @@ impl SseReader {
 /// stream as a final `Err`.
 pub(crate) fn text_stream<B, E>(
     bytes: impl Stream<Item = std::result::Result<B, E>> + Send + Unpin + 'static,
+    reader: SseReader,
 ) -> impl Stream<Item = Result<String>> + Send + 'static
 where
     B: AsRef<[u8]>,
     E: std::fmt::Display,
 {
-    futures::stream::unfold(Some((bytes, SseReader::new())), |state| async move {
+    futures::stream::unfold(Some((bytes, reader)), |state| async move {
         let (mut bytes, mut reader) = state?;
         while !reader.ended() {
             match bytes.next().await {
