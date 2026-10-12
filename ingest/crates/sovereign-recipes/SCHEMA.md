@@ -1046,6 +1046,7 @@ Data for a qualified scalar fold over already-assigned, cited claims.
 | `identity` | `String` | **yes** | — | A source-supported, stable identity for one reported transition. |
 | `effective_time` | `Option<String>` | no | type default | A source-supported transition effective time; never used as report order. |
 | `rules` | `Vec<ProtocolRuleDecl>` | no | type default | Explicit claim qualifications map to application state values. |
+| `initial` | `Option<String>` | no | type default | The state a record holds before any move, for the rules' `from` alone: a record no cited move reaches still holds nothing. |
 
 ## `ProtocolRuleDecl`
 
@@ -1058,6 +1059,8 @@ One application-data mapping from a qualified claim to a scalar state.
 | `state` | `String` | **yes** | — | A value in the derived attribute's closed text set. |
 | `when` | `BTreeMap<String, String>` | no | type default | Every named field must be source-supported at the exact declared value. |
 | `corrects` | `Option<String>` | no | type default | An optional field whose supported identity must name a prior transition. |
+| `by` | `Option<String>` | no | type default | Who may make this move: a declared path walked from the claim, the move counting only when it reaches something. Absent: anyone. |
+| `from` | `Vec<String>` | no | type default | The states this move may leave. Empty: any state, and none. |
 
 ## `FoldBy`
 

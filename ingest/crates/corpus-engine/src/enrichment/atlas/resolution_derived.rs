@@ -34,6 +34,8 @@ pub mod membership;
 mod outcome;
 #[path = "resolution_derived/protocol.rs"]
 mod protocol;
+#[path = "resolution_derived/protocol_moves.rs"]
+mod protocol_moves;
 #[path = "resolution_derived/protocol_support.rs"]
 mod protocol_support;
 #[path = "resolution_derived/read_fields.rs"]
@@ -190,6 +192,8 @@ struct Graph<'a> {
     clock: HashMap<&'a str, String>,
     /// Attribute → target atom → the atoms naming it there, for `^attribute`.
     named_by: HashMap<String, HashMap<String, Vec<Node>>>,
+    /// Atom → the (field, document) pairs whose field names it, for `^field`.
+    named_in: HashMap<&'a str, Vec<(&'a str, &'a str)>>,
     policies: &'a OntologyPolicies,
     index: &'a TypeIndex<'a>,
     parsed: HashMap<&'a str, Vec<PathExpr>>,
@@ -244,6 +248,15 @@ impl<'a> Graph<'a> {
                 }
             }
         }
+        let mut named_in: HashMap<&str, Vec<(&str, &str)>> = HashMap::new();
+        for (doc, named) in participants {
+            for (field, id) in named.iter().filter(|(f, _)| inverted.contains(f)) {
+                named_in
+                    .entry(id.as_str())
+                    .or_default()
+                    .push((field.as_str(), doc.as_str()));
+            }
+        }
         let mut about: HashMap<&str, Vec<usize>> = HashMap::new();
         for (j, c) in claims.iter().enumerate() {
             if let Some(s) = &c.subject {
@@ -292,6 +305,7 @@ impl<'a> Graph<'a> {
             participants,
             clock,
             named_by,
+            named_in,
             policies,
             index,
             parsed,
@@ -482,6 +496,15 @@ impl<'a> Graph<'a> {
                         _ => doc.clone(),
                     };
                     out.insert((n.clone(), d));
+                }
+                for (_, k) in self
+                    .named_in
+                    .get(id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|(f, _)| *f == attr)
+                {
+                    out.insert((Node::Document(k.to_string()), Some(k.to_string())));
                 }
             }
             _ => {}

@@ -38,6 +38,8 @@ mod contracts;
 mod identity;
 #[path = "layer_contract_tests/reader.rs"]
 mod reader;
+#[path = "layer_contract_tests/protocol.rs"]
+mod protocol;
 
 const SHAPES: [&str; 3] = ["mail", "issues", "news"];
 

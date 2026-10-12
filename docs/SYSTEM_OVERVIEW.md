@@ -817,7 +817,14 @@ question the pipeline asks about a type is a method on the resolved
   pointer remain pending. `change.document.date` orders state reports, while a
   configured claim `effective_time` is retained separately and never orders them.
   Undated, mixed-precision or unsupported partial report times remain alternatives;
-  incompatible states at the same report time conflict. The existing decision line
+  incompatible states at the same report time conflict. A protocol whose rules
+  declare `by` (a declared path walked from the claim: who may make the move) or
+  `from` (the states it may leave, from the protocol's `initial`) is a state
+  machine: reports are replayed in report-time order and one no move admits stays
+  in history as `unauthorized` or `not_from_state`, evidence and never the state
+  (`resolution_derived/protocol_moves.rs`); a path may walk a document field
+  backwards (`^author`: the documents a party wrote), so an event's actor takes a
+  role from their other posts. A protocol declaring neither folds as before. The existing decision line
   retains rule fingerprint, claim basis, assignment, source document, field evidence
   and history, including duplicates, corrections and superseded reports. Existing
   ref-valued folds keep their semantics. Every pipeline writes

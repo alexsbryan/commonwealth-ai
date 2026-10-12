@@ -253,3 +253,50 @@ fn a_folded_read_field_is_named_and_a_misplaced_by_refuses() {
         );
     }
 }
+
+/// A protocol's transitions: `by` names a declared path (who may move),
+/// `from` and `initial` name states of the derived attribute's closed set,
+/// and a document field may be walked backwards (`^from`: the documents a
+/// party wrote). Each misnamed one refuses on its own.
+#[test]
+fn a_transition_names_its_mover_by_path_and_its_states_from_the_closed_set() {
+    let when = "when = { step = \"open\" }\n";
+    let machine = |by: &str, from: &str, initial: &str| {
+        fixture()
+            .replace(
+                "effective_time = \"at\"\n",
+                &format!("effective_time = \"at\"\ninitial = \"{initial}\"\n"),
+            )
+            .replace(when, &format!("{when}by = \"{by}\"\nfrom = [\"{from}\"]\n"))
+            .replace(
+                "path = \"batch / tag\"\n",
+                "path = \"batch / tag\"\n\n[[enrichment.ontology.paths]]\nid = \"wrote\"\npath = \"document / from / ^from\"\n",
+            )
+    };
+    let v = validated(&machine("wrote", "shut", "open"));
+    assert!(
+        !v.errors
+            .iter()
+            .any(|e| e.contains("protocol") || e.contains("backwards")),
+        "{:#?}",
+        v.errors
+    );
+    for (recipe, says) in [
+        (
+            machine("owner_of_item", "shut", "open"),
+            "names no declared path",
+        ),
+        (machine("wrote", "ajar", "open"), "moves from `ajar`"),
+        (
+            machine("wrote", "shut", "ajar"),
+            "`protocol.initial` `ajar`",
+        ),
+    ] {
+        let v = validated(&recipe);
+        assert!(
+            v.errors.iter().any(|e| e.contains(says)),
+            "{says}: {:#?}",
+            v.errors
+        );
+    }
+}

@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 use tracing::debug;
 
+use super::protocol_moves as moves;
 use super::protocol_support::{
     history_entry, matches_rule, report_time_class, set_disposition, source_field_value,
 };
@@ -23,6 +24,8 @@ struct ProtocolCandidate {
     report_time: Option<String>,
     effective_time: Option<String>,
     corrects: Option<String>,
+    /// The states the move may leave (`None`: any, and none).
+    from: Option<BTreeSet<String>>,
 }
 
 pub(super) fn derive(
@@ -167,7 +170,45 @@ pub(super) fn derive(
                 Err(reasons) => uncertain.push((*rule, reasons)),
             }
         }
-        if matching.len() != 1 || !uncertain.is_empty() {
+        let machine = moves::is_machine(protocol);
+        if machine {
+            let (may, may_not) =
+                moves::authorized(graph, std::mem::take(&mut matching), claim_index)?;
+            if may.is_empty() && !may_not.is_empty() && uncertain.is_empty() {
+                let reason = may_not
+                    .iter()
+                    .filter_map(|r| {
+                        let by = r.by.as_deref()?;
+                        Some(format!("`{}` is a move only `{by}` makes", r.id))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                rule_ids.extend(may_not.iter().map(|r| r.id.clone()));
+                history.push(history_entry(
+                    input,
+                    claim,
+                    document_id.as_deref(),
+                    report_time.as_deref(),
+                    Some(&may_not[0].id),
+                    Some(&may_not[0].state),
+                    None,
+                    None,
+                    "unauthorized",
+                    Some(&reason),
+                    field_evidence,
+                ));
+                continue;
+            }
+            matching = may;
+        }
+        // Rules a machine tells apart only by mover or prior state, into one
+        // state, are one move.
+        let one_move = machine
+            && matching.len() > 1
+            && matching
+                .iter()
+                .all(|r| r.state == matching[0].state && r.corrects == matching[0].corrects);
+        if (matching.len() != 1 && !one_move) || !uncertain.is_empty() {
             let mut reasons = BTreeSet::new();
             rule_ids.extend(matching.iter().map(|rule| rule.id.clone()));
             for (_, missing) in &uncertain {
@@ -223,7 +264,7 @@ pub(super) fn derive(
         }
 
         let rule = matching[0];
-        rule_ids.insert(rule.id.clone());
+        rule_ids.extend(matching.iter().map(|r| r.id.clone()));
         let identity = match source_field_value(claim, source_document, &protocol.identity) {
             Ok(value) if !value.is_empty() => value,
             Ok(_) => {
@@ -372,11 +413,16 @@ pub(super) fn derive(
             history_index,
             claim_id,
             identity,
-            rule_id: rule.id.clone(),
+            rule_id: matching
+                .iter()
+                .map(|r| r.id.as_str())
+                .collect::<Vec<_>>()
+                .join("+"),
             state: rule.state.clone(),
             report_time,
             effective_time,
             corrects,
+            from: moves::leaves(&matching).map(|f| f.into_iter().map(str::to_string).collect()),
         });
     }
 
@@ -582,6 +628,62 @@ pub(super) fn derive(
             values: alternatives.iter().cloned().collect(),
             reasons: pending.iter().cloned().collect(),
         };
+    } else if !active.is_empty() && moves::is_machine(protocol) {
+        let mut replayed_moves = Vec::with_capacity(active.len());
+        for (_, candidate) in &active {
+            replayed_moves.push(moves::Move {
+                at: candidate
+                    .report_time
+                    .as_deref()
+                    .ok_or_else(|| "protocol replay lost a report time".to_string())?,
+                state: &candidate.state,
+                from: candidate
+                    .from
+                    .as_ref()
+                    .map(|f| f.iter().map(String::as_str).collect()),
+            });
+        }
+        let replayed = moves::replay(&replayed_moves, protocol.initial.as_deref());
+        for (k, (_, candidate)) in active.iter().enumerate() {
+            set_disposition(
+                &mut history,
+                candidate.history_index,
+                replayed.dispositions[k],
+            );
+        }
+        if let Some((at, states)) = replayed.conflict {
+            pending.insert(format!("incompatible moves share report time `{at}`"));
+            outcome = DerivedOutcome::Conflict {
+                values: states.iter().cloned().collect(),
+            };
+            alternatives = states;
+        } else if let Some((at, state)) = replayed.state {
+            as_of_report_time = Some(at);
+            let mut documents = BTreeSet::new();
+            for (k, (_, candidate)) in active.iter().enumerate() {
+                if replayed.dispositions[k] != "selected" {
+                    continue;
+                }
+                rule_ids.insert(candidate.rule_id.clone());
+                if let Some(time) = &candidate.effective_time {
+                    effective_times.insert(time.clone());
+                }
+                if let Some(d) = history[candidate.history_index]["document"].as_str() {
+                    documents.insert(d.to_string());
+                }
+            }
+            let superseded: BTreeSet<String> = candidates
+                .iter()
+                .filter(|c| c.state != state)
+                .map(|c| c.state.clone())
+                .collect();
+            outcome = DerivedOutcome::Decided {
+                values: vec![state],
+                input: None,
+                documents: documents.into_iter().collect(),
+                superseded: superseded.into_iter().collect(),
+            };
+        }
     } else if !active.is_empty() {
         let latest = active
             .iter()
