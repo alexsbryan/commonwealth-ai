@@ -1539,6 +1539,10 @@ impl InferenceProvider for SovereignInferenceAdapter {
         self.provider.count_tokens(text)
     }
 
+    async fn count_tokens_exact(&self, text: &str) -> CoreResult<u32> {
+        self.provider.count_tokens_exact(text).await
+    }
+
     fn code_model_id(&self) -> Option<String> {
         self.provider.code_model_id()
     }

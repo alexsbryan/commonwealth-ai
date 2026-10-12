@@ -50,6 +50,8 @@ pub enum ReplayMethod {
     RerankBatch,
     /// `count_tokens`.
     CountTokens,
+    /// `count_tokens_exact`: the server's own count. Not a captured method.
+    CountTokensExact,
     /// The provider's report about itself, read-only.
     Host,
     /// `probe_logprobs`: greedy steps with each step's top-k logprobs, the

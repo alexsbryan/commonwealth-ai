@@ -182,6 +182,10 @@ impl InferenceProvider for RecordingProvider {
         self.inner.count_tokens(text)
     }
 
+    async fn count_tokens_exact(&self, text: &str) -> Result<u32> {
+        self.inner.count_tokens_exact(text).await
+    }
+
     fn code_model_id(&self) -> Option<String> {
         self.inner.code_model_id()
     }

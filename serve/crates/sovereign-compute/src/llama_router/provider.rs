@@ -163,8 +163,23 @@ impl InferenceProvider for RouterProvider {
         self.n_ctx_train
     }
 
+    /// An estimate: the remote half's chars/4. The exact count is
+    /// [`Self::count_tokens_exact`], which asks the router.
     fn count_tokens(&self, text: &str) -> u32 {
         self.inner.count_tokens(text)
+    }
+
+    /// `POST /tokenize` on the router, with the model a fast turn goes to
+    /// (the fast model, else the primary), as the embedded engine counts on
+    /// its fast slot.
+    async fn count_tokens_exact(&self, text: &str) -> Result<u32> {
+        let model = self
+            .model_for("fast")
+            .unwrap_or_else(|| self.preset.primary());
+        self.router
+            .token_count(model, text)
+            .await
+            .map_err(sovereign_contracts::Error::Inference)
     }
 
     /// The preset's `[models] code` entry, which the router serves by name.
