@@ -11,11 +11,14 @@ fn hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// A binary in a fresh directory, with `manifest` beside it when given.
+/// The compiled pin's binaries in a fresh directory, with `manifest` beside
+/// them when given.
 fn installed(manifest: Option<&str>) -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
+    for name in BuildPin::compiled().unwrap().binaries {
+        std::fs::write(dir.path().join(name), b"").unwrap();
+    }
     let binary = dir.path().join("llama-server");
-    std::fs::write(&binary, b"").unwrap();
     if let Some(text) = manifest {
         std::fs::write(manifest_path(&binary), text).unwrap();
     }
@@ -85,6 +88,21 @@ fn a_changed_patch_or_llguidance_is_refused() {
         let (_dir, binary) = installed(Some(&as_built(&other)));
         assert!(verify(&binary, &pin).is_err());
     }
+}
+
+#[test]
+fn the_pin_ships_the_router_and_the_rpc_server() {
+    let binaries = BuildPin::compiled().unwrap().binaries;
+    assert_eq!(binaries, ["llama-server", "ggml-rpc-server"]);
+}
+
+#[test]
+fn a_named_binary_missing_beside_the_manifest_is_refused() {
+    let (dir, binary) = installed(Some(&as_built(COMPILED_PIN)));
+    std::fs::remove_file(dir.path().join("ggml-rpc-server")).unwrap();
+    let err = verify(&binary, &BuildPin::compiled().unwrap()).unwrap_err();
+    assert!(err.contains("names ggml-rpc-server"), "{err}");
+    assert!(err.contains("build.sh"), "{err}");
 }
 
 #[test]

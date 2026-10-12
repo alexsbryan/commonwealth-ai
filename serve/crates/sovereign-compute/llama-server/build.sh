@@ -4,18 +4,23 @@
 # the daemon with the manifest the daemon checks at startup. Runs inside the
 # sovereign-vulkan toolbox.
 #
-#   build.sh [--install-dir DIR]       the shipped build; DIR defaults to
-#                                      target/debug, where sovereign-cli-daemon is
+#   build.sh [--backend B] [--install-dir DIR]
+#                                      the shipped build; DIR defaults to
+#                                      target/debug, where sovereign-cli-daemon is.
+#                                      B is vulkan (the Linux default), metal
+#                                      (the macOS arm64 default), cpu (the
+#                                      macOS x86_64 default), rocm or cuda
 #   build.sh --vanilla [--llguidance]  an unpatched server for the bench's A/B
 #                                      arms, in target/llama-server-vanilla/
 #                                      build/ (build-llg/ with llguidance); no
 #                                      install, no manifest
 #
 # The shipped build applies every patch PIN.toml lists, after checking each
-# file's sha256 against the pin, and links llama.cpp statically, so the one
-# file copied beside the daemon is the whole server. It then writes
-# llama-server.manifest.toml beside it: PIN.toml verbatim, then a [build]
-# table. The daemon compares the manifest's pin with the one it was compiled
+# file's sha256 against the pin, turns on the RPC backend, and links llama.cpp
+# statically, so each binary PIN.toml names (llama-server, ggml-rpc-server) is
+# whole on its own. It copies them beside the daemon and writes
+# llama-server.manifest.toml beside them: PIN.toml verbatim, then a [build]
+# table naming the backend. The daemon compares the manifest's pin with the one it was compiled
 # with (llama_router::build_pin), because the binary cannot say: its
 # `--version` names the enclosing repo's HEAD, since cmake reads the git repo
 # that target/ sits in.
@@ -27,12 +32,13 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../../.." && pwd)
 pin=$here/PIN.toml
-vanilla= llg_vanilla=OFF install_dir=$repo/target/debug
+vanilla= llg_vanilla=OFF install_dir=$repo/target/debug backend=
 while [ $# -gt 0 ]; do
   case $1 in
     --vanilla) vanilla=1 ;;
     --llguidance) llg_vanilla=ON ;;
     --install-dir) install_dir=$2; shift ;;
+    --backend) backend=$2; shift ;;
     *) echo "build.sh: unknown argument $1" >&2; exit 2 ;;
   esac
   shift
@@ -42,6 +48,12 @@ done
 logged() {
   log=$1; shift
   "$@" > "$log" 2>&1 || { tail -30 "$log" >&2; echo "build.sh: failed, full log $log" >&2; exit 1; }
+}
+
+# nproc and sha256sum are GNU; macOS has getconf and shasum.
+jobs=$(getconf _NPROCESSORS_ONLN)
+sha256() {
+  if command -v sha256sum > /dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi | cut -d' ' -f1
 }
 
 # `key = "value"` or `key = value`, first match.
@@ -67,7 +79,7 @@ fetch() {
     curl -sSfL -o "$tarball.part" "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/$sha"
     mv "$tarball.part" "$tarball"
   fi
-  tarball_sha256=$(sha256sum "$tarball" | cut -d' ' -f1)
+  tarball_sha256=$(sha256 "$tarball")
 }
 
 if [ -n "$vanilla" ]; then
@@ -80,7 +92,7 @@ if [ -n "$vanilla" ]; then
   [ $llg_vanilla = ON ] && build=build-llg
   logged "$dir/$build-configure.log" cmake -S "$src" -B "$dir/$build" -DGGML_VULKAN=ON -DLLAMA_CURL=OFF \
     -DLLAMA_LLGUIDANCE=$llg_vanilla -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release
-  logged "$dir/$build-build.log" cmake --build "$dir/$build" --target llama-server -j "$(nproc)"
+  logged "$dir/$build-build.log" cmake --build "$dir/$build" --target llama-server -j "$jobs"
   echo "build.sh: $dir/$build/bin/llama-server from llama.cpp $sha, unpatched (llguidance $llg_vanilla)"
   exit 0
 fi
@@ -100,7 +112,7 @@ i=0
 for file in $listed; do
   i=$((i + 1))
   want=$(printf '%s\n' "$digests" | sed -n "${i}p")
-  got=$(sha256sum "$here/patches/$file" | cut -d' ' -f1)
+  got=$(sha256 "$here/patches/$file")
   [ "$got" = "$want" ] || { echo "build.sh: patches/$file is sha256 $got, $pin says $want" >&2; exit 3; }
 done
 
@@ -109,12 +121,37 @@ case $(field llguidance) in
   false) llg=OFF ;;
   *) echo "build.sh: llguidance in $pin is not true or false" >&2; exit 2 ;;
 esac
+binaries=$(sed -n 's/^binaries = \[\(.*\)\]$/\1/p' "$pin" | tr ',"' '  ')
+[ -n "$binaries" ] || { echo "build.sh: no binaries list in $pin" >&2; exit 2; }
 
-# The source tree and build dir are keyed by what the pin builds (commit,
-# llguidance, patch digests), so a changed pin builds fresh and an unchanged
-# one, comments included, rebuilds incrementally.
+# The backend's flags. The macOS modes match the embedded engine's build
+# (vendor/llama-cpp-sys-4/build.rs): no OpenMP, 10.15, and GGML_NATIVE off with
+# its portable CPU baseline, since a release runs on Macs other than the
+# builder. The pod modes are portable too; GPU_TARGETS and
+# CMAKE_CUDA_ARCHITECTURES pass through from the Containerfiles' env.
+if [ -z "$backend" ]; then
+  case $(uname -s)/$(uname -m) in
+    Darwin/arm64) backend=metal ;;
+    Darwin/x86_64) backend=cpu ;;
+    *) backend=vulkan ;;
+  esac
+fi
+mac="-DGGML_OPENMP=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DGGML_NATIVE=OFF"
+case $backend in
+  vulkan) flags="-DGGML_VULKAN=ON" ;;
+  metal) flags="-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON $mac -DGGML_CPU_ARM_ARCH=armv8-a" ;;
+  cpu) flags="-DGGML_METAL=OFF $mac -DGGML_SSE42=ON -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX_VNNI=OFF
+    -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_AVX512=OFF" ;;
+  rocm) flags="-DGGML_HIP=ON -DGGML_NATIVE=OFF${GPU_TARGETS:+ -DGPU_TARGETS=$GPU_TARGETS}" ;;
+  cuda) flags="-DGGML_CUDA=ON -DGGML_NATIVE=OFF${CMAKE_CUDA_ARCHITECTURES:+ -DCMAKE_CUDA_ARCHITECTURES=$CMAKE_CUDA_ARCHITECTURES}" ;;
+  *) echo "build.sh: unknown backend $backend (vulkan, metal, cpu, rocm, cuda)" >&2; exit 2 ;;
+esac
+
+# The source tree is keyed by what the pin builds (commit, llguidance, patch
+# digests), the build dir by that and the backend, so a changed pin builds
+# fresh and an unchanged one, comments included, rebuilds incrementally.
 dir=$repo/target/llama-server
-key=$(printf '%s\n' "$sha" "$llg" $digests | sha256sum | cut -c1-12)
+key=$(printf '%s\n' "$sha" "$llg" $digests | sha256 | cut -c1-12)
 fetch "$dir"
 src=$dir/src-$key
 if [ ! -d "$src" ]; then
@@ -126,18 +163,25 @@ if [ ! -d "$src" ]; then
   done
   mv "$src.part" "$src"
 fi
-build=$dir/build-$key
-logged "$build-configure.log" cmake -S "$src" -B "$build" -DGGML_VULKAN=ON -DLLAMA_CURL=OFF \
+build=$dir/build-$key-$backend
+# $flags and $binaries are word lists, split on purpose.
+# shellcheck disable=SC2086
+logged "$build-configure.log" cmake -S "$src" -B "$build" $flags -DGGML_RPC=ON -DLLAMA_CURL=OFF \
   -DLLAMA_LLGUIDANCE=$llg -DBUILD_SHARED_LIBS=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
   -DCMAKE_BUILD_TYPE=Release
-logged "$build-build.log" cmake --build "$build" --target llama-server -j "$(nproc)"
+# shellcheck disable=SC2086
+logged "$build-build.log" cmake --build "$build" --target $binaries -j "$jobs"
 
+# The manifest goes last: it is what the daemon checks, so it never names a
+# binary that is not yet in place.
 mkdir -p "$install_dir"
-cp "$build/bin/llama-server" "$install_dir/.llama-server.part"
-mv "$install_dir/.llama-server.part" "$install_dir/llama-server"
+for bin in $binaries; do
+  cp "$build/bin/$bin" "$install_dir/.$bin.part"
+  mv "$install_dir/.$bin.part" "$install_dir/$bin"
+done
 {
   cat "$pin"
-  printf '\n[build]\ntarball_sha256 = "%s"\nsource = "%s"\n' "$tarball_sha256" "$src"
+  printf '\n[build]\nbackend = "%s"\ntarball_sha256 = "%s"\nsource = "%s"\n' "$backend" "$tarball_sha256" "$src"
 } > "$install_dir/.llama-server.manifest.part"
 mv "$install_dir/.llama-server.manifest.part" "$install_dir/llama-server.manifest.toml"
-echo "build.sh: $install_dir/llama-server from llama.cpp $sha, $(printf '%s\n' "$listed" | grep -c .) patch(es), llguidance $llg"
+echo "build.sh:" $binaries "in $install_dir from llama.cpp $sha, $(printf '%s\n' "$listed" | grep -c .) patch(es), llguidance $llg, backend $backend"
