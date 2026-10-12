@@ -1565,6 +1565,14 @@ items = ["bundles", "assemble", "rank", "Ranking", "child_launch", "tracing_filt
 package = "serve"
 krate = "sovereign-serving-host"
 items = []
+# Serve's embedded engine, for the composition's tests alone
+# (es-t2-executor-native): executor_native_e2e runs the executor's tool loop
+# on it and on llama-server. Empty items keep stock's `src/` from naming any
+# of it.
+[[distribution.face]]
+package = "serve"
+krate = "sovereign-inference"
+items = []
 # svrn's store and the turn path's lesson reader, for the composition's tests
 # alone (pb-distribution-svrn-lift-2): svrn_memory_without_code_e2e moved here
 # from sovereign-daemon and reads the lesson back from svrn's store. Empty
