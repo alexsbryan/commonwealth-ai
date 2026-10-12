@@ -46,6 +46,11 @@ T_SYSTEM = ("You read one line of a document and say whether it is about a parti
             "message gives the document with its lines numbered, then one of its lines and the declared type with what "
             "it means. Answer A if the line is about one particular of that type, or 0 if it is not.")
 
+D_SYSTEM = ("You read one line of a document and say whether it reports a particular of a declared type with one given "
+            "value.\n\nThe user message gives the document with its lines numbered, then one of its lines, the declared "
+            "type with what it means and one value of one of its fields. Answer A if the line reports a particular of "
+            "that type with that value, or 0 if it does not.")
+
 # ---------------------------------------------------------------- the leg's trace
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 LOC = re.compile(r'document_read/passes: located document=(\S+) line=(\d+) kind="([^"]+)" p=([\d.]+) dist=(.*?) text=(.*)$')
@@ -107,7 +112,9 @@ def plan(rec):
     for k in kinds:
         s = by.get(k["subject"]) or {}
         if s.get("identity_criterion") and not s.get("source") and s["name"] not in [x["name"] for x in subjects]:
-            subjects.append({"name": s["name"], "description": s.get("description", "")})
+            necessary = [a for a in s.get("attributes", []) if a["name"] in (s.get("identity_necessary") or [])
+                         and a.get("values") and len(a["values"]) <= 25]
+            subjects.append({"name": s["name"], "description": s.get("description", ""), "necessary": necessary})
     return kinds, subjects
 
 
@@ -274,6 +281,12 @@ def unit(raw, n):
     return "paragraph" if len(re.findall(r"[.?!](\s|$)", t)) >= 3 else "sentence"
 
 
+def q_value(view, n, text, s, a, v):
+    u = head(view, n, text) + f"Does line {n} report a {s['name']} whose {a['name']} is this?\n{s['name']}" + (f" ({s['description']})" if s["description"] else "") + "\n"
+    u += f"   {a['name']}: {v}\nA yes\n{NONE} no\nAnswer with its letter."
+    return D_SYSTEM, u, ["A", NONE]
+
+
 def body(system, user, labels):
     return {"model": MODEL, "temperature": 0, "max_tokens": 16, "think_budget": 0, "thinking": {"type": "disabled"},
             "chat_template_kwargs": {"enable_thinking": False},
@@ -283,6 +296,9 @@ def body(system, user, labels):
 
 
 # ---------------------------------------------------------------- the population (no call)
+TYPES = collections.defaultdict(set)  # GVC: (doc, line) -> the gold types of the mentions on it
+
+
 def gold_lines(system, lines):
     """{(doc, line): (kind, value)} for the system's gold, and the documents in the population."""
     out, docs = {}, set()
@@ -325,6 +341,7 @@ def gold_lines(system, lines):
             if n is not None:
                 out.setdefault((d, n), ("report", None))
                 words[(d, n)].append(b[m["start"]:m["end"]].lower())
+                TYPES[(d, n)].add(str(m["type"]))
         out = {k: (v[0], "reference-only" if all(w in REFERENCE for w in words[k]) else None) for k, v in out.items()}
     return out, docs
 
@@ -353,17 +370,25 @@ def join():
             lost = [p for p in pos if p["class"] == "lost"]
             hit = [p for p in pos if p["class"] == "hit"]
             pos = rng.sample(lost, min(GVC_CAP["lost"], len(lost))) + rng.sample(hit, min(GVC_CAP["hit"], len(hit)))
+        if system == "gvc":  # arm D reads every multi-type line too (PREREG amendment 1)
+            fold = set(json.loads((HERE / "cdcr/fold_values.json").read_text())["values"].values())
+            have = {(p_["doc"], p_["line"]) for p_ in pos}
+            for (d, n) in sorted(gold):
+                if (d, n) not in have and lines[d][n]["asked"] and len([t for t in TYPES[(d, n)] if t in fold]) >= 2:
+                    pos.append({"doc": d, "line": n, "gold": "report", "value": None, "reference_only": False,
+                                "class": "multi", "logged": lines[d][n]["dist"], "logged_kind": lines[d][n]["kind"], "choose": None})
         marked = set(gold)
         pool = [(d, n) for d in sorted(docs) for n, ln in sorted(lines[d].items()) if ln["asked"] and (d, n) not in marked]
         neg = [{"doc": d, "line": n, "gold": None, "value": None, "reference_only": False,
                 "class": "clean" if lines[d][n]["kind"] == "none" else "flagged", "logged": lines[d][n]["dist"],
                 "logged_kind": lines[d][n]["kind"], "choose": None}
-               for d, n in rng.sample(pool, min(len(pos), len(pool)))]
+               for d, n in rng.sample(pool, min(sum(p_["class"] != "multi" for p_ in pos), len(pool)))]
         items = sorted(pos + neg, key=lambda x: (x["doc"], x["line"]))
         views = {d: (facts(rec, docs_text[d][0]), numbered(docs_text[d][1])) for d in {x["doc"] for x in items}}
         for x in items:
             x["text"] = line_text(lines[x["doc"]][x["line"]]["text"], docs_text[x["doc"]][1][x["line"] - 1])
             x["unit"] = unit(docs_text[x["doc"]][1], x["line"])
+            x["gold_types"] = sorted(TYPES.get((x["doc"], x["line"]), ())) if system == "gvc" else None
         pop[system] = {"kinds": kinds, "subjects": subjects, "items": items, "positives_not_asked": unasked,
                        "documents": len(views), "views": {d: f + v for d, (f, v) in views.items()}}
         c = collections.Counter(x["class"] for x in items)
@@ -419,6 +444,8 @@ def answer(rec, labels):
 def questions(system, pop, arm, x):
     """[(key, system prompt, user, labels, meaning)] for one item under one arm."""
     view, kinds, subjects = pop["views"][x["doc"]], pop["kinds"], pop["subjects"]
+    if x["class"] == "multi" and arm != "D":
+        return []
     if arm == "C":
         return [("C",) + q_control(view, x["line"], x["text"], kinds)]
     if arm == "V":
@@ -427,6 +454,9 @@ def questions(system, pop, arm, x):
         return [(f"Y:{k['name']}",) + q_yes(view, x["line"], x["text"], k) + ({"A": (k["name"], None)},) for k in kinds]
     if arm == "T":
         return [(f"T:{s['name']}",) + q_about(view, x["line"], x["text"], s) + ({"A": (s["name"], None)},) for s in subjects]
+    if arm == "D":
+        return [(f"D:{s['name']}:{a['name']}",) + q_value(view, x["line"], x["text"], s, a, v) + ({"A": (s["name"], v)},)
+                for s in subjects for a in s.get("necessary", []) for v in a["values"]] if system == "gvc" else []
     raise SystemExit(f"unknown arm {arm}")
 
 

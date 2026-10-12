@@ -43,3 +43,22 @@ Bars, per arm (fixed now).
 An arm meeting 1-3 (and 4 for V) is promising and goes to an end-to-end leg on the same inputs. An arm that misses is
 not tuned; its remaining losses are classed by distribution shape (right label rose but stayed second; confident
 other label; split between adjacent values) and the next tool is chosen by that class.
+
+## Amendment 1 (2026-10-12, before any arm was asked): arm D, cause 2
+
+Question. On GVC 175 of 320 statements cover several gold events, all sub-events of the article's one incident
+(gvc_incidents.json): "shot and killed" holds a firing, a hit and a death. The reader gives a statement one subject,
+so the others lose PLACE. By the recipe's own criterion an identity-necessary closed field separates particulars
+(happening: `kind`, five values), so a line reporting two of its values reports two particulars.
+
+- D: for each decided subject type with an identity-necessary closed field, one yes/no per value: "does line n
+  report a <subject> whose <field> is <value>?". A line reports every value whose yes beats no. Defined wherever a
+  recipe declares such a field; scored only on GVC, the one system whose gold types its particulars (ward's deal
+  declares `term`, which gold does not label; uv declares none). The mechanism is generic, the measurement GVC-only.
+- Gold per line: the gold types of the mentions on it, through cdcr/fold_values.json (the ladder's own map); a
+  type with no declared value is left out and counted.
+- Population for D: the GVC probe lines above, plus every asked line of the 78 read articles holding two or more
+  foldable gold types (183 lines: 153 with two, 29 with three, 1 with four; class `multi`, read only by D).
+- Bars. On the 183 multi-type lines: mean per-line recall of gold types at least 0.60 (one value per statement caps
+  it at 1/|types|: mean 0.472 on these lines, measured before any call) and mean per-line precision at least 0.70.
+  On the probe's unmarked GVC lines: lines with any yes at most C's flagged rate plus 5 points.
