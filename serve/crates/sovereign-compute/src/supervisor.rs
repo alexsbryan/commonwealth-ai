@@ -211,7 +211,12 @@ fn signal_group(pid: u32, signal: Signal) {
         // SAFETY: kill(2) on a negative pid signals that process group; a
         // stale group yields ESRCH.
         let delivered = unsafe { libc::kill(-(pid as libc::pid_t), sig) } == 0;
-        tracing::debug!(pid, ?signal, delivered, "supervisor: signalled the child's process group");
+        tracing::debug!(
+            pid,
+            ?signal,
+            delivered,
+            "supervisor: signalled the child's process group"
+        );
     }
     #[cfg(not(unix))]
     let _ = (pid, signal);
@@ -2143,8 +2148,15 @@ mod tests {
             }
         }
         assert!(healthy, "child never became healthy");
-        let grandchild: i32 = std::fs::read_to_string(&gc).unwrap().trim().parse().unwrap();
-        assert!(process_alive(grandchild), "grandchild {grandchild} not running");
+        let grandchild: i32 = std::fs::read_to_string(&gc)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert!(
+            process_alive(grandchild),
+            "grandchild {grandchild} not running"
+        );
 
         assert!(supervisor.terminate());
         tokio::time::timeout(Duration::from_secs(5), run_handle)
@@ -2159,6 +2171,9 @@ mod tests {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        assert!(gone, "grandchild {grandchild} outlived the terminated child");
+        assert!(
+            gone,
+            "grandchild {grandchild} outlived the terminated child"
+        );
     }
 }
