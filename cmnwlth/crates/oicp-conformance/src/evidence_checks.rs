@@ -17,6 +17,7 @@ use crate::report::{Check, Level};
 
 /// §2.1 and §4 feature co-occurrence: `evidence:text` iff
 /// `knowledge.evidence`, `evidence:align` iff its `align_endpoint`,
+/// `evidence:verify` iff its `verify_endpoint` (v0.6),
 /// `ingest:recipe` only beside `ingest:v1`, `knowledge:document` only with a
 /// knowledge plane.
 pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
@@ -36,6 +37,22 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
             "evidence:align ({align}) must co-occur with knowledge.evidence.align_endpoint \
              ({align_endpoint})"
         ));
+    }
+    // v0.6 §2.1: `evidence:verify` iff `verify_endpoint`, with tiers, and
+    // never without `evidence:text`.
+    let verify = m.has_feature(features::EVIDENCE_VERIFY);
+    let verify_endpoint = evidence.and_then(|e| e.verify_endpoint.as_ref()).is_some();
+    if verify != verify_endpoint {
+        f.push(format!(
+            "evidence:verify ({verify}) must co-occur with knowledge.evidence.verify_endpoint \
+             ({verify_endpoint})"
+        ));
+    }
+    if verify_endpoint && evidence.is_some_and(|e| e.verify_tiers.is_empty()) {
+        f.push("knowledge.evidence.verify_endpoint advertised with no verify_tiers".into());
+    }
+    if verify && !text {
+        f.push("evidence:verify requires evidence:text".into());
     }
     if m.has_feature(features::INGEST_RECIPE) && !m.has_feature(features::INGEST_V1) {
         f.push("ingest:recipe requires ingest:v1".into());
@@ -99,7 +116,7 @@ pub fn typed_hit_failures(results: &[Value]) -> Vec<String> {
     f
 }
 
-fn fixture_corpus<'a>(id: &str, state: &'a FixtureState) -> Result<&'a str, Check> {
+pub(crate) fn fixture_corpus<'a>(id: &str, state: &'a FixtureState) -> Result<&'a str, Check> {
     match state {
         FixtureState::Installed(c) => Ok(c),
         FixtureState::Unavailable(why) => Err(Check::skip(
@@ -404,7 +421,7 @@ pub async fn check_evidence_align(
 }
 
 /// GET a slice of a text; `Err` on any reply but 200 that decodes.
-async fn read(host: &Host, endpoint: &str, sha: &str, query: &str) -> Result<TextSlice, String> {
+pub(crate) async fn read(host: &Host, endpoint: &str, sha: &str, query: &str) -> Result<TextSlice, String> {
     let r = host.get(&format!("{endpoint}/{sha}{query}")).await?;
     if r.status != 200 {
         return Err(format!(

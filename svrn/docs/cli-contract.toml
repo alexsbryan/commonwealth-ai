@@ -1171,6 +1171,20 @@ path = "serve"
 binary = "dev"
 feature = "dev-tools"
 alias_of = "project serve"
+# `svrn verify` — the platform's own client of OICP `verify` (v0.6 §2.6, the
+# daemon's `routes_oicp_verify`): each paragraph of a file judged claim by claim
+# against the corpora the caller may read. In-process in the dispatcher;
+# reaches the daemon over loopback HTTP.
+[[command]]
+path = "verify"
+binary = "dispatcher"
+classification = "daemon"
+flags = [
+  { name = "--corpus", takes_value = true },
+  { name = "--tier", takes_value = true },
+  { name = "--json" },
+]
+
 [[command]]
 path = "audit"
 binary = "dev"

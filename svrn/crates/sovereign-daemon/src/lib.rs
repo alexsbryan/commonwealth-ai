@@ -221,6 +221,7 @@ pub mod routes_kinds;
 pub mod routes_knowledge;
 pub mod routes_oicp;
 pub mod routes_oicp_align;
+pub mod routes_oicp_verify;
 pub mod routes_oicp_ingest;
 pub mod routes_oicp_text;
 pub mod routes_ollama;

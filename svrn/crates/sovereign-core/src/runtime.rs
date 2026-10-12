@@ -171,6 +171,9 @@ pub use grounding::{
 // implementation (the flywheel generates against a pinned port of this fn;
 // export is where the genuine article gets the final word).
 pub use grounding::value_present_in_chunks;
+// A text's sentences and their specifics, found without a model: the fast
+// tier of `POST /oicp/v1/verify` reads them (the daemon's `routes_oicp_verify`).
+pub use grounding::{sentence_ranges, sentence_specifics, Specific, SpecificKind};
 // The native-grounding stack (`NATIVE_GROUNDING.md`). Default ON since
 // 2026-08-11; `SOVEREIGN_NATIVE_GROUNDING=0` is the opt-out. What is on
 // is DISPLAY (typed segments + answerability telemetry), never a

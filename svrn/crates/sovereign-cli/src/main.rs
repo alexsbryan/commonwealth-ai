@@ -83,6 +83,7 @@ mod status_cmd;
 mod stop_cmd;
 mod update_cmd;
 mod util;
+mod verify_cmd;
 
 // ─── Globals ───────────────────────────────────────────────────
 
@@ -195,6 +196,10 @@ const HELP: Help = Help {
                 "Mesh-replicated workspace migrate / status (~/.claude + notes.db)",
             ),
             ("corpus", "Knowledge corpus install / remove / status"),
+            (
+                "verify",
+                "Check writing against your corpora, sentence by sentence (fast / checker)",
+            ),
             (
                 "govern",
                 "Common-law governance over a corpus — tensions / resolve / ask",
@@ -401,6 +406,7 @@ const ALL_VERBS: &[&str] = &[
     "tools",
     "unpublish",
     "update",
+    "verify",
     "voice",
     "workflow",
 ];
@@ -910,6 +916,13 @@ async fn async_main() {
             }
             "status" => {
                 let code = status_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "verify" => {
+                // A client of the daemon's OICP `verify` (v0.6 §2.6): the
+                // platform's own second user of it. In-process; reaches the
+                // daemon over loopback HTTP like `seat`.
+                let code = verify_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "audit" => {

@@ -777,15 +777,6 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
     if !mentions_artifact(&low, ARTIFACT) {
         return None;
     }
-    fn cap_name(w: &str) -> Option<&str> {
-        let t = w.trim_matches(|c: char| !c.is_alphanumeric());
-        let mut chars = t.chars();
-        let first = chars.next()?;
-        (first.is_uppercase()
-            && t.chars().count() >= 2
-            && chars.all(|c| c.is_lowercase() && c.is_alphabetic()))
-        .then_some(t)
-    }
     let words: Vec<&str> = claim.split_whitespace().collect();
     for pair in words.windows(2) {
         // A separator on the first word means a LIST, not a name:

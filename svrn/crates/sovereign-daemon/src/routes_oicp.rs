@@ -187,12 +187,16 @@ async fn apply_v04_enrichment(
     let evidence = state.inner.node.corpus_engine.is_some().then(|| {
         feats.push(features::EVIDENCE_TEXT.to_string());
         feats.push(features::EVIDENCE_ALIGN.to_string());
+        // v0.6 §2.6: verify, mounted beside align on the same condition.
+        feats.push(features::EVIDENCE_VERIFY.to_string());
         // §3: every local hit carries its text's record
         // (`oicp_evidence::knowledge_results`).
         feats.push(features::KNOWLEDGE_DOCUMENT.to_string());
         EvidenceEndpoints {
             text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
             align_endpoint: Some("/oicp/v1/align".into()),
+            verify_endpoint: Some(crate::routes_oicp_verify::VERIFY_ENDPOINT.into()),
+            verify_tiers: crate::routes_oicp_verify::TIERS.to_vec(),
         }
     });
     manifest.features = feats;

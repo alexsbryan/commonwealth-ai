@@ -31,6 +31,7 @@ pub use sovereign_daemon::double::{
     empty_capabilities, id_to_hex, keyed_member, member, peer_row, roster, spawn_router,
     tie_as_cw_rails, StaticRoster,
 };
+pub mod fixture_library;
 pub mod service_double;
 pub mod work_rails;
 

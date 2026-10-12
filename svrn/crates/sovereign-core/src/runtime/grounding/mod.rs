@@ -52,12 +52,14 @@ mod pipeline;
 mod sealed;
 mod search;
 mod surgical;
+mod specifics;
 mod value_presence;
 
 // The gold-free groundedness primitive: the gate consumes it to DECIDE, the
 // chaos scorer consumes it to MEASURE `blatant_confab_rate`. Re-exported up to
 // `sovereign_core::runtime` (see runtime.rs) so the bench shares one
 // implementation rather than re-deriving the check.
+pub use specifics::{sentence_ranges, sentence_specifics, Specific, SpecificKind};
 pub use value_presence::{assess_asserted_value, value_present_in_chunks, AssertedValue};
 
 // The supporting-specifics half of groundedness: `value_presence` checks the

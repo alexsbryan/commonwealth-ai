@@ -62,6 +62,13 @@ pub struct EvidenceEndpoints {
     /// host advertises `evidence:align`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub align_endpoint: Option<String>,
+    /// `POST {verify_endpoint}`, taking a [`crate::verify::VerifyRequest`].
+    /// Present iff the host advertises `evidence:verify` (v0.6 §2.6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify_endpoint: Option<String>,
+    /// The tiers `verify_endpoint` serves. Empty iff it is absent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verify_tiers: Vec<crate::verify::VerifyTier>,
 }
 
 /// One stored text, and where it came from.

@@ -63,7 +63,12 @@ not held`, `texts not stored`, `text not stored`, `range outside text`).
 stored texts of those same corpora: each span is a code-point range with
 its `exact` slice and each difference is named, under the aligner's id and
 a `texts_digest` per corpus searched, and a corpus that could not be
-searched is named with its reason. Every knowledge-search hit carries
+searched is named with its reason. `POST /oicp/v1/verify`
+(`evidence:verify`, v0.6 §2.6) judges a unit claim by claim against the same
+corpora at the tiers the manifest names (`fast` with no model, `checker` with
+the daemon's judge): each claim an exact range of the unit with one of five
+verdicts, the rung that decided, the passages it judged as spans, and an
+`uncalibrated` operating point. Every knowledge-search hit carries
 `document`, its text's record with the metadata the extractor or the recipe
 declared (`knowledge:document`), local and peer-served alike, or names why
 it has none in `document_absent`. Recipes may carry their documents inline

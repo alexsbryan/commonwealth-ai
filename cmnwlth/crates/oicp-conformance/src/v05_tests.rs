@@ -163,6 +163,30 @@ async fn evidence_align_is_red_against_a_missing_texts_digest() {
 }
 
 #[tokio::test]
+async fn evidence_verify_is_red_against_an_unknown_verdict_and_a_span_off_by_one() {
+    let b = bench(Breaks::default()).await;
+    green(&crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    let b = bench(Breaks {
+        verify_unknown_verdict: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        "does not decode",
+    );
+    let b = bench(Breaks {
+        exact_off_by_one: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        "the text there says",
+    );
+}
+
+#[tokio::test]
 async fn the_evidence_checks_say_why_they_could_not_judge() {
     let b = bench(Breaks::default()).await;
     let gone = FixtureState::Unavailable("ingest:recipe not advertised".into());
@@ -170,6 +194,7 @@ async fn the_evidence_checks_say_why_they_could_not_judge() {
         check_knowledge_document(&b.host, &b.manifest, &b.lib, &gone).await,
         check_evidence_text(&b.host, &b.manifest, &b.lib, &gone).await,
         check_evidence_align(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &gone).await,
     ] {
         assert_eq!(c.status, CheckStatus::Skip, "{}", c.id);
         assert!(c.detail.starts_with("could not judge"), "{}", c.detail);

@@ -204,7 +204,7 @@ pub(crate) async fn open_for_reading(
 
 /// The record a hit names: the hit's own source's, at its lowest ordinal, or
 /// the lowest `(source.id, ordinal)` when no record is its source's.
-fn record_for<'a>(
+pub(crate) fn record_for<'a>(
     records: &'a [DocumentRecord],
     source_doc_id: Option<&str>,
 ) -> Option<&'a DocumentRecord> {

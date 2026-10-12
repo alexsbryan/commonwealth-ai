@@ -392,6 +392,25 @@ Output is a bare path, so it substitutes directly: `root="$(svrn path root)"`.
 
 Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `svrn project status` (old name still forwards here).
 
+### `svrn verify`
+
+Checks a piece of writing against your corpora, one paragraph at a time, and
+prints each sentence's verdict with the line it is on. It is a client of the
+daemon's OICP `verify` (`cmnwlth/docs/oicp-v0.6.md` §2.6).
+
+```
+svrn verify draft.md                      # every corpus you may read, fast tier
+svrn verify draft.md --corpus <id> ...    # only these corpora
+svrn verify draft.md --tier checker       # the daemon's judge reads each claim
+svrn verify - --json < draft.md           # one reply per paragraph, as JSON
+```
+
+`fast` uses no model: a sentence is `unsupported` when a number, date or name
+in it appears in no passage the search returns, and `abstained` otherwise.
+`checker` judges each sentence against the passages. Every verdict is
+uncalibrated, so `unsupported` means nothing backs the sentence, not that it is
+false.
+
 ### `svrn notes` (alias: `svrn reflect`)
 
 Durable working notes, plus the session-reflection view. The canonical name is `notes`; `reflect` still works and forwards here. Bare `svrn notes` renders the 30-day reflection *summary*; `svrn notes list` is the notes themselves — the same `NoteStore::read_notes` query the MCP `notes` tool runs, so the CLI and an agent cannot disagree about what is stored. The workflow these serve: [ground your agent — durable notes](../../docs/GROUND_YOUR_AGENT.md#durable-notes).

@@ -55,6 +55,10 @@ pub mod features {
     /// v0.5 §2.3: `knowledge.evidence.align_endpoint` aligns a quote against
     /// stored texts; MUST co-occur with that endpoint.
     pub const EVIDENCE_ALIGN: &str = "evidence:align";
+    /// v0.6 §2.6: `knowledge.evidence.verify_endpoint` judges a unit against
+    /// stored texts at the tiers `verify_tiers` names; MUST co-occur with
+    /// that endpoint.
+    pub const EVIDENCE_VERIFY: &str = "evidence:verify";
     /// v0.5 §3: knowledge-search hits carry `document`.
     pub const KNOWLEDGE_DOCUMENT: &str = "knowledge:document";
     /// v0.5 §4: install accepts `recipe_toml`; requires `ingest:v1`.
@@ -132,6 +136,7 @@ pub mod features {
         MODEL_FINGERPRINT,
         EVIDENCE_TEXT,
         EVIDENCE_ALIGN,
+        EVIDENCE_VERIFY,
         KNOWLEDGE_DOCUMENT,
         INGEST_RECIPE,
         AUTH_NAMED_CLIENT,

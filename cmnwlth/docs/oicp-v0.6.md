@@ -1,0 +1,147 @@
+# Open Inference Capabilities Protocol (OICP) — v0.6
+
+**Version:** 0.6.0 (draft)
+**Status:** Draft, written in parts as each lands on the reference host. The
+wire shape was approved by the operator 2026-10-12 (zoracite
+`orders/s6-lean-route/order.md`, decision 1). Extends v0.5 additively; v0.5
+remains the fallback path.
+**License:** CC0 (public domain dedication)
+
+---
+
+## Abstract
+
+v0.5 let a client hold a host to its sources for quotations. v0.6 does the
+same for claims: **`verify`** judges a unit of text, claim by claim, against
+the stored texts a caller may read, outside any conversation, and says for
+each claim which rung decided and how far that rung is calibrated.
+
+As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
+endpoint, or a feature string, and **feature presence, not the version
+string, gates behaviour**. The types are in
+`shared/crates/oicp-types/src/verify.rs`.
+
+## 2. The evidence extension, continued
+
+### 2.1 Advertisement (additions)
+
+| feature | meaning | requires |
+|---|---|---|
+| `evidence:verify` | `knowledge.evidence.verify_endpoint` judges a unit at the tiers `verify_tiers` names (§2.6) | `evidence:text`, `verify_endpoint`, a non-empty `verify_tiers` |
+
+```rust
+EvidenceEndpoints {
+    … (v0.5 fields) …
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    verify_endpoint: Option<String>,   // e.g. "/oicp/v1/verify"; present iff evidence:verify
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    verify_tiers: Vec<VerifyTier>,     // the tiers it serves; empty iff verify_endpoint is absent
+}
+```
+
+### 2.6 Verify
+
+```
+POST {verify_endpoint}
+Request:  VerifyRequest  { unit: String,
+                           context: Option<String>,      // text around the unit; read, never judged
+                           corpora: Vec<String>,         // default []: every corpus the caller may read
+                           tier: VerifyTier,             // "fast" | "checker" | "judge"
+                           span_context: Option<u32> }   // default 32
+Response: VerifyResponse { claims: Vec<VerifiedClaim>,
+                           verifier: String,
+                           corpora: Vec<CorpusTexts>,
+                           corpora_unavailable: Vec<Unavailable> }
+
+VerifiedClaim { start: u64, end: u64,            // code points into the unit
+                exact: String,                   // == the unit's [start, end)
+                class: Checkability,             // "checkable" | "not_checkable"
+                verdict: VerifyVerdict,
+                evidence: Vec<JudgedPassage>,
+                specifics_absent: Vec<String>,   // fast tier: specifics no passage carries
+                rung: String,
+                score: Option<f32>,
+                operating_point: String }        // "uncalibrated" until a bench measures the cell
+JudgedPassage { corpus_id: String,
+                span: Option<Span>,              // v0.5 §2.3's Span
+                span_absent: Option<String>,     // why span is absent
+                verdict: VerifyVerdict,
+                score: Option<f32> }
+VerifyVerdict = {"kind": "supported" | "contradicted" | "unsupported" | "abstained"}
+              | {"kind": "could_not_judge", "reason": String}
+```
+
+- **Claims.** A host splits the unit into claims and returns every one, in
+  unit order, each with its exact text. How it splits is its own (the
+  reference host takes sentences). A claim the host does not check is
+  `not_checkable` and `abstained`, never `supported`.
+- **Verdicts.** `VerifyVerdict` is a closed set; an unknown kind is an error,
+  never a default. `supported` and `contradicted` each rest on at least one
+  passage with that verdict. `unsupported` says nothing judged supports the
+  claim, which is not that the claim is false. `could_not_judge` names its
+  reason.
+- **Tiers.** `fast` uses no model. `checker` judges with one. `judge` is
+  reserved for a stronger judge that quotes before deciding. A tier the host
+  does not list in `verify_tiers` is refused with `422 tier not offered`.
+- **Evidence.** Each passage judged is named with its own verdict and, where
+  it is an exact slice of its stored text, its `span`, which dereferences
+  through `text_endpoint` as v0.5 §2.3's spans do. A passage that is not an
+  exact slice carries `span_absent: "not an exact slice"` instead of a range.
+- **Calibration.** `operating_point` is `uncalibrated` until a bench has
+  measured the rung's cell, and a client MUST NOT treat an uncalibrated
+  verdict as a licence for more than a warning.
+- **Identity.** `verifier` changes whenever the same request could be judged
+  differently (a rung, a threshold, a model). A client keys cached verdicts on
+  it together with each corpus's `texts_digest`.
+- **Scope.** Every requested corpus lands in exactly one of `corpora` and
+  `corpora_unavailable`, as in v0.5 §2.3. A checkable claim with no corpus to
+  read is `could_not_judge: no corpus read`.
+
+**The reference host's rungs** (`svrn/crates/sovereign-daemon/src/routes_oicp_verify.rs`):
+
+| rung | tier | decides |
+|---|---|---|
+| `class/no-specifics` | any | a claim carrying no number, date or name is `not_checkable` |
+| `fast/value-presence` | fast | each specific of the claim is looked for in the passages lexical search returns for the claim and for the specific; one found in none is `unsupported`, named in `specifics_absent`; otherwise `abstained`, because presence is not support |
+| `checker/chunk-support` | checker | the in-turn gate's per-claim register judges each passage; support at or above 0.5 on any is `supported`, otherwise `unsupported`. The register says support or not, so this rung never says `contradicted` |
+
+The reference host serves `fast` wherever `verify` is mounted, and `checker`
+only on the listener that holds its daemon's inference; elsewhere `checker`
+claims are `could_not_judge: no checker`.
+
+### 2.7 Named refusals and reasons (additions)
+
+| reason | status | when |
+|---|---|---|
+| `empty unit` | 400 | the unit is empty or whitespace |
+| `tier not offered` | 422 | the requested tier is not in `verify_tiers` |
+| `no checker` | — | a verdict's reason: the tier needs a model this listener does not hold |
+| `checker did not answer` | — | a verdict's reason: the checker gave no verdict on any passage |
+| `no corpus read` | — | a verdict's reason: no requested corpus could be read |
+| `not an exact slice` | — | a passage's `span_absent`: its text is not a slice of its stored text |
+| `passage names no text` | — | a passage's `span_absent`: it names no stored text |
+
+A passage whose stored text or record cannot be read gives v0.5 §2.5's reason
+in `span_absent` (`texts not stored`, `text not stored`, `document
+unreadable`), or an opaque one for a store error.
+
+The constants are in `oicp_types::verify::reasons`.
+
+## 6. Conformance (additions)
+
+| check | holds | red against |
+|---|---|---|
+| `evidence.verify` | the fixture's planted sentence comes back as claims whose `exact` is the unit's `[start, end)`; every verdict is one of the five; every passage's `span` dereferences to its `exact`; a tier outside `verify_tiers` is `422 tier not offered` | a passage `exact` one character off |
+
+`manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
+`verify_endpoint`, with a non-empty `verify_tiers`, and never without
+`evidence:text`.
+
+## 7. Backward compatibility
+
+- Every v0.6 field is `#[serde(default)]` and skipped when empty, so a v0.5
+  manifest reads into the v0.6 types and writes back unchanged.
+- `OICP_VERSION` is still `"0.4.0"` in the reference types (v0.5 is approved
+  but the constant was not moved); features gate behaviour either way.
+- A v0.6 client against a v0.5 host sees no `evidence:verify` and finds no
+  `verify_endpoint`.

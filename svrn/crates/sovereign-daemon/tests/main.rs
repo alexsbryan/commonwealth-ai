@@ -117,6 +117,8 @@ mod ner_one_load_census;
 mod no_engine_census;
 #[path = "main/oicp_align_e2e.rs"]
 mod oicp_align_e2e;
+#[path = "main/oicp_verify_e2e.rs"]
+mod oicp_verify_e2e;
 #[path = "main/oicp_evidence_e2e.rs"]
 mod oicp_evidence_e2e;
 #[path = "main/oicp_install_recipe_e2e.rs"]

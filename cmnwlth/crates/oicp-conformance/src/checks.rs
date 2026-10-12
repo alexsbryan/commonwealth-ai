@@ -240,6 +240,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
             out.push(evidence_checks::check_knowledge_document(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_evidence_text(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_evidence_align(host, m, &lib, &fixture).await);
+            out.push(crate::verify_checks::check_evidence_verify(host, m, &lib, &fixture).await);
         }
         Err(e) => {
             for id in [
@@ -248,6 +249,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
                 "knowledge.document",
                 "evidence.text",
                 "evidence.align",
+                "evidence.verify",
             ] {
                 out.push(Check::fail(
                     id,

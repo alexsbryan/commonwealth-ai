@@ -254,6 +254,14 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             // caller may read. Advertised as `evidence:align` beside
             // `knowledge.evidence.align_endpoint` (`routes_oicp`).
             .route("/oicp/v1/align", post(crate::routes_oicp_align::align))
+            // OICP v0.6 §2.6: judge a unit claim by claim against the same
+            // texts. Advertised as `evidence:verify` beside
+            // `knowledge.evidence.verify_endpoint`; its checker tier reads the
+            // `VerifyJudge` the operator listener layers on (`client_surface`).
+            .route(
+                crate::routes_oicp_verify::VERIFY_ENDPOINT,
+                post(crate::routes_oicp_verify::verify),
+            )
             // Ollama-native /api/* compatibility shim. Pure translation over the
             // OpenAI handlers above — no new inference/routing logic. Chat +
             // generate carry the same peer-admission gate as /v1/chat/completions

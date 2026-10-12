@@ -129,6 +129,8 @@ fn evidence_endpoints_omit_an_absent_align_endpoint() {
     let e = EvidenceEndpoints {
         text_endpoint: "/oicp/v1/text".into(),
         align_endpoint: None,
+        verify_endpoint: None,
+        verify_tiers: Vec::new(),
     };
     assert_eq!(
         serde_json::to_value(&e).unwrap(),

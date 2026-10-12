@@ -32,6 +32,8 @@ pub struct Breaks {
     pub exact_off_by_one: bool,
     /// evidence.align: replies carry no `texts_digest`.
     pub omit_texts_digest: bool,
+    /// evidence.verify: a claim's verdict is a kind outside the closed set.
+    pub verify_unknown_verdict: bool,
     /// knowledge.document: hits carry their record with metadata emptied.
     pub empty_metadata: bool,
     /// ingest.recipe: a recipe that does not parse is 200 `spawned: false`.
@@ -133,6 +135,7 @@ pub async fn spawn(breaks: Breaks) -> Running {
         .route("/v1/knowledge/search", post(search))
         .route("/oicp/v1/text/{sha}", get(text))
         .route("/oicp/v1/align", post(align))
+        .route("/oicp/v1/verify", post(verify))
         .route("/oicp/v1/corpus/install", post(install))
         .route("/oicp/v1/corpus/progress", get(progress))
         .route("/oicp/v1/recipe/test", post(recipe_test))
@@ -253,7 +256,7 @@ async fn capabilities() -> Json<Value> {
         "models": [],
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "evidence:text",
-            "evidence:align", "knowledge:document", "auth:named_client"
+            "evidence:align", "evidence:verify", "knowledge:document", "auth:named_client"
         ],
         "knowledge": {
             "corpora": [],
@@ -263,7 +266,12 @@ async fn capabilities() -> Json<Value> {
                 "progress_endpoint": "/oicp/v1/corpus/progress",
                 "test_endpoint": "/oicp/v1/recipe/test"
             },
-            "evidence": {"text_endpoint": "/oicp/v1/text", "align_endpoint": "/oicp/v1/align"}
+            "evidence": {
+                "text_endpoint": "/oicp/v1/text",
+                "align_endpoint": "/oicp/v1/align",
+                "verify_endpoint": "/oicp/v1/verify",
+                "verify_tiers": ["fast", "checker"]
+            }
         }
     }))
 }
@@ -400,6 +408,78 @@ async fn align(State(f): State<Arc<Fake>>, Json(req): Json<AlignRequest>) -> Jso
         "aligner": quote_align::ALIGNER_ID,
         "corpora": [corpus],
     }))
+}
+
+/// The lawful verify: each sentence of the unit is a claim, `supported` by
+/// the stored text it appears in verbatim (that occurrence is its passage),
+/// `unsupported` otherwise; the judge tier is not served. Spans take
+/// `exact_off_by_one` like align's.
+async fn verify(
+    State(f): State<Arc<Fake>>,
+    Json(req): Json<oicp_types::verify::VerifyRequest>,
+) -> Response {
+    use oicp_types::verify::{reasons as vr, VerifyTier, UNCALIBRATED};
+    if req.tier == VerifyTier::Judge {
+        return refuse(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!({"error": vr::TIER_NOT_OFFERED}),
+        );
+    }
+    let unit: Vec<char> = req.unit.chars().collect();
+    let mut claims = Vec::new();
+    let mut start = 0usize;
+    for i in 0..unit.len() {
+        let stop = unit[i] == '.' && unit.get(i + 1).is_none_or(|c| c.is_whitespace());
+        if !stop {
+            continue;
+        }
+        let exact: String = unit[start..=i].iter().collect();
+        let lead = exact.len() - exact.trim_start().len();
+        let (a, b) = ((start + lead) as u64, (i + 1) as u64);
+        let exact = exact.trim_start().to_string();
+        start = i + 1;
+        let found = f.texts.iter().find_map(|s| {
+            s.text
+                .find(&exact)
+                .map(|byte| (s, s.text[..byte].chars().count() as u64))
+        });
+        let shift = u64::from(f.breaks.exact_off_by_one);
+        let (verdict, evidence) = match found {
+            Some((s, at)) => {
+                let end = at + exact.chars().count() as u64;
+                let span = Span {
+                    corpus_id: f.corpus.clone(),
+                    document: f.record(s),
+                    start: at,
+                    end,
+                    exact: code_points(&s.text, at + shift, end + shift).unwrap_or_default(),
+                    prefix: String::new(),
+                    suffix: String::new(),
+                };
+                (
+                    json!({"kind": "supported"}),
+                    json!([{"corpus_id": f.corpus, "span": span, "verdict": {"kind": "supported"}}]),
+                )
+            }
+            None => (json!({"kind": "unsupported"}), json!([])),
+        };
+        let verdict = if f.breaks.verify_unknown_verdict {
+            json!({"kind": "plausible"})
+        } else {
+            verdict
+        };
+        claims.push(json!({
+            "start": a, "end": b, "exact": exact, "class": "checkable",
+            "verdict": verdict, "evidence": evidence, "rung": "fake/verbatim",
+            "operating_point": UNCALIBRATED,
+        }));
+    }
+    Json(json!({
+        "claims": claims,
+        "verifier": "fake-verify/1",
+        "corpora": [{"corpus_id": f.corpus, "texts_digest": f.digest()}],
+    }))
+    .into_response()
 }
 
 async fn install(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response {
