@@ -1001,19 +1001,13 @@ impl InferenceProvider for RemoteApiProvider {
             .as_deref()
             .filter(|_| self.forced_choice_by_logprobs_known())
         {
-            if let Some(text) = self
+            if let Some(answer) = self
                 .forced_choice_by_logprobs(&url, request, labels)
                 .await?
             {
                 return Ok(CompletionResponse {
-                    text,
-                    tokens_used: 0,
-                    prompt_tokens: 0,
-                    model_id: self.model_id.clone(),
                     latency_ms: start.elapsed().as_millis() as u64,
-                    oicp_meta: None,
-                    finish_reason: Some(FinishReason::Stop),
-                    completion_tokens: Some(1),
+                    ..answer
                 });
             }
         }
@@ -1033,15 +1027,22 @@ impl InferenceProvider for RemoteApiProvider {
             .map(|c| c.message.answer(request, mode))
             .unwrap_or_default();
         // A host that sampled a label rather than answering with the map
-        // (`forced_choice`): ask it once more through its logprobs.
-        let text = match labels {
-            Some(labels) if sovereign_contracts::oicp::forced_choice::parse(&text).is_none() => {
-                self.forced_choice_by_logprobs(&url, request, &labels)
-                    .await?
-                    .unwrap_or(text)
+        // (`forced_choice`): ask it once more through its logprobs. That
+        // answer stands whole, its usage too; without logprobs the native
+        // answer stands.
+        if let Some(labels) =
+            labels.filter(|_| sovereign_contracts::oicp::forced_choice::parse(&text).is_none())
+        {
+            if let Some(answer) = self
+                .forced_choice_by_logprobs(&url, request, &labels)
+                .await?
+            {
+                return Ok(CompletionResponse {
+                    latency_ms: start.elapsed().as_millis() as u64,
+                    ..answer
+                });
             }
-            _ => text,
-        };
+        }
         let finish_reason = first_choice
             .and_then(|c| c.finish_reason.as_deref())
             .and_then(response_wire::provider_finish);

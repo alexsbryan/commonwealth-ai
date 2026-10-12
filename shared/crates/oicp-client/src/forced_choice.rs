@@ -24,7 +24,7 @@ use std::sync::atomic::Ordering;
 
 use serde_json::{json, Value};
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::types::CompletionRequest;
+use sovereign_contracts::types::{CompletionRequest, CompletionResponse, FinishReason};
 
 use crate::RemoteApiProvider;
 
@@ -67,12 +67,17 @@ impl RemoteApiProvider {
     /// Answer `request`, a forced-choice call over `labels`, from one token's
     /// top logprobs. `Ok(None)` when the host returned no logprobs (it cannot
     /// serve this route either), so the caller keeps the native answer.
+    ///
+    /// The answer reports usage as the engine does for its one forward pass
+    /// (`model_slot.rs`, the forced-choice branch): the prompt the host
+    /// counted, no completion, `stop` (`projection.usage-forced-choice`). The
+    /// caller stamps the latency.
     pub(crate) async fn forced_choice_by_logprobs(
         &self,
         url: &str,
         request: &CompletionRequest,
         labels: &[String],
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<CompletionResponse>> {
         let admitted = self.outbound(crate::Payload::Completion)?;
         let mut body = self.build_request(request)?;
         if let Some(obj) = body.as_object_mut() {
@@ -132,7 +137,18 @@ impl RemoteApiProvider {
             distribution = ?distribution,
             "forced choice answered from one token's top logprobs"
         );
-        Ok(Some(match distribution {
+        let prompt_tokens = answer
+            .pointer("/usage/prompt_tokens")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize);
+        if prompt_tokens.is_none() {
+            tracing::debug!(
+                target: "oicp_client",
+                %url,
+                "forced choice: the host's logprobs answer carried no usage.prompt_tokens; reporting 0"
+            );
+        }
+        let text = match distribution {
             Some(map) => serde_json::to_string(&map).map_err(|e| {
                 Error::Inference(format!(
                     "forced choice: the label distribution did not serialise: {e}"
@@ -147,6 +163,17 @@ impl RemoteApiProvider {
                 );
                 String::new()
             }
+        };
+        let prompt_tokens = prompt_tokens.unwrap_or(0);
+        Ok(Some(CompletionResponse {
+            text,
+            tokens_used: prompt_tokens,
+            prompt_tokens,
+            model_id: self.model_id.clone(),
+            latency_ms: 0,
+            oicp_meta: None,
+            finish_reason: Some(FinishReason::Stop),
+            completion_tokens: Some(0),
         }))
     }
 }

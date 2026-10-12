@@ -149,3 +149,48 @@ where
     tokio::spawn(async move { axum::serve(listener, app).await });
     url
 }
+
+/// C5 (`projection.usage-forced-choice`): a logprobs answer reports the
+/// usage the engine reports for its one forward pass, the real prompt count
+/// and no completion, whichever call reached it. Case da62919cb6f3 reported
+/// prompt 191, completion 1 (the native ask's usage); the remembered route
+/// reported 0 and 0.
+#[tokio::test]
+async fn a_logprobs_answer_reports_its_prompt_and_no_completion() {
+    let chat = move |axum::Json(body): axum::Json<Value>| async move {
+        axum::Json(if body.get("logprobs") == Some(&json!(true)) {
+            json!({"choices": [{"finish_reason": "length", "message": {"content": "A"},
+                "logprobs": {"content": [{"token": "A", "top_logprobs": [
+                    {"token": "A", "logprob": 0.9f64.ln()}, {"token": "B", "logprob": 0.1f64.ln()}]}]}}],
+                "usage": {"prompt_tokens": 191, "completion_tokens": 1, "total_tokens": 192}})
+        } else {
+            json!({"choices": [{"finish_reason": "stop", "message": {"content": "\"A\""}}],
+                "usage": {"prompt_tokens": 195, "completion_tokens": 4, "total_tokens": 199}})
+        })
+    };
+    let url = serve(chat).await;
+    let provider = RemoteApiProvider::new(&url, None, "m", 8192).originating();
+    let request = CompletionRequest {
+        prompt: "is it A or B?".into(),
+        structured_output: Some(forced_choice::schema(&["A", "B"])),
+        ..Default::default()
+    };
+    for call in ["native first", "remembered"] {
+        let r = provider.complete(&request).await.unwrap();
+        assert!(
+            forced_choice::parse(&r.text).is_some(),
+            "{call}: {}",
+            r.text
+        );
+        assert_eq!(
+            (r.prompt_tokens, r.tokens_used, r.completion_tokens),
+            (191, 191, Some(0)),
+            "{call}"
+        );
+        assert_eq!(
+            r.finish_reason,
+            Some(sovereign_contracts::types::FinishReason::Stop),
+            "{call}"
+        );
+    }
+}
