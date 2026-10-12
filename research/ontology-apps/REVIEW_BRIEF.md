@@ -103,12 +103,14 @@ Scored against gold on the same documents. The line-level figures are b1's, from
 
 | Population | Asked of one line | Asked of the whole message |
 |---|---|---|
-| Ward, b1's 26 documents with a gold stage line | 11 right | 18 to 22, across two wordings (scored on 27: one more document, gold from our own table) |
+| Ward, b1's 26 documents with a gold stage line | 10 (a gold stage line read right at kind and value) | 18 to 22, across two wordings (scored on 27: one more document, gold from our own table) |
 | uv, 125 documents with a gold state (value right) | 76 | 96 to 98, across four wordings |
 
 b1's probe also shows the information is present at line level: the lines we lose rank well above unmarked lines
-(AUC .88 Ward, .85 uv). Within a document, the gold line is among the top three by the model's own claim
-probability 92% (Ward) and 95% (uv) of the time. The yes/no decision per line is what loses it. No line-level
+(AUC .88 Ward, .85 uv). Within a document, Locate's own ranking puts a gold line in its top three for 24 of
+32 Ward (document, value) items (chance .22), and for 23 of the 30 uv documents with more than three asked lines
+(chance .26). On GVC, per (document, happening type), it is .717 against chance .460 (`cite-probe/PREREG.md`).
+The argmax against "none" is what loses these lines. No line-level
 question shape tested does better than a plain paraphrase of today's question.
 
 ### 4.3 This model is sensitive to framing and wording
@@ -184,7 +186,10 @@ problem that the message-level change addresses.
    mentions.
 8. **Cost.** About added 18% to 41% calls per document. Message-level questions could replace most per-line
    questions; unmeasured.
-9. **Debt.** It is not decided what the new question order makes redundant: per-line Locate for acts, settle,
+9. **Stored embeddings are mostly zero off Ward.** The whole-text legs' chunk vectors are zero for 3,072 of 3,152
+   uv chunks and 512 of 743 GVC chunks (installs copied from runs/scaffold-3sys). Any plan that uses stored
+   embeddings, including the citation ranking above, must re-embed uv and GVC first.
+10. **Debt.** It is not decided what the new question order makes redundant: per-line Locate for acts, settle,
    possibly the weights. Nothing is retired yet.
 
 ## 6. How we plan to converge
@@ -199,8 +204,9 @@ have (About, Choose, Pick, Point, RESOLVE) in a new order before building anythi
    - For each particular, the act (stage, state) and its fields, asked of the whole message, with system prompts
      that name the declared type and field.
    - Each act asked in two wordings; a disagreement is held, not settled.
-   - Citation after the answer: the top line by the model's own in-document ranking, or one forced choice
-     among the top three.
+   - Citation after the answer: a ranking of the document's lines, then one forced choice among the top three.
+     Locate's ranking costs its per-line calls (19.7 per Ward document), the cost this plan exists to remove, so
+     b1 is measuring the replacement: sentence units ranked by embedding against the recorded value (M1, pending).
    - GVC's reports stay at line level.
 
    Read by error class and cost, beside the line-level run. Not a single bar.
