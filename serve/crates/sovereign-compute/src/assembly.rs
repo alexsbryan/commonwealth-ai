@@ -185,6 +185,7 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
         (EngineKind::LlamaServer, Some(models)) => Some(RouterPreset::from_models(
             models,
             served_kind::RERANK.model_path(Some(models)),
+            &config.daemon,
             sovereign_inference::gguf_meta::read_mtp_draft_layers,
         )?),
         _ => None,

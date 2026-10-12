@@ -296,6 +296,20 @@ impl LiveRouter {
             {
                 return Err(format!("the router reports {name}: {status}"));
             }
+            // A sleeping model is still running, so `/models/load` refuses
+            // it as already running; a request is what wakes it, and
+            // `/tokenize` is one the server makes wait for the reload.
+            for (name, _) in pending.iter().filter(|(_, s)| *s == "sleeping") {
+                tracing::info!(target: "llama_router", model = %name, "router: waking a sleeping model");
+                let woke = tokio::time::timeout(
+                    MODEL_LOAD.saturating_sub(started.elapsed()),
+                    self.token_count(name, ""),
+                )
+                .await;
+                if let Ok(Err(e)) = &woke {
+                    tracing::warn!(target: "llama_router", model = %name, error = %e, "router: waking request failed");
+                }
+            }
             if started.elapsed() > MODEL_LOAD {
                 return Err(format!(
                     "models still loading after {MODEL_LOAD:?}: {pending:?}"

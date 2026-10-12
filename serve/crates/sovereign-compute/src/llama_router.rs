@@ -23,7 +23,7 @@ pub mod build_pin;
 pub mod live;
 pub mod provider;
 use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection, GrammarSupport};
-use sovereign_contracts::setup_config::ModelsSection;
+use sovereign_contracts::setup_config::{DaemonSection, ModelsSection};
 
 /// Draft tokens per MTP step: the embedded engine's default
 /// (`mtp_draft_max_decide`), the value every battery pass ran.
@@ -65,6 +65,22 @@ pub struct RouterEntry {
     pub ctx: u32,
     /// What it serves.
     pub kind: EntryKind,
+    /// `sleep-idle-seconds`: the `[daemon] *_idle_secs` of the roles it
+    /// fills. `None` never sleeps.
+    pub sleep_idle_secs: Option<u64>,
+}
+
+/// One role's `[daemon] *_idle_secs` as a sleep window: 0 pins the model,
+/// which the server spells by leaving the flag out (it refuses 0).
+fn idle_window(secs: u64) -> Option<u64> {
+    (secs > 0).then_some(secs)
+}
+
+/// Two roles on one GGUF hold one copy of the weights, which is freed only
+/// once both would have let it go: the longer window, and never if either
+/// is pinned.
+fn shared_window(a: Option<u64>, b: Option<u64>) -> Option<u64> {
+    a.zip(b).map(|(a, b)| a.max(b))
 }
 
 /// The router's models and which of them fills each slot role.
@@ -86,13 +102,17 @@ fn stem(path: &Path) -> Result<String, String> {
 }
 
 impl RouterPreset {
-    /// Build the preset from `[models]` and the rerank kind's GGUF.
-    /// `mtp_draft_layers` answers how many draft layers a GGUF declares
-    /// (`gguf_meta::read_mtp_draft_layers` in production); an unreadable
-    /// GGUF refuses the preset, since the router could not load it either.
+    /// Build the preset from `[models]`, the rerank kind's GGUF and the
+    /// `[daemon] *_idle_secs` windows the embedded engine unloads on (code
+    /// shares the primary's lazy slot there, so its window; the reranker
+    /// has none). `mtp_draft_layers` answers how many draft layers a GGUF
+    /// declares (`gguf_meta::read_mtp_draft_layers` in production); an
+    /// unreadable GGUF refuses the preset, since the router could not load
+    /// it either.
     pub fn from_models(
         models: &ModelsSection,
         rerank: Option<PathBuf>,
+        idle: &DaemonSection,
         mtp_draft_layers: impl Fn(&Path) -> std::io::Result<Option<u32>>,
     ) -> Result<Self, String> {
         if !models.extra.is_empty() {
@@ -110,22 +130,28 @@ impl RouterPreset {
             );
         }
         let mut entries: BTreeMap<String, RouterEntry> = BTreeMap::new();
-        let mut chat = |path: &Path, ctx: u32, parallel: Option<u32>| -> Result<String, String> {
+        let mut chat = |path: &Path,
+                        ctx: u32,
+                        parallel: Option<u32>,
+                        sleep: Option<u64>|
+         -> Result<String, String> {
             let name = stem(path)?;
             let layers = mtp_draft_layers(path)
                 .map_err(|e| format!("reading {} for its MTP draft layers: {e}", path.display()))?;
             let mtp_draft = layers.is_some_and(|n| n > 0);
-            tracing::debug!(target: "llama_router", model = %name, ?layers, mtp_draft, ctx, "preset: chat entry");
+            tracing::debug!(target: "llama_router", model = %name, ?layers, mtp_draft, ctx, ?sleep, "preset: chat entry");
             match entries.get_mut(&name) {
                 // Two roles on one GGUF share its entry, at the larger
-                // context and the larger slot count.
+                // context, the larger slot count and the shared window.
                 Some(RouterEntry {
                     ctx: c,
                     kind: EntryKind::Chat { parallel: p, .. },
+                    sleep_idle_secs: s,
                     ..
                 }) => {
                     *c = (*c).max(ctx);
                     *p = (*p).max(parallel);
+                    *s = shared_window(*s, sleep);
                 }
                 Some(other) => {
                     return Err(format!("{name} is both a chat model and {:?}", other.kind));
@@ -140,46 +166,65 @@ impl RouterPreset {
                                 mtp_draft,
                                 parallel,
                             },
+                            sleep_idle_secs: sleep,
                         },
                     );
                 }
             }
             Ok(name)
         };
-        let primary = chat(&models.primary, models.effective_context_size(), None)?;
+        let primary_sleep = idle_window(idle.primary_idle_secs);
+        let primary = chat(
+            &models.primary,
+            models.effective_context_size(),
+            None,
+            primary_sleep,
+        )?;
         let fast = match models.has_explicit_fast() {
             true => Some(chat(
                 models.fast_path(),
                 models.effective_fast_context_size(),
                 Some(FAST_PARALLEL),
+                idle_window(idle.fast_idle_secs),
             )?),
             false => None,
         };
         let code = match &models.code {
-            Some(path) => Some(chat(path, models.effective_context_size(), None)?),
+            Some(path) => Some(chat(
+                path,
+                models.effective_context_size(),
+                None,
+                primary_sleep,
+            )?),
             None => None,
         };
-        let mut encoder = |path: &Path, kind: EntryKind| -> Result<String, String> {
-            let name = stem(path)?;
-            if entries.contains_key(&name) {
-                return Err(format!("{name} is named twice in [models]"));
-            }
-            entries.insert(
-                name.clone(),
-                RouterEntry {
-                    path: path.to_path_buf(),
-                    ctx: ENCODER_CTX,
-                    kind,
-                },
-            );
-            Ok(name)
-        };
+        let mut encoder =
+            |path: &Path, kind: EntryKind, sleep: Option<u64>| -> Result<String, String> {
+                let name = stem(path)?;
+                if entries.contains_key(&name) {
+                    return Err(format!("{name} is named twice in [models]"));
+                }
+                entries.insert(
+                    name.clone(),
+                    RouterEntry {
+                        path: path.to_path_buf(),
+                        ctx: ENCODER_CTX,
+                        kind,
+                        sleep_idle_secs: sleep,
+                    },
+                );
+                Ok(name)
+            };
         let embed = match models.embed.as_os_str().is_empty() {
             true => None,
-            false => Some(encoder(&models.embed, EntryKind::Embed)?),
+            false => Some(encoder(
+                &models.embed,
+                EntryKind::Embed,
+                idle_window(idle.embed_idle_secs),
+            )?),
         };
         let rerank = match rerank {
-            Some(path) => Some(encoder(&path, EntryKind::Rerank)?),
+            Some(path) => Some(encoder(&path, EntryKind::Rerank, None)?),
             None => None,
         };
         Ok(Self {
@@ -232,6 +277,9 @@ impl RouterPreset {
                 e.path.display(),
                 e.ctx
             );
+            if let Some(secs) = e.sleep_idle_secs {
+                let _ = writeln!(out, "sleep-idle-seconds = {secs}");
+            }
             match &e.kind {
                 EntryKind::Chat {
                     mtp_draft,
