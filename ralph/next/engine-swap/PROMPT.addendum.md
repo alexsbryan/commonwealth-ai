@@ -29,7 +29,10 @@ registry are the surfaces; a second implementation of any of them stops (§6).
 <!-- section: facts after=intro -->
 ## 0. Standing facts (do not re-derive)
 
-- Branch `main`. NOTHING IS EVER PUSHED. Never amend, never rewrite history.
+- Branch `engine-swap`, in its own worktree (`commonwealth-ai-engine-swap`)
+  beside the main checkout, which belongs to other agents. Never check out,
+  merge into or commit to `main`; the seat does every merge between the two.
+  NOTHING IS EVER PUSHED. Never amend, never rewrite history.
 - Builds, tests and every live run happen inside the `sovereign-vulkan`
   toolbox. Container builds run on the host through
   `flatpak-spawn --host podman`.

@@ -1,18 +1,29 @@
 # engine-swap: the embedded engine to a supervised llama-server, then delete.
 # Plan: ~/dev/svrn-docs/ENGINE_SWAP_PLAN.md (milestones A-G, decisions of
-# 2026-10-11 and 2026-10-12). Launch from the repo root INSIDE the toolbox
-# (`toolbox enter sovereign-vulkan`; `toolbox run` drops RALPH_QUEUE), after
+# 2026-10-11 and 2026-10-12).
+#
+# It runs in ITS OWN WORKTREE on branch `engine-swap`, so other agents keep
+# main to themselves (operator, 2026-10-12): the loop's tree is
+# /home/alexbryan/dev/commonwealth-ai-engine-swap, its lanes sit beside it in
+# commonwealth-ai-engine-swap-lanes, it builds into its own target/ and takes
+# its own cargo lock. Launch INSIDE the toolbox, from that worktree, after
 # checking no other loop is live (`pgrep -f 'ralph.py supervise'`):
 #
-#   nohup python3 scripts/ralph.py supervise --workdir . --queue engine-swap \
+#   cd /home/alexbryan/dev/commonwealth-ai-engine-swap && \
+#   SVRN_CARGO_LOCK_DIR=/tmp/svrn-cargo-lock.$(id -u).engine-swap \
+#   setsid nohup python3 scripts/ralph.py supervise --workdir . --queue engine-swap \
 #     -- python3 scripts/ralph.py pool --workdir . --queue engine-swap --lanes 3 \
-#     >> ralph/log-engine-swap.txt 2>&1 &
+#     --base-branch engine-swap >> ralph/log-engine-swap.txt 2>&1 < /dev/null &
 #
-# Three lanes, as phase-c measured its memory headroom (phase-b-103), with
-# the deployed daemon resident beside them. heavy.txt allows one
-# model-loading row per wave; conflicts.txt keeps rows on the same files out
-# of one wave. HUMAN- rows are the seat's (host grant: restart the daemon,
-# 2026-09-28): the pool parks them and runs on.
+# The seat merges main INTO engine-swap between waves (the empty-STOP-after-
+# "finished — merging" stop), so the branch keeps up with other agents, and
+# merges engine-swap into main before HUMAN-es-host-flip and at the release
+# flip. Nothing in this loop ever commits to main.
+#
+# Three lanes, simulated against 4 (4 is slower: conflicting rows then delay
+# the router chain). heavy.txt allows one timing row per wave; conflicts.txt
+# keeps rows on the same files out of one wave. HUMAN- rows are the seat's
+# (host grant: restart the daemon, 2026-09-28): the pool parks them and runs on.
 label = "engine-swap"
 session_timeout = 7200
 audit_every = 8

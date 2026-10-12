@@ -2,7 +2,8 @@
 
 Protocol: `ralph/PROMPT.base.md` + `ralph/next/engine-swap/PROMPT.addendum.md` (rendered by
 `--queue`). Plan: **P**. Launch line: the top of `ralph/next/engine-swap/queue.toml` (the pool,
-3 lanes, inside the toolbox).
+3 lanes, inside the toolbox, in its own worktree on branch `engine-swap`; main is other
+agents').
 
 Pointer keys:
 **P** = `/home/alexbryan/dev/svrn-docs/ENGINE_SWAP_PLAN.md` (absolute: `docs/internal` is a
@@ -61,7 +62,7 @@ are the seat's.
 
 ## Flip (P milestones C, E)
 
-- [ ] HUMAN-es-host-flip — depends [REVIEW-build-es-r5-router-owns-model-processes, REVIEW-build-es-t5-delete-hermes] — Seat (P dec 4, host grant). Rebuild the main tree's server with **BS**`build.sh` and the workspace, then flip `~/.sovereign/config.toml` to `kind = "llama-server"` between rows of any live loop, restart the daemon, and run gate bars 1 and 2 on it: `svrn quality check` twice, no lane worse than the embedded run of 2026-10-12 (`target/quality-check/20261012-081837`); throughput n of 15 or more each for primary and fast, first-token p50 at most 10% slower and decode tok/s at least 90%. Keep the flip if both hold, roll back otherwise, and record the numbers in P.
+- [ ] HUMAN-es-host-flip — depends [REVIEW-build-es-r5-router-owns-model-processes, REVIEW-build-es-t5-delete-hermes] — Seat (P dec 4, host grant). Merge `engine-swap` into `main` (the deployed daemon runs main's build), rebuild the main tree's server with **BS**`build.sh` and the workspace, then flip `~/.sovereign/config.toml` to `kind = "llama-server"` between rows of any live loop, restart the daemon, and run gate bars 1 and 2 on it: `svrn quality check` twice, no lane worse than the embedded run of 2026-10-12 (`target/quality-check/20261012-081837`); throughput n of 15 or more each for primary and fast, first-token p50 at most 10% slower and decode tok/s at least 90%. Keep the flip if both hold, roll back otherwise, and record the numbers in P.
 - [ ] HUMAN-es-measure-sampler-pins — depends [HUMAN-es-host-flip] — Seat (P C1-C3). Two more quality checks with the ModelQuirks tuple sent, against the flip's two on defaults; `--cache-ram` and checkpoints against `cost.directed-pin`; the E1 single-request perf check. Numbers into P.
 - [ ] REVIEW-build-es-c1-sampler-outcome — depends [HUMAN-es-measure-sampler-pins] — Act on the sampler verdict in P (P C1): if the defaults held, delete the sampler policy, `sampling_mode` and the quirk fields; if not, send only the parameters that moved. Behaviour delta and its reader in the body — check: LINT; TESTALL
 - [ ] es-c2-battery-rejudge — depends [HUMAN-es-host-flip] — The battery reruns and its verdicts are saved (P C4): fix the judge items L I3 and I4, retire or re-predict `split-sampler` and `forced-choice` in `bench/lanes/engine-swap/conformance.toml` with a reason each; every failed row fixed or retired. Paste the table — check: LINT
