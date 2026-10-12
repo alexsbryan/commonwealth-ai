@@ -2,10 +2,10 @@
 # Rows in one stream are already serial by their dependencies; these lines keep
 # rows from DIFFERENT streams that edit the same files apart, so the pool's
 # merge does not stall on a conflict.
-es-t1-call-check es-r1-host-truth REVIEW-build-es-r3-fim es-r4-rerank   # oicp-client lib.rs: the request path, raw completion, rerank
-es-r1-host-truth REVIEW-build-es-m3-move-agnostic                       # gguf_meta and sovereign-inference's module list
-REVIEW-build-es-r5-router-owns-model-processes REVIEW-build-es-m3-move-agnostic REVIEW-build-es-m4-planner-out-of-embedded  # assembly, engine_factory, compute's module list
-REVIEW-build-es-t2-executor-native es-t3-recipe-author-native            # sovereign-core's tool loop
-REVIEW-build-es-t5-delete-hermes REVIEW-build-es-r3-fim                  # serving-host inference_adapter (Hermes path, FIM routing)
+es-t1-call-check es-r1-host-truth es-r3-fim es-r4-rerank   # oicp-client lib.rs: the request path, raw completion, rerank
+es-r1-host-truth es-m3-move-agnostic                       # gguf_meta and sovereign-inference's module list
+es-r5-router-owns-model-processes es-m3-move-agnostic es-m4-planner-out-of-embedded  # assembly, engine_factory, compute's module list
+es-t2-executor-native es-t3-recipe-author-native            # sovereign-core's tool loop
+es-t5-delete-hermes es-r3-fim                  # serving-host inference_adapter (Hermes path, FIM routing)
 # No row runs alone: the battery judges conformance, not timing, and an alone row
 # starves while the pool keeps its lanes full (simulated: day 11 against day 6).

@@ -143,9 +143,8 @@ Outside a lane (a REVIEW row in the main tree), mint the same way and run
 | prefix | what you do |
 |---|---|
 | `es-` | build the unit (§3) |
-| `REVIEW-build-es-` | build the unit (§3); it needs judgment, which is why the stronger model runs it |
 | `REVIEW-audit-es-` | full gate and principles review (§4); the loop inserts one every 8 units |
-| `REVIEW-DEMO-es-` | run the row's command in the MAIN workdir; paste its output; anything but its expected verdict is §6 |
+| `REVIEW-DEMO-es-` (the pool runs every `REVIEW-` row in the main tree, alone; this queue has one, the last) | run the row's command in the MAIN workdir; paste its output; anything but its expected verdict is §6 |
 | `HUMAN-es-` | never do it and never mark it: the loop holds these for the seat. If you are given one, end with `ralph-result needs-human --operator <the row>` |
 
 <!-- section: checks-queue-1 -->
@@ -163,7 +162,7 @@ Outside a lane (a REVIEW row in the main tree), mint the same way and run
 - Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
   `scripts/ralph*`. Never touch `ralph/STOP`, `ralph/NEEDS_HUMAN.md`, or
   another queue's directory under `ralph/next/`.
-- **Behaviour-preserving or reported.** Until `REVIEW-build-es-e2-flip-default`
+- **Behaviour-preserving or reported.** Until `es-e2-flip-default`
   the default engine is untouched: every row's change is reached only under
   `kind = "llama-server"`, or is a move with no observable difference. A
   route, tool or read that worked must still work or answer with a named

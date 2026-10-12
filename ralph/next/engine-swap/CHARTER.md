@@ -39,7 +39,7 @@ one model-loading row per wave; a row marked `*` in conflicts.txt runs alone.
 
 ## Leave these for the operator (write the package and stop)
 
-- Changing the default engine anywhere but `REVIEW-build-es-e2-flip-default`,
+- Changing the default engine anywhere but `es-e2-flip-default`,
   or that row before its dependencies are `[x]`.
 - Reversing a decision of 2026-10-11 or 2026-10-12 (the plan's two decision
   lists), or dropping a kept capability.
