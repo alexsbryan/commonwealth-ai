@@ -21,13 +21,15 @@ use corpus_index::index::{CorpusIndex, DocumentRecord};
 use corpus_index::ingest_port::daemon::IngestPort;
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::{
-    reasons, AlignRequest, AlignResponse, Alignment, CorpusTexts, Difference, DifferenceKind, Span,
+    AlignRequest, AlignResponse, Alignment, CorpusTexts, Difference, DifferenceKind, Span,
     Unavailable,
 };
 use quote_align::{code_point_slice, AlignConfig, QuoteAlignment, QuoteEdit, QuoteEditKind};
 use sovereign_contracts::principal::AttachedPrincipal;
 
-use crate::oicp_evidence::{absence_reason, open_for_reading, readable_corpora, wire_document};
+use crate::oicp_evidence::{
+    absence_reason, open_for_reading, readable_corpora, requested_corpora, wire_document,
+};
 use crate::routes_internal::ErrorBody;
 use crate::state::AppState;
 
@@ -105,25 +107,8 @@ pub async fn align(
         &installed,
     );
 
-    let mut corpora_unavailable: Vec<Unavailable> = Vec::new();
-    let targets: Vec<String> = if req.corpora.is_empty() {
-        readable.clone()
-    } else {
-        let mut seen = std::collections::HashSet::new();
-        let mut out = Vec::new();
-        for id in req.corpora.iter().filter(|id| seen.insert(id.as_str())) {
-            if readable.contains(id) {
-                out.push(id.clone());
-            } else {
-                tracing::debug!(corpus = %id, "oicp align: requested corpus not held for this caller");
-                corpora_unavailable.push(Unavailable {
-                    corpus_id: id.clone(),
-                    reason: reasons::CORPUS_NOT_HELD.into(),
-                });
-            }
-        }
-        out
-    };
+    let (targets, mut corpora_unavailable) =
+        requested_corpora(&req.corpora, &readable, "align");
 
     let mut corpora: Vec<CorpusTexts> = Vec::new();
     let mut candidates: Vec<(Sha256Hash, Candidate)> = Vec::new();

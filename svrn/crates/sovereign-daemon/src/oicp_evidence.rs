@@ -13,7 +13,7 @@ use corpus_index::index::{CorpusIndex, DocumentRecord, TextAbsence};
 use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::types::{IndexInfo, ScoredChunk};
 use kernel_types::Sha256Hash;
-use oicp_types::evidence::{reasons, Document, SourceRef};
+use oicp_types::evidence::{reasons, Document, SourceRef, Unavailable};
 use oicp_types::KnowledgeResult;
 use sovereign_contracts::principal::Principal;
 use sovereign_core::context::PrincipalScope;
@@ -152,6 +152,37 @@ pub(crate) fn readable_corpora(
         "oicp read scope"
     );
     readable
+}
+
+/// The corpora a request names, resolved against what the caller may read:
+/// each requested corpus lands in exactly one of the two lists, a corpus the
+/// caller may not read (or the host does not hold) as `corpus not held`, so a
+/// reply never tells a caller which corpora exist beyond its reach. An empty
+/// request means every readable corpus. Repeats are read once. The align and
+/// verify routes both resolve through this.
+pub(crate) fn requested_corpora(
+    requested: &[String],
+    readable: &[String],
+    route: &'static str,
+) -> (Vec<String>, Vec<Unavailable>) {
+    if requested.is_empty() {
+        return (readable.to_vec(), Vec::new());
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut targets = Vec::new();
+    let mut unavailable = Vec::new();
+    for id in requested.iter().filter(|id| seen.insert(id.as_str())) {
+        if readable.contains(id) {
+            targets.push(id.clone());
+        } else {
+            tracing::debug!(corpus = %id, route, "oicp: requested corpus not held for this caller");
+            unavailable.push(Unavailable {
+                corpus_id: id.clone(),
+                reason: reasons::CORPUS_NOT_HELD.into(),
+            });
+        }
+    }
+    (targets, unavailable)
 }
 
 /// `corpus_id`'s index, opened to read its texts and records and to search
