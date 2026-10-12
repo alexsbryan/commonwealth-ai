@@ -1407,7 +1407,7 @@ mod outbound;
 mod response_wire;
 pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal};
 mod shed;
-pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
+pub use chat_wire::{openai_function_name, titled_schema, write_constraints, StructuredOutputMode};
 mod loopback;
 pub use loopback::endpoint_is_loopback;
 

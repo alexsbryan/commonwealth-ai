@@ -109,7 +109,11 @@ pub(crate) fn write_assistant_prefix(
 /// A constraint the host cannot enforce is refused, never dropped unseen.
 /// The one exception is a Lark grammar beside tools: llama-server's own
 /// tool-call grammar takes its place, and the drop is traced.
-pub(crate) fn write_constraints(
+///
+/// Public so the llg-parity corpus (sovereign-inference
+/// `llg_parity_corpus_tests`) records the grammar this writes rather than a
+/// copy of its rules.
+pub fn write_constraints(
     body: &mut Value,
     request: &CompletionRequest,
     host: GrammarSupport,

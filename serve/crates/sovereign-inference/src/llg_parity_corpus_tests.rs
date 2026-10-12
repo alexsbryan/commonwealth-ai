@@ -15,7 +15,9 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sovereign_contracts::decode_allowlist::{llguidance_lark, AllowlistLanguage, EVIDENCE_ID, URL};
+use sovereign_contracts::engine_config::GrammarSupport;
 use sovereign_contracts::structured_output::default_additional_properties_false;
+use sovereign_contracts::types::CompletionRequest;
 
 use crate::decode_allowlist_parity_tests::{generated, hand_picked, test_ids, test_urls};
 use crate::evidence_id_constraint::EvidenceIdAllowlistConstraint;
@@ -57,14 +59,21 @@ fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(FIXTURES)
 }
 
-/// A Lark grammar as the remote client sends it to llama-server
-/// (oicp-client chat_wire.rs:126-127, `write_constraints`).
+/// A Lark grammar as the remote client sends it to llama-server, written by
+/// the client's own `write_constraints` (C8: this was a copy of its header
+/// rule, which a change to the client would not have reached).
 fn wire_lark(lark: &str) -> String {
-    if lark.trim_start().starts_with("%llguidance") {
-        lark.to_string()
-    } else {
-        format!("%llguidance {{}}\n{lark}")
-    }
+    let request = CompletionRequest {
+        lark_grammar: Some(lark.to_string()),
+        ..Default::default()
+    };
+    let mut body = json!({});
+    oicp_client::write_constraints(&mut body, &request, GrammarSupport::Llguidance)
+        .expect("a Lark grammar alone is carried");
+    body["grammar"]
+        .as_str()
+        .expect("written as one grammar")
+        .to_string()
 }
 
 /// A schema as llama-server built with llguidance compiles it off the chat
