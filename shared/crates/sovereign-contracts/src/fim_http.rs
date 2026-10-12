@@ -72,8 +72,8 @@ pub async fn fim_aggregated(
                 );
             }
             StreamFrame::Debug(v) => debug_payload = Some(v),
-            StreamFrame::ToolCalls(_) => {
-                // Never produced by the FIM adapter; ignore defensively.
+            StreamFrame::ToolCalls(_) | StreamFrame::Reasoning(_) => {
+                // Chat-only frames; the FIM adapter never produces them.
             }
         }
     }
@@ -175,9 +175,9 @@ pub fn fim_sse_items(
                 "{{\"error\":{{\"message\":\"{}\"}}}}",
                 e.replace('"', "\\\"")
             )),
-            StreamFrame::ToolCalls(_) => {
-                // Never produced by the FIM adapter.
-                SseItem::Comment("tool_calls dropped")
+            StreamFrame::ToolCalls(_) | StreamFrame::Reasoning(_) => {
+                // Chat-only frames; the FIM adapter never produces them.
+                SseItem::Comment("chat frame dropped")
             }
         }
     });

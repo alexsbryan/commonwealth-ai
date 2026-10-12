@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Committed FACTS about the fetched E2E-SWE task (see ldaptor.toml for the pattern).
+# SAE J1939 CAN protocol stack, 81 hidden tests across 10 files, obscure
+# (low memorization exposure). Upstream's test.sh uses the whole tests/ dir and
+# a 60s per-test timeout (the suite has threading-based integration tests;
+# tests/feeder.py + conftest.py provide the virtual CAN bus).
+
+id = "j1939"
+upstream = "tasks/j1939"
+hidden_tests = 81
+spec_chars = 24218
+
+[test]
+target = "tests/"
+pytest_timeout = 60
+needs_redis = false
+
+# instruction.md: python-can + numpy preinstalled, setuptools build backend.
+[deps]
+runtime = ["python-can", "numpy"]
+build = ["setuptools", "wheel"]

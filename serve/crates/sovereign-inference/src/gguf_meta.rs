@@ -92,6 +92,46 @@ pub fn read_architecture(path: &Path) -> io::Result<Option<String>> {
     Ok(None)
 }
 
+/// The suffix of the key that counts a model's multi-token-prediction draft
+/// layers, `<arch>.nextn_predict_layers` (llama.cpp `llama-arch.cpp`,
+/// `LLM_KV_NEXTN_PREDICT_LAYERS`).
+pub const MTP_DRAFT_LAYERS_SUFFIX: &str = ".nextn_predict_layers";
+
+/// How many MTP draft layers the GGUF declares, read without loading it: the
+/// fact llama-server's `--spec-type draft-mtp` needs, where a name or an
+/// architecture family is only a guess.
+///
+/// - `Ok(Some(n))` — the key is present (`n` may be 0).
+/// - `Ok(None)` — no such key, or one that is not an unsigned integer.
+/// - `Err(_)` — I/O error or a malformed header.
+pub fn read_mtp_draft_layers(path: &Path) -> io::Result<Option<u32>> {
+    let mut r = BufReader::new(File::open(path)?);
+    if read_u32(&mut r)? != GGUF_MAGIC {
+        return Err(invalid("not a GGUF file (bad magic)"));
+    }
+    let version = read_u32(&mut r)?;
+    if !(2..=3).contains(&version) {
+        return Err(invalid(&format!("unsupported GGUF version {version}")));
+    }
+    let _tensor_count = read_u64(&mut r)?;
+    let kv_count = read_u64(&mut r)?;
+    if kv_count > 1_000_000 {
+        return Err(invalid("implausible GGUF metadata_kv_count"));
+    }
+    for _ in 0..kv_count {
+        let key = read_gguf_string(&mut r)?;
+        let vtype = read_u32(&mut r)?;
+        if key.ends_with(MTP_DRAFT_LAYERS_SUFFIX) {
+            return Ok(match vtype {
+                T_UINT32 => Some(read_u32(&mut r)?),
+                _ => None,
+            });
+        }
+        skip_value(&mut r, vtype)?;
+    }
+    Ok(None)
+}
+
 fn invalid(msg: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg.to_string())
 }
@@ -256,6 +296,27 @@ mod tests {
         let bytes = GgufBuilder::new().str_kv("general.name", "x").finish();
         let (_d, p) = write_tmp(&bytes);
         assert_eq!(read_architecture(&p).unwrap(), None);
+    }
+
+    #[test]
+    fn reads_mtp_draft_layers_after_other_keys() {
+        let bytes = GgufBuilder::new()
+            .str_kv(ARCH_KEY, "qwen35moe")
+            .str_array_kv("tokenizer.ggml.tokens", &["a", "b"])
+            .u32_kv("qwen35moe.nextn_predict_layers", 1)
+            .finish();
+        let (_d, p) = write_tmp(&bytes);
+        assert_eq!(read_mtp_draft_layers(&p).unwrap(), Some(1));
+    }
+
+    #[test]
+    fn no_mtp_draft_layers_key_is_none() {
+        let bytes = GgufBuilder::new()
+            .str_kv(ARCH_KEY, "qwen3")
+            .u32_kv("qwen3.block_count", 36)
+            .finish();
+        let (_d, p) = write_tmp(&bytes);
+        assert_eq!(read_mtp_draft_layers(&p).unwrap(), None);
     }
 
     #[test]

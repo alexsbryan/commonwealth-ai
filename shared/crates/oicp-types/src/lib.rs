@@ -32,6 +32,7 @@
 
 pub mod capabilities;
 pub mod capability;
+pub mod chat_turn;
 pub mod completion;
 pub mod error;
 /// The v0.5 evidence extension: stored texts, spans into them, alignment.

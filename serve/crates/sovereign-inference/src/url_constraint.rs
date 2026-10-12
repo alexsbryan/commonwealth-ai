@@ -34,6 +34,9 @@
 
 use std::sync::Arc;
 
+// The markers and terminators, shared with the grammar a remote host is sent.
+use sovereign_contracts::decode_allowlist::URL as LANGUAGE;
+
 use crate::llama::cpp::token::data_array::LlamaTokenDataArray;
 use crate::llama::cpp::token::LlamaToken;
 
@@ -57,33 +60,6 @@ impl Default for TrieNode {
     }
 }
 
-/// Bytes that legitimately terminate a URL when seen after a
-/// terminal trie node. Anything else, when the cursor is at a
-/// non-terminal node, is invalid (the model is trying to extend a
-/// URL with a byte that has no trie edge).
-fn is_url_terminator(b: u8) -> bool {
-    b == b' '
-        || b == b'\t'
-        || b == b'\n'
-        || b == b'\r'
-        || b == b','
-        || b == b'.'
-        || b == b'<'
-        || b == b'>'
-        || b == b'('
-        || b == b')'
-        || b == b'['
-        || b == b']'
-        || b == b'"'
-        || b == b'\''
-        || b == b'?'
-        || b == b'!'
-        || b == b';'
-        || b == b':'
-}
-
-const HTTPS_START: &[u8] = b"https://";
-const HTTP_START: &[u8] = b"http://";
 const URL_START_WATCH_BYTES: usize = 16;
 
 /// Position in the constraint state machine. Cheap to clone for the
@@ -215,6 +191,23 @@ impl UrlAllowlistConstraint {
     }
 }
 
+/// The mask's verdict on a whole output: every byte allowed, and EOS
+/// allowed after the last one. What `decode_allowlist_parity_tests` holds
+/// the remote host's grammar to.
+#[cfg(test)]
+impl UrlAllowlistConstraint {
+    pub(crate) fn accepts_whole(allowed: &[String], text: &[u8]) -> bool {
+        let Some(mut c) = Self::new(allowed, Arc::new(Vec::new())) else {
+            return true;
+        };
+        simulate_bytes(&c.nodes, &mut c.cursor, text)
+            && match c.cursor {
+                CursorMode::InUrl(node) => c.nodes[node as usize].is_terminal,
+                CursorMode::InProse(_) => true,
+            }
+    }
+}
+
 /// Feed `bytes` through `cursor` in place. Returns `true` if every
 /// byte was accepted; `false` if any byte broke the state machine
 /// (i.e. extended a URL into an invalid trie path).
@@ -239,27 +232,16 @@ fn feed_byte(nodes: &[TrieNode], cursor: &mut CursorMode, b: u8) -> bool {
                 let drain_n = window.len() - URL_START_WATCH_BYTES;
                 window.drain(..drain_n);
             }
-            if window.ends_with(HTTPS_START) {
-                let walked = walk_marker(nodes, HTTPS_START);
-                match walked {
+            if let Some(marker) = LANGUAGE.markers.iter().find(|m| window.ends_with(m)) {
+                match walk_marker(nodes, marker) {
                     Some(node_idx) => {
                         *cursor = CursorMode::InUrl(node_idx);
                     }
                     None => {
-                        // No allowed URL starts with `https://`. The
+                        // No allowed URL starts with this marker. The
                         // model has emitted these bytes anyway; we
                         // reject this transition. Caller will mask
                         // the offending token.
-                        return false;
-                    }
-                }
-            } else if window.ends_with(HTTP_START) {
-                let walked = walk_marker(nodes, HTTP_START);
-                match walked {
-                    Some(node_idx) => {
-                        *cursor = CursorMode::InUrl(node_idx);
-                    }
-                    None => {
                         return false;
                     }
                 }
@@ -277,7 +259,7 @@ fn feed_byte(nodes: &[TrieNode], cursor: &mut CursorMode, b: u8) -> bool {
                     // No trie edge for this byte. Either the URL ends
                     // here (terminal + URL-terminator byte) or this is
                     // an invalid extension.
-                    if nodes[cur].is_terminal && is_url_terminator(b) {
+                    if nodes[cur].is_terminal && LANGUAGE.is_terminator(b) {
                         // URL completes cleanly. Drop back to prose
                         // and reprocess `b` there (it might itself
                         // start a new prose context).
@@ -380,7 +362,7 @@ mod tests {
     #[test]
     fn url_inside_markdown_link_form() {
         // [label](https://a.test/x) — the brackets and paren are URL
-        // terminators per is_url_terminator.
+        // terminators per LANGUAGE.terminators.
         let mut c = build(&["https://a.test/x"]);
         assert!(feed(&mut c, "see [label](https://a.test/x) here"));
         assert!(!c.in_url_mode());

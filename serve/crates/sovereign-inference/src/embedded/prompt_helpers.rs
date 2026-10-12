@@ -187,10 +187,10 @@ pub(crate) fn clamp_max_tokens(
     n_ctx: usize,
 ) -> Result<usize> {
     if prompt_tokens >= n_ctx {
-        return Err(Error::Inference(format!(
-            "Prompt too long: {prompt_tokens} tokens already meets or exceeds \
-             the context window of {n_ctx}. Shorten the conversation."
-        )));
+        return Err(Error::ContextExceeded {
+            prompt_tokens: prompt_tokens as u64,
+            n_ctx: n_ctx as u64,
+        });
     }
     let headroom = n_ctx - prompt_tokens;
     let resolved = match requested {
@@ -308,12 +308,33 @@ pub(crate) fn add_bos_for(request: &CompletionRequest) -> AddBos {
     }
 }
 
+/// The prompt's token ids, as every generation path decodes them. The one
+/// place a prompt is tokenized, so the conformance battery's observation of
+/// what the model was given is taken where it happens.
+pub(crate) fn tokenize_prompt(
+    model: &LlamaModel,
+    full_prompt: &str,
+    request: &CompletionRequest,
+) -> Result<Vec<LlamaToken>> {
+    let tokens = model
+        .str_to_token(full_prompt, add_bos_for(request))
+        .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+    super::observe::prompt_tokens(&tokens);
+    Ok(tokens)
+}
+
 pub(crate) fn format_prompt(
     model: &LlamaModel,
     model_id: &str,
     request: &CompletionRequest,
     quirks: &ModelQuirks,
-) -> Result<String> {
+) -> Result<super::chat_template::Prompt> {
+    // Only a conversation's reply is parsed by `chat_turn`, so only its
+    // prompt names a turn opener; every other shape keeps its own parse.
+    let plain = |text: String| super::chat_template::Prompt {
+        text,
+        turn_opener: String::new(),
+    };
     // Raw pass-through (INLINE_COMPLETION.md §3.1, decision D4): the
     // caller already assembled the exact string the model must see
     // (FIM markers and all) — no chat template, no think-suppression,
@@ -321,7 +342,13 @@ pub(crate) fn format_prompt(
     // special tokens and skips BOS (`AddBos::Never` at the serving
     // sites), so the string is the whole contract.
     if matches!(request.prompt_shape, Some(PromptShape::Raw)) {
-        return Ok(request.prompt.clone());
+        return Ok(plain(request.prompt.clone()));
+    }
+    // A whole conversation (the OpenAI chat path): the model's template
+    // renders it, as llama-server does, and nothing below applies — no
+    // daemon tool block, think suppression or assistant prefix.
+    if let Some(PromptShape::Conversation { messages }) = &request.prompt_shape {
+        return super::chat_template::render_conversation(model, model_id, request, messages);
     }
     // Compute the rendered prompt via the inner tier dispatch, then
     // append `request.assistant_prefix` if present. The prefix lands
@@ -341,10 +368,10 @@ pub(crate) fn format_prompt(
     let suppress = request.think_budget == Some(0);
     let think_family = matches!(quirks.thinking, ThinkingControl::SystemPromptToken { .. });
     let rendered = enforce_think_suppression(rendered, suppress, think_family);
-    Ok(append_assistant_prefix(
+    Ok(plain(append_assistant_prefix(
         rendered,
         request.assistant_prefix.as_deref(),
-    ))
+    )))
 }
 
 /// Deterministically suppress the thinking phase when the caller set
@@ -563,7 +590,7 @@ fn format_prompt_inner(
             &template,
             &system_with_thinking,
             &request.prompt,
-            request.enable_thinking.unwrap_or(false),
+            request.templated_thinking(),
         ) {
             Ok(rendered) => return Ok(rendered),
             Err(e) => {
@@ -577,7 +604,7 @@ fn format_prompt_inner(
             }
         }
     }
-    if request.enable_thinking.unwrap_or(false) {
+    if request.templated_thinking() {
         tracing::warn!(
             model_id = %model_id,
             "request.enable_thinking=true requested, but the llama-cpp-4 binding \
@@ -636,137 +663,20 @@ fn apply_chat_template_minijinja(
     user: &str,
     enable_thinking: bool,
 ) -> Result<String> {
-    use minijinja::{context, Environment, Value};
-
-    // Build the messages list the template iterates over.
-    let mut messages: Vec<Value> = Vec::with_capacity(2);
+    let mut messages = Vec::with_capacity(2);
     if !system.is_empty() {
-        messages.push(Value::from_serialize(serde_json::json!({
-            "role": "system",
-            "content": system,
-        })));
+        messages.push(serde_json::json!({ "role": "system", "content": system }));
     }
-    messages.push(Value::from_serialize(serde_json::json!({
-        "role": "user",
-        "content": user,
-    })));
-
-    let mut env = Environment::new();
-    // Match Hugging Face's `Jinja2 Templates` behaviour: keep the
-    // raise_exception filter available — some templates call it
-    // (`{{ raise_exception("…") }}`) to halt on bad input.
-    env.add_function(
-        "raise_exception",
-        |msg: String| -> std::result::Result<String, minijinja::Error> {
-            Err(minijinja::Error::new(
-                minijinja::ErrorKind::InvalidOperation,
-                msg,
-            ))
+    messages.push(serde_json::json!({ "role": "user", "content": user }));
+    super::chat_template::render(
+        template,
+        &super::chat_template::ChatTemplateInput {
+            messages: &messages,
+            tools: None,
+            enable_thinking,
+            add_generation_prompt: true,
         },
-    );
-    // Python-compat method shim. HF templates routinely call
-    // `.get(key)`, `.get(key, default)`, `.split(sep)`,
-    // `.startswith(prefix)`, `.endswith(suffix)`, `.upper()`,
-    // `.lower()`, `.strip()` — methods that exist on Python's
-    // `dict`/`str`/`list` but aren't in stock minijinja. Without
-    // this shim, Gemma 4's template (which calls
-    // `message.get('reasoning')`, `message.get('tool_calls')`,
-    // `value['type'] | upper`, `part.split('<|channel>')`, …) fails
-    // at the first unknown method and we fall through to plain-text
-    // concat. The pycompat surface in `minijinja-contrib` would
-    // also do this, but pulling in another workspace dep for a
-    // half-dozen methods is excessive — handle them inline.
-    env.set_unknown_method_callback(|_state, value, method, args| {
-        use minijinja::value::{from_args, ValueKind};
-        use minijinja::{Error, ErrorKind, Value};
-        match method {
-            "get" => {
-                // dict.get(key) or dict.get(key, default)
-                if value.kind() != ValueKind::Map {
-                    return Err(Error::from(ErrorKind::UnknownMethod));
-                }
-                let (key, default): (Value, Option<Value>) = from_args(args)?;
-                let key_str: String = key
-                    .as_str()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| key.to_string());
-                match value.get_attr(&key_str) {
-                    Ok(v) if !v.is_undefined() => Ok(v),
-                    _ => Ok(default.unwrap_or(Value::from(()))),
-                }
-            }
-            "split" => {
-                // str.split(sep) — sep is required in HF templates we've
-                // seen (no zero-arg whitespace split path needed yet).
-                let s = value.as_str().ok_or_else(|| {
-                    Error::new(ErrorKind::InvalidOperation, "split on non-string")
-                })?;
-                let (sep,): (String,) = from_args(args)?;
-                let parts: Vec<Value> = s.split(&sep).map(|p| Value::from(p.to_string())).collect();
-                Ok(Value::from(parts))
-            }
-            "startswith" => {
-                let s = value.as_str().ok_or_else(|| {
-                    Error::new(ErrorKind::InvalidOperation, "startswith on non-string")
-                })?;
-                let (prefix,): (String,) = from_args(args)?;
-                Ok(Value::from(s.starts_with(&prefix)))
-            }
-            "endswith" => {
-                let s = value.as_str().ok_or_else(|| {
-                    Error::new(ErrorKind::InvalidOperation, "endswith on non-string")
-                })?;
-                let (suffix,): (String,) = from_args(args)?;
-                Ok(Value::from(s.ends_with(&suffix)))
-            }
-            "upper" => {
-                let s = value.as_str().ok_or_else(|| {
-                    Error::new(ErrorKind::InvalidOperation, "upper on non-string")
-                })?;
-                let _: () = from_args(args)?;
-                Ok(Value::from(s.to_uppercase()))
-            }
-            "lower" => {
-                let s = value.as_str().ok_or_else(|| {
-                    Error::new(ErrorKind::InvalidOperation, "lower on non-string")
-                })?;
-                let _: () = from_args(args)?;
-                Ok(Value::from(s.to_lowercase()))
-            }
-            "strip" => {
-                let s = value.as_str().ok_or_else(|| {
-                    Error::new(ErrorKind::InvalidOperation, "strip on non-string")
-                })?;
-                let _: () = from_args(args)?;
-                Ok(Value::from(s.trim().to_string()))
-            }
-            _ => Err(Error::from(ErrorKind::UnknownMethod)),
-        }
-    });
-    env.add_template("chat", template)
-        .map_err(|e| Error::Inference(format!("minijinja: compile chat template: {e}")))?;
-    let tmpl = env
-        .get_template("chat")
-        .map_err(|e| Error::Inference(format!("minijinja: load chat template: {e}")))?;
-
-    // Variables every reasonable chat template touches. Most
-    // templates don't use every key — providing them all is safe
-    // (Jinja2 is forgiving of unused globals). Templates that
-    // reference unknown vars produce empty strings, which is the
-    // same behaviour as the llama.cpp path.
-    let ctx = context! {
-        messages => messages,
-        add_generation_prompt => true,
-        enable_thinking => enable_thinking,
-        bos_token => "",
-        eos_token => "",
-        // Qwen3-family hint surfaced via a context variable on some
-        // template revisions. Most templates inspect the system
-        // message text instead.
-        thinking_mode => if enable_thinking { "think" } else { "no_think" },
-    };
-    tmpl.render(ctx)
-        .map_err(|e| Error::Inference(format!("minijinja: render chat template: {e}")))
+    )
 }
 
 /// Cheap heuristic for whether a chat template requires the full

@@ -1,15 +1,20 @@
 use super::*;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_media::MemberIdentity;
-use sovereign_contracts::setup_config::IrohSection;
+use commonwealth_rails::config::{Config as RailsConfig, MediaSection};
 
-/// What `offer` leaves in `[iroh]`, read back the way the daemon reads it.
-fn offered(admit: &[&str]) -> IrohSection {
-    let mut doc: toml_edit::DocumentMut = "[iroh]\n# kept\nenabled = true\n".parse().unwrap();
+/// `[media]` as cw-rails reads it from `doc`.
+fn as_rails_reads(doc: &toml_edit::DocumentMut) -> RailsConfig {
+    toml::from_str(&doc.to_string()).unwrap()
+}
+
+/// What `offer` leaves in rails.toml, read back the way cw-rails reads it.
+fn offered(admit: &[&str]) -> MediaSection {
+    let mut doc: toml_edit::DocumentMut = "# kept\nname = \"holder\"\n".parse().unwrap();
     let admit: Vec<String> = admit.iter().map(|s| s.to_string()).collect();
     set_offer(&mut doc, "127.0.0.1:8096".parse().unwrap(), &admit).unwrap();
     assert!(doc.to_string().contains("# kept"), "comments survive");
-    toml::from_str(&doc["iroh"].to_string()).unwrap()
+    as_rails_reads(&doc).media
 }
 
 fn member(name: &str, id: u128) -> MemberIdentity {
@@ -19,13 +24,12 @@ fn member(name: &str, id: u128) -> MemberIdentity {
     }
 }
 
-fn reaches(iroh: &IrohSection, who: &MemberIdentity) -> bool {
-    let origin = iroh.media_origin.as_deref().map(|o| o.parse().unwrap());
+fn reaches(media: &MediaSection, who: &MemberIdentity) -> bool {
     commonwealth_media::admit_media(
         Some(who),
         NodePubkey([7u8; 32]),
-        origin,
-        &iroh.media_allow,
+        media.origin,
+        &media.allow,
         &[],
     )
     .is_some()
@@ -38,11 +42,11 @@ fn offer_admit_narrows_through_admit_media() {
     let mac = member("LittleMac", 0xb0b252e4 << 96);
     let quiet = member("Quiet", 0xc0de << 96);
     let narrowed = offered(&["LittleMac"]);
-    assert_eq!(narrowed.media_origin.as_deref(), Some("127.0.0.1:8096"));
+    assert_eq!(narrowed.origin, Some("127.0.0.1:8096".parse().unwrap()));
     assert!(reaches(&narrowed, &mac));
     assert!(!reaches(&narrowed, &quiet), "a member not named is refused");
     let everyone = offered(&[]);
-    assert!(everyone.media_allow.is_empty());
+    assert!(everyone.allow.is_empty());
     assert!(reaches(&everyone, &mac) && reaches(&everyone, &quiet));
 }
 
@@ -50,23 +54,23 @@ fn offer_admit_narrows_through_admit_media() {
 /// failing input is an admit that loses or rewrites the origin.
 #[test]
 fn admit_narrows_the_stored_origin() {
-    let mut doc: toml_edit::DocumentMut = "[iroh]\nenabled = true\n".parse().unwrap();
+    let mut doc: toml_edit::DocumentMut = "name = \"holder\"\n".parse().unwrap();
     assert_eq!(
         stored_origin(&doc),
         Ok(None),
         "nothing offered, nothing to narrow"
     );
-    let broken: toml_edit::DocumentMut = "[iroh]\nmedia_origin = \"jellyfin\"\n".parse().unwrap();
+    let broken: toml_edit::DocumentMut = "[media]\norigin = \"jellyfin\"\n".parse().unwrap();
     assert!(stored_origin(&broken).is_err(), "unparseable is not absent");
     set_offer(&mut doc, "127.0.0.1:8920".parse().unwrap(), &[]).unwrap();
     let origin = stored_origin(&doc)
         .unwrap()
         .expect("offer stored its origin");
     set_offer(&mut doc, origin, &["LittleMac".into()]).unwrap();
-    let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
-    assert_eq!(iroh.media_origin.as_deref(), Some("127.0.0.1:8920"));
-    assert!(reaches(&iroh, &member("LittleMac", 0xb0b252e4 << 96)));
-    assert!(!reaches(&iroh, &member("Quiet", 0xc0de << 96)));
+    let media = as_rails_reads(&doc).media;
+    assert_eq!(media.origin, Some("127.0.0.1:8920".parse().unwrap()));
+    assert!(reaches(&media, &member("LittleMac", 0xb0b252e4 << 96)));
+    assert!(!reaches(&media, &member("Quiet", 0xc0de << 96)));
 }
 
 /// `offer` with no origin finds a listener on Jellyfin's port. A server
@@ -120,7 +124,7 @@ fn offer_keeps_house_and_viewer_where_the_rails_poll_reads_them() {
     assert!(!commonwealth_media::house_dir_under(&svrnmesh).exists());
 
     // withdraw: the viewer is gone, the house credential stays.
-    let mut doc: toml_edit::DocumentMut = "[iroh]\n".parse().unwrap();
+    let mut doc = toml_edit::DocumentMut::new();
     set_offer(&mut doc, "127.0.0.1:8096".parse().unwrap(), &[]).unwrap();
     assert!(clear_offer(&mut doc, &poll_house_dir()));
     assert_eq!(
@@ -134,7 +138,7 @@ fn offer_keeps_house_and_viewer_where_the_rails_poll_reads_them() {
 /// that just stopped.
 #[test]
 fn withdraw_clears_every_key_offer_wrote() {
-    let mut doc: toml_edit::DocumentMut = "[iroh]\n# kept\nenabled = true\n".parse().unwrap();
+    let mut doc: toml_edit::DocumentMut = "# kept\nname = \"holder\"\n".parse().unwrap();
     set_offer(
         &mut doc,
         "127.0.0.1:8096".parse().unwrap(),
@@ -147,16 +151,11 @@ fn withdraw_clears_every_key_offer_wrote() {
         clear_offer(&mut doc, house.path()),
         "there was an offer to withdraw"
     );
-    let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
-    assert_eq!(iroh.media_origin, None);
-    assert!(iroh.media_allow.is_empty());
-    assert!(!doc["iroh"]
-        .as_table()
-        .unwrap()
-        .contains_key("media_viewer_user"));
+    let read = as_rails_reads(&doc);
+    assert_eq!(read.media.origin, None);
+    assert!(read.media.allow.is_empty());
     assert_eq!(
-        iroh.enabled,
-        Some(true),
+        read.name, "holder",
         "withdraw touches only what offer wrote"
     );
     assert!(doc.to_string().contains("# kept"), "comments survive");
@@ -167,11 +166,11 @@ fn withdraw_clears_every_key_offer_wrote() {
     );
 }
 
-/// Negative: `withdraw` on a config with no `[iroh]` table at all reports
+/// Negative: `withdraw` on a rails.toml with no `[media]` table at all reports
 /// "nothing to withdraw" rather than panicking or claiming a takedown.
 #[test]
-fn withdraw_with_no_iroh_table_reports_nothing_to_withdraw() {
-    let mut doc: toml_edit::DocumentMut = "[daemon]\nclient_port = 9741\n".parse().unwrap();
+fn withdraw_with_no_media_table_reports_nothing_to_withdraw() {
+    let mut doc: toml_edit::DocumentMut = "name = \"holder\"\n".parse().unwrap();
     let house = tempfile::tempdir().unwrap();
     assert!(!clear_offer(&mut doc, house.path()));
 }
@@ -194,13 +193,13 @@ fn the_in_use_line_distinguishes_in_use_free_and_unreported() {
 
 /// The house credential is local-only. `offer` keeps it in a 0600 file under
 /// `commonwealth_media::house_dir_under` and writes NOTHING about it into
-/// `[iroh]` — the document the daemon reads and gossip's `NodeCapabilities`
-/// is built from. The failing input is a verb that parks the install
-/// credential in config "so the poll can find it": every peer would then be
-/// one `svrn mesh status` away from the run of this origin.
+/// rails.toml — the document cw-rails serves the origin and gossips from.
+/// The failing input is a verb that parks the install credential in config
+/// "so the poll can find it": every peer would then be one `svrn mesh
+/// status` away from the run of this origin.
 #[test]
 fn offer_writes_no_credential_into_the_config_the_mesh_reads() {
-    let mut doc: toml_edit::DocumentMut = "[iroh]\n".parse().unwrap();
+    let mut doc = toml_edit::DocumentMut::new();
     set_offer(
         &mut doc,
         "127.0.0.1:8096".parse().unwrap(),
@@ -214,12 +213,46 @@ fn offer_writes_no_credential_into_the_config_the_mesh_reads() {
             "offer put {forbidden:?} in the config the mesh reads:\n{written}"
         );
     }
-    assert!(
-        !doc["iroh"]
-            .as_table()
-            .unwrap()
-            .contains_key("media_viewer_user"),
-        "the viewer id lives in rails' house store"
+    // `[media]` is `deny_unknown_fields`: a viewer id parked there would not load.
+    as_rails_reads(&doc);
+}
+
+/// The verbs write the file cw-rails loads and the dir it reads the declared
+/// credential from, each side resolving its own default under one HOME. The
+/// failing input is the verb before 2026-10-04, which wrote svrn's
+/// config.toml and svrn's root: cw-rails started with `media_origin=None`
+/// and members were offered nothing (ring-room film leg).
+#[test]
+fn offer_writes_where_cw_rails_reads() {
+    let home = tempfile::tempdir().unwrap();
+    std::env::set_var("HOME", home.path());
+    std::env::remove_var("CW_RAILS_DIR");
+    let (path, mut doc) = rails_media::load().unwrap();
+    set_offer(&mut doc, "127.0.0.1:8096".parse().unwrap(), &["Cy".into()]).unwrap();
+    rails_media::write(&path, &doc).unwrap();
+
+    let rails_dir = RailsConfig::resolve_data_dir(None);
+    let read = RailsConfig::load(&rails_dir, None).unwrap();
+    assert_eq!(read.media.origin, Some("127.0.0.1:8096".parse().unwrap()));
+    assert_eq!(read.media.allow, vec!["Cy".to_string()]);
+    assert_eq!(
+        rails_media::declared_dir(),
+        commonwealth_media::dir_under(&rails_dir)
+    );
+}
+
+/// An edit cw-rails' reader refuses is put back, so a verb never leaves a
+/// rails.toml that stops cw-rails from starting.
+#[test]
+fn an_edit_cw_rails_would_refuse_leaves_rails_toml_as_it_was() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("rails.toml");
+    std::fs::write(&path, "name = \"holder\"\n").unwrap();
+    let bad: toml_edit::DocumentMut = "[media]\norigin = \"jellyfin\"\n".parse().unwrap();
+    assert!(rails_media::write(&path, &bad).is_err());
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "name = \"holder\"\n"
     );
 }
 

@@ -5,6 +5,7 @@
 #![allow(unused_imports)]
 
 pub mod capabilities;
+mod chat_template;
 mod compute_backend;
 mod control_vector;
 mod decide_wave;
@@ -21,12 +22,16 @@ pub(crate) mod idle_slot;
 pub(crate) mod kv_budget;
 pub mod kv_ops;
 mod model_slot;
+mod observe;
+mod prefix_pin;
 mod prefix_state;
+mod probe;
 mod prompt_helpers;
 mod rerank_slot;
 mod rpc_distribution;
 mod rpc_warm_cache;
 mod sampler;
+mod server_sampling;
 
 pub(crate) use compute_backend::*;
 pub use embed_only::*;

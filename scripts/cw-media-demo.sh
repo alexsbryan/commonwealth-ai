@@ -7,8 +7,8 @@
 #   HOLDER (the machine with the library):
 #     scripts/cw-media-demo.sh holder-up        # Jellyfin on 127.0.0.1:8096 + one test title (podman)
 #     scripts/cw-media-demo.sh holder-setup     # wizard, the declared key, then the offer
-#     # holder-setup runs `svrn mesh media offer` (it finds 127.0.0.1:8096), which writes [iroh] media_origin
-#     # and restarts the daemon itself -- the acceptor then advertises cwth/media/0 to members.
+#     # holder-setup runs `svrn mesh media offer` (it finds 127.0.0.1:8096), which writes [media] origin
+#     # in cw-rails' rails.toml and has cw-rails serve it -- it then advertises cwth/media/0 to members.
 #     # holder-setup needs no podman: ring-room-demo.sh runs it inside a node whose netns the
 #     # Jellyfin container shares (CW_MEDIA_NETWORK=container:<node>, CW_MEDIA_NAME to keep
 #     # clear of a cw-jellyfin already on the host).
@@ -71,10 +71,9 @@ holder_key() {
   command -v "$cli" >/dev/null \
     || { say "'$cli' is not on PATH -- set SVRN to your CLI (this repo ships it as both \`svrn\` and \`sovereign\`)"; return 1; }
   printf 'MediaBrowser Token="%s"' "$key" | "$cli" mesh media declare authorization || return 1
-  # Declaring is not serving. `read_declared_in` runs once, while the acceptor
-  # is built (sovereign-mesh/src/iroh_access.rs:620), so the key reaches no
-  # request until the daemon is rebuilt. No restart here: the offer verb that
-  # follows restarts the daemon itself, and one restart carries both.
+  # cw-rails reads the key whenever it stands its media origin
+  # (commonwealth-rails origins.rs `stand_media`), which the verb asks it to
+  # do; with no origin offered yet that serves nothing until the offer below.
 }
 
 holder_up() {
@@ -145,11 +144,11 @@ holder_setup() {
 
 holder is up: http://$ORIGIN (loopback only; login demo / demo)
 library:      $ROOT/media
-credential:   declared as \`authorization\` under ~/.svrnmesh/secrets/media/
+credential:   declared as \`authorization\` under cw-rails' data dir (secrets/media/)
               (0600, never leaves this machine, never printed back)
 
-offered:      \`svrn mesh media offer\` found $ORIGIN, wrote [iroh] media_origin and
-              reloaded the daemon (narrow it with \`svrn mesh media admit <member>...\`)
+offered:      \`svrn mesh media offer\` found $ORIGIN, wrote [media] origin to cw-rails'
+              rails.toml and had it serve it (narrow it with \`svrn mesh media admit <member>...\`)
 
 a member then runs:  svrn mesh media <this node's name>
 and a shim fans out:  POST /v1/mesh/media/fanout {"path":"/Items?..."} — which

@@ -6,46 +6,41 @@
 //! `mesh_media.rs` into the 800-1200 approach band (ARCH §3.1). A sibling of
 //! `declare` and `viewer`, which is how this module was already organised.
 
+use super::rails_media;
 use super::*;
 
-/// Set `[iroh] media_origin` and `[iroh] media_allow` in the config document.
-/// No `--admit` REMOVES `media_allow`, so re-offering without names widens back
-/// to every member rather than keeping a narrowing nobody typed this time.
+/// Set `[media] origin` and `[media] allow` in cw-rails' rails.toml document.
+/// No `--admit` REMOVES `allow`, so re-offering without names widens back to
+/// every member rather than keeping a narrowing nobody typed this time.
 pub(super) fn set_offer(
     doc: &mut toml_edit::DocumentMut,
     origin: std::net::SocketAddr,
     admit: &[String],
 ) -> Result<(), String> {
-    let iroh = doc
-        .entry("iroh")
-        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
-        .as_table_mut()
-        .ok_or("`iroh` in config.toml is not a table")?;
-    iroh.insert("media_origin", toml_edit::value(origin.to_string()));
+    let media = rails_media::media_table(doc)?;
+    media.insert("origin", toml_edit::value(origin.to_string()));
     if admit.is_empty() {
-        iroh.remove("media_allow");
+        media.remove("allow");
     } else {
         let names: toml_edit::Array = admit.iter().map(String::as_str).collect();
-        iroh.insert("media_allow", toml_edit::value(names));
+        media.insert("allow", toml_edit::value(names));
     }
     Ok(())
 }
 
 /// Remove everything `offer` wrote. The inverse, and the whole of it: origin,
 /// admit list and the viewer account file in `house_dir` go together, because
-/// each one describes an offer that no longer exists. (`media_viewer_user` is
-/// the pre-fp-70 home of the viewer id, removed wherever it still stands.)
+/// each one describes an offer that no longer exists.
 pub(super) fn clear_offer(doc: &mut toml_edit::DocumentMut, house_dir: &std::path::Path) -> bool {
     if let Err(e) = commonwealth_media::write_viewer_in(house_dir, "") {
         tracing::warn!(error = %e, dir = %house_dir.display(), "media withdraw: the viewer account file could not be removed");
     }
-    let Some(iroh) = doc.get_mut("iroh").and_then(|i| i.as_table_mut()) else {
+    let Some(media) = doc.get_mut("media").and_then(|m| m.as_table_mut()) else {
         return false;
     };
-    let had = iroh.contains_key("media_origin");
-    iroh.remove("media_origin");
-    iroh.remove("media_allow");
-    iroh.remove("media_viewer_user");
+    let had = media.contains_key("origin");
+    media.remove("origin");
+    media.remove("allow");
     had
 }
 
@@ -108,29 +103,29 @@ pub(super) fn probe_origin(candidates: &[&str]) -> Option<std::net::SocketAddr> 
         })
 }
 
-/// The origin a previous `offer` stored in `[iroh] media_origin`.
+/// The origin a previous `offer` stored in rails.toml's `[media] origin`.
 /// `Ok(None)` when nothing was offered; a value that does not parse is an
 /// error, not "nothing offered".
 pub(super) fn stored_origin(
     doc: &toml_edit::DocumentMut,
 ) -> Result<Option<std::net::SocketAddr>, String> {
-    let Some(item) = doc.get("iroh").and_then(|i| i.get("media_origin")) else {
+    let Some(item) = doc.get("media").and_then(|m| m.get("origin")) else {
         return Ok(None);
     };
     let text = item
         .as_str()
-        .ok_or_else(|| format!("[iroh] media_origin is not a string: {item}"))?;
+        .ok_or_else(|| format!("[media] origin is not a string: {item}"))?;
     text.parse()
         .map(Some)
-        .map_err(|e| format!("[iroh] media_origin = {text:?} does not parse: {e}"))
+        .map_err(|e| format!("[media] origin = {text:?} does not parse: {e}"))
 }
 
 /// `svrn mesh media offer [<origin>] [--admit <member>...]` — offer this
-/// node's media origin to the mesh, then `svrn daemon reload` so the running
-/// acceptor serves it. With no origin it probes [`WELL_KNOWN_ORIGINS`] and
-/// says what it found. Both keys reload live (`MediaRoute`), so no restart:
-/// a restart left peers dialing the holder's endpoint for 120 s (ring-room
-/// 99ca7e4cb leg 3).
+/// node's media origin to the mesh in cw-rails' rails.toml, then ask the
+/// running cw-rails to serve it ([`rails_media::reload`]). With no origin it
+/// probes [`WELL_KNOWN_ORIGINS`] and says what it found. Live, not a
+/// restart: a restart left peers dialing the holder's endpoint for 120 s
+/// (ring-room 99ca7e4cb leg 3).
 pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
     if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media offer [<origin>] [--admit <member>...]");
@@ -141,7 +136,7 @@ pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
         eprintln!("With no --admit every member may reach it; --admit names the only");
         eprintln!("members who may, by member name or a node-id prefix, as `svrn mesh");
         eprintln!("status` shows them (`svrn mesh media admit` narrows a standing offer).");
-        eprintln!("The running daemon is reloaded to publish the offer.");
+        eprintln!("The running cw-rails, this node's mesh endpoint, serves it at once.");
         return 0;
     }
     let mut origin: Option<&str> = None;
@@ -191,7 +186,7 @@ pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
             }
         },
     };
-    let (path, doc) = match crate::publish_cmd::load_doc() {
+    let (path, doc) = match rails_media::load() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("mesh media offer: {e}");
@@ -204,8 +199,7 @@ pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
     // (see `viewer`). A failure here is named and does NOT stop the offer: a
     // library served by the old credential is what the holder already had,
     // and refusing to offer at all would be a worse answer than a loud one.
-    let root = sovereign_contracts::rebrand::svrnmesh_root();
-    let dir = commonwealth_media::dir_under(&root);
+    let dir = rails_media::declared_dir();
     let before = commonwealth_media::read_declared_in(&dir);
     match viewer::provision(origin, &before).await {
         Ok(v) => {
@@ -229,21 +223,21 @@ pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
             eprintln!("  will publish no \"in use\" signal until a viewer account exists.");
         }
     }
-    write_offer(path, doc, origin, &admit)
+    write_offer(path, doc, origin, &admit).await
 }
 
 /// `svrn mesh media withdraw` — stop offering this machine's library. The
 /// inverse of `offer` and the whole of it: origin, admit list and viewer
-/// account are removed together and the daemon reloaded, so the offer is gone
+/// account are removed together and cw-rails reloaded, so the offer is gone
 /// from every member's rail within one gossip round rather than at the next
 /// restart.
-pub(super) fn cmd_media_withdraw(args: &[String]) -> i32 {
+pub(super) async fn cmd_media_withdraw(args: &[String]) -> i32 {
     if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media withdraw");
         eprintln!();
         eprintln!("Stop offering this machine's media server to the mesh. Removes the");
         eprintln!("origin, the admit list and the read-only viewer account this node");
-        eprintln!("recorded, then reloads the daemon so members see it go within one");
+        eprintln!("recorded, then reloads cw-rails so members see it go within one");
         eprintln!("gossip round. The library, the server and the declared credential are");
         eprintln!("untouched — `svrn mesh media offer` puts it back.");
         return 0;
@@ -252,7 +246,7 @@ pub(super) fn cmd_media_withdraw(args: &[String]) -> i32 {
         eprintln!("mesh media withdraw: takes no arguments (got {extra:?})");
         return 1;
     }
-    let (path, mut doc) = match crate::publish_cmd::load_doc() {
+    let (path, mut doc) = match rails_media::load() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("mesh media withdraw: {e}");
@@ -260,7 +254,7 @@ pub(super) fn cmd_media_withdraw(args: &[String]) -> i32 {
         }
     };
     let had = clear_offer(&mut doc, &poll_house_dir());
-    if let Err(e) = crate::publish_cmd::write_doc(&path, &doc) {
+    if let Err(e) = rails_media::write(&path, &doc) {
         eprintln!("mesh media withdraw: could not write the config — {e}");
         return 1;
     }
@@ -275,13 +269,13 @@ pub(super) fn cmd_media_withdraw(args: &[String]) -> i32 {
             path.display()
         );
     }
-    println!("reloading the daemon to publish the withdrawal…");
-    reload_daemon()
+    println!("asking cw-rails to stop serving it…");
+    rails_media::reload("withdraw").await
 }
 
 /// `svrn mesh media admit <member>...` — narrow a standing offer to the named
 /// members, reading the origin `offer` stored rather than asking for it again.
-pub(super) fn cmd_media_admit(args: &[String]) -> i32 {
+pub(super) async fn cmd_media_admit(args: &[String]) -> i32 {
     if sovereign_cli_base::help::wants_help(args) || args.is_empty() {
         eprintln!("Usage: svrn mesh media admit <member>...");
         eprintln!();
@@ -294,7 +288,7 @@ pub(super) fn cmd_media_admit(args: &[String]) -> i32 {
         eprintln!("mesh media admit: unknown flag {flag}");
         return 1;
     }
-    let (path, doc) = match crate::publish_cmd::load_doc() {
+    let (path, doc) = match rails_media::load() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("mesh media admit: {e}");
@@ -316,53 +310,26 @@ pub(super) fn cmd_media_admit(args: &[String]) -> i32 {
             return 1;
         }
     };
-    write_offer(path, doc, origin, args)
+    write_offer(path, doc, origin, args).await
 }
 
-/// Write the offer into the config and reload the daemon — the one tail
+/// Write the offer into rails.toml and have cw-rails serve it — the one tail
 /// `offer` and `admit` share.
-fn write_offer(
+async fn write_offer(
     path: std::path::PathBuf,
     mut doc: toml_edit::DocumentMut,
     origin: std::net::SocketAddr,
     admit: &[String],
 ) -> i32 {
     if let Err(e) =
-        set_offer(&mut doc, origin, admit).and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
+        set_offer(&mut doc, origin, admit).and_then(|()| rails_media::write(&path, &doc))
     {
-        eprintln!("mesh media offer: could not write the config — {e}");
+        eprintln!("mesh media offer: could not write rails.toml — {e}");
         return 1;
     }
     tracing::info!(%origin, admit = ?admit, config = %path.display(), "media offer written");
     println!("Offering {origin}. ({})", path.display());
     println!("  {}", offered_to_line(&admit));
-    println!("reloading the daemon to publish the offer…");
-    reload_daemon()
-}
-
-/// `daemon reload` through the dispatcher — this binary does not own the
-/// `daemon` verb. A reload that fails is the verb's failure.
-fn reload_daemon() -> i32 {
-    let dispatcher = match std::env::current_exe()
-        .map_err(|e| e.to_string())
-        .and_then(|exe| sovereign_cli_base::dispatcher::dispatcher_exe(&exe))
-    {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("mesh media offer: {e}");
-            eprintln!("The offer is written; run `svrn daemon reload`.");
-            return 1;
-        }
-    };
-    match std::process::Command::new(&dispatcher)
-        .args(["daemon", "reload"])
-        .status()
-    {
-        Ok(s) if s.success() => 0,
-        other => {
-            tracing::warn!(?other, "media offer: daemon reload failed");
-            eprintln!("mesh media offer: the reload did not apply — `svrn daemon reload`.");
-            1
-        }
-    }
+    println!("asking cw-rails to serve it…");
+    rails_media::reload("offer").await
 }

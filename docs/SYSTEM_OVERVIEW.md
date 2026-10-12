@@ -258,7 +258,7 @@ code/crates/
 ├── corpus-engine-archaeology      # Git archaeology + rough-edges + atom-provenance
 ├── corpus-engine-notes            # NoteStore + project_docs index
 ├── corpus-engine-watchers         # Lint/test/project-index watchers + result stores
-├── sovereign-agent-bench          # Eleven-problem agent-coding battery
+├── sovereign-agent-bench          # Fifteen-problem agent-coding battery; pi and opencode runners take any OpenAI-compatible endpoint (`--agent-base-url`)
 ├── sovereign-agent-tools          # Canonical agent-tool primitives (cross-runner contract)
 ├── sovereign-cli-dev              # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
 ├── sovereign-code                 # Code intelligence served over MCP — the `svrn code` program, lifted out of sovereign-tools
@@ -1075,9 +1075,29 @@ OpenAI-compatible servers. Full detail
 `engine_factory::build_engine(&SetupConfig)` is the ONE place `[engine] kind`
 becomes an `Arc<dyn InferenceProvider>`. The vocabulary is one layer down in
 `sovereign-contracts`, so an out-of-tree engine can name the selection without
-naming any implementation. `llama` and `remote` are typed variants; anything
-else is `EngineKind::Custom(name)` resolved through `register_engine`, and an
-unknown id refuses listing what IS registered rather than falling back.
+naming any implementation. `llama`, `remote` and `llama-server` are typed
+variants; anything else is `EngineKind::Custom(name)` resolved through
+`register_engine`, and an unknown id refuses listing what IS registered rather
+than falling back. `llama-server` is a router the node supervises: the factory
+refuses it by name, because its endpoint exists only once serving assembly has
+started the router. Its models come from `[models]` through
+`sovereign_compute::llama_router::RouterPreset`, whose `engine_section` is the
+remote half the factory then builds (svrn-docs ENGINE_SWAP_PLAN.md, step 1).
+Serving assembly starts the router on its first build (`llama_router::live`,
+a supervised child), warms every preset model until `GET /models` reports
+`loaded`, and re-wraps it on every reload, refusing one whose preset differs;
+`llama_router::provider::RouterProvider` reports it and each model under
+`compute_children` and the node's weights as `OwnWeights`.
+The binary is `llama-server` beside the daemon's executable, built by
+`serve/crates/sovereign-compute/llama-server/build.sh` from `PIN.toml` there
+(llama.cpp commit, llguidance, each patch by sha256), which writes
+`llama-server.manifest.toml` beside it. The daemon compiles the pin in and
+refuses a shipped binary whose manifest disagrees
+(`llama_router::build_pin::verify`); `[engine] server_binary` overrides the
+binary and skips the check, and `/status` says which ran. The whole path is
+`sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
+shipped binary, serve a completion and an embedding, SIGKILL the daemon, no
+llama-server left.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.
@@ -1085,6 +1105,22 @@ Cold start and hot reload both reach it through ONE serving assembly,
 `sovereign_compute::assembly` (`assemble_serving`, `ReloadFactory::build`),
 which adds admission, llama's slot installs and the compute-child layer; a
 reload re-wraps the running compute children instead of spawning new ones.
+
+**The engine conformance battery measures the engine that serves.**
+`POST /internal/engine/replay`, on the operator listener beside
+`/internal/inference/warmup`, runs one provider call with a
+`sovereign_contracts::engine_observe` sink installed and returns the answer
+and what the engine recorded on the way. Its `probe` method is
+`InferenceProvider::probe_logprobs`: greedy steps with each step's top-k
+logprobs, on a context of the slot's own parameters (`embedded/probe.rs`).
+The default refuses, and the wrappers on the daemon's path forward it.
+`bench/lanes/engine-swap/battery.sh` drives the case bank through it per
+target, and `svrn bench engine-conformance judge` holds the records to
+`conformance.toml`. Rows whose oracle is a language rather than a record take
+their verdict from `--scenario`: `bench/lanes/engine-swap/llg-parity`, a
+standalone crate pinned to llama-server's llguidance, judges the corpus the
+engine side writes (`llg_parity_corpus_tests.rs`) and emits one verdict per
+row.
 
 **A remote engine off this machine is a third party.** `build_remote` builds
 one shape, `oicp_client::SplitInferenceProvider::engine` (`far_end.rs`), which
@@ -1111,6 +1147,27 @@ structured_output` is how the host is asked for a schema: unset is
 remembered; `tool-use-forced` sends that from the first request, for a host
 that ignores `response_format` rather than refusing it (Anthropic's
 OpenAI-compatible endpoint; `svrn setup --hosted anthropic` writes it).
+The host's answer is read into the embedded engine's shape at the client, by
+rules kept in one module for the message and both streams
+(`oicp-client/src/response_wire.rs`):
+`reasoning_content` goes back into the text as the `<think>` block the engine
+writes (not in front of a structured answer), native tool calls, whole or as
+streamed fragments, become the `<tool_call>` envelope, and a `tool_calls`
+finish reads as `stop`, since the adapter derives `tool_calls` from the text
+for every engine. A streamed request asks for usage (`stream_options`), and a
+stream that fails, by an error chunk or the transport, ends in
+`Finish{Error}`.
+The request is written in the spelling `[engine] grammar` names
+(`oicp-client/src/chat_wire.rs`). To a llama-server (`llguidance`) an
+`assistant_prefix` goes as a trailing assistant message the server
+continues, and the prefix is cut from the front of the answer as the engine
+leaves it out; a named `tool_choice`, which that server reads as `auto`, is
+refused. To every host, a templated request carries the `enable_thinking` the
+engine renders it with (`CompletionRequest::templated_thinking`, off unless
+asked), a positive think budget also goes as `reasoning_budget_tokens`, and a
+schema goes out closed by the same `additionalProperties` default the engine
+compiles it with (`sovereign_contracts::structured_output`), which leaves an
+object that declares no properties open.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers
@@ -1347,7 +1404,11 @@ own loopback origin; the key the QUIC handshake proved is the discriminator):
 | `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring/sync` and `/internal/ring/live` (members; the checkpoint is local-only), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
 
 Federated media and named apps ride that surface: the holder declares an
-origin, the viewer asks cw-rails for a loopback bridge URL, and the acceptor
+origin (`svrn mesh media offer | admit | withdraw | origin | declare` write
+`[media]` in cw-rails' rails.toml and the credential under its data dir, then
+`POST /v1/mesh/media/reload`, which re-stands the origin with no restart —
+`commonwealth-rails/src/origins.rs::stand_media`), the viewer asks cw-rails
+for a loopback bridge URL, and the acceptor
 tells the origin WHO is asking by rewriting request heads
 (`X-Mesh-Member`/`-Node`/`-Pubkey`, every client-supplied `x-mesh-*` header
 dropped first). Responses are a byte copy, which is why `Range` stays
@@ -1443,7 +1504,10 @@ something" lets an app state a wrong total with full confidence.
 it never comes back" is not an expense rule, and it is the rule most easily
 got wrong. **`Introduce` is evidence, never admission**: an introduction
 arriving from a peer moves no roster row, and `svrn ring roster add` is still
-the only writer of a roster.
+the only writer of a roster. It writes under cw-rails' root
+(`commonwealth_media::rails_data_dir`, `$CW_RAILS_DIR`), where cw-rails reads
+it, through `ring_cmd::journal_root`, the root `svrn mesh offers --why` reads
+warrants from too.
 
 Replication is its own loop at a 60-second cadence, syncing by digest
 (`{actor → contiguous high-water mark}`, ~600 bytes regardless of history) —
@@ -1487,7 +1551,11 @@ A non-loopback caller presents one of two bearers. `client_token` is
 daemon-wide. An **ephemeral guest grant** is the narrow one: short-lived,
 revocable, bound to a closed `Scope` enum whose `paths()` is the only route
 allowlist there is. A guest is not a mesh member and cannot mint further
-grants, because no `Scope` variant names `/internal/*`.
+grants, because no `Scope` variant names `/internal/*`. A grant also names its
+`GrantHolder`: `Guest` (the default, every link a person holds), whose writes
+must claim a name at the rail door, or `MemberPage`, which only the operator's
+mint route sets and only `svrn ring show` asks for, whose writes are the
+member's own.
 
 A named credential is one record `{name, token, groups}` at
 `<data_dir>/client-tokens/<name>.key` (`client_tokens::ClientTokenStore`; legacy
@@ -1516,7 +1584,7 @@ admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
 
 | Path | Notes |
 |---|---|
-| `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400 |
+| `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400. An external client's conversation (no OICP envelope) takes llama-server's path: the model's template renders it whole, the reply is parsed in the model's own format with `reasoning_content` apart, and a stream is live with or without tools (`serve/crates/sovereign-serving-host/src/inference_adapter/conversation.rs`, `oicp_types::chat_turn::TurnStream`); a prompt over the window is 400 `exceed_context_size_error` |
 | `POST /v1/responses` | OpenAI Responses-API adapter |
 | `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
@@ -1744,7 +1812,10 @@ and the gossiped capabilities are all read (a renew carrying `claims` replaces i
 declaration, pb-mesh-exit-transport-claims); each registration is handed a tie (`X-Mesh-Tie`) its origin
 checks with `tied_pubkey`, and an unregistered ALPN or prefix is refused by name. svrn registers its peer
 routes there (`sovereign-daemon/src/peer_origin.rs`), declaring the gossip round's capabilities, anchor
-excepted, at every 10 s renew; its internal resolver believes a forward carrying
+excepted, and the ring namespaces its pages drain (`live_namespaces`: each live grant's rail namespace,
+the wall's for a wall grant) at every 10 s renew — a renew carrying `namespaces` replaces them, and
+cw-rails' live lane buffers a peer's payload only for a declared namespace (`ring_routes.rs` `ring_live`);
+its internal resolver believes a forward carrying
 that registration's live tie as it believes its own acceptor's mark. Outbound (pb-rails-reach),
 `GET /v1/mesh/reach?peer=&class=` answers any peer's endpoints for a traffic class from its own transport,
 and the `mesh-reach` leaf's `RailsTransport` is the `PeerTransport` that asks it, so a program that is not

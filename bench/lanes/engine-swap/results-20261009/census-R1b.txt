@@ -1,0 +1,150 @@
+== chat-ask
+     103  /v1/chat/completions 200
+      65  /v1/embeddings 200
+       8  ext assistant_prefix: translated
+     102  ext oicp: dropped
+      27  ext stable_prefix_len: dropped
+      94  ext think_budget: translated
+       8  ext think_budget: translated: 0 -> enable_thinking false
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9926
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9946
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9948
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9954
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9955
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9970
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9971
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9972
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9975
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9976
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9977
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9978
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9980
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9981
+       3  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9982
+       5  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9984
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9986
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9987
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9994
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9995
+       4  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9998
+       3  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9999
+       3  ext x_forced_choice: translated: top-20 logprobs, label mass 1.0000
+== throughput
+      26  /v1/chat/completions 200
+      10  /v1/embeddings 200
+       2  ext assistant_prefix: translated
+       5  ext model_alias: fast -> Qwen3.5-4B-UD-MTP-Q6_K_XL
+       5  ext model_alias: primary -> Qwen3.6-35B-A3B-MTP-UD-Q6_K
+      12  ext oicp: dropped
+       8  ext think_budget: translated
+       6  ext think_budget: translated: 0 -> enable_thinking false
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 1.0000
+== routing
+      11  /v1/chat/completions 200
+     166  /v1/embeddings 200
+      10  ext oicp: dropped
+      10  ext think_budget: translated: 0 -> enable_thinking false
+== retrieval-prod
+       3  /v1/chat/completions 200
+     114  /v1/embeddings 200
+       2  ext oicp: dropped
+       2  ext think_budget: translated: 0 -> enable_thinking false
+== chaos-monkey
+      40  /v1/chat/completions 200
+      36  /v1/embeddings 200
+       5  ext assistant_prefix: translated
+      33  ext oicp: dropped
+       5  ext stable_prefix_len: dropped
+      27  ext think_budget: translated
+      11  ext think_budget: translated: 0 -> enable_thinking false
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9727
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9867
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9874
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9942
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9983
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9994
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 1.0000
+== knowledge-gym
+      22  /v1/chat/completions 200
+      21  ext oicp: dropped
+      18  ext think_budget: translated: 0 -> enable_thinking false
+== synth
+      80  /v1/chat/completions 200
+      49  /v1/embeddings 200
+       3  ext assistant_prefix: translated
+      79  ext oicp: dropped
+      24  ext stable_prefix_len: dropped
+      54  ext think_budget: translated
+      25  ext think_budget: translated: 0 -> enable_thinking false
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9642
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9660
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9683
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9777
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9870
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9886
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9919
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9924
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9930
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9937
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9940
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9946
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9949
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9952
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9955
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9961
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9962
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9964
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9972
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9977
+== all lanes
+      18  ext assistant_prefix: translated
+       5  ext model_alias: fast -> Qwen3.5-4B-UD-MTP-Q6_K_XL
+       5  ext model_alias: primary -> Qwen3.6-35B-A3B-MTP-UD-Q6_K
+     259  ext oicp: dropped
+      56  ext stable_prefix_len: dropped
+     183  ext think_budget: translated
+      80  ext think_budget: translated: 0 -> enable_thinking false
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9642
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9660
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9683
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9727
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9777
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9867
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9870
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9874
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9886
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9919
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9924
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9926
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9930
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9937
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9940
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9942
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9946
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9948
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9949
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9952
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9954
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9955
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9961
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9962
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9964
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9970
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9971
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9972
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9975
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9976
+       3  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9977
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9978
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9980
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9981
+       3  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9982
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9983
+       5  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9984
+       2  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9986
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9987
+       3  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9994
+       1  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9995
+       4  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9998
+       3  ext x_forced_choice: translated: top-20 logprobs, label mass 0.9999
+       6  ext x_forced_choice: translated: top-20 logprobs, label mass 1.0000

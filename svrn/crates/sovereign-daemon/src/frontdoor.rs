@@ -1269,6 +1269,7 @@ pub fn apply_read_attractor_nudge_chat(req: &mut crate::openai_types::ChatComple
         content: note,
         tool_call_id: None,
         tool_calls: None,
+        reasoning_content: None,
     });
 
     // Structural commit via grammar (R2): require `cmd` to start with
@@ -1641,6 +1642,7 @@ pub fn apply_failure_nudge_chat(req: &mut crate::openai_types::ChatCompletionReq
         content: note,
         tool_call_id: None,
         tool_calls: None,
+        reasoning_content: None,
     });
 }
 
@@ -1879,6 +1881,7 @@ pub fn apply_anti_repetition_chat(req: &mut crate::openai_types::ChatCompletionR
         content: note,
         tool_call_id: None,
         tool_calls: None,
+        reasoning_content: None,
     });
 }
 
@@ -3534,6 +3537,7 @@ mod tests {
             content: content.to_string(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -3579,6 +3583,7 @@ mod tests {
                     arguments: "{}".to_string(),
                 },
             }]),
+            reasoning_content: None,
         };
         assert!(!promote_in_content_tool_call(&mut m));
         // Existing tool call preserved; content not cleared.
@@ -4167,6 +4172,7 @@ mod tests {
                     arguments: args.into(),
                 },
             }]),
+            reasoning_content: None,
         }
     }
     fn make_tool_result(call_id: &str, output: &str) -> crate::openai_types::ChatMessage {
@@ -4175,6 +4181,7 @@ mod tests {
             content: output.into(),
             tool_call_id: Some(call_id.into()),
             tool_calls: None,
+            reasoning_content: None,
         }
     }
     fn make_user(content: &str) -> crate::openai_types::ChatMessage {
@@ -4183,6 +4190,7 @@ mod tests {
             content: content.into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -4274,6 +4282,7 @@ mod tests {
                 .into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let xattr_call = make_assistant_tool_call(
             "exec_command",
@@ -4312,6 +4321,7 @@ mod tests {
             content: "Let me try a different approach.".into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4405,6 +4415,7 @@ mod tests {
                 .into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4472,6 +4483,7 @@ mod tests {
             content: "{\n\"name\": \"exec_command\",\n\"arguments\": {\"cmd\": \"rg\"}\n}".into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4645,6 +4657,7 @@ mod tests {
                 .to_string(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4679,6 +4692,7 @@ mod tests {
             content: "You are a helpful assistant. Be concise.".to_string(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4713,6 +4727,7 @@ mod tests {
                 .to_string(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4781,6 +4796,7 @@ mod tests {
             content: "I have compressed the file. Now what?".to_string(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4812,6 +4828,7 @@ mod tests {
             content: format!("{{\"name\":\"exec_command\",\"arguments\":{{\"cmd\":\"{c}\"}}}}"),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         };
         let mut req = ChatCompletionRequest {
             messages: vec![
@@ -4849,6 +4866,7 @@ mod tests {
                     content: format!("{} prior nudge", READ_ATTRACTOR_NUDGE_PREFIX),
                     tool_call_id: None,
                     tool_calls: None,
+                    reasoning_content: None,
                 },
             ],
             ..chat_req_defaults()
@@ -4988,6 +5006,7 @@ mod tests {
             content: "result from /opt/data/file".to_string(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         });
         let paths = gather_context_paths(&req_msgs);
         assert!(paths.contains("/Users/alex/foo/bar.md"));
@@ -5627,6 +5646,7 @@ That's my answer."#;
             content: content.into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -5636,6 +5656,7 @@ That's my answer."#;
             content: content.into(),
             tool_call_id: Some("call-1".into()),
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -5747,6 +5768,7 @@ That's my answer."#;
                 content: "Yes I see https://example.test/y mentioned".into(),
                 tool_call_id: None,
                 tool_calls: None,
+                reasoning_content: None,
             },
         ]);
         super::apply_url_allowlist_from_tool_results(&mut req);

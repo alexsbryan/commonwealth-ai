@@ -240,6 +240,40 @@ impl OriginRegistry {
         })
     }
 
+    /// Replace the endpoint's OWN origin on `alpn` — [`stand`](Self::stand)
+    /// for an origin its config can change while it runs (cw-rails'
+    /// `[media]`). `None` withdraws it. One lock, so a re-stand that keeps the
+    /// ALPN never takes the served set through "absent"; a slot a program's
+    /// claim holds is refused by name and the old entry stays.
+    pub fn restand(
+        &self,
+        alpn: &[u8],
+        addr: Option<SocketAddr>,
+        admit: Admit,
+        declared: Vec<(String, String)>,
+    ) -> Result<(), OriginRefusal> {
+        let alpn = String::from_utf8_lossy(alpn).into_owned();
+        let entries = match addr {
+            Some(addr) => self.entries_of(&alpn, &[], addr, &admit, Framing::Http)?,
+            None => Vec::new(),
+        };
+        self.mutate(|s| {
+            let (old, others) = std::mem::take(&mut s.standing)
+                .into_iter()
+                .partition(|(_, e)| e.alpn == alpn);
+            s.standing = others;
+            if let Err(e) = Self::refuse_taken(s, &entries) {
+                s.standing.extend(old);
+                return Err(e);
+            }
+            for mut e in entries {
+                e.declared = declared.clone();
+                s.standing.insert(slot(&e.alpn, e.prefix.as_deref()), e);
+            }
+            Ok(())
+        })
+    }
+
     /// Register a program's origin. Refused by name when a slot is taken.
     pub fn register(&self, req: OriginRegistration) -> Result<OriginClaim, OriginRefusal> {
         let addr: SocketAddr = ([127, 0, 0, 1], req.port).into();
@@ -296,28 +330,53 @@ impl OriginRegistry {
         ttl: Duration,
         claims: Option<NodeCapabilities>,
     ) -> Result<u64, OriginRefusal> {
+        self.renew_declaring(claim_id, ttl, claims, None)
+    }
+
+    /// [`Self::renew`], and `Some(namespaces)` replaces the ring namespaces
+    /// the claim declares, so what a registrant drains moves with its state
+    /// as its claims do (the live lane holds only these: ring_routes.rs).
+    pub fn renew_declaring(
+        &self,
+        claim_id: &str,
+        ttl: Duration,
+        claims: Option<NodeCapabilities>,
+        namespaces: Option<Vec<String>>,
+    ) -> Result<u64, OriginRefusal> {
         let ttl = ttl.min(crate::claims::MAX_CLAIM_TTL);
         let declares = claims.is_some();
+        let namespaces_declared = namespaces.as_ref().map(Vec::len);
         let secs = self.mutate(|s| {
             let keys = s
                 .claimed
                 .renew(claim_id, ttl)
                 .ok_or_else(|| OriginRefusal::NoSuchClaim(claim_id.to_string()))?;
+            // The declaration stays on ONE slot, as `register` put it: the
+            // slot holding it, or the first when it declared none.
+            let holder = keys
+                .iter()
+                .find(|k| s.claimed.get(k).is_some_and(|r| r.value.claims.is_some()))
+                .unwrap_or(&keys[0])
+                .clone();
             if let Some(claims) = claims {
-                // The declaration stays on ONE slot, as `register` put it:
-                // the slot holding it, or the first when it declared none.
-                let holder = keys
-                    .iter()
-                    .find(|k| s.claimed.get(k).is_some_and(|r| r.value.claims.is_some()))
-                    .unwrap_or(&keys[0])
-                    .clone();
                 if let Some(row) = s.claimed.get_mut(&holder) {
                     row.value.claims = Some(claims);
+                }
+            }
+            if let Some(namespaces) = namespaces {
+                for key in &keys {
+                    if let Some(row) = s.claimed.get_mut(key) {
+                        row.value.namespaces.clear();
+                    }
+                }
+                if let Some(row) = s.claimed.get_mut(&holder) {
+                    row.value.namespaces = namespaces;
                 }
             }
             Ok(ttl.as_secs())
         })?;
         tracing::debug!(target: "transport", claim = %claim_id, ttl_secs = secs, declares,
+                        namespaces = ?namespaces_declared,
                         "origin registry: renewed — a declaration replaces the claim's, \
                          none keeps it");
         Ok(secs)

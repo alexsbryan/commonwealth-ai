@@ -116,10 +116,17 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 get(routes_internal::guest_grant_list),
             )
             .route_layer(owner_only);
-        credentials.route(
-            "/internal/inference/warmup",
-            post(routes_internal::inference_warmup),
-        )
+        credentials
+            .route(
+                "/internal/inference/warmup",
+                post(routes_internal::inference_warmup),
+            )
+            // The engine conformance battery's replay: inference on
+            // request, so operator-only, beside warmup.
+            .route(
+                "/internal/engine/replay",
+                post(routes_internal::engine_replay),
+            )
     } else {
         Router::new()
     };

@@ -180,7 +180,9 @@ pub struct ChatMessage {
     /// Accepts both `"text"` (string) and `[{"type":"text","text":"..."}]`
     /// (array) formats. Opencode sends the array form for tool-result
     /// messages; the deserializer extracts text parts and joins them.
-    #[serde(deserialize_with = "deserialize_message_content")]
+    /// `null` or absent is an assistant turn that only calls tools (the
+    /// OpenAI shape pi sends), and reads as no text.
+    #[serde(default, deserialize_with = "deserialize_message_content")]
     pub content: String,
     /// Set on `role="tool"` messages to associate an execution result with
     /// the assistant `tool_calls[].id` that requested it.
@@ -191,6 +193,13 @@ pub struct ChatMessage {
     /// output; supplied by the caller when replaying prior turns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+    /// The assistant's thinking, apart from `content`, as llama-server
+    /// returns it (its default `--reasoning-format`). Set on replies by the
+    /// adapter; on history a client sends back, the conversation path hands
+    /// it to the model's template, which may render it (Qwen's does, inside
+    /// `<think>`, for turns after the last user message).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 /// Custom deserializer for `ChatMessage.content`: accepts either a plain
@@ -207,6 +216,11 @@ pub struct ChatMessage {
 /// Parts whose `type` field is missing entirely are also accepted as
 /// text — opencode's tool-result wire format omits the discriminator
 /// in some versions.
+///
+/// `null` is no text: an assistant message that only requests tools
+/// carries `"content": null` in the OpenAI shape. Refusing it turned every
+/// pi session into a 422 at its second tool round (2026-10-06); the
+/// message's meaning lives in its `tool_calls`, which are kept.
 fn deserialize_message_content<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -225,9 +239,10 @@ where
         #[serde(default)]
         text: Option<String>,
     }
-    match StringOrParts::deserialize(deserializer)? {
-        StringOrParts::String(s) => Ok(s),
-        StringOrParts::Parts(parts) => {
+    match Option::<StringOrParts>::deserialize(deserializer)? {
+        None => Ok(String::new()),
+        Some(StringOrParts::String(s)) => Ok(s),
+        Some(StringOrParts::Parts(parts)) => {
             let texts: Vec<String> = parts
                 .into_iter()
                 .filter(|p| matches!(p.kind.as_deref(), None | Some("text")))
@@ -304,6 +319,7 @@ impl ChatMessage {
             content: content.into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 }
@@ -448,6 +464,9 @@ pub struct StreamUsage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamFrame {
     Token(String),
+    /// A piece of the assistant's thinking; rendered as
+    /// `delta.reasoning_content`, apart from the reply's `content`.
+    Reasoning(String),
     ToolCalls(Vec<ToolCall>),
     Finish {
         reason: FinishReason,
@@ -871,6 +890,7 @@ mod tests {
                     arguments: r#"{"city":"SF"}"#.into(),
                 },
             }]),
+            reasoning_content: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
         let back: ChatMessage = serde_json::from_str(&json).unwrap();
@@ -962,6 +982,30 @@ mod tests {
         let json = r#"{"role":"user","content":[]}"#;
         let msg: ChatMessage = serde_json::from_str(json).unwrap();
         assert_eq!(msg.content, "");
+    }
+
+    /// The failing input: pi's third request, `messages[4]` verbatim
+    /// (agent-coding smoke 2026-10-06). An assistant turn that only calls
+    /// tools carries `"content": null` in the OpenAI shape; the daemon
+    /// refused the whole request with a 422 and pi ended the session.
+    #[test]
+    fn message_content_null_on_a_tool_call_turn_is_no_text() {
+        let json = r#"{"role": "assistant", "content": null, "tool_calls": [{"id": "call_9852383_0", "type": "function", "function": {"name": "read", "arguments": "{\"path\":\"tests/test_integration.py\"}"}}]}"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "");
+        let calls = msg.tool_calls.expect("the tool calls survive");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "read");
+    }
+
+    /// The same turn with `content` left out, which the OpenAI shape also
+    /// allows for an assistant message carrying tool calls.
+    #[test]
+    fn message_content_absent_on_a_tool_call_turn_is_no_text() {
+        let json = r#"{"role": "assistant", "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "bash", "arguments": "{}"}}]}"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "");
+        assert_eq!(msg.tool_calls.map(|c| c.len()), Some(1));
     }
 
     #[test]

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Headless OCR install — hand the daemon's `LocalCorpusManager` an `OcrCtx`.
+//! Headless OCR install — resolve the daemon's one `OcrCtx`, which boot hands
+//! to the watched-folder `LocalCorpusManager` and to the recipe `"pdf"`
+//! extractor ([`register_recipe_extractors`]).
 //!
 //! # Why this file exists
 //!
@@ -31,7 +33,7 @@
 //!
 //! # Glassbox
 //!
-//! Every exit from [`install_ocr_ctx`] logs, including the two silent ones:
+//! Every exit from [`resolve_ocr_ctx`] logs, including the two silent ones:
 //! the feature being compiled out, and the models not resolving. An operator
 //! who turned OCR on in `corpus watch` and sees nothing happen must be able
 //! to find out why from the daemon log alone.
@@ -43,10 +45,14 @@ use std::path::Path;
 #[cfg(feature = "ocr")]
 use std::path::PathBuf;
 
-use sovereign_tools::local_corpus::LocalCorpusManager;
+use std::sync::Arc;
 
-/// Install an `OcrCtx` on `manager`, if this build has the `ocr` feature and
-/// the PaddleOCR assets can be found.
+use corpus_index::ingest_port::daemon::IngestPort;
+use sovereign_core::setup_config::SetupConfig;
+use sovereign_tools::local_corpus::ocr::OcrCtx;
+
+/// The daemon's `OcrCtx`, if this build has the `ocr` feature and the
+/// PaddleOCR assets can be found.
 ///
 /// `cleanup_model` must be a GGUF **file stem** the daemon's
 /// `/v1/chat/completions` route can resolve (slots are registered under
@@ -58,30 +64,31 @@ use sovereign_tools::local_corpus::LocalCorpusManager;
 ///
 /// Never fatal. A daemon with no OCR is a supported posture; a daemon that
 /// refuses to boot because an optional asset is missing is not.
-pub async fn install_ocr_ctx(
-    manager: &LocalCorpusManager,
+pub fn resolve_ocr_ctx(
     data_dir: &Path,
     daemon_base_url: String,
     cleanup_model: String,
     bearer: Option<String>,
-) {
+) -> Option<OcrCtx> {
     #[cfg(not(feature = "ocr"))]
     {
         // Bind the unused params so the no-op arm compiles identically to
         // the real one — a signature that drifts between cfgs is a build
         // break waiting for whoever first turns the feature on.
-        let _ = (manager, data_dir, daemon_base_url, cleanup_model, bearer);
+        let _ = (data_dir, daemon_base_url, cleanup_model, bearer);
         tracing::info!(
             "ocr:unavailable reason=feature_not_compiled — this daemon was built \
              without `--features ocr`, so scanned PDFs in a `corpus watch --ocr` \
-             folder will be reported as scanned_no_text rather than indexed"
+             folder will be reported as scanned_no_text rather than indexed, and a \
+             recipe's scanned PDF indexes only its thin text layer"
         );
+        None
     }
 
     #[cfg(feature = "ocr")]
     {
         use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
-        use sovereign_tools::local_corpus::ocr::{OcrCtx, OcrEngineKind};
+        use sovereign_tools::local_corpus::ocr::OcrEngineKind;
 
         let roots = paddle_model_roots(
             data_dir,
@@ -100,7 +107,7 @@ pub async fn install_ocr_ctx(
                  or set SOVEREIGN_PADDLE_OCR_MODEL_DIR; scanned PDFs stay unindexed \
                  until then"
             );
-            return;
+            return None;
         };
 
         // The engine reads this on construction. Setting it here (rather
@@ -148,10 +155,71 @@ pub async fn install_ocr_ctx(
             cleanup_model = %ctx.cleanup_model,
             daemon_base_url = %ctx.daemon_base_url,
             keyed = ctx.bearer.is_some(),
-            "ocr:installed — `corpus watch --ocr` folders will read scanned PDFs"
+            "ocr:resolved — `corpus watch --ocr` folders and recipe PDFs will read scanned PDFs"
         );
-        manager.set_ocr_ctx(ctx).await;
+        Some(ctx)
     }
+}
+
+/// Register svrn's recipe extractors on ingest's engine and return the
+/// daemon's one `OcrCtx`, which `setup_watched_folders` installs too.
+///
+/// The `"pdf"` registration was lost when the CLI's boot moved into the
+/// daemon (de34eb36c, 2026-05-22): every recipe of `kind = "pdf"` then
+/// panicked its install task with "No custom extractor registered".
+pub fn register_recipe_extractors(
+    ingest: Option<&Arc<dyn IngestPort>>,
+    data_dir: &Path,
+    config: &SetupConfig,
+) -> Option<OcrCtx> {
+    // `cleanup_model` is the same chat-slot file stem the enrichment
+    // defaults use: the daemon registers each loaded slot under its file
+    // stem, so a slot ALIAS like "fast" would 503 and silently degrade
+    // every page to raw OCR text.
+    //
+    // A keyed daemon admits no caller without a key, loopback included
+    // (phase-b-86), so the cleanup call presents the daemon's own
+    // credential there; the store's own `is_keyed` decides, read from the
+    // directory the seal reads. An unknown `[daemon] loopback` refuses the
+    // boot at the node seed with its sentence; here it is named and the
+    // pass presents no credential, which that refusal makes moot.
+    let keyed =
+        crate::client_tokens::loopback_grants_nothing(config.daemon.loopback.as_deref(), data_dir)
+            .unwrap_or_else(|e| {
+                tracing::warn!("ocr: {e}");
+                false
+            });
+    let ocr_ctx = resolve_ocr_ctx(
+        data_dir,
+        format!("http://127.0.0.1:{}", config.daemon.client_port),
+        config.primary_model_stem().unwrap_or_default(),
+        keyed
+            .then(crate::client_tokens::self_credential)
+            .flatten()
+            .map(str::to_string),
+    );
+    match ingest {
+        Some(port) => {
+            sovereign_tools::local_corpus::recipe_extractor::register_pdf_extractor(
+                port.as_ref(),
+                ocr_ctx.clone(),
+            );
+            tracing::info!(
+                ocr = ocr_ctx.is_some(),
+                "recipe_extractor:pdf_registered — recipes of kind \"pdf\" read the text layer{}",
+                if ocr_ctx.is_some() {
+                    ", and OCR a layer too thin to index"
+                } else {
+                    " only; a scanned PDF indexes its thin text layer (no OcrCtx)"
+                }
+            );
+        }
+        None => tracing::info!(
+            "recipe_extractor:not_registered — no ingest program in this process, so no \
+             recipe is ingested here"
+        ),
+    }
+    ocr_ctx
 }
 
 /// Candidate PaddleOCR model **roots**, in precedence order. A root holds

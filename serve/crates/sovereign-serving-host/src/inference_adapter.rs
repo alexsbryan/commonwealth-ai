@@ -334,6 +334,16 @@ impl SovereignInferenceAdapter {
     /// whether a smaller, faster slot would already satisfy the
     /// request's capability requirements.
     fn build_completion_request(&self, request: &ChatCompletionRequest) -> CompletionRequest {
+        // An external client's conversation goes to the model's own
+        // template whole (llama-server parity); in-repo callers keep the
+        // flattened Hermes path below. One decider: `conversation`.
+        let hermes_reason = conversation::hermes_path_reason(request);
+        tracing::debug!(
+            conversation = hermes_reason.is_none(),
+            hermes_reason = hermes_reason.unwrap_or(""),
+            messages = request.messages.len(),
+            "inference_adapter: prompt path chosen"
+        );
         let (prompt, system) = Self::flatten(request);
         // Build a skeleton request with the OICP envelope attached
         // BEFORE choosing a slot — the slot picker reads the
@@ -471,7 +481,10 @@ impl SovereignInferenceAdapter {
             alternation_env = alternation_grammar_enabled(),
             "inference_adapter: pre-envelope-check"
         );
-        if req.structured_output.is_none() && request.assistant_prefix.is_none() {
+        if req.structured_output.is_none()
+            && request.assistant_prefix.is_none()
+            && hermes_reason.is_some()
+        {
             // R1 (assistant_prefix) and envelope-schema don't compose:
             // the prefill places the model mid-JSON while the grammar
             // mask starts fresh on the first generated token expecting
@@ -542,6 +555,9 @@ impl SovereignInferenceAdapter {
         // through to the embedded provider's default" — which is
         // `enable_thinking: false` in `apply_chat_template_oaicompat`.
         req.enable_thinking = extract_enable_thinking(request.chat_template_kwargs.as_ref());
+        if hermes_reason.is_none() {
+            conversation::into_conversation(&mut req, request);
+        }
         let (speed, slot_picker) = if req.tools.is_some() {
             (sovereign_contracts::types::Speed::Slow, "tools_bias_slow")
         } else {
@@ -1067,28 +1083,6 @@ pub(crate) fn guard_tools_on_fast(
     Ok(())
 }
 
-/// Carry a queue shed's structure across the trait boundary; flatten
-/// everything else to prose exactly as before.
-///
-/// This is the ONE translation from the provider's error enum into the
-/// API layer's. Both chat entry points route through it, so a shed
-/// cannot reach the wire as backpressure on one path and as a crash on
-/// the other (ARCH_PRINCIPLES §10.6 — one decider, one name).
-fn map_provider_error(e: sovereign_contracts::Error) -> LocalInferenceError {
-    match e {
-        sovereign_contracts::Error::QueueShed {
-            position,
-            predicted_wait_ms,
-            retry_after_secs,
-        } => LocalInferenceError::Shed {
-            position,
-            predicted_wait_ms,
-            retry_after_secs,
-        },
-        other => LocalInferenceError::Other(format!("{other}")),
-    }
-}
-
 #[async_trait]
 impl LocalInferenceService for SovereignInferenceAdapter {
     async fn chat_completion(
@@ -1199,7 +1193,16 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             }
             _ => resp.text.clone(),
         };
-        let (parsed_calls, parse_errors) = if tools_present {
+        // A conversation's reply is parsed as llama-server parses it:
+        // reasoning apart, calls in the model's own format.
+        let conversation_turn = conversation::is_conversation(&req)
+            .then(|| conversation::parse_reply(&resp.text, &req));
+        let reasoning_content = conversation_turn
+            .as_ref()
+            .and_then(|t| t.reasoning_content.clone());
+        let (parsed_calls, parse_errors) = if let Some(turn) = &conversation_turn {
+            (turn.tool_calls.clone(), turn.unparsed.clone())
+        } else if tools_present {
             if grammar_constrained {
                 let direct = parse_tool_envelope_direct(&text_for_parsing);
                 if !direct.is_empty() {
@@ -1270,7 +1273,9 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         // markup out of the returned content so downstream clients
         // don't re-render it. The structured `tool_calls` field is
         // the authoritative signal.
-        let clean_content = if tool_calls_out.is_some() {
+        let clean_content = if let Some(turn) = conversation_turn {
+            turn.content
+        } else if tool_calls_out.is_some() {
             strip_tool_call_blocks(&resp.text)
         } else {
             resp.text
@@ -1317,6 +1322,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             content: clean_content,
             tool_call_id: None,
             tool_calls: tool_calls_out,
+            reasoning_content,
         };
         Ok(ChatCompletionResponse {
             id: format!("chatcmpl-{}", started.elapsed().as_micros()),
@@ -1355,17 +1361,12 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             "inference_adapter:chat_completion_stream_entry"
         );
 
-        // Streaming + tool_calls path. Local backends parse the
-        // `<tool_call>` markup AFTER the model finishes generating, so
-        // genuine token-by-token streaming for tool turns isn't
-        // possible without re-architecting the parser. Instead we
-        // route through the non-streaming `chat_completion` (which
-        // already handles tool extraction, content cleanup, and
-        // finish_reason logic) and synthesize an OpenAI-shaped stream
-        // from the response. opencode and other clients that always
-        // request `stream=true` once tools are bound now succeed
-        // instead of getting a 503.
-        if tools_present {
+        // A conversation streams live, tools or not
+        // (`conversation::stream_turn`). The Hermes path's tool turns
+        // (in-repo callers) parse their envelope after generation, so
+        // they run the non-streaming `chat_completion` and replay it as
+        // an OpenAI-shaped stream.
+        if tools_present && conversation::hermes_path_reason(&request).is_some() {
             // Tools path delegates to chat_completion; the compactor
             // runs there. Don't compact twice.
             let resp = self.chat_completion(request).await?;
@@ -1404,7 +1405,13 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .complete_stream_with_finish(&req)
             .await
             .map_err(map_provider_error)?;
-        tracing::info!("sovereign inference adapter: typed streaming started");
+        tracing::info!(
+            conversation = conversation::is_conversation(&req),
+            "sovereign inference adapter: typed streaming started"
+        );
+        if conversation::is_conversation(&req) {
+            return Ok(Box::pin(conversation::stream_turn(inner, &req)));
+        }
         // Translate sovereign_contracts::types::StreamFrame →
         // oicp_types::openai_types::StreamFrame. The two
         // shapes are identical by design (see openai_types.rs);
@@ -1544,6 +1551,13 @@ impl InferenceProvider for SovereignInferenceAdapter {
         self.provider.warmup_primary().await
     }
 
+    async fn probe_logprobs(
+        &self,
+        probe: &sovereign_contracts::engine_observe::ProbeRequest,
+    ) -> CoreResult<sovereign_contracts::engine_observe::ProbeAnswer> {
+        self.provider.probe_logprobs(probe).await
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.provider.capabilities()
     }
@@ -1589,6 +1603,13 @@ impl InferenceProvider for SovereignInferenceAdapter {
         self.provider.lender_manifest().await
     }
 }
+
+#[path = "inference_adapter/conversation.rs"]
+mod conversation;
+
+#[path = "inference_adapter/provider_error.rs"]
+mod provider_error;
+use provider_error::map_provider_error;
 
 #[cfg(test)]
 #[path = "inference_adapter/guard_tests.rs"]

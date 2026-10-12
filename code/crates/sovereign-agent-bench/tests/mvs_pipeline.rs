@@ -160,6 +160,8 @@ async fn mock_runner_judge_only_pipeline_end_to_end() {
     let report = BenchReport {
         agent: "mock".into(),
         model: "stub".into(),
+        agent_base_url: None,
+        no_judge: false,
         judge_model: "stub".into(),
         judge_trials: 3,
         run_trials: 1,

@@ -703,7 +703,7 @@ mod tests {
         .unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("media origin"), "{msg}");
-        assert!(msg.contains("[iroh] media_origin"), "{msg}");
+        assert!(msg.contains("svrn mesh media offer"), "{msg}");
 
         // And the self-dial, which said "its media origin is already local"
         // no matter which verb asked.

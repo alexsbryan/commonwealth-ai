@@ -25,15 +25,19 @@
 # only in `ci:suites`, and sits behind 16 known failures. This is registered
 # separately, hard and at prepush, for exactly that reason.
 #
+# The same merge resurrects a hook DELETED on main (intent-warn.py, removed
+# 2026-10-10), and then `python3 <missing file>` exits 2, which blocks every
+# Edit. So an anchored command naming a script that does not exist fails too.
+#
 #   bash .claude/hooks/tests/settings-wiring.sh              # check the repo
 #   bash .claude/hooks/tests/settings-wiring.sh --self-test  # + planted bad
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 check() {   # check <file> -> prints findings, returns 1 if any
-python3 - "$1" <<'PY'
-import json, sys, collections
-path = sys.argv[1]
+python3 - "$1" "$REPO" <<'PY'
+import json, os, re, sys, collections
+path, repo = sys.argv[1], sys.argv[2]
 try:
     with open(path, encoding="utf-8") as fh:
         cfg = json.load(fh)
@@ -58,6 +62,13 @@ for event, groups in (cfg.get("hooks") or {}).items():
                                or "$CLAUDE_PROJECT_DIR" in cmd
                                or "${CLAUDE_PROJECT_DIR" in cmd):
                 bad.append(f"  RELATIVE  {event}: {cmd}")
+            # A deleted hook comes back the same way: a branch forked before
+            # the deletion merges its settings entry back in. `python3 <gone>`
+            # exits 2, and exit 2 from PreToolUse BLOCKS the tool, so a missing
+            # script is a broken session, not a stale line.
+            local = re.sub(r'"?\$\{?CLAUDE_PROJECT_DIR\}?"?', repo, script).strip('"')
+            if script and local.startswith(repo) and not os.path.exists(local):
+                bad.append(f"  MISSING   {event}: {local[len(repo) + 1:]} does not exist")
 for (event, script), n in sorted(seen.items()):
     if n > 1:
         bad.append(f"  DUPLICATE {event}: {script} registered {n} times")
@@ -70,7 +81,7 @@ PY
 rc=0
 echo "settings-wiring: $REPO/.claude/settings.json"
 if check "$REPO/.claude/settings.json"; then
-    echo "  ok — every hook command is \$CLAUDE_PROJECT_DIR-anchored or absolute, none registered twice"
+    echo "  ok — every hook command is \$CLAUDE_PROJECT_DIR-anchored or absolute, names a script that exists, none registered twice"
 else
     rc=1
 fi
@@ -91,9 +102,16 @@ JSON
     if check "$tmp/bad.json"; then
         echo "  MISBEHAVED: the planted duplicate+relative blob passed"; rc=1
     else
-        echo "  ok — planted blob rejected (both findings above are expected)"
+        echo "  ok — planted blob rejected (the findings above are expected)"
     fi
-    printf '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"python3 \\"$CLAUDE_PROJECT_DIR\\"/.claude/hooks/inject-notes.py"}]}]}}\n' > "$tmp/good.json"
+    printf '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"python3 \\"$CLAUDE_PROJECT_DIR\\"/.claude/hooks/no-such-hook.py"}]}]}}\n' > "$tmp/missing.json"
+    echo "settings-wiring --self-test: an anchored entry whose script was deleted"
+    if check "$tmp/missing.json"; then
+        echo "  MISBEHAVED: an entry naming a deleted script passed"; rc=1
+    else
+        echo "  ok — missing script rejected (the finding above is expected)"
+    fi
+    printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"sh \\"$CLAUDE_PROJECT_DIR\\"/.claude/hooks/session-boot.sh"}]}]}}\n' > "$tmp/good.json"
     if check "$tmp/good.json"; then
         echo "  ok — a correctly wired blob passes"
     else

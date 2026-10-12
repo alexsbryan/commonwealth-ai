@@ -117,7 +117,7 @@ impl OriginKind {
     /// same refusal: the reader is often the person who has to go fix it.
     pub fn how_to_offer(self) -> &'static str {
         match self {
-            OriginKind::Media => "set `[iroh] media_origin`",
+            OriginKind::Media => "run `svrn mesh media offer`",
             OriginKind::App => "run `svrn publish <name> <port>`",
             // Config, not a verb: unlike an app, an offer origin is a server
             // the operator already runs and wants up permanently, so the

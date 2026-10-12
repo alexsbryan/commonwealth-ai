@@ -487,6 +487,8 @@ pub(super) async fn run_daemon(
              routes are withheld by name, and workflow runs get no corpus/atlas tools"
         );
     }
+    let ocr_ctx =
+        crate::ocr_install::register_recipe_extractors(ingest_port.as_ref(), &data_dir, &config);
 
     // Self-healing corpus maintenance. Continuous appenders (the
     // `wikipedia-newsworthy` freshness daemon, watched folders, mesh pulls)
@@ -682,6 +684,7 @@ pub(super) async fn run_daemon(
         &config,
         folder_tiered_deps,
         enrich_config.clone(),
+        ocr_ctx,
     )
     .await;
 

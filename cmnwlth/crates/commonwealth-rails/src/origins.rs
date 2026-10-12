@@ -26,22 +26,17 @@ use commonwealth_media::origins::{Admit, OriginRefusal, OriginRegistration, Orig
 use commonwealth_transport::iroh::{ALPN, MEDIA_ALPN};
 use serde::Deserialize;
 
+use crate::config::{Config, MediaSection};
 use crate::rail::MembershipRosterSource;
 use crate::RailsDaemon;
 
 /// The endpoint's own origins, which no claim holds: its gossip and join
 /// routes on `cwth/http/0` (any dialer — a joiner is not a member yet, and
-/// the gossip merge authorizes for itself), its ring sync and live routes
-/// (members only; never the checkpoint, a local operator's), and the media origin
-/// `rails.toml` declares, for members inside `media.allow`, with the
-/// credentials declared for it.
-pub fn stand_own(
-    registry: &OriginRegistry,
-    internal: SocketAddr,
-    media: Option<SocketAddr>,
-    media_allow: Vec<String>,
-    media_declared: Vec<(String, String)>,
-) -> Result<(), OriginRefusal> {
+/// the gossip merge authorizes for itself) and its ring sync and live routes
+/// (members only; never the checkpoint, a local operator's). The media
+/// origin is [`stand_media`]'s, because `rails.toml` can change it while this
+/// process runs.
+pub fn stand_own(registry: &OriginRegistry, internal: SocketAddr) -> Result<(), OriginRefusal> {
     registry.stand(
         ALPN,
         &["/internal/gossip", "/internal/join"],
@@ -61,17 +56,72 @@ pub fn stand_own(
         internal,
         Admit::Members(Vec::new()),
         Vec::new(),
+    )
+}
+
+/// Serve the media origin `media` names, for members inside `media.allow`,
+/// with the credentials declared for it; no origin withdraws it. Start and
+/// [`reload_media`] both come through here. The credentials are read from
+/// the data dir that holds the node key, not from `rails.toml`:
+/// `MediaSection` is `deny_unknown_fields`, so a new key there would make an
+/// UN-upgraded daemon refuse to boot rather than ignore it (see
+/// `commonwealth_media::declared`). Returns how many were declared.
+pub fn stand_media(
+    registry: &OriginRegistry,
+    media: &MediaSection,
+    data_dir: &std::path::Path,
+) -> Result<usize, OriginRefusal> {
+    let declared = commonwealth_media::read_declared_in(&commonwealth_media::dir_under(data_dir));
+    let n = declared.len();
+    registry.restand(
+        MEDIA_ALPN,
+        media.origin,
+        Admit::Members(media.allow.clone()),
+        declared,
     )?;
-    if let Some(origin) = media {
-        registry.stand(
-            MEDIA_ALPN,
-            &[],
-            origin,
-            Admit::Members(media_allow),
-            media_declared,
-        )?;
-    }
-    Ok(())
+    Ok(n)
+}
+
+/// `POST /v1/mesh/media/reload` — read `[media]` again from the rails.toml
+/// this process loaded, and the credentials declared for it, and serve what
+/// they now say. `svrn mesh media offer | admit | withdraw | declare` write
+/// those files and call this, so an offer changes without restarting the
+/// endpoint: a restart left peers redialing it for ~120 s (ring-room
+/// 99ca7e4cb leg 3). Only `[media]` applies; a file that no longer loads is
+/// refused and nothing changes.
+pub async fn reload_media(State(daemon): State<Arc<RailsDaemon>>) -> Response {
+    let source = daemon.node.config.source.as_deref();
+    let loaded = match Config::load(&daemon.node.data_dir, source) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(target: "rails", error = %e, "media reload: rails.toml did not load — the origin is served as it was");
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    let before = daemon.media();
+    let declared = match stand_media(&daemon.origins, &loaded.media, &daemon.node.data_dir) {
+        Ok(n) => n,
+        Err(e) => return refused(e),
+    };
+    daemon.set_media(loaded.media.clone());
+    tracing::info!(
+        target: "rails",
+        was = ?before.origin,
+        origin = ?loaded.media.origin,
+        allow = ?loaded.media.allow,
+        declared,
+        "media reload: serving the origin rails.toml now names"
+    );
+    Json(serde_json::json!({
+        "origin": loaded.media.origin,
+        "allow": loaded.media.allow,
+        "declared": declared,
+    }))
+    .into_response()
 }
 
 /// `GET /v1/mesh/origins` — what this endpoint serves, with no tie.
@@ -115,6 +165,9 @@ pub struct Renew {
     /// Replaces the claim's declaration; absent keeps it.
     #[serde(default)]
     pub claims: Option<NodeCapabilities>,
+    /// Replaces the ring namespaces the claim declares; absent keeps them.
+    #[serde(default)]
+    pub namespaces: Option<Vec<String>>,
 }
 
 /// `POST /v1/mesh/origins/{claim_id}/renew`
@@ -123,9 +176,14 @@ pub async fn renew(
     Path(claim_id): Path<String>,
     body: Option<Json<Renew>>,
 ) -> Response {
-    let (ttl_secs, claims) = body.map_or((None, None), |Json(b)| (b.ttl_secs, b.claims));
+    let (ttl_secs, claims, namespaces) = body.map_or((None, None, None), |Json(b)| {
+        (b.ttl_secs, b.claims, b.namespaces)
+    });
     let ttl = crate::api::ttl_of(ttl_secs);
-    match daemon.origins.renew(&claim_id, ttl, claims) {
+    match daemon
+        .origins
+        .renew_declaring(&claim_id, ttl, claims, namespaces)
+    {
         Ok(secs) => Json(serde_json::json!({ "claim_id": claim_id, "expires_in_secs": secs }))
             .into_response(),
         Err(e) => refused(e),
@@ -228,14 +286,7 @@ mod tests {
     /// prefix it binds under, or the status it is refused with.
     fn routed_for_a_member(target: &str) -> Result<String, u16> {
         let registry = OriginRegistry::new(commonwealth_media::PublishedApps::default());
-        stand_own(
-            &registry,
-            "127.0.0.1:1".parse().unwrap(),
-            None,
-            Vec::new(),
-            Vec::new(),
-        )
-        .unwrap();
+        stand_own(&registry, "127.0.0.1:1".parse().unwrap()).unwrap();
         let member = MemberIdentity {
             name: "LittleMac".into(),
             node_id: NodeId::from_u128(0xB0B),

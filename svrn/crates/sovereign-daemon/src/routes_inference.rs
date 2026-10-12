@@ -212,11 +212,10 @@ pub async fn chat_completions(
         // time. Order matters: failure-recovery is most specific (a
         // single recent failure), anti-rep is intermediate (a pattern),
         // read-attractor is the most general (a mode).
-        // Opt-OUT, default on: see `turn_fidelity::reshape_enabled`. All
-        // three key on the Codex/opencode contract, so a client with a
-        // different tool vocabulary never trips them — but an operator
-        // running a shared anchor node can still say "serve it
-        // unmodified" with SOVEREIGN_FRONTDOOR_RESHAPE=0.
+        // Opt-IN since 2026-10-07 (llama-server parity, note fb4d2489):
+        // see `turn_fidelity::reshape_enabled`. All three key on the
+        // Codex/opencode contract; SOVEREIGN_FRONTDOOR_RESHAPE=1 turns
+        // them on for measurement.
         if crate::turn_fidelity::reshape_enabled() {
             crate::frontdoor::apply_failure_nudge_chat(&mut request);
             crate::frontdoor::apply_anti_repetition_chat(&mut request);
@@ -1126,6 +1125,11 @@ async fn serve_local_non_stream(
                 retry_after_secs,
             )
         }
+        Err(crate::state::LocalInferenceError::ContextExceeded {
+            prompt_tokens,
+            n_ctx,
+        }) => sovereign_contracts::openai_http::context_exceeded_response(prompt_tokens, n_ctx)
+            .into_response(),
         Err(e) => {
             warn!(error = %e, "chat_completions: local inference failed");
             (
@@ -1174,6 +1178,16 @@ async fn serve_local_stream(
                 retry_after_secs,
             );
         }
+        Err(crate::state::LocalInferenceError::ContextExceeded {
+            prompt_tokens,
+            n_ctx,
+        }) => {
+            return sovereign_contracts::openai_http::context_exceeded_response(
+                prompt_tokens,
+                n_ctx,
+            )
+            .into_response()
+        }
         Err(e) => {
             warn!(error = %e, "chat_completions: local stream failed to start");
             return (
@@ -1200,7 +1214,10 @@ async fn serve_local_stream(
     let chunks_count_for_stream = chunks_count.clone();
     let sse_events = token_stream.map(move |frame| {
         use crate::openai_types::StreamFrame;
-        if matches!(frame, StreamFrame::Token(_) | StreamFrame::ToolCalls(_)) {
+        if matches!(
+            frame,
+            StreamFrame::Token(_) | StreamFrame::Reasoning(_) | StreamFrame::ToolCalls(_)
+        ) {
             chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         Ok::<_, std::convert::Infallible>(crate::openai_http::sse_event(&header, frame))
@@ -1264,8 +1281,8 @@ async fn serve_local_stream(
 }
 
 #[cfg(test)]
-#[path = "routes_inference/shed_rendering_tests.rs"]
-mod shed_rendering_tests;
+#[path = "routes_inference/refusal_rendering_tests.rs"]
+mod refusal_rendering_tests;
 
 #[cfg(test)]
 #[path = "routes_inference/list_models_tests.rs"]

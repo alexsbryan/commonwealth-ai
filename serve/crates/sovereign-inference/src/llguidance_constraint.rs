@@ -54,6 +54,8 @@ use llguidance::{
     Matcher, ParserFactory,
 };
 
+use sovereign_contracts::structured_output::default_additional_properties_false;
+
 use crate::llama::cpp::model::LlamaModel;
 use crate::llama::cpp::token::data_array::LlamaTokenDataArray;
 use crate::llama::cpp::token::LlamaToken;
@@ -121,15 +123,7 @@ impl LlguidanceConstraint {
     }
 
     fn with_factory(factory: &ParserFactory, grammar_or_schema: &str) -> Result<Self, LlgError> {
-        let trimmed = grammar_or_schema.trim_start();
-        let grammar = if trimmed.starts_with('{') {
-            let schema: serde_json::Value = serde_json::from_str(trimmed)
-                .map_err(|e| LlgError::ParserCreate(format!("json schema parse: {e}")))?;
-            TopLevelGrammar::from_json_schema(schema)
-        } else {
-            TopLevelGrammar::from_lark(grammar_or_schema.to_string())
-        };
-        let parser = factory.create_parser(grammar);
+        let parser = factory.create_parser(top_level_grammar(grammar_or_schema)?);
         let matcher = Matcher::new(parser);
         if matcher.is_error() {
             return Err(LlgError::ParserCreate(
@@ -189,11 +183,7 @@ impl LlguidanceConstraint {
         schema: &serde_json::Value,
         model: &LlamaModel,
     ) -> Result<Self, LlgError> {
-        let mut walked = schema.clone();
-        default_additional_properties_false(&mut walked);
-        let serialised = serde_json::to_string(&walked)
-            .map_err(|e| LlgError::ParserCreate(format!("serialise walked schema: {e}")))?;
-        Self::new(&serialised, model)
+        Self::new(&engine_schema_text(schema)?, model)
     }
 
     /// Compute the next-token mask. Call once per sampling step
@@ -354,6 +344,37 @@ impl LlguidanceConstraint {
     }
 }
 
+/// The grammar the engine compiles for `grammar_or_schema`, by its first
+/// non-whitespace byte: `{` is a JSON Schema
+/// (`TopLevelGrammar::from_json_schema`), anything else a Lark grammar. The
+/// one decider for both `LlguidanceConstraint::new` and the llg-parity
+/// corpus (`llg_parity_corpus_tests.rs`).
+pub(crate) fn top_level_grammar(grammar_or_schema: &str) -> Result<TopLevelGrammar, LlgError> {
+    let trimmed = grammar_or_schema.trim_start();
+    if trimmed.starts_with('{') {
+        let schema: serde_json::Value = serde_json::from_str(trimmed)
+            .map_err(|e| LlgError::ParserCreate(format!("json schema parse: {e}")))?;
+        Ok(TopLevelGrammar::from_json_schema(schema))
+    } else {
+        Ok(TopLevelGrammar::from_lark(grammar_or_schema.to_string()))
+    }
+}
+
+/// The text the engine compiles for a `structured_output` schema: the schema
+/// after [`default_additional_properties_false`], serialised.
+pub(crate) fn engine_schema_text(schema: &serde_json::Value) -> Result<String, LlgError> {
+    let mut walked = schema.clone();
+    default_additional_properties_false(&mut walked);
+    let text = serde_json::to_string(&walked)
+        .map_err(|e| LlgError::ParserCreate(format!("serialise walked schema: {e}")))?;
+    tracing::debug!(
+        closed = walked != *schema,
+        schema = %text,
+        "llguidance: the schema compiled, after the closed-object default"
+    );
+    Ok(text)
+}
+
 fn trace_enabled() -> bool {
     std::env::var("SOVEREIGN_TRACE_LLGUIDANCE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -409,79 +430,6 @@ fn build_tok_env(model: &LlamaModel) -> TokEnv {
     let info = TokRxInfo::new(n_vocab as u32, model.token_eos().0 as u32);
     let trie = TokTrie::from(&info, vocab_bytes.as_ref());
     Arc::new(ApproximateTokEnv::new(trie))
-}
-
-// ---------------------------------------------------------------------------
-// Schema preprocessing.
-// ---------------------------------------------------------------------------
-
-/// Walk a JSON-Schema document and inject `additionalProperties: false`
-/// on every typed-object node that does not already set the field.
-///
-/// **Why this exists.** The in-house `JsonConstraint::compile_schema`
-/// defaults `additionalProperties` to `false` for `type: object`
-/// (non-spec — JSON Schema spec defaults to `true`). Callers across
-/// `sovereign-core` rely on this implicit strictness: zero of the 11
-/// `structured_output: Some(schema)` sites set `additionalProperties`
-/// explicitly. `llguidance`'s `TopLevelGrammar::from_json_schema`
-/// follows the spec, so a naive migration would let the model emit
-/// trailing fields the JsonConstraint mask used to forbid.
-///
-/// Rather than touch all 11 call sites, this walker preserves the
-/// in-house default at the engine boundary. Apply it to the schema
-/// **before** passing to `LlguidanceConstraint::new`. Object subtrees
-/// that explicitly set `additionalProperties: true` are left alone —
-/// callers that genuinely want extensibility keep it.
-///
-/// Recurses into: `properties[*]`, `items`, `additionalProperties`
-/// (when itself a schema object), `anyOf[*]`, `oneOf[*]`, `allOf[*]`,
-/// `$defs[*]`, `definitions[*]`. Non-object values pass through
-/// unchanged.
-///
-/// See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.A.
-pub fn default_additional_properties_false(schema: &mut serde_json::Value) {
-    use serde_json::Value;
-    let Some(obj) = schema.as_object_mut() else {
-        return;
-    };
-
-    let is_typed_object = obj
-        .get("type")
-        .and_then(|v| v.as_str())
-        .map(|s| s == "object")
-        .unwrap_or(false);
-
-    if is_typed_object && !obj.contains_key("additionalProperties") {
-        obj.insert("additionalProperties".to_string(), Value::Bool(false));
-    }
-
-    if let Some(props) = obj.get_mut("properties").and_then(|v| v.as_object_mut()) {
-        for (_k, sub) in props.iter_mut() {
-            default_additional_properties_false(sub);
-        }
-    }
-    if let Some(items) = obj.get_mut("items") {
-        default_additional_properties_false(items);
-    }
-    if let Some(ap) = obj.get_mut("additionalProperties") {
-        if ap.is_object() {
-            default_additional_properties_false(ap);
-        }
-    }
-    for key in ["anyOf", "oneOf", "allOf"] {
-        if let Some(arr) = obj.get_mut(key).and_then(|v| v.as_array_mut()) {
-            for sub in arr.iter_mut() {
-                default_additional_properties_false(sub);
-            }
-        }
-    }
-    for key in ["$defs", "definitions"] {
-        if let Some(defs) = obj.get_mut(key).and_then(|v| v.as_object_mut()) {
-            for (_k, sub) in defs.iter_mut() {
-                default_additional_properties_false(sub);
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

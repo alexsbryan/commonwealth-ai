@@ -1294,9 +1294,9 @@ purpose = "=1/true lets the daemon SYNTHESISE a citation allowlist from the conv
 [[flag]]
 name = "SOVEREIGN_FRONTDOOR_RESHAPE"
 cluster = "bench"
-default = "on"
+default = "off"
 status = "shipped"
-purpose = "=0/false/off serves a locally-served chat turn WITHOUT the runtime reshape passes: the three request-side nudges (failure-recovery, anti-repetition, read-attractor) that append a synthetic message the client never sent, and the two response-side canonicalizers (apply_patch heredoc, absolute path) that rewrite arguments the model already emitted. Defaults ON because all five key on the Codex/opencode contract (exec_command calls, the literal 'Process exited with code N' result shape) and each was cut against a named gym fixture -- a client with a different tool vocabulary never trips them. The switch exists because they are the only remaining passes that make a locally-served turn differ from what the same model and prompt produce under bare llama.cpp, and an operator running a shared anchor node should be able to say 'serve it unmodified' without reading frontdoor.rs to learn the passes exist. Every firing logs at INFO, so ON is auditable and OFF is total. Does NOT govern promote_in_content_tool_call, which recovers a tool call the model emitted as content and would otherwise be lost."
+purpose = "=1/true serves a locally-served chat turn WITH the runtime reshape passes: the three request-side nudges (failure-recovery, anti-repetition, read-attractor) that rewrite or append to the conversation the client sent, and the two response-side canonicalizers (apply_patch heredoc, absolute path) that rewrite arguments the model already emitted. All five key on the Codex/opencode contract and each was cut against a named gym fixture. Default ON until 2026-10-07; OFF since, because the OpenAI chat path's target is llama-server parity (note fb4d2489): these are the passes that make a served turn differ from bare llama.cpp, read-attractor appends a tail system message a real chat template may refuse, and failure-recovery relies on flattening the conversation path no longer does. Every firing logs at INFO. Does NOT govern promote_in_content_tool_call, which recovers a tool call the model emitted as content and would otherwise be lost."
 
 # ── enrichment: the build's progress wire ───────────────────────────
 
@@ -1338,6 +1338,13 @@ cluster = "dev-gates"
 default = "unset (derived from cores + free memory)"
 status = "guard"
 purpose = "Caps the cargo job fan for scripts/sovereign-test.sh — build+link+run, the heaviest fan in the repo. Twin of SOVEREIGN_LINT_JOBS on the same lib/cargo-jobs.sh budget; --jobs overrides it per run. The resolved value is what the banner's `jobs:` line reports, so a run that self-throttled on low free memory says so instead of just being slow."
+
+[[flag]]
+name = "SOVEREIGN_TOOL_STOP_TEST_GGUF"
+cluster = "dev-gates"
+default = "unset (the test prints SKIP and returns)"
+status = "guard"
+purpose = "Absolute path to a tool-calling chat GGUF (a Qwen3.x) for the ignored manual test serve/crates/sovereign-inference/tests/main/tool_turn_finish_reason.rs, which loads the model and checks that a turn stopping on its `</tool_call>` marker reports finish reason Stop, not Length. Read only by that test; run it with `-- --ignored`."
 
 # ── dev-gates: which host tool the gate reaches for ─────────────────
 

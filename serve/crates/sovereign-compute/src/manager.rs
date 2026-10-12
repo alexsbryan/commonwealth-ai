@@ -504,6 +504,9 @@ fn spawn_managed(
         healthy_reset_after: Duration::from_secs(60),
         crash_loop_max: 5,
         stderr_ring_lines: 200,
+        // A compute child honours SIGTERM with `fast_exit_skip_destructors`
+        // and is gone well inside this.
+        terminate_grace: Duration::from_secs(3),
     };
 
     let supervisor = Arc::new(match spec.spawn_gate.clone() {
@@ -1292,6 +1295,13 @@ impl InferenceProvider for ComputeRoutedProvider {
 
     async fn warmup_primary(&self) -> Result<()> {
         self.inner.warmup_primary().await
+    }
+
+    async fn probe_logprobs(
+        &self,
+        probe: &sovereign_contracts::engine_observe::ProbeRequest,
+    ) -> Result<sovereign_contracts::engine_observe::ProbeAnswer> {
+        self.inner.probe_logprobs(probe).await
     }
 
     fn load_extra_slot(

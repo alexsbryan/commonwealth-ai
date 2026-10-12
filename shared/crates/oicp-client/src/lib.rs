@@ -28,7 +28,7 @@ mod serve_loopback;
 mod turn_admission;
 
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use serde::Deserialize;
 
 use sovereign_contracts::error::{Error, Result};
@@ -245,14 +245,25 @@ pub struct RemoteApiProvider {
     /// path bit-identical to the embedded one. See
     /// `ModelsManifest::embed_query_instruction`.
     query_instruction: String,
+    /// The embed family's whole input preparation (instruction AND EOS), for
+    /// a host that does none of its own: llama-server, vLLM. `None` sends
+    /// text as given, which is right for a Sovereign daemon, whose embed slot
+    /// prepares inputs itself. Set by `[engine] embed_inputs = "client"`.
+    input_prep: Option<sovereign_contracts::embed_quirks::EmbedQuirks>,
     /// How this provider's host is asked for schema-shaped output.
     structured_output_mode: StructuredOutputMode,
+    /// How this provider's host takes a decode constraint
+    /// (`[engine] grammar`).
+    grammar: sovereign_contracts::engine_config::GrammarSupport,
     /// Operator-set vendor fields merged into every body last (OpenRouter's
     /// `provider` routing, OpenAI's `seed`).
     extra_params: Option<serde_json::Value>,
     /// Set once this host refused `json_schema` and answered a forced function
     /// call instead (`chat_wire::send_chat`); schemas go that way from then on.
     json_schema_refused: std::sync::atomic::AtomicBool,
+    /// Set once this host answered a forced-choice call only through its
+    /// logprobs (`forced_choice`); such calls go that way from then on.
+    forced_choice_by_logprobs: std::sync::atomic::AtomicBool,
 }
 
 /// Default request timeout for `RemoteApiProvider`. Matches the
@@ -305,9 +316,11 @@ impl RemoteApiProvider {
     async fn embed_many_one_request(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let admitted = self.outbound(Payload::Texts)?;
         let url = format!("{}/embeddings", self.endpoint.resolve().await?);
+        let inputs: Vec<std::borrow::Cow<'_, str>> =
+            texts.iter().map(|t| self.document_input(t)).collect();
         let body = serde_json::json!({
             "model": &self.model_id,
-            "input": texts,
+            "input": inputs,
         });
 
         // Deliberately NOT routed through `send_honouring_shed`: this site's
@@ -400,9 +413,12 @@ impl RemoteApiProvider {
             // `with_query_instruction`; chat providers and document-embed
             // (`embed`, which ignores the prefix) leave it empty.
             query_instruction: String::new(),
+            input_prep: None,
             structured_output_mode: StructuredOutputMode::default(),
+            grammar: Default::default(),
             extra_params: None,
             json_schema_refused: std::sync::atomic::AtomicBool::new(false),
+            forced_choice_by_logprobs: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -470,6 +486,16 @@ impl RemoteApiProvider {
     }
 
     /// Merge these vendor fields into every request body, last.
+    /// How this host takes a decode constraint: a daemon's extension
+    /// fields (the default) or one llguidance `grammar`.
+    pub fn with_grammar(
+        mut self,
+        grammar: sovereign_contracts::engine_config::GrammarSupport,
+    ) -> Self {
+        self.grammar = grammar;
+        self
+    }
+
     pub fn with_extra_params(mut self, extra: Option<serde_json::Value>) -> Self {
         self.extra_params = extra;
         self
@@ -492,7 +518,63 @@ impl RemoteApiProvider {
         self
     }
 
-    fn build_request(&self, request: &CompletionRequest) -> serde_json::Value {
+    /// Prepare every embed input here, as the embed slot does in process:
+    /// `prepare_document` for `embed`/`embed_batch`, `prepare_query` for
+    /// `embed_query`. For a host that sends the text to the model as given.
+    pub fn with_input_prep(
+        mut self,
+        quirks: sovereign_contracts::embed_quirks::EmbedQuirks,
+    ) -> Self {
+        self.input_prep = Some(quirks);
+        self
+    }
+
+    /// One `/embeddings` call on `text` exactly as given: no preparation.
+    async fn embed_as_given(&self, text: &str) -> Result<Vec<f32>> {
+        let admitted = self.outbound(Payload::Texts)?;
+        let url = format!("{}/embeddings", self.endpoint.resolve().await?);
+        let body = serde_json::json!({
+            "model": &self.model_id,
+            "input": text,
+        });
+
+        let response = self
+            .send_honouring_shed(|| admitted.post(&url).json(&body), "Embedding request")
+            .await?;
+
+        #[derive(Deserialize)]
+        struct EmbedResponse {
+            data: Vec<EmbedData>,
+        }
+        #[derive(Deserialize)]
+        struct EmbedData {
+            embedding: Vec<f32>,
+        }
+
+        let embed_response: EmbedResponse = response
+            .json()
+            .await
+            .map_err(|e| Error::Inference(format!("Failed to parse embedding response: {e}")))?;
+
+        embed_response
+            .data
+            .into_iter()
+            .next()
+            .map(|d| d.embedding)
+            .ok_or(Error::Inference(
+                "No embedding data in response".to_string(),
+            ))
+    }
+
+    /// A document-side input as this host must receive it.
+    fn document_input<'a>(&self, text: &'a str) -> std::borrow::Cow<'a, str> {
+        match &self.input_prep {
+            Some(q) => std::borrow::Cow::Owned(q.prepare_document(text)),
+            None => std::borrow::Cow::Borrowed(text),
+        }
+    }
+
+    fn build_request(&self, request: &CompletionRequest) -> Result<serde_json::Value> {
         self.build_request_in(request, self.effective_structured_output_mode())
     }
 
@@ -500,20 +582,8 @@ impl RemoteApiProvider {
         &self,
         request: &CompletionRequest,
         mode: StructuredOutputMode,
-    ) -> serde_json::Value {
-        let mut messages = Vec::new();
-
-        if let Some(ref system) = request.system_message {
-            messages.push(serde_json::json!({
-                "role": "system",
-                "content": system,
-            }));
-        }
-
-        messages.push(serde_json::json!({
-            "role": "user",
-            "content": &request.prompt,
-        }));
+    ) -> Result<serde_json::Value> {
+        let messages = chat_wire::request_messages(request);
 
         // Pin the OpenAI `model` field when the caller asked for a
         // specific model — and, since 2026-07-23, ALSO for slot-routed
@@ -652,30 +722,11 @@ impl RemoteApiProvider {
         // budget the runtime's `think_budget: Some(0)` (FastFocused synthesis,
         // gap check, router) died at this boundary and every fast-slot answer
         // was truncated raw deliberation (2026-06-10 fabrication burn-down).
-        chat_wire::write_thinking(&mut body, request.think_budget, request.enable_thinking);
-
-        // Forward `lark_grammar` to the daemon as a sovereign-specific
-        // extension field. The daemon's inference_adapter unwraps it
-        // back onto CompletionRequest.lark_grammar; embedded.rs then
-        // compiles it via llguidance and constrains decoding.
-        //
-        // Why this exists separately from `response_format`: lark
-        // grammars are strictly more expressive than JSON-Schema
-        // (regex tokens, recursion, custom productions) and the
-        // OpenAI envelope has no slot for free-form lark. The
-        // structured_output → response_format path remains the
-        // canonical route for schema-shaped output; this is the
-        // escape hatch for non-schema constraints like
-        // `(entity ("," entity)*)?` per-line lists or strict
-        // BREAK/CONTINUE alternations.
-        //
-        // The wire field name `lark_grammar` mirrors the
-        // CompletionRequest field exactly — chosen for symmetry
-        // with the in-process path so daemon-side debugging
-        // doesn't need a translation table.
-        if let Some(grammar) = &request.lark_grammar {
-            body["lark_grammar"] = serde_json::json!(grammar);
-        }
+        chat_wire::write_thinking(
+            &mut body,
+            request.think_budget,
+            chat_wire::template_thinking(request),
+        );
 
         // Commonwealth extension: forward the caller-directed
         // stable-prefix declaration (bytes of the user prompt shared
@@ -747,18 +798,16 @@ impl RemoteApiProvider {
         if let Some(mode) = request.sampling_mode {
             body["sampling_mode"] = serde_json::json!(mode);
         }
-        if let Some(prefix) = &request.assistant_prefix {
-            body["assistant_prefix"] = serde_json::json!(prefix);
-        }
+        chat_wire::write_assistant_prefix(&mut body, request, self.grammar);
+        chat_wire::check_tool_choice(&body, self.grammar)?;
         if let Some(prefix) = &request.cmd_prefix {
             body["cmd_prefix"] = serde_json::json!(prefix);
         }
-        if let Some(urls) = &request.url_allowlist {
-            body["url_allowlist"] = serde_json::json!(urls);
-        }
-        if let Some(ids) = &request.evidence_id_allowlist {
-            body["evidence_id_allowlist"] = serde_json::json!(ids);
-        }
+        // The Lark grammar and the URL and evidence-id allow-lists, in this
+        // host's spelling: a daemon's extension fields, or one llguidance
+        // `grammar` (`[engine] grammar`). After the tools and the schema,
+        // which decide what can ride beside them.
+        chat_wire::write_constraints(&mut body, request, self.grammar)?;
         // Operator-set vendor fields, last, so they can override.
         if let (Some(extra), Some(obj)) = (
             self.extra_params.as_ref().and_then(|e| e.as_object()),
@@ -766,7 +815,7 @@ impl RemoteApiProvider {
         ) {
             obj.extend(extra.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
-        body
+        Ok(body)
     }
 
     /// The daemon root: this provider's endpoint with any `/v1` suffix
@@ -874,6 +923,10 @@ struct ChatMessage {
     /// become one.
     #[serde(default)]
     tool_calls: Vec<WireToolCall>,
+    /// The thinking, which llama-server's default reasoning format moves out
+    /// of `content`. [`ChatMessage::answer`] writes it back inline.
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -912,17 +965,12 @@ impl ChatMessage {
         }
         let mut out = prose;
         for call in &self.tool_calls {
-            let args: serde_json::Value = match call.function.arguments.as_deref() {
-                Some(raw) => serde_json::from_str(raw)
-                    .unwrap_or_else(|_| serde_json::Value::String(raw.to_string())),
-                None => serde_json::json!({}),
-            };
             if !out.is_empty() && !out.ends_with('\n') {
                 out.push('\n');
             }
-            out.push_str(&format!(
-                "<tool_call>{}</tool_call>",
-                serde_json::json!({ "name": call.function.name, "arguments": args })
+            out.push_str(&response_wire::tool_call_envelope(
+                &call.function.name,
+                call.function.arguments.as_deref(),
             ));
         }
         out
@@ -943,38 +991,6 @@ struct UsageInfo {
     completion_tokens: u32,
 }
 
-// ─── SSE Streaming Types ─────────────────────────────────────
-
-#[derive(Deserialize)]
-struct StreamChunk {
-    #[serde(default)]
-    choices: Vec<StreamChoice>,
-    /// OpenAI emits a final post-DONE chunk carrying token usage on
-    /// some servers (vLLM, recent llama.cpp). `None` on servers that
-    /// don't emit it — the cutoff chip still works via finish_reason
-    /// alone, just without the precise generated-token count.
-    #[serde(default)]
-    usage: Option<UsageInfo>,
-}
-
-#[derive(Deserialize)]
-struct StreamChoice {
-    #[serde(default)]
-    delta: StreamDelta,
-    /// Set on the terminal chunk (and only the terminal chunk in
-    /// OpenAI-compliant servers). Parsed via
-    /// [`FinishReason::from_openai_str`] at the consume site so a
-    /// stray non-OpenAI string (server bug) round-trips to None and
-    /// we synthesise a `Stop` rather than panic.
-    #[serde(default)]
-    finish_reason: Option<String>,
-}
-
-#[derive(Deserialize, Default)]
-struct StreamDelta {
-    content: Option<String>,
-}
-
 // ─── InferenceProvider Implementation ────────────────────────
 
 #[async_trait]
@@ -983,20 +999,62 @@ impl InferenceProvider for RemoteApiProvider {
         let start = Instant::now();
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
+        let labels = request.forced_choice_candidates();
+        if let Some(labels) = labels
+            .as_deref()
+            .filter(|_| self.forced_choice_by_logprobs_known())
+        {
+            if let Some(answer) = self
+                .forced_choice_by_logprobs(&url, request, labels)
+                .await?
+            {
+                return Ok(CompletionResponse {
+                    latency_ms: start.elapsed().as_millis() as u64,
+                    ..answer
+                });
+            }
+        }
         let (response, mode) = self.send_chat(&admitted, &url, request).await?;
 
-        let chat_response: ChatCompletionResponse = response
-            .json()
+        let status = response.status().as_u16();
+        let raw = response
+            .text()
             .await
+            .map_err(|e| Error::Inference(format!("Failed to read API response: {e}")))?;
+        chat_wire::observe_wire_response(status, &raw);
+        let mut chat_response: ChatCompletionResponse = serde_json::from_str(&raw)
             .map_err(|e| Error::Inference(format!("Failed to parse API response: {e}")))?;
+        if let (Some(prefix), Some(choice)) = (
+            chat_wire::prefix_as_message(request, self.grammar),
+            chat_response.choices.first_mut(),
+        ) {
+            choice.message.strip_continued(prefix);
+        }
 
         let first_choice = chat_response.choices.first();
         let text = first_choice
             .map(|c| c.message.answer(request, mode))
             .unwrap_or_default();
+        // A host that sampled a label rather than answering with the map
+        // (`forced_choice`): ask it once more through its logprobs. That
+        // answer stands whole, its usage too; without logprobs the native
+        // answer stands.
+        if let Some(labels) =
+            labels.filter(|_| sovereign_contracts::oicp::forced_choice::parse(&text).is_none())
+        {
+            if let Some(answer) = self
+                .forced_choice_by_logprobs(&url, request, &labels)
+                .await?
+            {
+                return Ok(CompletionResponse {
+                    latency_ms: start.elapsed().as_millis() as u64,
+                    ..answer
+                });
+            }
+        }
         let finish_reason = first_choice
             .and_then(|c| c.finish_reason.as_deref())
-            .and_then(FinishReason::from_openai_str);
+            .and_then(response_wire::provider_finish);
 
         let (tokens_used, prompt_tokens, completion_tokens) = chat_response
             .usage
@@ -1045,11 +1103,12 @@ impl InferenceProvider for RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
-        use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
+        use sovereign_contracts::types::StreamFrame;
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
-        let mut body = self.build_request(request);
-        body["stream"] = serde_json::json!(true);
+        let mut body = self.build_request(request)?;
+        response_wire::ask_to_stream(&mut body);
+        chat_wire::observe_wire_request(&body);
 
         let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
         let response = self
@@ -1060,7 +1119,9 @@ impl InferenceProvider for RemoteApiProvider {
             .await?;
         lap.mark("headers");
 
+        let status = response.status().as_u16();
         let byte_stream = response.bytes_stream();
+        let inline_reasoning = response_wire::inlines_reasoning(request);
         // Carry parser state across the byte-stream's filter_map by
         // streaming into a channel: parsing SSE line-by-line is
         // stateful (finish_reason + usage may land on any chunk
@@ -1068,63 +1129,45 @@ impl InferenceProvider for RemoteApiProvider {
         // mutable state across yields cleanly. Channel-driven actor
         // keeps the parser straightforward.
         let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(32);
-        tokio::spawn(async move {
-            use futures::StreamExt;
-            let mut byte_stream = byte_stream;
-            let mut buf = String::new();
-            let mut finish_reason: Option<FinishReason> = None;
-            let mut usage: Option<StreamUsage> = None;
-            'outer: while let Some(chunk) = byte_stream.next().await {
-                let Ok(bytes) = chunk else { continue };
-                lap.first("first byte");
-                buf.push_str(&String::from_utf8_lossy(&bytes));
-                // Process complete lines; leave the tail in buf for
-                // the next iteration so a chunk-split SSE line
-                // doesn't drop tokens.
-                while let Some(pos) = buf.find('\n') {
-                    let line = buf[..pos].trim().to_string();
-                    buf.drain(..=pos);
-                    if line == "data: [DONE]" {
-                        break 'outer;
-                    }
-                    let Some(data) = line.strip_prefix("data: ") else {
-                        continue;
-                    };
-                    let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) else {
-                        continue;
-                    };
-                    if let Some(u) = parsed.usage {
-                        usage = Some(StreamUsage {
-                            prompt_tokens: u.prompt_tokens as u32,
-                            completion_tokens: u.completion_tokens,
-                            total_tokens: u.total_tokens as u32,
-                        });
-                    }
-                    for choice in parsed.choices {
-                        if let Some(text) = choice.delta.content {
-                            lap.first("first frame parsed");
-                            if !text.is_empty() && tx.send(StreamFrame::Token(text)).await.is_err()
-                            {
-                                return;
-                            }
+        tokio::spawn(sovereign_contracts::engine_observe::carry_future(
+            async move {
+                use futures::StreamExt;
+                let mut byte_stream = byte_stream;
+                let mut reader = response_wire::SseReader::new(inline_reasoning);
+                // The raw stream, kept only while a conformance sink is installed.
+                let mut raw = sovereign_contracts::engine_observe::is_observing().then(String::new);
+                while !reader.ended() {
+                    let bytes = match byte_stream.next().await {
+                        Some(Ok(bytes)) => bytes,
+                        Some(Err(e)) => {
+                            reader.fail(format!("the stream broke: {e}"));
+                            break;
                         }
-                        if let Some(reason_str) = choice.finish_reason {
-                            finish_reason = FinishReason::from_openai_str(&reason_str);
-                            tracing::debug!(
-                                finish_reason = %reason_str,
-                                "remote: stream - terminal finish_reason captured"
-                            );
+                        None => break,
+                    };
+                    lap.first("first byte");
+                    if let Some(raw) = raw.as_mut() {
+                        raw.push_str(&String::from_utf8_lossy(&bytes));
+                    }
+                    for text in reader.push(&bytes) {
+                        lap.first("first frame parsed");
+                        if tx.send(StreamFrame::Token(text)).await.is_err() {
+                            return;
                         }
                     }
                 }
-            }
-            let _ = tx
-                .send(StreamFrame::Finish {
-                    reason: finish_reason.unwrap_or(FinishReason::Stop),
-                    usage,
-                })
-                .await;
-        });
+                if let Some(raw) = raw {
+                    chat_wire::observe_wire_response(status, &raw);
+                }
+                let (tail, terminal) = reader.finish();
+                for text in tail {
+                    if tx.send(StreamFrame::Token(text)).await.is_err() {
+                        return;
+                    }
+                }
+                let _ = tx.send(terminal).await;
+            },
+        ));
         Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
     }
 
@@ -1134,44 +1177,17 @@ impl InferenceProvider for RemoteApiProvider {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
-        let mut body = self.build_request(request);
-        body["stream"] = serde_json::json!(true);
+        let mut body = self.build_request(request)?;
+        response_wire::ask_to_stream(&mut body);
 
         let response = self
             .send_honouring_shed(|| admitted.post(&url).json(&body), "Remote stream request")
             .await?;
 
-        let byte_stream = response.bytes_stream();
-
-        let token_stream = byte_stream.filter_map(|chunk| async move {
-            let bytes = chunk.ok()?;
-            let text = String::from_utf8_lossy(&bytes);
-
-            let mut tokens = Vec::new();
-            for line in text.lines() {
-                let line = line.trim();
-                if line == "data: [DONE]" {
-                    break;
-                }
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
-                        if let Some(content) =
-                            chunk.choices.first().and_then(|c| c.delta.content.clone())
-                        {
-                            tokens.push(content);
-                        }
-                    }
-                }
-            }
-
-            if tokens.is_empty() {
-                None
-            } else {
-                Some(Ok(tokens.join("")))
-            }
-        });
-
-        Ok(Box::pin(token_stream))
+        Ok(Box::pin(response_wire::text_stream(
+            response.bytes_stream(),
+            response_wire::SseReader::new(response_wire::inlines_reasoning(request)),
+        )))
     }
 
     /// Dispatch requests concurrently via HTTP connection pooling.
@@ -1188,39 +1204,7 @@ impl InferenceProvider for RemoteApiProvider {
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        let admitted = self.outbound(Payload::Texts)?;
-        let url = format!("{}/embeddings", self.endpoint.resolve().await?);
-        let body = serde_json::json!({
-            "model": &self.model_id,
-            "input": text,
-        });
-
-        let response = self
-            .send_honouring_shed(|| admitted.post(&url).json(&body), "Embedding request")
-            .await?;
-
-        #[derive(Deserialize)]
-        struct EmbedResponse {
-            data: Vec<EmbedData>,
-        }
-        #[derive(Deserialize)]
-        struct EmbedData {
-            embedding: Vec<f32>,
-        }
-
-        let embed_response: EmbedResponse = response
-            .json()
-            .await
-            .map_err(|e| Error::Inference(format!("Failed to parse embedding response: {e}")))?;
-
-        embed_response
-            .data
-            .into_iter()
-            .next()
-            .map(|d| d.embedding)
-            .ok_or(Error::Inference(
-                "No embedding data in response".to_string(),
-            ))
+        self.embed_as_given(&self.document_input(text)).await
     }
 
     /// The rerank kind's client method (`rerank.rs`).
@@ -1281,6 +1265,9 @@ impl InferenceProvider for RemoteApiProvider {
     /// the model declares no query instruction (chat / non-embedding ids), the
     /// prefix is empty and this is exactly `embed()` — no behaviour change.
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        if let Some(q) = &self.input_prep {
+            return self.embed_as_given(&q.prepare_query(query)).await;
+        }
         if self.query_instruction.is_empty() {
             return self.embed(query).await;
         }
@@ -1416,10 +1403,12 @@ pub struct SplitInferenceProvider {
 }
 
 mod chat_wire;
+mod forced_choice;
 mod outbound;
+mod response_wire;
 pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal};
 mod shed;
-pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
+pub use chat_wire::{openai_function_name, titled_schema, write_constraints, StructuredOutputMode};
 mod loopback;
 pub use loopback::endpoint_is_loopback;
 
@@ -2131,7 +2120,7 @@ mod tests {
         // empty so the daemon's OICP slot picker decides — see the
         // doc comment on `build_request`.
         let request = CompletionRequest::new("Hello, world!").with_model_id("test-model");
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
 
         assert_eq!(body["model"], "test-model");
         let messages = body["messages"].as_array().unwrap();
@@ -2149,7 +2138,7 @@ mod tests {
         // Priority-1 envelope routing would override the pin (the
         // 2026-07-23 fast-slot hijack; see `build_request` docs).
         let request = CompletionRequest::new("Hello");
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
         assert_eq!(body["model"], "test-model");
         // The invariant this guards is "no ROUTING signal", not "no envelope".
         // Absence of the envelope used to be a sufficient proxy for it; since
@@ -2173,7 +2162,7 @@ mod tests {
         // Fast with model_id = None keeps the empty model + envelope
         // form so the daemon routes it to a fast-class slot.
         let fast = CompletionRequest::new("Hello").with_speed(Speed::Fast);
-        let body = provider.build_request(&fast);
+        let body = provider.build_request(&fast).unwrap();
         assert_eq!(body["model"], "");
         assert_eq!(body["oicp"]["latency_class"], "fast");
     }
@@ -2192,7 +2181,9 @@ mod tests {
         assert!(env.forward_budget.is_none(), "fixture starts unstated");
         assert_eq!(env.effective_forward_budget(), 1, "unstated means one hop");
 
-        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(env));
+        let body = provider
+            .build_request(&CompletionRequest::new("hi").with_oicp(env))
+            .unwrap();
 
         // Explicit zero, not omission. The receiver must be able to tell
         // "you are the last hop" from "nobody told me".
@@ -2211,7 +2202,9 @@ mod tests {
 
         // Fast + no model_id is the branch that builds an envelope from
         // scratch (see `build_request_slow_pins_provider_model_...`).
-        let body = provider.build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast));
+        let body = provider
+            .build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast))
+            .unwrap();
 
         assert_eq!(
             body["oicp"]["latency_class"], "fast",
@@ -2235,7 +2228,9 @@ mod tests {
             .with_forward_budget(0);
         assert!(!spent.may_forward());
 
-        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(spent));
+        let body = provider
+            .build_request(&CompletionRequest::new("hi").with_oicp(spent))
+            .unwrap();
         assert_eq!(
             body["oicp"]["forward_budget"], 0,
             "saturating, not wrapping"
@@ -2272,7 +2267,7 @@ mod tests {
 
         let request = CompletionRequest::new("complete this").with_model_id("qwen-122b");
         assert!(request.oicp.is_none(), "thin clients send no envelope");
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
 
         // The name survives the hop — no silent substitution.
         assert_eq!(body["model"], "qwen-122b");
@@ -2330,7 +2325,7 @@ mod tests {
             stable_prefix_len: None,
         };
 
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
         let messages = body["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0]["role"], "system");
@@ -2376,7 +2371,7 @@ mod tests {
             stable_prefix_len: None,
         };
 
-        let body = provider.build_request(&request);
+        let body = provider.build_request(&request).unwrap();
         assert!(body.get("oicp").is_some());
         // v0.3: hint + latency class + sizing live at the top level
         // of the OICP envelope.

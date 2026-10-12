@@ -20,11 +20,26 @@ pub struct RunArgs {
     pub judge_trials: u8,
     pub judge_model: Option<String>,
     pub judge_base_url: String,
+    /// The OpenAI-compatible server the agent itself talks to. `None`
+    /// keeps the old coupling (the agent uses `judge_base_url`), so a run
+    /// that names neither still reaches the local daemon. Only runners that
+    /// take an endpoint (pi, opencode) accept it; any other refuses the run
+    /// rather than silently using its own hardcoded URL.
+    pub agent_base_url: Option<String>,
+    /// The context window the agent is told the model has. pi and
+    /// opencode size their compaction against it, so it should match what
+    /// the server serves per request.
+    pub agent_context_window: u32,
+    /// Skip the rubric judge. Judge-scored dims are recorded as not judged
+    /// (hybrid dims keep their auto floor), never as a judged 0.
+    pub no_judge: bool,
     pub token_cap_override: Option<u64>,
     pub wall_seconds_override: Option<u64>,
     pub update_baseline: bool,
     pub report_path: PathBuf,
     pub pi_binary: Option<String>,
+    /// Pin the `opencode` binary (default: `opencode` on PATH).
+    pub opencode_binary: Option<String>,
     /// Where to persist per-run artifacts (agent workdir copy, pi
     /// stderr, judge prompts + raw responses). When `None`, defaults
     /// to `<bench_root>/.artifacts/<utc-date>-<agent>-<model-slug>/`
@@ -74,11 +89,15 @@ impl RunArgs {
         let mut judge_trials: u8 = 3;
         let mut judge_model: Option<String> = None;
         let mut judge_base_url = "http://localhost:9741/v1".to_string();
+        let mut agent_base_url: Option<String> = None;
+        let mut agent_context_window: u32 = 32_768;
+        let mut no_judge = false;
         let mut token_cap_override: Option<u64> = None;
         let mut wall_seconds_override: Option<u64> = None;
         let mut update_baseline = false;
         let mut report_path = PathBuf::from("agent-bench-report.json");
         let mut pi_binary: Option<String> = None;
+        let mut opencode_binary: Option<String> = None;
         let mut artifacts_dir: Option<PathBuf> = None;
         let mut trials: u8 = 1;
         let mut tier_override: Option<Tier> = None;
@@ -118,6 +137,20 @@ impl RunArgs {
                 "--judge-base-url" => {
                     judge_base_url = require_value("--judge-base-url", argv, &mut i)?;
                 }
+                "--agent-base-url" => {
+                    agent_base_url = Some(require_value("--agent-base-url", argv, &mut i)?);
+                }
+                "--agent-context-window" => {
+                    let v = require_value("--agent-context-window", argv, &mut i)?;
+                    agent_context_window = v.parse().map_err(|_| {
+                        ArgsError::BadNumber("--agent-context-window".into(), v.clone())
+                    })?;
+                }
+                "--no-judge" => {
+                    no_judge = true;
+                    i += 1;
+                    continue;
+                }
                 "--token-cap-override" => {
                     let v = require_value("--token-cap-override", argv, &mut i)?;
                     token_cap_override = Some(v.parse().map_err(|_| {
@@ -140,6 +173,9 @@ impl RunArgs {
                 }
                 "--pi-binary" => {
                     pi_binary = Some(require_value("--pi-binary", argv, &mut i)?);
+                }
+                "--opencode-binary" => {
+                    opencode_binary = Some(require_value("--opencode-binary", argv, &mut i)?);
                 }
                 "--artifacts-dir" => {
                     artifacts_dir = Some(require_value("--artifacts-dir", argv, &mut i)?.into());
@@ -186,11 +222,15 @@ impl RunArgs {
             judge_trials,
             judge_model,
             judge_base_url,
+            agent_base_url,
+            agent_context_window,
+            no_judge,
             token_cap_override,
             wall_seconds_override,
             update_baseline,
             report_path,
             pi_binary,
+            opencode_binary,
             artifacts_dir,
             trials,
             tier_override,
@@ -233,6 +273,27 @@ mod tests {
         assert_eq!(r.judge_trials, 3);
         assert!(!r.update_baseline);
         assert_eq!(r.trials, 1);
+    }
+
+    #[test]
+    fn parse_agent_endpoint_flags() {
+        let r = RunArgs::parse(&argv(&[
+            "--agent-base-url",
+            "http://127.0.0.1:18180/v1",
+            "--agent-context-window",
+            "65536",
+            "--no-judge",
+        ]))
+        .unwrap();
+        assert_eq!(
+            r.agent_base_url.as_deref(),
+            Some("http://127.0.0.1:18180/v1")
+        );
+        assert_eq!(r.agent_context_window, 65_536);
+        assert!(r.no_judge);
+        let d = RunArgs::parse(&[]).unwrap();
+        assert_eq!(d.agent_base_url, None);
+        assert!(!d.no_judge);
     }
 
     #[test]

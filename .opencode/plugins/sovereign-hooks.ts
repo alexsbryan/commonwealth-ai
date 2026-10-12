@@ -20,9 +20,9 @@
 //
 // 1. opencode has no context channel at PreToolUse — `tool.execute.before` can
 //    only mutate the tool's args. So advisory output from prefer-code-intel /
-//    prior-art-warn / intent-warn is BUFFERED and flushed into the next
-//    chat.message. The advice lands one turn later than under Claude Code.
-//    This is safe precisely because all three scripts are advisory by
+//    prior-art-warn is BUFFERED and flushed into the next chat.message. The
+//    advice lands one turn later than under Claude Code. This is safe
+//    precisely because both scripts are advisory by
 //    contract ("NEVER BLOCKS. Always exit 0"); a blocking hook could not be
 //    adapted this way and must not be added to the buffered set.
 //
@@ -189,7 +189,7 @@ export const plugin: Plugin = async ({ directory }) => {
       }
       const scripts =
         tool === "Edit" || tool === "Write"
-          ? ["prior-art-warn.py", "intent-warn.py"]
+          ? ["prior-art-warn.py"]
           : ["prefer-code-intel.py"]
       for (const s of scripts) {
         const out = runHook(directory, s, envelope)

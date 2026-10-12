@@ -17,113 +17,9 @@ use crate::state::AppState;
 
 use super::corpus_ingest::{clear_stale_failure, ingest_progress_callback, record_failure};
 
-/// Resolve the CLI binary that can actually run `enrich init/extract`
-/// for the deep Tier-2 referential-atlas pass.
-///
-/// `enrich` is owned ONLY by `sovereign-cli-llm`. **No daemon process
-/// is that binary**, so we must NEVER self-exec `std::env::current_exe()`
-/// here (the historical bug):
-/// - Standalone daemon → `current_exe()` is `sovereign-cli-daemon`,
-///   whose dispatcher rejects `enrich` (exit 2) — a dead pass.
-/// - Desktop embedded in-process daemon → `current_exe()` is the Tauri
-///   GUI binary (`sovereign-desktop`), which has no arg-parser and no
-///   single-instance guard: self-execing it **mis-launches a second GUI
-///   window** and blocks this post-install task on it.
-///
-/// So the deep pass is opt-in via an explicit `$SOVEREIGN_CLI_LLM_BIN`
-/// pointing at a real `sovereign-cli-llm`. When it is unset (every
-/// default deployment) we skip — the structural atlas + inline tiered
-/// enrichment have already landed by this point, so the referential
-/// atlas is an optional publisher-side deepening, not a prerequisite for
-/// retrieval or Explore. We deliberately do NOT auto-discover a sibling
-/// binary or fall back to `which`: that would silently turn on a heavy
-/// LLM pass on the standalone daemon (which has never run it), changing
-/// behaviour no operator asked for.
-fn resolve_enrich_cli() -> Option<std::path::PathBuf> {
-    let raw = std::env::var("SOVEREIGN_CLI_LLM_BIN").ok()?;
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let path = std::path::PathBuf::from(trimmed);
-    if path.exists() {
-        Some(path)
-    } else {
-        tracing::warn!(
-            configured = %path.display(),
-            "SOVEREIGN_CLI_LLM_BIN is set but the path does not exist — skipping tier-2 deep extraction"
-        );
-        None
-    }
-}
-
-/// Phase C3 — gather peer atlas advice for `corpus_id`.
-///
-/// Walks the live mesh, builds [`RemoteAtlasView`]s from each peer's
-/// `hosted_corpora`, reads the local atlas summary, and returns the
-/// best pull candidate (if any) per the rule in
-/// [`evaluate_peer_atlas_advice`].
-///
-/// Returns `None` when no peer is worth pulling from — the post-
-/// install hook then proceeds with the local Tier-2 launch as
-/// usual. Best-effort: any I/O hiccup falls through to "no advice"
-/// rather than blocking the install.
-async fn gather_peer_atlas_advice(
-    state: &AppState,
-    corpus_id: &str,
-    indexes_dir: &std::path::Path,
-) -> Option<sovereign_tools::atlas_peer_advice::AtlasPullLead> {
-    use sovereign_tools::atlas_peer_advice::{evaluate_peer_atlas_advice, RemoteAtlasView};
-
-    // Local view: atom counts come from the cached summary; embed
-    // model from our own member record (populated by gossip).
-    let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
-    let Some(atlas) = state.inner.node.atlas.as_ref() else {
-        tracing::debug!(
-            corpus_id,
-            "peer atlas advice: no ingest atlas port; no advice"
-        );
-        return None;
-    };
-    let local_summary = atlas.atlas_summary(&atlas_dir).ok().flatten();
-    let local_tier2_count = local_summary.as_ref().map(|s| s.tier2_count).unwrap_or(0);
-    let local_fingerprint = local_summary.as_ref().map(|s| s.fingerprint.as_str());
-
-    let self_node_id = state.inner.fabric.identity.current();
-    let members = state.membership().members().await;
-    let my_embed_model = members
-        .iter()
-        .find(|m| m.node_id == self_node_id)
-        .and_then(|m| m.capabilities.embed_model.as_ref())
-        .map(|m| m.model_id.clone());
-
-    let mut peer_views: Vec<RemoteAtlasView> = Vec::new();
-    for member in &members {
-        if member.node_id == self_node_id {
-            continue;
-        }
-        let model = member
-            .capabilities
-            .embed_model
-            .as_ref()
-            .map(|m| m.model_id.clone());
-        if let Some(view) = RemoteAtlasView::from_member(
-            member.name.clone(),
-            model,
-            corpus_id,
-            &member.capabilities.hosted_corpora,
-        ) {
-            peer_views.push(view);
-        }
-    }
-
-    evaluate_peer_atlas_advice(
-        local_tier2_count,
-        local_fingerprint,
-        my_embed_model.as_deref(),
-        &peer_views,
-    )
-}
+#[path = "corpus_install/post_install.rs"]
+mod post_install;
+use post_install::{gather_peer_atlas_advice, resolve_enrich_cli};
 
 /// Where an install's recipe comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -277,7 +173,11 @@ pub async fn spawn_install(
         // to its own chunks (e.g. the chaos-monkey bench corpus). A recipe with
         // NO [enrichment] keeps the default-on hook.
         let recipe_opts_out_of_auto_enrichment = prepared.opts_out_of_auto_enrichment;
-        let result = (prepared.run)(Some(progress_cb)).await;
+        // The run gets a task of its own, so a panic inside it ends as a
+        // recorded failure (PL6). Awaited inline, a panic killed this task
+        // before anything was recorded: the corpus stayed in
+        // `active_ingests` and a poller saw no failure, only absence.
+        let joined = tokio::spawn((prepared.run)(Some(progress_cb))).await;
 
         state_for_task
             .inner
@@ -286,6 +186,20 @@ pub async fn spawn_install(
             .write()
             .await
             .remove(&corpus_id_for_task);
+
+        let result = match joined {
+            Ok(result) => result,
+            Err(join) => {
+                let reason = install_task_died(join);
+                record_failure(&state_for_task, &corpus_id_for_task, reason.clone()).await;
+                tracing::warn!(
+                    corpus = %corpus_id_for_task,
+                    %reason,
+                    "spawn_corpus_install: ingest task died"
+                );
+                return;
+            }
+        };
 
         match result {
             Ok(info) => {
@@ -661,6 +575,21 @@ pub async fn spawn_install(
         }
     });
     InstallOutcome::Spawned
+}
+
+/// The failure message for an install task that did not return: its panic
+/// message when it panicked.
+fn install_task_died(join: tokio::task::JoinError) -> String {
+    if !join.is_panic() {
+        return format!("the install task was cancelled: {join}");
+    }
+    let payload = join.into_panic();
+    let message = payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a non-string panic payload".to_string());
+    format!("the install task panicked: {message}")
 }
 
 /// Take `corpus_id` back out of `active_ingests` on a path that spawned

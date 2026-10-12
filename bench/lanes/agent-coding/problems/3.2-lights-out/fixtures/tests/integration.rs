@@ -96,11 +96,7 @@ fn all_lit_3x3_solvable() {
 
 #[test]
 fn checkerboard_3x3_solvable() {
-    let grid = vec![
-        vec![1u8, 0, 1],
-        vec![0, 1, 0],
-        vec![1, 0, 1],
-    ];
+    let grid = vec![vec![1u8, 0, 1], vec![0, 1, 0], vec![1, 0, 1]];
     check_solves(grid);
 }
 
@@ -111,10 +107,17 @@ fn all_lit_5x5_solvable() {
 }
 
 #[test]
-fn one_lit_5x5_corner_solvable() {
+fn one_lit_5x5_corner_unsolvable_returns_none() {
+    // Unsolvable: the corner overlaps an odd number of cells of one of the
+    // 5x5 board's two quiet patterns. This test asserted "solvable" until
+    // 2026-10-07; light chasing over all 32 first rows finds no solution.
     let mut grid = vec![vec![0u8; 5]; 5];
     grid[0][0] = 1;
-    check_solves(grid);
+    let presses = solve(&grid);
+    assert!(
+        presses.is_none(),
+        "expected single-corner-lit 5x5 to be unsolvable; got {presses:?}"
+    );
 }
 
 #[test]

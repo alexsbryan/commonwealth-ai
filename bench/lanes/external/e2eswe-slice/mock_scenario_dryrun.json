@@ -1,0 +1,5 @@
+[
+  {"bash": "mkdir -p ldaptor/protocols/ldap && printf 'def test_placeholder():\\n    assert True\\n' > smoke_marker.py && cat > pyproject.toml <<'EOF'\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"ldaptor\"\nversion = \"0.0.1\"\nEOF\ncat > setup.sh <<'EOF'\n#!/bin/bash\npip install -e . --no-build-isolation\nEOF\nchmod +x setup.sh"},
+  {"bash": "bash ./setup.sh"},
+  {"bash": "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"}
+]

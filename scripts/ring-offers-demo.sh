@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # ring-offers-demo.sh — the ra-4 demo, and the instrument behind its two bars.
 #
-# Four throwaway daemons on ONE host, one mesh, two of them publishing an offer
-# origin and two publishing none. `svrn mesh offers` run from a fifth role (the
+# Four throwaway nodes on ONE host, one mesh, two of them publishing an offer
+# origin and two publishing none. A node is a `cw-rails` (its mesh endpoint,
+# which holds the origins table and answers `/v1/mesh/fanout`) and the daemon
+# that dials it through `[daemon] rails_base` and registers its `[iroh]
+# offer_origin` there; svrn's own /v1/mesh/* answer 410 since
+# pb-mesh-exit-transport. `svrn mesh offers` run from a fifth role (the
 # caller) then shows what `ra-offers-catalogue-computed` claims: a SERVED row
 # from a peer's offer origin and a NEVER_ASKED row naming a peer that publishes
 # none, in the SAME response — and `--why` shows what
@@ -13,10 +17,13 @@
 # `hm-no-shared-credentials` records a run where a reachability probe passed
 # while every real fetch 401'd. The verdict below reads the FANOUT ROWS.
 #
-# WHY THROWAWAY DAEMONS AND NOT THE OPERATOR'S. Every node here has its own
-# `SOVEREIGN_DATA_DIR`, its own ports and its own node key. Nothing touches
-# ~/.svrnmesh or the daemon on :9741, so this needs no restart of anything a
-# person is using and no coordination with a peer session.
+# WHY THROWAWAY NODES AND NOT THE OPERATOR'S. Every node here has its own
+# `SOVEREIGN_DATA_DIR`, its own cw-rails root (`CW_RAILS_DIR`), its own ports
+# and its own node key. Nothing touches ~/.svrnmesh, ~/.commonwealth-rails or
+# the house's :9741/:9747/:9748, so this needs no restart of anything a person
+# is using and no coordination with a peer session. Every CLI call carries the
+# node's CW_RAILS_DIR: `ring roster add` writes under it, and without it the
+# roster would land in the house's cw-rails root.
 #
 #   scripts/ring-offers-demo.sh up                 bring the four up and join them
 #   scripts/ring-offers-demo.sh show               the demo: offers, then --why
@@ -32,43 +39,63 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 D="${RING_OFFERS_DIR:-${TMPDIR:-/tmp}/ring-offers-demo}"
 DAEMON="$REPO/target/debug/sovereign-cli-daemon"
 CLI="$REPO/target/debug/sovereign-cli"
+# CW_RAILS_BIN: the name `svrn mesh up` reads too (rails_up.rs locate_rails).
+RAILS="${CW_RAILS_BIN:-$REPO/target/debug/cw-rails}"
 export SOVEREIGN_NO_STALE_WARN=1
 
-# Five ports per node, well clear of the daemon's own 9741/9742.
+# Ports per node, well clear of the house's 9741/9742/9747/9748. svrn binds
+# client and internal, and its ring rail at client + 2 (guest_pages.rs
+# rail_port); cw-rails' API is client + 5 and serve (hosted in the daemon)
+# client + 6.
 ADA_C=19741;   ADA_I=19742
 MIRA_C=19751;  MIRA_I=19752;  MIRA_O=18711
 JONAS_C=19761; JONAS_I=19762; JONAS_O=18712
 SAM_C=19771;   SAM_I=19772
+declare -A CPORT=([ada]=$ADA_C [mira]=$MIRA_C [jonas]=$JONAS_C [sam]=$SAM_C)
+rport() { echo $(( CPORT[$1] + 5 )); }
+sport() { echo $(( CPORT[$1] + 6 )); }
+rails_url() { echo "http://127.0.0.1:$(rport "$1")"; }
+# cw-rails' root, beside the daemon's data dir rather than inside it.
+rdir() { echo "$D/$1-rails"; }
 
-sv() { local n=$1; shift; SOVEREIGN_DATA_DIR="$D/$n" "$CLI" "$@" 2>/dev/null | grep -v '^svrnmesh: bridged'; }
+# A CLI call on node n: its data dir, its serve port and its cw-rails root.
+sv() { local n=$1; shift; SOVEREIGN_DATA_DIR="$D/$n" SOVEREIGN_SERVE_PORT="$(sport "$n")" CW_RAILS_DIR="$(rdir "$n")" "$CLI" "$@" 2>/dev/null | grep -v '^svrnmesh: bridged'; }
 
 need_binaries() {
   # Exit 3 is co-lineage's "artifact-absent": the instrument could not run, and
   # that is a could-not-judge rather than a failed bar (ARCH §18.2).
-  [ -x "$DAEMON" ] && [ -x "$CLI" ] && return 0
+  [ -x "$DAEMON" ] && [ -x "$CLI" ] && [ -x "$RAILS" ] && return 0
   echo "ring-offers-demo: build first — cargo build --bins --features sovereign-cli/dev-tools" >&2
   exit 3
 }
 
 mkcfg() { # name client internal [offer-port]
-  local dir="$D/$1"; mkdir -p "$dir"
+  local dir="$D/$1" rd; rd=$(rdir "$1"); mkdir -p "$dir" "$rd"
   {
     echo 'mcp_servers = []'; echo
     echo '[daemon]'
     echo "client_port = $2"; echo "internal_port = $3"
+    echo "rails_base = \"$(rails_url "$1")\""
     echo 'autostart = false'
     echo 'client_bind = "127.0.0.1"'; echo 'internal_bind = "127.0.0.1"'; echo
     echo '[data]'; echo "dir = \"$dir\""; echo
     # A terminal node: it holds no weights, which is all this demo needs and
     # keeps four daemons cheap (~190 MB RSS each, no model loaded).
     echo '[node]'; echo 'entry = "http://127.0.0.1:9741/v1"'; echo
-    echo '[iroh]'; echo 'enabled = true'
-    [ -n "${4:-}" ] && echo "offer_origin = \"127.0.0.1:$4\""
-    echo
-    # No mDNS: these four must not meet the real house on this LAN. They find
-    # each other through the `?relay=` hint on the join link instead.
+    # The offer origin stays svrn's config; the daemon registers it with its
+    # cw-rails as a `cwth/offer/0` origin (published_origins.rs).
+    if [ -n "${4:-}" ]; then echo '[iroh]'; echo "offer_origin = \"127.0.0.1:$4\""; echo; fi
     echo '[discovery]'; echo 'mdns = false'; echo 'seed_addrs = []'
   } > "$dir/config.toml"
+  # cw-rails' own config. `name` is the member name the mesh shows and what
+  # /v1/mesh/join's node_name must equal (membership.rs check_node_name).
+  # Local-only: no relay, and no --mdns at run, so these four meet nobody on
+  # this LAN and dial each other by the direct addresses the invite carries.
+  printf 'name = "%s"\nlisten = %s\n\n[relay]\ndiscovery = "none"\n' "${1^}" "$(rport "$1")" > "$rd/rails.toml"
+  # One node identity in both roots, as `svrn mesh up`'s handover leaves it
+  # (identity_handover.rs), before either boots.
+  [ -f "$rd/node_id" ] || head -c 16 /dev/urandom > "$rd/node_id"
+  cp "$rd/node_id" "$dir/node_id"
 }
 
 origin_py() {
@@ -118,7 +145,21 @@ J
 J
 }
 
-start_daemon() { local n=$1; SOVEREIGN_DATA_DIR="$D/$n" "$DAEMON" daemon run > "$D/$n/daemon.out" 2> "$D/$n/daemon.err" & echo $! > "$D/$n/pid"; }
+start_rails() { local n=$1; "$RAILS" run --data-dir "$(rdir "$n")" > "$D/$n/rails.out" 2> "$D/$n/rails.err" & echo $! > "$D/$n/rails.pid"; }
+start_daemon() { local n=$1; SOVEREIGN_DATA_DIR="$D/$n" SOVEREIGN_SERVE_PORT="$(sport "$n")" CW_RAILS_DIR="$(rdir "$n")" "$DAEMON" daemon run > "$D/$n/daemon.out" 2> "$D/$n/daemon.err" & echo $! > "$D/$n/pid"; }
+
+# Each cw-rails answers its status before any daemon dials it.
+wait_rails_up() { # node…
+  local deadline=$(( $(date +%s) + 60 )) n missing
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    missing=""
+    for n in "$@"; do curl -sf --max-time 2 -o /dev/null "$(rails_url "$n")/v1/mesh/status" || missing="$missing $n"; done
+    [ -z "$missing" ] && return 0
+    sleep 1
+  done
+  echo "cw-rails on$missing never answered /v1/mesh/status inside 60s" >&2
+  return 1
+}
 
 # ONE deadline for ALL four, not one each. Four debug daemons cold-booting at
 # once on a loaded machine take well over a minute between them, and a
@@ -138,33 +179,53 @@ wait_all_up() {
   return 1
 }
 
-join_one() { # display-name client-port
-  # The name goes through the HTTP route because the CLI has no --name and all
-  # four nodes share one hostname; the `?relay=` hint is how a joiner reaches
-  # the founder with mDNS off. The key is rotated per joiner — `mesh rotate`
-  # invalidates the previous one by design.
-  local key
-  key=$(sv ada mesh rotate | awk '/Join key:/{print $3}')
-  curl -s --max-time 90 -X POST "http://127.0.0.1:$2/v1/mesh/join" \
+# Ada's cw-rails founds the mesh (`POST /v1/mesh/create`, what `svrn mesh
+# create` sends after its bring-up, which this script must not run: it would
+# install a cw-rails user unit). Sets JOIN_LINK, the invite carrying Ada's
+# iroh dial (`iroh=`); cw-rails refuses a join with none (join.rs NoIrohDial).
+found_mesh() {
+  local out code
+  out=$(curl -s --max-time 20 -w $'\n%{http_code}' -X POST "$(rails_url ada)/v1/mesh/create" \
+    -H 'content-type: application/json' -d '{"name":"house-things","node_name":"Ada"}')
+  code="${out##*$'\n'}"; out="${out%$'\n'*}"
+  JOIN_LINK=$(printf '%s' "$out" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("join_link") or "")' 2>/dev/null)
+  case "$code:$JOIN_LINK" in 200:*iroh=*) return 0;; esac
+  echo "found: ada's cw-rails answered $code with no iroh= invite: ${out:0:300}" >&2
+  return 1
+}
+
+join_one() { # display-name node — through the joiner's own cw-rails, by Ada's invite
+  local out code
+  out=$(curl -s --max-time 90 -w $'\n%{http_code}' -X POST "$(rails_url "$2")/v1/mesh/join" \
     -H 'content-type: application/json' \
-    -d "{\"key_or_url\":\"https://sovereign.dev/join/$key?relay=127.0.0.1:$ADA_I\",\"node_name\":\"$1\"}" \
-    > "$D/join-$1.json"
+    -d "{\"key_or_url\":\"$JOIN_LINK\",\"node_name\":\"$1\"}")
+  code="${out##*$'\n'}"; printf '%s\n' "${out%$'\n'*}" > "$D/join-$1.json"
+  [ "$code" = 200 ] && return 0
+  echo "join: $1 was refused ($code): $(cat "$D/join-$1.json")" >&2
+  return 1
 }
 
 cmd_up() {
   need_binaries
-  mkdir -p "$D"; origin_py
+  mkdir -p "$D"
+  # Throwaway nodes, wiped on every up: cw-rails keeps its mesh across
+  # restarts, and a rerun must not inherit the last one's roster or members.
+  for n in ada mira jonas sam; do rm -rf "$D/$n" "$(rdir $n)"; done
+  origin_py
   mkcfg ada   $ADA_C   $ADA_I
   mkcfg mira  $MIRA_C  $MIRA_I  $MIRA_O
   mkcfg jonas $JONAS_C $JONAS_I $JONAS_O
   mkcfg sam   $SAM_C   $SAM_I
   python3 "$D/origin.py" $MIRA_O  "$D/offers-mira.json"  > "$D/origin-mira.log"  2>&1 & echo $! > "$D/origin-mira.pid"
   python3 "$D/origin.py" $JONAS_O "$D/offers-jonas.json" > "$D/origin-jonas.log" 2>&1 & echo $! > "$D/origin-jonas.pid"
+  for n in ada mira jonas sam; do start_rails $n; done
+  wait_rails_up ada mira jonas sam || exit 3
   for n in ada mira jonas sam; do start_daemon $n; done
   wait_all_up $ADA_C $MIRA_C $JONAS_C $SAM_C || exit 3
-  join_one Mira  $MIRA_C
-  join_one Jonas $JONAS_C
-  join_one Sam   $SAM_C
+  found_mesh || exit 3
+  join_one Mira  mira  || exit 3
+  join_one Jonas jonas || exit 3
+  join_one Sam   sam   || exit 3
   # One gossip round, so `origins` has crossed before anything is asked.
   sleep 12
   seed_ring
@@ -178,8 +239,8 @@ seed_ring() {
   # The MIXED run is the instrument: a uniform one cannot tell a working join
   # from a stuck one.
   local mira jonas op
-  mira=$(curl -s "http://127.0.0.1:$ADA_C/v1/mesh/status" | python3 -c "import sys,json;d=json.load(sys.stdin);print(next((m['node_pubkey'] for m in d['members'] if m['name']=='Mira'), ''))")
-  jonas=$(curl -s "http://127.0.0.1:$ADA_C/v1/mesh/status" | python3 -c "import sys,json;d=json.load(sys.stdin);print(next((m['node_pubkey'] for m in d['members'] if m['name']=='Jonas'), ''))")
+  mira=$(curl -s "$(rails_url ada)/v1/mesh/status" | python3 -c "import sys,json;d=json.load(sys.stdin);print(next((m['node_pubkey'] for m in d['members'] if m['name']=='Mira'), ''))")
+  jonas=$(curl -s "$(rails_url ada)/v1/mesh/status" | python3 -c "import sys,json;d=json.load(sys.stdin);print(next((m['node_pubkey'] for m in d['members'] if m['name']=='Jonas'), ''))")
   [ -z "$mira" ] && { echo "Mira never reached the roster — nothing to vouch for" >&2; return; }
   sv ada ring roster add ada --self --ring house-things > /dev/null
   op=$(sv ada ring introduce Mira --key "$mira" --reason "sold me the drill in June; her eggs are good" --ring house-things | awk '/^  op:/{print $2}')
@@ -189,7 +250,10 @@ seed_ring() {
 
 cmd_down() {
   local n
-  for n in ada mira jonas sam; do [ -f "$D/$n/pid" ] && kill "$(cat "$D/$n/pid")" 2>/dev/null; done
+  for n in ada mira jonas sam; do
+    [ -f "$D/$n/pid" ] && kill "$(cat "$D/$n/pid")" 2>/dev/null
+    [ -f "$D/$n/rails.pid" ] && kill "$(cat "$D/$n/rails.pid")" 2>/dev/null
+  done
   for n in mira jonas; do [ -f "$D/origin-$n.pid" ] && kill "$(cat "$D/origin-$n.pid")" 2>/dev/null; done
   sleep 1
 }
@@ -264,5 +328,5 @@ case "${1:-show}" in
       *) echo "verdict: name a bar — ra-offers-catalogue-computed | ra-seller-carries-their-vouch" >&2; exit 2 ;;
     esac
     ;;
-  *) sed -n '2,26p' "$0"; exit 2 ;;
+  *) awk 'NR >= 2 && /^#/ { print; next } NR >= 2 { exit }' "$0"; exit 2 ;;
 esac

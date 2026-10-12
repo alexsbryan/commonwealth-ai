@@ -602,7 +602,11 @@ pub(crate) async fn start_daemon(args: &[String]) -> i32 {
             Ok(()) => finish_service_start(&svc.name).await,
             Err(e) => {
                 eprintln!("✗ {e}");
-                1
+                // systemd's start-limit lockout fails the start verb itself,
+                // so the diagnosis after a successful start never sees it
+                // (watched 2026-10-10: five starts in ten minutes, then every
+                // `daemon start` failed with an empty reason).
+                repair_registration(&svc.name).await.unwrap_or(1)
             }
         };
     }
@@ -837,6 +841,23 @@ async fn finish_service_start(unit: &str) -> i32 {
     // 0, the daemon log keeps a timestamp from hours ago because the process
     // dies before opening it, and this function blames slow model loading.
     // Diagnose before blaming (ARCH §18.3).
+    if let Some(code) = repair_registration(unit).await {
+        return code;
+    }
+    eprintln!(
+        "⚠ {unit} accepted the command but :{} didn't respond within {}s\n\
+         the daemon may still be loading models — re-check with `svrn daemon status`",
+        client_port(),
+        timeout.as_secs()
+    );
+    1
+}
+
+/// When the service manager will not run the job as registered, re-register
+/// it, start it, and report: `Some(exit code)`. `None` when the manager has
+/// no such complaint, so the caller's own verdict stands.
+async fn repair_registration(unit: &str) -> Option<i32> {
+    let timeout = ready_timeout();
     if let Some(svc) = sovereign_service::managing_service(service_addressing()) {
         if let Some(reason) = svc.needs_reregister() {
             eprintln!("✗ {unit} will not start as registered: {reason}.\n  Re-registering …");
@@ -850,7 +871,7 @@ async fn finish_service_start(unit: &str) -> i32 {
                             "✓ daemon ready at http://127.0.0.1:{} (re-registered {unit})",
                             client_port()
                         );
-                        return 0;
+                        return Some(0);
                     }
                     eprintln!(
                         "✗ re-registered {unit} but :{} still didn't respond within {}s \
@@ -858,23 +879,17 @@ async fn finish_service_start(unit: &str) -> i32 {
                         client_port(),
                         timeout.as_secs()
                     );
-                    return 1;
+                    return Some(1);
                 }
                 Err(e) => {
                     eprintln!("✗ could not re-register {unit}: {e}");
-                    return 1;
+                    return Some(1);
                 }
             }
         }
     }
-
-    eprintln!(
-        "⚠ {unit} accepted the command but :{} didn't respond within {}s\n\
-         the daemon may still be loading models — re-check with `svrn daemon status`",
-        client_port(),
-        timeout.as_secs()
-    );
-    1
+    tracing::debug!(unit, "the service manager reports no registration fault");
+    None
 }
 
 /// Readiness timeout for `daemon start`, env-overridable via

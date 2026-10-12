@@ -1,0 +1,52 @@
+== chat-ask
+     148  /v1/chat/completions 200
+      71  /v1/embeddings 200
+       8  ext assistant_prefix: translated
+     147  ext oicp: dropped
+      26  ext stable_prefix_len: dropped
+     147  ext think_budget: translated
+      83  ext x_forced_choice: dropped: enum enforced, label sampled
+== throughput
+      14  /v1/chat/completions 200
+      10  /v1/chat/completions 400
+      31  /v1/embeddings 200
+       2  ext assistant_prefix: translated
+      10  ext oicp: dropped
+      12  ext think_budget: translated
+       2  ext x_forced_choice: dropped: enum enforced, label sampled
+== routing
+      11  /v1/chat/completions 200
+     166  /v1/embeddings 200
+      10  ext oicp: dropped
+      10  ext think_budget: translated
+== retrieval-prod
+       3  /v1/chat/completions 200
+     114  /v1/embeddings 200
+       2  ext oicp: dropped
+       2  ext think_budget: translated
+== chaos-monkey
+      25  /v1/chat/completions 200
+      73  /v1/embeddings 200
+       4  ext assistant_prefix: translated
+      20  ext oicp: dropped
+      24  ext think_budget: translated
+       3  ext x_forced_choice: dropped: enum enforced, label sampled
+== knowledge-gym
+      25  /v1/chat/completions 200
+       1  /v1/embeddings 200
+      24  ext oicp: dropped
+      21  ext think_budget: translated
+== synth
+      74  /v1/chat/completions 200
+      48  /v1/embeddings 200
+       3  ext assistant_prefix: translated
+      73  ext oicp: dropped
+      19  ext stable_prefix_len: dropped
+      73  ext think_budget: translated
+      19  ext x_forced_choice: dropped: enum enforced, label sampled
+== all lanes
+      17  ext assistant_prefix: translated
+     286  ext oicp: dropped
+      45  ext stable_prefix_len: dropped
+     289  ext think_budget: translated
+     107  ext x_forced_choice: dropped: enum enforced, label sampled

@@ -1,0 +1,352 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! What a llama-server says it did with a call the daemon's remote client
+//! sent it, asked of the server itself:
+//!
+//! - the prompt ids: `/apply-template` then `/tokenize` on the recorded wire
+//!   body, held to the response's own `usage.prompt_tokens`;
+//! - the sampler and grammar: the `/slots` entry of the last task, read over
+//!   the same stage keys the engine side reports
+//!   ([`SAMPLER_STAGE_PARAMS`]);
+//! - prompt tokens evaluated: `timings.prompt_n` from the responses
+//!   ([`WireReply::prompt_evaluated`]);
+//! - the host truth: `/props` and `/models`.
+//!
+//! The battery runs one call at a time, so the slot with the newest task is
+//! the call's own.
+
+use std::collections::BTreeMap;
+use std::time::Duration;
+
+use serde_json::{json, Value};
+use sovereign_contracts::engine_observe::{
+    canonical_sampler, ProbeAnswer, ProbeRequest, ProbeStep, SAMPLER_STAGE_PARAMS,
+};
+
+use super::project::WireReply;
+use super::record::{Facets, Sampler};
+
+/// A llama-server, or a router in front of several.
+pub struct LlamaServer {
+    base: String,
+    http: reqwest::Client,
+}
+
+impl LlamaServer {
+    /// A server at `base` (`http://127.0.0.1:8080`).
+    pub fn new(base: &str) -> Self {
+        Self {
+            base: base.trim_end_matches('/').to_string(),
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .expect("a reqwest client with a timeout builds"),
+        }
+    }
+
+    async fn send(&self, req: reqwest::RequestBuilder, path: &str) -> Result<Value, String> {
+        let resp = req.send().await.map_err(|e| format!("{path}: {e}"))?;
+        let status = resp.status();
+        let body = resp.text().await.map_err(|e| format!("{path}: {e}"))?;
+        if !status.is_success() {
+            return Err(format!("{path}: HTTP {status}: {body}"));
+        }
+        serde_json::from_str(&body).map_err(|e| format!("{path}: {e}"))
+    }
+
+    async fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
+        let url = format!("{}{path}", self.base);
+        self.send(self.http.post(url).json(body), path).await
+    }
+
+    async fn get(&self, path: &str, model: Option<&str>) -> Result<Value, String> {
+        let url = format!("{}{path}", self.base);
+        let mut req = self.http.get(url);
+        if let Some(m) = model {
+            req = req.query(&[("model", m)]);
+        }
+        self.send(req, path).await
+    }
+
+    /// The token ids the server's own template and tokenizer give the body.
+    async fn prompt_ids(&self, body: &Value) -> Result<Vec<i64>, String> {
+        let prompt = if body.get("messages").is_some() {
+            self.post("/apply-template", body).await?["prompt"].clone()
+        } else {
+            body["prompt"].clone()
+        };
+        if let Some(ids) = prompt.as_array().filter(|a| a.iter().all(Value::is_i64)) {
+            return Ok(ids.iter().filter_map(Value::as_i64).collect());
+        }
+        let Some(text) = prompt.as_str() else {
+            return Err(format!("no prompt text to tokenize: {prompt}"));
+        };
+        self.tokenize(text, true, body.get("model")).await
+    }
+
+    /// `/tokenize`, special tokens parsed.
+    pub async fn tokenize(
+        &self,
+        text: &str,
+        add_special: bool,
+        model: Option<&Value>,
+    ) -> Result<Vec<i64>, String> {
+        let mut req = json!({"content": text, "add_special": add_special, "parse_special": true});
+        if let Some(m) = model {
+            req["model"] = m.clone();
+        }
+        let resp = self.post("/tokenize", &req).await?;
+        resp["tokens"]
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_i64).collect())
+            .ok_or_else(|| format!("/tokenize returned no tokens: {resp}"))
+    }
+
+    /// Add what the server says it did to a remote target's facets.
+    pub async fn observe(&self, wire: &WireReply, f: &mut Facets) {
+        for (i, b) in wire.requests.iter().enumerate() {
+            tracing::debug!(target: "engine_conformance", i, body = %b, "a wire body the client sent");
+        }
+        // The call's answer is its last response, and /slots' newest task is
+        // the last request, so that request is the one observed. An earlier
+        // one was superseded, e.g. forced choice asked natively before its
+        // logprobs route (oicp-client forced_choice.rs).
+        let body = wire
+            .requests
+            .last()
+            .ok_or_else(|| "the client sent no request".to_string());
+        if wire.requests.len() > 1 {
+            tracing::debug!(target: "engine_conformance", n = wire.requests.len(), "observing the last of several requests");
+        }
+        let model = body.as_ref().ok().and_then(|b| b["model"].as_str());
+        let prompt = match &body {
+            Ok(b) => self
+                .prompt_ids(b)
+                .await
+                .and_then(|ids| prompt_oracle(ids, wire.prompt_tokens, wire.prompt_timed)),
+            Err(why) => Err(why.clone()),
+        };
+        let slot = match &body {
+            Ok(_) => self.get("/slots", model).await.and_then(|s| {
+                tracing::debug!(target: "engine_conformance", slots = %s, "server /slots");
+                slot_sampler(&s)
+            }),
+            Err(why) => Err(why.clone()),
+        };
+        settle(f, "prompt_ids", prompt, |f, ids| f.prompt_ids = Some(ids));
+        let grammar = slot
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|(_, g)| g.clone());
+        settle(f, "sampler", slot.map(|(s, _)| s), |f, s| {
+            f.sampler = Some(s)
+        });
+        settle(f, "grammar", grammar, |f, g| f.grammar = g);
+        let prefill = wire
+            .prompt_evaluated
+            .ok_or_else(|| "no response carried timings.prompt_n".to_string());
+        settle(f, "prefill_evaluated", prefill, |f, n| {
+            f.prefill_evaluated = Some(n)
+        });
+        f.unobserved.insert(
+            "greedy_tokens".into(),
+            "a chat completion returns no token ids; the probe observes them".into(),
+        );
+    }
+
+    /// The compute probe as the server answers it: the prompt through its
+    /// own `/tokenize` with `add_special`, then `/completion` on those ids,
+    /// greedy, with `n_probs` read before sampling (the server's default),
+    /// stopping where the server stops. The server must not draft: a token
+    /// accepted from a draft gets no probabilities (only the one-token path
+    /// calls `populate_token_probs`, LS/tools/server/server-context.cpp
+    /// :3766), and no request field turns MTP drafting off in this build, so
+    /// the battery's `llama-server-matched` target runs a preset without it.
+    /// A drafting server shows up as an empty step, which the probe oracle
+    /// (`project::probe_facets`) reports rather than judges.
+    pub async fn probe(&self, model: &str, probe: &ProbeRequest) -> Result<ProbeAnswer, String> {
+        let prompt_ids = self
+            .tokenize(&probe.text, true, Some(&json!(model)))
+            .await?;
+        let body = json!({
+            "model": model,
+            "prompt": prompt_ids,
+            "n_predict": probe.steps,
+            "n_probs": probe.top_k,
+            "temperature": 0.0,
+            "cache_prompt": false,
+            "stream": false,
+        });
+        let resp = self.post("/completion", &body).await?;
+        let probs = resp["completion_probabilities"]
+            .as_array()
+            .ok_or_else(|| format!("/completion carried no completion_probabilities: {resp}"))?;
+        let steps = probs
+            .iter()
+            .map(|p| {
+                let top = p["top_logprobs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|t| Some((t["id"].as_i64()?, t["logprob"].as_f64()?)))
+                    .collect();
+                p["id"]
+                    .as_i64()
+                    .map(|token| ProbeStep { token, top })
+                    .ok_or_else(|| format!("a probability entry carried no id: {p}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ProbeAnswer { prompt_ids, steps })
+    }
+
+    /// The server's own account of the keys the host rows compare, for
+    /// those it can answer.
+    pub async fn host_observed(
+        &self,
+        reported: &BTreeMap<String, Value>,
+    ) -> Result<BTreeMap<String, Value>, String> {
+        let primary = reported.get("model_for_slow").and_then(Value::as_str);
+        let models = self.get("/models", None).await?;
+        let props = self.get("/props", primary).await?;
+        Ok(host_truth(reported, &props, &models))
+    }
+}
+
+/// Fill a facet, or record why it stays empty.
+fn settle<T>(f: &mut Facets, facet: &str, r: Result<T, String>, fill: impl FnOnce(&mut Facets, T)) {
+    match r {
+        Ok(v) => {
+            f.unobserved.remove(facet);
+            fill(f, v);
+        }
+        Err(why) => {
+            tracing::debug!(target: "engine_conformance", facet, %why, "server facet unobserved");
+            f.unobserved.insert(facet.to_string(), why);
+        }
+    }
+}
+
+/// Hold the re-derived prompt to the count the server reported for the call
+/// itself: its usage, else its timings. When the two disagree the ids are
+/// not the prompt the model was given, and with neither there is nothing to
+/// say they are; either way saying so beats judging them.
+pub fn prompt_oracle(
+    ids: Vec<i64>,
+    prompt_tokens: Option<u64>,
+    prompt_timed: Option<u64>,
+) -> Result<Vec<i64>, String> {
+    let (n, source) = match (prompt_tokens, prompt_timed) {
+        (Some(n), _) => (n, "usage"),
+        (None, Some(n)) => (n, "timings"),
+        (None, None) => {
+            return Err("no usage.prompt_tokens and no timings to hold the /tokenize ids to".into())
+        }
+    };
+    tracing::debug!(target: "engine_conformance", ids = ids.len(), n, source, "prompt oracle");
+    if n == ids.len() as u64 {
+        Ok(ids)
+    } else {
+        Err(format!(
+            "/tokenize gave {} ids, the response's {source} says {n}",
+            ids.len()
+        ))
+    }
+}
+
+/// Why a slot's grammar cannot be read: the server describes its slots in
+/// metrics-only form, which omits the key, unless it runs with
+/// `LLAMA_SERVER_SLOTS_DEBUG` (LS/tools/server/server-context.cpp:2418).
+pub const SLOTS_METRICS_ONLY: &str =
+    "/slots omits the grammar in metrics-only form; start the server with LLAMA_SERVER_SLOTS_DEBUG=1";
+
+/// The sampler and grammar of the slot that ran the newest task. The grammar
+/// is `Ok(None)` when the slot ran without one, and an error when the server
+/// did not say.
+#[allow(clippy::type_complexity)]
+pub fn slot_sampler(slots: &Value) -> Result<(Sampler, Result<Option<String>, String>), String> {
+    let slot = slots
+        .as_array()
+        .and_then(|a| {
+            a.iter()
+                .filter(|s| s["id_task"].is_i64())
+                .max_by_key(|s| s["id_task"].as_i64())
+        })
+        .ok_or_else(|| "/slots shows no slot that has run a task".to_string())?;
+    let params = &slot["params"];
+    let raw: BTreeMap<String, f64> = SAMPLER_STAGE_PARAMS
+        .iter()
+        .flat_map(|(_, keys)| keys.iter())
+        .filter_map(|k| Some((k.to_string(), params[*k].as_f64()?)))
+        .collect();
+    let order: Vec<&str> = params["samplers"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let (params_c, order_c) = canonical_sampler(&raw, &order);
+    let grammar = match params.get("grammar") {
+        None => Err(SLOTS_METRICS_ONLY.to_string()),
+        Some(g) => Ok(g.as_str().filter(|g| !g.is_empty()).map(str::to_string)),
+    };
+    Ok((
+        Sampler {
+            params: params_c,
+            order: order_c,
+        },
+        grammar,
+    ))
+}
+
+/// The server's truth for the host keys it can speak to. A model id is true
+/// when the server serves it; otherwise the truth is the list it does serve.
+/// Residency is a set, so it is sorted.
+pub fn host_truth(
+    reported: &BTreeMap<String, Value>,
+    props: &Value,
+    models: &Value,
+) -> BTreeMap<String, Value> {
+    let data = models["data"].as_array().cloned().unwrap_or_default();
+    let names = |m: &Value| -> Vec<String> {
+        std::iter::once(&m["id"])
+            .chain(m["aliases"].as_array().into_iter().flatten())
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect()
+    };
+    let served: Vec<String> = data.iter().flat_map(names).collect();
+    let mut out = BTreeMap::new();
+    for key in ["model_for_fast", "model_for_slow", "code_model"] {
+        if let Some(id) = reported.get(key) {
+            let truth = match id.as_str() {
+                Some(s) if served.iter().any(|x| x == s) => id.clone(),
+                _ => json!(served),
+            };
+            out.insert(key.to_string(), truth);
+        }
+    }
+    if let Some(n) = props["default_generation_settings"]["n_ctx"].as_u64() {
+        out.insert("effective_context_size".into(), json!(n));
+    }
+    let primary = reported.get("model_for_slow").and_then(Value::as_str);
+    let meta = data
+        .iter()
+        .find(|m| primary.is_some_and(|p| names(m).iter().any(|x| x == p)))
+        .or(if data.len() == 1 { data.first() } else { None })
+        .map(|m| &m["meta"]);
+    if let Some(n) = meta.and_then(|m| m["n_ctx_train"].as_u64()) {
+        out.insert("n_ctx_train".into(), json!(n));
+    }
+    // A router reports each model's status; a single server lists only the
+    // model it holds.
+    let mut resident: Vec<String> = data
+        .iter()
+        .filter(
+            |m| match m["status"]["value"].as_str().or(m["status"].as_str()) {
+                Some(s) => s == "loaded",
+                None => true,
+            },
+        )
+        .filter_map(|m| m["id"].as_str().map(str::to_string))
+        .collect();
+    resident.sort();
+    out.insert("resident_models".into(), json!(resident));
+    out
+}

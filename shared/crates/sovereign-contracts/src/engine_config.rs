@@ -40,6 +40,11 @@ pub enum EngineKind {
     /// An OpenAI-compatible HTTP endpoint (`oicp-client`'s
     /// `RemoteApiProvider`). Holds no weights.
     Remote,
+    /// A llama-server router this node runs and supervises, serving the
+    /// GGUFs in `[models]`. It holds the weights, as `Llama` does; it is
+    /// reached the way `Remote` is, through an endpoint and model ids that
+    /// follow from the router and are never configured.
+    LlamaServer,
     /// An engine registered out of tree, selected by name.
     Custom(String),
 }
@@ -51,6 +56,7 @@ impl EngineKind {
         match self {
             Self::Llama => "llama",
             Self::Remote => "remote",
+            Self::LlamaServer => "llama-server",
             Self::Custom(name) => name,
         }
     }
@@ -59,7 +65,7 @@ impl EngineKind {
     /// means the name must be found in the registry, and refused if it
     /// is not — never defaulted.
     pub fn is_builtin(&self) -> bool {
-        matches!(self, Self::Llama | Self::Remote)
+        matches!(self, Self::Llama | Self::Remote | Self::LlamaServer)
     }
 
     /// Does this engine read its chat slots from `[models]`? Every engine
@@ -75,6 +81,7 @@ impl From<String> for EngineKind {
         match s.as_str() {
             "llama" => Self::Llama,
             "remote" => Self::Remote,
+            "llama-server" => Self::LlamaServer,
             _ => Self::Custom(s),
         }
     }
@@ -208,6 +215,57 @@ pub struct EngineSection {
     /// ignored, and `svrn setup --hosted anthropic` writes `tool-use-forced`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structured_output: Option<StructuredOutputMode>,
+    /// Who prepares `remote`'s embed inputs: the instruction prefix and the
+    /// EOS an instruction-aware embedder was trained with. Unset is `server`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embed_inputs: Option<EmbedInputs>,
+    /// How `remote` hands this host a decode constraint: a Lark grammar or
+    /// the URL and evidence-id allow-lists. Unset is `sovereign`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grammar: Option<GrammarSupport>,
+    /// A file to append every model call to, for the engine conformance
+    /// battery's case bank (`bench/lanes/engine-swap/`). Unset captures
+    /// nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capture: Option<std::path::PathBuf>,
+    /// `kind = "llama-server"` only: run this llama-server binary instead of
+    /// the one shipped beside the daemon. A development override; the
+    /// release check is skipped for it and `/status` names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_binary: Option<std::path::PathBuf>,
+}
+
+/// How a host takes a decode constraint. A property of the SERVER: nothing
+/// in a response tells a host that enforced a constraint from one that
+/// ignored the field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GrammarSupport {
+    /// A Sovereign daemon: `lark_grammar`, `url_allowlist` and
+    /// `evidence_id_allowlist` go as extension fields, and its engine
+    /// enforces them. Any other server ignores those fields.
+    #[default]
+    Sovereign,
+    /// llama-server built with `LLAMA_LLGUIDANCE`: each constraint becomes
+    /// one `grammar` in llguidance's Lark. A server built without it aborts
+    /// on that grammar, so this is declared, never guessed.
+    Llguidance,
+}
+
+/// Who turns text into the input an embedding model expects. A property of
+/// the embedding SERVER, like [`StructuredOutputMode`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EmbedInputs {
+    /// The server does: a Sovereign daemon's embed slot applies the family's
+    /// instruction and EOS itself, so the client sends text as given.
+    #[default]
+    Server,
+    /// The client does, because the server sends text to the model as
+    /// given (llama-server, vLLM). Without it a Qwen3-Embedding query lands
+    /// at cosine 0.84 from the daemon's vector for the same query
+    /// (bench/lanes/engine-swap/embed_parity.py, 2026-10-09).
+    Client,
 }
 
 fn default_engine_context_size() -> u32 {
@@ -240,6 +298,10 @@ impl Default for EngineSection {
             embed_path: None,
             extra_params: None,
             structured_output: None,
+            embed_inputs: None,
+            grammar: None,
+            capture: None,
+            server_binary: None,
         }
     }
 }

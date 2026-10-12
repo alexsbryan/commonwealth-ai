@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Committed FACTS about the fetched E2E-SWE task (see ldaptor.toml for the pattern).
+# CLI framework, 96 hidden tests, mid fame. The redis cache extension expects a
+# LIVE redis on localhost:6379 (instruction.md: "A Redis server is already
+# installed and running") — the verify sandbox starts one (bin/redis-server,
+# built pinned by `setup`), and the agent sandbox gets the same treatment.
+
+id = "cement"
+upstream = "tasks/cement"
+hidden_tests = 96
+spec_chars = 26685
+
+[test]
+target = "tests/test_cement.py"
+pytest_timeout = 30
+needs_redis = true
+
+# instruction.md "Environment & Dependencies": optional-extension imports
+# (pyyaml, tabulate, colorlog, jinja2, pystache, watchdog, redis) plus the
+# pdm-backend build backend its setup.sh editable install needs offline.
+[deps]
+runtime = ["pyyaml", "tabulate", "colorlog", "jinja2", "pystache", "watchdog", "redis"]
+build = ["setuptools", "wheel", "pdm-backend"]

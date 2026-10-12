@@ -4140,6 +4140,20 @@ mod tests {
         )
     }
 
+    /// The router answers its local engine's locus, so a reader above it
+    /// sees a forwarding engine as one.
+    #[test]
+    fn the_router_reports_its_local_engines_locus() {
+        for locus in [
+            ServingLocus::OwnWeights,
+            ServingLocus::ForwardsOnBox,
+            ServingLocus::ForwardsOffBox,
+            ServingLocus::ForwardsToThirdParty,
+        ] {
+            assert_eq!(forwarder(locus).serving_locus(), locus);
+        }
+    }
+
     /// A node that owns no weights forwards a name nobody advertises, instead
     /// of refusing it.
     ///

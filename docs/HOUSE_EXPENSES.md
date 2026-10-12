@@ -65,7 +65,7 @@ On each machine, that person adds themselves:
 svrn ring roster add alex --self --ring house-expenses
 # alex → 3f9c1a…de04        (the 64-hex node public key, abbreviated here)
 #   ring: house-expenses
-#   file: ~/.svrnmesh/rings/house-expenses/roster.json
+#   file: ~/.commonwealth-rails/rings/house-expenses/roster.json
 ```
 
 Then everyone reads out the key that printed, and **each person adds the other
@@ -319,7 +319,7 @@ settling a real month.
 
 | Thing | Path |
 |---|---|
-| The journal and the roster | `~/.svrnmesh/rings/<namespace>/` |
+| The journal and the roster | cw-rails' root: `~/.commonwealth-rails/rings/<namespace>/` (`$CW_RAILS_DIR`) |
 | The rail routes | `POST /v1/rail/append`, `GET /v1/rail/log` on `:9743` |
 | The app | wherever you scaffolded it |
 

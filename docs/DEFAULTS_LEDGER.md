@@ -30,6 +30,68 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `[engine] embed_inputs` — `server` unless the operator says `client` (2026-10-09)
+
+**What ships.** A remote engine's embed half prepares inputs (instruction
+prefix and EOS, `EmbedQuirks`) only with `embed_inputs = "client"`. The
+default, `server`, sends text as given.
+
+**Why `server`.** Every deployed remote engine today points at a Sovereign
+daemon, whose embed slot already prepares inputs. Preparing on both sides
+would double the EOS.
+
+**Measured.** In `bench/lanes/engine-swap/embed_parity.py` (2026-10-09), with
+llama-server as the embed server:
+- **Unprepared:** query vectors had minimum cosine 0.836 against the daemon's,
+  and chunk vectors 0.990.
+- **Prepared:** both were 0.9996 or closer.
+
+**Flip condition.** Make `client` the default when a remote engine can tell a
+preparing host from a bare one without the operator saying so. For example,
+an OICP manifest could advertise who prepares inputs, defaulting to `client`
+when a host advertises nothing.
+
+**Review by 2026-11-09.**
+
+### `[engine] capture` — unset, nothing captured (2026-10-10)
+
+**What ships.** With `capture = "<path>"` the daemon appends every model call
+at the engine boundary to that file: the method, the `CompletionRequest` or
+the embed, rerank or count input, and the innermost tracing span
+(`sovereign-inference/src/engine_capture.rs`). Unset, the engine is not
+wrapped at all.
+
+**Why unset.** It is an instrument for the engine conformance battery's case
+bank (`bench/lanes/engine-swap/`), not a behaviour. Captured prompts carry
+corpus text, so the file is written only where an operator asks for it.
+
+**Flip condition.** None; it stays an operator's choice per run.
+
+**Review by 2026-11-10.**
+
+### `[engine] grammar` — `sovereign` unless the operator says `llguidance` (2026-10-10)
+
+**What ships.** A remote engine sends Lark grammars and the URL and
+evidence-id allow-lists as one llguidance `grammar` only with
+`grammar = "llguidance"`. The default, `sovereign`, sends the daemon's
+extension fields.
+
+**Why `sovereign`.** Every deployed remote engine today points at a Sovereign
+daemon, which enforces the extension fields. A llama-server built without
+llguidance aborts on an llguidance grammar, so the client cannot try it and
+see.
+
+**Measured.** On 2026-10-10, through a daemon on the remote engine in front
+of an llguidance llama-server (Qwen3.5-4B, 5 runs per cell): 0 of 15 cited
+URLs and 0 of 10 evidence handles were outside the lists. Unconstrained, 11 of
+12 URLs were outside.
+
+**Flip condition.** Make the default follow the host when a remote engine can
+learn whether its host enforces grammars, for example from an OICP manifest
+field. Until then the operator says so.
+
+**Review by 2026-11-10.**
+
 ### ~~`[enrichment.ontology].document_reading` / `document_reader`~~ — RETIRED 2026-10-09: reading is chosen by the declaration
 
 **What ships.** No switch. A version-1 recipe whose claim kinds all have a
@@ -920,6 +982,37 @@ remains the default; the flag adds one branch at
 **Review by.** 2026-10-15. If unflipped and unmeasured by then, the honest
 options are to run the three checks or to delete the child path — a second
 worker shape that nobody exercises is worse than either.
+
+### `SOVEREIGN_FRONTDOOR_RESHAPE` — shipped OFF (2026-10-07)
+
+**What is dark.** The five frontdoor reshape passes on
+`POST /v1/chat/completions`: the request-side failure-recovery,
+anti-repetition and read-attractor nudges (which delete history, replace the
+system prompt or append a tail system message) and the response-side
+apply_patch-heredoc and absolute-path canonicalizers (which rewrite arguments
+the model emitted). Default ON from their introduction until this commit.
+
+**Why it went dark.** Operator direction 2026-10-07: the OpenAI chat path's
+target is llama-server parity (note fb4d2489), and these are the passes that
+make a served turn differ from bare llama.cpp. Two of them also depend on the
+flattening the new conversation path removed: read-attractor appends a system
+message at the tail, which a real chat template may refuse, and
+failure-recovery orphans a tool result on the reasoning that the history is
+flattened anyway (frontdoor.rs). On the 2026-10-07 B-arm smokes they fired 0
+times across pi's 4 turns and opencode's 1.
+
+**What it costs while dark.** Nothing measured on the agent-coding battery.
+The Codex-gym fixtures each pass was cut against (gym 004, 006, 007) lose the
+nudge; `tests/main/turn_reshape_fidelity.rs` composes the passes directly and
+does not read the default.
+
+**Flip condition.** Flip ON only if a pre-registered A/B on the agent-coding
+battery, daemon at parity with llama-server, shows `SOVEREIGN_FRONTDOOR_RESHAPE=1`
+raising pi or opencode's witness pass rate beyond the run-to-run noise, with
+no client-visible rewrite the client did not ask for. Otherwise delete the
+passes.
+
+**Review by.** 2026-11-15.
 
 ### `SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST` — shipped OFF (2026-08-29)
 
@@ -3018,6 +3111,42 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - **Instrument:** `svrn bench enrichment-ablate --prefix-state` is
   committed and is the template for any daemon-side knob. The original
   harness (`scratchpad/arm_runner.py`) never was.
+- **Conversations re-pin (7f3e06a41, 2026-10-08).** An external client's
+  conversation now re-pins its whole prompt each turn instead of freezing
+  at turn 1. 35B-A3B e2eswe battery, 682 turns (arm log
+  `target/agent-coding-arms/B-18090/server-35b-repin.log` against
+  `server-35b-baseline.log`): median suffix prefilled per turn 34,525 →
+  469 tokens; non-generation time per turn at prompts over 25k 75.0 s →
+  2.5 s (median, n=23 vs 576); 409 re-pins, median save 461 ms, ~21 KB a
+  token (2.75 GB at 131k). The default `_MAX_MB=2048` refuses a 35B pin
+  past ~102k tokens (21,008 bytes a token); the battery ran at 8192.
+- **Correction: the re-pin stops 4 tokens short (2026-10-08).** "Whole
+  prompt" held on that battery only because opencode echoed non-empty
+  reasoning back. A history turn with empty reasoning renders
+  `<think>\n\n</think>`, and the prompt's closing `<think>\n` (198)
+  re-tokenizes as `\n\n` (271), so a whole-prompt pin missed every such
+  turn by one token: 27B replay arm B2, 0 hits in 4 turns, first delta
+  91.6 s against llama-server's 34.9 s. The pin is now the prompt short
+  of `CONVERSATION_PIN_TAIL` (4), llama-server's own checkpoint offset;
+  the prefill splits there. Replay arm B3 (38 captured agent requests,
+  one run): 28 restores, 10 full prefills (4 first turns, 6 jumps back
+  to a shorter history, which llama-server serves from an older
+  checkpoint and the daemon's one pin per family cannot); median first
+  delta 7.9 s against llama-server's 5.7 s.
+- **What a restore costs, measured.** Greedy A/B on 12 battery request
+  pairs, each prompt once by full prefill and once restored from the
+  previous turn's pin, with a full-vs-full control
+  (`target/e2eswe-slice/b3_ab.py`, `b3-ab.jsonl`). The control reproduced
+  12 of 12 outputs and acceptance rates exactly. Restored: MTP draft
+  acceptance 0.925 → 0.859 pooled, because the draft context is never
+  restored and drafts attend only to the suffix (`model_slot.rs`, the
+  prefix_state block in `generate_sync_mtp_impl`); 3.8% slower generation
+  on identical output. And restore is NOT bit-exact at the token level:
+  greedy output differed from full prefill in 7 of 12 pairs, which is the
+  caveat above, now measured. Saving the draft context's sequence state
+  with the pin (`MtpSession::draft_state_seq_get_data_ext`, unused) is the
+  lever for the first; the second needs a split-batch full prefill to tell
+  restore inexactness from batch-split float order.
 
 ### ~~RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`~~ — RETIRED 2026-09-07
 - **What was on by default:** summary nodes as virtual chunks, injected at

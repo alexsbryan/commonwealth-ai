@@ -307,6 +307,20 @@ impl Hosted {
         }
     }
 
+    /// The model id a slot alias names here: `primary`, `fast`, `embed` and
+    /// their keys in `SLOT_ALIAS_POLICY` (`commonwealth/primary`, ...).
+    /// `None` for anything that is not an alias of a slot this engine holds.
+    pub(crate) fn alias_target(&self, name: &str) -> Option<&str> {
+        self.slots
+            .iter()
+            .find(|s| {
+                sovereign_contracts::venue::resolution_alias_keys(&s.role)
+                    .iter()
+                    .any(|k| k == name)
+            })
+            .map(|s| s.model_id.as_str())
+    }
+
     pub(crate) fn primary(&self) -> Option<sovereign_contracts::traits::ResidentSlot> {
         self.slots.iter().find(|s| s.role == "primary").cloned()
     }
@@ -321,6 +335,10 @@ pub enum EngineEmbed {
         endpoint_v1: String,
         /// The model it embeds with.
         model_id: String,
+        /// The embed family's input preparation, when the server does none
+        /// of its own (`[engine] embed_inputs = "client"`). `None` sends text
+        /// as given: right for a Sovereign daemon, whose embed slot prepares.
+        input_prep: Option<sovereign_contracts::embed_quirks::EmbedQuirks>,
     },
     /// A model in this process (`[engine] embed_path`): the small embedding
     /// GGUF, so a hosted engine embeds on this machine with no second server.
@@ -347,6 +365,7 @@ impl SplitInferenceProvider {
         context_size: u32,
         extra_params: Option<serde_json::Value>,
         structured_output: crate::StructuredOutputMode,
+        grammar: sovereign_contracts::engine_config::GrammarSupport,
     ) -> Result<Self> {
         let half = |endpoint: &str, model: &str| -> Result<RemoteApiProvider> {
             let provider = match FarEnd::of_engine_endpoint(endpoint) {
@@ -362,7 +381,8 @@ impl SplitInferenceProvider {
         };
         let chat = half(chat_endpoint_v1, &chat_model_id)?
             .with_extra_params(extra_params)
-            .with_structured_output_mode(structured_output);
+            .with_structured_output_mode(structured_output)
+            .with_grammar(grammar);
         let local_embed = matches!(embed, EngineEmbed::Local { .. });
         let (embed, embed_model_id, embed_at): (
             std::sync::Arc<dyn sovereign_contracts::traits::InferenceProvider>,
@@ -372,9 +392,22 @@ impl SplitInferenceProvider {
             EngineEmbed::Remote {
                 endpoint_v1,
                 model_id,
+                input_prep,
             } => {
-                let half = half(&endpoint_v1, &model_id)?;
-                let at = format!("{endpoint_v1} ({:?})", half.far_end());
+                let prepared_here = input_prep.is_some();
+                let half = match input_prep {
+                    Some(quirks) => half(&endpoint_v1, &model_id)?.with_input_prep(quirks),
+                    None => half(&endpoint_v1, &model_id)?,
+                };
+                let at = format!(
+                    "{endpoint_v1} ({:?}, inputs prepared {})",
+                    half.far_end(),
+                    if prepared_here {
+                        "here"
+                    } else {
+                        "by the server"
+                    }
+                );
                 (std::sync::Arc::new(half), model_id, at)
             }
             EngineEmbed::Local { provider, model_id } => {
@@ -436,7 +469,27 @@ impl SplitInferenceProvider {
                 pinned.model_id = Some(model);
                 std::borrow::Cow::Owned(pinned)
             }
-            _ => std::borrow::Cow::Borrowed(request),
+            Some(hosted) => match request
+                .model_id
+                .as_deref()
+                .and_then(|m| hosted.alias_target(m))
+            {
+                // A slot role named by its alias (`primary`, `fast`, ...):
+                // the remote serves model ids, not this node's role names.
+                Some(model) => {
+                    tracing::debug!(
+                        target: "oicp_client",
+                        alias = ?request.model_id,
+                        %model,
+                        "hosted engine: a slot alias resolved to the model id the remote serves"
+                    );
+                    let mut pinned = request.clone();
+                    pinned.model_id = Some(model.to_string());
+                    std::borrow::Cow::Owned(pinned)
+                }
+                None => std::borrow::Cow::Borrowed(request),
+            },
+            None => std::borrow::Cow::Borrowed(request),
         }
     }
 }

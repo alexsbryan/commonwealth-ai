@@ -1,0 +1,6 @@
+docs 8 (first 4 relevant)
+llama-server scores [0.9985, 0.9998, 0.9964, 0.9594, 0.0, 0.0, 0.0, 0.0]
+in-process   scores [6.6997, 8.7099, 5.7399, 3.5688, -11.1835, -11.4188, -12.0414, -11.5376]
+llama-server order [1, 0, 2, 3, 7, 4, 5, 6]  relevant mean +0.9885  irrelevant mean +0.0000  max |score| 9.998e-01
+in-process   order [1, 0, 2, 3, 4, 5, 7, 6]
+top-4 sets agree: True; both rank all relevant first: True

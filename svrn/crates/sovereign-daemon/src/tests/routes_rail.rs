@@ -58,6 +58,7 @@ fn grant_with(scopes: Vec<Scope>) -> Guest {
             issued_at_ms: 0,
             expires_at_ms: u64::MAX,
             revoked: false,
+            holder: sovereign_grants::GrantHolder::Guest,
         }),
         session: None,
     }

@@ -3,6 +3,7 @@
 //! `lib.rs` so that file stays under its arch-gate slack (ARCH §3.1).
 
 use super::*;
+use futures::StreamExt;
 
 // ═══════════════════════════════════════════════════════════════
 // ATTACH-MODE CONFORMANCE

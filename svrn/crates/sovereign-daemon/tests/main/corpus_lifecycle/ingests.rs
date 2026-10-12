@@ -23,6 +23,8 @@ pub(super) enum Run {
     Completes,
     /// Fail the way a mid-install embed failure does.
     Fails,
+    /// Panic the way a recipe whose extractor nobody registered does.
+    Panics,
 }
 
 /// The registry install the node's port double runs, and the on-disk
@@ -92,6 +94,9 @@ impl Ingests {
             opts_out_of_auto_enrichment: true,
             run: Box::new(move |progress| {
                 Box::pin(async move {
+                    if run == Run::Panics {
+                        panic!("No custom extractor registered for kind 'pdf'");
+                    }
                     if run == Run::Fails {
                         return Err(corpus_index::Error::Embed(
                             "simulated mid-install embed failure".into(),

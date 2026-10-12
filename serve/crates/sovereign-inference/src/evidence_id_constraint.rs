@@ -43,6 +43,10 @@
 
 use std::sync::Arc;
 
+// The marker, entry form and terminators, shared with the grammar a remote
+// host is sent.
+use sovereign_contracts::decode_allowlist::EVIDENCE_ID as LANGUAGE;
+
 use crate::llama::cpp::token::data_array::LlamaTokenDataArray;
 use crate::llama::cpp::token::LlamaToken;
 
@@ -65,37 +69,11 @@ impl Default for TrieNode {
     }
 }
 
-/// Bytes that legitimately terminate an evidence citation when seen
-/// after a terminal trie node. `]` is canonical (the standard
-/// closing-bracket form); the URL-style terminators are accepted
-/// too so the model can emit `[ev-T2-0001 ` (trailing space) or
-/// `[ev-T2-0001,` (in a list) without the constraint mistakenly
-/// blocking the next byte.
-fn is_id_terminator(b: u8) -> bool {
-    b == b']'
-        || b == b' '
-        || b == b'\t'
-        || b == b'\n'
-        || b == b'\r'
-        || b == b','
-        || b == b'.'
-        || b == b'('
-        || b == b')'
-        || b == b'<'
-        || b == b'>'
-        || b == b'"'
-        || b == b'\''
-        || b == b'?'
-        || b == b'!'
-        || b == b';'
-        || b == b':'
-}
-
 /// Marker bytes that trigger the prose → in-id transition. The
 /// opening bracket is part of the marker so we don't engage on a
 /// bare `ev-T` mention in conversational prose ("an ev-T-like
 /// scheme would..."). Real citations always come inside brackets.
-const EV_START: &[u8] = b"[ev-T";
+const EV_START: &[u8] = LANGUAGE.markers[0];
 /// Sliding window length for the InProse cursor — long enough to
 /// hold any prefix of `EV_START` that straddles a token boundary,
 /// with headroom for token chunking quirks.
@@ -139,10 +117,7 @@ impl EvidenceIdAllowlistConstraint {
             // from the opening bracket onward. The trailing `]` is
             // NOT in the trie — it's recognised as a terminator
             // when the cursor sits at a terminal node.
-            let mut bracketed: Vec<u8> = Vec::with_capacity(id.len() + 1);
-            bracketed.push(b'[');
-            bracketed.extend_from_slice(id.as_bytes());
-            for &b in &bracketed {
+            for &b in LANGUAGE.entry(id).as_bytes() {
                 let next = match nodes[cur].children[b as usize] {
                     Some(idx) => idx as usize,
                     None => {
@@ -226,6 +201,23 @@ impl EvidenceIdAllowlistConstraint {
     }
 }
 
+/// The mask's verdict on a whole output: every byte allowed, and EOS
+/// allowed after the last one. What `decode_allowlist_parity_tests` holds
+/// the remote host's grammar to.
+#[cfg(test)]
+impl EvidenceIdAllowlistConstraint {
+    pub(crate) fn accepts_whole(allowed: &[String], text: &[u8]) -> bool {
+        let Some(mut c) = Self::new(allowed, Arc::new(Vec::new())) else {
+            return true;
+        };
+        simulate_bytes(&c.nodes, &mut c.cursor, text)
+            && match c.cursor {
+                CursorMode::InId(node) => c.nodes[node as usize].is_terminal,
+                CursorMode::InProse(_) => true,
+            }
+    }
+}
+
 fn simulate_bytes(nodes: &[TrieNode], cursor: &mut CursorMode, bytes: &[u8]) -> bool {
     for &b in bytes {
         if !feed_byte(nodes, cursor, b) {
@@ -269,7 +261,7 @@ fn feed_byte(nodes: &[TrieNode], cursor: &mut CursorMode, b: u8) -> bool {
                     true
                 }
                 None => {
-                    if nodes[cur].is_terminal && is_id_terminator(b) {
+                    if nodes[cur].is_terminal && LANGUAGE.is_terminator(b) {
                         *cursor = CursorMode::InProse(Vec::with_capacity(EV_START_WATCH_BYTES));
                         true
                     } else {

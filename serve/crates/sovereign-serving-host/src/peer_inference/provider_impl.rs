@@ -598,6 +598,14 @@ impl InferenceProvider for InferenceRouter {
         self.local.warmup_primary().await
     }
 
+    async fn probe_logprobs(
+        &self,
+        probe: &sovereign_contracts::engine_observe::ProbeRequest,
+    ) -> Result<sovereign_contracts::engine_observe::ProbeAnswer> {
+        // The local engine only: a probe measures this box's weights.
+        self.local.probe_logprobs(probe).await
+    }
+
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         self.local.embed(text).await
     }
@@ -618,6 +626,14 @@ impl InferenceProvider for InferenceRouter {
         // Embeds always run locally (see `embed`/`embed_batch` above),
         // so the local slot's id is the honest answer.
         self.local.embed_model_id()
+    }
+
+    fn serving_locus(&self) -> sovereign_contracts::traits::ServingLocus {
+        // The local engine's, as every routing check here already reads it.
+        // Without this the trait default answered OwnWeights for a router
+        // over a forwarding engine: the conformance host row read
+        // own-weights above a pair that built ForwardsOnBox.
+        self.local.serving_locus()
     }
 
     fn code_model_id(&self) -> Option<String> {

@@ -36,6 +36,7 @@ pub mod containment;
 // path, so the routes are unchanged.
 pub mod daemon_wire;
 pub mod data_roots;
+pub mod decode_allowlist;
 /// `TestProvider`, the builder-style `InferenceProvider` double.
 #[cfg(feature = "test-fixtures")]
 pub mod double;
@@ -45,6 +46,9 @@ pub mod double;
 /// the code-intelligence crate.
 pub mod drift_fingerprint;
 pub mod engine_config;
+/// What an engine did with one request, recorded where it did it, for the
+/// engine conformance battery.
+pub mod engine_observe;
 /// serve's engine-state wire (pb-svrn-dials-serve).
 pub mod engine_state;
 // The egress boundary — the ONE choke point for remote-model calls and
@@ -184,6 +188,10 @@ pub mod setup_config;
 pub mod setup_config_iroh;
 pub mod skills;
 pub mod slot_policy;
+/// What a `structured_output` schema means before any engine compiles it:
+/// the closed-object default the embedded engine and the remote client both
+/// apply, so the two constrain the same language.
+pub mod structured_output;
 pub mod tokens;
 pub mod tool_bundle;
 pub mod tool_manifest;

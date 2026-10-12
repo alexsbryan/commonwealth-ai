@@ -1,0 +1,22 @@
+# The llama-server the daemon ships: the llama.cpp it is built from, whether
+# llguidance is on, and the patches applied on top, each by its sha256.
+#
+# build.sh builds from this and copies it into llama-server.manifest.toml
+# beside the binary. The daemon compiles this file in
+# (sovereign_compute::llama_router::build_pin) and refuses a shipped binary
+# whose manifest says anything else, so changing a line here means rebuilding
+# the server.
+#
+# The commit is the one vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT names (a pull
+# request head, see the comments there): the conformance battery compares the
+# embedded engine with this server, so both run the same kernels until the
+# embedded engine is deleted. build.sh refuses while the two differ.
+
+llama_cpp_commit = "035e22731a7fd70b9854b3a2d64ec68e9b1a45d3"
+llguidance = true
+
+# Applied in this order with `patch -p1` from the source root. A test holds
+# this list equal to patches/, file for file and digest for digest.
+[[patches]]
+file = "ggml-vulkan-alias-dependency.patch"
+sha256 = "a39fc31da3824f9ab2ca64623e6ef81395f815077a0fcbbe1e007d9fe6445685"

@@ -80,6 +80,9 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
         // `media_available` as this node's own poll read it, `null` when
         // nobody answered — "could not ask", never "free".
         .route("/v1/mesh/media/presence", get(media_presence))
+        // `[media]` read again from rails.toml, served without a restart
+        // (`svrn mesh media offer | admit | withdraw | declare` call it).
+        .route("/v1/mesh/media/reload", post(crate::origins::reload_media))
         // One handler, two paths: the media spelling is the generic body with
         // `kind` absent, not a second implementation.
         .route("/v1/mesh/fanout", post(origin_fanout))
@@ -192,6 +195,9 @@ pub async fn serve(
 
 /// `GET /v1/mesh/status` — who I am, who is on the roster, who offers media.
 pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
+    // Read before the mesh lock below: `paths` takes that lock itself, and a
+    // second read queued behind a writer would never be granted.
+    let paths: std::collections::HashMap<_, _> = daemon.paths().await.into_iter().collect();
     let mesh = daemon.mesh.read().await;
     // The summary counts svrn's `/v1/mesh/status` carried, under the same
     // names, so its clients (`sovereign_contracts::daemon_wire::
@@ -252,6 +258,25 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             })
             .collect()
     };
+    // Each peer's live iroh path (`commonwealth_media::path_to`, the one
+    // classifier the watchdog reads too), under the name and shape svrn's
+    // status carried it (`daemon_wire::MemberReachView`), so `svrn mesh
+    // transport` and the desktop read it again. `path` is absent while the
+    // endpoint has no record of the peer.
+    let iroh_transport: Vec<serde_json::Value> = mesh
+        .members
+        .values()
+        .filter(|m| m.removed_at.is_none() && m.node_id != daemon.node.self_id)
+        .map(|m| {
+            serde_json::json!({
+                "name": m.name,
+                "node_id": m.node_id.to_string(),
+                "path": paths.get(&m.node_id),
+            })
+        })
+        .collect();
+    tracing::debug!(target: "rails", peers = iroh_transport.len(), with_path = paths.len(),
+                    "api: status read the peers' iroh paths");
     let addr = daemon.endpoint().addr();
     // The posture the endpoint was bound with (`RailsNode::bind` reads the
     // same `relay_config`), so a client can refuse an n0-homed cw-rails.
@@ -276,7 +301,7 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             "name": daemon.node.config.name,
             "pubkey": hex::encode(daemon.node.pubkey().0),
             "dial": dial,
-            "media_origin": daemon.node.config.media.origin,
+            "media_origin": daemon.media().origin,
         },
         "mesh": { "id": mesh.id.to_string(), "name": mesh.name },
         "running": true,
@@ -299,6 +324,7 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             }),
         },
         "members": members,
+        "iroh_transport": iroh_transport,
         "meshes": meshes.as_ref().ok(),
         "meshes_absent": meshes.as_ref().err().map(|e| e.to_string()),
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),
@@ -466,7 +492,7 @@ pub async fn publishing(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResp
         StatusCode::OK,
         Json(serde_json::json!({
             "apps": daemon.published_apps.listing(),
-            "media_origin": daemon.node.config.media.origin,
+            "media_origin": daemon.media().origin,
         })),
     )
 }

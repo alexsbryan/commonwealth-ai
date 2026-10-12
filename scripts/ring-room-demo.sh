@@ -5,6 +5,10 @@
 # door `sv`/`node_exec`/`node_curl`, the podman backend, `up`/`down`, the
 # 100-edit drive and the attribution leg (RING_DOC_PHASES=1,3). Nothing of it
 # is copied here; what this adds is the four legs' measurement and the census.
+# A node there is a `cw-rails` and the daemon that dials it (pb-mesh-exit-
+# transport), so every mesh read here — status, the media rail — asks the
+# node's cw-rails at `rport`, and every node this script starts itself gets
+# its cw-rails first.
 #
 #   1. answer  b ingests a small folder that a never installs; a answers a
 #              5-question bank from it; each released citation's member is read.
@@ -137,8 +141,15 @@ eval "ring_doc_$(declare -f mkcfg)"
 # `[models]` requires `primary`, so b names the same chat GGUF; b is never asked.
 mkcfg() {
   ring_doc_mkcfg "$1"
+  # A node with weights hosts serve itself, so ring-doc's terminal `[node]
+  # entry` goes: an address there names WHERE serve runs (serve_client.rs
+  # resolve_serve_base), and the daemon dials it for up to ten minutes
+  # rather than load the [models] below — inside a container, at a port
+  # nothing listens on (measured 2026-10-04: a and b never answered /status).
   case "$1" in
-    a|b|d|beefy|halo) printf '\n[models]\nprimary = "%s"\nembed = "%s"\n' "$CHAT_GGUF" "$EMBED_GGUF" >> "$D/$1/config.toml" ;;
+    a|b|d|beefy|halo)
+      sed -i '/^\[node\]$/,/^$/d' "$D/$1/config.toml"
+      printf '\n[models]\nprimary = "%s"\nembed = "%s"\n' "$CHAT_GGUF" "$EMBED_GGUF" >> "$D/$1/config.toml" ;;
   esac
   # The wall's guest door: its own bind on the room's WiFi. Inserted INTO the
   # `[daemon]` table ring_doc_mkcfg wrote — a second `[daemon]` header would be
@@ -530,7 +541,7 @@ leg_doc() {
 }
 
 # ── leg 3: a film from the library rail ─────────────────────────────────────
-offers_on_c() { node_curl c -s --max-time 5 "$(at "${CPORT[c]}")/v1/mesh/media"; }
+offers_on_c() { node_curl c -s --max-time 5 "$(at "$(rport c)")/v1/mesh/media"; }
 
 # poll_offer <holder-name> <want-offered-to-json> <window-s> → seconds, or empty
 poll_offer() {
@@ -563,12 +574,22 @@ media_holder() {
   node_exec "$n" env SVRN="$CLI" CW_MEDIA_ROOT="$4" bash "$MEDIA_SCRIPT" holder-setup > "$D/room-holder-setup-$n.out" 2>&1
 }
 
+# The holder's two config files around a media verb: svrn's config.toml, which
+# the verb must not touch, and cw-rails' rails.toml, where it writes `[media]`.
+cfg_snap() { # when node...
+  local when=$1 n; shift
+  for n in "$@"; do
+    cp "$D/$n/config.toml" "$D/room-$n-config.$when"
+    cp "$(rdir "$n")/rails.toml" "$D/room-$n-rails.$when" 2>/dev/null || : > "$D/room-$n-rails.$when"
+  done
+}
+
 leg_film() {
   local out="$D/room-film.json"
   if [ "$BACKEND" != podman ]; then echo '{"skipped":"backend local: Jellyfin needs a node netns to sit in"}' > "$out"; return; fi
   local bname aname cname first narrowed url item fb
   bname=$(self_name b); aname=$(self_name a); cname=$(self_name c)
-  cp "$D/b/config.toml" "$D/room-b-config.before"; cp "$D/c/config.toml" "$D/room-c-config.before"
+  cfg_snap before b c
   rm -rf "$MEDIA_ROOT/config" "$MEDIA_ROOT/cache" # a cold holder each run; the generated title is kept
   media_holder b film "$JELLY" "$MEDIA_ROOT" \
     || { echo '{"fatal":"holder-up failed, see room-holder-up-b.out"}' > "$out"; return; }
@@ -585,7 +606,7 @@ leg_film() {
   local pick_t0 deadline url=""
   pick_t0=$(date +%s.%N); deadline=$(( $(date +%s) + 120 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    url=$(node_curl c -s --max-time 15 "$(at "${CPORT[c]}")/v1/mesh/media?peer=$bname" \
+    url=$(node_curl c -s --max-time 15 "$(at "$(rport c)")/v1/mesh/media?peer=$bname" \
       | python3 -c "import sys,json; print(json.load(sys.stdin).get('url') or '')" 2>/dev/null)
     [ -n "$url" ] || { sleep 3; continue; }
     # Each attempt's status, beside the body: an empty body alone cannot tell a
@@ -603,19 +624,20 @@ leg_film() {
       "$url/Videos/$item/stream?static=true")
     pick_s=$(python3 -c "import sys; print(round(float(sys.argv[1]) - float(sys.argv[2]), 2))" "$(date +%s.%N)" "$pick_t0")
   fi
-  cp "$D/b/config.toml" "$D/room-b-config.after"; cp "$D/c/config.toml" "$D/room-c-config.after"
+  cfg_snap after b c
   python3 - "$D" "$bname" "${first:-}" "${narrowed:-}" "$url" "${item:-}" "${fb:-}" "$pick_s" > "$out" <<'PY'
 import difflib, json, sys
 d, bname, first, narrowed, url, item, fb, pick = sys.argv[1:9]
-def diff(n):
-    a = open(f"{d}/room-{n}-config.before").read().splitlines()
-    b = open(f"{d}/room-{n}-config.after").read().splitlines()
+def diff(n, f="config"):
+    a = open(f"{d}/room-{n}-{f}.before").read().splitlines()
+    b = open(f"{d}/room-{n}-{f}.after").read().splitlines()
     return [l for l in difflib.unified_diff(a, b, lineterm="", n=0) if l[:1] in "+-" and l[:3] not in ("+++", "---")]
 t, code = (fb.split() + ["", ""])[:2] if fb else ("", "")
 json.dump({"holder": bname, "listed_s": float(first) if first else None, "narrowed_s": float(narrowed) if narrowed else None,
            "player_url": bool(url), "item": bool(item), "stream_first_byte_s": float(t) if t else None,
            "pick_to_first_byte_s": float(pick) if pick else None, "http": code,
-           "b_config_diff": diff("b"), "c_config_diff": diff("c")}, sys.stdout)
+           "b_config_diff": diff("b"), "c_config_diff": diff("c"),
+           "b_rails_diff": diff("b", "rails"), "c_rails_diff": diff("c", "rails")}, sys.stdout)
 PY
 }
 
@@ -694,7 +716,14 @@ leg_join() {
   n_before=$(mesh_members a)
   mkcfg d
   fatal() { python3 -c "import json,sys; print(json.dumps({'fatal': sys.argv[1]}))" "$1" > "$out"; }
+  # No `name` in its rails.toml: `mesh join` sends the hostname, and cw-rails
+  # refuses a join under any name but its own (membership.rs
+  # check_node_name), which defaults to the hostname — as `svrn mesh up`
+  # leaves a real fourth machine.
+  sed -i '/^name = /d' "$(rdir d)/rails.toml"
   if [ "$BACKEND" = podman ]; then container_up_one d || { fatal "the fourth container did not start"; return; }; fi
+  start_rails d
+  wait_rails_up d || { fatal "the fourth node's cw-rails never answered"; return; }
   start_daemon d
   { wait_all_up d && wait_homed d; } || { fatal "the fourth daemon never came up homed"; return; }
   # The invite, as a shows it: `mesh status`'s `join link:` line, kept as the
@@ -707,7 +736,16 @@ leg_join() {
   [ -n "$link" ] || { fatal "a's mesh status printed no join link inside 30 s"; return; }
   typed d join "mesh join" "the one verb; its argument is the invite below"
   typed d join "$link" "the invite a shows — scanned as a QR in the room (no renderer yet: rr-2)" "" "$D/room-a-status.out"
-  node_exec d "$CLI" mesh join "$link" > "$D/room-join.out" 2>&1
+  # `mesh join` is the person's verb, so it runs as typed — and it installs
+  # cw-rails' boot unit after reaching cw-rails (rails_unit.rs
+  # install_after_bring_up), even one already running. Its HOME, config dir
+  # and runtime dir are the node's own and it has no user bus, so the unit
+  # lands under $D/d and `systemctl --user` cannot reach a manager: on the
+  # local backend the operator's own cw-rails.service would otherwise be
+  # rewritten to this throwaway node. The verb reports the unit not
+  # installed, and joins. A podman container already has neither.
+  node_exec d env -u DBUS_SESSION_BUS_ADDRESS HOME="$D/d" XDG_CONFIG_HOME="$D/d/.config" XDG_RUNTIME_DIR="$D/d" \
+    "$CLI" mesh join "$link" > "$D/room-join.out" 2>&1
   dname=$(self_name d)
   [ -n "$dname" ] || { fatal "the fourth's mesh status names no self after the join, see room-join.out"; return; }
   wait_online "$dname" 2> "$D/room-join-online.err" || { fatal "a never saw the fourth online"; return; }
@@ -786,9 +824,10 @@ PY
 # is never retried.
 room_join_lost_to_the_relay() { # node
   local n=$1
+  # The relay's complaint is the iroh endpoint's, which is cw-rails'.
   grep -qs "iroh tunnel" "$D/join-$n.json" \
     && grep -qs "Another endpoint connected with the same endpoint id" \
-         "$D/$n/daemon.err" "$D/beefy/daemon.err"
+         "$D/$n/rails.err" "$D/beefy/rails.err" "$D/$n/daemon.err" "$D/beefy/daemon.err"
 }
 
 # ── the seal: neither bridge forwards to the other ──────────────────────────
@@ -921,9 +960,12 @@ room_up() {
   for n in beefy halo little; do mkcfg "$n"; done
   containers_up || return 3
   room_seal || return 3
+  for n in beefy halo little; do start_rails "$n"; done
+  wait_rails_up beefy halo little || return 3
   for n in beefy halo little; do room_start_daemon "$n"; done
   wait_all_up beefy halo little || return 3
   wait_homed beefy halo little || return 3
+  found_mesh || return 3
   local retries=0
   for n in halo little; do
     if ! { join_one "$n" && wait_online "${MESHNAME[$n]}"; }; then
@@ -963,7 +1005,7 @@ room_topology_down() {
   node_kill beefy "$D/beefy/dev.pid"
   node_kill beefy "$D/beefy/dev2.pid"
   local n
-  for n in beefy halo little; do node_kill "$n" "$D/$n/pid"; done
+  for n in beefy halo little; do node_kill "$n" "$D/$n/pid"; node_kill "$n" "$D/$n/rails.pid"; done
   sleep 1
   [ "$BACKEND" = podman ] && containers_down
   return 0
@@ -1048,9 +1090,9 @@ leg_room_wall() {
   sv beefy mesh grant --list > "$D/wall-grants.txt" 2>&1
   leg_room_narrowing "$member"
   mesh_json beefy > "$D/wall-beefy-after.json"; mesh_json halo > "$D/wall-halo-after.json"
-  # The peer path, from the daemon's EXISTING observation — nothing added for
-  # the bar (A36): `/v1/mesh/status` already publishes `iroh_transport`.
-  node_curl beefy -s --max-time 10 "$(at "${CPORT[beefy]}")/v1/mesh/status" > "$D/wall-transport.json" 2>/dev/null
+  # The peer path, from the node's EXISTING observation — nothing added for
+  # the bar (A36): cw-rails' `/v1/mesh/status` publishes `iroh_transport`.
+  node_curl beefy -s --max-time 10 "$(at "$(rport beefy)")/v1/mesh/status" > "$D/wall-transport.json" 2>/dev/null
   grep -E 'routing outcome|routing decision|guest_ask: accepted|turn stage attribution' "$D/beefy/daemon.err" \
     > "$D/wall-decisions.txt" 2>/dev/null
   # A MEMBER's own loopback append carrying a forged `on_behalf_of`. Nobody
@@ -1149,7 +1191,7 @@ leg_room_film() {
   if [ "$BACKEND" != podman ]; then echo '{"skipped":"backend local: Jellyfin needs a node netns to sit in"}' > "$out"; return; fi
   local lname bname first="" url="" item="" fb="" pick_s="" gone="" inuse_s="" inuse_text=""
   lname=$(self_name little); bname=$(self_name beefy)
-  cp "$D/little/config.toml" "$D/room-little-config.before"; cp "$D/beefy/config.toml" "$D/room-beefy-config.before"
+  cfg_snap before little beefy
   # (a) ONE verb on the holder, and the clock starts when it returns.
   typed little film "mesh media offer" "the holder's one verb; it finds the origin and mints the read-only viewer itself"
   node_exec little "$CLI" mesh media offer > "$D/room-offer.out" 2>&1
@@ -1158,7 +1200,7 @@ leg_room_film() {
   local pick_t0 deadline
   pick_t0=$(date +%s.%N); deadline=$(( $(date +%s) + 180 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    url=$(node_curl beefy -s --max-time 15 "$(at "${CPORT[beefy]}")/v1/mesh/media?peer=$lname" \
+    url=$(node_curl beefy -s --max-time 15 "$(at "$(rport beefy)")/v1/mesh/media?peer=$lname" \
       | python3 -c "import sys,json; print(json.load(sys.stdin).get('url') or '')" 2>/dev/null)
     [ -n "$url" ] || { sleep 3; continue; }
     node_curl beefy -s --max-time 20 -o /dev/stdout -w '%{stderr}%{http_code} %{time_total}\n' \
@@ -1198,13 +1240,13 @@ leg_room_film() {
   typed little film "mesh media withdraw" "the holder's other verb; the offer is gone within a gossip round"
   node_exec little "$CLI" mesh media withdraw > "$D/room-withdraw.out" 2>&1
   gone=$(room_poll_gone "$lname" 120)
-  cp "$D/little/config.toml" "$D/room-little-config.after"; cp "$D/beefy/config.toml" "$D/room-beefy-config.after"
+  cfg_snap after little beefy
   python3 - "$D" "$lname" "${first:-}" "$url" "${item:-}" "${fb:-}" "${pick_s:-}" "${inuse_s:-}" "$inuse_text" "${gone:-}" > "$out" <<'PY'
 import difflib, json, os, sys
 d, lname, first, url, item, fb, pick, inuse, inuse_text, gone = sys.argv[1:11]
-def diff(n):
-    a = open(f"{d}/room-{n}-config.before").read().splitlines()
-    b = open(f"{d}/room-{n}-config.after").read().splitlines()
+def diff(n, f="config"):
+    a = open(f"{d}/room-{n}-{f}.before").read().splitlines()
+    b = open(f"{d}/room-{n}-{f}.after").read().splitlines()
     return [l for l in difflib.unified_diff(a, b, lineterm="", n=0) if l[:1] in "+-" and l[:3] not in ("+++", "---")]
 t, code = (fb.split() + ["", ""])[:2] if fb else ("", "")
 offer_out = open(f"{d}/room-offer.out").read()
@@ -1234,14 +1276,15 @@ json.dump({"holder": lname, "listed_s": float(first) if first else None,
            "viewer_policies": viewers, "holder_playing": holder_playing,
            "in_use_s": float(inuse) if inuse else None, "in_use_lines": int(inuse_text or 0),
            "withdrawn_s": float(gone) if gone else None,
-           "little_config_diff": diff("little"), "beefy_config_diff": diff("beefy")}, sys.stdout)
+           "little_config_diff": diff("little"), "beefy_config_diff": diff("beefy"),
+           "little_rails_diff": diff("little", "rails"), "beefy_rails_diff": diff("beefy", "rails")}, sys.stdout)
 PY
 }
 
 # The rail as the viewer reads it. Three polls, one shape: `GET /v1/mesh/media`
 # on the viewer, which is what `svrn mesh media` and the desktop Library rail
 # both read.
-room_offers() { node_curl "${OFFERS_NODE:-beefy}" -s --max-time 10 "$(at "${CPORT[${OFFERS_NODE:-beefy}]}")/v1/mesh/media"; }
+room_offers() { node_curl "${OFFERS_NODE:-beefy}" -s --max-time 10 "$(at "$(rport "${OFFERS_NODE:-beefy}")")/v1/mesh/media"; }
 room_poll_until() { # window-s predicate-python peer arg
   local t0 now
   t0=$(date +%s.%N)
@@ -1470,7 +1513,7 @@ PY
   node_exec halo "$CLI" ring checkpoint --verify "$truncated" > "$D/room-checkpoint-truncated.out" 2>&1
   rc_t=$?; ck_refusal "truncated-tail" "$rc_t" "$D/room-checkpoint-truncated.out" "marks disagree"
   # (d) the planted same-seq pair, grown not typed (see the header note).
-  local probe=$RING2 journal="$D/beefy/rings/$RING2/ring_oplog.jsonl"
+  local probe=$RING2 journal="$(rdir beefy)/rings/$RING2/ring_oplog.jsonl"
   local body='{"op":"record","payload":{"kind":"expense","payer":"'"$FOUNDER"'","amount_cents":1,"description":"checkpoint fork probe: SEQUENCE NUMBER PLANT %s","participants":[]}}'
   node_curl beefy -s --max-time 20 -X POST \
     "$(at "${CPORT[beefy]}")/v1/rail/append?namespace=$probe" \
@@ -1754,15 +1797,15 @@ if topology != "room":
     else:
         # Every key `svrn mesh media offer` writes, and nothing else. This
         # clause asks whether the HOLDER'S config moved under ONE VERB rather
-        # than under a person's editor — so it tracks the verb's key set, and
-        # the verb gained `media_viewer_user` in rr-2-media-posture
-        # (ee1c6b388: the read-only account's id, which the presence poll
-        # needs to tell the holder's own sessions from the house's). What the
-        # clause discriminates is unchanged: any other key, and node c's
-        # config moving at all (`c_config_diff`), still fail.
-        verb_keys = re.compile(r'^[+-]\s*media_(origin|allow|viewer_user)\s*=')
+        # than under a person's editor — so it tracks the verb's key set:
+        # `[media] origin`/`allow` in the holder's cw-rails rails.toml since
+        # 2026-10-04 (the viewer id lives in rails' house store). Any other
+        # key, the holder's svrn config moving, and node c's files moving at
+        # all, still fail.
+        verb_keys = re.compile(r'^[+-]\s*($|\[media\]$|(origin|allow)\s*=)')
         c_urls = [e for e in walk if e["leg"] == "film" and e["node"] == "c" and e["cls"] == "URL"]
-        legs = {"a_one_verb_no_config_edit": all(verb_keys.match(l) for l in f["b_config_diff"]) and not f["c_config_diff"],
+        legs = {"a_one_verb_no_config_edit": all(verb_keys.match(l) for l in f["b_rails_diff"])
+                                             and not (f["b_config_diff"] or f["c_config_diff"] or f["c_rails_diff"]),
                 "b_listed_and_narrowed": f["listed_s"] is not None and f["listed_s"] <= list_w
                                          and f["narrowed_s"] is not None and f["narrowed_s"] <= list_w,
                 "c_first_byte": f["pick_to_first_byte_s"] is not None and f["http"] in ("200", "206")
@@ -1770,7 +1813,7 @@ if topology != "room":
                 "d_viewer_typed_no_url": not c_urls}
         row("ra-room-film-from-the-library-rail", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
             **{k: f[k] for k in ("holder", "listed_s", "narrowed_s", "pick_to_first_byte_s", "stream_first_byte_s", "http",
-                                "b_config_diff", "c_config_diff")})
+                                "b_config_diff", "c_config_diff", "b_rails_diff", "c_rails_diff")})
 
     # 4 — a fourth member plugs in
     win = num(r"within (\d+) s", bars["ra-room-plug-in-live"]["one_line"])
@@ -1992,14 +2035,17 @@ if topology == "room":
     if not f or f.get("skipped") or f.get("fatal"):
         row("ra-room-film-from-littlemac", None, f.get("skipped") or f.get("fatal") or "the film leg did not run")
     else:
-        verb_keys = re.compile(r'^[+-]\s*(media_(origin|allow|viewer\w*)|viewer\w*)\s*=')
+        # The holder's verbs write `[media]` in its cw-rails rails.toml; its
+        # svrn config and the viewer's files do not move.
+        verb_keys = re.compile(r'^[+-]\s*($|\[media\]$|(origin|allow)\s*=)')
         film_creds = [e for e in walk if e["leg"] == "film" and e["cls"] == "credential"]
         legs = {"a_listed_with_offered_to": f["listed_s"] is not None and list_w is not None and f["listed_s"] <= list_w,
                 "b_first_byte": f["pick_to_first_byte_s"] is not None and f["http"] in ("200", "206")
                                 and byte_w is not None and f["pick_to_first_byte_s"] <= byte_w,
                 "c_no_credential_in_the_walk": not film_creds,
-                "d_holder_config_untouched": all(verb_keys.match(l) for l in f["little_config_diff"])
-                                             and not f["beefy_config_diff"],
+                "d_holder_config_untouched": all(verb_keys.match(l) for l in f["little_rails_diff"])
+                                             and not (f["little_config_diff"] or f["beefy_config_diff"]
+                                                      or f["beefy_rails_diff"]),
                 "e_the_declared_account_is_read_only": bool(f.get("viewer_policies"))
                                                       and all(p["admin"] is False and not p["manages"]
                                                               for p in f["viewer_policies"]),
@@ -2009,7 +2055,8 @@ if topology == "room":
             windows={"listed_s": list_w, "first_byte_s": byte_w},
             **{k: f.get(k) for k in ("holder", "listed_s", "pick_to_first_byte_s", "stream_first_byte_s", "http",
                                      "viewer_declared", "viewer_policies", "holder_playing", "in_use_s",
-                                     "in_use_lines", "withdrawn_s", "little_config_diff", "beefy_config_diff")})
+                                     "in_use_lines", "withdrawn_s", "little_config_diff", "beefy_config_diff",
+                                     "little_rails_diff", "beefy_rails_diff")})
 
     # 5 — the room says what it lost
     o = load("room-offline.json") or {}
@@ -2370,7 +2417,7 @@ PY
 room_down() { # Jellyfin first: podman will not remove b while a container shares its netns
   [ "$BACKEND" = podman ] && "${PODMAN[@]}" rm -f -t 2 "$JELLY" > /dev/null 2>&1
   [ "$BACKEND" = podman ] && "${PODMAN[@]}" rm -f -t 2 "$JELLY-d" > /dev/null 2>&1
-  local n=d; node_kill $n "$D/$n/dev.pid"; node_kill $n "$D/$n/pid"
+  local n=d; node_kill $n "$D/$n/dev.pid"; node_kill $n "$D/$n/pid"; node_kill $n "$D/$n/rails.pid"
   [ "$BACKEND" = podman ] && "${PODMAN[@]}" rm -f -t 2 "ring-doc-$n" > /dev/null 2>&1
   cmd_down
 }

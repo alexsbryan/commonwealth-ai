@@ -2,10 +2,11 @@
 //! The OpenAI wire's rendering, shared by every host that answers it: the
 //! daemon's `/v1/*` routes and `serve`'s (phase-b pb-serve-program).
 //!
-//! Three pieces a host would otherwise re-derive: a chat stream frame as an
-//! SSE chunk ([`sse_item`]), an embeddings request answered against a
-//! provider ([`embeddings_response`]), and `/v1/models` rows from the
-//! manifests a host can dispatch ([`model_rows`]). What a host records about
+//! Four pieces a host would otherwise re-derive: a chat stream frame as an
+//! SSE chunk ([`sse_item`]), a prompt over the context window answered as
+//! llama-server answers it ([`context_exceeded_response`]), an embeddings
+//! request answered against a provider ([`embeddings_response`]), and
+//! `/v1/models` rows from the manifests a host can dispatch ([`model_rows`]). What a host records about
 //! the work (ledgers, activity) and where its provider comes from stay its
 //! own.
 //!
@@ -45,6 +46,10 @@ pub struct ChunkHeader {
     pub created: u64,
     /// The model the request named, else `local`.
     pub model: String,
+    /// Tool calls this stream has already sent. A call's `index` is its
+    /// place in the turn, so a frame per call (the live stream) and one
+    /// frame of all of them (the synthetic one) index the same way.
+    calls_sent: std::sync::atomic::AtomicUsize,
 }
 
 impl ChunkHeader {
@@ -56,6 +61,7 @@ impl ChunkHeader {
             id: format!("chatcmpl-{}", sovereign_time::unix_millis()),
             created: sovereign_time::unix_now_u64(),
             model: model.unwrap_or_else(|| "local".into()),
+            calls_sent: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 }
@@ -78,6 +84,20 @@ pub fn sse_item(header: &ChunkHeader, frame: StreamFrame) -> SseItem {
             });
             SseItem::Data(chunk.to_string())
         }
+        StreamFrame::Reasoning(delta) => {
+            let chunk = serde_json::json!({
+                "id": header.id,
+                "object": "chat.completion.chunk",
+                "created": header.created,
+                "model": header.model,
+                "choices": [{
+                    "index": 0,
+                    "delta": { "reasoning_content": delta },
+                    "finish_reason": null
+                }]
+            });
+            SseItem::Data(chunk.to_string())
+        }
         StreamFrame::ToolCalls(calls) => {
             // Synthetic tools-streaming chunk. Local backends
             // parse `<tool_call>` markup post-generation, so we
@@ -86,12 +106,15 @@ pub fn sse_item(header: &ChunkHeader, frame: StreamFrame) -> SseItem {
             // OpenAI spec also permits. Both shapes are
             // wire-legal — clients accumulate by `tool_calls[i].
             // index` regardless of chunk count.
+            let base = header
+                .calls_sent
+                .fetch_add(calls.len(), std::sync::atomic::Ordering::Relaxed);
             let tool_calls_json: Vec<serde_json::Value> = calls
                 .iter()
                 .enumerate()
                 .map(|(i, c)| {
                     serde_json::json!({
-                        "index": i,
+                        "index": base + i,
                         "id": c.id,
                         "type": c.kind,
                         "function": {
@@ -165,6 +188,44 @@ pub fn sse_item(header: &ChunkHeader, frame: StreamFrame) -> SseItem {
 /// The OpenAI `[DONE]` sentinel that closes a chat stream.
 /// `RemoteApiProvider::complete_stream` breaks its loop on it.
 pub const DONE: &str = "[DONE]";
+
+/// A prompt that fills the context window, answered as llama-server answers
+/// it: `400`, `type: "exceed_context_size_error"`, the two numbers, and its
+/// sentence (`server-common.cpp` `format_error_response` and `server-task.cpp`
+/// `server_task_result_error::to_json` at the vendored 035e227).
+///
+/// The sentence matters as much as the status: litellm keys
+/// `ContextWindowExceededError` on "exceeds the available context size" and
+/// does not retry it. Rendered as a `503 backend_error`, one overflowing
+/// prompt was retried 30 times by an agent's client before it gave up with
+/// `ServiceUnavailableError` (the 35B e2eswe battery, cement task). Both
+/// hosts' chat routes answer through this.
+pub fn context_exceeded_response(prompt_tokens: u64, n_ctx: u64) -> http::Response<String> {
+    warn!(
+        prompt_tokens,
+        n_ctx,
+        "chat_completions: prompt exceeds the context window — 400, the caller must shorten it"
+    );
+    let body = serde_json::json!({
+        "error": {
+            "code": 400,
+            "message": format!(
+                "request ({prompt_tokens} tokens) exceeds the available context size \
+                 ({n_ctx} tokens), try increasing it"
+            ),
+            "type": "exceed_context_size_error",
+            "n_prompt_tokens": prompt_tokens,
+            "n_ctx": n_ctx,
+        }
+    });
+    let mut response = http::Response::new(body.to_string());
+    *response.status_mut() = StatusCode::BAD_REQUEST;
+    response.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    response
+}
 
 /// Why an embeddings request was not answered: the status, the message and
 /// the OpenAI error type the host renders.
@@ -331,4 +392,61 @@ pub fn model_rows(
         });
     }
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oicp_types::openai_types::{FunctionCall, ToolCall};
+
+    fn data(item: SseItem) -> serde_json::Value {
+        match item {
+            SseItem::Data(s) => serde_json::from_str(&s).expect("chunk is json"),
+            SseItem::Comment(c) => panic!("expected data, got comment {c}"),
+        }
+    }
+
+    fn call(name: &str) -> ToolCall {
+        ToolCall {
+            id: format!("call_{name}"),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: name.into(),
+                arguments: "{}".into(),
+            },
+        }
+    }
+
+    /// A live stream sends each call in its own frame as its block
+    /// closes. Clients merge `tool_calls` deltas by `index`, so a second
+    /// call indexed 0 would be appended onto the first.
+    #[test]
+    fn a_frame_per_call_indexes_calls_by_their_place_in_the_turn() {
+        let header = ChunkHeader::new(Some("m".into()));
+        let first = data(sse_item(
+            &header,
+            StreamFrame::ToolCalls(vec![call("read")]),
+        ));
+        let second = data(sse_item(
+            &header,
+            StreamFrame::ToolCalls(vec![call("bash")]),
+        ));
+        assert_eq!(first["choices"][0]["delta"]["tool_calls"][0]["index"], 0);
+        assert_eq!(second["choices"][0]["delta"]["tool_calls"][0]["index"], 1);
+        assert_eq!(
+            second["choices"][0]["delta"]["tool_calls"][0]["function"]["name"],
+            "bash"
+        );
+    }
+
+    /// llama-server's shape: thinking in `reasoning_content`, never in
+    /// `content`.
+    #[test]
+    fn reasoning_renders_as_reasoning_content() {
+        let header = ChunkHeader::new(None);
+        let chunk = data(sse_item(&header, StreamFrame::Reasoning("plan".into())));
+        let delta = &chunk["choices"][0]["delta"];
+        assert_eq!(delta["reasoning_content"], "plan");
+        assert!(delta.get("content").is_none(), "{delta}");
+    }
 }

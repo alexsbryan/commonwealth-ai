@@ -8038,6 +8038,7 @@ version = "2.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb3d648e68cea56d9858d535ee28f9538404e2dd8cb08ed0bd05dca379477f39"
 dependencies = [
+ "indexmap 2.14.0",
  "memo-map",
  "serde",
 ]
@@ -12630,9 +12631,11 @@ dependencies = [
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-serving-host",
+ "sovereign-time",
  "tempfile",
  "tokio",
  "tokio-util",
+ "toml 0.8.2",
  "tower",
  "tracing",
  "tracing-subscriber",

@@ -428,18 +428,29 @@ assert_iroh_carried_traffic() {
       FAILS=$((FAILS+1))
     fi
   done
-  # The operator surface: node0's cw-rails status must name an iroh dial (a
-  # relay or direct addresses) for every peer, or a member it lists is one it
-  # cannot reach. The daemon's `iroh_transport` path view has no cw-rails
-  # counterpart; `members[].dial` is what cw-rails reports (api.rs).
-  local undialable
+  # The operator surface, two readings of node0's cw-rails status. Dials:
+  # every peer it lists carries an iroh dial (a relay or direct addresses), or
+  # it lists a member it cannot reach. Paths: `iroh_transport` names a live
+  # path for every peer (api.rs, through commonwealth_media::path_to) — the
+  # H2 view `svrn mesh transport` prints. In-netns peers are loopback, so a
+  # live path is `direct`.
+  local undialable peers paths unpathed
   undialable=$(jget "$(status_url 0)" '",".join(m["name"] for m in d["members"] if not m.get("is_self") and not ((m.get("dial") or {}).get("relay_url") or (m.get("dial") or {}).get("iroh_direct_addrs")))')
-  local peers; peers=$(jget "$(status_url 0)" 'sum(1 for m in d["members"] if not m.get("is_self"))')
+  peers=$(jget "$(status_url 0)" 'sum(1 for m in d["members"] if not m.get("is_self"))')
   if [ -n "$peers" ] && [ "$peers" -gt 0 ] && [ -z "$undialable" ]; then
     echo "  node0 status: an iroh dial for each of $peers peer(s)"
-    finding '{"kind":"iroh","check":"status_surface","node":0,"ok":true}'
+    finding '{"kind":"iroh","check":"status_dial","node":0,"ok":true}'
   else
     echo "  node0 status: peers=${peers:-unread} without an iroh dial: ${undialable:-none} ✗"
+    FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"status_dial","node":0,"ok":false}'
+  fi
+  paths=$(jget "$(status_url 0)" '",".join(r["name"] + "=" + ((r.get("path") or {}).get("path") or "none") for r in d.get("iroh_transport", []))')
+  unpathed=$(jget "$(status_url 0)" '",".join(r["name"] for r in d.get("iroh_transport", []) if (r.get("path") or {}).get("path") not in ("direct", "relayed", "mixed"))')
+  if [ -n "$paths" ] && [ -z "$unpathed" ] && [ "$(printf '%s' "$paths" | tr ',' '\n' | grep -c .)" = "${peers:-x}" ]; then
+    echo "  node0 iroh_transport: $paths"
+    finding '{"kind":"iroh","check":"status_surface","node":0,"ok":true}'
+  else
+    echo "  node0 iroh_transport: '${paths:-absent}' — no live path for: ${unpathed:-<rows missing>} ✗"
     FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"status_surface","node":0,"ok":false}'
   fi
 }
@@ -1332,7 +1343,7 @@ bad=$(grep -c '"kind":"iroh".*"ok":false' "$FINDINGS" 2>/dev/null); bad=${bad:-0
 echo "  ── iroh ─────────────────────────────────────────────────"
 echo "  transport       : iroh, cw-rails' only mesh transport (local-only: direct addrs)"
 echo "  join path       : dial-by-key over the founder's iroh= invite"
-echo "  iroh checks     : ${ok} ok / ${bad} failed (install + carried-over-iroh per node + status dials)"
+echo "  iroh checks     : ${ok} ok / ${bad} failed (install + carried-over-iroh per node + status dials + paths)"
 if [ "$GATE" = 1 ]; then
   log "SLO gate"
   "$CLI" mesh soak-gate "$FINDINGS" --baseline "$ROOT/mesh-soak-baseline.json" || true

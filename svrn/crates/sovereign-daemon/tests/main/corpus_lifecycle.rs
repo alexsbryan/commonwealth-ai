@@ -43,6 +43,8 @@ use crate::common::ledger_double::RecordingLedger;
 
 #[path = "corpus_lifecycle/ingests.rs"]
 mod ingests;
+#[path = "corpus_lifecycle/panics.rs"]
+mod panics;
 use ingests::{absent, Ingests, Run};
 
 /// An `AppState` whose corpus handle is `engine`, and the handle itself so

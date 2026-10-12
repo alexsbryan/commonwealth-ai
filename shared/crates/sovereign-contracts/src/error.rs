@@ -59,6 +59,24 @@ pub enum Error {
         retry_after_secs: u64,
     },
 
+    /// The prompt alone fills the context window it was admitted against,
+    /// so no output budget is left to clamp to.
+    ///
+    /// The caller's to fix, so it is structured: the HTTP boundary renders
+    /// llama-server's `400 exceed_context_size_error` from these numbers. As
+    /// a prose `Inference` error it rendered as a retryable 503, and an
+    /// agent's client retried one overflowing prompt 30 times. The display
+    /// text is `InferenceError::context_exceeded_message`, the one
+    /// `clamp_max_tokens` always produced, so callers that match "Prompt too
+    /// long" in it are unaffected.
+    #[error("{}", InferenceError::context_exceeded_message(*.prompt_tokens, *.n_ctx))]
+    ContextExceeded {
+        /// Tokens in the rendered prompt.
+        prompt_tokens: u64,
+        /// The context window it was admitted against.
+        n_ctx: u64,
+    },
+
     /// The LLM-produced plan failed validation: malformed JSON, missing/empty `steps`, or a dependency cycle.
     #[error("Planning error: {0}")]
     Planning(String),
@@ -172,6 +190,13 @@ impl From<InferenceError> for Error {
                 predicted_wait_ms,
                 retry_after_secs,
             },
+            InferenceError::ContextExceeded {
+                prompt_tokens,
+                n_ctx,
+            } => Error::ContextExceeded {
+                prompt_tokens,
+                n_ctx,
+            },
             InferenceError::InvalidInput { message } => Error::InvalidInput(message),
             InferenceError::NotImplemented { message } => Error::NotImplemented(message),
             InferenceError::Cancelled => Error::Cancelled,
@@ -184,7 +209,7 @@ impl From<InferenceError> for Error {
 /// The other direction, and deliberately NOT symmetric — read this before
 /// using it. Lifting is exact; narrowing cannot be, because `Planning`,
 /// `Execution`, `Storage`, `Tool` and the rest have no protocol meaning. The
-/// eight with twins map variant-for-variant; everything else widens to
+/// nine with twins map variant-for-variant; everything else widens to
 /// [`InferenceError::Inference`] carrying the full `Display` text, which keeps
 /// the original variant's prefix ("Storage error: ...") — so the detail
 /// survives even though the ability to `match` on it across the seam does not.
@@ -221,6 +246,13 @@ impl From<&Error> for InferenceError {
                 position: *position,
                 predicted_wait_ms: *predicted_wait_ms,
                 retry_after_secs: *retry_after_secs,
+            },
+            Error::ContextExceeded {
+                prompt_tokens,
+                n_ctx,
+            } => InferenceError::ContextExceeded {
+                prompt_tokens: *prompt_tokens,
+                n_ctx: *n_ctx,
             },
             Error::InvalidInput(message) => InferenceError::InvalidInput {
                 message: message.clone(),

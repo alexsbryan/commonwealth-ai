@@ -14,7 +14,7 @@
 use oicp_types::capabilities::{ComputeType, NodeCapabilities};
 use serde::Deserialize;
 
-use super::mesh::{KnownMeshDto, MemberDto, MeshStatusSummary, SelfReachability};
+use super::mesh::{KnownMeshDto, MemberDto, MemberReachView, MeshStatusSummary, SelfReachability};
 
 /// cw-rails' status document, the fields svrn's view reads.
 #[derive(Debug, Deserialize)]
@@ -33,6 +33,10 @@ pub struct RailsMeshStatus {
     /// summary, never a parse failure of the whole view.
     #[serde(default)]
     self_reachability: Option<serde_json::Value>,
+    /// Each peer's live iroh path, in the shape svrn's status carried it.
+    /// Absent from a cw-rails that predates it, which reads as no paths.
+    #[serde(default)]
+    iroh_transport: Vec<MemberReachView>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,7 +83,7 @@ impl From<RailsMeshStatus> for MeshStatusSummary {
             self_reachability,
             node_class: String::new(),
             entry_node: None,
-            iroh_transport: Vec::new(),
+            iroh_transport: s.iroh_transport,
         }
     }
 }
@@ -178,5 +182,30 @@ mod tests {
             b.hw_fingerprint, None,
             "no GPU advertised: unknown, not empty"
         );
+    }
+
+    /// cw-rails' `iroh_transport` rows reach the summary, so `svrn mesh
+    /// transport` has paths to print. Failing input: the projection that
+    /// wrote `Vec::new()` here whatever cw-rails said.
+    #[test]
+    fn the_peers_iroh_paths_reach_the_summary() {
+        let doc = serde_json::json!({
+            "members": [],
+            "iroh_transport": [
+                { "name": "b", "node_id": "node-44ae7614",
+                  "path": { "path": "direct", "active_direct_addrs": 1,
+                            "active_direct_socket_addrs": ["127.0.0.1:50784"] } },
+                { "name": "c", "node_id": "node-77a27e5e", "path": null }
+            ],
+        });
+        let s: MeshStatusSummary = serde_json::from_value::<RailsMeshStatus>(doc)
+            .expect("parses")
+            .into();
+        let rows: Vec<_> = s
+            .iroh_transport
+            .iter()
+            .map(|r| (r.name.as_str(), r.path.as_ref().map(|p| p.path.as_str())))
+            .collect();
+        assert_eq!(rows, [("b", Some("direct")), ("c", None)]);
     }
 }

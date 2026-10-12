@@ -512,6 +512,7 @@ pub async fn setup_watched_folders(
     config: &SetupConfig,
     folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps>,
     enrich_config: Option<Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>>,
+    ocr_ctx: Option<sovereign_tools::local_corpus::ocr::OcrCtx>,
 ) -> Option<crate::watched_folder_setup::WatchedSubsystem> {
     // ── Watched-folder reconciliation scheduler ─────────────────
     //
@@ -619,40 +620,11 @@ pub async fn setup_watched_folders(
             // the folder config, but the sweep only takes the OCR path when
             // an `OcrCtx` is also installed here — otherwise scanned PDFs
             // are reported as `scanned_no_text` and never indexed
-            // (`watched/worker.rs`). Until now only the desktop installed
-            // one, so a server could enable OCR and get nothing.
-            //
-            // `cleanup_model` is the same chat-slot file stem the
-            // enrichment defaults use: the daemon registers each loaded
-            // slot under its file stem, so a slot ALIAS like "fast" would
-            // 503 and silently degrade every page to raw OCR text.
-            //
-            // A keyed daemon admits no caller without a key, loopback
-            // included (phase-b-86), so the cleanup call presents the
-            // daemon's own credential there; the store's own `is_keyed`
-            // decides, read from the directory the seal reads.
-            // An unknown `[daemon] loopback` refuses the boot at the node
-            // seed with its sentence; here it is named and the pass presents
-            // no credential, which that refusal makes moot.
-            let keyed = crate::client_tokens::loopback_grants_nothing(
-                config.daemon.loopback.as_deref(),
-                data_dir,
-            )
-            .unwrap_or_else(|e| {
-                tracing::warn!("watched folders: {e}");
-                false
-            });
-            super::ocr_install::install_ocr_ctx(
-                &manager,
-                data_dir,
-                format!("http://127.0.0.1:{}", config.daemon.client_port),
-                config.primary_model_stem().unwrap_or_default(),
-                keyed
-                    .then(crate::client_tokens::self_credential)
-                    .flatten()
-                    .map(str::to_string),
-            )
-            .await;
+            // (`watched/worker.rs`). Boot resolved it once
+            // (`ocr_install::register_recipe_extractors`), shared with recipe PDFs.
+            if let Some(ctx) = ocr_ctx {
+                manager.set_ocr_ctx(ctx).await;
+            }
             // Living trigger: workflows attached to a watched folder
             // (`run_on_changes`) run on the daemon when a sweep changes files.
             // Routed back through the daemon's own loopback so `model:`/`embed:`

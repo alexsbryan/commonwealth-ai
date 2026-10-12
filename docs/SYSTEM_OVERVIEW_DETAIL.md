@@ -3932,8 +3932,8 @@ had no key that could say otherwise.
   factory sits in `sovereign-inference` because it alone can name both
   `EmbeddedLlamaCpp` (its own) and `oicp-client`'s `RemoteApiProvider` (a
   dependency since the `remote.rs` extraction). No new dependency edges.
-- **Closed set as an enum, open set as a registry** (§2, §4). `llama` and
-  `remote` are typed variants; anything else is `EngineKind::Custom(name)`
+- **Closed set as an enum, open set as a registry** (§2, §4). `llama`,
+  `remote` and `llama-server` are typed variants; anything else is `EngineKind::Custom(name)`
   resolved through `register_engine`. Rust has no safe cross-crate ABI for
   `dyn Trait`, so an in-process third-party engine is always compiled into a
   binary the operator controls — registration in `main()` is the mechanism.
@@ -3967,6 +3967,52 @@ had no key that could say otherwise.
   constructor was missing). `embed_endpoint` without `embed_model_id` is
   refused, not guessed. Operator-facing walkthrough:
   [`docs/USE_YOUR_OWN_INFERENCE_SERVER.md`](USE_YOUR_OWN_INFERENCE_SERVER.md).
+- **`[engine] embed_inputs` (2026-10-09)** says who prepares the remote
+  embed half's inputs: the family's query instruction and its EOS.
+  - `server` (the default) sends text as given, which is right for a daemon,
+    whose embed slot prepares.
+  - `client` resolves `EmbedQuirks::for_model_stem` on the embed model id
+    (`engine_factory::remote_embed_input_prep`, which refuses an unplaced
+    id). `RemoteApiProvider::with_input_prep` then applies `prepare_document`
+    on `embed`/`embed_batch` and `prepare_query` on `embed_query`.
+  - Found by the engine-swap probe (`bench/lanes/engine-swap/embed_parity.py`):
+    unprepared query vectors sat at cosine 0.84 from the daemon's.
+- **Three more remote-engine translations (2026-10-09)**, for hosts that
+  render the model's own template. The engine-swap check found each one
+  against llama-server. With all three, R1b matched the daemon's own engine
+  on every lane the check reaches.
+  - **Forced choice** (`oicp-client/src/forced_choice.rs`). The native answer
+    is asked for first. If it is not a label-to-probability map, the call is
+    answered from one token's top-20 logprobs, renormalised over the labels,
+    and that route is remembered per provider. With no label in the top 20,
+    the answer is empty, which reads as no answer.
+  - **Zero think budget** (`chat_wire::write_thinking`). It also writes
+    `enable_thinking: false` unless the caller set the flag. Since
+    2026-10-11 every templated request carries the flag the engine renders
+    it with (`chat_wire::template_thinking`), and a positive budget also
+    goes as llama-server's `reasoning_budget_tokens`.
+  - **Slot aliases** (`outbound::Hosted::alias_target`, through
+    `venue::resolution_alias_keys`). A hosted engine sends `primary`/`fast`
+    as the model ids it holds.
+- **`[engine] grammar` (2026-10-10)** says how the remote host takes a decode
+  constraint: a Lark grammar, or the URL and evidence-id allow-lists. It is
+  written in one place, `chat_wire::write_constraints`.
+  - `sovereign` (the default) sends the `lark_grammar`, `url_allowlist` and
+    `evidence_id_allowlist` extension fields, which a daemon's engine
+    enforces and any other server ignores.
+  - `llguidance` is for a llama-server built with `LLAMA_LLGUIDANCE`. It
+    sends one `grammar`: the Lark grammar with its `%llguidance` header, or
+    the allow-lists rendered by `sovereign_contracts::decode_allowlist::llguidance_lark`.
+    The tries in `url_constraint.rs` and `evidence_id_constraint.rs` read
+    their markers and terminators from that same module, and
+    `decode_allowlist_parity_tests` holds the grammar to the tries' verdicts.
+  - What one grammar cannot carry is refused: a Lark grammar together with
+    an allow-list, an allow-list beside tools (llama-server refuses a grammar
+    there), and a grammar beside `response_format`. A Lark grammar beside
+    tools is dropped and traced, because llama-server's own tool-call grammar
+    stands in for the envelope grammar.
+  - Measured through a daemon on the remote engine (4B, 5 runs per cell):
+    0 of 15 URLs outside the list, against 11 of 12 unconstrained.
 - **Proven live 2026-08-30**: a second daemon on `kind = "remote"` with
   deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
   (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file
@@ -5561,7 +5607,17 @@ latency window, `Unresponsive` after 3 failures), a `FaultDetector` and a
 
 Multi-process supervision on the path that IS live is
 `sovereign-compute/src/supervisor.rs` — `SupervisorState`, `graceful_kill`
-(SIGTERM, grace, SIGKILL) and health polling. It has NO departure countdown and
+(SIGTERM, `SupervisorConfig::terminate_grace`, SIGKILL) and health polling.
+Each child leads its own process group and gets `PR_SET_PDEATHSIG(SIGKILL)`
+from the supervisor's `pre_exec`, not from its own code, and is forked by one
+`child-spawner` thread that lives as long as the process: the signal follows
+the forking THREAD, so a child forked by a tokio worker that later retired was
+told its parent died while it lived, and nothing when it did. SIGKILL because
+the signal can arrive once per reparenting as a multi-threaded parent exits,
+and llama-server deadlocks on a second SIGTERM; a child of ours that wants
+SIGTERM sets it after exec (`child_main`). Terminate signals the group, and
+every generation ends with a group SIGKILL, so nothing a child forked outlives
+it (`supervisor_lifetime_tests.rs`). It has NO departure countdown and
 NO fault detector, so those two parts of FE-139 are unimplemented rather than
 implemented-elsewhere; `quality/conformance-specs.toml` FE-139 carries the
 statement and the requirement is write-work again.
@@ -6035,12 +6091,14 @@ wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing
 **Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
 `cmnwlth/crates/commonwealth-media/src/reach.rs`, the route and daemon
 glue in `sovereign-daemon/src/media_reach.rs`, 2026-09-11). The holder declares
-`[iroh] media_origin = "127.0.0.1:8096"` — `svrn mesh media offer [<origin>]
-[--admit <member>...]` writes it (and `media_allow`; with no origin it probes
-127.0.0.1:8096 then 8920; `mesh media admit <member>...` narrows the stored
-origin) and runs `daemon reload`,
-which swaps the live `MediaRoute` (`sovereign-mesh/src/media_route.rs`) with no
-restart; a value that does not parse refuses the boot or the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
+`[media] origin = "127.0.0.1:8096"` in cw-rails' rails.toml (it was svrn's
+`[iroh] media_origin` until cw-rails became the endpoint; the verbs moved
+2026-10-04) — `svrn mesh media offer [<origin>] [--admit <member>...]` writes
+it (and `allow`; with no origin it probes 127.0.0.1:8096 then 8920; `mesh
+media admit <member>...` narrows the stored origin), checks the file with
+cw-rails' own `Config::load`, and calls `POST /v1/mesh/media/reload`, which
+re-stands the origin in the registry with no restart; a value that does not
+parse is refused before it is kept, and by the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
 `svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
 transport's cached bridge for `(peer, cwth/media/0)`, minted once and retargeted
 in place when the peer's dial info moves, so a player can hold the URL. The

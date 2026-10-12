@@ -106,14 +106,50 @@ one server happens to serve both, set `embed_model_id` alone and leave
 Two things to know about embeddings specifically. **Changing the embedding model
 invalidates the corpora you built with the old one** — vectors from two different
 models aren't comparable, and Sovereign records which model produced each one so
-it can refuse to mix them. If you switch, re-ingest. And **instruction-aware
-embedding models lose a little quality here**: models like Qwen3-Embedding want a
-different prefix on the query side than the document side, and Sovereign doesn't
-know which prefix your model expects. It sends neither rather than inventing one.
-That's worth 1–5% on retrieval; a model without that asymmetry loses nothing.
+it can refuse to mix them. If you switch, re-ingest.
+
+**Instruction-aware embedding models need their input prepared.** Models like
+Qwen3-Embedding were trained with an instruction prefix on queries and an
+end-of-text token on every input. A Sovereign daemon adds both itself. A plain
+server like llama-server or vLLM sends your text to the model as it arrives, so
+tell Sovereign to prepare it:
+
+```toml
+embed_inputs = "client"
+```
+
+With this setting, inputs are prepared through the same table the daemon's own
+embed slot uses. The embed model id must name a family Sovereign knows (today
+that is Qwen3-Embedding), and an id it cannot place is refused at startup
+rather than guessed.
+
+Leave the setting out (the same as `"server"`) when the embedding server is
+a Sovereign daemon, or when your model has no instruction or EOS convention.
+
+Getting this wrong is not a small loss when the corpus was built by a daemon.
+Measured on 2026-10-09 against llama-server, unprepared Qwen3-Embedding query
+vectors landed as low as cosine 0.84 from the daemon's vectors for the same
+queries. Prepared, they were 0.9996 or closer.
 
 You can skip all of this if you don't use corpora, memory, or anything that
 retrieves — plain chat needs no embedding model.
+
+**Grammars and citation allow-lists need a declared host.** Some requests
+constrain decoding: a Lark grammar for a structured answer, or allow-lists
+that keep cited URLs and evidence handles to the ones a source actually
+gave. A Sovereign daemon enforces these in its own engine. A plain
+llama-server ignores the fields, so the answer comes back unconstrained. If
+your llama-server was built with llguidance (`-DLLAMA_LLGUIDANCE=ON`), say
+so, and each constraint is sent as a grammar it enforces:
+
+```toml
+grammar = "llguidance"
+```
+
+Do not set this for a server built without llguidance: it aborts on such a
+grammar. A request whose constraint cannot be expressed as one grammar (an
+allow-list on a request that also offers tools, for example) is refused, not
+answered unconstrained.
 
 ## A hosted provider
 

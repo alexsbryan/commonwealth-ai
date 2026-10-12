@@ -187,6 +187,8 @@ windows-vulkan = ["llama-cpp-4/vulkan"]
 windows-cuda = ["llama-cpp-4/cuda"]
 
 [dev-dependencies]
+# `engine_capture`'s test records through `double::TestProvider`.
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # `llguidance_parity`'s F3 fixture proves the plan schema compiles under the
 # real engine; the schema moved to `sovereign-contracts::planner_schema`
 # 2026-09-21, so the dev-dep on the runtime hub is gone.

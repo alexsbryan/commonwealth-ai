@@ -307,7 +307,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
 /// serve's allowlisted targets, without `llama_cpp`, whose level
 /// [`tracing_filter`] decides; a host takes the whole filter from there.
 pub const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
-     sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,\
+     sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,llama_router=info,\
      engine_factory=info,serving_assembly=info,compute_child=info,rails_origins=info,transport=info";
 
 /// serve's log filter when `RUST_LOG` is unset, and the one a distribution
@@ -601,9 +601,15 @@ async fn chat_completions(
 }
 
 /// A shed is backpressure and carries `Retry-After` (serving-host's one
-/// shed renderer); any other failure is a 503 naming what failed.
+/// shed renderer); a prompt over the context window is llama-server's 400;
+/// any other failure is a 503 naming what failed.
 fn chat_refusal(err: LocalInferenceError, what: &'static str) -> Response {
     match err {
+        LocalInferenceError::ContextExceeded {
+            prompt_tokens,
+            n_ctx,
+        } => sovereign_contracts::openai_http::context_exceeded_response(prompt_tokens, n_ctx)
+            .into_response(),
         LocalInferenceError::Shed {
             position,
             predicted_wait_ms,

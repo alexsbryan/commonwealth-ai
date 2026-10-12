@@ -3,6 +3,7 @@ pub mod capacity;
 pub mod cpu_compat;
 pub mod embedded;
 /// The contracts an engine must satisfy, as runnable checks.
+pub mod engine_capture;
 pub mod engine_conformance;
 /// Which inference engine serves this node — selection + construction.
 pub mod engine_factory;
@@ -35,6 +36,13 @@ pub mod setup_planner;
 pub mod smoketest;
 pub mod url_constraint;
 pub mod vocab_cache;
+
+#[cfg(test)]
+mod decode_allowlist_parity_tests;
+#[cfg(test)]
+mod llg_parity_corpus_tests;
+#[cfg(test)]
+mod llg_whole_string;
 
 pub use gguf_validator::{validate_gguf, GgufExpectation, GgufValidationError};
 

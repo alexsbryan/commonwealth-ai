@@ -46,6 +46,7 @@ mod corpus_ingest;
 mod corpus_install;
 mod corpus_queue;
 mod corpus_sync;
+mod engine_replay;
 mod enrichment_status;
 mod guest_grant;
 mod knowledge;
@@ -83,6 +84,7 @@ pub use corpus_queue::{
     NextUnitRequest, NextUnitResponse,
 };
 pub use corpus_sync::{index_serve, index_transfer, model_transfer};
+pub use engine_replay::engine_replay;
 pub use enrichment_status::{enrichment_status, EnrichmentStatusResponse};
 pub use knowledge::{knowledge_search, latency_probe};
 pub use mesh_admin::{

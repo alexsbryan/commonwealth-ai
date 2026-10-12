@@ -39,8 +39,8 @@
 # WHAT THIS STAND-IN CANNOT SHOW, said rather than defaulted (ARCH §6):
 #   - the iroh half of the stranger bar (clause (b), a non-member key dialing
 #     `cwth/http/0`) has no CLI surface on this host — `svrn mesh` has no dial
-#     verb — so it is read from the file that already decides who may dial
-#     what, sovereign-mesh/tests/main/iroh_dialer_admission_e2e.rs;
+#     verb — so it is read from the tests of what decides who may dial what,
+#     cw-rails' origin registry (commonwealth-media/src/origins_tests.rs);
 #   - clauses (c) and (d) of tg-rpc-port-not-on-lan need two machines and a
 #     resident big model and read COULD-NOT-JUDGE here, owed to the queue's
 #     HUMAN-tg-rpc-two-machines row;
@@ -113,9 +113,15 @@ tg_up() {
   for n in "${TG_MEMBERS[@]}" "$TG_JOINER"; do tg_mkcfg "$n"; done
   mkdir -p "$D/$TG_STRANGER"
   [ "$BACKEND" = podman ] && { containers_up || return 3; }
+  # A node is a cw-rails and the daemon that dials it (pb-mesh-exit-
+  # transport): cw-rails first, and the founder's founds the mesh. The
+  # joiner's cw-rails runs solo until the walk joins it.
+  for n in "${TG_MEMBERS[@]}" "$TG_JOINER"; do start_rails "$n"; done
+  wait_rails_up "${TG_MEMBERS[@]}" "$TG_JOINER" || return 3
   for n in "${TG_MEMBERS[@]}" "$TG_JOINER"; do room_start_daemon "$n"; done
   wait_all_up "${TG_MEMBERS[@]}" "$TG_JOINER" || return 3
   wait_homed "${TG_MEMBERS[@]}" "$TG_JOINER" || return 3
+  found_mesh || return 3
   for n in "${TG_MEMBERS[@]:1}"; do join_one "$n" && wait_online "${MESHNAME[$n]}" || return 3; done
   sleep 12
   members_from_mesh "${#TG_MEMBERS[@]}" || return 3
@@ -124,7 +130,7 @@ tg_up() {
 
 tg_down() {
   local n
-  for n in "${TG_MEMBERS[@]}" "$TG_JOINER"; do node_kill "$n" "$D/$n/pid"; done
+  for n in "${TG_MEMBERS[@]}" "$TG_JOINER"; do node_kill "$n" "$D/$n/pid"; node_kill "$n" "$D/$n/rails.pid"; done
   sleep 1
   [ "$BACKEND" = podman ] && containers_down
   return 0
@@ -168,11 +174,13 @@ except Exception: print(''); raise SystemExit
 print(sum(1 for x in m if x.get('status')=='online'))" 2>/dev/null)
   # Clause (d): a fresh node joins over the same listener.
   join_one "$TG_JOINER" > /dev/null 2>&1 && wait_online "${MESHNAME[$TG_JOINER]}" > /dev/null 2>&1 && joined=1
+  # curl writes no body file when the connection itself fails; that is a
+  # reading (no answer), never a reason to lose the codes measured above.
   python3 -c "
-import json, sys
+import json, os, sys
 k = ['bind','reach','code','before','after','online_before','online_after','joined']
 d = dict(zip(k, sys.argv[1:9]))
-d['body'] = open(sys.argv[9]).read()[:400] if len(sys.argv) > 9 else ''
+d['body'] = open(sys.argv[9]).read()[:400] if os.path.exists(sys.argv[9]) else None
 json.dump(d, sys.stdout)" \
     "$bind" "$reach" "$code" "$before" "$after" "$online_before" "$online_after" "$joined" \
     "$D/stranger-quiesce.body" > "$D/stranger.json"
@@ -233,19 +241,22 @@ def said(clauses):
 # ── tg-stranger-refused-9742 ────────────────────────────────────────────────
 BAR = "tg-stranger-refused-9742"
 st = artifact("stranger.json")
-# (b) the iroh half. `sovereign-mesh/tests/main/iroh_dialer_admission_e2e.rs`
-# is where "who may dial what" is already decided, one test per ALPN. Clause
-# (b) is a test in THAT file that dials the INTERNAL alpn (the bare `ALPN`
-# const, not CLIENT_/RPC_/MEDIA_/OFFER_/APP_) and reads a refusal.
-adm_rel = "sovereign/crates/sovereign-mesh/tests/main/iroh_dialer_admission_e2e.rs"
+# (b) the iroh half. "Who may dial what" is decided by cw-rails' origin
+# registry, `OriginRegistry::forward_for(alpn, who, dialer)`, a non-member
+# being `who = None` (the daemon's iroh_dialer_admission_e2e.rs, which this
+# read until cw-rails became the endpoint, went in e007f0edd). Clause (b) is
+# a test there that asks the INTERNAL alpn (the bare `ALPN` const, not
+# CLIENT_/RPC_/MEDIA_/OFFER_/APP_) as a non-member and asserts a refusal.
+adm_rel = "cmnwlth/crates/commonwealth-media/src/origins_tests.rs"
 adm = src(adm_rel)
 alpn_tests, internal_alpn_tests = [], []
 if adm is not None:
-    for fn in re.finditer(r"async fn (\w+)\(\)\s*\{", adm):
+    for fn in re.finditer(r"fn (\w+)\(\)\s*\{", adm):
         name, start = fn.group(1), fn.end()
         body = adm[start:start + 1500]
         alpn_tests.append(name)
-        if re.search(r"(?<![_A-Z])ALPN\b", body) and re.search(r"is_err|unwrap_err|401|403|refus", body):
+        if re.search(r"forward_for\(\s*ALPN,\s*None", body) and re.search(
+                r"!\s*routes\[[^\]]*\]\.admitted|is_none\(\)|is_err|unwrap_err|401|403|refus", body):
             internal_alpn_tests.append(name)
 # (e) the exempt set, pinned by a test: ONE slice literal in the daemon crate
 # whose `/internal/*` members are EXACTLY join and gossip, named by an
@@ -273,9 +284,23 @@ if "stranger" not in legs.split(",") or st is None:
     row(BAR, None, "the stranger leg did not run: no bring-up, nothing measured",
         adm_file=adm_rel, internal_alpn_tests=internal_alpn_tests)
 elif st["reach"] in ("000", ""):
+    # Since cw-rails forwards members over loopback the daemon binds its
+    # internal API to loopback whatever `internal_bind` says, and logs it.
+    # Then the closed port IS the product's posture: named, still not
+    # scored, because clause (a) is worded as a 401 to a request that now
+    # never reaches HTTP — the bar's wording to change, not this judge's.
+    try:
+        a_log = open(os.path.join(d, "a", "daemon.err"), errors="replace").read()
+    except OSError:
+        a_log = ""
+    loopback_only = "internal API binds loopback" in a_log
+    why = ("a's daemon binds its internal API to loopback whatever internal_bind says "
+           f"(configured {st['bind']}; daemon.err: 'internal API binds loopback'), so a "
+           "non-member's plain-IP request is refused below HTTP and clause (a)'s 401 has "
+           "nothing to answer" if loopback_only else
+           "that is the instrument's own posture, not a refusal by the product")
     row(BAR, None,
-        f"the stranger could not reach {st['bind']}:9742 at all (curl wrote '{st['reach']}') — "
-        "that is the instrument's own posture, not a refusal by the product",
+        f"the stranger could not reach {st['bind']}:9742 at all (curl wrote '{st['reach']}') — {why}",
         **st)
 else:
     clauses = {

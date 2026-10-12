@@ -1,0 +1,4 @@
+url          L, masked     cited  38  outside the allow-list   2  e.g. ['https://plato.stanford.edu/entries/k', 'https://plato.stanford.edu/entries']
+url          llama-server  cited  15  outside the allow-list  14  e.g. ['https://www.kantandcriticalrealism.com/categorical-imperative/', 'https://www.oxfordreference.com/view/10.1093/acref/9780195305631.001.0001/acref-9780195305631-e-124', 'https://www.kantandcriticalrealism.com/categorical-imperative/']
+evidence-id  L, masked     cited  13  outside the allow-list   0  e.g. []
+evidence-id  llama-server  cited  18  outside the allow-list   0  e.g. []

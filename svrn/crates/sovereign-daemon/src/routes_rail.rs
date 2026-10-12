@@ -497,7 +497,15 @@ pub async fn append(
     // claimed none lands HERE rather than as the host's words (ROOT_CAUSE_FIXES
     // C1; operator decision 2026-09-23: refused by name). `Seal` is exempt:
     // delivery, not words — there is nothing it could be said on behalf of.
-    if guest.is_some() && on_behalf_of.is_none() && !matches!(act, RailAct::Seal) {
+    // A member's own page (`svrn ring show`) holds its grant as the member
+    // and writes in the member's own name, so the rule is a guest's alone.
+    let held_by_guest =
+        guest.is_some_and(|g| g.grant.holder == sovereign_grants::GrantHolder::Guest);
+    if guest.is_some() && !held_by_guest {
+        tracing::debug!(target: "rail:door", ns = %namespace,
+                        "member page append — the member's own words, no name to claim");
+    }
+    if held_by_guest && on_behalf_of.is_none() && !matches!(act, RailAct::Seal) {
         tracing::warn!(
             target: "rail:door",
             ns = %namespace,

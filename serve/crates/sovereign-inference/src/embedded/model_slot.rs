@@ -376,7 +376,7 @@ impl SlotContext {
 /// to `'static`. The caller MUST keep `model` alive (in practice via
 /// the `_model: Arc<LlamaModel>` field on `SlotContext`) for the
 /// lifetime of the returned context.
-fn build_target_ctx_for_slot(
+pub(crate) fn build_target_ctx_for_slot(
     model: &Arc<LlamaModel>,
     params: &MtpRebuildParams,
     model_id: &str,
@@ -652,52 +652,6 @@ pub(crate) fn forced_choice_candidates(request: &CompletionRequest) -> Option<Ve
     request.forced_choice_candidates()
 }
 
-/// Map a caller-declared stable-prefix byte length (over the RAW user
-/// prompt, `CompletionRequest.stable_prefix_len`) to a conservative
-/// token boundary in the rendered prompt's token stream, for the
-/// pinned-prefix cache's directed plan. `None` (→ sighting-based plan)
-/// when the declaration is absent, malformed, or unlocatable.
-///
-/// Method: locate the declared prefix substring inside the rendered
-/// prompt (chat templates concatenate message content verbatim),
-/// tokenize the rendered text UP TO that boundary, and take its LCP
-/// with the full token stream, backing off 2 tokens. The back-off
-/// matters: BPE merges at the cut can differ from the full stream's
-/// (the boundary token may fuse with suffix bytes), and LCP+back-off
-/// makes the pin a guaranteed common token prefix of every sibling
-/// sharing the declared bytes. Cost: one extra tokenize of the prefix
-/// per request. Failures degrade to the undirected plan — full
-/// prefill at worst, never wrong output.
-fn directed_pin_tokens(
-    model: &LlamaModel,
-    request: &CompletionRequest,
-    full_prompt: &str,
-    tokens: &[crate::llama::cpp::token::LlamaToken],
-) -> Option<usize> {
-    let n = request.stable_prefix_len?;
-    // `.get` enforces both the range and the char-boundary contract.
-    let raw_prefix = request.prompt.get(..n)?;
-    if raw_prefix.is_empty() {
-        return None;
-    }
-    let start = full_prompt.find(raw_prefix)?;
-    let rendered_prefix = &full_prompt[..start + raw_prefix.len()];
-    let prefix_tokens = model.str_to_token(rendered_prefix, AddBos::Always).ok()?;
-    let lcp = prefix_tokens
-        .iter()
-        .zip(tokens.iter())
-        .take_while(|(a, b)| a == b)
-        .count();
-    // Same margin as the undirected path, from the same constant, so the
-    // two planners cannot drift apart on how much tail a restore needs.
-    // Kept as a plain subtraction rather than `pin_with_tail` on purpose:
-    // this path is measured and working (4,881 tokens restored in 45 ms),
-    // and widening its pin would rotate `directed_key` for every existing
-    // judge family to buy two tokens.
-    let pin = lcp.saturating_sub(super::prefix_state::PIN_TAIL_MARGIN);
-    (pin > 0).then_some(pin)
-}
-
 /// Read the model's next-token distribution over `candidates` in one
 /// forward pass (prompt already decoded). For each candidate we sum the
 /// mass over its single-token encodings — bare and space-prefixed, to
@@ -761,13 +715,14 @@ pub(crate) fn forced_choice_probs(
 
 /// Synthesise `FinishReason` from observed token counts. Real source
 /// of truth is the decode loop's exit branch (EOS vs `n_generated >=
-/// max_tokens`); this helper is the fallback for variants that haven't
-/// been migrated to return the typed reason directly (MTP +
-/// generate_sync_batched as of 2026-05-25). The only false positive
-/// is the vanishing edge where EOS lands at exactly the budget
-/// boundary. Single-token path uses its real exit-branch signal
-/// instead — see `GenerationOutcome` construction at the end of the
-/// single-token loop in `generate_sync`.
+/// max_tokens`); this helper is the fallback for the one variant that
+/// still returns none, `generate_sync_batched` (FastShort). It counts
+/// against `request.max_tokens`, so a reply cut short by a budget
+/// `clamp_max_tokens` lowered to the context's headroom reads as `Stop`
+/// here; the MTP path returned that wrong answer at the context edge
+/// until it was given its loop's own reason. FastShort admits only
+/// prompts under `FAST_SHORT_MAX_INPUT_CHARS`, far from that edge. The other false positive is
+/// EOS landing exactly on the budget.
 pub(crate) fn finish_reason_from_counts(
     request: &CompletionRequest,
     completion_tokens: usize,
@@ -794,6 +749,11 @@ pub(crate) use sovereign_time::unix_millis as now_millis;
 /// (~60-160s observed worst-case under heavy grammar) finishes
 /// with margin, short enough that a runaway mask-state is killed
 /// before it pins the daemon for ~30 min and starves the mesh.
+/// (Measured 2026-10-07, replay of the agent-coding A0 corpus against
+/// the conversation path with thinking on: legitimate turns DO run
+/// past 300s — 18/76 were killed at ~3600-4950 generated tokens —
+/// so thinking-on serving needs the env raised; the OpenAI-agent-coding
+/// arms run with SOVEREIGN_INFERENCE_TIMEOUT_SECS=1200.)
 /// Parse `SOVEREIGN_TENSOR_BUFT_OVERRIDE` into llama.cpp `-ot` overrides.
 ///
 /// Syntax is llama.cpp's own: `<regex>=<buffer-type>[,<regex>=<buffer-type>...]`.
@@ -2518,13 +2478,11 @@ impl ModelSlot {
             // `SOVEREIGN_MTP_QUARANTINE_DISABLE=1` to opt out
             // (debugging MTP-stability work).
             match Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks) {
-                Ok((text, prompt_tokens, completion_tokens)) => {
-                    // MTP loop hasn't been threaded for typed FinishReason
-                    // yet — synthesise via the counts helper. Migrating
-                    // MTP would require touching the draft+verify loop's
-                    // exit branches; deferred until the verify-side
-                    // acceptance-rate work settles.
-                    let finish_reason = finish_reason_from_counts(request, completion_tokens);
+                Ok((text, prompt_tokens, completion_tokens, finish_reason)) => {
+                    // The loop's own exit branch, not a count against
+                    // `request.max_tokens`: that count missed the budget
+                    // `clamp_max_tokens` cut to the context's headroom, so a
+                    // reply truncated at the context edge read as `stop`.
                     let outcome = GenerationOutcome {
                         text,
                         prompt_tokens,
@@ -2751,11 +2709,10 @@ impl ModelSlot {
                 quirks,
             );
         }
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let (full_prompt, turn_opener) =
+            format_prompt(model, model_id, request, quirks)?.into_parts();
 
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
@@ -2867,7 +2824,9 @@ impl ModelSlot {
         // generated per turn for ~80-byte envelopes — every token
         // past the close `}` was wasted on a grammar mask cycling
         // through whitespace / preferred-but-masked tokens.
-        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        // Tools that ride the daemon's Hermes envelope; a conversation's
+        // tools are the template's own format and run to end-of-turn.
+        let tools_present = super::chat_template::hermes_tool_envelope(request);
         // Shape-B (balanced JSON envelope) stop — state machine and
         // BOTH gates (grammar-locked, think-suspend) live in
         // `gates::ToolStopTracker`; see its doc for the LaTeX
@@ -2927,16 +2886,20 @@ impl ModelSlot {
         let mut jump_fwd_max: usize = 0;
         let mut jump_fwd_bytes_n: usize = 0;
 
-        // Real finish_reason tracking — replaces the chars-per-token
-        // heuristic the runtime used to do post-hoc. Default to Length
-        // (the `while n_generated < max_tokens` predicate is the exit
-        // condition when the loop body doesn't break early). EOS path
-        // overwrites with Stop. Set this AFTER each potential exit
-        // branch — leaving it Length on a clean budget exhaustion is
-        // the correct answer.
-        let mut exit_reason: FinishReason = FinishReason::Length;
-
-        while n_generated < max_tokens {
+        // The finish reason is what the loop breaks with: every early stop
+        // (EOS, grammar accept, the `</tool_call>` marker, a balanced JSON
+        // envelope, a jump-forward stop) breaks with `Stop`, and only the
+        // budget check breaks with `Length`. It used to be a variable
+        // defaulted to `Length` that only the EOS branch overwrote, so a
+        // tool turn that stopped on its marker reported `length` — hidden
+        // while the call parsed (the adapter reports `tool_calls`), and
+        // sent to the client when it did not (opencode on Qwen3.8-27B,
+        // 2026-10-06: 26 tokens, "length", session ended). A bare `break;`
+        // here no longer compiles, so a new exit cannot forget its reason.
+        let exit_reason = loop {
+            if n_generated >= max_tokens {
+                break FinishReason::Length;
+            }
             if Instant::now() > deadline {
                 let elapsed = started_at.elapsed().as_secs();
                 tracing::warn!(
@@ -2985,8 +2948,7 @@ impl ModelSlot {
             sampler.accept(token);
 
             if model.is_eog_token(token) {
-                exit_reason = FinishReason::Stop;
-                break;
+                break FinishReason::Stop;
             }
 
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
@@ -3054,7 +3016,7 @@ impl ModelSlot {
                         "inference: stopping on llguidance grammar accept"
                     );
                     n_generated += 1;
-                    break;
+                    break FinishReason::Stop;
                 }
                 if tools_present {
                     if tail.contains("</tool_call>") {
@@ -3065,7 +3027,7 @@ impl ModelSlot {
                             "inference: stopping on </tool_call> marker"
                         );
                         n_generated += 1;
-                        break;
+                        break FinishReason::Stop;
                     }
                     if tool_stop.observe(&piece, in_think) {
                         tracing::info!(
@@ -3074,7 +3036,7 @@ impl ModelSlot {
                             "inference: stopping on balanced JSON envelope"
                         );
                         n_generated += 1;
-                        break;
+                        break FinishReason::Stop;
                     }
                 }
             }
@@ -3266,13 +3228,14 @@ impl ModelSlot {
             }
 
             if forced_hit_break {
-                break;
+                break FinishReason::Stop;
             }
 
             // Budget forcing: inject </think> if the think block runs too long.
             if in_think
                 && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
                 && !think_budget_fired
+                && super::chat_template::think_budget_applies(request)
             {
                 think_budget_fired = true;
                 let force = "\n</think>\n\n";
@@ -3304,7 +3267,7 @@ impl ModelSlot {
                 }
                 in_think = false;
             }
-        }
+        };
 
         // Intentionally do NOT clear KV here. The prefix-cache
         // machinery at the top of generate_sync (cached_tokens +
@@ -3403,7 +3366,8 @@ impl ModelSlot {
         );
 
         let outcome = GenerationOutcome {
-            text: output,
+            // The turn starts where its prompt left off (`Prompt::turn_opener`).
+            text: turn_opener + &output,
             prompt_tokens: tokens.len(),
             completion_tokens: n_generated,
             finish_reason: exit_reason,
@@ -3455,7 +3419,7 @@ impl ModelSlot {
         slot_ctx: &mut SlotContext,
         request: &CompletionRequest,
         quirks: &ModelQuirks,
-    ) -> Result<(String, usize, usize)> {
+    ) -> Result<(String, usize, usize, FinishReason)> {
         Self::generate_sync_mtp_impl(model, model_id, slot_ctx, request, quirks, None, None)
     }
 
@@ -3500,7 +3464,7 @@ impl ModelSlot {
         quirks: &ModelQuirks,
         sink: Option<&StreamSink<'_>>,
         cancel: Option<&tokio_util::sync::CancellationToken>,
-    ) -> Result<(String, usize, usize)> {
+    ) -> Result<(String, usize, usize, FinishReason)> {
         // **Build the MTP session for THIS request.** A session must
         // never outlive the request that made it: KV cache clear (below)
         // resets the contexts' token state but does NOT touch the
@@ -3563,10 +3527,9 @@ impl ModelSlot {
         session.draft_context_mut().clear_kv_cache(); // kv-phase: RequestStartReset
         cached_tokens.clear();
 
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        let (full_prompt, turn_opener) =
+            format_prompt(model, model_id, request, quirks)?.into_parts();
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
         if tokens.is_empty() {
             return Err(Error::Inference("MTP: empty prompt".into()));
         }
@@ -3591,11 +3554,11 @@ impl ModelSlot {
         //
         //  - `session.begin(0, &tokens)` still receives the FULL
         //    token list, so per-seq position bookkeeping is unchanged.
-        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
-            Some(pin) => prefix_state.plan_directed(&tokens, pin),
-            None => prefix_state.plan(&tokens),
-        };
+        let (plan, repin) =
+            super::prefix_pin::plan_for(model, request, &full_prompt, &tokens, false, prefix_state);
         let mut prefix_base: usize = 0;
+        // Tokens decoded into a pin this call are evaluated, not reused.
+        let mut learned_pin = false;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {
                 session.target_context_mut().clear_kv_cache(); // kv-phase: PrefixStateRestore
@@ -3674,6 +3637,7 @@ impl ModelSlot {
                         );
                     }
                     prefix_base = pin_len;
+                    learned_pin = true;
                 } else {
                     tracing::warn!(
                         target: "prefix_state",
@@ -3763,35 +3727,47 @@ impl ModelSlot {
         // default. `the_mtp_target_context_is_still_initialised_unmasked` is
         // the tripwire for the vendored precondition.
         let tail_logits_only = mtp_prefill_tail_logits_only();
-        let last_idx = tokens.len().saturating_sub(1);
-        for (i, &tok) in tokens[prefix_base..].iter().enumerate() {
-            let pos = prefix_base + i;
-            let want_logits = !tail_logits_only || pos == last_idx;
-            prefill
-                .add(tok, pos as i32, &[0], want_logits)
-                .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
+        // A re-pin splits the prefill at its `pin_len`: the state is saved
+        // there, then the generation prompt's tail is decoded.
+        let cut = repin.map_or(prefix_base, |r| r.pin_len);
+        for (start, end) in [(prefix_base, cut), (cut, tokens.len())] {
+            if start == end {
+                continue;
+            }
+            prefill.clear();
+            for (pos, &tok) in tokens.iter().enumerate().take(end).skip(start) {
+                let want_logits = !tail_logits_only || pos + 1 == end;
+                prefill
+                    .add(tok, pos as i32, &[0], want_logits)
+                    .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
+            }
+            session
+                .target_context_mut()
+                .decode(&mut prefill)
+                .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
+            super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
+            // `process(&prefill)` after every target decode is what injects
+            // target's pre-norm h into the draft side; skipping it makes the
+            // draft run uncalibrated and acceptance collapses.
+            session
+                .process(&prefill)
+                .map_err(|e| Error::Inference(format!("MTP process(prefill) failed: {e:?}")))?;
+            super::ffi_trace::record(super::ffi_trace::FfiCall::SessionProcess);
+            if let Some(r) = repin.filter(|_| end == cut) {
+                let rows = if tail_logits_only { 1 } else { end - start };
+                let ctx = session.target_context();
+                super::prefix_pin::repin(ctx, prefix_state, r, &tokens, rows, model_id, "MTP");
+            }
         }
-        session
-            .target_context_mut()
-            .decode(&mut prefill)
-            .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
-        super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
-
-        // `process(&prefill)` after every target decode is what injects
-        // target's pre-norm h into the draft side. `begin(seq_id,
-        // &tokens)` then resets per-seq pending-h state for THIS
-        // request (the session itself persists across requests). Both
-        // calls are load-bearing: skipping either makes the draft run
-        // uncalibrated and acceptance collapses.
-        session
-            .process(&prefill)
-            .map_err(|e| Error::Inference(format!("MTP process(prefill) failed: {e:?}")))?;
-        super::ffi_trace::record(super::ffi_trace::FfiCall::SessionProcess);
+        // `begin(seq_id, &tokens)` resets per-seq pending-h state for THIS
+        // request (the session itself persists across requests); it is as
+        // load-bearing as `process`.
         session
             .begin(0, &tokens)
             .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::SessionBegin);
 
+        super::observe::prefill(tokens.len(), prefix_base, learned_pin);
         // Sample the first token from prefill's last logit position.
         // Use ConstrainedSampler::Explore — no JSON-schema mask is
         // installed on this path (dispatcher filtered structured
@@ -3817,6 +3793,19 @@ impl ModelSlot {
         // after the loop so the slot is freed rather than pinned.
         let mut consumer_stalled = false;
         let mut finish_reason = FinishReason::Length;
+        // The turn starts where its prompt left off (`Prompt::turn_opener`):
+        // sent first here, prepended to the sync text at the end. `output`
+        // stays the model's own text, which the loop's checks read.
+        if let Some(s) = sink.filter(|_| !turn_opener.is_empty()) {
+            match s.send_piece(&turn_opener) {
+                StreamSend::Sent => {}
+                StreamSend::ReceiverGone => receiver_gone = true,
+                StreamSend::DeadlineExceeded => {
+                    receiver_gone = true;
+                    consumer_stalled = true;
+                }
+            }
+        }
         if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
             output.push_str(&piece);
             if let Some(s) = sink {
@@ -4354,7 +4343,7 @@ impl ModelSlot {
         if let Some(s) = sink {
             if !receiver_gone {
                 s.send_finish(
-                    finish_reason,
+                    finish_reason.clone(),
                     StreamUsage {
                         prompt_tokens: tokens.len() as u32,
                         completion_tokens: n_generated as u32,
@@ -4364,7 +4353,12 @@ impl ModelSlot {
             }
         }
 
-        Ok((output, tokens.len(), n_generated))
+        Ok((
+            turn_opener + &output,
+            tokens.len(),
+            n_generated,
+            finish_reason,
+        ))
     }
 
     /// Multi-sequence batched autoregressive decode for short-call
@@ -4407,11 +4401,11 @@ impl ModelSlot {
         // production chat-template renderer (system + user + thinking
         // injection per `quirks`).
         let forensic = std::env::var("SOVEREIGN_FORENSIC").ok().as_deref() == Some("1");
-        let tokenized: Vec<Vec<LlamaToken>> = requests
+        let (tokenized, openers): (Vec<Vec<LlamaToken>>, Vec<String>) = requests
             .iter()
             .enumerate()
             .map(|(idx, r)| {
-                let prompt = format_prompt(model, model_id, r, quirks)?;
+                let (prompt, turn_opener) = format_prompt(model, model_id, r, quirks)?.into_parts();
                 let toks = model
                     .str_to_token(&prompt, AddBos::Always)
                     .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
@@ -4435,9 +4429,11 @@ impl ModelSlot {
                         "batched-prefill: request tokenized to zero tokens — will fail the batch"
                     );
                 }
-                Ok(toks)
+                Ok((toks, turn_opener))
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .unzip();
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
@@ -4601,7 +4597,9 @@ impl ModelSlot {
 
         let mut results = Vec::with_capacity(requests.len());
         for (seq, output) in outputs.into_iter().enumerate() {
-            results.push((output, tokenized[seq].len(), n_generated[seq]));
+            // Each turn starts where its own prompt left off.
+            let text = openers[seq].clone() + &output;
+            results.push((text, tokenized[seq].len(), n_generated[seq]));
         }
         Ok(results)
     }
@@ -4685,11 +4683,17 @@ impl ModelSlot {
         // 2026-07-12). Restore/Learn override the LCP machinery for
         // this request (full clear either way); Pass leaves the
         // pre-existing behavior byte-identical.
-        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
-            Some(pin) => prefix_state.plan_directed(&tokens, pin),
-            None => prefix_state.plan(&tokens),
-        };
+        let (plan, repin) = super::prefix_pin::plan_for(
+            model,
+            request,
+            &full_prompt,
+            &tokens,
+            prefix_cache_safe,
+            prefix_state,
+        );
         let mut state_prefix_ready = false;
+        // Tokens decoded into a pin this call are evaluated, not reused.
+        let mut learned_pin = false;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {
                 ctx.clear_kv_cache(); // kv-phase: PrefixStateRestore
@@ -4763,6 +4767,7 @@ impl ModelSlot {
                         );
                     }
                     lcp = pin_len;
+                    learned_pin = true;
                     state_prefix_ready = true;
                 } else {
                     tracing::warn!(
@@ -4801,11 +4806,20 @@ impl ModelSlot {
             }
         }
 
+        let tail_start = super::prefix_pin::prefill_to_pin(
+            ctx,
+            prefix_state,
+            repin,
+            tokens,
+            lcp,
+            n_batch,
+            model_id,
+        )?;
         let mut batch = LlamaBatch::new(n_batch, 1);
-        let tail = &tokens[lcp..];
+        let tail = &tokens[tail_start..];
         let last_idx = tail.len() - 1;
         for (j, &token) in tail.iter().enumerate() {
-            let absolute_pos = (lcp + j) as i32;
+            let absolute_pos = (tail_start + j) as i32;
             batch
                 .add(token, absolute_pos, &[0], j == last_idx)
                 .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
@@ -4817,7 +4831,7 @@ impl ModelSlot {
         tracing::info!(
             cache_hit_tokens = lcp,
             raw_lcp,
-            new_prefill_tokens = tail.len(),
+            new_prefill_tokens = tokens.len() - lcp,
             new_prompt_len = tokens.len(),
             cached_len_at_entry,
             batch_n_tokens = batch.n_tokens(),
@@ -4847,6 +4861,7 @@ impl ModelSlot {
         // each token), but we DON'T add generated tokens to
         // cached_tokens because they're not part of the *prompt* the
         // next request will share. Only the prompt is comparable.
+        super::observe::prefill(tokens.len(), lcp, learned_pin);
         *cached_tokens = tokens.to_vec();
         Ok(())
     }
@@ -4900,10 +4915,9 @@ impl ModelSlot {
             SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
         };
 
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        let (full_prompt, turn_opener) =
+            format_prompt(model, model_id, request, quirks)?.into_parts();
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
@@ -4942,6 +4956,7 @@ impl ModelSlot {
             cancel,
             prompt_len: prompt_tokens,
             max_tokens,
+            turn_opener: &turn_opener,
             // FALSE now, and that is load-bearing: an end-of-generation clear
             // here would silently desync from the `cached_tokens` this path now
             // populates — the exact 2026-05 incident the phase discipline was
@@ -5000,10 +5015,9 @@ impl ModelSlot {
             SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
         };
 
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        // A raw FIM prompt opens no turn: its opener is always empty.
+        let (full_prompt, _) = format_prompt(model, model_id, request, quirks)?.into_parts();
+        let tokens = tokenize_prompt(model, &full_prompt, request)?;
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
@@ -5066,6 +5080,7 @@ impl ModelSlot {
             cancel,
             prompt_len: prompt_tokens,
             max_tokens,
+            turn_opener: "",
             clear_kv_at_end: false,
         })
     }
@@ -5264,6 +5279,9 @@ struct StreamLoopParams<'a, 'ctx> {
     /// tokens (NOT the prefilled tail length under partial-keep).
     prompt_len: usize,
     max_tokens: usize,
+    /// Sent before the model's first piece: the turn starts where its
+    /// prompt left off (`Prompt::turn_opener`).
+    turn_opener: &'a str,
     /// Legacy behaviour: clear the KV cache at end-of-generation. The
     /// FIM entry passes false so the prompt's KV slice survives for
     /// the next keystroke's LCP.
@@ -5285,11 +5303,21 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         cancel,
         prompt_len,
         max_tokens,
+        turn_opener,
         clear_kv_at_end,
     } = p;
     {
         let tokens_len = prompt_len;
         let prompt_tokens = prompt_len;
+        if !turn_opener.is_empty() {
+            match sink.send_piece(turn_opener) {
+                StreamSend::Sent => {}
+                StreamSend::ReceiverGone => return Ok(()),
+                StreamSend::DeadlineExceeded => {
+                    return Err(stalled_consumer_abort(model_id, ctx, 0))
+                }
+            }
+        }
 
         let mut sampler = build_sampler(model, request, quirks)?;
         let mut n_generated = 0usize;
@@ -5310,7 +5338,9 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         // See generate_sync: stop on `</tool_call>` (marker) or
         // balanced JSON envelope when tools were requested. The
         // shape-B state machine + gates live in `gates::ToolStopTracker`.
-        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        // Tools that ride the daemon's Hermes envelope; a conversation's
+        // tools are the template's own format and run to end-of-turn.
+        let tools_present = super::chat_template::hermes_tool_envelope(request);
         let mut tool_stop =
             ToolStopTracker::new(tools_present, request.structured_output.is_some());
 
@@ -5438,6 +5468,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
             if in_think
                 && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
                 && !think_budget_fired
+                && super::chat_template::think_budget_applies(request)
             {
                 think_budget_fired = true;
                 let force = "\n</think>\n\n";

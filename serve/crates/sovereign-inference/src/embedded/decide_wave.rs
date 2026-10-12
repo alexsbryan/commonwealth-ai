@@ -114,8 +114,9 @@ pub(crate) fn decide_wave(
     for branch in branches {
         let single = branch_request(request, branch);
         let rendered = format_prompt(model, model_id, &single, quirks).and_then(|p| {
+            let (text, _) = p.into_parts();
             model
-                .str_to_token(&p, add_bos_for(&single))
+                .str_to_token(&text, add_bos_for(&single))
                 .map_err(|e| Error::Inference(format!("tokenization failed: {e}")))
         });
         match rendered {

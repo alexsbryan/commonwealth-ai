@@ -33,7 +33,7 @@ use ed25519_dalek::SigningKey;
 use kernel_types::NodeId;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
-use sovereign_grants::Scope;
+use sovereign_grants::{GrantHolder, Scope};
 use tower::ServiceExt;
 
 #[allow(dead_code)]

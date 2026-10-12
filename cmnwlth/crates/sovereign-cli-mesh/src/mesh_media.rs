@@ -14,6 +14,7 @@ use crate::mesh_cmd::daemon_client_port;
 
 mod declare;
 mod origin;
+mod rails_media;
 mod viewer;
 pub(crate) use declare::cmd_media_declare;
 pub(crate) use origin::cmd_media_origin;
@@ -23,19 +24,19 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         return cmd_fanout(None, &args[1..]).await;
     }
     if args.first().map(String::as_str) == Some("declare") {
-        return cmd_media_declare(&args[1..]);
+        return cmd_media_declare(&args[1..]).await;
     }
     if args.first().map(String::as_str) == Some("origin") {
-        return cmd_media_origin(&args[1..]);
+        return cmd_media_origin(&args[1..]).await;
     }
     if args.first().map(String::as_str) == Some("offer") {
         return cmd_media_offer(&args[1..]).await;
     }
     if args.first().map(String::as_str) == Some("withdraw") {
-        return cmd_media_withdraw(&args[1..]);
+        return cmd_media_withdraw(&args[1..]).await;
     }
     if args.first().map(String::as_str) == Some("admit") {
-        return cmd_media_admit(&args[1..]);
+        return cmd_media_admit(&args[1..]).await;
     }
     if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
@@ -56,13 +57,11 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         eprintln!("at it. <peer> is a member name or a node-id prefix of at least 4 chars;");
         eprintln!("`svrn mesh status` lists both.");
         eprintln!();
-        eprintln!(
-            "The peer must declare what it serves:  [iroh] media_origin = \"127.0.0.1:8096\""
-        );
-        eprintln!("(Jellyfin's default). A peer that declares nothing closes the dial.");
+        eprintln!("The peer offers what it serves with `svrn mesh media offer`, which finds");
+        eprintln!("Jellyfin's 127.0.0.1:8096 itself. A peer that offers nothing closes the dial.");
         eprintln!();
         eprintln!("If your origin authenticates its own clients (Jellyfin wants an");
-        eprintln!("X-Emby-Token), `declare` stores YOUR key on YOUR machine and your daemon");
+        eprintln!("X-Emby-Token), `declare` stores YOUR key on YOUR machine and your cw-rails");
         eprintln!("adds it on the way in — so housemates reach your library holding no key");
         eprintln!("of yours. See `svrn mesh media declare --help`.");
         eprintln!();
@@ -148,7 +147,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
                 ok: false,
                 detail: format!(
                     "GET / failed after {} ms: {e} — the peer refuses this dial (not a member, \
-                     or it declares no [iroh] media_origin) or its origin is down",
+                     or it offers no media origin) or its origin is down",
                     started.elapsed().as_millis()
                 ),
             },
@@ -252,9 +251,8 @@ async fn list_offers(client: &reqwest::Client, port: u16, url: &str, json_out: b
     };
     if offers.offering.is_empty() {
         println!(
-            "No member offers a media origin. A holder declares one with \
-             `[iroh] media_origin = \"127.0.0.1:8096\"` and reloads its daemon; it shows \
-             here within one gossip round."
+            "No member offers a media origin. A holder offers one with \
+             `svrn mesh media offer`; it shows here within one gossip round."
         );
         return 0;
     }
@@ -509,6 +507,13 @@ fn offered_to_line(offered_to: &[String]) -> String {
 mod offer;
 use offer::{cmd_media_admit, cmd_media_offer, cmd_media_withdraw};
 // The offer helpers the test module drives; reached through `use super::*`.
+/// The media origin this node's rails.toml offers, for a listing that runs
+/// while cw-rails is down (`svrn publish`). An unreadable file is an error,
+/// not "nothing offered".
+pub(crate) fn offered_origin_in_rails_toml() -> Result<Option<std::net::SocketAddr>, String> {
+    rails_media::load().and_then(|(_, doc)| offer::stored_origin(&doc))
+}
+
 #[cfg(test)]
 use offer::{
     clear_offer, keep_for_poll, poll_house_dir, probe_origin, set_offer, stored_origin,

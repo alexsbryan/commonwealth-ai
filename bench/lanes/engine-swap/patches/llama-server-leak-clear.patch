@@ -1,0 +1,63 @@
+The recurrent-state leak experiment (lesson 9535ad01), against llama.cpp
+035e227. Apply from the source root with `patch -p1`, build as
+serve/crates/sovereign-compute/llama-server/build.sh --vanilla does, run with LLAMA_LEAK_CLEAR set.
+
+LLAMA_LEAK_CLEAR=1     llama_memory_clear(data = true) whenever a slot starts
+                       from position 0: drift 0.0 nats (probes.py leak), A/A
+                       0 of 47 greedy cases unstable (battery-20261011-111305)
+LLAMA_LEAK_CLEAR=meta  the same with data = false: drift unchanged, so the
+                       leak is stale state data, not cell bookkeeping
+LLAMA_LEAK_HALF=recr   zero only the recurrent half's data: drift 0.0035 nats
+LLAMA_LEAK_HALF=attn   zero only the attention half's: drift unchanged, and
+                       the first probe moves (-1.155 against -1.0795), a
+                       deterministic anomaly not yet explained
+
+An experiment, not a fix: llama_memory_clear wipes every sequence, so it is
+only sound when no other slot holds state worth keeping.
+
+diff -ru -x '*.o' llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3/src/llama-memory-hybrid.cpp llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3-leakclear/src/llama-memory-hybrid.cpp
+--- llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3/src/llama-memory-hybrid.cpp	2026-08-26 08:09:53.000000000 -0700
++++ llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3-leakclear/src/llama-memory-hybrid.cpp	2026-10-11 11:11:20.342071476 -0700
+@@ -1,5 +1,8 @@
+ #include "llama-memory-hybrid.h"
+ 
++#include <cstdlib>
++#include <string>
++
+ #include "llama-impl.h"
+ #include "llama-model.h"
+ #include "llama-context.h"
+@@ -136,8 +139,13 @@
+ }
+ 
+ void llama_memory_hybrid::clear(bool data) {
+-    mem_attn->clear(data);
+-    mem_recr->clear(data);
++    // leak experiment: LLAMA_LEAK_HALF=attn|recr zeroes only that half's data
++    const char * half = getenv("LLAMA_LEAK_HALF");
++    const bool attn_data = data && !(half && std::string(half) == "recr");
++    const bool recr_data = data && !(half && std::string(half) == "attn");
++    LLAMA_LOG_WARN("leak experiment: hybrid clear attn data %d, recr data %d\n", attn_data, recr_data);
++    mem_attn->clear(attn_data);
++    mem_recr->clear(recr_data);
+ }
+ 
+ bool llama_memory_hybrid::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+diff -ru -x '*.o' llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3/tools/server/server-context.cpp llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3-leakclear/tools/server/server-context.cpp
+--- llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3/tools/server/server-context.cpp	2026-08-26 08:09:53.000000000 -0700
++++ llama.cpp-035e22731a7fd70b9854b3a2d64ec68e9b1a45d3-leakclear/tools/server/server-context.cpp	2026-10-11 11:10:18.452993252 -0700
+@@ -3325,6 +3325,14 @@
+ 
+                     SLT_TRC(slot, "cached n_tokens = %d, memory_seq_rm [%d, end)\n", slot.prompt.n_tokens(), p0);
+ 
++                    if (p0 == 0 && getenv("LLAMA_LEAK_CLEAR")) {
++                        const bool data = std::string(getenv("LLAMA_LEAK_CLEAR")) != "meta";
++                        SLT_WRN(slot, "leak experiment: llama_memory_clear(data = %d) at p0 == 0\n", data);
++                        llama_memory_clear(llama_get_memory(slot.ctx_tgt), data);
++                        if (slot.ctx_dft) {
++                            llama_memory_clear(llama_get_memory(slot.ctx_dft), data);
++                        }
++                    }
+                     slot.mem.seq_rm(slot.id, p0, -1);
+ 
+                     // If using an alora, there may be uncached tokens that come

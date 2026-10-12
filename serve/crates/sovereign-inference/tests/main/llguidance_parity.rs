@@ -19,7 +19,7 @@
 //! markers below document the intent.
 
 use llguidance::{api::TopLevelGrammar, toktrie::ApproximateTokEnv, Matcher, ParserFactory};
-use sovereign_inference::llguidance_constraint::default_additional_properties_false;
+use sovereign_contracts::structured_output::default_additional_properties_false;
 
 // ─── helpers ───────────────────────────────────────────────────────────
 
@@ -383,7 +383,7 @@ fn parity_from_schema_value_applies_walker_then_compiles() {
     // Schema without explicit additionalProperties — the
     // `from_schema_value` helper must inject false before passing to
     // llguidance, so the resulting grammar masks extra fields.
-    use sovereign_inference::llguidance_constraint::default_additional_properties_false;
+    use sovereign_contracts::structured_output::default_additional_properties_false;
 
     let raw_schema = serde_json::json!({
         "type": "object",

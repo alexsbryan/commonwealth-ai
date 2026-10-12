@@ -43,7 +43,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use sovereign_grants::guest_grant::{Scope, DEFAULT_GUEST_TTL_SECS};
+use sovereign_grants::guest_grant::{GrantHolder, Scope, DEFAULT_GUEST_TTL_SECS};
 
 use crate::state::AppState;
 
@@ -116,6 +116,10 @@ pub struct GuestGrantRequest {
     /// Operator's own note, echoed back by `list`. Never consulted.
     #[serde(default)]
     pub label: Option<String>,
+    /// Whose words the grant's writes are. Omitted is a guest's: only
+    /// `svrn ring show` asks for `member_page`, for the member's own app.
+    #[serde(default)]
+    pub holder: GrantHolder,
     /// The base a phone opens (the room address, or the static origin). When
     /// present, the response carries the composed `link`, so a client that
     /// cannot compose it itself — the desktop, which is an HTTP client and
@@ -230,9 +234,10 @@ pub async fn guest_grant_issue(
         .inner
         .node
         .guest_grants
-        .issue(token, scopes, req.label, ttl_secs, now_ms);
+        .issue_held(req.holder, token, scopes, req.label, ttl_secs, now_ms);
 
     tracing::info!(
+        holder = ?grant.holder,
         expires_at_ms = grant.expires_at_ms,
         grants = %grant.summary(),
         label = grant.label.as_deref().unwrap_or(""),
