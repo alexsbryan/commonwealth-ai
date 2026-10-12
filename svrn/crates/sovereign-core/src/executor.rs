@@ -461,7 +461,8 @@ impl Executor {
         task: &Task,
     ) -> Result<StepOutput> {
         use crate::tool_loop::{
-            format_step_output, parse_assistant_text, tool_schemas_for, TextEnvelope,
+            assistant_message, conversation_request, format_step_output, parse_conversation_reply,
+            tool_message, tool_schemas_for, TextEnvelope,
         };
 
         let descriptors: Vec<ToolDescriptor> = tool_ids
@@ -477,10 +478,8 @@ impl Executor {
 
         let system = format!(
             "You are a focused sub-agent. Complete EXACTLY this subtask using \
-             only the tools below, one call at a time as \
-             `<tool_call>{{\"name\":\"<tool>\",\"arguments\":{{...}}}}</tool_call>`. \
-             When you have what the subtask needs, reply WITHOUT a tool call and \
-             state your findings concisely.\n\nTools:\n{tool_list}\n\nSubtask: {goal}"
+             only the tools below. When you have what the subtask needs, reply \
+             WITHOUT a tool call and state your findings concisely.\n\nTools:\n{tool_list}"
         );
         let ctx = ToolContext {
             conversation_id: task.conversation_id.clone(),
@@ -494,24 +493,30 @@ impl Executor {
 
         // The worker's fat context — raw tool results accumulate here and are
         // dropped when this fn returns. This is the firewall.
-        let mut transcript = format!("{system}\n\nAssistant:");
+        let mut messages = vec![
+            serde_json::json!({ "role": "system", "content": system }),
+            serde_json::json!({ "role": "user", "content": format!("Subtask: {goal}") }),
+        ];
         let mut findings = String::new();
         let mut calls_made = 0usize;
 
         for _ in 0..max_iterations.max(1) {
-            let mut req = CompletionRequest::new(&transcript).with_speed(Speed::Slow);
-            req.tools = Some(tool_schemas.clone());
+            let mut req =
+                conversation_request(messages.clone(), &tool_schemas).with_speed(Speed::Slow);
             req.max_tokens = Some(2048);
             let resp = self.inference.complete(&req).await?;
-            let (visible, calls) = parse_assistant_text(&resp.text);
+            let (visible, calls) = parse_conversation_reply(&resp.text, &tool_schemas);
             if !visible.trim().is_empty() {
                 findings = visible.clone();
             }
             if calls.is_empty() {
                 break; // worker signalled done (no tool call this turn)
             }
-            transcript.push_str(&visible);
-            for call in &calls {
+            let ids: Vec<String> = (0..calls.len())
+                .map(|i| format!("call_{}", calls_made + i))
+                .collect();
+            messages.push(assistant_message(&visible, &calls, &ids));
+            for (call, id) in calls.iter().zip(&ids) {
                 let result = match self.tools.get(&call.name) {
                     Ok(tool) => match tool.execute(&call.arguments, &ctx).await {
                         Ok(out) => format_step_output(&out, TextEnvelope::Wire),
@@ -528,12 +533,8 @@ impl Executor {
                     tool = %call.name,
                     "delegate worker tool call (observation stays in worker)"
                 );
-                transcript.push_str(&format!(
-                    "\n<tool_call>{}</tool_call>\nResult: {result}\n",
-                    serde_json::json!({ "name": call.name, "arguments": call.arguments })
-                ));
+                messages.push(tool_message(id, &result));
             }
-            transcript.push_str("\nAssistant:");
         }
 
         // Formalize the worker's findings into the typed contract. The schema
@@ -1062,8 +1063,8 @@ impl Executor {
         task: &Task,
     ) -> Result<StepOutput> {
         use crate::tool_loop::{
-            format_step_output, parse_assistant_text, result_cardinality, tool_schemas_for,
-            TextEnvelope,
+            assistant_message, conversation_request, format_step_output, parse_conversation_reply,
+            result_cardinality, tool_message, tool_schemas_for, TextEnvelope,
         };
 
         // The tools actually on offer, resolved ONCE. Both the prompt's tool
@@ -1156,8 +1157,20 @@ impl Executor {
             max_iterations,
         );
 
-        // Build the growing conversation as a single prompt.
-        let mut conversation = format!("{system}\n\n---\n\nUser question: {prompt}\n\nAssistant:");
+        // The growing conversation, sent whole with the scoped tools: the
+        // model's template renders the calls, their results and the tools'
+        // parameter SCHEMAS, which is how it learns to write an argument
+        // that is not `query`.
+        let mut messages = vec![
+            serde_json::json!({ "role": "system", "content": system }),
+            serde_json::json!({ "role": "user", "content": prompt }),
+        ];
+        let turn = |messages: &[serde_json::Value], tools: &[ToolSchema]| {
+            let mut request = conversation_request(messages.to_vec(), tools).with_speed(speed);
+            request.max_tokens = Some(2048);
+            request.temperature = Some(0.3);
+            request
+        };
 
         let mut search_log: Vec<SearchLogEntry> = Vec::new();
         let mut iterations = 0;
@@ -1166,28 +1179,13 @@ impl Executor {
         let mut empty_results = 0usize;
 
         loop {
-            let mut request = CompletionRequest {
-                prompt: conversation.clone(),
-                system_message: None, // System is baked into the prompt
-                preferred_speed: speed,
-                max_tokens: Some(2048),
-                temperature: Some(0.3),
-                ..Default::default()
-            };
-            // The scoped tools, projected into the shape the embedded chat
-            // template and the daemon's envelope grammar both consume. The
-            // prompt still lists them in prose — this is what makes the model
-            // see the parameter SCHEMAS, which is how it learns to write an
-            // argument that is not `query`.
-            if !tool_schemas.is_empty() {
-                request.tools = Some(tool_schemas.clone());
-            }
-
-            let response = self.inference.complete(&request).await?;
-            let response_text = response.text.trim().to_string();
+            let response = self
+                .inference
+                .complete(&turn(&messages, &tool_schemas))
+                .await?;
 
             // Check if the model emitted a tool call.
-            let (thinking, calls) = parse_assistant_text(&response_text);
+            let (visible, calls) = parse_conversation_reply(&response.text, &tool_schemas);
             if !calls.is_empty() {
                 // Every call in the turn runs. The retired parser returned only
                 // the FIRST envelope in the text, so a model that emitted two
@@ -1202,8 +1200,11 @@ impl Executor {
                     turn_index: 0,
                     ..Default::default()
                 };
-                let mut rendered = String::new();
-                for call in &calls {
+                let ids: Vec<String> = (0..calls.len())
+                    .map(|i| format!("call_{}", search_log.len() + i))
+                    .collect();
+                messages.push(assistant_message(&visible, &calls, &ids));
+                for (call, id) in calls.iter().zip(&ids) {
                     let query = call.query_arg();
                     // Tier 4: cache-aware dispatch. The model's arguments go
                     // to the tool WHOLE — the retired loop rebuilt them as
@@ -1242,16 +1243,11 @@ impl Executor {
                     search_log.push(SearchLogEntry {
                         iteration: iterations,
                         tool_id: call.name.clone(),
-                        query: query.clone(),
+                        query,
                         result_count,
                     });
-                    rendered.push_str(&format!(
-                        "\n\n[Search results for \"{query}\"]:\n{tool_result}"
-                    ));
+                    messages.push(tool_message(id, &tool_result));
                 }
-
-                // Append model's thinking + tool results to the conversation.
-                conversation.push_str(&format!(" {thinking}{rendered}\n\nAssistant:"));
 
                 iterations += 1;
 
@@ -1269,25 +1265,16 @@ impl Executor {
                         exhausted,
                         "reason loop searching closed"
                     );
-                    conversation.push_str(if exhausted {
-                        " Your searches returned no results, and searching is now closed. \
-                         Answer now: say what you could not find, and do not guess it.\
-                         \n\nAssistant:"
+                    let close = if exhausted {
+                        "Your searches returned no results, and searching is now closed. \
+                         Answer now: say what you could not find, and do not guess it."
                     } else {
-                        " You have used all available searches. Synthesize your answer now \
+                        "You have used all available searches. Synthesize your answer now \
                          from what you've found. If you couldn't find everything, note what's \
-                         missing.\n\nAssistant:"
-                    });
-
-                    let final_request = CompletionRequest {
-                        prompt: conversation,
-                        system_message: None,
-                        preferred_speed: speed,
-                        max_tokens: Some(2048),
-                        temperature: Some(0.3),
-                        ..Default::default()
+                         missing."
                     };
-                    let final_response = self.inference.complete(&final_request).await?;
+                    messages.push(serde_json::json!({ "role": "user", "content": close }));
+                    let final_response = self.inference.complete(&turn(&messages, &[])).await?;
 
                     return Ok(StepOutput::ReasonWithToolsResult {
                         text: final_response.text.trim().to_string(),
@@ -1302,7 +1289,7 @@ impl Executor {
 
             // No tool call — model is done reasoning. Return the synthesis.
             return Ok(StepOutput::ReasonWithToolsResult {
-                text: response_text,
+                text: visible,
                 search_log,
                 iterations,
                 capped: false,
@@ -1319,21 +1306,16 @@ impl Executor {
     ) -> String {
         let tools_list = tool_descriptions.join("\n");
 
-        // The worked call, GENERATED from the tools this step actually offers.
-        // Hardcoded here until 2026-09-08 as `{"tool":"search","query":…}` —
-        // which named a tool that is not offered on most steps, so a model
-        // offered only `knowledge_lookup` emitted `search` first and was told
-        // `Tool 'search' not available.` (6 of 9 gym replays, 2026-09-07). When
-        // no tool is on offer there is no example and no "How to call a tool"
-        // section at all: a prompt that teaches a call the step cannot serve is
-        // worse than one that teaches none.
-        let how_to_call = match crate::tool_loop::worked_example(descriptors) {
-            Some(example) => format!(
+        // The call format is the model's own: its template writes it from the
+        // request's tools (`tool_loop::conversation_request`). When no tool is
+        // on offer there is no "How to call a tool" section at all: a prompt
+        // that teaches a call the step cannot serve is worse than one that
+        // teaches none.
+        let how_to_call = if descriptors.is_empty() {
+            String::new()
+        } else {
+            format!(
                 "## How to call a tool\n\n\
-                 When you need information, emit a tool call in this exact format:\n\
-                 {example}\n\n\
-                 `name` must be one of the ids under \"Available tools\" below, and \
-                 `arguments` must match that tool's declared parameters.\n\n\
                  After each call, you'll receive its result. Read it carefully, then either:\n\
                  - Call again with different arguments if you need more information\n\
                  - Write your final answer if you have enough\n\n\
@@ -1346,8 +1328,7 @@ impl Executor {
                  - Stop when you have enough sources to answer confidently.\n\
                  - Stop when additional calls return information you've already seen.\n\
                  - You have a maximum of {max_iterations} calls. Use them wisely.\n\n"
-            ),
-            None => String::new(),
+            )
         };
 
         // Phase 2: render an optional `## Tool state` block only when
@@ -1371,7 +1352,7 @@ impl Executor {
 
 {how_to_call}## Your answer
 
-When ready to answer (without a <tool_call>):
+When ready to answer (without a tool call):
 - Cite sources using the handles the tool results returned — an evidence id
   (`[ev-0001]`) or a `[Source: name]` label — for every claim backed by one.
 - If you make a claim that is NOT directly supported by a tool result,
