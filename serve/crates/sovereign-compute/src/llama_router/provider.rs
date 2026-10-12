@@ -56,6 +56,18 @@ impl RouterProvider {
         }
     }
 
+    /// The router loads only the models its preset names, and the slots
+    /// `/internal/models/load` manages are GGUFs outside it; the inner
+    /// refusal would say this node holds no weights, which is not so here.
+    fn extras_refusal(&self, verb: &str, slot: &str) -> sovereign_contracts::Error {
+        tracing::debug!(target: "llama_router", verb, slot, "router provider: extra slot refused");
+        sovereign_contracts::Error::Inference(format!(
+            "runtime slot {verb} of {slot:?} is refused: the llama-server router serves only its \
+             preset ({}); add the GGUF to [models] and restart the daemon",
+            self.preset.warm_models().join(", ")
+        ))
+    }
+
     fn model_for(&self, role: &str) -> Option<&str> {
         self.preset
             .roles()
@@ -164,8 +176,13 @@ impl InferenceProvider for RouterProvider {
         self.inner.edit_slot_info()
     }
 
+    /// Load the primary through the router's `POST /models/load` and wait
+    /// for `loaded`; a load that fails is an error, never Ok.
     async fn warmup_primary(&self) -> Result<()> {
-        self.inner.warmup_primary().await
+        let primary = self.preset.primary();
+        let result = self.router.load(primary).await;
+        tracing::debug!(target: "llama_router", model = primary, ok = result.is_ok(), "router provider: warmup");
+        result.map_err(sovereign_contracts::Error::Inference)
     }
 
     async fn probe_logprobs(
@@ -185,11 +202,12 @@ impl InferenceProvider for RouterProvider {
         path: std::path::PathBuf,
         context_size: u32,
     ) -> Result<String> {
-        self.inner.load_extra_slot(slot_name, path, context_size)
+        let _ = (path, context_size);
+        Err(self.extras_refusal("load", &slot_name))
     }
 
     fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>> {
-        self.inner.unload_extra_slot(slot_name)
+        Err(self.extras_refusal("unload", slot_name))
     }
 
     fn extras_inventory(&self) -> Vec<(String, String)> {
