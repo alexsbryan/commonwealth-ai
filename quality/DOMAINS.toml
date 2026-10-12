@@ -13759,24 +13759,6 @@ lines = 130
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/health.rs"
-context = "unknown"
-lines = 95
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/hybrid.rs"
-context = "unknown"
-lines = 574
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/json_grammar.rs"
-context = "unknown"
-lines = 741
-note = ""
-
-[[module]]
 path = "serve/crates/sovereign-inference/src/lib.rs"
 context = "unknown"
 lines = 69
@@ -13807,33 +13789,15 @@ lines = 297
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/router_circuit.rs"
-context = "unknown"
-lines = 111
-note = ""
-
-[[module]]
 path = "serve/crates/sovereign-inference/src/rpc_worker_main.rs"
 context = "unknown"
 lines = 363
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/selector.rs"
-context = "unknown"
-lines = 529
-note = ""
-
-[[module]]
 path = "serve/crates/sovereign-inference/src/setup_planner.rs"
 context = "unknown"
 lines = 717
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/smoketest.rs"
-context = "unknown"
-lines = 212
 note = ""
 
 [[module]]

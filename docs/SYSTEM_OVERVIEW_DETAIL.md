@@ -5303,8 +5303,8 @@ weight-read bandwidth and can raise *throughput* despite the extra hop (the meas
 122B ran ~20% faster distributed 36/12 at 17.3–17.9 tok/s than solo at 14.8). So the
 advisor reports the hop cost without claiming fewer nodes is always faster. `--from-mesh` plans across the
 running mesh — each member advertises `vram_gb` + `can_anchor` on `GET /v1/mesh/status`
-(`MemberDto`), the VRAM sourced from `rpc_distribution::local_gpu_total_vram_gb` (the
-ggml device total, which unlike sysfs sees the full unified-memory pool on AMD APUs —
+(`MemberDto`), the VRAM sourced from `gpu_probe` (the shipped llama-server's
+`--list-devices` total, probed once at startup; unknown when it fails, never 0 GB; unlike sysfs it sees the full unified-memory pool on AMD APUs —
 ~124 GB on Strix Halo vs sysfs's ~0.5 GB dedicated carveout); `--devices 64,32,32` plans
 a hypothetical mesh. The headroom factor is operator-set — `[shared_model] headroom` →
 (bootstrap bridge) `SOVEREIGN_RPC_HEADROOM` → `rpc_headroom_factor()`, default 1.2,
