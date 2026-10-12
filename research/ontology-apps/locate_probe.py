@@ -418,8 +418,8 @@ def join():
 
 
 # ---------------------------------------------------------------- calls (cached by their whole request)
-def post(req):
-    path = OUT / "waves" / (hashlib.sha256(json.dumps(req, sort_keys=True).encode()).hexdigest() + ".json")
+def post(req, root=None):
+    path = (root or OUT) / "waves" / (hashlib.sha256(json.dumps(req, sort_keys=True).encode()).hexdigest() + ".json")
     if path.exists():
         return json.loads(path.read_text())
     r = urllib.request.Request(CHAT, json.dumps(req).encode(), {"Content-Type": "application/json"})

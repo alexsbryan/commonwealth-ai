@@ -343,6 +343,160 @@ def cmd_run(args):
     (DATA / "furniture-sample.jsonl").write_text("".join(json.dumps(r) + "\n" for r in furn_rows))
 
 
+# ---------------------------------------------------------------- M2: citing an act by one forced choice (PREREG part 2)
+# The noun follows the arm's unit (U: sentence, L: line); everything else is byte-identical across arms.
+WORDINGS = {
+    "W1": ("You read a document and point to the {noun} that shows a given fact.\n\nThe user message gives the "
+           "document's declared facts, then the document, in which some {noun}s are marked with a letter in brackets, "
+           "then the fact. Answer with the letter of the marked {noun} that shows the fact most directly, or 0 if no "
+           "marked {noun} shows it.",
+           "Which marked {noun} shows this fact? Answer with its letter, or 0 if none does."),
+    "W2": ("Find where a document shows something.\n\nYou are given what is declared about the document, the document "
+           "itself with certain {noun}s tagged by a bracketed letter, and a fact. Reply with the tag of the tagged "
+           "{noun} that most directly supports the fact, or 0 if none of the tagged {noun}s supports it.",
+           "Which tagged {noun} supports the fact? Reply with its tag, or 0 if none does."),
+}
+NOUN = {"U": "sentence", "L": "line"}
+M2 = OUT / "m2"
+
+
+def fact(kind, value, subject):
+    """The fact in the recipe's own words: the value's segment of its field's description, or the kind's
+    description when the kind has no closed field."""
+    if kind["fields"] and value is not None:
+        a = kind["fields"][0]
+        desc = value_segments(a.get("description", ""))[value].split(": ", 1)[1]
+        return f"a {subject} this document is about has {a['name']} '{value}': {desc}"
+    return kind["description"]
+
+
+def act_items(system):
+    """[{doc, kind, value, gold lines, fact, facts view, U: (texts, candidates), L: (texts, candidates)}]."""
+    leg, corp = L.SYSTEMS[system]
+    rec = L.recipe(leg, corp)
+    kinds, _ = L.plan(rec)
+    by = {k["name"]: k for k in kinds}
+    meta_raw = L.documents(leg, corp)
+    docs, um = load(system)
+    items, lines, _ = items_of(system)
+    out = []
+    for d, kind, value, gl, _, _ in items:
+        asked = {n for n, ln in lines[d].items() if ln["asked"]}
+        meta, raw = meta_raw[d]
+        us = um[d]
+        out.append({"doc": d, "kind": kind, "value": value, "gold": gl,
+                    "fact": fact(by[kind], value, by[kind]["subject"]),
+                    "facts": L.facts(rec, meta),
+                    "U": ([t for t, _ in us], [u for u, (_, ls) in enumerate(us) if ls & asked], [ls for _, ls in us]),
+                    "L": ([ln.strip() for ln in raw], [n - 1 for n in sorted(asked)], [{i + 1} for i in range(len(raw))])})
+    return out
+
+
+def act_question(it, arm, wording, marked):
+    """(system, user, labels, {label: candidate index}) with `marked` (candidate indices) lettered in order."""
+    texts = it[arm][0]
+    letter = {c: L.LABELS[i] for i, c in enumerate(marked)}
+    shown = "\n".join(f"[{letter[i]}] {t}" if i in letter else t for i, t in enumerate(texts))
+    sysp, q = (w.format(noun=NOUN[arm]) for w in WORDINGS[wording])
+    user = f"{it['facts']}Document:\n<<<\n{shown}\n>>>\n\nFact: {it['fact']}\n\n{q}"
+    return sysp, user, [letter[c] for c in marked] + [L.NONE], {v: k for k, v in letter.items()}
+
+
+def cite(it, arm, wording, root=M2):
+    """The cited candidate (or None), the calls made, and each question's distribution: pages of 25 in document
+    order, then one final question over the pages' picks when two or more pages pick one."""
+    cands, calls, picks, dists = it[arm][1], 0, [], []
+
+    def ask(marked):
+        nonlocal calls
+        sysp, user, labels, back = act_question(it, arm, wording, marked)
+        rec = L.post(L.body(sysp, user, labels), root=root)
+        calls += 1
+        d = L.answer(rec, labels)
+        if d is None:
+            return "unanswered", None
+        dists.append(d)
+        top = max(d, key=d.get)
+        return (None if top == L.NONE else back[top]), d
+
+    pages = [cands[i:i + len(L.LABELS)] for i in range(0, len(cands), len(L.LABELS))] or [[]]
+    for page in pages:
+        if not page:
+            continue
+        c, _ = ask(page)
+        if c == "unanswered":
+            return "unanswered", calls, dists
+        if c is not None:
+            picks.append(c)
+    if len(picks) >= 2:
+        c, _ = ask(picks)
+        return c, calls, dists
+    return (picks[0] if picks else None), calls, dists
+
+
+def cmd_ask(args):
+    for system in args.systems:
+        items = act_items(system)
+        t0 = time.time()
+        for arm in args.arms:
+            for wording in args.wordings:
+                n = sum(cite(it, arm, wording)[1] for it in items)
+                print(f"{system} {arm} {wording}: {len(items)} items, {n} questions, {time.time() - t0:.0f}s", flush=True)
+
+
+def cmd_gate_act(_):
+    """Gate: 20 items re-asked under U/W1 outside the cache; the cited unit must equal the first answer's on 19."""
+    items = [(s, it) for s in ("ward", "uv") for it in act_items(s)]
+    sample = random.Random(L.SEED).sample(items, 20)
+    same = sum(cite(it, "U", "W1")[0] == cite(it, "U", "W1", root=OUT / "m2-regate")[0] for _, it in sample)
+    res = {"re_asked": 20, "same_cited": same, "passed": same >= 19}
+    print(json.dumps(res))
+    (DATA / "gate-act.json").write_text(json.dumps(res, indent=1) + "\n")
+
+
+def cmd_score_act(_):
+    report, rows = {}, []
+    for system in ("ward", "uv"):
+        items = act_items(system)
+        res = {}
+        cited = {}
+        for arm in ("U", "L"):
+            for wording in ("W1", "W2"):
+                agg = collections.defaultdict(lambda: collections.Counter())
+                for it in items:
+                    c, calls, dists = cite(it, arm, wording)
+                    cited[(arm, wording, it["doc"], it["kind"], it["value"])] = c
+                    hit = c not in (None, "unanswered") and bool(it[arm][2][c] & it["gold"])
+                    informative = len(it["U"][1]) > 3
+                    for key in (it["kind"], it["kind"] + (":informative" if informative else ":small")):
+                        a = agg[key]
+                        a["n"] += 1
+                        a["hit"] += hit
+                        a["calls"] += calls
+                        a["zero"] += c is None
+                        a["unanswered"] += c == "unanswered"
+                        a["lines"] += len(it[arm][2][c]) if c not in (None, "unanswered") else 0
+                    rows.append({"system": system, "arm": arm, "wording": wording, "doc": it["doc"], "kind": it["kind"],
+                                 "value": it["value"], "cited": c, "hit": hit, "calls": calls,
+                                 "cited_text": it[arm][0][c][:160] if c not in (None, "unanswered") else None,
+                                 "gold_lines": sorted(it["gold"])})
+                res[f"{arm}{wording}"] = {k: {"hit": a["hit"], "n": a["n"], "rate": round(a["hit"] / a["n"], 3),
+                                              "calls_per_item": round(a["calls"] / a["n"], 2), "zero": a["zero"],
+                                              "unanswered": a["unanswered"],
+                                              "lines_per_cited": round(a["lines"] / max(a["n"] - a["zero"] - a["unanswered"], 1), 2)}
+                                          for k, a in sorted(agg.items())}
+            agree = [(cited[(arm, "W1", it["doc"], it["kind"], it["value"])] == cited[(arm, "W2", it["doc"], it["kind"], it["value"])], it)
+                     for it in items]
+            hit1 = lambda it: (lambda c: c not in (None, "unanswered") and bool(it[arm][2][c] & it["gold"]))(cited[(arm, "W1", it["doc"], it["kind"], it["value"])])  # noqa: E731
+            res[f"{arm}_agreement"] = {"agree": sum(a for a, _ in agree), "of": len(agree),
+                                       "W1_hit_where_agree": sum(hit1(it) for a, it in agree if a),
+                                       "W1_hit_where_differ": sum(hit1(it) for a, it in agree if not a)}
+        report[system] = res
+        print(json.dumps({system: res}, indent=1))
+    (DATA / "score-act.json").write_text(json.dumps(report, indent=1) + "\n")
+    (DATA / "rows-act.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
 def main():
     a = argparse.ArgumentParser()
     sub = a.add_subparsers(dest="cmd", required=True)
@@ -350,8 +504,15 @@ def main():
     sub.add_parser("gates")
     r = sub.add_parser("run")
     r.add_argument("--systems", nargs="+", default=list(L.SYSTEMS))
+    k = sub.add_parser("ask")
+    k.add_argument("--systems", nargs="+", default=["ward", "uv"])
+    k.add_argument("--arms", nargs="+", default=["U", "L"])
+    k.add_argument("--wordings", nargs="+", default=["W1", "W2"])
+    sub.add_parser("gate-act")
+    sub.add_parser("score-act")
     args = a.parse_args()
-    {"count": cmd_count, "gates": cmd_gates, "run": cmd_run}[args.cmd](args)
+    {"count": cmd_count, "gates": cmd_gates, "run": cmd_run, "ask": cmd_ask, "gate-act": cmd_gate_act,
+     "score-act": cmd_score_act}[args.cmd](args)
 
 
 if __name__ == "__main__":
