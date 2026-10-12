@@ -565,10 +565,54 @@ def outcome(system, p, arm, x):
         kinds = {k for k, py in yes.items() if py > 0.5}
         p_right = math.prod(py if (k == x["gold"]) else 1 - py for k, py in yes.items())
         return p_right, kinds, None, yes
+    if arm == "D":
+        yes = {meaning["A"][1]: d["A"] / max(d["A"] + d[NONE], 1e-9) for _, d, meaning in got}
+        return None, {v for v, py in yes.items() if py > 0.5}, None, yes
     if arm == "T":
         _, d, meaning = got[0]
         py = d["A"] / max(d["A"] + d[NONE], 1e-9)
         return (py if x["gold"] else 1 - py), ({meaning["A"][0]} if py > 0.5 else set()), None, {"yes": py}
+
+
+def claim_score(arm, o):
+    """The arm's mass on 'some declared kind' for a line, its top choice ignored: 1 - p(0) for one-question arms, the
+    chance at least one kind is a yes for Y, the yes for T."""
+    if arm in ("C", "P", "V"):
+        return 1 - o[3].get(NONE, 0)
+    if arm == "Y":
+        return 1 - math.prod(1 - py for py in o[3].values())
+    return o[3]["yes"]
+
+
+def auc(pos, neg):
+    """P(a gold claim line scores above an unmarked line), ties half: threshold-free, so an arm that only moves how
+    readily the model says yes leaves it where it was (a diagnostic beside the bars, added after C and P ran)."""
+    if not pos or not neg:
+        return None
+    wins = sum((a > b) + 0.5 * (a == b) for a in pos for b in neg)
+    return round(wins / (len(pos) * len(neg)), 3)
+
+
+def score_d(system, p, items):
+    """Arm D (PREREG amendment 1): per-line recall and precision of gold types over multi-type lines, and lines with
+    any yes among the unmarked."""
+    fv = json.loads((HERE / "cdcr/fold_values.json").read_text())["values"]
+    asked = [x for x in items if questions(system, p, "D", x)]
+    outs = [(x, outcome(system, p, "D", x)) for x in asked]
+    if not outs or any(o is None for _, o in outs):
+        return {"could_not_judge": f"{sum(o is None for _, o in outs)} of {len(outs)} items unanswered"}
+    fold = set(fv.values())
+    multi = [(x, o) for x, o in outs if x["gold"] and len([t for t in x["gold_types"] if t in fold]) >= 2]
+    rec = prec = 0.0
+    for x, o in multi:
+        gold = {t for t in x["gold_types"] if t in fold}
+        pred = {fv[v] for v in o[1]}
+        rec += len(gold & pred) / len(gold)
+        prec += (len(gold & pred) / len(pred)) if pred else 0.0
+    neg = [(x, o) for x, o in outs if not x["gold"]]
+    return {"multi_lines": len(multi), "mean_recall": round(rec / len(multi), 3), "mean_precision": round(prec / len(multi), 3),
+            "one_value_cap": round(sum(1 / len({t for t in x["gold_types"] if t in fold}) for x, _ in multi) / len(multi), 3),
+            "unmarked_any_yes": [sum(bool(o[1]) for _, o in neg), len(neg)]}
 
 
 def score():
@@ -590,6 +634,8 @@ def score():
         gate = {"judged": judged, "of": len(asked_c), "argmax_agree": round(agree / judged, 3) if judged else None,
                 "mean_abs_dp_none": round(dp / judged, 4) if judged else None}
         gate["passed"] = bool(judged == len(asked_c) and gate["argmax_agree"] >= 0.95 and gate["mean_abs_dp_none"] <= 0.05)
+        if system == "gvc":
+            res["D"] = score_d(system, p, items)
         for arm in ("C", "P", "V", "Y", "T"):
             outs = [(x, outcome(system, p, arm, x)) for x in items if questions(system, p, arm, x)]
             if not outs or all(o is None for _, o in outs):
@@ -611,7 +657,13 @@ def score():
                  "reference_only_right": [sum(right(x, o) for x, o in pos if x["reference_only"]), sum(x["reference_only"] for x, _ in pos)]}
             if valued:
                 r["value_right"] = [sum(o[2] == x["value"] for x, o in valued), len(valued)]
-                r["choose_logged_right_same_lines"] = [sum(x["choose"] == x["value"] for x, _ in chose), len(chose)]
+                # bar 4 compares on identical lines: those the arm reads as their kind and Choose also read
+                r["bar4_same_lines"] = {"arm": [sum(o[2] == x["value"] for x, o in chose), len(chose)],
+                                        "choose_logged": [sum(x["choose"] == x["value"] for x, _ in chose), len(chose)]}
+            r["auc_claim_vs_unmarked"] = auc([claim_score(arm, o) for x, o in pos if not x["reference_only"]],
+                                             [claim_score(arm, o) for _, o in neg])
+            r["auc_claim_vs_unmarked"] = auc([claim_score(arm, o) for x, o in pos if not x["reference_only"]],
+                                             [claim_score(arm, o) for _, o in neg])
             r["lost_recovered_by_unit"] = {u: [sum(right(x, o) for x, o in lost if x["unit"] == u), sum(x["unit"] == u for x, _ in lost)]
                                            for u in sorted({x["unit"] for x, _ in lost})}
             res[arm] = r
