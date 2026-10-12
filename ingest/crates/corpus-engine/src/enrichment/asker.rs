@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
+use crate::enrichment::atlas::resolve_records::{compose_wave, wave_singles, wave_text};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::{Error, Result};
 use crate::types::EmbedFn;
@@ -238,6 +239,9 @@ pub fn answering(
     let chat_store = Arc::clone(&store);
     let asked_chat: InferenceFn = Arc::new(move |prompt: &ChatPrompt, max_tokens| {
         let store = Arc::clone(&chat_store);
+        if let Some(split) = wave_singles(prompt) {
+            return ask_wave(store, Arc::clone(&chat), prompt.phase_id.clone(), split, max_tokens);
+        }
         let key = chat_key(prompt, max_tokens);
         let phase = prompt.phase_id.clone();
         let recorded = store.get(&key);
@@ -282,6 +286,69 @@ pub fn answering(
         })
     });
     Ok((asked_embed, asked_chat))
+}
+
+/// A forced-choice wave, answered question by question: each by its single
+/// prompt's key, so a wave and its single questions share one store and a run
+/// recorded either way replays the other. The questions the store holds no
+/// answer for go to the daemon as one smaller wave (`daemon`), or are refused
+/// one by one (`replay`, `gold`); every new answer is recorded under its own
+/// question's key. A refused question is that question's alone.
+fn ask_wave(
+    store: Arc<Store>,
+    chat: InferenceFn,
+    phase: Option<String>,
+    split: std::result::Result<Vec<ChatPrompt>, String>,
+    max_tokens: Option<u32>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>> {
+    Box::pin(async move {
+        let singles = split
+            .map_err(|e| Error::InvalidInput(format!("forced_choice wave: {e}")))?;
+        let keys: Vec<String> = singles.iter().map(|s| chat_key(s, max_tokens)).collect();
+        let text = |v: Value| match v {
+            Value::String(t) => Ok(t),
+            other => Err(format!("the store holds a non-text chat answer: {other}")),
+        };
+        let mut answers: Vec<Option<std::result::Result<String, String>>> =
+            keys.iter().map(|k| store.get(k).map(text)).collect();
+        let missing: Vec<usize> = (0..keys.len()).filter(|&i| answers[i].is_none()).collect();
+        debug!(asker = store.source.label(), ?phase, questions = keys.len(), recorded = keys.len() - missing.len(), "asker: a wave");
+        if !missing.is_empty() && !store.source.needs_daemon() {
+            for &i in &missing {
+                answers[i] = Some(Err(store.missing("chat", phase.as_deref(), &keys[i]).to_string()));
+            }
+        } else if !missing.is_empty() {
+            let ask: Vec<ChatPrompt> = missing.iter().map(|&i| singles[i].clone()).collect();
+            let asked: Vec<std::result::Result<String, String>> = match compose_wave(&ask) {
+                Ok(wave) if ask.len() > 1 => match chat(&wave, max_tokens).await {
+                    Ok(raw) => match oicp_types::forced_choice::wave_texts(&raw) {
+                        Some(texts) if texts.len() == ask.len() => texts,
+                        _ => {
+                            let head: String = raw.chars().take(120).collect();
+                            vec![Err(format!("not a wave answer: {head:?}")); ask.len()]
+                        }
+                    },
+                    Err(e) => vec![Err(e.to_string()); ask.len()],
+                },
+                _ => {
+                    let mut out = Vec::with_capacity(ask.len());
+                    for single in &ask {
+                        out.push(chat(single, max_tokens).await.map_err(|e| e.to_string()));
+                    }
+                    out
+                }
+            };
+            for (&i, answer) in missing.iter().zip(asked) {
+                answers[i] = Some(match answer {
+                    Ok(t) => text(store.keep(keys[i].clone(), "chat", phase.as_deref(), Value::String(t))?),
+                    Err(why) => Err(why),
+                });
+            }
+        }
+        let answers: Vec<std::result::Result<String, String>> =
+            answers.into_iter().map(|a| a.expect("every question answered or refused")).collect();
+        Ok(wave_text(&answers))
+    })
 }
 
 #[cfg(test)]

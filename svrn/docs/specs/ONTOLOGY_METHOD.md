@@ -85,7 +85,8 @@ text by pointing at the words. Code links on a sufficient field, never across a 
 only where the agreeing evidence (declared structure, domain-free similarity, read fields, the model's own
 choice) clears the type's precision bar; each link is a `same_as` claim carrying what made it. Every model
 question is a small closed one, answered in one forward pass as a distribution over single-token labels
-(`oicp_types::forced_choice`), off a document prefilled once; where the one-pass choice cannot clear the bar,
+(`oicp_types::forced_choice`), off a document prefilled once (questions that need nothing from one another go
+as one wave, `forced_choice::wave`, each answered as its single request and recorded under its key); where the one-pass choice cannot clear the bar,
 the model may reason first, and its answer is still read as that distribution, after its own reasoning, and
 weighed as its own source (`reasoned_choice`; amended 2026-10-06 on ward's measurement). Why: shown a strong free signal,
 the model's partition departed from it far more often than it was right to (`research/ontology-apps/resolve-prereg.md`),

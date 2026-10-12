@@ -518,7 +518,14 @@ impl DaemonInferenceClient {
         asker: corpus_engine::enrichment::asker::Asker,
         enrichment_dir: &std::path::Path,
     ) -> std::result::Result<(EmbedFn, InferenceFn), String> {
-        let (embed, chat) = self.into_closures();
+        let (embed, mut chat) = self.into_closures();
+        // A/B valve and rollback hatch for forced-choice waves: the daemon is
+        // asked each question of a wave alone, the request pattern before
+        // waves, with the same questions, keys and answers.
+        if std::env::var("SOVEREIGN_WAVES_ONE_BY_ONE").is_ok_and(|v| v == "1") {
+            tracing::info!("inference_client: SOVEREIGN_WAVES_ONE_BY_ONE=1 — each wave's questions go to the daemon one by one");
+            chat = corpus_engine::enrichment::atlas::resolve_records::one_by_one(chat);
+        }
         corpus_engine::enrichment::asker::answering(asker, enrichment_dir, embed, chat)
             .map_err(|e| format!("the {} asker: {e}", asker.label()))
     }

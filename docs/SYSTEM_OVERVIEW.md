@@ -643,7 +643,9 @@ question the pipeline asks about a type is a method on the resolved
   key). Locate asks every remaining
   numbered line which declared claim kind it states, and Mention which entity
   type a read reference targets it names, pointing at the words (`mention.rs`;
-  no type a table source holds). Per statement each field is asked by its
+  no type a table source holds); each of the two asks a document's lines as one
+  forced-choice wave (`decision_wave`, below), since no line's question needs
+  another's answer. Per statement each field is asked by its
   declared family (`ask.rs`), every such question showing the whole document,
   numbered as Locate shows it, with the statement named by its lines (never a
   window around it): Choose a closed value with RESOLVE's READ question,
@@ -669,7 +671,12 @@ question the pipeline asks about a type is a method on the resolved
   hash of the whole prompt and per-call budget (or the text embedded), one answer
   per question per run; `replay` answers from that store and never calls (or
   probes) the daemon; `gold` reads `answers.gold.jsonl`. A question with no stored
-  answer is refused, never defaulted.
+  answer is refused, never defaulted. A forced-choice wave
+  (`resolve_records/wave.rs`) is split into its single questions, each answered
+  and recorded under its own single prompt's key, the ones the store lacks sent
+  to the daemon as one smaller wave, so a run recorded with or without waves
+  replays either way; `SOVEREIGN_WAVES_ONE_BY_ONE=1` sends each question alone
+  (A/B valve).
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from its ONE document (`locate`: the document its evidence names, stamped from
@@ -1009,6 +1016,14 @@ register change is priced in both directions or it is not judged. The
 forced-choice body itself is built in one place for every subsystem,
 `oicp_types::forced_choice::schema` beside its detector, and each caller issues
 it through a census (`gate_call` here, RESOLVE's `decision_call` in ingest).
+A WAVE (`forced_choice::wave`, advertised `x:forced_choice_wave`, routed only
+to hosts that advertise it) carries several closed questions over one shared
+prompt as branches; the engine renders each branch as the single request it
+stands for, decodes the shared token prefix once, restores that sequence state
+before each branch and reads each distribution as a single forced choice does
+(`embedded/decide_wave.rs`), so every answer equals its single request's.
+Ingest issues waves through `decision_wave`, a census funnel beside
+`decision_call` that the judge-funnel gate counts.
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER

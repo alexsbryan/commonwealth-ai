@@ -36,7 +36,7 @@ use super::line_classes::{LineClass, LineClasses};
 use super::{mention, pick, point, prefill};
 use super::{DocumentReadClaim, DocumentReadOutcome, DocumentReadStatus};
 use crate::enrichment::atlas::resolve_records::{
-    choice_question, decision_call, ClosedAttr, LABELS, NONE,
+    choice_question, decision_call, decision_wave, ClosedAttr, LABELS, NONE,
 };
 use crate::enrichment::atlas::SourceDocument;
 use crate::enrichment::ontology::{
@@ -448,22 +448,33 @@ async fn read_document(
     let mut calls = 0u32;
     let mut refused = 0usize;
     let mut classed: BTreeMap<LineClass, usize> = BTreeMap::new();
-    let mut located = Vec::with_capacity(lines.len());
+    let mut located = vec![None; lines.len()];
     let mut asked_lines = vec![true; lines.len()];
     let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
-    for (line, carried) in lines.iter().zip(classes.classes(&id, &texts)) {
+    // Every asked line's question needs nothing from another's answer, so
+    // they go as one wave off the document (`decision_wave`).
+    let mut asking: Vec<usize> = Vec::with_capacity(lines.len());
+    for (i, (line, carried)) in lines.iter().zip(classes.classes(&id, &texts)).enumerate() {
         let text = &raw[line.start..line.end];
         if let Some(carried) = carried {
             debug!(document = %id, line = line.n, class = carried.class.label(), from = carried.from, text = %excerpt(text), "document_read/passes: line not asked");
             *classed.entry(carried.class).or_default() += 1;
-            located.push(None);
             asked_lines[line.n - 1] = false;
             continue;
         }
-        let prompt = locate_question(&facts, &raw, &lines, line, plan, &labels);
-        calls += 1;
-        let item = format!("line {}", line.n);
-        match decision_call(infer, &prompt, &labels, &id, &item).await {
+        asking.push(i);
+    }
+    let prompts: Vec<ChatPrompt> = asking
+        .iter()
+        .map(|&i| locate_question(&facts, &raw, &lines, &lines[i], plan, &labels))
+        .collect();
+    let items: Vec<String> = asking.iter().map(|&i| format!("line {}", lines[i].n)).collect();
+    calls += prompts.len() as u32;
+    let answers =
+        decision_wave(infer, &prompts, &vec![labels.clone(); prompts.len()], &id, &items).await;
+    for (&i, answer) in asking.iter().zip(answers) {
+        let line = &lines[i];
+        match answer {
             Ok(dist) => {
                 let (best, p) = argmax(&labels, &dist);
                 let kind = (best < plan.kinds.len()).then_some(best);
@@ -478,12 +489,11 @@ async fn read_document(
                     text = %excerpt(&raw[line.start..line.end]),
                     "document_read/passes: located"
                 );
-                located.push(kind);
+                located[i] = kind;
             }
             Err(refusal) => {
                 debug!(document = %id, line = line.n, ?refusal, "document_read/passes: locate refused");
                 refused += 1;
-                located.push(None);
             }
         }
     }

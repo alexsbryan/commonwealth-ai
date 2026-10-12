@@ -14,7 +14,7 @@ use tracing::debug;
 
 use super::passes::{argmax, excerpt, numbered, render, Line};
 use super::point::{point_span, Pointing};
-use crate::enrichment::atlas::resolve_records::{decision_call, LABELS, NONE};
+use crate::enrichment::atlas::resolve_records::{decision_wave, LABELS, NONE};
 use crate::enrichment::ontology::OntologyTypeDecl;
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
@@ -83,11 +83,20 @@ pub(super) async fn mentions(
         .chain([NONE])
         .collect();
     let mut refused = 0usize;
-    for (line, _) in lines.iter().zip(asked).filter(|(_, a)| **a) {
-        let item = format!("line {}", line.n);
-        let prompt = mention_question(facts, body, lines, line, targets, &labels);
-        *calls += 1;
-        let dist = match decision_call(infer, &prompt, &labels, document, &item).await {
+    // Which type each line names needs no other line's answer: one wave. The
+    // pointing that follows a named line depends on that answer, so it is
+    // asked after, line by line.
+    let asking: Vec<&Line> = lines.iter().zip(asked).filter(|(_, a)| **a).map(|(l, _)| l).collect();
+    let prompts: Vec<_> = asking
+        .iter()
+        .map(|line| mention_question(facts, body, lines, line, targets, &labels))
+        .collect();
+    let items: Vec<String> = asking.iter().map(|line| format!("line {}", line.n)).collect();
+    *calls += prompts.len() as u32;
+    let answers =
+        decision_wave(infer, &prompts, &vec![labels.clone(); prompts.len()], document, &items).await;
+    for ((line, item), answer) in asking.into_iter().zip(&items).zip(answers) {
+        let dist = match answer {
             Ok(d) => d,
             Err(refusal) => {
                 debug!(
@@ -122,7 +131,7 @@ pub(super) async fn mentions(
             what: format!("the name of the {}", target.name),
             phase: MENTION_PHASE,
             document,
-            item: &item,
+            item,
         };
         match point_span(&pointing, text, calls).await {
             Ok(Some(span)) => {

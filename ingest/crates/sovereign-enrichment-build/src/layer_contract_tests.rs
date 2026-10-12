@@ -155,9 +155,11 @@ fn spread_pick(prompt: &ChatPrompt, labels: usize) -> usize {
     sum % (labels - 1).max(1)
 }
 
-/// The scripted oracle (module doc), recording every question it is asked.
+/// The scripted oracle (module doc), recording every question it is asked. A
+/// wave is answered question by question, as a port that cannot batch does
+/// (`resolve_records::one_by_one`), so it records each single question.
 fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
-    Arc::new(move |prompt: &ChatPrompt, _| {
+    corpus_engine::enrichment::atlas::resolve_records::one_by_one(Arc::new(move |prompt: &ChatPrompt, _| {
         asked.lock().unwrap().push(prompt.clone());
         let labels: Vec<String> = prompt
             .response_schema
@@ -200,7 +202,7 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
             Ok(Value::Object(dist).to_string())
         };
         Box::pin(async move { answer })
-    })
+    }))
 }
 
 /// A deterministic embedding of the text alone.

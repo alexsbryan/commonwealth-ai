@@ -30,12 +30,12 @@ async fn a_line_naming_a_type_is_pointed_at_and_its_words_are_the_mention() {
     let firm = ty("firm", "an organization");
     let place = ty("place", "");
     let (infer, seen) = scripted(vec![
-        // Line 1 names a firm: start at "Birch", end at "Hall".
+        // The asked lines' choices, one wave: line 1 names a firm, line 3 none.
         dist(&["A", "B", NONE], "A"),
+        dist(&["A", "B", NONE], NONE),
+        // Then line 1 is pointed at: start at "Birch", end at "Hall".
         dist(&["A", "B", "C", "D", "E", "F", NONE], "D"),
         dist(&["A", "B", "C"], "B"),
-        // Line 3 names none.
-        dist(&["A", "B", NONE], NONE),
     ]);
     let mut calls = 0;
     let got = mentions(
@@ -70,7 +70,8 @@ async fn a_line_naming_a_type_is_pointed_at_and_its_words_are_the_mention() {
         prompts[0].user
     );
     assert_eq!(prompts[0].phase_id.as_deref(), Some(MENTION_PHASE));
-    assert!(prompts[1]
+    assert!(prompts[1].user.contains("Line 3:"));
+    assert!(prompts[2]
         .user
         .contains("Kind of thing: firm (an organization)"));
     assert!(!prompts.iter().any(|p| p.user.contains("Line 2:")));

@@ -81,7 +81,9 @@ pub(super) fn scripted(
             })
         },
     );
-    (f, seen)
+    // A wave is answered question by question, in order, as a port that
+    // cannot batch answers one (`resolve_records::one_by_one`).
+    (crate::enrichment::atlas::resolve_records::one_by_one(f), seen)
 }
 
 pub(super) fn row(
@@ -159,7 +161,7 @@ fn passes_model(
     calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     prompts: std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
 ) -> crate::types::InferenceFn {
-    std::sync::Arc::new(move |prompt, _| {
+    crate::enrichment::atlas::resolve_records::one_by_one(std::sync::Arc::new(move |prompt, _| {
         calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         prompts.lock().unwrap().push(prompt.clone());
         let labels: Vec<String> = prompt.response_schema.as_ref().unwrap()["enum"]
@@ -190,7 +192,7 @@ fn passes_model(
             .collect();
         let answer = Value::Object(dist).to_string();
         Box::pin(async move { Ok(answer) })
-    })
+    }))
 }
 
 fn counted(
