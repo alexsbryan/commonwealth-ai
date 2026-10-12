@@ -192,6 +192,27 @@ pub fn write_constraints(
     Ok(())
 }
 
+/// Refuse a `tool_choice` on `body` that `host` would loosen. llama-server
+/// reads `tool_choice` as a string (LS server-common.cpp:1138): an object,
+/// a named function, fails that read, is logged as the wrong type and
+/// becomes "auto" (server-common.h:40-52), so the model may answer in text
+/// or call another tool. Refused rather than sent to be loosened
+/// (`decode.tool-choice-named`). Call it once `tool_choice` is final.
+pub(crate) fn check_tool_choice(body: &Value, host: GrammarSupport) -> Result<()> {
+    let Some(named) = body.get("tool_choice").filter(|tc| tc.is_object()) else {
+        return Ok(());
+    };
+    if host == GrammarSupport::Sovereign {
+        return Ok(());
+    }
+    tracing::warn!(target: "oicp_client", tool_choice = %named, "check_tool_choice: refused");
+    Err(Error::InvalidInput(format!(
+        "this host reads tool_choice as \"auto\", \"none\" or \"required\" and \
+         would answer the named choice {named} as \"auto\". It is refused rather \
+         than sent to be loosened."
+    )))
+}
+
 /// Write `schema` onto `body` in `mode`'s spelling, named after the schema's
 /// own `title` (JSON Schema's annotation for exactly that, which a grammar
 /// ignores) folded to the alphabet OpenAI accepts for a schema or function

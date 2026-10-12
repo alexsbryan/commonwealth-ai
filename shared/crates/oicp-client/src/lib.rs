@@ -799,6 +799,7 @@ impl RemoteApiProvider {
             body["sampling_mode"] = serde_json::json!(mode);
         }
         chat_wire::write_assistant_prefix(&mut body, request, self.grammar);
+        chat_wire::check_tool_choice(&body, self.grammar)?;
         if let Some(prefix) = &request.cmd_prefix {
             body["cmd_prefix"] = serde_json::json!(prefix);
         }

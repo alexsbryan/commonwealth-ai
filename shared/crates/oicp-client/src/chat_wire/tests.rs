@@ -544,3 +544,20 @@ fn a_schema_goes_out_closed_as_the_engine_compiles_it() {
         "{body}"
     );
 }
+
+/// THE FAILING INPUT for decode.tool-choice-named: a named function went to
+/// llama-server, which read it as "auto", so the call was optional and could
+/// be any tool. It is refused there; a daemon, and the string choices, pass.
+#[test]
+fn a_named_tool_choice_is_refused_where_the_host_would_loosen_it() {
+    let mut req = with_tools(named_request());
+    req.tool_choice = Some(json!({"type": "function", "function": {"name": "bash"}}));
+    let refused = llguidance().build_request(&req);
+    assert!(refused.is_err(), "{refused:?}");
+    let daemon = provider().build_request(&req).unwrap();
+    assert_eq!(daemon["tool_choice"]["function"]["name"], "bash");
+
+    req.tool_choice = Some(json!("required"));
+    let body = llguidance().build_request(&req).unwrap();
+    assert_eq!(body["tool_choice"], "required");
+}
