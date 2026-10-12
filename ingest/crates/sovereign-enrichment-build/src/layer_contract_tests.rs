@@ -163,7 +163,35 @@ fn spread_pick(prompt: &ChatPrompt, labels: usize) -> usize {
 /// The scripted oracle (module doc), recording every question it is asked. A
 /// wave is answered question by question, as a port that cannot batch does
 /// (`resolve_records::one_by_one`), so it records each single question.
-fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
+/// What a fixture knows of its particulars, for a model that answers RESOLVE
+/// right: per declared type, words that place a statement (a company's name in
+/// the statement's own words; for any other type, words in its document) and
+/// the mark of the candidate a right answer picks (as a candidate shows it).
+type Parties = &'static [(&'static str, &'static str, &'static str)];
+
+/// The candidate records a RESOLVE question shows, each with its quoted lines.
+fn candidate_blocks(user: &str, labels: &[String]) -> Vec<String> {
+    let mut blocks: Vec<String> = Vec::new();
+    let shown = user
+        .split_once("Candidate records:\n")
+        .and_then(|(_, rest)| rest.split_once("\nStatement, its words"))
+        .map_or("", |(shown, _)| shown);
+    for line in shown.lines() {
+        if labels
+            .get(blocks.len())
+            .is_some_and(|l| line.starts_with(&format!("{l} ")))
+        {
+            blocks.push(String::new());
+        }
+        if let Some(block) = blocks.last_mut() {
+            block.push_str(line);
+            block.push('\n');
+        }
+    }
+    blocks
+}
+
+fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose, parties: Parties) -> InferenceFn {
     corpus_engine::enrichment::atlas::resolve_records::one_by_one(Arc::new(
         move |prompt: &ChatPrompt, _| {
             asked.lock().unwrap().push(prompt.clone());
@@ -226,6 +254,86 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
                         .unwrap_or(0),
                     "document_passes_choose" if choose == Choose::Spread => {
                         spread_pick(prompt, labels.len())
+                    }
+                    // A line naming a party the fixture knows is answered
+                    // right: the company kind, then the party's own first and
+                    // last words; a line naming none, none.
+                    "document_passes_mention" if !parties.is_empty() => {
+                        let line = prompt
+                            .user
+                            .rsplit_once("Line ")
+                            .and_then(|(_, rest)| rest.split_once(": \""))
+                            .and_then(|(_, rest)| rest.split_once('"'))
+                            .map_or("", |(text, _)| text);
+                        let named = parties
+                            .iter()
+                            .find(|(of, name, _)| *of == "company" && line.contains(name))
+                            .map(|(_, name, _)| name);
+                        let shown = |want: &str| {
+                            labels.iter().position(|l| {
+                                prompt.user.lines().any(|row| {
+                                    row.strip_prefix(&format!("{l} ")).is_some_and(|w| {
+                                        w.trim_matches(|c: char| !c.is_alphanumeric()) == want
+                                    })
+                                })
+                            })
+                        };
+                        let pick = match named {
+                            None => None,
+                            Some(_) if prompt.user.contains("Which kind of thing does line") => {
+                                labels.iter().position(|l| {
+                                    prompt
+                                        .user
+                                        .lines()
+                                        .any(|row| row.starts_with(&format!("{l} company")))
+                                })
+                            }
+                            Some(name) if prompt.user.contains("start?") => {
+                                shown(name.split_whitespace().next().unwrap())
+                            }
+                            Some(name) => shown(name.split_whitespace().last().unwrap()),
+                        };
+                        pick.unwrap_or(labels.len() - 1)
+                    }
+                    // A statement the fixture places is answered right: the
+                    // candidate showing its mark, or none when none does.
+                    // Every other one, the first.
+                    "resolve_select" if !parties.is_empty() => {
+                        let of = prompt
+                            .user
+                            .strip_prefix("Type: ")
+                            .and_then(|rest| rest.split_whitespace().next())
+                            .unwrap_or("");
+                        let statement = prompt
+                            .user
+                            .split_once("its words in [[ ]]:")
+                            .map_or("", |(_, statement)| statement);
+                        let words = statement
+                            .split_once("[[")
+                            .and_then(|(_, rest)| rest.split_once("]]"))
+                            .map_or("", |(words, _)| words);
+                        let document = prompt
+                            .user
+                            .split_once("Document titled")
+                            .and_then(|(_, rest)| rest.split_once("\n>>>"))
+                            .map_or("", |(document, _)| document);
+                        let placed = parties.iter().find(|(t, key, _)| {
+                            *t == of
+                                && if of == "company" {
+                                    words.contains(key)
+                                } else {
+                                    document.to_lowercase().contains(&key.to_lowercase())
+                                }
+                        });
+                        match placed {
+                            Some((_, _, mark)) => candidate_blocks(&prompt.user, &labels)
+                                .iter()
+                                .position(|block| {
+                                    block.to_lowercase().contains(&mark.to_lowercase())
+                                })
+                                .unwrap_or(labels.len() - 1),
+                            None => 0,
+                        }
                     }
                     // About names a particular on a line the oracle would
                     // locate (six words or more), the first such line shown,
@@ -299,6 +407,23 @@ async fn run_with(fixture: &Fixture, asker: Asker, store: &Path) -> Run {
 }
 
 async fn run_choosing(fixture: &Fixture, asker: Asker, store: &Path, choose: Choose) -> Run {
+    run_as(fixture, asker, store, choose, &[]).await
+}
+
+/// The default path over `fixture` with a model that answers RESOLVE right
+/// for the companies `parties` names (`oracle`).
+async fn run_knowing(fixture: &Fixture, parties: Parties) -> Run {
+    let store = tempfile::tempdir().unwrap();
+    run_as(fixture, Asker::Daemon, store.path(), Choose::First, parties).await
+}
+
+async fn run_as(
+    fixture: &Fixture,
+    asker: Asker,
+    store: &Path,
+    choose: Choose,
+    parties: Parties,
+) -> Run {
     let spec = fixture.spec();
     let corpus_id = "layer-fixture";
     let cfg = config(corpus_id, spec.clone());
@@ -320,7 +445,7 @@ async fn run_choosing(fixture: &Fixture, asker: Asker, store: &Path, choose: Cho
         store,
         Arc::new(|_, _| "fixture-oracle".to_string()),
         embedder(),
-        oracle(Arc::clone(&asked), choose),
+        oracle(Arc::clone(&asked), choose, parties),
     )
     .unwrap();
     let work = tempfile::tempdir().unwrap();

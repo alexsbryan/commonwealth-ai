@@ -551,105 +551,152 @@ fn with_company_criterion() -> Fixture {
     f
 }
 
-/// A party the text names but no header does (cast instance 1): with a
-/// company criterion, each mention Pick would offer by its words is a
-/// statement RESOLVE decides. The header records keep their atom ids; a
-/// record a mention opened holds no domain its text does not state; a
-/// reference reading a mention lands on the record its document's mention is
-/// on, so the internal note leaves no reading unresolved; a served record is
-/// never our own side by domain, and one whose `ours` membership no domain
-/// can judge is served marked unjudged (D3).
+/// A company named in prose binds to the record its message's header names
+/// (cast instance 1; the delivery journey's first acceptance case). With a
+/// company criterion and a model that answers RESOLVE right, "Birch Hall" in
+/// Rosa's messages is the birchhall.example record, "Quay Market" in Ivo's is
+/// quaymarket.example, and "Alder and Pine Workshop" is our own
+/// alderpine.example: no company record is opened for them, the header
+/// records keep their ids, each order's client holds its customer's id, and
+/// our own company is never served and never unjudged.
 #[tokio::test]
-async fn a_mention_reading_lands_on_the_record_resolve_put_its_mention_on() {
-    let headers = |run: &Run| -> BTreeSet<String> {
+async fn a_company_named_in_prose_binds_to_its_header_record_and_is_the_orders_client() {
+    const PARTIES: &[(&str, &str, &str)] = &[
+        ("company", "Birch Hall", "web_domain: birchhall example"),
+        ("company", "Quay Market", "web_domain: quaymarket example"),
+        (
+            "company",
+            "Alder and Pine Workshop",
+            "web_domain: alderpine example",
+        ),
+        ("order", "oak chairs", "oak chairs"),
+        ("order", "walnut", "walnut"),
+    ];
+    let domain_of = |name: &str| match name {
+        "Birch Hall" => "birchhall.example",
+        "Quay Market" => "quaymarket.example",
+        _ => "alderpine.example",
+    };
+    let companies = |run: &Run| -> BTreeSet<String> {
         run.atoms()
             .iter()
             .filter(|a| a["data"]["entity_type"] == "company")
-            .filter(|a| a["data"]["attributes"]["web_domain"].is_string())
             .map(|a| a["data"]["id"].as_str().unwrap().to_string())
             .collect()
     };
     let base = run(&with_client_and_internal_note()).await;
-    let f = with_company_criterion();
-    let run = run(&f).await;
+    let run = run_knowing(&with_company_criterion(), PARTIES).await;
     let atoms = run.atoms();
-    let by_id: BTreeMap<&str, &Value> = atoms
-        .iter()
-        .filter_map(|a| Some((a["data"]["id"].as_str()?, a)))
-        .collect();
-    assert_eq!(
-        headers(&run),
-        headers(&base),
-        "a header record keeps its id"
+    let headers = companies(&base);
+    assert!(
+        headers.is_subset(&companies(&run)),
+        "a header record lost its id"
     );
-    let decided = run
-        .lines(DECISIONS_FILE)
-        .iter()
-        .filter(|d| {
-            let candidates = d["candidates"].as_array().unwrap();
-            candidates
+    // Each company record a mention opened, by the words put on it.
+    let opened: BTreeMap<String, Vec<&str>> = companies(&run)
+        .difference(&headers)
+        .map(|id| {
+            let words = atoms
                 .iter()
-                .any(|c| headers(&run).contains(c.as_str().unwrap()))
+                .filter(|a| a["data"]["subject"] == id.as_str())
+                .filter_map(|a| a["data"]["attributes"]["__document_read_words"].as_str())
+                .collect();
+            (id.clone(), words)
         })
-        .count();
-    assert!(decided > 0, "no mention was offered its message's records");
-    let mentioned: Vec<&Value> = atoms
-        .iter()
-        .filter(|a| a["data"]["entity_type"] == "company")
-        .filter(|a| !headers(&run).contains(a["data"]["id"].as_str().unwrap()))
         .collect();
-    assert!(!mentioned.is_empty(), "no mention opened a record");
-    for a in &mentioned {
-        assert!(
-            a["data"]["attributes"]["web_domain"].is_null(),
-            "a mention's record holds a domain its text does not state: {a}"
+    assert!(
+        opened.is_empty(),
+        "every company here has a header record, yet mentions opened {}: {opened:?}",
+        opened.len()
+    );
+    let company = |domain: &str| -> String {
+        atoms
+            .iter()
+            .find(|a| {
+                a["data"]["entity_type"] == "company"
+                    && a["data"]["attributes"]["web_domain"] == domain
+            })
+            .and_then(|a| a["data"]["id"].as_str())
+            .unwrap_or_else(|| panic!("no company record for {domain}"))
+            .to_string()
+    };
+    let mut bound = BTreeSet::new();
+    for a in &atoms {
+        let Some(words) = a["data"]["attributes"]["__document_read_words"].as_str() else {
+            continue;
+        };
+        let Some((_, name, _)) = PARTIES
+            .iter()
+            .find(|(of, name, _)| *of == "company" && words.contains(name))
+        else {
+            continue;
+        };
+        let domain = domain_of(name);
+        assert_eq!(
+            a["data"]["subject"].as_str(),
+            Some(company(domain).as_str()),
+            "the mention {words:?} is not on {domain}'s record: {a}"
         );
+        bound.insert(*name);
     }
+    assert_eq!(
+        bound.len(),
+        3,
+        "a party's mention was never decided: {bound:?}"
+    );
     let lines: Vec<Value> = run
         .lines(DERIVED_FILE)
         .into_iter()
         .filter(|l| l["type"] == "order" && l["attribute"] == "client")
         .collect();
-    let mut unjudged = 0;
+    let client = |doc: &str| -> &Value {
+        lines
+            .iter()
+            .find(|l| {
+                l["documents"]
+                    .as_array()
+                    .is_some_and(|d| d.contains(&json!(doc)))
+            })
+            .unwrap_or_else(|| panic!("no order's client is read from {doc}: {lines:?}"))
+    };
+    let orders: Vec<Value> = run
+        .lines(DECISIONS_FILE)
+        .into_iter()
+        .filter(|d| d["type"] == "order")
+        .map(|d| {
+            json!([
+                d["document"],
+                d["candidates"],
+                d["outcomes"]
+                    .as_array()
+                    .map(|o| o.iter().map(|o| o["outcome"].clone()).collect::<Vec<_>>())
+            ])
+        })
+        .collect();
+    assert_eq!(
+        lines.len(),
+        2,
+        "the chairs and the bookcase, each one order: {lines:?}; RESOLVE's order decisions: {orders:?}"
+    );
+    assert_eq!(
+        client("q1@birchhall.example")["values"],
+        json!([company("birchhall.example")])
+    );
+    assert_eq!(
+        client("b1@quaymarket.example")["values"],
+        json!([company("quaymarket.example")])
+    );
+    let ours = company("alderpine.example");
     for line in &lines {
         assert!(
-            line["unresolved"].is_null(),
-            "a reading of a mention found no record: {line}"
+            line["unjudged"].is_null(),
+            "every client here is judged by its domain: {line}"
         );
-        let held = &by_id[line["atom"].as_str().unwrap()]["data"]["attributes"]["client"];
-        let Some(target) = held.as_str().map(|id| by_id[id]) else {
-            continue;
-        };
-        match target["data"]["attributes"]["web_domain"].as_str() {
-            Some(domain) => assert!(
-                !domain.ends_with("alderpine.example"),
-                "our own side is served: {line}"
-            ),
-            None => {
-                unjudged += 1;
-                assert!(
-                    line["unjudged"]
-                        .as_array()
-                        .is_some_and(|u| u.contains(held)),
-                    "a record no set can judge is served unmarked: {line}"
-                );
-            }
-        }
-    }
-    let note = lines
-        .iter()
-        .find(|l| {
-            l["documents"]
+        assert!(
+            !line["values"]
                 .as_array()
-                .is_some_and(|d| d.contains(&json!("n1@alderpine.example")))
-        })
-        .expect("the internal note's order folds `client`");
-    assert!(
-        note["values"].is_array(),
-        "the note's mention reading holds a record: {note}"
-    );
-    assert!(
-        unjudged > 0,
-        "no mention's record was served, so D3 judged none"
-    );
+                .is_some_and(|v| v.contains(&json!(ours))),
+            "our own side is served: {line}"
+        );
+    }
 }

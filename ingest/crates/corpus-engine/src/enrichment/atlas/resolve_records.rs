@@ -203,6 +203,15 @@ pub enum Decision {
         posterior: f64,
         sources: Vec<Vote>,
     },
+    /// The model, shown the record among the statement's candidates, chose it
+    /// over every other and over none, and its choice decides
+    /// (`select.rs`); `posterior` is what the weighed sources gave the record,
+    /// kept beside it, and `sources` those that agreed with it.
+    Chosen {
+        record: String,
+        posterior: f64,
+        sources: Vec<Vote>,
+    },
     /// None of the candidates: a record was opened. `cite` is `None` only for
     /// a statement alone in its document with no candidate, where no call is made.
     Opened {
@@ -266,6 +275,7 @@ impl Outcome {
             Outcome::Decided(Decision::Key { .. }) => "key",
             Outcome::Decided(Decision::Cited { .. }) => "cited",
             Outcome::Decided(Decision::Weighed { .. }) => "weighed",
+            Outcome::Decided(Decision::Chosen { .. }) => "chosen",
             Outcome::Decided(Decision::Opened { .. }) => "opened",
             Outcome::Held(_) => "held",
             Outcome::Refused(r) => match r {
@@ -287,6 +297,7 @@ impl Outcome {
                 Decision::Key { record, .. }
                 | Decision::Cited { record, .. }
                 | Decision::Weighed { record, .. }
+                | Decision::Chosen { record, .. }
                 | Decision::Opened { record, .. },
             ) => Some(record),
             Outcome::Refused(_) | Outcome::Held(_) => None,
@@ -431,6 +442,11 @@ enum Plan {
         cite: String,
     },
     Weighed {
+        record: usize,
+        posterior: f64,
+        votes: Vec<Vote>,
+    },
+    Chosen {
         record: usize,
         posterior: f64,
         votes: Vec<Vote>,
@@ -792,6 +808,27 @@ impl Resolver {
                         None,
                     );
                     Outcome::Decided(Decision::Weighed {
+                        record: self.records[record].id.clone(),
+                        posterior,
+                        sources: votes,
+                    })
+                }
+                Plan::Chosen {
+                    record,
+                    posterior,
+                    votes,
+                } => {
+                    self.fold(
+                        record,
+                        doc,
+                        &statements[i],
+                        surface[i],
+                        &folded_keys[i],
+                        &read_of[i],
+                        &supplied[i],
+                        None,
+                    );
+                    Outcome::Decided(Decision::Chosen {
                         record: self.records[record].id.clone(),
                         posterior,
                         sources: votes,

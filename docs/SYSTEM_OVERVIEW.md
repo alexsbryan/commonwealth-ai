@@ -761,7 +761,10 @@ question the pipeline asks about a type is a method on the resolved
   `--answer select` (`resolve_records/select.rs`) asks instead one forced
   choice per statement, in document order, over the shown candidates and the
   records this document opened, read as a distribution in one forward pass and
-  kept on the outcome (`Choice`); the argmax is one source among the rest.
+  kept on the outcome (`Choice`); its argmax decides whenever a record was
+  shown, the record it picks (`Decision::Chosen`) or none, which opens one
+  (operator delivery review 2026-10-12: on Ward the weighed decider overrode
+  36 of the model's 39 picks of an offered company).
   A type's `identity_necessary` attributes (each with declared `values`) are READ
   per asked statement as one forced choice over those values
   (`resolve_records/read.rs`), unless the document reader already chose it
@@ -779,7 +782,10 @@ question the pipeline asks about a type is a method on the resolved
   as evidence against, and sources identical on every pair count once), refitted after every
   document in clock order, so a document is weighed at what the documents
   before it estimate; the recipe declares no precision (`identity_evidential`
-  is a retired key, warned and ignored). The decider (`resolve_records/weigh.rs`)
+  is a retired key, warned and ignored). The weighed posterior is kept beside
+  every model choice; it decides only a statement no record was shown to the
+  model for (a field-named or proposed record alone) and every statement under a
+  partition answerer. That decider (`resolve_records/weigh.rs`)
   sums each alternative's weights with the pair prior into its log odds
   against none: one an agreeing source raised and whose posterior reaches
   `identity_bar` links (`Decision::Weighed`, with the sources that agreed);
@@ -790,13 +796,14 @@ question the pipeline asks about a type is a method on the resolved
   settled (`resolve_records/settle.rs`, E3, called by `drive.rs` for both
   drivers): weighed again against the records it was held between as they
   stand, at the whole corpus's weights, with the model asked once more over
-  those records only (one more `model_choice` or `reasoned_choice`); at the bar
-  it links, with no source raising a record it opens its own, and still
-  unsettled the most probable decides, so nothing is left held. Each settled
+  those records only (`model_choice` or `reasoned_choice`), whose choice
+  decides as in a document; with no model, at the bar it links, with no source
+  raising a record it opens its own, and still unsettled the most probable
+  decides, so nothing is left held. Each settled
   document reaches `on_document` again as a resolution with `settles`, its
   outcomes replacing the held ones (`RecordsReport::settled` is the held count
   before; `outcomes["held"]` after). The model
-  is asked only where the other sources do not already link. The resolve step
+  is asked whenever a record is offered. The resolve step
   prints, per source, its estimated precision, weights and the links and
   vetoes it carried (`Resolver::sources_summary`).
   `--answer reason` reads the same choice after the model's own bounded

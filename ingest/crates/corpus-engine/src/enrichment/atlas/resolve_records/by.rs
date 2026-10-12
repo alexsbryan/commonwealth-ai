@@ -21,6 +21,9 @@ impl Outcome {
                 "model_partition",
                 Precision::Unmeasured,
             )],
+            Outcome::Decided(Decision::Chosen { .. }) => {
+                vec![SourcePrecision::new("model_choice", Precision::Unmeasured)]
+            }
             Outcome::Decided(Decision::Weighed { sources, .. })
             | Outcome::Held(Held { sources, .. }) => sources
                 .iter()

@@ -5,12 +5,13 @@
 //! it made, at weights those documents estimate; one it held there is weighed
 //! again here, against the records it was held between as they stand after
 //! the last document, at the weights the whole corpus estimates, with the
-//! model asked once more, over those records only, as one more weighed source
-//! (`model_choice`, or `reasoned_choice` when the run reasons). A record the
-//! posterior puts at the type's bar takes it; one where no source raises any
-//! record opens its own; and where it is still unsettled the most probable of
-//! the records and none decides, as with no bar declared, so nothing is left
-//! held after the last document. Statements settle in the documents' clock
+//! model asked once more, over those records only (`model_choice`, or
+//! `reasoned_choice` when the run reasons): its choice decides, as in a
+//! document (`select.rs`), the posterior kept beside it. With no model, a
+//! record the posterior puts at the type's bar takes it; one where no source
+//! raises any record opens its own; and where it is still unsettled the most
+//! probable of the records and none decides, as with no bar declared, so
+//! nothing is left held after the last document. Statements settle in the documents' clock
 //! order, each document's in text order, so any input order settles alike.
 
 use std::collections::BTreeMap;
@@ -129,6 +130,8 @@ impl Resolver {
             })
             .collect();
         let (mut calls, mut choice) = (0, None);
+        // What the model picks when asked again: it decides, as in a document.
+        let mut picked: Option<Option<usize>> = None;
         let model = match answerer {
             Answerer::Select(infer) => Some((infer, false)),
             Answerer::Reason(infer) => Some((infer, true)),
@@ -165,6 +168,7 @@ impl Resolver {
                         comp.insert(source.into(), best == Some(k));
                     }
                     choice = Some(c);
+                    picked = Some(best);
                 }
                 Err(refusal) => return (Outcome::Refused(refusal), None, calls, candidates),
             }
@@ -180,17 +184,36 @@ impl Resolver {
             weighed = weigh(&evidence, &raised, prior, None);
             debug!(document = doc.id, statement = %s.id, zone = ?weighed.zone, "atlas/resolve settle: unsettled at the bar; the most probable decides");
         }
+        // The model's choice decides a statement it was asked about, as in a
+        // document (`select.rs`); the weighed posterior is kept beside it.
+        let zone = match picked {
+            Some(Some(k)) => Zone::Link(k, weighed.posterior[k]),
+            Some(None) => Zone::NoLink,
+            None => weighed.zone,
+        };
+        if picked.is_some() {
+            debug!(document = doc.id, statement = %s.id, decided = ?zone, weighed = ?weighed.zone, "atlas/resolve settle: the model's choice decides; the weighed zone is kept beside it");
+        }
         let surface = doc.body.get(s.start..s.end).unwrap_or("");
         let keys = declared_keys(criterion, s);
-        let outcome = match weighed.zone {
+        let outcome = match zone {
             Zone::Link(at, posterior) => {
                 let r = alts[at];
                 let votes = fields::votes_for(&comps[at], &self.records[r].id, estimate);
                 self.fold(r, doc, s, surface, &keys, &held.read, &held.supplied, None);
-                Outcome::Decided(Decision::Weighed {
-                    record: self.records[r].id.clone(),
-                    posterior,
-                    sources: votes,
+                let record = self.records[r].id.clone();
+                Outcome::Decided(if picked.is_some() {
+                    Decision::Chosen {
+                        record,
+                        posterior,
+                        sources: votes,
+                    }
+                } else {
+                    Decision::Weighed {
+                        record,
+                        posterior,
+                        sources: votes,
+                    }
                 })
             }
             Zone::NoLink | Zone::Unsettled => {

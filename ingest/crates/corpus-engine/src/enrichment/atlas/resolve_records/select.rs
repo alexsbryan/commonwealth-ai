@@ -6,11 +6,15 @@
 //! of this document opened is a candidate for the ones after it, so grouping
 //! within a document needs no second question.
 //!
-//! Ring 0 of the identity plan (`research/ontology-apps/resolve-prereg.md`):
-//! unmeasured, the most probable label decides, so the information the choice
-//! carries can be measured. Measured, its argmax is one source the decider
-//! weighs with the rest (Ring 2, `weigh.rs`); the full distribution is kept on
-//! every outcome.
+//! The model is asked whenever a record is offered, and its most probable
+//! label decides: a record it picks over every other and over none
+//! (`Decision::Chosen`), or none, which opens one. The sources `weigh.rs`
+//! weighs at their corpus-estimated weights are kept beside the choice, never
+//! over it: a statement no candidate was offered for is the only one they
+//! decide. Operator delivery review, 2026-10-12: on Ward the weighed decider
+//! overrode 36 of the model's 39 picks of an offered company and linked 42
+//! statements no model was asked about, so it earns no authority it has not
+//! shown in the workflow. The full distribution is kept on every outcome.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
@@ -197,9 +201,10 @@ pub(super) fn gate_plans(
     for (j, mut plan) in decided.into_iter().enumerate() {
         let i = asked[j];
         let target = match &plan {
-            Plan::Key { record, .. } | Plan::Join { record, .. } | Plan::Weighed { record, .. } => {
-                Some(*record)
-            }
+            Plan::Key { record, .. }
+            | Plan::Join { record, .. }
+            | Plan::Weighed { record, .. }
+            | Plan::Chosen { record, .. } => Some(*record),
             Plan::Open { .. } | Plan::Held(_) | Plan::Refuse(_) => None,
         };
         if let Some(record) = target {
@@ -329,9 +334,10 @@ impl Candidate<'_> {
 /// Where an earlier asked statement's plan put it; `None` when held or refused.
 fn alt_of(plan: &Plan) -> Option<Alt> {
     match plan {
-        Plan::Key { record, .. } | Plan::Join { record, .. } | Plan::Weighed { record, .. } => {
-            Some(Alt::Record(*record))
-        }
+        Plan::Key { record, .. }
+        | Plan::Join { record, .. }
+        | Plan::Weighed { record, .. }
+        | Plan::Chosen { record, .. } => Some(Alt::Record(*record)),
         Plan::Open { group, .. } => Some(Alt::Opened(*group)),
         Plan::Held(_) | Plan::Refuse(_) => None,
     }
@@ -486,9 +492,11 @@ pub(super) async fn choose(
         let raised = |comps: &[Comparison]| -> Vec<bool> {
             comps.iter().map(|c| estimate.supports(c)).collect()
         };
-        let before = weigh(&evidence(&comps), &raised(&comps), prior, criterion.bar);
         let mut choice: Option<Choice> = None;
-        if !matches!(before.zone, Zone::Link(..)) && !candidates.is_empty() {
+        // The model is asked whenever a record is offered, so no statement
+        // links on fitted weights alone; what it picks is `picked`.
+        let mut picked: Option<Option<Alt>> = None;
+        if !candidates.is_empty() {
             let Some(same_when) = criterion.same_when.as_deref() else {
                 plans.push(Plan::Refuse(Refusal::NoCriterion));
                 choices.push(None);
@@ -566,22 +574,39 @@ pub(super) async fn choose(
             for (k, c) in comps.iter_mut().enumerate().take(candidates.len()) {
                 c.insert(model_source.into(), best == Some(alts[k]));
             }
+            picked = Some(best);
         }
         let weighed = weigh(&evidence(&comps), &raised(&comps), prior, criterion.bar);
-        tally(
-            &mut carried,
-            &comps,
-            estimate,
-            prior,
-            criterion.bar,
-            weighed.zone,
-        );
+        // The model's forced choice decides an asked statement, its pick or
+        // none (operator delivery review, 2026-10-12: fitted weights are not
+        // an authority; on Ward they overrode 36 of the model's 39 picks of an
+        // offered company). The weighed posterior is kept beside it.
+        let zone = match picked {
+            Some(Some(alt)) => {
+                let at = alts
+                    .iter()
+                    .position(|&a| a == alt)
+                    .expect("the model picks among the alternatives it was shown");
+                Zone::Link(at, weighed.posterior[at])
+            }
+            Some(None) => Zone::NoLink,
+            None => weighed.zone,
+        };
+        tally(&mut carried, &comps, estimate, prior, criterion.bar, zone);
         // Each alternative by its record id beside its comparison, so the
         // estimate can be read against gold pair by pair (layer-estimator).
         let named: Vec<String> = alts.iter().map(|&a| id_of(a)).collect();
         debug!(document = doc.id, statement = %statements[i].id, alternatives = ?named, comparisons = ?comps, zone = ?weighed.zone, "atlas/resolve: the sources weighed");
-        let decided = match weighed.zone {
+        if picked.is_some() {
+            debug!(document = doc.id, statement = %statements[i].id, decided = ?zone, weighed = ?weighed.zone, "atlas/resolve: the model's choice decides; the weighed zone is kept beside it");
+        }
+        let decided = match zone {
             Zone::Link(at, posterior) => match alts[at] {
+                Alt::Record(record) if picked.is_some() => Plan::Chosen {
+                    record,
+                    posterior,
+                    votes: fields::votes_for(&comps[at], &records[record].id, estimate),
+                },
                 Alt::Record(record) => Plan::Weighed {
                     record,
                     posterior,

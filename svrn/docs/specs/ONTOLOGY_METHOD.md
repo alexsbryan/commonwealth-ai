@@ -104,7 +104,10 @@ sides, one a model chose (the reader's Choose or RESOLVE's READ) being one more 
 checks on the default path; E3, 2026-10-10: a statement held in its document is settled after the last one,
 weighed again against the records it was held between at the whole corpus's weights with the model asked once
 more over those only, linking at the bar, opening its own record when nothing raises one, and otherwise taken by
-the most probable, so nothing is left held, `resolve_records/settle.rs`); **3** the layer's other identity deciders onto it (about fifteen today, with
+the most probable, so nothing is left held, `resolve_records/settle.rs`; amended 2026-10-12 by the operator's
+delivery review: the model's forced choice decides every statement it was shown a record for, in its document and
+at settling, and the weighed posterior is kept beside it, deciding only what no model was shown, since on Ward the
+weights overrode 36 of its 39 picks of an offered company); **3** the layer's other identity deciders onto it (about fifteen today, with
 three ways of combining keys; begun: an entity or event type with a criterion and no source is RESOLVE's alone in the
 atlas build, over the claims whose subject it is, `resolution_records.rs`). A precision is measured on the rule as it runs, never under gold alone: a field
 follows whatever decision put its value in a record (uv thread .905 under gold, .71 live). That is why it is

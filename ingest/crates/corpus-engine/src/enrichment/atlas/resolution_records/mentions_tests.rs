@@ -105,9 +105,11 @@ fn mention(id: &str, doc: &str, line: &str, words: &str, n: usize) -> Claim {
     .unwrap()
 }
 
-/// Every forced choice answered with its first label: a candidate when one is
-/// shown; any other question refused. Each question is kept.
-fn first_label(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> crate::InferenceFn {
+/// A model that answers RESOLVE right for this fixture: PG&E is the pge.com
+/// record; Tucson Electric is the record that holds no domain and was said
+/// as Tucson Electric in another message, or none while there is no such
+/// record. Any other question is refused. Each question is kept.
+fn knowing(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> crate::InferenceFn {
     super::super::resolve_records::one_by_one(Arc::new(move |prompt: &ChatPrompt, _| {
         asked.lock().unwrap().push(prompt.clone());
         let labels: Option<Vec<String>> = prompt
@@ -117,11 +119,43 @@ fn first_label(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> crate::InferenceFn {
             .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect());
         let answer = match labels {
             Some(labels) => {
+                let user = &prompt.user;
+                let words = user
+                    .split_once("its words in [[ ]]:")
+                    .and_then(|(_, rest)| rest.split_once("[["))
+                    .and_then(|(_, rest)| rest.split_once("]]"))
+                    .map_or("", |(words, _)| words);
+                let marks: &[&str] = match words {
+                    "PG&E" => &["domain: pge com"],
+                    "Tucson Electric" => &["no declared value", "Tucson Electric"],
+                    _ => &[],
+                };
+                // Each candidate's lines: its label's line and the quotes under it.
+                let shown = user
+                    .split_once("Candidate records:\n")
+                    .and_then(|(_, rest)| rest.split_once("\nStatement, its words"))
+                    .map_or("", |(shown, _)| shown);
+                let mut blocks: Vec<String> = Vec::new();
+                for line in shown.lines() {
+                    if labels
+                        .get(blocks.len())
+                        .is_some_and(|l| line.starts_with(&format!("{l} ")))
+                    {
+                        blocks.push(String::new());
+                    }
+                    if let Some(b) = blocks.last_mut() {
+                        b.push_str(line);
+                    }
+                }
+                let pick = blocks
+                    .iter()
+                    .position(|b| !marks.is_empty() && marks.iter().all(|m| b.contains(m)))
+                    .unwrap_or(labels.len() - 1);
                 let rest = 0.03 / labels.len() as f64;
                 let dist: Map<String, Value> = labels
                     .iter()
                     .enumerate()
-                    .map(|(i, l)| (l.clone(), json!(if i == 0 { 0.97 } else { rest })))
+                    .map(|(i, l)| (l.clone(), json!(if i == pick { 0.97 } else { rest })))
                     .collect();
                 Ok(Value::Object(dist).to_string())
             }
@@ -136,8 +170,9 @@ fn first_label(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> crate::InferenceFn {
 /// The source's records are RESOLVE's first records, under the atom ids the
 /// source gave them, and each is offered to its own message's mentions as
 /// named in a field; two names on one line are two statements, each its own
-/// words; a mention in a message whose fields name no company reaches a
-/// record that holds no domain, since its text states none.
+/// words. Answered right, PG&E is the pge.com record, and Tucson Electric,
+/// which no header names, opens a record that holds no domain (its text
+/// states none) and is the same record when the next message names it.
 #[tokio::test]
 async fn a_mention_is_decided_against_the_records_its_message_names() {
     let p = policies(DECLARATION);
@@ -159,7 +194,7 @@ async fn a_mention_is_decided_against_the_records_its_message_names() {
     let (mut ars, mut positions, mut oppositions) = (Vec::new(), Vec::new(), Vec::new());
     let (mut edges, mut trajectories) = (Vec::new(), BTreeMap::new());
     let asked = Arc::new(Mutex::new(Vec::new()));
-    let infer = first_label(Arc::clone(&asked));
+    let infer = knowing(Arc::clone(&asked));
     let (reports, failures) = {
         let mut atoms = BuildAtoms {
             entities: &mut entities,
@@ -220,10 +255,21 @@ async fn a_mention_is_decided_against_the_records_its_message_names() {
     for claim in ["claim-1", "claim-2", "claim-3"] {
         assert_eq!(subject(claim).entity_type.as_str_repr(), "company");
     }
+    let pge = projection
+        .atoms
+        .iter()
+        .find(|e| e.attributes.get("domain") == Some(&json!("pge.com")))
+        .expect("pge.com is a source record");
+    assert_eq!(subject("claim-1").id, pge.id, "PG&E is the pge.com record");
     let alone = subject("claim-3");
     assert!(
         !sourced.contains(alone.id.as_str()),
-        "m2's fields name no company, so none is offered"
+        "Tucson Electric is no header's company"
+    );
+    assert_eq!(
+        alone.id,
+        subject("claim-2").id,
+        "m2's Tucson Electric is the record m1's opened"
     );
     assert!(
         !alone.attributes.contains_key("domain"),
