@@ -365,8 +365,14 @@ pub(crate) fn top_level_grammar(grammar_or_schema: &str) -> Result<TopLevelGramm
 pub(crate) fn engine_schema_text(schema: &serde_json::Value) -> Result<String, LlgError> {
     let mut walked = schema.clone();
     default_additional_properties_false(&mut walked);
-    serde_json::to_string(&walked)
-        .map_err(|e| LlgError::ParserCreate(format!("serialise walked schema: {e}")))
+    let text = serde_json::to_string(&walked)
+        .map_err(|e| LlgError::ParserCreate(format!("serialise walked schema: {e}")))?;
+    tracing::debug!(
+        closed = walked != *schema,
+        schema = %text,
+        "llguidance: the schema compiled, after the closed-object default"
+    );
+    Ok(text)
 }
 
 fn trace_enabled() -> bool {
