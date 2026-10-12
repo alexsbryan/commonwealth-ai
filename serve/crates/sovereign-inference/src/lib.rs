@@ -32,6 +32,8 @@ pub mod vocab_cache;
 #[cfg(test)]
 mod decode_allowlist_parity_tests;
 #[cfg(test)]
+mod ggml_type_size_golden_tests;
+#[cfg(test)]
 mod llg_parity_corpus_tests;
 #[cfg(test)]
 mod llg_whole_string;

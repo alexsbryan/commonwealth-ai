@@ -20,6 +20,7 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+pub(crate) mod ggml_type;
 mod split;
 pub use split::*;
 
@@ -244,24 +245,23 @@ fn parse_gguf(path: &Path) -> std::io::Result<(Vec<TensorInfo>, u64)> {
 }
 
 /// Byte length of a contiguous tensor, matching `ggml_nbytes`:
-/// `row_size(type, ne0) * ne1 * ne2 * …`. Uses the bound ggml size helpers so
-/// every quant type is exact without a hand-coded table.
-fn tensor_nbytes(t: &TensorInfo) -> u64 {
+/// `row_size(type, ne0) * ne1 * ne2 * …`, from [`ggml_type::ggml_row_bytes`].
+/// A type id ggml does not define is an `InvalidData` error naming it.
+fn tensor_nbytes(t: &TensorInfo) -> std::io::Result<u64> {
     if t.dims.is_empty() {
-        return 0;
+        return Ok(0);
     }
-    // SAFETY: ggml_row_size is a pure size calculation over the type enum.
-    let row = unsafe {
-        crate::llama::sys::ggml_row_size(
-            t.ggml_type as crate::llama::sys::ggml_type,
-            t.dims[0] as i64,
+    let row = ggml_type::ggml_row_bytes(t.ggml_type, t.dims[0]).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("tensor {}: unknown ggml type {}", t.name, t.ggml_type),
         )
-    } as u64;
+    })?;
     let mut n = row;
     for d in &t.dims[1..] {
         n = n.saturating_mul(*d);
     }
-    n
+    Ok(n)
 }
 
 /// Streaming FNV-1a (64-bit) — byte-for-byte the hash the RPC worker names its
@@ -453,7 +453,7 @@ pub fn build_manifest(gguf_path: &Path) -> std::io::Result<Vec<TensorManifestEnt
             .to_string();
         out.reserve(tensors.len());
         for t in &tensors {
-            let nbytes = tensor_nbytes(t);
+            let nbytes = tensor_nbytes(t)?;
             let cacheable = nbytes > HASH_THRESHOLD;
             let start = data_offset + t.offset;
             // Only cacheable tensors are ever hash-matched; a non-cacheable
@@ -490,7 +490,7 @@ pub fn tensor_sizes(gguf_path: &Path) -> std::io::Result<Vec<(String, Option<u32
         let (tensors, _data_offset) = parse_gguf(&shard)?;
         out.reserve(tensors.len());
         for t in &tensors {
-            out.push((t.name.clone(), tensor_layer(&t.name), tensor_nbytes(t)));
+            out.push((t.name.clone(), tensor_layer(&t.name), tensor_nbytes(t)?));
         }
     }
     Ok(out)
@@ -534,7 +534,7 @@ fn warm_slice_one_file(
     let mut buf = vec![0u8; CHUNK];
 
     for t in &tensors {
-        let nbytes = tensor_nbytes(t);
+        let nbytes = tensor_nbytes(t)?;
         if nbytes <= HASH_THRESHOLD {
             continue;
         }
