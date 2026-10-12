@@ -1122,6 +1122,13 @@ default = "off"
 status = "experiment"
 purpose = "A/B valve for forced-choice waves (oicp_types::forced_choice::wave): =1 makes the ontology verbs' daemon client ask each question of a wave as its own request, the request pattern before waves. Same questions, keys and recorded answers either way (asker.rs ask_wave); only the transport differs. Read once per port build (inference_client::into_asked_closures)."
 
+
+[[flag]]
+name = "SOVEREIGN_READER"
+cluster = "inference"
+default = "unset"
+status = "experiment"
+purpose = "=waves reads documents with the compiled reader (document_read/waves.rs): the declaration compiled into levels of closed questions, particulars first, each round one forced-choice wave off one document prefix. Unset, the passes reader. Read per chapter (passes::read) and in the read contract's fingerprint, so cached reads of one reader are never served to the other."
 [[flag]]
 name = "SOVEREIGN_RERANK_MODEL_PATH"
 cluster = "inference"

@@ -274,7 +274,7 @@ pub(super) enum Reading {
 
 impl Reading {
     /// The field a statement carries from this reading, citing `evidence`.
-    fn field(&self, evidence: &str) -> DocumentReadField {
+    pub(super) fn field(&self, evidence: &str) -> DocumentReadField {
         match self {
             // No read precision is declared yet: the agreed value decides so
             // that it can be measured (`passes.rs` module doc).

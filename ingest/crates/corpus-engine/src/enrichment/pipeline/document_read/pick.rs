@@ -60,7 +60,7 @@ pub(super) enum Candidate {
 }
 
 impl Candidate {
-    fn shown(&self, of: &str) -> String {
+    pub(super) fn shown(&self, of: &str) -> String {
         match self {
             Candidate::Record {
                 identity,
@@ -80,7 +80,7 @@ impl Candidate {
     }
 
     /// The value a chosen candidate gives the field, and what cites it.
-    fn answer(&self) -> (String, String) {
+    pub(super) fn answer(&self) -> (String, String) {
         match self {
             Candidate::Record {
                 identity, scalar, ..

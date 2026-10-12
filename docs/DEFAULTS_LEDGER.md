@@ -30,6 +30,27 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `SOVEREIGN_READER=waves` — the compiled reader, off until measured (2026-10-12)
+
+**What ships.** `document_read/waves.rs`: the declaration compiled into levels
+of closed questions, particulars first (count, then each pointed at), then per
+particular its fields and acts, then per claim its fields. Every question
+opens with the document's facts and numbered lines, and each round of a level
+asks every job's next question as one forced-choice wave. Unset, the passes
+reader reads, unchanged.
+
+**Why off.** It changes what is asked, not only how it travels: line-by-line
+Locate and Mention become enumerations, and fields are read per particular
+over the whole document. Served records may move either way.
+
+**Flip condition.** The pre-registered experiment (cast-probe-style PREREG
+under research/ontology-apps/waves/) passes on Ward, uv and GVC: no system
+loses more than run-to-run churn on its served-record metric, and the cost
+per document falls as its bar says. Refuted, the row moves to Rejected and
+the three files are deleted.
+
+**Review by 2026-10-26.**
+
 ### `[engine] embed_inputs` — `server` unless the operator says `client` (2026-10-09)
 
 **What ships.** A remote engine's embed half prepares inputs (instruction

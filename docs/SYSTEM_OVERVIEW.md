@@ -630,8 +630,12 @@ question the pipeline asks about a type is a method on the resolved
   subject fields flow to RESOLVE. A claim carries its subject's readings whole
   (`SUBJECT_FIELDS_ATTRIBUTE`, each a `DocumentReadField` like its own fields),
   RESOLVE keys on their supported values and keeps them on the claim, and the
-  projection sketches no subject (RESOLVE alone makes those records). One reader asks: the passes reader
-  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). Every question about a
+  projection sketches no subject (RESOLVE alone makes those records). The passes reader asks by default
+  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading); `SOVEREIGN_READER=waves` (experiment, DEFAULTS_LEDGER)
+  reads with the compiled reader instead (`document_read/waves.rs`): the declaration compiled into levels,
+  each declared target counted and its particulars pointed at first, then per particular its fields and acts,
+  then per claim its fields, every question opening with one document prefix and each round of a level one
+  forced-choice wave (`waves_jobs.rs`). Every question about a
   document opens with its declared facts (`prefill.rs`: the metadata fields the
   declaration names and the declared sets they put the document or a sourced
   record in, read through the projection's own field readers,

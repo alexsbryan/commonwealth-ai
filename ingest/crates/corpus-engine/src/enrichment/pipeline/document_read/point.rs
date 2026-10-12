@@ -147,7 +147,7 @@ pub(super) async fn point_span(
 }
 
 /// How a family's value is named in the question.
-fn family_words(family: &AttrFamily) -> String {
+pub(super) fn family_words(family: &AttrFamily) -> String {
     match family {
         AttrFamily::Text { .. } => "words of the statement".into(),
         AttrFamily::Quantity { unit: Some(u) } => format!("a number, in {u}"),

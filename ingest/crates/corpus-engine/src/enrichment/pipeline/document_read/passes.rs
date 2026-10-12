@@ -56,6 +56,9 @@ pub async fn read(
     classes: &LineClasses,
     infer: &InferenceFn,
 ) -> Result<String> {
+    if super::waves::chosen() {
+        return super::waves::read(chapter, policies, classes, infer).await;
+    }
     let plan = Plan::of(policies);
     if plan.kinds.is_empty() {
         return Err(Error::InvalidInput(
@@ -601,6 +604,9 @@ pub fn read_fields(
 /// question's wording changes this value, and so the contract fingerprint
 /// that keys cached reads (`schema::contract_value`).
 pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
+    if super::waves::chosen() {
+        return super::waves::contract_value(policies);
+    }
     let plan = Plan::of(policies);
     let body = "first line\nsecond line";
     let lines = lines(body);

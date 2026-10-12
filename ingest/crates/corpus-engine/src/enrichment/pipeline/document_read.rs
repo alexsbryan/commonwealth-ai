@@ -22,6 +22,10 @@ mod projection;
 mod runner_support;
 mod schema;
 mod validation;
+mod waves;
+mod waves_forms;
+mod waves_jobs;
+mod waves_readings;
 
 pub use cache::{
     cache_matches_chapter, checkpoint_processed_ids, context_fingerprint, contract_fingerprint,
