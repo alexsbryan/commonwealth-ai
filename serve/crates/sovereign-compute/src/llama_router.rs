@@ -397,6 +397,13 @@ impl RouterPreset {
             embed_inputs: Some(EmbedInputs::Client),
             // The shipped router is built with llguidance.
             grammar: Some(GrammarSupport::Llguidance),
+            // The embedded engine's decode deadline, on every chat request.
+            // The server measures it from the first generated token and
+            // stops only at a newline past it, where the engine stopped
+            // the wall clock outright: no caller reads that difference.
+            extra_params: Some(serde_json::json!({
+                "t_max_predict_ms": sovereign_inference::embedded::inference_deadline_secs() * 1000
+            })),
             ..Default::default()
         }
     }

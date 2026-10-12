@@ -827,7 +827,8 @@ fn env_tensor_buft_overrides() -> Vec<(
     out
 }
 
-fn inference_deadline_secs() -> u64 {
+/// Public: the llama-server router sends this deadline as `t_max_predict_ms`.
+pub fn inference_deadline_secs() -> u64 {
     use std::sync::OnceLock;
     static DEADLINE: OnceLock<u64> = OnceLock::new();
     *DEADLINE.get_or_init(|| {

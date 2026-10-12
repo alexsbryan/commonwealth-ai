@@ -87,6 +87,11 @@ fn the_remote_half_follows_from_the_preset() {
     );
     assert_eq!(s.embed_inputs, Some(EmbedInputs::Client));
     assert_eq!(s.grammar, Some(GrammarSupport::Llguidance));
+    // The embedded engine's 300s decode deadline, on every chat request.
+    assert_eq!(
+        s.extra_params,
+        Some(serde_json::json!({ "t_max_predict_ms": 300_000 }))
+    );
 }
 
 #[test]
