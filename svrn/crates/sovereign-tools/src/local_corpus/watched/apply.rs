@@ -141,14 +141,13 @@ pub async fn apply_watched_diff(
             // Decide whether to fall through to OCR. Trigger when
             // the file is a PDF, OCR is enabled, an OcrCtx is
             // installed, AND the plain text is short enough to
-            // suggest a scanned-without-text-layer document. The
-            // 32-character threshold matches the spirit of the
-            // pre-scan classifier (`pre_scanner.rs::classify_pdf_blocking`
-            // looks for `< 20` words in the first 4KB).
+            // suggest a scanned-without-text-layer document
+            // (`ocr::text_layer_needs_ocr`, shared with the recipe
+            // `"pdf"` extractor).
             let needs_ocr = is_pdf
                 && cfg.ocr_pdfs
                 && ocr_ctx.as_ref().as_ref().is_some()
-                && extracted.trim().len() < 32;
+                && crate::local_corpus::ocr::text_layer_needs_ocr(&extracted);
 
             if needs_ocr {
                 let ctx = ocr_ctx

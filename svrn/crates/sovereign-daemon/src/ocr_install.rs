@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Headless OCR install — hand the daemon's `LocalCorpusManager` an `OcrCtx`.
+//! Headless OCR install — resolve the daemon's one `OcrCtx`, which boot hands
+//! to the watched-folder `LocalCorpusManager` and to the recipe `"pdf"`
+//! extractor (`bootstrap::register_recipe_extractors`).
 //!
 //! # Why this file exists
 //!
@@ -31,7 +33,7 @@
 //!
 //! # Glassbox
 //!
-//! Every exit from [`install_ocr_ctx`] logs, including the two silent ones:
+//! Every exit from [`resolve_ocr_ctx`] logs, including the two silent ones:
 //! the feature being compiled out, and the models not resolving. An operator
 //! who turned OCR on in `corpus watch` and sees nothing happen must be able
 //! to find out why from the daemon log alone.
@@ -43,10 +45,10 @@ use std::path::Path;
 #[cfg(feature = "ocr")]
 use std::path::PathBuf;
 
-use sovereign_tools::local_corpus::LocalCorpusManager;
+use sovereign_tools::local_corpus::ocr::OcrCtx;
 
-/// Install an `OcrCtx` on `manager`, if this build has the `ocr` feature and
-/// the PaddleOCR assets can be found.
+/// The daemon's `OcrCtx`, if this build has the `ocr` feature and the
+/// PaddleOCR assets can be found.
 ///
 /// `cleanup_model` must be a GGUF **file stem** the daemon's
 /// `/v1/chat/completions` route can resolve (slots are registered under
@@ -58,30 +60,31 @@ use sovereign_tools::local_corpus::LocalCorpusManager;
 ///
 /// Never fatal. A daemon with no OCR is a supported posture; a daemon that
 /// refuses to boot because an optional asset is missing is not.
-pub async fn install_ocr_ctx(
-    manager: &LocalCorpusManager,
+pub fn resolve_ocr_ctx(
     data_dir: &Path,
     daemon_base_url: String,
     cleanup_model: String,
     bearer: Option<String>,
-) {
+) -> Option<OcrCtx> {
     #[cfg(not(feature = "ocr"))]
     {
         // Bind the unused params so the no-op arm compiles identically to
         // the real one — a signature that drifts between cfgs is a build
         // break waiting for whoever first turns the feature on.
-        let _ = (manager, data_dir, daemon_base_url, cleanup_model, bearer);
+        let _ = (data_dir, daemon_base_url, cleanup_model, bearer);
         tracing::info!(
             "ocr:unavailable reason=feature_not_compiled — this daemon was built \
              without `--features ocr`, so scanned PDFs in a `corpus watch --ocr` \
-             folder will be reported as scanned_no_text rather than indexed"
+             folder will be reported as scanned_no_text rather than indexed, and a \
+             recipe's scanned PDF indexes only its thin text layer"
         );
+        None
     }
 
     #[cfg(feature = "ocr")]
     {
         use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
-        use sovereign_tools::local_corpus::ocr::{OcrCtx, OcrEngineKind};
+        use sovereign_tools::local_corpus::ocr::OcrEngineKind;
 
         let roots = paddle_model_roots(
             data_dir,
@@ -100,7 +103,7 @@ pub async fn install_ocr_ctx(
                  or set SOVEREIGN_PADDLE_OCR_MODEL_DIR; scanned PDFs stay unindexed \
                  until then"
             );
-            return;
+            return None;
         };
 
         // The engine reads this on construction. Setting it here (rather
@@ -148,9 +151,9 @@ pub async fn install_ocr_ctx(
             cleanup_model = %ctx.cleanup_model,
             daemon_base_url = %ctx.daemon_base_url,
             keyed = ctx.bearer.is_some(),
-            "ocr:installed — `corpus watch --ocr` folders will read scanned PDFs"
+            "ocr:resolved — `corpus watch --ocr` folders and recipe PDFs will read scanned PDFs"
         );
-        manager.set_ocr_ctx(ctx).await;
+        Some(ctx)
     }
 }
 

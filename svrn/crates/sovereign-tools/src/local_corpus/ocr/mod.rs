@@ -148,6 +148,17 @@ pub struct PageProgress {
     pub file_total: u32,
 }
 
+/// Fewer trimmed characters than this in a PDF's text layer means it is
+/// scanned, not born-digital: read it with OCR when OCR is installed.
+pub const MIN_TEXT_LAYER_CHARS: usize = 32;
+
+/// THE test for "this text layer is too thin to index — OCR the PDF". The
+/// watched-folder sweep and the recipe `"pdf"` extractor both ask it, so a
+/// PDF reads the same through either door.
+pub fn text_layer_needs_ocr(text: &str) -> bool {
+    text.trim().len() < MIN_TEXT_LAYER_CHARS
+}
+
 pub use cleanup::cleanup_page;
 pub use engine::{build_engine, OcrEngine, OcrEngineKind, OcrError};
 pub use pipeline::extract_pdf_via_ocr;
