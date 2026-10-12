@@ -61,7 +61,7 @@ fn document() -> crate::enrichment::atlas::SourceDocument {
 }
 
 /// The source's records less the exclusion set, each once, then the mentions
-/// that name no listed record.
+/// that name no listed record and no excluded one (Bo, by name or by site).
 #[test]
 fn the_candidates_are_the_records_less_exclusions_then_new_mentions() {
     let p = declared();
@@ -74,6 +74,8 @@ fn the_candidates_are_the_records_less_exclusions_then_new_mentions() {
             mention(1, "Ann"),
             mention(2, "Quay Market"),
             mention(3, "Quay  Market"),
+            mention(4, "Bo"),
+            mention(5, "desk.home.example"),
         ],
     );
     assert_eq!(

@@ -799,8 +799,11 @@ question the pipeline asks about a type is a method on the resolved
   and event records alike); a `ref` reading counts as the record of the
   referenced type that its statement's document names in its fields and whose
   identity values it folds equal to (`key_name`, the projection's own naming),
-  and as its words otherwise, never a minted record; RESOLVE itself writes no
-  record value. When
+  is dropped (`excluded`) when that record is in an exclusion set over the type
+  (`DerivedPolicy::exclusions_of`, the one Pick reads too), and otherwise is
+  never held: it stays on the derivation line under `unresolved`, cited by its
+  statement, document, words and evidence, so a served reference is a record of
+  its type or nothing; RESOLVE itself writes no record value. When
   `change.document` declares a thread and an id, a record also holds each
   document the run read that states nothing of its type and whose thread's
   statements all sit on it, by declared id under `thread_documents`

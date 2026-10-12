@@ -10,7 +10,8 @@
 //!   whose words are a listed record's identity value or one of its read
 //!   values: that mention names the record and is not offered twice;
 //! - less any record in a declared exclusion set, a set over the type that a
-//!   declared path or fold drops by (`[!set]`).
+//!   declared path or fold drops by (`[!set]`), and any mention whose words
+//!   are such a record's identity value or read value.
 //!
 //! A chosen record answers with its identity value, cited by the field it was
 //! read from; a chosen mention with its words, cited where the line holds
@@ -28,7 +29,7 @@ use super::passes::{argmax, render};
 use super::DocumentReadField;
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolution_derived::conditions_hold;
-use crate::enrichment::atlas::resolution_sources::field_records;
+use crate::enrichment::atlas::resolution_sources::{field_records, FieldRecord};
 use crate::enrichment::atlas::resolve_records::{decision_call, marked_context, LABELS, NONE};
 use crate::enrichment::atlas::SourceDocument;
 use crate::enrichment::ontology::derived::SUBJECT;
@@ -99,25 +100,28 @@ pub(super) struct Candidates {
 
 /// What `document` offers a reference to `target`: the records its source
 /// reads here, less the exclusion sets, then the mentions that name no listed
-/// record.
+/// or excluded record.
 pub(super) fn candidates(
     document: &SourceDocument,
     policies: &OntologyPolicies,
     target: &OntologyTypeDecl,
     mentions: &[Mention],
 ) -> Candidates {
-    let derived = &policies.derivation.derived;
-    let excluded: Vec<_> = derived
-        .exclusion_sets()
-        .into_iter()
-        .filter_map(|id| derived.sets.iter().find(|s| s.id == id))
-        .filter(|s| s.of == target.name)
-        .collect();
+    let excluded = policies.derivation.derived.exclusions_of(&target.name);
     let mut all: Vec<Candidate> = Vec::new();
     let mut keys: Vec<String> = Vec::new();
     // Folded identity values and read values: what a mention naming a listed
-    // record would be.
+    // record would be, and one naming an excluded record.
     let mut named: Vec<String> = Vec::new();
+    let mut named_excluded: Vec<String> = Vec::new();
+    let values = |record: &FieldRecord| {
+        record
+            .attributes
+            .values()
+            .filter_map(|v| fold_identity_value(v))
+            .chain(record.key.split('\u{1f}').map(str::to_string))
+            .collect::<Vec<_>>()
+    };
     if let Some(SourceDecl::Metadata(src)) = &target.source {
         let index = TypeIndex::from_policies(policies);
         let identity = index.effective_identity(&target.name);
@@ -139,16 +143,11 @@ pub(super) fn candidates(
                     .find(|s| conditions_hold(s, &attributes) == Some(true))
                 {
                     debug!(document = %document.key(), of = %target.name, key = %record.key, set = %set.id, "document_read/pick: candidate in an exclusion set");
+                    named_excluded.extend(values(&record));
                     continue;
                 }
                 keys.push(record.key.clone());
-                named.extend(
-                    record
-                        .attributes
-                        .values()
-                        .filter_map(|v| fold_identity_value(v)),
-                );
-                named.extend(record.key.split('\u{1f}').map(str::to_string));
+                named.extend(values(&record));
                 let names = record
                     .attributes
                     .iter()
@@ -168,6 +167,10 @@ pub(super) fn candidates(
         let folded = fold_identity_value(&m.text);
         if folded.as_ref().is_some_and(|f| named.contains(f)) {
             debug!(document = %document.key(), of = %target.name, words = %m.text, "document_read/pick: the mention names a listed record");
+            continue;
+        }
+        if folded.as_ref().is_some_and(|f| named_excluded.contains(f)) {
+            debug!(document = %document.key(), of = %target.name, words = %m.text, "document_read/pick: the mention names a record in an exclusion set");
             continue;
         }
         if let Some(f) = folded {

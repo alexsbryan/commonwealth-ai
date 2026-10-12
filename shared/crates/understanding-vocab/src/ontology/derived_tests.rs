@@ -182,6 +182,14 @@ fn the_exclusion_sets_are_the_sets_a_path_or_fold_drops_by() {
     });
     d.folds[1].from = vec!["^subject / party [kept]".into()];
     assert_eq!(d.exclusion_sets().into_iter().collect::<Vec<_>>(), ["ours"]);
+    let ids = |of| {
+        d.exclusions_of(of)
+            .into_iter()
+            .map(|s| s.id.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids("company"), ["ours"]);
+    assert!(ids("person").is_empty());
     d.paths.clear();
     assert!(d.exclusion_sets().is_empty());
 }

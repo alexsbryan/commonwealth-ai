@@ -201,6 +201,16 @@ impl DerivedPolicy {
         out
     }
 
+    /// The declared exclusion sets over type `of`: a record in one is never
+    /// a Pick candidate nor a value a record's reference to `of` holds.
+    pub fn exclusions_of(&self, of: &str) -> Vec<&SetDecl> {
+        let ids = self.exclusion_sets();
+        self.sets
+            .iter()
+            .filter(|s| s.of == of && ids.contains(s.id.as_str()))
+            .collect()
+    }
+
     /// The parsed expressions a path or fold id evaluates.
     pub fn exprs(&self, id: &str) -> Result<Vec<PathExpr>, String> {
         match self.get(id) {

@@ -328,3 +328,96 @@ async fn a_picked_reference_is_cited_in_its_own_document() {
     }
     assert!(picked > 0, "no reference was picked on mail");
 }
+
+/// The mail fixture with an order-level read reference its records fold by
+/// `most` (`client`), and a seventh message, from our own side to our own
+/// side, so its header offers no outside record and its picks are mentions.
+fn with_client_and_internal_note() -> Fixture {
+    let mut f = Fixture::load("mail");
+    let piece = "  { name = \"piece\", type = \"text\", description = \"what is to be made\" },\n";
+    assert!(f.recipe.contains(piece), "the mail recipe declares `piece`");
+    f.recipe = f.recipe.replace(
+        piece,
+        &format!(
+            "{piece}  {{ name = \"client\", type = \"ref\", of = \"company\", by = \"most\", \
+             description = \"the customer the order is for\" }},\n"
+        ),
+    );
+    let note = json!({"id": "n1@alderpine.example", "thread_id": "n1@alderpine.example",
+        "from": "Tom Avery <tom.avery@alderpine.example>",
+        "to": "Mia Holt <mia.holt@alderpine.example>",
+        "date": "Sat, 07 Mar 2026 09:00:00 -0800", "subject": "Walnut timber",
+        "body": "Mia,\n\nAlder and Pine Workshop will not build the walnut bookcase for the shop front.\n\
+                 Please set the cut walnut timber aside until we find another use for it.\n\nTom"});
+    f.documents.push(note.as_object().unwrap().clone());
+    f
+}
+
+/// A served reference holds a record of its declared type that a document
+/// its decision came through names, never our own side; a reading that names
+/// no record is never served and stays on the derivation line, cited by its
+/// statement, document and words.
+#[tokio::test]
+async fn a_served_reference_is_a_record_of_its_type_and_a_mention_stays_unresolved() {
+    let f = with_client_and_internal_note();
+    let run = run(&f).await;
+    let atoms = run.atoms();
+    let by_id: BTreeMap<&str, &Value> = atoms
+        .iter()
+        .filter_map(|a| Some((a["data"]["id"].as_str()?, a)))
+        .collect();
+    let lines: Vec<Value> = run
+        .lines(DERIVED_FILE)
+        .into_iter()
+        .filter(|l| l["type"] == "order" && l["attribute"] == "client")
+        .collect();
+    // The header fields a document names its parties in, by document id.
+    let headers = |doc: &str| -> String {
+        let d = f.documents.iter().find(|d| d["id"] == doc).unwrap();
+        ["from", "to", "cc"]
+            .iter()
+            .filter_map(|k| d.get(*k).and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    assert!(!lines.is_empty(), "no order folds `client`");
+    let (mut served, mut unresolved) = (0, 0);
+    for line in &lines {
+        let held = &by_id[line["atom"].as_str().unwrap()]["data"]["attributes"]["client"];
+        for u in line["unresolved"].as_array().into_iter().flatten() {
+            unresolved += 1;
+            assert!(
+                u["claim"].as_str().is_some_and(|c| by_id.contains_key(c)),
+                "an unresolved reading cites no statement: {u}"
+            );
+            assert!(u["document"].is_string(), "{u}");
+            assert!(u["evidence"].is_string(), "{u}");
+            assert!(u["words"].as_str().is_some_and(|w| !w.is_empty()), "{u}");
+            assert_ne!(held, &u["words"], "an unresolved reading is served: {line}");
+        }
+        if held.is_null() {
+            continue;
+        }
+        served += 1;
+        let target = held
+            .as_str()
+            .and_then(|id| by_id.get(id))
+            .unwrap_or_else(|| panic!("order holds {held}, which is no record: {line}"));
+        assert_eq!(target["data"]["entity_type"], "company", "{line}");
+        let domain = target["data"]["attributes"]["web_domain"].as_str().unwrap();
+        assert!(
+            !domain.ends_with("alderpine.example"),
+            "our own side is served: {line}"
+        );
+        assert_eq!(line["outcome"], "decided", "{line}");
+        let through = line["documents"].as_array().unwrap();
+        assert!(
+            through
+                .iter()
+                .any(|d| headers(d.as_str().unwrap()).contains(&format!("@{domain}>"))),
+            "no document the decision came through names {domain}: {line}"
+        );
+    }
+    assert!(served > 0, "no order holds its `client`");
+    assert!(unresolved > 0, "the internal note's mention left no trace");
+}

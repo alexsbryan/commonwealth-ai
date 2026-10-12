@@ -132,9 +132,9 @@ only who took part, so it is not), one choice per asked line then pointed at, a 
 field (the subject's identity fields included) as a distribution over its declared values and "not stated",
 **Pick** each reference field from candidates code proposes (the records the referenced type's metadata source
 reads from this document's fields, plus this document's mentions that name no listed record, less any record in
-a declared exclusion set, a set a declared path drops by; `pick.rs`; a record folding the field holds the record a
-pick names and a mention's words, never a record minted from them, `read_fields.rs`, 2026-10-11: on Ward's 47 deals
-5 served with words only, 1 with records only, 6 with both), and Pick the subject whose type has a metadata source
+a declared exclusion set, a set a declared path drops by, and any mention naming such a record; `pick.rs`; a record
+folding the field holds the record a pick names or nothing, never a mention's words and never a record minted from
+them: a mention stays on the derivation line as a cited unresolved reading, `read_fields.rs`), and Pick the subject whose type has a metadata source
 among the records that source reads from this document, its answer written as the subject's identity readings
 (the statement's words rarely write the address that identifies a person: of Ward's 64 commitments, 59 pointed at no
 word and none reached its person, 2026-10-11), and **Point** at each open-valued field

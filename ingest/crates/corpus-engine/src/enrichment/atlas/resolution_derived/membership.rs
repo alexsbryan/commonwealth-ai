@@ -254,6 +254,7 @@ pub fn place_thread_documents(
                 derived: DOCUMENT_THREAD_ATTR.to_string(),
                 outcome: outcome.clone(),
                 excluded: Vec::new(),
+                unresolved: Vec::new(),
                 replaced,
                 protocol: None,
                 by: SourcePrecision::new(

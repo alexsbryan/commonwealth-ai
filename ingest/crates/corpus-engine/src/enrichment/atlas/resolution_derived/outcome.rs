@@ -104,6 +104,9 @@ pub struct DerivedValue {
     /// Atoms a `[!set]` filter dropped on the way.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub excluded: Vec<String>,
+    /// Readings of a reference that name no record: kept here, never held.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<UnresolvedReading>,
     /// The value the atom held before, when the derivation changed it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replaced: Option<Value>,
@@ -116,6 +119,23 @@ pub struct DerivedValue {
     pub by: crate::enrichment::atlas::precision::SourcePrecision,
 }
 
+/// A statement's reading of a reference that names no record of its type:
+/// a proposal the build never mints into a record, cited where it was read.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UnresolvedReading {
+    /// The statement that read it.
+    pub claim: String,
+    /// The statement's document, when it is in one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document: Option<String>,
+    /// What the statement read.
+    pub words: Value,
+    /// Where the document holds them.
+    pub evidence: String,
+    /// Why they name no record.
+    pub why: String,
+}
+
 /// Per attribute, what one stage did.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct DerivedTally {
@@ -125,6 +145,8 @@ pub struct DerivedTally {
     pub excluded: usize,
     /// Atoms of a set's type lacking an attribute it reads: in no set, out of no set.
     pub unjudged: usize,
+    /// Readings of a reference that named no record (`UnresolvedReading`).
+    pub unresolved: usize,
     /// Per document read, how it came to be held or not (`membership`).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub documents: BTreeMap<&'static str, usize>,

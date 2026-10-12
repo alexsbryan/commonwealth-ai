@@ -203,6 +203,15 @@ subject = "deal"
 
 [change]
 document = { date = "date" }
+
+[[sets]]
+id = "ours"
+type = "company"
+where = { domain = { suffix = "enron.com" } }
+
+[[paths]]
+id = "outside"
+path = "document / (from | to) [!ours]"
 "#;
 
 /// A statement `id` in document `doc` about `deal`, reading its counterparty as
@@ -227,12 +236,13 @@ fn deal(id: &str) -> Entity {
     .unwrap()
 }
 
-/// A reference holds a record: a reading that folds equal to a company the
-/// statement's own message names in its fields counts as that company's
-/// record, never its words; a mention, or a company only another message
-/// names, is held as words.
+/// A reference holds a record or nothing: a reading that folds equal to a
+/// company the statement's own message names in its fields counts as that
+/// company's record, never its words, and is dropped when the company is in
+/// the exclusion set `ours`; a mention, or a company only another message
+/// names, is never held and stays on the derivation line, cited.
 #[test]
-fn a_record_holds_the_record_its_statements_pick_and_a_mention_as_words() {
+fn a_record_holds_the_record_its_statements_pick_or_nothing() {
     let p = OntologyBlock {
         version: 1,
         body: toml::from_str(REFERENCES).unwrap(),
@@ -269,7 +279,8 @@ fn a_record_holds_the_record_its_statements_pick_and_a_mention_as_words() {
     };
     let (city, pge) = (company("city.gov"), company("pge.com"));
     let mut entities = projection.atoms.clone();
-    entities.extend(["entity-d1", "entity-d2", "entity-d3"].map(deal));
+    let enron = company("enron.com");
+    entities.extend(["entity-d1", "entity-d2", "entity-d3", "entity-d4"].map(deal));
     let mut claims = vec![
         stage("claim-1", "m1", "entity-d1", "city.gov"),
         stage("claim-2", "m2", "entity-d1", "city.gov"),
@@ -277,6 +288,7 @@ fn a_record_holds_the_record_its_statements_pick_and_a_mention_as_words() {
         stage("claim-4", "m3", "entity-d1", "Tucson"),
         stage("claim-5", "m3", "entity-d2", "pge.com"),
         stage("claim-6", "m4", "entity-d3", "pge.com"),
+        stage("claim-7", "m2", "entity-d4", "enron.com"),
     ];
     let mut events = Vec::new();
     let (mut states, mut relations, mut ars) = (Vec::new(), Vec::new(), Vec::new());
@@ -313,21 +325,36 @@ fn a_record_holds_the_record_its_statements_pick_and_a_mention_as_words() {
             .get("counterparty")
             .cloned()
     };
-    assert_eq!(
-        held("entity-d1"),
-        Some(json!(city)),
-        "two messages' picks of the listed company outweigh one message's mention"
-    );
-    assert_eq!(held("entity-d2"), Some(json!(pge)));
-    assert_eq!(
-        held("entity-d3"),
-        Some(json!("pge.com")),
-        "m4's fields name no pge.com: its words"
-    );
-    let d1 = lines.iter().find(|l| l.atom == "entity-d1").unwrap();
+    let line = |id: &str| lines.iter().find(|l| l.atom == id).unwrap();
+    assert_eq!(held("entity-d1"), Some(json!(city)));
+    let d1 = line("entity-d1");
     assert!(
         matches!(&d1.outcome, DerivedOutcome::Decided { values, documents, .. }
             if values == &[city.clone()] && documents == &["m1", "m2"]),
         "{d1:?}"
     );
+    let cited: Vec<(&str, Option<&str>, &Value)> = d1
+        .unresolved
+        .iter()
+        .map(|u| (u.claim.as_str(), u.document.as_deref(), &u.words))
+        .collect();
+    assert_eq!(
+        cited,
+        [
+            ("claim-3", Some("m3"), &json!("Tucson")),
+            ("claim-4", Some("m3"), &json!("Tucson"))
+        ],
+        "the mention is kept, cited, and never counted"
+    );
+    assert_eq!(held("entity-d2"), Some(json!(pge)));
+    assert_eq!(held("entity-d3"), None, "m4's fields name no pge.com");
+    let d3 = line("entity-d3");
+    assert_eq!(d3.outcome, DerivedOutcome::Nothing);
+    assert_eq!(d3.unresolved.len(), 1, "{d3:?}");
+    assert_eq!(d3.unresolved[0].claim, "claim-6");
+    assert_eq!(held("entity-d4"), None, "our own side is never held");
+    let d4 = line("entity-d4");
+    assert_eq!(d4.outcome, DerivedOutcome::Nothing);
+    assert_eq!(d4.excluded, [enron]);
+    assert!(d4.unresolved.is_empty(), "{d4:?}");
 }

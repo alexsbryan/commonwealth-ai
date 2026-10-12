@@ -39,6 +39,7 @@ mod read_fields;
 
 pub use outcome::{
     DeriveStage, DerivedOutcome, DerivedProtocolAudit, DerivedReport, DerivedTally, DerivedValue,
+    UnresolvedReading,
 };
 
 /// Whether `policies` derive anything in the atlas build: a declared path or
@@ -141,6 +142,7 @@ pub fn derive_attributes(
                 derived: id.to_string(),
                 outcome,
                 excluded: excluded.into_iter().collect(),
+                unresolved: Vec::new(),
                 replaced,
                 protocol,
                 by: crate::enrichment::atlas::precision::SourcePrecision::new(
