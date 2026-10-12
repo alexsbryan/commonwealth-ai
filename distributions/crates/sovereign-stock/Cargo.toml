@@ -76,6 +76,10 @@ serde = { workspace = true }
 # the turn path's reader, the empty-items faces below svrn's process face.
 sovereign-core = { workspace = true }
 sovereign-store = { workspace = true }
+# executor_native_e2e: the executor's tool loop on the embedded engine and on
+# llama-server through the router's client.
+sovereign-inference = { workspace = true }
+oicp-client = { workspace = true }
 
 [features]
 # `svrn awareness`, served by `sovereign-cli-llm-stock` since

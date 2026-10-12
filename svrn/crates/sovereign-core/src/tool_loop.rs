@@ -10,6 +10,9 @@
 //! them: [`recipe_author`](crate::runtime::handlers::recipe_author),
 //! [`Executor::execute_delegate`](crate::executor::Executor),
 //! `Executor::execute_reason_with_tools` and the attached-document turn.
+//! The two executor loops have moved to the native shape: they send a
+//! conversation ([`conversation_request`]) and read each reply with
+//! [`parse_conversation_reply`]; the other two still parse the envelope.
 //!
 //! # The fork this replaced (2026-09-08)
 //!
