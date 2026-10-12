@@ -181,18 +181,21 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 
 # BuildKit cache mounts persist the cargo registry, git checkouts,
 # target dir, and sccache across rebuilds. See Containerfile.cuda for
-# the full explanation. Binary copied out of the cached target dir into
+# the full explanation. The explicit --target keeps RUSTFLAGS (-no-pie) off
+# proc-macros and build scripts: a -shared proc-macro linked -no-pie fails
+# (rust-lld: undefined symbol main, `paste` and `time-macros` on stable rustc,
+# 2026-10-12). Binary copied out of the cached target dir into
 # /usr/local/bin so the runtime stage's COPY --from=build pulls from a
 # real image layer (cache mounts don't survive across stages).
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
-    cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-stock --bin sovereign-pod-worker \
- && cp /workspace/target/release/sovereign-cli          /usr/local/bin/sovereign-cli \
- && cp /workspace/target/release/sovereign-cli-daemon   /usr/local/bin/sovereign-cli-daemon \
- && cp /workspace/target/release/sovereign-stock        /usr/local/bin/sovereign-stock \
- && cp /workspace/target/release/sovereign-pod-worker   /usr/local/bin/sovereign-pod-worker \
+    cargo build --release --target x86_64-unknown-linux-gnu --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-stock --bin sovereign-pod-worker \
+ && cp /workspace/target/x86_64-unknown-linux-gnu/release/sovereign-cli          /usr/local/bin/sovereign-cli \
+ && cp /workspace/target/x86_64-unknown-linux-gnu/release/sovereign-cli-daemon   /usr/local/bin/sovereign-cli-daemon \
+ && cp /workspace/target/x86_64-unknown-linux-gnu/release/sovereign-stock        /usr/local/bin/sovereign-stock \
+ && cp /workspace/target/x86_64-unknown-linux-gnu/release/sovereign-pod-worker   /usr/local/bin/sovereign-pod-worker \
  && sccache --show-stats
 
 # ─── Runtime stage ───────────────────────────────────────────────────
