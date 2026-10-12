@@ -421,7 +421,12 @@ pub async fn check_evidence_align(
 }
 
 /// GET a slice of a text; `Err` on any reply but 200 that decodes.
-pub(crate) async fn read(host: &Host, endpoint: &str, sha: &str, query: &str) -> Result<TextSlice, String> {
+pub(crate) async fn read(
+    host: &Host,
+    endpoint: &str,
+    sha: &str,
+    query: &str,
+) -> Result<TextSlice, String> {
     let r = host.get(&format!("{endpoint}/{sha}{query}")).await?;
     if r.status != 200 {
         return Err(format!(

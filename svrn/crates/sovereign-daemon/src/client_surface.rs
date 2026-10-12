@@ -164,10 +164,14 @@ pub(crate) fn operator_listener_router(
     // answering `no checker`, by name.
     match judge {
         Some(i) => {
-            tracing::debug!("operator listener: verify's checker judges with this daemon's runtime");
+            tracing::debug!(
+                "operator listener: verify's checker judges with this daemon's runtime"
+            );
             router = router.layer(axum::Extension(crate::routes_oicp_verify::VerifyJudge(i)));
         }
-        None => tracing::info!("operator listener: no runtime, so verify's checker tier answers `no checker`"),
+        None => tracing::info!(
+            "operator listener: no runtime, so verify's checker tier answers `no checker`"
+        ),
     }
     match (mcp_mount, posture.withheld()) {
         (Some(_), Some(_)) => {

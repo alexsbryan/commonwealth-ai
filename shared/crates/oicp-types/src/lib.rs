@@ -42,8 +42,8 @@ pub mod error;
 /// The v0.5 evidence extension: stored texts, spans into them, alignment.
 pub mod evidence;
 // v0.6 §2.6: a unit judged claim by claim against the stored texts.
-pub mod verify;
 pub mod forced_choice;
+pub mod verify;
 // Crate-private: `model_aliases` is its only caller and always was. It was
 // `pub mod glob` in `commonwealth-core` and the move is what makes the
 // privacy true rather than intended — a `git grep` before the move found zero

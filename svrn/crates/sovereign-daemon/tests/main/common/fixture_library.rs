@@ -137,4 +137,3 @@ pub async fn state_over(indexes: std::path::PathBuf) -> AppState {
     let engine = crate::common::reading_double(indexes, embed).on_texts_digest(digest_of);
     AppState::new_with_platform_and_engine(NodeId::from_u128(1), Some(Arc::new(engine)))
 }
-

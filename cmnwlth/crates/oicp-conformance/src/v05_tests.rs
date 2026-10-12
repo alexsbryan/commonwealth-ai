@@ -165,14 +165,18 @@ async fn evidence_align_is_red_against_a_missing_texts_digest() {
 #[tokio::test]
 async fn evidence_verify_is_red_against_an_unknown_verdict_and_a_span_off_by_one() {
     let b = bench(Breaks::default()).await;
-    green(&crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    green(
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture)
+            .await,
+    );
     let b = bench(Breaks {
         verify_unknown_verdict: true,
         ..Breaks::default()
     })
     .await;
     red(
-        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture)
+            .await,
         "does not decode",
     );
     let b = bench(Breaks {
@@ -181,7 +185,8 @@ async fn evidence_verify_is_red_against_an_unknown_verdict_and_a_span_off_by_one
     })
     .await;
     red(
-        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture)
+            .await,
         "the text there says",
     );
 }

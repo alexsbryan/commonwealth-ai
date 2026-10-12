@@ -23,9 +23,9 @@ mod fake_host;
 mod fixture;
 mod ingest_checks;
 mod report;
-mod verify_checks;
 #[cfg(test)]
 mod v05_tests;
+mod verify_checks;
 mod wire;
 
 use std::process::ExitCode;
