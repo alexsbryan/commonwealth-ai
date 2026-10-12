@@ -1,35 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The compiled reader's questions (`waves.rs`). Every question about a
-//! document is one system prompt and one user turn that opens with the
-//! document's declared facts and its numbered lines and ends with the
-//! question, so all of a document's questions share that prefix: any set of
-//! them composes into one forced-choice wave (`resolve_records/wave.rs`
-//! `compose`: identical but for the user turn and its labels), and the engine
-//! decodes the document once per wave (`decide_wave.rs`).
-
-use oicp_types::forced_choice;
+//! The compiled reader's question texts (`waves.rs`): the suffix each
+//! question appends to the document's shared prefix. `waves_jobs::question`
+//! makes the request from them, in the file that hands it to the census.
 
 use super::act::Unit;
 use super::passes::{excerpt, Line};
 use super::pick::Candidate;
 use crate::enrichment::atlas::resolve_records::{ClosedAttr, NONE};
 use crate::enrichment::ontology::{AttrDecl, OntologyTypeDecl};
-use crate::enrichment::pipeline::types::ChatPrompt;
 
-const WAVES_SYSTEM: &str = include_str!("passes_waves_prompt.md");
-/// One phase for every question of the compiled reader: a wave is one
-/// request, so its questions share one phase (`compose`).
-pub(super) const WAVES_PHASE: &str = "document_waves";
 /// The count question's answers: one, more than one, none (`about::count_of`).
 pub(super) const COUNT_LABELS: [&str; 3] = ["A", "B", NONE];
-
-/// A question: the shared prefix (`ask::opening`), then `suffix`.
-pub(super) fn question(prefix: &str, suffix: &str, labels: &[&str]) -> ChatPrompt {
-    ChatPrompt::new(WAVES_SYSTEM, format!("{prefix}{suffix}"))
-        .with_response_schema("read", forced_choice::schema(labels))
-        .with_phase_id(WAVES_PHASE)
-        .with_temperature(0.0)
-}
 
 fn described(name: &str, description: &str) -> String {
     if description.is_empty() {

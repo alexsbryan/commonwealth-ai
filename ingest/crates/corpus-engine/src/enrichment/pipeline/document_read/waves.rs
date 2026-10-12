@@ -35,7 +35,7 @@ use super::line_classes::LineClasses;
 use super::mention::{self, Mention};
 use super::passes::{lines, mentioned, numbered, FieldPlan, Line, Plan};
 use super::waves_forms::{self as forms, Target, Who};
-use super::waves_jobs::{run, Doc, Enumerate, Job, Spent};
+use super::waves_jobs::{question, run, Doc, Enumerate, Job, Spent};
 use super::waves_readings::{ActRead, Field};
 use super::{pick, prefill};
 use super::{DocumentReadClaim, DocumentReadField, DocumentReadOutcome, DocumentReadStatus};
@@ -621,7 +621,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
     };
     let window = forms::window(body, &ls.iter().collect::<Vec<_>>());
     let prefix = opening(prefill::FACTS_HEADER, &numbered(body, &ls));
-    let q = |suffix: String| forms::question(&prefix, &suffix, &["A", NONE]);
+    let q = |suffix: String| question(&prefix, &suffix, &["A", NONE]);
     let samples = [
         q(forms::count(Target::Decided(&probe))),
         q(forms::count(Target::Mentioned(&probe))),

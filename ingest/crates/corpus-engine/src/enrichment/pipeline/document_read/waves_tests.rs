@@ -334,7 +334,7 @@ async fn a_document_is_read_in_levels_each_round_one_wave_off_one_prefix() {
         .all(|r| r.system == requests[0].system && r.user.starts_with(prefix)));
     assert!(requests
         .iter()
-        .all(|r| r.phase_id.as_deref() == Some(forms::WAVES_PHASE)));
+        .all(|r| r.phase_id.as_deref() == Some(super::super::waves_jobs::WAVES_PHASE)));
     assert_eq!(
         requests.len(),
         7,

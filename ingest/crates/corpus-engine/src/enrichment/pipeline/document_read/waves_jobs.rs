@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
 
+use oicp_types::forced_choice;
 use tracing::{debug, info};
 
 use super::about::{count_of, Count, Particular, MAX_PARTICULARS};
@@ -25,6 +26,25 @@ use crate::InferenceFn;
 /// may cost, not a number measured on any corpus. A job steps forward on
 /// every answer, so a level ends long before it on any document read so far.
 const MAX_ROUNDS: u32 = 64;
+
+const WAVES_SYSTEM: &str = include_str!("passes_waves_prompt.md");
+/// One phase for every question of the compiled reader: a wave is one
+/// request, so its questions share one phase (`compose`).
+pub(super) const WAVES_PHASE: &str = "document_waves";
+
+/// A question: one system prompt and one user turn, the shared prefix
+/// (`ask::opening`: the declared facts and the numbered lines) then `suffix`
+/// (`waves_forms`). Every question about a document shares that prefix, so
+/// any set of them composes into one forced-choice wave
+/// (`resolve_records/wave.rs` `compose`), and the engine decodes the document
+/// once per wave (`decide_wave.rs`). Built here because [`run`] is where
+/// every one of them reaches the census (`decision_wave`).
+pub(super) fn question(prefix: &str, suffix: &str, labels: &[&str]) -> ChatPrompt {
+    ChatPrompt::new(WAVES_SYSTEM, format!("{prefix}{suffix}"))
+        .with_response_schema("read", forced_choice::schema(labels))
+        .with_phase_id(WAVES_PHASE)
+        .with_temperature(0.0)
+}
 
 /// One document as the jobs ask about it.
 pub(super) struct Doc<'a> {
@@ -46,7 +66,7 @@ pub(super) struct Doc<'a> {
 impl Doc<'_> {
     pub(super) fn ask(&self, suffix: String, labels: Vec<&'static str>, item: String) -> Q {
         Q {
-            prompt: forms::question(&self.prefix, &suffix, &labels),
+            prompt: question(&self.prefix, &suffix, &labels),
             labels,
             item,
         }
