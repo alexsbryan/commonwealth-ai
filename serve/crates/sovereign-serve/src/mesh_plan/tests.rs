@@ -92,7 +92,7 @@ fn each_rows_capacity_belongs_to_the_device_that_row_names() {
 /// disagrees with the load it previews is worse than no preview.
 #[test]
 fn the_rows_come_from_the_shared_decider() {
-    use sovereign_inference::embedded as inf;
+    use sovereign_inference::rpc_warm_cache as inf;
     let sizes = model(48, 1, 2, 3);
     let devices = vec![64.0, 32.0, 32.0];
     let r = report(input(sizes.clone(), 48, devices.clone()));

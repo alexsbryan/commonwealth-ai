@@ -42,6 +42,7 @@ use sovereign_contracts::types::*;
 use sovereign_contracts::Result;
 
 use crate::hardware::HardwareProfile;
+use crate::rpc_warm_cache::*;
 
 /// Operator-declared primary-slot sibling count.
 ///
@@ -768,7 +769,7 @@ fn placed_devices() -> Option<Vec<(crate::llama::sys::ggml_backend_dev_t, Device
 ///
 /// Deliberately raw rather than parsed: parsing needs the model's block count and
 /// the device count, which only the caller knows. Both sides then run the SAME
-/// [`parse_block_split`](crate::embedded::parse_block_split) over the same string,
+/// [`parse_block_split`](crate::rpc_warm_cache::parse_block_split) over the same string,
 /// so they cannot disagree about whether a pin is valid — including agreeing to
 /// ignore a malformed one.
 pub fn pinned_block_split_raw() -> Option<String> {
@@ -2504,7 +2505,7 @@ fn rpc_cache_dir() -> Option<std::path::PathBuf> {
     // Resolution lives in `rpc_warm_cache::default_cache_dir` — one rule, so
     // the bytes the host warms land where this worker looks. Creating the
     // directory stays here: only the reader needs it to exist.
-    let dir = super::rpc_warm_cache::default_cache_dir()?;
+    let dir = crate::rpc_warm_cache::default_cache_dir()?;
     if let Err(e) = std::fs::create_dir_all(&dir) {
         tracing::warn!(dir = %dir.display(), error = %e, "could not create RPC cache dir — caching disabled");
         return None;

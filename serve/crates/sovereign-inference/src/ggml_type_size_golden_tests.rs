@@ -3,7 +3,7 @@
 //! `crate::llama` and goes with it: once nothing links ggml there is no
 //! oracle left to hold the table to.
 
-use crate::embedded::ggml_type::{ggml_row_bytes, GGML_TYPE_SIZES};
+use crate::rpc_warm_cache::ggml_type::{ggml_row_bytes, GGML_TYPE_SIZES};
 
 #[test]
 fn every_type_row_size_matches_ggml() {

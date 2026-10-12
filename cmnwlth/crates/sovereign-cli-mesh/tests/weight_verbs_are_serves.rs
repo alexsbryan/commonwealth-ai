@@ -30,7 +30,7 @@ fn cli_mesh_names_no_serve_weight_verb_surface() {
     let forbidden = [
         concat!("model", "_fetch"),
         concat!("warm_cache", "_from_gguf"),
-        concat!("embedded::", "default_cache_dir"),
+        concat!("rpc_warm_cache::", "default_cache_dir"),
         concat!("sovereign", "_inference"),
         concat!("mesh", "_measurements"),
         concat!("measurements", "_rail"),

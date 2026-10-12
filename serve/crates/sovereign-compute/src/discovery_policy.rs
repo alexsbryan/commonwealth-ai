@@ -225,7 +225,7 @@ pub fn host_share_need_bytes(
     model_bytes: u64,
     local_blocks: u32,
     total_blocks: u32,
-    overheads: Option<&sovereign_inference::embedded::PlanOverheads>,
+    overheads: Option<&sovereign_inference::rpc_warm_cache::PlanOverheads>,
 ) -> Option<u64> {
     if total_blocks == 0 || model_bytes == 0 {
         return None;
@@ -669,7 +669,7 @@ mod tests {
     /// MLA model ~5× and refusing a load that fits.
     #[test]
     fn the_projection_replaces_the_kv_proxy_when_present() {
-        let o = sovereign_inference::embedded::PlanOverheads {
+        let o = sovereign_inference::rpc_warm_cache::PlanOverheads {
             context_total_bytes: 86,
             compute_accel_bytes: 7,
             compute_host_bytes: 11,

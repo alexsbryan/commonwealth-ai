@@ -13729,7 +13729,7 @@ lines = 3511
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs"
+path = "serve/crates/sovereign-inference/src/rpc_warm_cache.rs"
 context = "unknown"
 lines = 1952
 note = ""

@@ -64,7 +64,7 @@ pub async fn resolve(spec: &str) -> Result<ResolvedModel, String> {
         resolve_hf(rest).await
     } else {
         let path = PathBuf::from(spec);
-        let shards = sovereign_inference::embedded::shard_files(&path);
+        let shards = sovereign_inference::rpc_warm_cache::shard_files(&path);
         let total_bytes = shards
             .iter()
             .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))
@@ -153,7 +153,7 @@ async fn resolve_hf(rest: &str) -> Result<ResolvedModel, String> {
         let path = first_path.clone().ok_or("no shards resolved")?;
         // One call validates the whole set: `tensor_sizes` walks `shard_files`,
         // which enumerates the siblings we just wrote into the temp dir.
-        match sovereign_inference::embedded::tensor_sizes(&path) {
+        match sovereign_inference::rpc_warm_cache::tensor_sizes(&path) {
             Ok(_) => {
                 eprintln!(
                     "  headers fetched: {:.1} MB ({:.5}% of the model)\n",

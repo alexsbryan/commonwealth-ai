@@ -450,7 +450,7 @@ pub fn servable_model_files(slot_paths: &[std::path::PathBuf]) -> Vec<std::path:
     let mut seen: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
     for path in slot_paths {
         let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        let shards = sovereign_inference::embedded::shard_files(&canon);
+        let shards = sovereign_inference::rpc_warm_cache::shard_files(&canon);
         if shards.len() > 1 {
             tracing::info!(
                 shards = shards.len(),

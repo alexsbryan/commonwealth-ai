@@ -28,7 +28,7 @@
 //! Not upstream's `ggml-rpc-server` binary. That one derives its tensor-cache
 //! directory internally (`$LLAMA_CACHE/llama.cpp/rpc/`) from a boolean `-c`
 //! flag, so it cannot be pointed at `~/.svrnmesh/rpc-cache` where
-//! [`crate::embedded::warm_cache_from_gguf`] writes its shards — adopting it
+//! [`crate::rpc_warm_cache::warm_cache_from_gguf`] writes its shards — adopting it
 //! would silently disable offline pre-warming. Re-execing our own binary
 //! costs no packaging change (the release ships three binaries and none of
 //! them is a llama.cpp tool) and keeps exact parameter parity, because this

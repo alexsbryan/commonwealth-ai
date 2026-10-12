@@ -1383,7 +1383,7 @@ Eight decision points, each with one home:
 | Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-serving-host/src/slot_select.rs::pick_slot_for_oicp` |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` |
-| Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` |
+| Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` (load); plan and warm cache, FFI-free, `sovereign-inference/rpc_warm_cache.rs` |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
 Slot policy is normative in [`svrn/docs/SLOT_POLICY.md`](../svrn/docs/SLOT_POLICY.md):

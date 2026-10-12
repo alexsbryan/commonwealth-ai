@@ -28,7 +28,6 @@ mod probe;
 mod prompt_helpers;
 mod rerank_slot;
 mod rpc_distribution;
-mod rpc_warm_cache;
 mod sampler;
 mod server_sampling;
 
@@ -42,5 +41,4 @@ pub use model_slot::*;
 pub use prompt_helpers::*;
 pub use rerank_slot::*;
 pub use rpc_distribution::*;
-pub use rpc_warm_cache::*;
 pub use sampler::*;

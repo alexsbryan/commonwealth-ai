@@ -60,7 +60,7 @@ pub fn total_model_bytes(model_path: &Path) -> u64 {
     };
     // One parser for the `<stem>-<idx>-of-<count>.gguf` convention, shared with
     // `shard_files` and the mesh's fetch side — see `split_shard_names`.
-    let Some(names) = super::rpc_warm_cache::split_shard_names(name) else {
+    let Some(names) = crate::rpc_warm_cache::split_shard_names(name) else {
         return single;
     };
     let mut total = 0u64;
@@ -96,7 +96,7 @@ pub fn missing_shards(model_path: &Path) -> Vec<String> {
         return Vec::new();
     };
     // The one shard-name parser, shared with `shard_files` / `total_model_bytes`.
-    let Some(names) = super::rpc_warm_cache::split_shard_names(name) else {
+    let Some(names) = crate::rpc_warm_cache::split_shard_names(name) else {
         return Vec::new(); // not a split — nothing can be missing
     };
     names

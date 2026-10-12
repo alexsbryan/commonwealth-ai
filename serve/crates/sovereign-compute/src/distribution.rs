@@ -27,7 +27,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use sovereign_inference::embedded::NodeShard;
+use sovereign_inference::rpc_warm_cache::NodeShard;
 
 /// Everything a compute child needs to load the distributed primary against
 /// workers the daemon has already seeded.

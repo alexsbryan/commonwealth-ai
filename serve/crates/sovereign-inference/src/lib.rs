@@ -24,6 +24,7 @@ pub mod remote {
     pub use oicp_client::*;
 }
 pub mod reranker_standalone;
+pub mod rpc_warm_cache;
 pub mod rpc_worker_main;
 pub mod served_kind;
 pub mod url_constraint;

@@ -43,7 +43,7 @@ pub(crate) async fn cmd_warm_cache(args: &[String]) -> i32 {
         eprintln!("Usage: svrn mesh warm-cache <model.gguf> [--cache-dir <dir>]");
         return 2;
     };
-    let cache_dir = match cache_dir.or_else(sovereign_inference::embedded::default_cache_dir) {
+    let cache_dir = match cache_dir.or_else(sovereign_inference::rpc_warm_cache::default_cache_dir) {
         Some(d) => d,
         None => {
             eprintln!(
@@ -59,7 +59,7 @@ pub(crate) async fn cmd_warm_cache(args: &[String]) -> i32 {
         cache_dir.display()
     );
     let t0 = std::time::Instant::now();
-    match sovereign_inference::embedded::warm_cache_from_gguf(&model, &cache_dir) {
+    match sovereign_inference::rpc_warm_cache::warm_cache_from_gguf(&model, &cache_dir) {
         Ok(s) => {
             println!(
                 "✓ {}/{} tensors cacheable (>10MB): {} written ({:.2} GB), {} already present — {:.1}s",
