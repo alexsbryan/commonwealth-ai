@@ -15,6 +15,11 @@
 #                  probabilities, and no request field turns drafting off
 #                  in this build (speculative.type "none" and n_max 0 both
 #                  still drafted, 2026-10-11)
+#   mesh-llm       [engine] kind = "remote" against one private mesh-llm node
+#                  on :9337 (target/mesh-llm, the v0.78.1 release, usage
+#                  reporting off), serving the same three GGUFs. It has no
+#                  observer endpoints, so its prompt, sampler and compute
+#                  cells are could-not-judge (the plan, component 5)
 #
 # Each pass replays the case bank (BATTERY_CASES, default the 2026-10-10
 # bank) through /internal/engine/replay, which the daemon mounts on its
@@ -37,6 +42,10 @@ embed=$repo/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0.gguf
 # BATTERY_SERVER_ENV is extra environment for the router and its children.
 server=${BATTERY_LLAMA_SERVER:-$repo/target/llama-server-vanilla/build-llg/bin/llama-server}
 server_env=${BATTERY_SERVER_ENV:-}
+# mesh-llm: the release build, with a config that turns its usage reporting
+# off (it is on by default) and a data dir of its own, both under target/.
+meshllm=${BATTERY_MESH_LLM:-$repo/target/mesh-llm/v0.78.1/x/mesh-bundle/mesh-llm}
+meshdir=$repo/target/mesh-llm
 cases=${BATTERY_CASES:-$repo/target/engine-conformance/cases-20261010.jsonl}
 out=$repo/target/engine-conformance/battery-$(date +%Y%m%d-%H%M%S)
 tb() { toolbox run -c sovereign-vulkan "$@"; }
@@ -52,9 +61,9 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -gt 0 ] || { echo "battery.sh [--only <case-id>]... embedded|llama-server|llama-server-matched..." >&2; exit 2; }
+[ $# -gt 0 ] || { echo "battery.sh [--only <case-id>]... embedded|llama-server|llama-server-matched|mesh-llm..." >&2; exit 2; }
 for t in "$@"; do
-  case $t in embedded|llama-server|llama-server-matched) ;; *) die "unknown target $t" ;; esac
+  case $t in embedded|llama-server|llama-server-matched|mesh-llm) ;; *) die "unknown target $t" ;; esac
 done
 
 # ── preflight: refuse rather than share the box ────────────────────────────
@@ -78,6 +87,8 @@ preflight() {
     die "a llama-server is running (pid $(pgrep -x llama-server | tr '\n' ' ')); stop probe servers first"
   fi
   if ss -ltn 'sport = :18301' | grep -q LISTEN; then die "port 18301 is taken"; fi
+  if pgrep -f "mesh-llm serve" >/dev/null; then die "a mesh-llm is running; stop it first"; fi
+  if ss -ltn 'sport = :9337' | grep -q LISTEN; then die "port 9337 is taken"; fi
   # The resident must be doing nothing: no slot mid-load, no peer served.
   # Held slots are no reason to refuse, since every pass stops the daemon and
   # a fresh one loads fast and embed at boot (watched 2026-10-10); their
@@ -139,7 +150,71 @@ assert n == 1, "exactly one [engine] table"
 open(dst, "w").write(new)
 EOF
       ;;
+    mesh-llm)
+      # grammar is left unset: no GrammarSupport value says "this server
+      # takes none", so the default is what an operator gets. embed_inputs is
+      # "server" because "client" takes the embed family from the model id,
+      # and mesh-llm names a GGUF by digest: the daemon refuses that config
+      # at boot. The embedding cells then show whether mesh-llm prepares.
+      python3 - "$out/config.before.toml" "$cfg" "$out/mesh-ids.env" <<'EOF'
+import re, sys
+src, dst, ids = sys.argv[1:]
+id = dict(line.strip().split("=", 1) for line in open(ids) if "=" in line)
+text = open(src).read()
+engine = f'''[engine]
+kind = "remote"
+endpoint = "http://127.0.0.1:9337/v1"
+model_id = "{id['slow']}"
+fast_model_id = "{id['fast']}"
+embed_model_id = "{id['embed']}"
+embed_inputs = "server"
+context_size = 65536
+'''
+new, n = re.subn(r'(?ms)^\[engine\]\n.*?(?=^\[|\Z)', engine + "\n", text)
+assert n == 1, "exactly one [engine] table"
+open(dst, "w").write(new)
+EOF
+      ;;
   esac
+}
+
+# ── mesh-llm, one private node on this box ─────────────────────────────────
+
+mesh_down() {
+  [ -f "$out/mesh.pid" ] || return 0
+  kill "$(cat "$out/mesh.pid")" 2>/dev/null || true
+  rm -f "$out/mesh.pid"
+  i=0; while pgrep -f "mesh-llm serve" >/dev/null; do
+    i=$((i + 1)); [ $i -lt 60 ] || die "mesh-llm still running after 60s"; sleep 1
+  done
+}
+
+# Private (no --publish), loopback-bound, no iroh relays. A raw GGUF is served
+# as local-gguf/sha256-<file digest>, so the ids are computed, not guessed.
+mesh_up() {
+  slow=$(readlink -f "$models/Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf")
+  fast=$(readlink -f "$models/Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf")
+  emb=$(readlink -f "$embed")
+  {
+    echo "slow=local-gguf/sha256-$(sha256sum "$slow" | cut -d' ' -f1)"
+    echo "fast=local-gguf/sha256-$(sha256sum "$fast" | cut -d' ' -f1)"
+    echo "embed=local-gguf/sha256-$(sha256sum "$emb" | cut -d' ' -f1)"
+  } > "$out/mesh-ids.env"
+  say "mesh-llm: $meshllm, ids in $out/mesh-ids.env"
+  tb sh -c "MESH_LLM_CONFIG='$meshdir/config.toml' MESH_LLM_DATA_DIR='$meshdir/data' '$meshllm' serve \
+    --llama-flavor vulkan --gguf '$slow' --gguf '$fast' --gguf '$emb' --port 9337 --console 3131 \
+    --disable-iroh-relays --bind-ip 127.0.0.1 --ctx-size 65536 > '$out/mesh.log' 2>&1 & echo \$! > '$out/mesh.pid'"
+  # The two chat models gate the run; whether the embedder is served is
+  # recorded, and its cells say so.
+  for k in slow fast; do
+    want=$(sed -n "s/^$k=//p" "$out/mesh-ids.env")
+    i=0; until curl -sf localhost:9337/v1/models | grep -q "$want"; do
+      i=$((i + 1)); [ $i -lt 600 ] || die "mesh-llm did not list $k ($want), see $out/mesh.log"; sleep 1
+    done
+  done
+  want=$(sed -n "s/^embed=//p" "$out/mesh-ids.env")
+  if curl -sf localhost:9337/v1/models | grep -q "$want"; then say "mesh-llm up on :9337, embedder listed"
+  else say "mesh-llm up on :9337, embedder NOT listed"; fi
 }
 
 # ── the llama-server router, for remote targets ────────────────────────────
@@ -213,6 +288,7 @@ restore() {
   say "restoring the resident config"
   daemon_down
   router_down
+  mesh_down
   [ -f "$out/config.before.toml" ] && cp "$out/config.before.toml" "$cfg"
   tb sovereign daemon start >"$out/daemon-start-restore.log" 2>&1 || true
   curl -sf -m 5 localhost:9741/health >/dev/null && say "resident back up" \
@@ -233,6 +309,8 @@ for t in "$@"; do
   n=$((n + 1))
   daemon_down
   router_down
+  mesh_down
+  [ "$t" = mesh-llm ] && mesh_up
   write_config "$t"
   server_flag=""
   case $t in
