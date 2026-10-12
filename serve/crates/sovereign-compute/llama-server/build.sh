@@ -143,7 +143,10 @@ case $backend in
   cpu) flags="-DGGML_METAL=OFF $mac -DGGML_SSE42=ON -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX_VNNI=OFF
     -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_AVX512=OFF" ;;
   rocm) flags="-DGGML_HIP=ON -DGGML_NATIVE=OFF${GPU_TARGETS:+ -DGPU_TARGETS=$GPU_TARGETS}" ;;
-  cuda) flags="-DGGML_CUDA=ON -DGGML_NATIVE=OFF${CMAKE_CUDA_ARCHITECTURES:+ -DCMAKE_CUDA_ARCHITECTURES=$CMAKE_CUDA_ARCHITECTURES}" ;;
+  # NCCL off as Containerfile.cuda sets it for the embedded engine: with it on,
+  # ggml_cuda_init's ncclCommInitAll fails on pod hosts whose driver and NCCL
+  # disagree, and a single-GPU pod has no use for it.
+  cuda) flags="-DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF -DGGML_NATIVE=OFF${CMAKE_CUDA_ARCHITECTURES:+ -DCMAKE_CUDA_ARCHITECTURES=$CMAKE_CUDA_ARCHITECTURES}" ;;
   *) echo "build.sh: unknown backend $backend (vulkan, metal, cpu, rocm, cuda)" >&2; exit 2 ;;
 esac
 
