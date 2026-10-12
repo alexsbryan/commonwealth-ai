@@ -4,9 +4,13 @@
 # the daemon with the manifest the daemon checks at startup. Runs inside the
 # sovereign-vulkan toolbox.
 #
-#   build.sh [--backend B] [--install-dir DIR]
+#   build.sh [--backend B] [--install-dir DIR] [--work-dir W]
 #                                      the shipped build; DIR defaults to
 #                                      target/debug, where sovereign-cli-daemon is.
+#                                      W (source and build trees) defaults to
+#                                      target/llama-server; a container sees the
+#                                      repo at another path, so it needs its own,
+#                                      or CMake refuses the host's cache
 #                                      B is vulkan (the Linux default), metal
 #                                      (the macOS arm64 default), cpu (the
 #                                      macOS x86_64 default), rocm or cuda
@@ -32,13 +36,14 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../../.." && pwd)
 pin=$here/PIN.toml
-vanilla= llg_vanilla=OFF install_dir=$repo/target/debug backend=
+vanilla= llg_vanilla=OFF install_dir=$repo/target/debug backend= work_dir=$repo/target/llama-server
 while [ $# -gt 0 ]; do
   case $1 in
     --vanilla) vanilla=1 ;;
     --llguidance) llg_vanilla=ON ;;
     --install-dir) install_dir=$2; shift ;;
     --backend) backend=$2; shift ;;
+    --work-dir) work_dir=$2; shift ;;
     *) echo "build.sh: unknown argument $1" >&2; exit 2 ;;
   esac
   shift
@@ -150,7 +155,7 @@ esac
 # The source tree is keyed by what the pin builds (commit, llguidance, patch
 # digests), the build dir by that and the backend, so a changed pin builds
 # fresh and an unchanged one, comments included, rebuilds incrementally.
-dir=$repo/target/llama-server
+dir=$work_dir
 key=$(printf '%s\n' "$sha" "$llg" $digests | sha256 | cut -c1-12)
 fetch "$dir"
 src=$dir/src-$key
