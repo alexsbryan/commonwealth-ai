@@ -411,10 +411,12 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
             .unwrap_or_default()
     };
     let idle_from = Instant::now();
+    // The router logs every request it proxies to a model, so on a timeout
+    // its log names what kept the embedder awake.
     wait_until(
         "/status reporting the idle embedder asleep",
         Duration::from_secs(EMBED_IDLE_SECS * 3 + 10),
-        &log,
+        &data.join("llama-server/router.log"),
         || lifecycle_of(embed) == "sleeping",
     );
     let slept_after = idle_from.elapsed().as_secs();
