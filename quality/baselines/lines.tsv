@@ -19,7 +19,7 @@
 24	bench/lanes/agent-coding/problems/2.2-group-anagrams/scaffold::tests
 4	bench/lanes/agent-coding/problems/3.2-lights-out/scaffold
 45	bench/lanes/agent-coding/problems/3.2-lights-out/scaffold::tests
-233	bench/lanes/engine-swap/llg-parity
+218	bench/lanes/engine-swap/llg-parity
 13142	clients/desktop/src-tauri
 6330	clients/desktop/src-tauri::tests
 9235	clients/desktop/tests/e2e/scripts
@@ -46,7 +46,7 @@
 1840	cmnwlth/crates/commonwealth-work::tests
 942	cmnwlth/crates/oicp-conformance
 221	cmnwlth/crates/oicp-conformance::tests
-10933	cmnwlth/crates/sovereign-cli-mesh
+10715	cmnwlth/crates/sovereign-cli-mesh
 3480	cmnwlth/crates/sovereign-cli-mesh::tests
 2323	cmnwlth/crates/sovereign-pods
 2837	cmnwlth/crates/sovereign-pods::tests
@@ -86,7 +86,7 @@
 305	ingest/crates/sovereign-enrichment-catalog
 370	ingest/crates/sovereign-enrichment-catalog::tests
 29117	ingest/crates/sovereign-pipeline
-4947	ingest/crates/sovereign-pipeline::tests
+4791	ingest/crates/sovereign-pipeline::tests
 3846	ingest/crates/sovereign-recipe-author
 2428	ingest/crates/sovereign-recipe-author::tests
 81	ingest/crates/sovereign-recipes
@@ -101,11 +101,11 @@
 61233	scripts
 2	serve/crates/serving-policy
 7393	serve/crates/sovereign-compute
-2014	serve/crates/sovereign-compute::tests
+1942	serve/crates/sovereign-compute::tests
 755	serve/crates/sovereign-gliner
 1307	serve/crates/sovereign-gliner::tests
 8463	serve/crates/sovereign-inference
-20549	serve/crates/sovereign-inference::tests
+19337	serve/crates/sovereign-inference::tests
 2563	serve/crates/sovereign-scheduler
 2301	serve/crates/sovereign-scheduler::tests
 9213	serve/crates/sovereign-serve
@@ -133,7 +133,7 @@
 611	shared/crates/mesh-reach
 667	shared/crates/mesh-reach::tests
 3300	shared/crates/oicp-client
-1424	shared/crates/oicp-client::tests
+853	shared/crates/oicp-client::tests
 5229	shared/crates/oicp-types
 2545	shared/crates/oicp-types::tests
 266	shared/crates/oplog
@@ -165,7 +165,7 @@
 677	svrn/crates/sovereign-cli-shared::tests
 5022	svrn/crates/sovereign-cli::tests
 56639	svrn/crates/sovereign-core
-40759	svrn/crates/sovereign-core::tests
+40708	svrn/crates/sovereign-core::tests
 39190	svrn/crates/sovereign-daemon
 31420	svrn/crates/sovereign-daemon::tests
 1853	svrn/crates/sovereign-grants
@@ -174,13 +174,13 @@
 172	svrn/crates/sovereign-meshapp::tests
 516	svrn/crates/sovereign-runtime-recipe
 198	svrn/crates/sovereign-runtime-recipe::tests
-849	svrn/crates/sovereign-service
+848	svrn/crates/sovereign-service
 56	svrn/crates/sovereign-service::tests
 7688	svrn/crates/sovereign-store
 3002	svrn/crates/sovereign-store::tests
 29397	svrn/crates/sovereign-tools
 3924	svrn/crates/sovereign-tools-base
 1752	svrn/crates/sovereign-tools-base::tests
-17307	svrn/crates/sovereign-tools::tests
+16732	svrn/crates/sovereign-tools::tests
 1678	svrn/crates/sovereign-workflow-host
 611	svrn/crates/sovereign-workflow-host::tests
