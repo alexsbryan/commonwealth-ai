@@ -49,6 +49,11 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# llama.cpp builds llguidance with a nested cargo and reads llguidance.h from
+# that cargo's default target dir; an inherited CARGO_TARGET_DIR (the release
+# container sets one) sends the header elsewhere and the build fails.
+unset CARGO_TARGET_DIR
+
 # Run a build step into its log; on failure, show the log's tail.
 logged() {
   log=$1; shift
