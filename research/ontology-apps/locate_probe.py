@@ -645,7 +645,10 @@ def score():
                 continue
             pos = [(x, o) for x, o in outs if x["gold"]]
             neg = [(x, o) for x, o in outs if not x["gold"]]
-            right = lambda x, o: (x["gold"] in o[1]) if x["gold"] else not o[1]  # noqa: E731
+            if arm == "T":  # T says whether a line is about a particular, not which kind: right is yes on a gold line
+                right = lambda x, o: bool(o[1]) == bool(x["gold"])  # noqa: E731
+            else:
+                right = lambda x, o: (x["gold"] in o[1]) if x["gold"] else not o[1]  # noqa: E731
             lost = [(x, o) for x, o in pos if x["class"] == "lost" and not x["reference_only"]]
             hits = [(x, o) for x, o in pos if x["class"] == "hit"]
             valued = [(x, o) for x, o in pos if x["value"] and x["gold"] in o[1] and o[2] is not None]
