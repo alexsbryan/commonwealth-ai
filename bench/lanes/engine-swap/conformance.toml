@@ -340,7 +340,7 @@ callers = "every greedy call on an MTP model"
 check = "greedy tokens with speculation equal greedy tokens without, on each side separately"
 judge = [{ kind = "greedy-tokens" }]
 when = [{ label = "conversation-greedy-plain" }, { label = "evidence-synthesis" }, { label = "judge-pin-a1" }]
-pairs = [["embedded-nospec", "embedded"], ["llama-server-nospec", "llama-server"]]
+pairs = [["embedded-nospec", "embedded"], ["llama-server-matched", "llama-server"]]
 predict = "pass"
 basis = "unverified"
 note = "Verification batches change the batch shape, which can move float results."
