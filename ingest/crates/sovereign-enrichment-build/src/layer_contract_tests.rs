@@ -159,50 +159,52 @@ fn spread_pick(prompt: &ChatPrompt, labels: usize) -> usize {
 /// wave is answered question by question, as a port that cannot batch does
 /// (`resolve_records::one_by_one`), so it records each single question.
 fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
-    corpus_engine::enrichment::atlas::resolve_records::one_by_one(Arc::new(move |prompt: &ChatPrompt, _| {
-        asked.lock().unwrap().push(prompt.clone());
-        let labels: Vec<String> = prompt
-            .response_schema
-            .as_ref()
-            .and_then(|s| s["enum"].as_array())
-            .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect())
-            .unwrap_or_default();
-        let phase = prompt.phase_id.clone().unwrap_or_default();
-        let answer = if labels.is_empty() {
-            Err(corpus_engine::Error::Extraction(format!(
-                "the oracle answers forced choices only; `{phase}` is not one"
-            )))
-        } else {
-            let pick = match phase.as_str() {
-                "document_passes_locate" => {
-                    let line = prompt
-                        .user
-                        .rsplit_once("\n\nLine ")
-                        .and_then(|(_, rest)| rest.split_once('"'))
-                        .and_then(|(_, rest)| rest.split_once("\"\n"))
-                        .map(|(text, _)| text)
-                        .unwrap_or("");
-                    if line.split_whitespace().count() >= 6 {
-                        0
-                    } else {
-                        labels.len() - 1
+    corpus_engine::enrichment::atlas::resolve_records::one_by_one(Arc::new(
+        move |prompt: &ChatPrompt, _| {
+            asked.lock().unwrap().push(prompt.clone());
+            let labels: Vec<String> = prompt
+                .response_schema
+                .as_ref()
+                .and_then(|s| s["enum"].as_array())
+                .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect())
+                .unwrap_or_default();
+            let phase = prompt.phase_id.clone().unwrap_or_default();
+            let answer = if labels.is_empty() {
+                Err(corpus_engine::Error::Extraction(format!(
+                    "the oracle answers forced choices only; `{phase}` is not one"
+                )))
+            } else {
+                let pick = match phase.as_str() {
+                    "document_passes_locate" => {
+                        let line = prompt
+                            .user
+                            .rsplit_once("\n\nLine ")
+                            .and_then(|(_, rest)| rest.split_once('"'))
+                            .and_then(|(_, rest)| rest.split_once("\"\n"))
+                            .map(|(text, _)| text)
+                            .unwrap_or("");
+                        if line.split_whitespace().count() >= 6 {
+                            0
+                        } else {
+                            labels.len() - 1
+                        }
                     }
-                }
-                "document_passes_choose" if choose == Choose::Spread => {
-                    spread_pick(prompt, labels.len())
-                }
-                _ => 0,
+                    "document_passes_choose" if choose == Choose::Spread => {
+                        spread_pick(prompt, labels.len())
+                    }
+                    _ => 0,
+                };
+                let rest = 0.1 / labels.len() as f64;
+                let dist: Map<String, Value> = labels
+                    .iter()
+                    .enumerate()
+                    .map(|(i, l)| (l.clone(), json!(if i == pick { 0.9 } else { rest })))
+                    .collect();
+                Ok(Value::Object(dist).to_string())
             };
-            let rest = 0.1 / labels.len() as f64;
-            let dist: Map<String, Value> = labels
-                .iter()
-                .enumerate()
-                .map(|(i, l)| (l.clone(), json!(if i == pick { 0.9 } else { rest })))
-                .collect();
-            Ok(Value::Object(dist).to_string())
-        };
-        Box::pin(async move { answer })
-    }))
+            Box::pin(async move { answer })
+        },
+    ))
 }
 
 /// A deterministic embedding of the text alone.

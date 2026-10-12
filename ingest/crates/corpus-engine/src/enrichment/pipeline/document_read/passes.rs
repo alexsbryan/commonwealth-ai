@@ -468,10 +468,19 @@ async fn read_document(
         .iter()
         .map(|&i| locate_question(&facts, &raw, &lines, &lines[i], plan, &labels))
         .collect();
-    let items: Vec<String> = asking.iter().map(|&i| format!("line {}", lines[i].n)).collect();
+    let items: Vec<String> = asking
+        .iter()
+        .map(|&i| format!("line {}", lines[i].n))
+        .collect();
     calls += prompts.len() as u32;
-    let answers =
-        decision_wave(infer, &prompts, &vec![labels.clone(); prompts.len()], &id, &items).await;
+    let answers = decision_wave(
+        infer,
+        &prompts,
+        &vec![labels.clone(); prompts.len()],
+        &id,
+        &items,
+    )
+    .await;
     for (&i, answer) in asking.iter().zip(answers) {
         let line = &lines[i];
         match answer {

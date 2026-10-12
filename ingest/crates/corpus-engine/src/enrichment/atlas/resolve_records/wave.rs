@@ -52,7 +52,10 @@ pub(crate) fn compose(singles: &[ChatPrompt]) -> Result<ChatPrompt, String> {
         if serde_json::to_value(shell(p)).ok() != serde_json::to_value(&common).ok() {
             return Err("the questions differ in more than their user turn".to_string());
         }
-        let body = p.response_schema.as_ref().ok_or("a question asks no forced choice")?;
+        let body = p
+            .response_schema
+            .as_ref()
+            .ok_or("a question asks no forced choice")?;
         let l = forced_choice::candidates(body).ok_or("a question asks no forced choice")?;
         let refs: Vec<&str> = l.iter().map(String::as_str).collect();
         if forced_choice::schema(&refs) != *body {
@@ -191,12 +194,20 @@ pub(crate) async fn decision_wave(
             other => {
                 let head: String = raw.chars().take(120).collect();
                 let reason = match other {
-                    Some(t) => format!("the wave answered {} of {} questions", t.len(), prompts.len()),
+                    Some(t) => format!(
+                        "the wave answered {} of {} questions",
+                        t.len(),
+                        prompts.len()
+                    ),
                     None => format!("not a wave answer: {head:?}"),
                 };
                 warn!(document, ?phase, ms, %reason, "atlas/resolve: decision wave answered no wave");
                 return (0..prompts.len())
-                    .map(|_| Err(Refusal::NoAnswer { reason: reason.clone() }))
+                    .map(|_| {
+                        Err(Refusal::NoAnswer {
+                            reason: reason.clone(),
+                        })
+                    })
                     .collect();
             }
         },
@@ -204,11 +215,21 @@ pub(crate) async fn decision_wave(
             warn!(document, ?phase, ms, error = %e, "atlas/resolve: decision wave failed");
             let reason = format!("call failed: {e:#}");
             return (0..prompts.len())
-                .map(|_| Err(Refusal::NoAnswer { reason: reason.clone() }))
+                .map(|_| {
+                    Err(Refusal::NoAnswer {
+                        reason: reason.clone(),
+                    })
+                })
                 .collect();
         }
     };
-    debug!(document, ?phase, ms, questions = prompts.len(), "atlas/resolve: decision wave");
+    debug!(
+        document,
+        ?phase,
+        ms,
+        questions = prompts.len(),
+        "atlas/resolve: decision wave"
+    );
     texts
         .into_iter()
         .zip(labels)

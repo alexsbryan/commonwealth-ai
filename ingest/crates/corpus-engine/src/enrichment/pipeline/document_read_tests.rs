@@ -83,7 +83,10 @@ pub(super) fn scripted(
     );
     // A wave is answered question by question, in order, as a port that
     // cannot batch answers one (`resolve_records::one_by_one`).
-    (crate::enrichment::atlas::resolve_records::one_by_one(f), seen)
+    (
+        crate::enrichment::atlas::resolve_records::one_by_one(f),
+        seen,
+    )
 }
 
 pub(super) fn row(

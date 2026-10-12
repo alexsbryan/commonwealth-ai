@@ -240,7 +240,13 @@ pub fn answering(
     let asked_chat: InferenceFn = Arc::new(move |prompt: &ChatPrompt, max_tokens| {
         let store = Arc::clone(&chat_store);
         if let Some(split) = wave_singles(prompt) {
-            return ask_wave(store, Arc::clone(&chat), prompt.phase_id.clone(), split, max_tokens);
+            return ask_wave(
+                store,
+                Arc::clone(&chat),
+                prompt.phase_id.clone(),
+                split,
+                max_tokens,
+            );
         }
         let key = chat_key(prompt, max_tokens);
         let phase = prompt.phase_id.clone();
@@ -302,8 +308,7 @@ fn ask_wave(
     max_tokens: Option<u32>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>> {
     Box::pin(async move {
-        let singles = split
-            .map_err(|e| Error::InvalidInput(format!("forced_choice wave: {e}")))?;
+        let singles = split.map_err(|e| Error::InvalidInput(format!("forced_choice wave: {e}")))?;
         let keys: Vec<String> = singles.iter().map(|s| chat_key(s, max_tokens)).collect();
         let text = |v: Value| match v {
             Value::String(t) => Ok(t),
@@ -312,10 +317,18 @@ fn ask_wave(
         let mut answers: Vec<Option<std::result::Result<String, String>>> =
             keys.iter().map(|k| store.get(k).map(text)).collect();
         let missing: Vec<usize> = (0..keys.len()).filter(|&i| answers[i].is_none()).collect();
-        debug!(asker = store.source.label(), ?phase, questions = keys.len(), recorded = keys.len() - missing.len(), "asker: a wave");
+        debug!(
+            asker = store.source.label(),
+            ?phase,
+            questions = keys.len(),
+            recorded = keys.len() - missing.len(),
+            "asker: a wave"
+        );
         if !missing.is_empty() && !store.source.needs_daemon() {
             for &i in &missing {
-                answers[i] = Some(Err(store.missing("chat", phase.as_deref(), &keys[i]).to_string()));
+                answers[i] = Some(Err(store
+                    .missing("chat", phase.as_deref(), &keys[i])
+                    .to_string()));
             }
         } else if !missing.is_empty() {
             let ask: Vec<ChatPrompt> = missing.iter().map(|&i| singles[i].clone()).collect();
@@ -340,13 +353,20 @@ fn ask_wave(
             };
             for (&i, answer) in missing.iter().zip(asked) {
                 answers[i] = Some(match answer {
-                    Ok(t) => text(store.keep(keys[i].clone(), "chat", phase.as_deref(), Value::String(t))?),
+                    Ok(t) => text(store.keep(
+                        keys[i].clone(),
+                        "chat",
+                        phase.as_deref(),
+                        Value::String(t),
+                    )?),
                     Err(why) => Err(why),
                 });
             }
         }
-        let answers: Vec<std::result::Result<String, String>> =
-            answers.into_iter().map(|a| a.expect("every question answered or refused")).collect();
+        let answers: Vec<std::result::Result<String, String>> = answers
+            .into_iter()
+            .map(|a| a.expect("every question answered or refused"))
+            .collect();
         Ok(wave_text(&answers))
     })
 }

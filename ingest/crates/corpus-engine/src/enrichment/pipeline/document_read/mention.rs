@@ -86,15 +86,29 @@ pub(super) async fn mentions(
     // Which type each line names needs no other line's answer: one wave. The
     // pointing that follows a named line depends on that answer, so it is
     // asked after, line by line.
-    let asking: Vec<&Line> = lines.iter().zip(asked).filter(|(_, a)| **a).map(|(l, _)| l).collect();
+    let asking: Vec<&Line> = lines
+        .iter()
+        .zip(asked)
+        .filter(|(_, a)| **a)
+        .map(|(l, _)| l)
+        .collect();
     let prompts: Vec<_> = asking
         .iter()
         .map(|line| mention_question(facts, body, lines, line, targets, &labels))
         .collect();
-    let items: Vec<String> = asking.iter().map(|line| format!("line {}", line.n)).collect();
+    let items: Vec<String> = asking
+        .iter()
+        .map(|line| format!("line {}", line.n))
+        .collect();
     *calls += prompts.len() as u32;
-    let answers =
-        decision_wave(infer, &prompts, &vec![labels.clone(); prompts.len()], document, &items).await;
+    let answers = decision_wave(
+        infer,
+        &prompts,
+        &vec![labels.clone(); prompts.len()],
+        document,
+        &items,
+    )
+    .await;
     for ((line, item), answer) in asking.into_iter().zip(&items).zip(answers) {
         let dist = match answer {
             Ok(d) => d,

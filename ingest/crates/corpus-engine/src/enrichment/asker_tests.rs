@@ -143,7 +143,9 @@ async fn a_wave_records_each_question_under_its_own_key_and_replays_either_way()
     let (_, c) = answering(Asker::Daemon, dir.path(), embed, chat).unwrap();
     // One question asked alone first; the wave then asks only the other two,
     // as one request.
-    let alone = decision_call(&c, &line_question("1 A"), &labels, "doc", "1").await.unwrap();
+    let alone = decision_call(&c, &line_question("1 A"), &labels, "doc", "1")
+        .await
+        .unwrap();
     let waved = ask_wave(Arc::clone(&c), vec!["1 A", "2 B", "3 0"]).await;
     assert_eq!(requests.load(Ordering::SeqCst), 2);
     assert_eq!(questions.load(Ordering::SeqCst), 3);
@@ -152,7 +154,10 @@ async fn a_wave_records_each_question_under_its_own_key_and_replays_either_way()
     // single request is answered with.
     let store = std::fs::read_to_string(dir.path().join(ANSWERS_FILE)).unwrap();
     for line in ["2 B", "3 0"] {
-        assert!(store.contains(&chat_key(&line_question(line), None)), "{line}");
+        assert!(
+            store.contains(&chat_key(&line_question(line), None)),
+            "{line}"
+        );
     }
 
     // Replayed with no daemon: each question alone, and the wave again, give
@@ -163,7 +168,10 @@ async fn a_wave_records_each_question_under_its_own_key_and_replays_either_way()
         let single = decision_call(&c, &line_question(line), &labels, "doc", line).await;
         assert_eq!(single.as_ref().unwrap(), waved[i].as_ref().unwrap());
     }
-    assert_eq!(ask_wave(Arc::clone(&c), vec!["1 A", "2 B", "3 0"]).await, waved);
+    assert_eq!(
+        ask_wave(Arc::clone(&c), vec!["1 A", "2 B", "3 0"]).await,
+        waved
+    );
     // A wave holding one question the run never asked refuses that one alone.
     let partly = ask_wave(Arc::clone(&c), vec!["2 B", "4 A"]).await;
     assert_eq!(partly[0], waved[1]);
