@@ -105,6 +105,22 @@ pub const MTP_DRAFT_LAYERS_SUFFIX: &str = ".nextn_predict_layers";
 /// - `Ok(None)` — no such key, or one that is not an unsigned integer.
 /// - `Err(_)` — I/O error or a malformed header.
 pub fn read_mtp_draft_layers(path: &Path) -> io::Result<Option<u32>> {
+    read_u32_by_suffix(path, MTP_DRAFT_LAYERS_SUFFIX)
+}
+
+/// The suffix of the key that carries the context a model was trained with,
+/// `<arch>.context_length` (llama.cpp `LLM_KV_CONTEXT_LENGTH`, what the
+/// engine reports as `n_ctx_train`).
+pub const CONTEXT_LENGTH_SUFFIX: &str = ".context_length";
+
+/// The trained context of the GGUF (`n_ctx_train`), read without loading
+/// it. Same three answers as [`read_mtp_draft_layers`].
+pub fn read_context_length(path: &Path) -> io::Result<Option<u32>> {
+    read_u32_by_suffix(path, CONTEXT_LENGTH_SUFFIX)
+}
+
+/// The first key ending in `suffix`, when it holds a u32.
+fn read_u32_by_suffix(path: &Path, suffix: &str) -> io::Result<Option<u32>> {
     let mut r = BufReader::new(File::open(path)?);
     if read_u32(&mut r)? != GGUF_MAGIC {
         return Err(invalid("not a GGUF file (bad magic)"));
@@ -121,7 +137,7 @@ pub fn read_mtp_draft_layers(path: &Path) -> io::Result<Option<u32>> {
     for _ in 0..kv_count {
         let key = read_gguf_string(&mut r)?;
         let vtype = read_u32(&mut r)?;
-        if key.ends_with(MTP_DRAFT_LAYERS_SUFFIX) {
+        if key.ends_with(suffix) {
             return Ok(match vtype {
                 T_UINT32 => Some(read_u32(&mut r)?),
                 _ => None,
@@ -317,6 +333,17 @@ mod tests {
             .finish();
         let (_d, p) = write_tmp(&bytes);
         assert_eq!(read_mtp_draft_layers(&p).unwrap(), None);
+    }
+
+    #[test]
+    fn reads_context_length_past_a_longer_key_with_the_same_ending() {
+        let bytes = GgufBuilder::new()
+            .str_kv(ARCH_KEY, "qwen35")
+            .u32_kv("qwen35.rope.scaling.original_context_length", 4096)
+            .u32_kv("qwen35.context_length", 262_144)
+            .finish();
+        let (_d, p) = write_tmp(&bytes);
+        assert_eq!(read_context_length(&p).unwrap(), Some(262_144));
     }
 
     #[test]

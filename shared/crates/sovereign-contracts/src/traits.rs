@@ -579,6 +579,16 @@ pub trait InferenceProvider: Send + Sync {
         (text.chars().count() / 4) as u32
     }
 
+    /// The exact count for the chat model's own tokenizer, asked of what
+    /// holds it (a router's `/tokenize`); [`Self::count_tokens`] stays the
+    /// sync estimate. The default refuses rather than pass an estimate off
+    /// as a count; a wrapper forwards it.
+    async fn count_tokens_exact(&self, _text: &str) -> Result<u32> {
+        Err(Error::NotImplemented(
+            "count_tokens_exact: no exact tokenizer here; count_tokens is an estimate".into(),
+        ))
+    }
+
     /// Return the model ID of a configured Code specialist slot, if the
     /// provider has one separately from its primary slot. Returns `None`
     /// on providers that collapse all chat work into `model_id_for(Slow)`

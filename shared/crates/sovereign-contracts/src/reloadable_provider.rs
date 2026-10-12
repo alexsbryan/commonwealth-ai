@@ -137,6 +137,10 @@ impl InferenceProvider for ReloadableProvider {
         self.current().count_tokens(text)
     }
 
+    async fn count_tokens_exact(&self, text: &str) -> Result<u32> {
+        self.current().count_tokens_exact(text).await
+    }
+
     fn code_model_id(&self) -> Option<String> {
         self.current().code_model_id()
     }

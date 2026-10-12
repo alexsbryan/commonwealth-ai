@@ -718,6 +718,11 @@ impl InferenceProvider for InferenceRouter {
         self.local.count_tokens(text)
     }
 
+    /// Exact for the local model, by the same reasoning as above.
+    async fn count_tokens_exact(&self, text: &str) -> Result<u32> {
+        self.local.count_tokens_exact(text).await
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.local.capabilities()
     }

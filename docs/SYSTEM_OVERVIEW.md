@@ -1032,7 +1032,10 @@ Serving assembly starts the router on its first build (`llama_router::live`,
 a supervised child), warms every preset model until `GET /models` reports
 `loaded`, and re-wraps it on every reload, refusing one whose preset differs;
 `llama_router::provider::RouterProvider` reports it and each model under
-`compute_children` and the node's weights as `OwnWeights`.
+`compute_children` and the node's weights as `OwnWeights`, and answers the
+host facts from the router rather than the remote half's assumptions: each
+preset role's residency (embed and rerank included) from the polled
+`GET /models`, the code model, and `n_ctx_train` from the primary GGUF's header.
 The binary is `llama-server` beside the daemon's executable, built by
 `serve/crates/sovereign-compute/llama-server/build.sh` from `PIN.toml` there
 (llama.cpp commit, llguidance, each patch by sha256), which writes

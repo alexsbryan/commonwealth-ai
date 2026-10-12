@@ -342,6 +342,46 @@ impl LiveRouter {
         });
     }
 
+    /// `model`'s status as the router last listed it in `GET /models`
+    /// (`loaded`, `loading`, `unloaded`, `sleeping`, `failed (exit N)`), or
+    /// `None` before the first listing names it. Never asks the router: the
+    /// listing is the one [`Self::follow`] keeps current every 5s.
+    pub fn model_status(&self, model: &str) -> Option<String> {
+        self.models
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .find(|(m, _)| m == model)
+            .map(|(_, s)| s.clone())
+    }
+
+    /// Load `model` through the router's `POST /models/load` and return once
+    /// it reports `loaded`; a failed load is an error naming the status.
+    pub async fn load(&self, model: &str) -> Result<(), String> {
+        self.warm(&[model.to_string()]).await
+    }
+
+    /// How many tokens `model`'s own tokenizer makes of `text`, from the
+    /// router's `POST /tokenize` (routed by model, as a completion is).
+    pub async fn token_count(&self, model: &str, text: &str) -> Result<u32, String> {
+        let body: Value = reqwest::Client::new()
+            .post(format!("http://127.0.0.1:{}/tokenize", self.port))
+            .json(&json!({ "model": model, "content": text }))
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .map_err(|e| format!("POST /tokenize for {model}: {e}"))?
+            .json()
+            .await
+            .map_err(|e| format!("POST /tokenize for {model}: {e}"))?;
+        let tokens = body
+            .get("tokens")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("POST /tokenize for {model} returned no tokens: {body}"))?;
+        tracing::debug!(target: "llama_router", model, chars = text.len(), tokens = tokens.len(), "router: tokenized");
+        Ok(tokens.len() as u32)
+    }
+
     /// The router and each of its models, as `/status` lists compute children.
     pub fn statuses(&self) -> Vec<ComputeChildStatus> {
         let state = self

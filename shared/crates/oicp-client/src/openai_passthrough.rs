@@ -480,6 +480,10 @@ impl InferenceProvider for OpenAiPassthrough {
         self.local.count_tokens(text)
     }
 
+    async fn count_tokens_exact(&self, text: &str) -> Result<u32> {
+        self.local.count_tokens_exact(text).await
+    }
+
     fn code_model_id(&self) -> Option<String> {
         self.local.code_model_id()
     }
