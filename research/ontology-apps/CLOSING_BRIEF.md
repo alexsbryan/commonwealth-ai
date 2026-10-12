@@ -9,6 +9,26 @@ detail. Numbers come from the final run (`runs/converge-s2`, local to this host;
 (`~/.svrnmesh/bench-corpora/baseline-fullreader-20261010`), the measurement rows in
 `~/.sovereign/comaintainer/bar-measurements.jsonl` and the commit log. Where something was not measured it says so.
 
+**Corrections (2026-10-11, from the review in note 49fa8428; the campaign is reopened).** What below was wrong:
+1. The closure's cited authority does not exist: the 2026-10-10 handoff says demonstrate the objective and finish
+   one coherent path (CONVERGE.md:49-59), not "then close".
+2. Served ref -> text (Q1) was an introduced type-binding regression, not a found limit: Pick answers identity keys
+   as strings and the fold wrote them. Repaired in d3b12ba9c (a ref holds a record of its type or nothing; the
+   mention kept cited and unresolved); "about six matched deals" was a scorer rescore, not served correctness.
+3. "PLACE, so no reader boundary" is unsupported: the first-loss bucket is not a cause, Pick makes wrong company
+   choices, and RESOLVE asks the model too. The blind ladders' largest losses are READ (Ward 44/47, uv 65/182,
+   GVC 606/977).
+4. The uv authors read different inputs (blind: ours' 554 documents plus 402), so masking the evaluation does not
+   remove input effects; the common row (blind-author/converge-s2/agreement.json:151-172: 59/132 vs 58/132)
+   belongs beside every two-author uv number.
+5. Bars: three met, two failed, three unjudged, and the GVC failure is the older RESOLVE-alone run; current failure,
+   stale evidence and missing measurement are three things.
+6. Q2's candidate cited-line comparison already exists (resolve_records/select.rs calls answer::describe, which
+   shows up to four cited quotes per candidate); its limits are to be measured, not proposed as new.
+7. 17/17 fixture tests and 469 cited lists do not show a ref targets its declared type; the control that does is
+   layer_contract_tests reader `a_served_reference_is_a_record_of_its_type_and_a_mention_stays_unresolved`.
+   Ward's cost in wall seconds is 23.98 s/doc for extract alone; 25.93 summed model-seconds is another unit.
+
 ## The verdict
 
 The campaign closes with its objective not met. What holds: one production path (publish a recipe, then
