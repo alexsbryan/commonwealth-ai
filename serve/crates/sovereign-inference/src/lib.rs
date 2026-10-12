@@ -2,14 +2,12 @@
 pub mod capacity;
 pub mod cpu_compat;
 pub mod embedded;
-/// The contracts an engine must satisfy, as runnable checks.
 pub mod engine_capture;
-pub mod engine_conformance;
 /// Which inference engine serves this node — selection + construction.
 pub mod engine_factory;
 pub mod evidence_id_constraint;
 pub mod fim;
-pub mod gguf_meta;
+pub use sovereign_contracts::gguf_meta;
 pub use sovereign_contracts::gguf_validator;
 pub mod gpu_probe;
 pub mod hardware;
@@ -28,7 +26,6 @@ pub mod remote {
 pub mod reranker_standalone;
 pub mod rpc_worker_main;
 pub mod served_kind;
-pub mod setup_planner;
 pub mod url_constraint;
 pub mod vocab_cache;
 

@@ -2162,6 +2162,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose (operator, asked by the seat with both options priced: "Close, file residue"): pc-partial-decline-verdict stays [x]; measure-2 closes at b43e0e20f as the reading it is; the two shapes and the 35B decline-plus-GK Grounded label go below the cut as pc-partial-decline-residue with their transcripts as fixtures.
 - Because: a third round costs ~2.5 h (code plus a 2 h reading alone) for one false label in 40 turns and one miss that predates the row; the operator ruled the residue a cleanup, not a blocker. The seat stopped the director's resolution session (an operator STOP, 18:11Z) so it would not reopen the row against the ruling; it had already merged the readings (379e56f1e).
 
+**engine-swap-1 · 2026-10-12 · es-m3-move-agnostic · director** — this commit
+- Needed: the row asked for six moves to `sovereign-compute` with a re-export at the old path and the parity tests moved to `oicp-client`; both are impossible as written.
+- Chose: shrink es-m3 to `gguf_meta` (re-exported) plus `setup_planner` and `engine_conformance` (callers repointed, no re-export); split `hardware`/`capacity`/`cpu_compat`/`engine_capture` into es-m3-move-agnostic-after-g2 behind es-g2; delete the parity tests with the tries in es-g2.
+- Because: `sovereign-compute` depends on `sovereign-inference`, so an old-path re-export is a cycle, and the engine still uses four of the six; P itself says the parity tests are deleted with the tries.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13809,5 +13814,52 @@ Falsified if: a pool halt with "merge conflict" recurs while the merge applies c
 <details><summary>reasoning, evidence, package</summary>
 
 Causes, from b43e0e20f's findings: `pivot_answers`' value test (a fresh number or a capitalised mid-sentence word) misses a lowercase or code-span answer after " but " (sovereign-core runtime/grounding/decline.rs); `strip_gk_caveat` (repair.rs:58) keeps only the text after a mid-text "from general knowledge:", so `declines_asked_fact` (decline.rs:155) never sees the opening decline. Fixtures, kept in the main tree: target/ralph/phase-c/pc-partial-decline-verdict-measure-2/phase-c/pdm/runs/4b-chatask-r3-q1-warmup.txt (answers) and .../runs/4b-firm-r1.transcripts.jsonl (declines). The 4B gk_rescue "1945-06-23" release to a conference-room question (1 of 3) is pd-anchor-unenriched's case.
+
+</details>
+
+## engine-swap-1 · 2026-10-12 — es-m3 shrinks to the moves with no engine user; the rest waits for G2
+
+<details><summary>reasoning, evidence, package</summary>
+
+The premise was false (charter: "A false row premise: verify the census,
+rewrite the row"). Reproduced in the lane at 95ae59e68:
+
+- `serve/crates/sovereign-compute/Cargo.toml:32` is
+  `sovereign-inference = { workspace = true }`. A `pub use
+  sovereign_compute::x` inside `sovereign-inference` needs the reverse edge.
+- Engine users inside SI, by `git grep -nE "(crate|super)::<m>\b"`:
+  `hardware` in nine `embedded/` files plus `llama.rs:405` and
+  `reranker_standalone.rs:135`; `capacity` in `reranker_standalone.rs:136-146`
+  and `served_kind.rs:484`; `cpu_compat` in `embedded/model_slot.rs:1524,2282`;
+  `engine_capture` in `engine_factory.rs:223`. `setup_planner` and
+  `engine_conformance` have none, and `setup_planner`'s one SI import,
+  `hardware::ProfileName`, is itself a re-export of
+  `sovereign_contracts::daemon_wire::ProfileName` (`hardware.rs:16`).
+- External callers of the two: `sovereign-compute` (assets.rs:27,
+  setup_reads.rs:17), `sovereign-serve` setup_probe.rs:23 (serve depends on
+  compute), SI's `examples/custom_engine.rs:49`; cli-daemon mentions them only
+  in comments. So repointing is closed and no twin is left.
+- `oicp-client/Cargo.toml` has no `llguidance`, and the tests import
+  `crate::url_constraint`, `crate::evidence_id_constraint`,
+  `crate::llguidance_constraint` (on llama token types), all deleted in G2.
+  ENGINE_SWAP_PLAN.md: "Its parity test with the tries (`bd3ac4ea6`) has done
+  its job and is deleted with them." Deleting a test of deleted code is not
+  deleting a test to make a gate pass; the bench lane's `llg-parity` twin stays.
+
+Dropping the old-path re-export for two modules departs from the row's
+mechanics, not its outcome (the modules land where ARCH 12 puts them, one
+copy each). PASS BARs unchanged except TEST(oicp-client), which only covered
+the dropped test move.
+
+Findings for the operator, not acted on (scope frozen): the same cycle sits
+under es-g1 ("re-exported at the old paths" for `engine_factory`/`served_kind`)
+and es-m4 ("the engine keeps calling the moved planner" in compute). Their
+directors will hit it; the likely shape is the same, order the move after the
+engine delete or repoint callers.
+
+Falsified if: `sovereign-compute` drops its `sovereign-inference` dependency
+before es-g2 (then the re-export works and the split was unnecessary), or a
+crate below SI that may carry `sysinfo`/process probes turns up as the right
+home for `hardware`.
 
 </details>

@@ -7,7 +7,7 @@
 //! loading: some architectures (Gated DeltaNet / Mamba / RWKV) SIGSEGV inside
 //! ggml's recurrent `SET` op during CPU prefill, and a crash in C is
 //! unrecoverable in-process — so we must know the architecture and refuse the
-//! load pre-flight rather than discover it by crashing. See [`crate::cpu_compat`].
+//! load pre-flight rather than discover it by crashing. See `sovereign_inference::cpu_compat`.
 //!
 //! ## Format
 //!
@@ -59,24 +59,7 @@ pub const ARCH_KEY: &str = "general.architecture";
 /// - `Ok(None)` — a valid GGUF header with no (string-typed) architecture key.
 /// - `Err(_)` — I/O error or a malformed/oversized header. Never panics.
 pub fn read_architecture(path: &Path) -> io::Result<Option<String>> {
-    let mut r = BufReader::new(File::open(path)?);
-
-    let magic = read_u32(&mut r)?;
-    if magic != GGUF_MAGIC {
-        return Err(invalid("not a GGUF file (bad magic)"));
-    }
-    let version = read_u32(&mut r)?;
-    if !(2..=3).contains(&version) {
-        return Err(invalid(&format!("unsupported GGUF version {version}")));
-    }
-    let _tensor_count = read_u64(&mut r)?;
-    let kv_count = read_u64(&mut r)?;
-    // A sane cap: real models carry dozens–hundreds of KV entries, never
-    // millions. Guards a corrupt count from spinning the loop forever.
-    if kv_count > 1_000_000 {
-        return Err(invalid("implausible GGUF metadata_kv_count"));
-    }
-
+    let (mut r, kv_count) = open_kv_section(path)?;
     for _ in 0..kv_count {
         let key = read_gguf_string(&mut r)?;
         let vtype = read_u32(&mut r)?;
@@ -121,19 +104,7 @@ pub fn read_context_length(path: &Path) -> io::Result<Option<u32>> {
 
 /// The first key ending in `suffix`, when it holds a u32.
 fn read_u32_by_suffix(path: &Path, suffix: &str) -> io::Result<Option<u32>> {
-    let mut r = BufReader::new(File::open(path)?);
-    if read_u32(&mut r)? != GGUF_MAGIC {
-        return Err(invalid("not a GGUF file (bad magic)"));
-    }
-    let version = read_u32(&mut r)?;
-    if !(2..=3).contains(&version) {
-        return Err(invalid(&format!("unsupported GGUF version {version}")));
-    }
-    let _tensor_count = read_u64(&mut r)?;
-    let kv_count = read_u64(&mut r)?;
-    if kv_count > 1_000_000 {
-        return Err(invalid("implausible GGUF metadata_kv_count"));
-    }
+    let (mut r, kv_count) = open_kv_section(path)?;
     for _ in 0..kv_count {
         let key = read_gguf_string(&mut r)?;
         let vtype = read_u32(&mut r)?;
@@ -146,6 +117,27 @@ fn read_u32_by_suffix(path: &Path, suffix: &str) -> io::Result<Option<u32>> {
         skip_value(&mut r, vtype)?;
     }
     Ok(None)
+}
+
+/// Open `path`, check the header, and leave the reader at the first KV entry;
+/// returns it with the entry count.
+fn open_kv_section(path: &Path) -> io::Result<(BufReader<File>, u64)> {
+    let mut r = BufReader::new(File::open(path)?);
+    if read_u32(&mut r)? != GGUF_MAGIC {
+        return Err(invalid("not a GGUF file (bad magic)"));
+    }
+    let version = read_u32(&mut r)?;
+    if !(2..=3).contains(&version) {
+        return Err(invalid(&format!("unsupported GGUF version {version}")));
+    }
+    let _tensor_count = read_u64(&mut r)?;
+    let kv_count = read_u64(&mut r)?;
+    // A sane cap: real models carry dozens–hundreds of KV entries, never
+    // millions. Guards a corrupt count from spinning the loop forever.
+    if kv_count > 1_000_000 {
+        return Err(invalid("implausible GGUF metadata_kv_count"));
+    }
+    Ok((r, kv_count))
 }
 
 fn invalid(msg: &str) -> io::Error {

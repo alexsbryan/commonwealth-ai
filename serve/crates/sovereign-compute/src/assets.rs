@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::setup_planner;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -24,7 +25,6 @@ use sovereign_contracts::daemon_wire::{
     AssetDownloadProgress, AssetDownloadRequest, AssetDownloadState, AssetKind, IngestJobAck,
     NerModelStatus,
 };
-use sovereign_inference::setup_planner;
 
 use crate::setup_reads::json_error;
 

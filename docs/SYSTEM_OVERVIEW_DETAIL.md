@@ -3937,7 +3937,7 @@ had no key that could say otherwise.
   resolved through `register_engine`. Rust has no safe cross-crate ABI for
   `dyn Trait`, so an in-process third-party engine is always compiled into a
   binary the operator controls — registration in `main()` is the mechanism.
-  Worked example: `sovereign-inference/examples/custom_engine.rs`.
+  Worked example: `sovereign-compute/examples/custom_engine.rs`.
   An unknown id refuses and lists what IS registered; it never falls back to
   llama (§18.3).
 - **`BuiltEngine.llama` is `None` for every non-llama engine**, and the daemon's
@@ -3948,7 +3948,7 @@ had no key that could say otherwise.
   died in `build/preflight.rs` because it stat'd `[models]` GGUF paths a remote
   engine never opens. Regression test:
   `a_weightless_engine_skips_the_vram_preflight_entirely`.
-- **The contracts are executable.** `sovereign_inference::engine_conformance`
+- **The contracts are executable.** `sovereign_compute::engine_conformance`
   — `check_sync` (no I/O, runs against any engine) and `check_serving` — checks
   the honesty invariants a new engine breaks silently: the terminal `Finish`
   frame, `embed_batch` length, `rerank_batch` refusing rather than fabricating,
@@ -4125,7 +4125,7 @@ avoids it). They run fine on GPU. Two layers keep a user's first message from
 hard-crashing the app:
 
 - **Proactive substitution — DECIDER SHIPPED, CALLER OWED (2026-09-11).**
-  `sovereign-inference::gguf_meta::read_architecture` reads
+  `sovereign-contracts::gguf_meta::read_architecture` reads
   `general.architecture` straight from the GGUF header (zero weight load), and
   `cpu_compat::choose_cpu_safe_chat_model` decides `Keep` / `Substitute` /
   `NoSafeModel`. Its one caller was the desktop's boot-time model-compat
