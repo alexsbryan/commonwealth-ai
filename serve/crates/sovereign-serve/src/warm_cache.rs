@@ -43,7 +43,8 @@ pub(crate) async fn cmd_warm_cache(args: &[String]) -> i32 {
         eprintln!("Usage: svrn mesh warm-cache <model.gguf> [--cache-dir <dir>]");
         return 2;
     };
-    let cache_dir = match cache_dir.or_else(sovereign_inference::rpc_warm_cache::default_cache_dir) {
+    let cache_dir = match cache_dir.or_else(sovereign_inference::rpc_warm_cache::default_cache_dir)
+    {
         Some(d) => d,
         None => {
             eprintln!(

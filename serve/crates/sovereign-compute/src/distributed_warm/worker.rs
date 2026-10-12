@@ -23,7 +23,8 @@ use super::{RpcWarmShardRequest, RpcWarmShardResponse, RpcWarmSource, TensorRang
 /// is a standing invitation to disagree. This wrapper only adds the
 /// non-split fallback the fetch path wants.
 fn split_sibling_names(name: &str) -> Vec<String> {
-    sovereign_inference::rpc_warm_cache::split_shard_names(name).unwrap_or_else(|| vec![name.to_string()])
+    sovereign_inference::rpc_warm_cache::split_shard_names(name)
+        .unwrap_or_else(|| vec![name.to_string()])
 }
 
 /// The cache dir the in-process RPC worker actually reads, so the bytes we
