@@ -56,11 +56,14 @@ for arg in "$@"; do
 done
 
 # Every binary the release dispatcher's verbs exec, and the packages that
-# build them; xtask's release_bins test pins both to the exec sites.
-BINS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-cli-llm-stock sovereign-serve svrn-ingest sovereign-pod-worker cw-rails)
+# build them; xtask's release_bins test pins both to the exec sites. The last
+# three are not cargo's: SERVER_BUILD installs the pinned llama-server, its
+# RPC server and the manifest the daemon verifies, beside the daemon.
+BINS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-cli-llm-stock sovereign-serve svrn-ingest sovereign-pod-worker cw-rails llama-server ggml-rpc-server llama-server.manifest.toml)
 PKGS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-serve sovereign-pipeline sovereign-pods commonwealth-rails)
 PKG_FLAGS=()
 for p in "${PKGS[@]}"; do PKG_FLAGS+=(-p "$p"); done
+SERVER_BUILD=serve/crates/sovereign-compute/llama-server/build.sh
 
 # ─── Pre-flight ───────────────────────────────────────────────────────
 VERSION="$(python3 -c "
@@ -158,6 +161,13 @@ build_mac() {  # build_mac <triple>
     cargo build --release --locked --target "$triple" \
         --features sovereign-cli/code-intel \
         "${PKG_FLAGS[@]}"
+    # The Intel leg is cross-built from the arm64 Mac: CMake reads the
+    # architecture from its environment, and ggml's CPU backend picks x86
+    # from it.
+    case "$triple" in
+        aarch64-*) sh "$SERVER_BUILD" --backend metal --install-dir "target/$triple/release" ;;
+        x86_64-*)  CMAKE_OSX_ARCHITECTURES=x86_64 sh "$SERVER_BUILD" --backend cpu --install-dir "target/$triple/release" ;;
+    esac
     package "$triple" "target/$triple/release"
 }
 
@@ -209,7 +219,9 @@ if ! (( SKIP_LINUX )); then
         --entrypoint /bin/bash "$IMAGE" -c \
         "cd /work && taskset -c 0-$((LINUX_BUILD_CPUS - 1)) cargo build --release --locked --target x86_64-unknown-linux-gnu \
              --features sovereign-cli/code-intel \
-             ${PKG_FLAGS[*]}"
+             ${PKG_FLAGS[*]} \
+         && taskset -c 0-$((LINUX_BUILD_CPUS - 1)) sh $SERVER_BUILD --backend vulkan --work-dir /work/target-container-linux/llama-server \
+             --install-dir /work/target-container-linux/x86_64-unknown-linux-gnu/release"
     package x86_64-unknown-linux-gnu "target-container-linux/x86_64-unknown-linux-gnu/release"
 fi
 
