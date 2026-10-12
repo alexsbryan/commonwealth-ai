@@ -234,8 +234,123 @@ def score_leg(leg, emb):
     return agg[system], out_rows
 
 
+# ---------------------------------------------------------------- Amendment 1: Ward company mentions (the party slice)
+ADDRESS = re.compile(r"[\w.+'-]+@([\w-]+(?:\.[\w-]+)+)")
+
+
+def company_section(leg, emb):
+    """Per Ward message in one gold deal: is the counterparty C offered by the message's header records (F), by a
+    Mention pick (M), and by name or embedding against the company records open before it (N, E)?"""
+    import email.utils  # noqa: PLC0415
+    S = LW.S
+    g = S.load_gold(S.WARD / "gold")
+    comp = {c["id"]: c for c in g["companies"]}
+    forms = {cid: S.gold_forms(c) for cid, c in comp.items()}
+    ours = {cid for cid, c in comp.items() if "enron.com" in (c.get("domains") or [])}
+
+    def resolves(text):
+        """Gold companies a written name or an address/domain resolves to (the scorer's rule: a shared domain, else
+        an equal name core)."""
+        dom = {m.lower() for m in ADDRESS.findall(text)} | ({text.lower()} if re.fullmatch(r"[\w-]+(\.[\w-]+)+", text.strip()) else set())
+        hit = {cid for cid, c in comp.items() if dom & {x.lower() for x in c.get("domains") or []}}
+        core = S.name_core(text)
+        return hit | {cid for cid, f in forms.items() if core and core in f}
+
+    docs = documents(leg, "ward")
+    of = collections.defaultdict(set)
+    for dl in g["deals"]:
+        for f in dl["files"]:
+            of[f].add(dl["id"])
+    deal_of = {}
+    for e in json.loads((S.WARD / "manifest.json").read_text()):
+        ds = of.get(e["path"], set())
+        if len(ds) == 1:
+            for mid in e.get("message_ids") or []:
+                deal_of[LW.doc_id(mid)] = next(iter(ds))
+    cp = {dl["id"]: dl.get("counterparty") for dl in g["deals"]}
+    mentions = collections.defaultdict(list)
+    for raw in open(RUN / leg / "extract.err.log", errors="replace"):
+        raw = LP.ANSI.sub("", raw)
+        if (m := MENTION.search(raw)) and m[3] == "company":
+            mentions[m[1]].append(m[4].strip().rstrip(";"))
+
+    def when(d):
+        try:
+            return email.utils.parsedate_to_datetime(docs[d][0].get("date") or "").timestamp()
+        except (TypeError, ValueError):
+            return float("inf")
+
+    def header_domains(d):
+        m = docs[d][0]
+        return {x.lower() for f in ("from", "to", "cc") for x in ADDRESS.findall(str(m.get(f) or ""))}
+
+    read = set()
+    for raw in open(RUN / leg / "extract.err.log", errors="replace"):
+        if (m := re.search(r'document_read/[a-z_]+: [^=]*document="?([^" ]+)"?', LP.ANSI.sub("", raw))):
+            read.add(m[1])
+
+    def partly(w, cid):
+        """Diagnostic added after the strict count was read: the mention's words share a token with C's written forms
+        or a domain stem (the link step's reach, not the scorer's rule)."""
+        toks = set(S.name_core(w).split())
+        stems = {x.split(".")[0].lower() for x in comp[cid].get("domains") or []}
+        return bool(toks & (set(" ".join(forms[cid]).split()) | stems))
+
+    a = collections.Counter()
+    open_records = {}  # record name -> gold companies it resolves to (header domains and earlier mention names)
+    for d in sorted(docs, key=when):
+        dom = header_domains(d)
+        ms = mentions.get(d, [])
+        c = cp.get(deal_of.get(d))
+        if c in comp and d in read:
+            a["units"] += 1
+            a["M_partly"] += any(partly(w, c) for w in ms)
+            f_hit = any(c in resolves(x) for x in dom)
+            m_hit = [w for w in ms if c in resolves(w)]
+            a["F"] += f_hit
+            a["M"] += bool(m_hit)
+            a["F_or_M"] += f_hit or bool(m_hit)
+            given = [r for r, cs in open_records.items() if c in cs]
+            if m_hit and given:
+                a["link_units"] += 1
+                q = m_hit[0]
+                names_ = list(open_records)
+                n_sc = {r: name_score(names([q]), names([r])) for r in names_}
+                emb.need([q] + names_)
+                qv = emb.unit(q)
+                e_sc = {r: float(qv @ emb.unit(r)) for r in names_}
+                for nm, sc in (("N", n_sc), ("E", e_sc)):
+                    order = sorted(names_, key=lambda r: -sc[r])
+                    for k in KS:
+                        a[f"{nm}@{k}"] += any(c in open_records[r] for r in order[:k])
+                a["link_records_open"] += len(names_)
+        for w in ms:
+            hit = resolves(w)
+            if hit & ours:
+                a["ours_mentions"] += 1
+                a["ours_mentions_F_offers"] += any(resolves(x) & hit & ours for x in dom)
+        for x in dom:
+            open_records.setdefault(x, resolves(x))
+        for w in ms:
+            open_records.setdefault(w, resolves(w))
+    u, lu = a["units"] or 1, a["link_units"] or 1
+    res = {"units": a["units"], "F": [a["F"], a["units"]], "M": [a["M"], a["units"]],
+           "M_partly_diagnostic": [a["M_partly"], a["units"]], "F_or_M": [a["F_or_M"], a["units"]],
+           "link_units": a["link_units"], "mean_records_open": round(a["link_records_open"] / lu, 1),
+           "ours_mentions": a["ours_mentions"], "ours_mentions_F_offers": a["ours_mentions_F_offers"]}
+    for nm in ("N", "E"):
+        for k in KS:
+            res[f"{nm}@{k}"] = [a[f"{nm}@{k}"], a["link_units"]]
+    return res
+
+
 def main():
     emb = C.Embedder()
+    if sys.argv[1:2] == ["--companies"]:
+        out = {leg: company_section(leg, emb) for leg in ("ours-ward", "blind-ward")}
+        print(json.dumps(out, indent=1))
+        (DATA / "companies.json").write_text(json.dumps(out, indent=1) + "\n")
+        return
     legs = sys.argv[1:] or list(W.LEGS)
     report, all_rows = {}, []
     for leg in legs:
