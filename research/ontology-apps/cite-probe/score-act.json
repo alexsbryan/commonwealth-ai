@@ -1,0 +1,398 @@
+{
+ "ward": {
+  "UW1": {
+   "commitment": {
+    "hit": 4,
+    "n": 5,
+    "rate": 0.8,
+    "calls_per_item": 1.6,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 5,
+    "lines_per_cited": 1.25
+   },
+   "commitment:informative": {
+    "hit": 4,
+    "n": 5,
+    "rate": 0.8,
+    "calls_per_item": 1.6,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 5,
+    "lines_per_cited": 1.25
+   },
+   "stage_update": {
+    "hit": 4,
+    "n": 32,
+    "rate": 0.125,
+    "calls_per_item": 1.28,
+    "zero": 27,
+    "unanswered": 0,
+    "diag_letters_top1": 13,
+    "diag_letters_top3": 19,
+    "lines_per_cited": 1.6
+   },
+   "stage_update:informative": {
+    "hit": 4,
+    "n": 31,
+    "rate": 0.129,
+    "calls_per_item": 1.29,
+    "zero": 26,
+    "unanswered": 0,
+    "diag_letters_top1": 12,
+    "diag_letters_top3": 18,
+    "lines_per_cited": 1.6
+   },
+   "stage_update:small": {
+    "hit": 0,
+    "n": 1,
+    "rate": 0.0,
+    "calls_per_item": 1.0,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 1,
+    "diag_letters_top3": 1,
+    "lines_per_cited": 0.0
+   }
+  },
+  "UW2": {
+   "commitment": {
+    "hit": 3,
+    "n": 5,
+    "rate": 0.6,
+    "calls_per_item": 1.6,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 3,
+    "diag_letters_top3": 3,
+    "lines_per_cited": 1.25
+   },
+   "commitment:informative": {
+    "hit": 3,
+    "n": 5,
+    "rate": 0.6,
+    "calls_per_item": 1.6,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 3,
+    "diag_letters_top3": 3,
+    "lines_per_cited": 1.25
+   },
+   "stage_update": {
+    "hit": 5,
+    "n": 32,
+    "rate": 0.156,
+    "calls_per_item": 1.28,
+    "zero": 26,
+    "unanswered": 0,
+    "diag_letters_top1": 13,
+    "diag_letters_top3": 21,
+    "lines_per_cited": 2.33
+   },
+   "stage_update:informative": {
+    "hit": 4,
+    "n": 31,
+    "rate": 0.129,
+    "calls_per_item": 1.29,
+    "zero": 26,
+    "unanswered": 0,
+    "diag_letters_top1": 12,
+    "diag_letters_top3": 20,
+    "lines_per_cited": 1.6
+   },
+   "stage_update:small": {
+    "hit": 1,
+    "n": 1,
+    "rate": 1.0,
+    "calls_per_item": 1.0,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 1,
+    "diag_letters_top3": 1,
+    "lines_per_cited": 6.0
+   }
+  },
+  "U_agreement": {
+   "agree": 35,
+   "of": 37,
+   "W1_hit_where_agree": 7,
+   "W1_hit_where_differ": 1
+  },
+  "LW1": {
+   "commitment": {
+    "hit": 4,
+    "n": 5,
+    "rate": 0.8,
+    "calls_per_item": 2.0,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 4,
+    "lines_per_cited": 1.0
+   },
+   "commitment:informative": {
+    "hit": 4,
+    "n": 5,
+    "rate": 0.8,
+    "calls_per_item": 2.0,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 4,
+    "lines_per_cited": 1.0
+   },
+   "stage_update": {
+    "hit": 1,
+    "n": 32,
+    "rate": 0.031,
+    "calls_per_item": 1.5,
+    "zero": 30,
+    "unanswered": 0,
+    "diag_letters_top1": 8,
+    "diag_letters_top3": 15,
+    "lines_per_cited": 1.0
+   },
+   "stage_update:informative": {
+    "hit": 1,
+    "n": 31,
+    "rate": 0.032,
+    "calls_per_item": 1.52,
+    "zero": 29,
+    "unanswered": 0,
+    "diag_letters_top1": 8,
+    "diag_letters_top3": 14,
+    "lines_per_cited": 1.0
+   },
+   "stage_update:small": {
+    "hit": 0,
+    "n": 1,
+    "rate": 0.0,
+    "calls_per_item": 1.0,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 0,
+    "diag_letters_top3": 1,
+    "lines_per_cited": 0.0
+   }
+  },
+  "LW2": {
+   "commitment": {
+    "hit": 3,
+    "n": 5,
+    "rate": 0.6,
+    "calls_per_item": 2.0,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 3,
+    "diag_letters_top3": 4,
+    "lines_per_cited": 1.0
+   },
+   "commitment:informative": {
+    "hit": 3,
+    "n": 5,
+    "rate": 0.6,
+    "calls_per_item": 2.0,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 3,
+    "diag_letters_top3": 4,
+    "lines_per_cited": 1.0
+   },
+   "stage_update": {
+    "hit": 2,
+    "n": 32,
+    "rate": 0.062,
+    "calls_per_item": 1.53,
+    "zero": 29,
+    "unanswered": 0,
+    "diag_letters_top1": 12,
+    "diag_letters_top3": 17,
+    "lines_per_cited": 1.0
+   },
+   "stage_update:informative": {
+    "hit": 2,
+    "n": 31,
+    "rate": 0.065,
+    "calls_per_item": 1.55,
+    "zero": 28,
+    "unanswered": 0,
+    "diag_letters_top1": 11,
+    "diag_letters_top3": 16,
+    "lines_per_cited": 1.0
+   },
+   "stage_update:small": {
+    "hit": 0,
+    "n": 1,
+    "rate": 0.0,
+    "calls_per_item": 1.0,
+    "zero": 1,
+    "unanswered": 0,
+    "diag_letters_top1": 1,
+    "diag_letters_top3": 1,
+    "lines_per_cited": 0.0
+   }
+  },
+  "L_agreement": {
+   "agree": 35,
+   "of": 37,
+   "W1_hit_where_agree": 4,
+   "W1_hit_where_differ": 1
+  }
+ },
+ "uv": {
+  "UW1": {
+   "case_state": {
+    "hit": 33,
+    "n": 125,
+    "rate": 0.264,
+    "calls_per_item": 1.12,
+    "zero": 92,
+    "unanswered": 0,
+    "diag_letters_top1": 98,
+    "diag_letters_top3": 115,
+    "lines_per_cited": 1.18
+   },
+   "case_state:informative": {
+    "hit": 2,
+    "n": 33,
+    "rate": 0.061,
+    "calls_per_item": 1.45,
+    "zero": 31,
+    "unanswered": 0,
+    "diag_letters_top1": 11,
+    "diag_letters_top3": 23,
+    "lines_per_cited": 4.0
+   },
+   "case_state:small": {
+    "hit": 31,
+    "n": 92,
+    "rate": 0.337,
+    "calls_per_item": 1.0,
+    "zero": 61,
+    "unanswered": 0,
+    "diag_letters_top1": 87,
+    "diag_letters_top3": 92,
+    "lines_per_cited": 1.0
+   }
+  },
+  "UW2": {
+   "case_state": {
+    "hit": 40,
+    "n": 125,
+    "rate": 0.32,
+    "calls_per_item": 1.12,
+    "zero": 85,
+    "unanswered": 0,
+    "diag_letters_top1": 100,
+    "diag_letters_top3": 114,
+    "lines_per_cited": 1.15
+   },
+   "case_state:informative": {
+    "hit": 2,
+    "n": 33,
+    "rate": 0.061,
+    "calls_per_item": 1.45,
+    "zero": 31,
+    "unanswered": 0,
+    "diag_letters_top1": 12,
+    "diag_letters_top3": 22,
+    "lines_per_cited": 4.0
+   },
+   "case_state:small": {
+    "hit": 38,
+    "n": 92,
+    "rate": 0.413,
+    "calls_per_item": 1.0,
+    "zero": 54,
+    "unanswered": 0,
+    "diag_letters_top1": 88,
+    "diag_letters_top3": 92,
+    "lines_per_cited": 1.0
+   }
+  },
+  "U_agreement": {
+   "agree": 112,
+   "of": 125,
+   "W1_hit_where_agree": 30,
+   "W1_hit_where_differ": 3
+  },
+  "LW1": {
+   "case_state": {
+    "hit": 36,
+    "n": 125,
+    "rate": 0.288,
+    "calls_per_item": 1.16,
+    "zero": 89,
+    "unanswered": 0,
+    "diag_letters_top1": 96,
+    "diag_letters_top3": 109,
+    "lines_per_cited": 1.0
+   },
+   "case_state:informative": {
+    "hit": 2,
+    "n": 33,
+    "rate": 0.061,
+    "calls_per_item": 1.61,
+    "zero": 31,
+    "unanswered": 0,
+    "diag_letters_top1": 8,
+    "diag_letters_top3": 17,
+    "lines_per_cited": 1.0
+   },
+   "case_state:small": {
+    "hit": 34,
+    "n": 92,
+    "rate": 0.37,
+    "calls_per_item": 1.0,
+    "zero": 58,
+    "unanswered": 0,
+    "diag_letters_top1": 88,
+    "diag_letters_top3": 92,
+    "lines_per_cited": 1.0
+   }
+  },
+  "LW2": {
+   "case_state": {
+    "hit": 41,
+    "n": 125,
+    "rate": 0.328,
+    "calls_per_item": 1.16,
+    "zero": 83,
+    "unanswered": 0,
+    "diag_letters_top1": 97,
+    "diag_letters_top3": 107,
+    "lines_per_cited": 1.0
+   },
+   "case_state:informative": {
+    "hit": 4,
+    "n": 33,
+    "rate": 0.121,
+    "calls_per_item": 1.61,
+    "zero": 28,
+    "unanswered": 0,
+    "diag_letters_top1": 8,
+    "diag_letters_top3": 15,
+    "lines_per_cited": 1.0
+   },
+   "case_state:small": {
+    "hit": 37,
+    "n": 92,
+    "rate": 0.402,
+    "calls_per_item": 1.0,
+    "zero": 55,
+    "unanswered": 0,
+    "diag_letters_top1": 89,
+    "diag_letters_top3": 92,
+    "lines_per_cited": 1.0
+   }
+  },
+  "L_agreement": {
+   "agree": 115,
+   "of": 125,
+   "W1_hit_where_agree": 34,
+   "W1_hit_where_differ": 2
+  }
+ }
+}

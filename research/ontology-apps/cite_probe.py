@@ -434,6 +434,26 @@ def cite(it, arm, wording, root=M2):
     return (picks[0] if picks else None), calls, dists
 
 
+def letters_ranked(it, arm, wording):
+    """Diagnostic, added after W1 was read (most misses answered 0): the candidates ranked by their letter's p with
+    '0' set aside, pages pooled, from the cached answers only. Threshold-free, so it shows whether the cited unit
+    is there when the choice against none loses it."""
+    cands, pooled = it[arm][1], {}
+    for i in range(0, len(cands), len(L.LABELS)):
+        page = cands[i:i + len(L.LABELS)]
+        sysp, user, labels, back = act_question(it, arm, wording, page)
+        req = L.body(sysp, user, labels)
+        path = M2 / "waves" / (hashlib.sha256(json.dumps(req, sort_keys=True).encode()).hexdigest() + ".json")
+        d = L.answer(json.loads(path.read_text()), labels) if path.exists() else None
+        if d is None:
+            return None
+        rest = 1 - d.get(L.NONE, 0)
+        for lab, p in d.items():
+            if lab != L.NONE:
+                pooled[back[lab]] = p / rest if rest > 0 else 0.0
+    return sorted(pooled, key=lambda c: -pooled[c])
+
+
 def cmd_ask(args):
     for system in args.systems:
         items = act_items(system)
@@ -468,6 +488,8 @@ def cmd_score_act(_):
                     cited[(arm, wording, it["doc"], it["kind"], it["value"])] = c
                     hit = c not in (None, "unanswered") and bool(it[arm][2][c] & it["gold"])
                     informative = len(it["U"][1]) > 3
+                    ranked = letters_ranked(it, arm, wording) or []
+                    first = next((r + 1 for r, cc in enumerate(ranked) if it[arm][2][cc] & it["gold"]), None)
                     for key in (it["kind"], it["kind"] + (":informative" if informative else ":small")):
                         a = agg[key]
                         a["n"] += 1
@@ -476,13 +498,17 @@ def cmd_score_act(_):
                         a["zero"] += c is None
                         a["unanswered"] += c == "unanswered"
                         a["lines"] += len(it[arm][2][c]) if c not in (None, "unanswered") else 0
+                        a["diag_top1"] += first == 1
+                        a["diag_top3"] += first is not None and first <= 3
                     rows.append({"system": system, "arm": arm, "wording": wording, "doc": it["doc"], "kind": it["kind"],
-                                 "value": it["value"], "cited": c, "hit": hit, "calls": calls,
+                                 "value": it["value"], "cited": c, "hit": hit, "calls": calls, "gold_letter_rank": first,
+                                 "candidates": len(it[arm][1]),
                                  "cited_text": it[arm][0][c][:160] if c not in (None, "unanswered") else None,
                                  "gold_lines": sorted(it["gold"])})
                 res[f"{arm}{wording}"] = {k: {"hit": a["hit"], "n": a["n"], "rate": round(a["hit"] / a["n"], 3),
                                               "calls_per_item": round(a["calls"] / a["n"], 2), "zero": a["zero"],
                                               "unanswered": a["unanswered"],
+                                              "diag_letters_top1": a["diag_top1"], "diag_letters_top3": a["diag_top3"],
                                               "lines_per_cited": round(a["lines"] / max(a["n"] - a["zero"] - a["unanswered"], 1), 2)}
                                           for k, a in sorted(agg.items())}
             agree = [(cited[(arm, "W1", it["doc"], it["kind"], it["value"])] == cited[(arm, "W2", it["doc"], it["kind"], it["value"])], it)
