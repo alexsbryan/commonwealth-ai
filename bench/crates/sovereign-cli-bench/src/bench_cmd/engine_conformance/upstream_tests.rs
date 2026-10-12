@@ -113,5 +113,9 @@ fn a_reasoning_difference_excuses_a_count_when_the_answers_agree() {
         pair(&Check::Usage, f("long thought", 95), f("short", 70)),
         CellVerdict::CouldNotJudge(why) if why.contains("reasoning differs")
     ));
-    assert!(is_differs(&pair(&Check::Usage, f("same", 95), f("same", 70))));
+    assert!(is_differs(&pair(
+        &Check::Usage,
+        f("same", 95),
+        f("same", 70)
+    )));
 }
