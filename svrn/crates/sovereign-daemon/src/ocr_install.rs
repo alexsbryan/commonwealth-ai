@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Headless OCR install — resolve the daemon's one `OcrCtx`, which boot hands
 //! to the watched-folder `LocalCorpusManager` and to the recipe `"pdf"`
-//! extractor (`bootstrap::register_recipe_extractors`).
+//! extractor ([`register_recipe_extractors`]).
 //!
 //! # Why this file exists
 //!
@@ -45,6 +45,10 @@ use std::path::Path;
 #[cfg(feature = "ocr")]
 use std::path::PathBuf;
 
+use std::sync::Arc;
+
+use corpus_index::ingest_port::daemon::IngestPort;
+use sovereign_core::setup_config::SetupConfig;
 use sovereign_tools::local_corpus::ocr::OcrCtx;
 
 /// The daemon's `OcrCtx`, if this build has the `ocr` feature and the
@@ -155,6 +159,67 @@ pub fn resolve_ocr_ctx(
         );
         Some(ctx)
     }
+}
+
+/// Register svrn's recipe extractors on ingest's engine and return the
+/// daemon's one `OcrCtx`, which `setup_watched_folders` installs too.
+///
+/// The `"pdf"` registration was lost when the CLI's boot moved into the
+/// daemon (de34eb36c, 2026-05-22): every recipe of `kind = "pdf"` then
+/// panicked its install task with "No custom extractor registered".
+pub fn register_recipe_extractors(
+    ingest: Option<&Arc<dyn IngestPort>>,
+    data_dir: &Path,
+    config: &SetupConfig,
+) -> Option<OcrCtx> {
+    // `cleanup_model` is the same chat-slot file stem the enrichment
+    // defaults use: the daemon registers each loaded slot under its file
+    // stem, so a slot ALIAS like "fast" would 503 and silently degrade
+    // every page to raw OCR text.
+    //
+    // A keyed daemon admits no caller without a key, loopback included
+    // (phase-b-86), so the cleanup call presents the daemon's own
+    // credential there; the store's own `is_keyed` decides, read from the
+    // directory the seal reads. An unknown `[daemon] loopback` refuses the
+    // boot at the node seed with its sentence; here it is named and the
+    // pass presents no credential, which that refusal makes moot.
+    let keyed =
+        crate::client_tokens::loopback_grants_nothing(config.daemon.loopback.as_deref(), data_dir)
+            .unwrap_or_else(|e| {
+                tracing::warn!("ocr: {e}");
+                false
+            });
+    let ocr_ctx = resolve_ocr_ctx(
+        data_dir,
+        format!("http://127.0.0.1:{}", config.daemon.client_port),
+        config.primary_model_stem().unwrap_or_default(),
+        keyed
+            .then(crate::client_tokens::self_credential)
+            .flatten()
+            .map(str::to_string),
+    );
+    match ingest {
+        Some(port) => {
+            sovereign_tools::local_corpus::recipe_extractor::register_pdf_extractor(
+                port.as_ref(),
+                ocr_ctx.clone(),
+            );
+            tracing::info!(
+                ocr = ocr_ctx.is_some(),
+                "recipe_extractor:pdf_registered — recipes of kind \"pdf\" read the text layer{}",
+                if ocr_ctx.is_some() {
+                    ", and OCR a layer too thin to index"
+                } else {
+                    " only; a scanned PDF indexes its thin text layer (no OcrCtx)"
+                }
+            );
+        }
+        None => tracing::info!(
+            "recipe_extractor:not_registered — no ingest program in this process, so no \
+             recipe is ingested here"
+        ),
+    }
+    ocr_ctx
 }
 
 /// Candidate PaddleOCR model **roots**, in precedence order. A root holds

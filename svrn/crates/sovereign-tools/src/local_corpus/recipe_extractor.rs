@@ -14,7 +14,7 @@
 //! `pdf-extract` is a ~30 MB dep and corpus-engine deliberately stays
 //! lean so cloud-build deployments that never see a PDF don't pay the
 //! weight. The daemon registers it at boot
-//! (`sovereign-daemon/src/bootstrap.rs::register_recipe_extractors`); a
+//! (`sovereign-daemon/src/ocr_install.rs::register_recipe_extractors`); a
 //! recipe ingest on an engine nobody registered it on panics at install.
 use std::path::Path;
 use std::sync::Arc;
@@ -27,17 +27,9 @@ use super::ocr::{extract_pdf_via_ocr, text_layer_needs_ocr, OcrCtx};
 
 /// Register the `"pdf"` per-file extractor on `engine`, reading scanned
 /// PDFs through `ocr` when it is `Some`. Idempotent: re-registering
-/// overwrites.
+/// overwrites. The caller logs the registration under its own target: a
+/// daemon's tracing allowlist does not carry `sovereign_tools`.
 pub fn register_pdf_extractor<P: IngestPluginPort + ?Sized>(engine: &P, ocr: Option<OcrCtx>) {
-    tracing::info!(
-        ocr = ocr.is_some(),
-        "recipe_extractor:pdf_registered — recipes of kind \"pdf\" read the text layer{}",
-        if ocr.is_some() {
-            ", and OCR a layer too thin to index"
-        } else {
-            " only; a scanned PDF indexes its thin text layer (no OcrCtx installed)"
-        }
-    );
     let extractor: CustomExtractorFn = Arc::new(move |path| extract_recipe_pdf(path, ocr.as_ref()));
     engine.register_extractor("pdf", extractor);
 }
