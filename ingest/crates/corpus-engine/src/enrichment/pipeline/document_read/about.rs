@@ -121,6 +121,28 @@ pub(super) fn count_question(facts: &str, view: &str, of: &OntologyTypeDecl) -> 
     question(user, &COUNT_LABELS)
 }
 
+/// What the count question's answer says. Its first decision is whether the
+/// document is about a particular at all, and two labels answer yes ("one",
+/// "more than one"), so it is read over yes against no, their mass summed:
+/// an argmax over three labels lets the two yeses split the mass and "no"
+/// win with less than half of it (2026-10-12, a bhp message with four
+/// located stage statements: no .48 against one .24 and several .29). Then
+/// one against several. A tie is "not about", the reading before About.
+pub(super) fn count_of(dist: &BTreeMap<String, f64>) -> (Count, f64) {
+    let (one, several, no) = (
+        dist[COUNT_LABELS[0]],
+        dist[COUNT_LABELS[1]],
+        dist[COUNT_LABELS[2]],
+    );
+    if no >= one + several {
+        (Count::NotAbout, no)
+    } else if one >= several {
+        (Count::One, one + several)
+    } else {
+        (Count::Several, one + several)
+    }
+}
+
 /// On which of `window`'s lines the next particular of `of` is first named
 /// or described, `found` being those already pointed at.
 pub(super) fn line_question(
@@ -206,8 +228,7 @@ pub(super) async fn about(d: &Doc<'_>, types: &[&OntologyTypeDecl], calls: &mut 
     for (of, answer) in types.iter().zip(answers) {
         let count = match answer {
             Ok(dist) => {
-                let (best, p) = argmax(&COUNT_LABELS, &dist);
-                let count = [Count::One, Count::Several, Count::NotAbout][best];
+                let (count, p) = count_of(&dist);
                 debug!(document = d.document, of = %of.name, ?count, p, dist = %render(&dist), "document_read/about: count");
                 count
             }

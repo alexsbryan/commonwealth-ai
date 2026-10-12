@@ -345,3 +345,22 @@ fn validation_refuses_a_particular_of_a_type_resolve_does_not_decide_or_cited_of
         "only the kept particular is projected"
     );
 }
+
+#[test]
+fn the_count_reads_about_over_yes_against_no_then_one_against_several() {
+    let dist = |one: f64, several: f64, no: f64| {
+        [("A", one), ("B", several), ("0", no)]
+            .into_iter()
+            .map(|(l, p)| (l.to_string(), p))
+            .collect::<std::collections::BTreeMap<String, f64>>()
+    };
+    // The two yeses outweigh no although no is the largest single label.
+    assert_eq!(count_of(&dist(0.24, 0.29, 0.48)).0, Count::Several);
+    assert_eq!(count_of(&dist(0.30, 0.25, 0.45)).0, Count::One);
+    assert_eq!(count_of(&dist(0.16, 0.26, 0.58)).0, Count::NotAbout);
+    assert_eq!(
+        count_of(&dist(0.25, 0.25, 0.50)).0,
+        Count::NotAbout,
+        "a tie is not about"
+    );
+}
