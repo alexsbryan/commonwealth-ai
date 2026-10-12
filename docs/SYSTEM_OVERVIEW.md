@@ -1035,9 +1035,11 @@ a supervised child), warms every preset model until `GET /models` reports
 `compute_children` and the node's weights as `OwnWeights`.
 The binary is `llama-server` beside the daemon's executable, built by
 `serve/crates/sovereign-compute/llama-server/build.sh` from `PIN.toml` there
-(llama.cpp commit, llguidance, each patch by sha256), which writes
-`llama-server.manifest.toml` beside it. The daemon compiles the pin in and
-refuses a shipped binary whose manifest disagrees
+(llama.cpp commit, llguidance, each patch by sha256, the binaries), per
+backend (`--backend vulkan|metal|cpu|rocm|cuda`, defaulting by host) and
+always with RPC, so `ggml-rpc-server` installs beside it, and writes
+`llama-server.manifest.toml` beside both. The daemon compiles the pin in and
+refuses a shipped binary whose manifest disagrees or names a binary not there
 (`llama_router::build_pin::verify`); `[engine] server_binary` overrides the
 binary and skips the check, and `/status` says which ran. The whole path is
 `sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the

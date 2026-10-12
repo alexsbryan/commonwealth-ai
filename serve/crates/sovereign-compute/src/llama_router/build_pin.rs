@@ -34,6 +34,8 @@ pub const MANIFEST: &str = "llama-server.manifest.toml";
 pub struct BuildPin {
     pub llama_cpp_commit: String,
     pub llguidance: bool,
+    /// The executables installed beside the manifest; each must be there.
+    pub binaries: Vec<String>,
     #[serde(default)]
     pub patches: Vec<PinnedPatch>,
 }
@@ -69,7 +71,7 @@ impl fmt::Display for BuildPin {
             let sep = if i == 0 { "" } else { ", " };
             write!(f, "{sep}{} {digest}", p.file)?;
         }
-        write!(f, "]")
+        write!(f, "], binaries [{}]", self.binaries.join(", "))
     }
 }
 
@@ -78,9 +80,9 @@ pub fn manifest_path(binary: &Path) -> PathBuf {
     binary.with_file_name(MANIFEST)
 }
 
-/// Refuse a binary whose manifest is absent, unreadable, or names another
-/// build than `pin`. The refusal says what each side holds and how to build
-/// the right one.
+/// Refuse a binary whose manifest is absent, unreadable, names another build
+/// than `pin`, or names a binary that is not beside it. The refusal says what
+/// each side holds and how to build the right one.
 pub fn verify(binary: &Path, pin: &BuildPin) -> Result<(), String> {
     let path = manifest_path(binary);
     let hint = format!("hint: build it with {SERVER_SOURCE_DIR}/build.sh");
@@ -97,6 +99,16 @@ pub fn verify(binary: &Path, pin: &BuildPin) -> Result<(), String> {
             "{} was built from {built}; this daemon was compiled against {pin}\n{hint}",
             binary.display()
         ));
+    }
+    for name in &built.binaries {
+        let sibling = binary.with_file_name(name);
+        if !sibling.is_file() {
+            return Err(format!(
+                "{} names {name}, which is not at {}\n{hint}",
+                path.display(),
+                sibling.display()
+            ));
+        }
     }
     Ok(())
 }
