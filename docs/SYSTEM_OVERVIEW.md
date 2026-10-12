@@ -1039,7 +1039,10 @@ The binary is `llama-server` beside the daemon's executable, built by
 `llama-server.manifest.toml` beside it. The daemon compiles the pin in and
 refuses a shipped binary whose manifest disagrees
 (`llama_router::build_pin::verify`); `[engine] server_binary` overrides the
-binary and skips the check, and `/status` says which ran.
+binary and skips the check, and `/status` says which ran. The whole path is
+`sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
+shipped binary, serve a completion and an embedding, SIGKILL the daemon, no
+llama-server left.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.
