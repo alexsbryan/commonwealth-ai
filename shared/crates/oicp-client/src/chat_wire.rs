@@ -11,7 +11,7 @@ use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::{CompletionRequest, PromptShape};
 use std::sync::atomic::Ordering;
 
-use crate::{error_excerpt, ChatMessage, RemoteApiProvider};
+use crate::{error_excerpt, RemoteApiProvider};
 
 pub use sovereign_contracts::setup_config::StructuredOutputMode;
 
@@ -264,7 +264,7 @@ pub fn openai_function_name(name: &str) -> String {
 }
 
 /// The name a schema goes by on the wire: its `title`, folded.
-fn schema_function_name(schema: &Value) -> String {
+pub(crate) fn schema_function_name(schema: &Value) -> String {
     let title = schema.get("title").and_then(Value::as_str);
     openai_function_name(title.unwrap_or("structured"))
 }
@@ -346,45 +346,6 @@ impl RemoteApiProvider {
                 error_excerpt(&second.body)
             ))),
         }
-    }
-}
-
-impl ChatMessage {
-    /// The assistant turn as the caller's answer. A schema that rode a
-    /// function call comes back as that call's arguments, the JSON the caller
-    /// asked for whichever spelling the host needed; anything else is
-    /// [`ChatMessage::as_text`] with the reasoning in front of it, as the
-    /// engine writes it (`response_wire::with_reasoning`).
-    pub(crate) fn answer(&self, request: &CompletionRequest, mode: StructuredOutputMode) -> String {
-        let Some(schema) = request
-            .structured_output
-            .as_ref()
-            .filter(|_| mode.via_tool())
-        else {
-            return self.with_reasoning(request);
-        };
-        let name = schema_function_name(schema);
-        let call = self.tool_calls.iter().find(|c| c.function.name == name);
-        if let Some(args) = call.and_then(|c| c.function.arguments.clone()) {
-            return args;
-        }
-        // `tool_choice: auto` lets the model answer in text. Use it, and say
-        // so: the schema was offered, not enforced.
-        tracing::warn!(
-            target: "oicp_client",
-            function = %name,
-            ?mode,
-            "schema offered as a function call but the model answered in text; schema not enforced on this call"
-        );
-        self.with_reasoning(request)
-    }
-
-    fn with_reasoning(&self, request: &CompletionRequest) -> String {
-        crate::response_wire::with_reasoning(
-            self.reasoning_content.as_deref(),
-            self.as_text(),
-            request,
-        )
     }
 }
 

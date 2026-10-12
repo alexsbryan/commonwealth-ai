@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The response side of a streamed chat completion: OpenAI server-sent
-//! events in, the provider's frames out.
+//! The response side of a chat completion: the host's answer read into the
+//! engine's shape. A message becomes the caller's text
+//! ([`ChatMessage::answer`]); server-sent events become the provider's frames
+//! ([`SseReader`]).
 //!
 //! One reader serves the typed stream (`complete_stream_with_finish`, the
 //! daemon's path) and the untyped one (`complete_stream`, bare Split
@@ -23,7 +25,7 @@ use serde::Deserialize;
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::{CompletionRequest, FinishReason, StreamFrame, StreamUsage};
 
-use crate::UsageInfo;
+use crate::{ChatMessage, StructuredOutputMode, UsageInfo};
 
 #[derive(Deserialize)]
 struct StreamChunk {
@@ -156,6 +158,41 @@ pub(crate) fn with_reasoning(
 pub(crate) fn ask_to_stream(body: &mut serde_json::Value) {
     body["stream"] = serde_json::json!(true);
     body["stream_options"] = serde_json::json!({"include_usage": true});
+}
+
+impl ChatMessage {
+    /// The assistant turn as the caller's answer. A schema that rode a
+    /// function call comes back as that call's arguments, the JSON the caller
+    /// asked for whichever spelling the host needed; anything else is
+    /// [`ChatMessage::as_text`] with the reasoning in front of it, as the
+    /// engine writes it ([`with_reasoning`]).
+    pub(crate) fn answer(&self, request: &CompletionRequest, mode: StructuredOutputMode) -> String {
+        let Some(schema) = request
+            .structured_output
+            .as_ref()
+            .filter(|_| mode.via_tool())
+        else {
+            return self.with_reasoning(request);
+        };
+        let name = crate::chat_wire::schema_function_name(schema);
+        let call = self.tool_calls.iter().find(|c| c.function.name == name);
+        if let Some(args) = call.and_then(|c| c.function.arguments.clone()) {
+            return args;
+        }
+        // `tool_choice: auto` lets the model answer in text. Use it, and say
+        // so: the schema was offered, not enforced.
+        tracing::warn!(
+            target: "oicp_client",
+            function = %name,
+            ?mode,
+            "schema offered as a function call but the model answered in text; schema not enforced on this call"
+        );
+        self.with_reasoning(request)
+    }
+
+    fn with_reasoning(&self, request: &CompletionRequest) -> String {
+        with_reasoning(self.reasoning_content.as_deref(), self.as_text(), request)
+    }
 }
 
 /// Reads one SSE response, a byte chunk at a time.
