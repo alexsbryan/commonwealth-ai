@@ -9,6 +9,10 @@
 //!   corpus's answer store, keyed by the question's content;
 //! - `replay`: the store answers; a question it holds no answer for is
 //!   refused, never sent to the daemon;
+//! - `recorded`: the store answers what the model this run asks gave it
+//!   (each answer is stamped with the model that gave it); the model answers
+//!   the rest, recorded, so a run asks only the questions no earlier run of
+//!   that model asked;
 //! - `gold`: a store written from labels answers, refusing the same way.
 //!
 //! A question's key is the hash of everything that makes it that question:
@@ -42,6 +46,9 @@ pub enum Asker {
     Daemon,
     /// The recorded answers of earlier runs answer; nothing reaches a model.
     Replay,
+    /// The recorded answers the model this run asks gave answer; the model
+    /// answers the rest, and every new answer is recorded.
+    Recorded,
     /// Answers written from labels answer; nothing reaches a model.
     Gold,
 }
@@ -53,9 +60,10 @@ impl Asker {
         match value {
             "daemon" => Ok(Self::Daemon),
             "replay" => Ok(Self::Replay),
+            "recorded" => Ok(Self::Recorded),
             "gold" => Ok(Self::Gold),
             other => Err(format!(
-                "unknown asker `{other}`; expected daemon, replay or gold"
+                "unknown asker `{other}`; expected daemon, replay, recorded or gold"
             )),
         }
     }
@@ -64,19 +72,25 @@ impl Asker {
         match self {
             Self::Daemon => "daemon",
             Self::Replay => "replay",
+            Self::Recorded => "recorded",
             Self::Gold => "gold",
         }
     }
 
     /// Whether answering needs the model reachable.
     pub fn needs_daemon(self) -> bool {
-        self == Self::Daemon
+        matches!(self, Self::Daemon | Self::Recorded)
+    }
+
+    /// Whether earlier answers in the store answer this run's questions.
+    fn reads_store(self) -> bool {
+        self != Self::Daemon
     }
 
     /// The store this source reads (`replay`, `gold`) or writes (`daemon`).
     pub fn store_path(self, enrichment_dir: &Path) -> PathBuf {
         enrichment_dir.join(match self {
-            Self::Daemon | Self::Replay => ANSWERS_FILE,
+            Self::Daemon | Self::Replay | Self::Recorded => ANSWERS_FILE,
             Self::Gold => GOLD_FILE,
         })
     }
@@ -96,6 +110,10 @@ pub struct Answer {
     /// The question's phase id, for reading a store by eye.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
+    /// The model that gave the answer (`AnsweredBy`); none in a store written
+    /// from labels or recorded before answers were stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// Chat: the text answered. Embed: the vector.
     pub answer: Value,
 }
@@ -112,21 +130,32 @@ pub fn embed_key(text: &str) -> String {
     ContentHash::of_str(&format!("embed\0{text}")).to_hex()
 }
 
+/// Which model answers a question, by its port (`chat`, `embed`) and phase
+/// id: the model the daemon client routes it to. A new answer is stamped with
+/// it, and under `recorded` a stored answer is reused only when it gave it.
+pub type AnsweredBy = Arc<dyn Fn(&str, Option<&str>) -> String + Send + Sync>;
+
 /// The answers this run has given or been given, and where new ones go.
 struct Store {
     source: Asker,
     path: PathBuf,
+    by: AnsweredBy,
     answers: Mutex<HashMap<String, Value>>,
     out: Option<Mutex<std::io::BufWriter<std::fs::File>>>,
 }
 
 impl Store {
-    fn open(source: Asker, path: PathBuf) -> Result<Self> {
+    fn open(source: Asker, path: PathBuf, by: AnsweredBy) -> Result<Self> {
         let mut answers = HashMap::new();
-        // A recording run starts from nothing it has not asked: an answer from
+        let mut other_model = 0usize;
+        // A `daemon` run starts from nothing it has not asked: an answer from
         // an earlier run is never reused, so the model answers every question
-        // this run asks and the store records it. Replay and gold read all.
-        if !source.needs_daemon() {
+        // this run asks and the store records it. Replay and gold read all; a
+        // `recorded` run reads what this run's model gave, and a store not
+        // yet written is an empty one.
+        if source == Asker::Recorded && !path.exists() {
+            info!(asker = source.label(), store = %path.display(), "asker: no store yet; every question goes to the model");
+        } else if source.reads_store() {
             let text = std::fs::read_to_string(&path).map_err(|e| {
                 Error::InvalidInput(format!(
                     "the {} asker reads {}: {e}",
@@ -142,6 +171,12 @@ impl Store {
                 let a: Answer = serde_json::from_str(line).map_err(|e| {
                     Error::Serialization(format!("{} line {}: {e}", path.display(), n + 1))
                 })?;
+                if source == Asker::Recorded
+                    && a.model.as_deref() != Some(by(&a.port, a.phase.as_deref()).as_str())
+                {
+                    other_model += 1;
+                    continue;
+                }
                 // The latest recording of a question is the one a replay gives.
                 answers.insert(a.key, a.answer);
             }
@@ -158,10 +193,11 @@ impl Store {
         } else {
             None
         };
-        info!(asker = source.label(), store = %path.display(), answers = answers.len(), "asker: answering");
+        info!(asker = source.label(), store = %path.display(), answers = answers.len(), other_model, "asker: answering");
         Ok(Self {
             source,
             path,
+            by,
             answers: Mutex::new(answers),
             out,
         })
@@ -194,6 +230,7 @@ impl Store {
                 key,
                 port: port.to_string(),
                 phase: phase.map(str::to_string),
+                model: Some((self.by)(port, phase)),
                 answer: answer.clone(),
             };
             let mut out = out.lock().expect("the store writer is never poisoned");
@@ -228,14 +265,16 @@ impl Store {
 }
 
 /// Put the Asker in front of a build's two model ports. `chat` and `embed` are
-/// the daemon's; under `replay` and `gold` they are never called.
+/// the daemon's, `by` the models they route each question to; under `replay`
+/// and `gold` they are never called.
 pub fn answering(
     source: Asker,
     enrichment_dir: &Path,
+    by: AnsweredBy,
     embed: EmbedFn,
     chat: InferenceFn,
 ) -> Result<(EmbedFn, InferenceFn)> {
-    let store = Arc::new(Store::open(source, source.store_path(enrichment_dir))?);
+    let store = Arc::new(Store::open(source, source.store_path(enrichment_dir), by)?);
     let chat_store = Arc::clone(&store);
     let asked_chat: InferenceFn = Arc::new(move |prompt: &ChatPrompt, max_tokens| {
         let store = Arc::clone(&chat_store);

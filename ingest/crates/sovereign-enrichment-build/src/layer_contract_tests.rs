@@ -315,8 +315,14 @@ async fn run_choosing(fixture: &Fixture, asker: Asker, store: &Path, choose: Cho
     );
 
     let asked = Arc::new(Mutex::new(Vec::new()));
-    let (embed, chat) =
-        answering(asker, store, embedder(), oracle(Arc::clone(&asked), choose)).unwrap();
+    let (embed, chat) = answering(
+        asker,
+        store,
+        Arc::new(|_, _| "fixture-oracle".to_string()),
+        embedder(),
+        oracle(Arc::clone(&asked), choose),
+    )
+    .unwrap();
     let work = tempfile::tempdir().unwrap();
     let pipeline = super::pipeline_resolve::resolve_pipeline(&cfg).unwrap();
     let runner = PhaseRunner::new(

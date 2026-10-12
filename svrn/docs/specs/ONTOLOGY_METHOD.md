@@ -177,8 +177,9 @@ operator 2026-10-10; it said a choice decides only once measured, which would le
 question alone. Answers assemble into the stored claims RESOLVE already reads, a reading of the subject's field
 beside the claim's own, cited, and never onto the record (`SUBJECT_FIELDS_ATTRIBUTE`); the `Asker` that answers takes
 the daemon, a replay, or gold, so every question is an oracle at its own boundary (built 2026-10-09,
-`enrichment/asker.rs`, `--asker` on extract and atlas-resolve: every answer recorded by its question's content,
-and a replay with no daemon reproduces the run's records, C5). One reader, chosen
+`enrichment/asker.rs`, `--asker` on extract and atlas-resolve: every answer recorded by its question's content
+and stamped with the model that gave it, and a replay with no daemon reproduces the run's records, C5; `recorded`
+reuses what the same model answered and asks only the rest, 2026-10-12). One reader, chosen
 by the declaration (every claim kind readable, or the general extractor; a mix refuses): passes, every pass built
 (Locate and Choose 2026-10-09; prefill, line classes, Mention, Pick and Point 2026-10-10, order
 ontology-layer-15; About and Act 2026-10-12); the one-shot reader was deleted on 2026-10-09 with no comparison run (operator: no build step gated on a

@@ -691,9 +691,12 @@ question the pipeline asks about a type is a method on the resolved
   one place (`DaemonInferenceClient::into_asked_closures`): `--asker daemon`
   (default) records every answer in `enrichment/<id>/answers.jsonl` keyed by the
   hash of the whole prompt and per-call budget (or the text embedded), one answer
-  per question per run; `replay` answers from that store and never calls (or
-  probes) the daemon; `gold` reads `answers.gold.jsonl`. A question with no stored
-  answer is refused, never defaulted. A forced-choice wave
+  per question per run, each stamped with the model the client routes it to
+  (`AnsweredBy`); `replay` answers from that store and never calls (or probes)
+  the daemon; `recorded` answers from it what the run's own model gave and asks
+  the daemon only the rest, recording them, so an iteration pays for the
+  questions it changed; `gold` reads `answers.gold.jsonl`. Under `replay` and
+  `gold` a question with no stored answer is refused, never defaulted. A forced-choice wave
   (`resolve_records/wave.rs`) is split into its single questions, each answered
   and recorded under its own single prompt's key, the ones the store lacks sent
   to the daemon as one smaller wave, so a run recorded with or without waves

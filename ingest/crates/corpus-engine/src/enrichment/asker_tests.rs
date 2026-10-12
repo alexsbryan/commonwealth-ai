@@ -23,6 +23,11 @@ fn counting_daemon() -> (EmbedFn, InferenceFn, Arc<AtomicUsize>) {
     (embed, chat, calls)
 }
 
+/// Every question answered by one model, `model`.
+fn by(model: &'static str) -> AnsweredBy {
+    Arc::new(move |_, _| model.to_string())
+}
+
 fn refusing_daemon() -> (EmbedFn, InferenceFn) {
     let chat: InferenceFn =
         Arc::new(|_, _| Box::pin(async { panic!("a replay must never reach the daemon") }));
@@ -35,7 +40,7 @@ fn refusing_daemon() -> (EmbedFn, InferenceFn) {
 async fn a_recorded_run_replays_with_no_daemon_and_refuses_what_it_never_asked() {
     let dir = tempfile::tempdir().unwrap();
     let (embed, chat, calls) = counting_daemon();
-    let (e, c) = answering(Asker::Daemon, dir.path(), embed, chat).unwrap();
+    let (e, c) = answering(Asker::Daemon, dir.path(), by("m"), embed, chat).unwrap();
     let q = ChatPrompt::new("sys", "which kind?").with_phase_id("document_passes_locate");
     let first = c(&q, None).await.unwrap();
     // The same question again in the run: the one answer, no second call.
@@ -44,7 +49,7 @@ async fn a_recorded_run_replays_with_no_daemon_and_refuses_what_it_never_asked()
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 
     let (embed, chat) = refusing_daemon();
-    let (e, c) = answering(Asker::Replay, dir.path(), embed, chat).unwrap();
+    let (e, c) = answering(Asker::Replay, dir.path(), by("m"), embed, chat).unwrap();
     assert_eq!(c(&q, None).await.unwrap(), first);
     assert_eq!(e("a line").await.unwrap(), v);
     // A question the run never asked is refused, never answered by default.
@@ -60,12 +65,20 @@ async fn a_recorded_run_replays_with_no_daemon_and_refuses_what_it_never_asked()
 async fn gold_answers_from_its_own_store_and_replay_needs_a_store() {
     let dir = tempfile::tempdir().unwrap();
     let (embed, chat) = refusing_daemon();
-    assert!(answering(Asker::Replay, dir.path(), embed.clone(), chat.clone()).is_err());
+    assert!(answering(
+        Asker::Replay,
+        dir.path(),
+        by("m"),
+        embed.clone(),
+        chat.clone()
+    )
+    .is_err());
     let q = ChatPrompt::new("sys", "same?");
     let line = Answer {
         key: chat_key(&q, None),
         port: "chat".into(),
         phase: None,
+        model: None,
         answer: Value::String(r#"{"A":1.0,"0":0.0}"#.into()),
     };
     std::fs::write(
@@ -73,13 +86,13 @@ async fn gold_answers_from_its_own_store_and_replay_needs_a_store() {
         format!("{}\n", serde_json::to_string(&line).unwrap()),
     )
     .unwrap();
-    let (_, c) = answering(Asker::Gold, dir.path(), embed, chat).unwrap();
+    let (_, c) = answering(Asker::Gold, dir.path(), by("m"), embed, chat).unwrap();
     assert_eq!(c(&q, None).await.unwrap(), r#"{"A":1.0,"0":0.0}"#);
 }
 
 #[test]
 fn the_asker_flag_is_a_closed_set() {
-    for s in ["daemon", "replay", "gold"] {
+    for s in ["daemon", "replay", "recorded", "gold"] {
         assert_eq!(Asker::parse(s).unwrap().label(), s);
     }
     assert!(Asker::parse("cache").is_err());
@@ -140,7 +153,7 @@ async fn a_wave_records_each_question_under_its_own_key_and_replays_either_way()
     };
     let dir = tempfile::tempdir().unwrap();
     let (embed, chat, requests, questions) = wave_daemon();
-    let (_, c) = answering(Asker::Daemon, dir.path(), embed, chat).unwrap();
+    let (_, c) = answering(Asker::Daemon, dir.path(), by("m"), embed, chat).unwrap();
     // One question asked alone first; the wave then asks only the other two,
     // as one request.
     let alone = decision_call(&c, &line_question("1 A"), &labels, "doc", "1")
@@ -163,7 +176,7 @@ async fn a_wave_records_each_question_under_its_own_key_and_replays_either_way()
     // Replayed with no daemon: each question alone, and the wave again, give
     // the recorded answers.
     let (embed, chat) = refusing_daemon();
-    let (_, c) = answering(Asker::Replay, dir.path(), embed, chat).unwrap();
+    let (_, c) = answering(Asker::Replay, dir.path(), by("m"), embed, chat).unwrap();
     for (i, line) in ["1 A", "2 B", "3 0"].iter().enumerate() {
         let single = decision_call(&c, &line_question(line), &labels, "doc", line).await;
         assert_eq!(single.as_ref().unwrap(), waved[i].as_ref().unwrap());
@@ -178,4 +191,58 @@ async fn a_wave_records_each_question_under_its_own_key_and_replays_either_way()
     assert!(
         matches!(&partly[1], Err(crate::enrichment::atlas::resolve_records::Refusal::NoAnswer { reason }) if reason.contains("no answer recorded"))
     );
+}
+
+/// `recorded` asks the model only what no earlier run of that model asked:
+/// a question a run of model m answered is answered from the store, a new
+/// one goes to the daemon and is recorded, stamped; under another model every
+/// question is asked again, and a store not yet written is an empty one.
+#[tokio::test]
+async fn recorded_reuses_only_what_the_same_model_answered_and_asks_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let q = ChatPrompt::new("sys", "which kind?").with_phase_id("document_passes_locate");
+    let new = ChatPrompt::new("sys", "which value?").with_phase_id("document_passes_act");
+
+    let (embed, chat, calls) = counting_daemon();
+    let (e, c) = answering(Asker::Recorded, dir.path(), by("m"), embed, chat).unwrap();
+    let first = c(&q, None).await.unwrap();
+    let v = e("a line").await.unwrap();
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "an empty store asks everything"
+    );
+
+    let (embed, chat, calls) = counting_daemon();
+    let (e, c) = answering(Asker::Recorded, dir.path(), by("m"), embed, chat).unwrap();
+    assert_eq!(c(&q, None).await.unwrap(), first);
+    assert_eq!(e("a line").await.unwrap(), v);
+    assert_eq!(calls.load(Ordering::SeqCst), 0, "m answered both already");
+    let fresh = c(&new, None).await.unwrap();
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "only the new question is asked"
+    );
+
+    let store = std::fs::read_to_string(dir.path().join(ANSWERS_FILE)).unwrap();
+    let stamps: Vec<Option<String>> = store
+        .lines()
+        .map(|l| serde_json::from_str::<Answer>(l).unwrap().model)
+        .collect();
+    assert_eq!(stamps, vec![Some("m".to_string()); 3]);
+
+    let (embed, chat, calls) = counting_daemon();
+    // One call outside the store, so n's answers are told from m's by count.
+    chat(&ChatPrompt::new("sys", "warm"), None).await.unwrap();
+    let (_, c) = answering(Asker::Recorded, dir.path(), by("n"), embed, chat).unwrap();
+    let by_n = c(&q, None).await.unwrap();
+    assert_ne!(by_n, first);
+    assert_eq!(calls.load(Ordering::SeqCst), 2, "n never answered it");
+
+    // A replay gives the latest recording of each question, whoever gave it.
+    let (embed, chat) = refusing_daemon();
+    let (_, c) = answering(Asker::Replay, dir.path(), by("m"), embed, chat).unwrap();
+    assert_eq!(c(&q, None).await.unwrap(), by_n);
+    assert_eq!(c(&new, None).await.unwrap(), fresh);
 }
