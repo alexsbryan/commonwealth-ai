@@ -8,12 +8,13 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use corpus_index::chunkers::title_unheaded;
 use corpus_index::corpus::Corpus;
-use corpus_index::index::{CorpusIndex, DocumentRecord, TextAbsence};
+use corpus_index::index::{CorpusIndex, DocumentRecord, StoredText, TextAbsence};
 use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::types::{IndexInfo, ScoredChunk};
 use kernel_types::Sha256Hash;
-use oicp_types::evidence::{reasons, Document, SourceRef, Unavailable};
+use oicp_types::evidence::{reasons, Document, SourceRef, Span, Unavailable, DEFAULT_CONTEXT};
 use oicp_types::KnowledgeResult;
 use sovereign_contracts::principal::Principal;
 use sovereign_core::context::PrincipalScope;
@@ -324,53 +325,199 @@ async fn hit_documents(
     out
 }
 
+/// The text names a knowledge search's `documents` asks for (v0.6 §2.8):
+/// `None` when it names none, or the first entry that is not a text name.
+pub(crate) fn search_scope(documents: &[String]) -> Result<Option<Vec<Sha256Hash>>, String> {
+    if documents.is_empty() {
+        return Ok(None);
+    }
+    documents
+        .iter()
+        .map(|d| Sha256Hash::from_hex(d).ok_or_else(|| d.clone()))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
+/// One corpus's hits for a knowledge search as OICP results, cut from
+/// `scope`'s texts only when it names any. The one search both knowledge
+/// routes run, the client route and the peer route alike.
+pub(crate) async fn search_corpus(
+    index: &CorpusIndex,
+    corpus_id: &str,
+    query_embedding: &[f32],
+    query_text: &str,
+    limit: usize,
+    scope: Option<&[Sha256Hash]>,
+) -> corpus_index::error::Result<Vec<KnowledgeResult>> {
+    let hits = match scope {
+        Some(texts) => {
+            index
+                .search_in_texts(query_embedding, query_text, limit, texts)
+                .await?
+        }
+        None => index.search(query_embedding, query_text, limit).await?,
+    };
+    Ok(knowledge_results(index, corpus_id, hits).await)
+}
+
+/// `content`, its title header removed ([`title_unheaded`]), as a span of
+/// `stored`, given only when that body is an exact slice of the stored text:
+/// otherwise `not an exact slice`. The one locator verify's passages
+/// (v0.6 §2.6) and search's hits (§2.8) share, so a range means the same on
+/// both. `context` is code points of prefix and suffix.
+pub(crate) fn span_of(
+    stored: &StoredText,
+    corpus_id: &str,
+    title: Option<&str>,
+    content: &str,
+    source_doc_id: Option<&str>,
+    context: usize,
+) -> Result<Span, &'static str> {
+    let body = title_unheaded(title, content);
+    if body.is_empty() {
+        return Err(reasons::NOT_AN_EXACT_SLICE);
+    }
+    let byte = stored.text.find(body).ok_or(reasons::NOT_AN_EXACT_SLICE)?;
+    let text = stored.text.as_str();
+    let start = text[..byte].chars().count();
+    let end = start + body.chars().count();
+    let record =
+        record_for(&stored.documents, source_doc_id).ok_or(reasons::DOCUMENT_UNREADABLE)?;
+    let document = wire_document(record).map_err(|e| {
+        tracing::error!(corpus = corpus_id, error = %e, "span: record not served");
+        reasons::DOCUMENT_UNREADABLE
+    })?;
+    let len = text.chars().count();
+    // Every range here is cut from `text` itself (`find`, then counts of
+    // it), so a slice is never out of range.
+    let slice = |r: std::ops::Range<usize>| {
+        quote_align::code_point_slice(text, r)
+            .unwrap_or_default()
+            .to_string()
+    };
+    Ok(Span {
+        corpus_id: corpus_id.to_string(),
+        document,
+        start: start as u64,
+        end: end as u64,
+        exact: slice(start..end),
+        prefix: slice(start.saturating_sub(context)..start),
+        suffix: slice(end..(end + context).min(len)),
+    })
+}
+
+/// A hit's stored text by its name, read once per corpus per request, or
+/// why it cannot be read, as one of `reasons::HIT_ABSENCES`.
+async fn hit_text<'a>(
+    index: &CorpusIndex,
+    corpus_id: &str,
+    name: &str,
+    cache: &'a mut HashMap<String, Result<StoredText, &'static str>>,
+) -> Result<&'a StoredText, &'static str> {
+    if !cache.contains_key(name) {
+        let read = match Sha256Hash::from_hex(name) {
+            None => Err(reasons::DOCUMENT_UNREADABLE),
+            Some(h) => match index.text(&h).await {
+                Ok(Ok(t)) => Ok(t),
+                Ok(Err(absence)) => Err(hit_absence(absence)),
+                Err(e) => {
+                    tracing::warn!(corpus = corpus_id, %name, error = %e, "knowledge hits: text store unreadable");
+                    Err(reasons::DOCUMENT_UNREADABLE)
+                }
+            },
+        };
+        cache.insert(name.to_string(), read);
+    }
+    cache[name].as_ref().map_err(|r| *r)
+}
+
 /// A local index's search hits as OICP results, each carrying the record of
-/// the text it was cut from (v0.5 §3). The one projection both knowledge
-/// routes serve, the client route and the peer route alike, so a peer's hits
-/// keep their metadata exactly as local ones do. The v0.2 `metadata` map
+/// the text it was cut from (v0.5 §3) and its range of that text (v0.6
+/// §2.8), or why not. The one projection both knowledge routes serve, the
+/// client route and the peer route alike, so a peer's hits keep their
+/// metadata and ranges exactly as local ones do. The v0.2 `metadata` map
 /// stays empty: `document.metadata` supersedes it.
-pub(crate) async fn knowledge_results(
+async fn knowledge_results(
     index: &CorpusIndex,
     corpus_id: &str,
     hits: Vec<ScoredChunk>,
 ) -> Vec<KnowledgeResult> {
     let mut documents = hit_documents(index, corpus_id, &hits).await;
-    hits.into_iter()
-        .map(|r| {
-            // Every hit carries its document or names why not (v0.5 §3). A
-            // hit with no stable chunk id names no text.
-            let (document, document_absent) = match r.chunk_id.and_then(|id| documents.remove(&id))
-            {
-                Some(Ok(d)) => (Some(d), None),
-                Some(Err(reason)) => (None, Some(reason.to_string())),
-                None => (None, Some(reasons::TEXTS_NOT_STORED.to_string())),
-            };
-            KnowledgeResult {
-                // Provenance the SERVING index stamped, forwarded rather than
-                // dropped (TOPOLOGY §10 rung 9.1). `stamped_custody` and not
-                // `custody` so "this index recorded no class" stays ABSENT on the
-                // wire rather than becoming the string "unknown" — the requester
-                // joins absence into a refusal.
-                custody: r
-                    .provenance
-                    .stamped_custody()
-                    .map(|c| c.as_str().to_string()),
-                grain: Some(r.provenance.grain().as_str().to_string()),
-                document,
-                document_absent,
-                content: r.content,
-                title: r.title,
-                corpus_id: corpus_id.to_string(),
-                url: r.url,
-                score: r.score,
-                metadata: HashMap::new(),
-                chunk_id: r.chunk_id,
-                source_doc_id: r.source_doc_id,
-                peer_name: None,
-                peer_node_id: None,
+    let mut texts = HashMap::new();
+    let mut out = Vec::with_capacity(hits.len());
+    let (mut ranged, mut inexact) = (0usize, 0usize);
+    for r in hits {
+        // Every hit carries its document or names why not (v0.5 §3). A
+        // hit with no stable chunk id names no text.
+        let (document, document_absent) = match r.chunk_id.and_then(|id| documents.remove(&id)) {
+            Some(Ok(d)) => (Some(d), None),
+            Some(Err(reason)) => (None, Some(reason.to_string())),
+            None => (None, Some(reasons::TEXTS_NOT_STORED.to_string())),
+        };
+        // And its range, or why not (§2.8): the document's absence when it
+        // has none, else whatever reading or slicing its text says.
+        let (span, span_absent) = match &document {
+            None => (None, document_absent.clone()),
+            Some(d) => {
+                let located = match hit_text(index, corpus_id, &d.text_sha256, &mut texts).await {
+                    Ok(stored) => span_of(
+                        stored,
+                        corpus_id,
+                        r.title.as_deref(),
+                        &r.content,
+                        r.source_doc_id.as_deref(),
+                        DEFAULT_CONTEXT as usize,
+                    ),
+                    Err(why) => Err(why),
+                };
+                match located {
+                    Ok(s) => {
+                        ranged += 1;
+                        (Some(s), None)
+                    }
+                    Err(why) => {
+                        inexact += usize::from(why == reasons::NOT_AN_EXACT_SLICE);
+                        (None, Some(why.to_string()))
+                    }
+                }
             }
-        })
-        .collect()
+        };
+        out.push(KnowledgeResult {
+            // Provenance the SERVING index stamped, forwarded rather than
+            // dropped (TOPOLOGY §10 rung 9.1). `stamped_custody` and not
+            // `custody` so "this index recorded no class" stays ABSENT on the
+            // wire rather than becoming the string "unknown" — the requester
+            // joins absence into a refusal.
+            custody: r
+                .provenance
+                .stamped_custody()
+                .map(|c| c.as_str().to_string()),
+            grain: Some(r.provenance.grain().as_str().to_string()),
+            document,
+            document_absent,
+            span,
+            span_absent,
+            content: r.content,
+            title: r.title,
+            corpus_id: corpus_id.to_string(),
+            url: r.url,
+            score: r.score,
+            metadata: HashMap::new(),
+            chunk_id: r.chunk_id,
+            source_doc_id: r.source_doc_id,
+            peer_name: None,
+            peer_node_id: None,
+        });
+    }
+    tracing::debug!(
+        corpus = corpus_id,
+        hits = out.len(),
+        ranged,
+        not_an_exact_slice = inexact,
+        texts_read = texts.len(),
+        "knowledge hits: ranges located"
+    );
+    out
 }
 
 #[cfg(test)]
@@ -387,6 +534,43 @@ mod tests {
             metadata: Some(r#"{"b":1,"a":[2]}"#.into()),
             text_stored: true,
         }
+    }
+
+    /// The locator verify and search share (v0.6 §2.6, §2.8): a headed
+    /// chunk is found by its body, at code points, with its context; a chunk
+    /// that is not a slice of its text, or is empty once unheaded, has no
+    /// range and says so.
+    #[test]
+    fn a_chunk_is_a_span_only_where_its_body_is_an_exact_slice() {
+        let stored = StoredText {
+            text: "Préface.\n\nThe ferry ran late again.\n".into(),
+            documents: vec![rec("notes", 0)],
+        };
+        let headed = corpus_index::chunkers::title_headed(Some("notes"), "The ferry ran late");
+        let s = span_of(&stored, "c", Some("notes"), &headed, Some("notes"), 4).unwrap();
+        assert_eq!((s.start, s.end), (10, 28), "code points, not bytes");
+        assert_eq!(s.exact, "The ferry ran late");
+        assert_eq!((s.prefix.as_str(), s.suffix.as_str()), ("e.\n\n", " aga"));
+        assert_eq!(
+            span_of(&stored, "c", None, "The ferry ran early", None, 4).unwrap_err(),
+            reasons::NOT_AN_EXACT_SLICE
+        );
+        assert_eq!(
+            span_of(&stored, "c", Some("notes"), "notes\n\n", None, 4).unwrap_err(),
+            reasons::NOT_AN_EXACT_SLICE,
+            "an empty body is no range, never [0, 0)"
+        );
+    }
+
+    #[test]
+    fn a_documents_filter_is_text_names_or_refused() {
+        let name = Sha256Hash::of_str("t");
+        assert_eq!(search_scope(&[]), Ok(None));
+        assert_eq!(search_scope(&[name.to_hex()]), Ok(Some(vec![name])));
+        assert_eq!(
+            search_scope(&[name.to_hex(), "okafor2019".into()]),
+            Err("okafor2019".to_string())
+        );
     }
 
     #[test]

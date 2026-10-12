@@ -129,6 +129,19 @@ pub async fn knowledge_search(
 
     let corpora = request.corpora.as_deref().unwrap_or(&[]);
     let limit = request.effective_limit() as usize;
+    // v0.6 §2.8: the requester's `documents` scope, held here as on the
+    // client route; anything but text names is refused, never searched as
+    // "no filter".
+    let scope = match crate::oicp_evidence::search_scope(&request.documents) {
+        Ok(s) => s,
+        Err(bad) => {
+            tracing::warn!(document = %bad, "internal knowledge_search: `documents` names something that is not a text name");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(KnowledgeSearchResponse::default()),
+            );
+        }
+    };
 
     // Resolve the target corpora and BOUND the fan-out structurally. An absent
     // `corpora` filter (broad research) previously meant "search every
@@ -178,17 +191,21 @@ pub async fn knowledge_search(
     for corpus_id in &search_corpora {
         match engine.open_index_for_corpus(corpus_id).await {
             Ok(index) => {
-                match index
-                    .search(&request.query_embedding, &request.query_text, limit)
-                    .await
+                match crate::oicp_evidence::search_corpus(
+                    &index,
+                    corpus_id,
+                    &request.query_embedding,
+                    &request.query_text,
+                    limit,
+                    scope.as_deref(),
+                )
+                .await
                 {
                     Ok(results) => {
-                        // The same projection the client route serves, so a
-                        // peer's hits keep their records (v0.5 §3).
-                        all_results.extend(
-                            crate::oicp_evidence::knowledge_results(&index, corpus_id, results)
-                                .await,
-                        );
+                        // The same search and projection the client route
+                        // serves, so a peer's hits keep their records (v0.5
+                        // §3) and ranges (v0.6 §2.8).
+                        all_results.extend(results);
                     }
                     Err(e) => {
                         tracing::warn!(

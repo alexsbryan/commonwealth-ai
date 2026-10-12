@@ -34,6 +34,9 @@ pub struct Breaks {
     pub omit_texts_digest: bool,
     /// evidence.verify: a claim's verdict is a kind outside the closed set.
     pub verify_unknown_verdict: bool,
+    /// knowledge.scoped: the `documents` filter is ignored, so hits from
+    /// unnamed texts come back.
+    pub scope_leaks: bool,
     /// knowledge.document: hits carry their record with metadata emptied.
     pub empty_metadata: bool,
     /// ingest.recipe: a recipe that does not parse is 200 `spawned: false`.
@@ -256,7 +259,8 @@ async fn capabilities() -> Json<Value> {
         "models": [],
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "evidence:text",
-            "evidence:align", "evidence:verify", "knowledge:document", "auth:named_client"
+            "evidence:align", "evidence:verify", "knowledge:document", "knowledge:scoped",
+            "knowledge:range", "auth:named_client"
         ],
         "knowledge": {
             "corpora": [],
@@ -276,30 +280,82 @@ async fn capabilities() -> Json<Value> {
     }))
 }
 
-async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Json<Value> {
+/// The lawful search: a text is a hit when it holds the query, or any of the
+/// query's words of four letters or more, so a query of several sentences
+/// reaches several texts (`knowledge.scoped`). Each hit is its whole text, so
+/// its span is `[0, len)`; `exact_off_by_one` shifts it, `scope_leaks`
+/// ignores `documents`, and a malformed name is 400 as §2.8 says.
+async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response {
     let query = req.get("query").and_then(Value::as_str).unwrap_or("");
+    let words: Vec<String> = query
+        .split_whitespace()
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
+        .filter(|w| w.chars().count() >= 4)
+        .collect();
+    let documents: Vec<String> = req
+        .get("documents")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    if documents
+        .iter()
+        .any(|d| !oicp_types::evidence::is_sha256_hex(d))
+    {
+        return refuse(StatusCode::BAD_REQUEST, json!({"results": []}));
+    }
     let hits: Vec<KnowledgeResult> = f
         .texts
         .iter()
-        .filter(|s| s.text.contains(query))
-        .map(|s| KnowledgeResult {
-            content: s.text.clone(),
-            title: None,
-            corpus_id: f.corpus.clone(),
-            url: None,
-            score: 1.0,
-            metadata: Default::default(),
-            chunk_id: None,
-            source_doc_id: Some(s.name.clone()),
-            custody: None,
-            grain: None,
-            peer_name: None,
-            peer_node_id: None,
-            document: Some(f.record(s)),
-            document_absent: None,
+        .filter(|s| {
+            let lower = s.text.to_lowercase();
+            s.text.contains(query) || words.iter().any(|w| lower.contains(w.as_str()))
+        })
+        .filter(|s| {
+            f.breaks.scope_leaks
+                || documents.is_empty()
+                || documents.contains(&sha256_hex(s.text.as_bytes()))
+        })
+        .map(|s| {
+            let len = s.text.chars().count() as u64;
+            let shift = u64::from(f.breaks.exact_off_by_one);
+            let span = Span {
+                corpus_id: f.corpus.clone(),
+                document: f.record(s),
+                start: 0,
+                end: len,
+                exact: code_points(&s.text, shift, len).unwrap_or_default(),
+                prefix: String::new(),
+                suffix: String::new(),
+            };
+            KnowledgeResult {
+                content: s.text.clone(),
+                title: None,
+                corpus_id: f.corpus.clone(),
+                url: None,
+                score: 1.0,
+                metadata: Default::default(),
+                chunk_id: None,
+                source_doc_id: Some(s.name.clone()),
+                custody: None,
+                grain: None,
+                peer_name: None,
+                peer_node_id: None,
+                document: Some(f.record(s)),
+                document_absent: None,
+                span: Some(span),
+                span_absent: None,
+            }
         })
         .collect();
-    Json(json!({"results": hits, "corpora_searched": [f.corpus]}))
+    Json(json!({"results": hits, "corpora_searched": [f.corpus]})).into_response()
 }
 
 async fn text(

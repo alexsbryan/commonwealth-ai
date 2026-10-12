@@ -340,6 +340,39 @@ impl CorpusIndex {
         query_text: &str,
         limit: usize,
     ) -> Result<Vec<ScoredChunk>> {
+        self.search_filtered(query_embedding, query_text, limit, None)
+            .await
+    }
+
+    /// [`Self::search`] over the chunks cut from `texts` only, by their
+    /// `text_sha256`. The filter runs inside the query, before the top
+    /// `limit` is cut, so a scope never thins its own hits; a chunk written
+    /// before the text store names no text and is never returned. No texts
+    /// means no chunks.
+    pub async fn search_in_texts(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+        texts: &[kernel_types::Sha256Hash],
+    ) -> Result<Vec<ScoredChunk>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Hex digests only, so nothing here needs quoting.
+        let names: Vec<String> = texts.iter().map(|t| format!("'{}'", t.to_hex())).collect();
+        let filter = format!("text_sha256 IN ({})", names.join(", "));
+        self.search_filtered(query_embedding, query_text, limit, Some(filter))
+            .await
+    }
+
+    async fn search_filtered(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+        only_if: Option<String>,
+    ) -> Result<Vec<ScoredChunk>> {
         let sanitized = sanitize_fts_query(query_text);
         // Single live check — list_indices() only returns COMPLETE indices.
         // Gates both vector (IVF-PQ on "embedding") and FTS (Tantivy on "content"/"title").
@@ -375,6 +408,7 @@ impl CorpusIndex {
             query_dims = query_embedding.len(),
             dims_match = (query_embedding.is_empty() || query_embedding.len() == self.embedding_dimensions),
             sanitized_query = %sanitized,
+            scoped = only_if.as_deref().unwrap_or(""),
             "CorpusIndex::search gate"
         );
 
@@ -401,6 +435,9 @@ impl CorpusIndex {
             if let Some(rf) = refine {
                 q = q.refine_factor(rf);
             }
+            if let Some(f) = &only_if {
+                q = q.only_if(f.clone());
+            }
             q.limit(fetch_limit)
                 .execute()
                 .await
@@ -419,6 +456,9 @@ impl CorpusIndex {
             if let Some(rf) = refine {
                 q = q.refine_factor(rf);
             }
+            if let Some(f) = &only_if {
+                q = q.only_if(f.clone());
+            }
             q.limit(fetch_limit)
                 .execute()
                 .await
@@ -428,10 +468,14 @@ impl CorpusIndex {
                 .map_err(|e| Error::Database(format!("collect: {e}")))?
         } else {
             // FTS-only search.
-            self.table
+            let mut q = self
+                .table
                 .query()
-                .full_text_search(FullTextSearchQuery::new(sanitized))
-                .limit(limit)
+                .full_text_search(FullTextSearchQuery::new(sanitized));
+            if let Some(f) = &only_if {
+                q = q.only_if(f.clone());
+            }
+            q.limit(limit)
                 .execute()
                 .await
                 .map_err(|e| Error::Database(format!("FTS search: {e}")))?

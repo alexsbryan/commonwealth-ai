@@ -17,9 +17,10 @@
 //!
 //! Candidates come from each corpus's lexical index as align's do, so no
 //! embedding model is involved. A passage's span is located by finding its
-//! chunk body ([`title_unheaded`]) in the stored text; a passage that is not
-//! an exact slice says so instead of carrying a range. Every operating point
-//! is `uncalibrated` until the bench has measured a cell.
+//! chunk body in the stored text (`oicp_evidence::span_of`, the locator
+//! search's hits share); a passage that is not an exact slice says so instead
+//! of carrying a range. Every operating point is `uncalibrated` until the
+//! bench has measured a cell.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,7 +28,6 @@ use std::sync::Arc;
 use axum::extract::{Extension, State};
 use axum::http::StatusCode;
 use axum::Json;
-use corpus_index::chunkers::title_unheaded;
 use corpus_index::index::CorpusIndex;
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::{CorpusTexts, Span, Unavailable};
@@ -46,8 +46,7 @@ use sovereign_core::types::Speed;
 use sovereign_tools::summary_verify::{EARLY_EXIT_SUPPORT, SUPPORTED_TAU};
 
 use crate::oicp_evidence::{
-    absence_reason, open_for_reading, readable_corpora, record_for, requested_corpora,
-    wire_document,
+    absence_reason, open_for_reading, readable_corpora, requested_corpora, span_of,
 };
 use crate::routes_internal::ErrorBody;
 use crate::state::AppState;
@@ -492,28 +491,13 @@ async fn locate(
         cache.texts.insert(tkey.clone(), stored);
     }
     let stored = cache.texts[&tkey].clone()?;
-    let body = title_unheaded(p.title.as_deref(), &p.content);
-    let byte = stored
-        .text
-        .find(body)
-        .ok_or_else(|| reasons::NOT_AN_EXACT_SLICE.to_string())?;
-    let start = stored.text[..byte].chars().count();
-    let end = start + body.chars().count();
-    let record = record_for(&stored.documents, p.source_doc_id.as_deref())
-        .ok_or_else(|| oicp_types::evidence::reasons::DOCUMENT_UNREADABLE.to_string())?;
-    let text = stored.text.as_str();
-    let len = text.chars().count();
-    // Every range here is cut from `text` itself (`find`, then counts of
-    // it), so a slice is never out of range.
-    let slice =
-        |r: std::ops::Range<usize>| code_point_slice(text, r).unwrap_or_default().to_string();
-    Ok(Span {
-        corpus_id: p.corpus_id.clone(),
-        document: wire_document(record)?,
-        start: start as u64,
-        end: end as u64,
-        exact: slice(start..end),
-        prefix: slice(start.saturating_sub(context)..start),
-        suffix: slice(end..(end + context).min(len)),
-    })
+    span_of(
+        &stored,
+        &p.corpus_id,
+        p.title.as_deref(),
+        &p.content,
+        p.source_doc_id.as_deref(),
+        context,
+    )
+    .map_err(str::to_string)
 }

@@ -116,6 +116,7 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
             // discard, which OOM-kills the daemon.
             corpora: corpora.map(|c| c.to_vec()),
             limit: Some(limit as u32),
+            documents: Vec::new(),
         };
         let url = format!("{}/v1/knowledge/search", self.base_url);
         let response = match self.http.post(&url).json(&body).send().await {

@@ -73,6 +73,7 @@ mod quality_map_cmd;
 mod project_registry;
 mod refresh_cmd;
 mod report_audit;
+mod search_cmd;
 mod seat_cmd;
 mod serve_bin;
 mod serve_cmd;
@@ -196,6 +197,10 @@ const HELP: Help = Help {
                 "Mesh-replicated workspace migrate / status (~/.claude + notes.db)",
             ),
             ("corpus", "Knowledge corpus install / remove / status"),
+            (
+                "search",
+                "Search your corpora, or only some texts in them (--document)",
+            ),
             (
                 "verify",
                 "Check writing against your corpora, sentence by sentence (fast / checker)",
@@ -395,6 +400,7 @@ const ALL_VERBS: &[&str] = &[
     "rough-edges",
     "router-cache",
     "run",
+    "search",
     "search-gym",
     "seat",
     "serve",
@@ -916,6 +922,13 @@ async fn async_main() {
             }
             "status" => {
                 let code = status_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "search" => {
+                // A client of the daemon's knowledge search with v0.6 §2.8's
+                // scope and ranges: the platform's own second user of them.
+                // In-process; reaches the daemon over loopback HTTP.
+                let code = search_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "verify" => {

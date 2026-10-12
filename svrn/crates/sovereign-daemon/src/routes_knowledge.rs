@@ -34,7 +34,7 @@ use axum::Json;
 use sovereign_contracts::membership::MembershipEntry;
 
 use crate::types::MemberStatus;
-use kernel_types::NodeId;
+use kernel_types::{NodeId, Sha256Hash};
 use oicp_types::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
 use crate::state::AppState;
@@ -63,6 +63,15 @@ pub async fn knowledge_search(
     Json(mut request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     let limit = request.effective_limit() as usize;
+    // v0.6 §2.8: a `documents` filter is text names; anything else is refused
+    // before any work, never searched as "no filter".
+    let scope = match crate::oicp_evidence::search_scope(&request.documents) {
+        Ok(s) => s,
+        Err(bad) => {
+            tracing::warn!(document = %bad, "knowledge search: `documents` names something that is not a text name");
+            return (StatusCode::BAD_REQUEST, Json(empty_knowledge_response()));
+        }
+    };
 
     // OICP thin-client search (v0.4 §6): a client MAY send only `query`
     // / `query_text` and let the host embed it — the host owns the embed
@@ -233,17 +242,21 @@ pub async fn knowledge_search(
         if let Some(engine) = state.inner.node.corpus_engine.as_ref() {
             for corpus_id in &local_targets {
                 match engine.open_index_for_corpus(corpus_id).await {
-                    Ok(index) => match index
-                        .search(&request.query_embedding, &request.query_text, limit)
-                        .await
+                    Ok(index) => match crate::oicp_evidence::search_corpus(
+                        &index,
+                        corpus_id,
+                        &request.query_embedding,
+                        &request.query_text,
+                        limit,
+                        scope.as_deref(),
+                    )
+                    .await
                     {
                         Ok(results) => {
                             corpora_searched.insert(corpus_id.clone());
-                            // Each hit carries its text's record (v0.5 §3).
-                            all_results.extend(
-                                crate::oicp_evidence::knowledge_results(&index, corpus_id, results)
-                                    .await,
-                            );
+                            // Each hit carries its text's record (v0.5 §3)
+                            // and its range of it (v0.6 §2.8).
+                            all_results.extend(results);
                         }
                         Err(e) => {
                             tracing::warn!(
@@ -308,6 +321,7 @@ pub async fn knowledge_search(
                     corpora_unavailable,
                     requested_corpora.as_deref(),
                     limit,
+                    scope.as_deref(),
                 );
             }
         };
@@ -315,6 +329,7 @@ pub async fn knowledge_search(
         let query_embedding = request.query_embedding.clone();
         let query_text = request.query_text.clone();
         let limit_u32 = request.effective_limit();
+        let documents = request.documents.clone();
         let requester_id = self_id;
         // The corpora each peer was asked for, kept beside the rows so a
         // peer that failed marks exactly its corpora unavailable. Keyed by
@@ -349,6 +364,7 @@ pub async fn knowledge_search(
                 let transport = transport.clone();
                 let query_embedding = query_embedding.clone();
                 let query_text = query_text.clone();
+                let documents = documents.clone();
                 async move {
                     fanout_one_peer(
                         http,
@@ -359,6 +375,7 @@ pub async fn knowledge_search(
                         query_embedding,
                         query_text,
                         limit_u32,
+                        documents,
                     )
                     .await
                 }
@@ -415,6 +432,7 @@ pub async fn knowledge_search(
         corpora_unavailable,
         requested_corpora.as_deref(),
         limit,
+        scope.as_deref(),
     )
 }
 
@@ -462,12 +480,14 @@ async fn fanout_one_peer(
     query_embedding: Vec<f32>,
     query_text: String,
     limit: u32,
+    documents: Vec<String>,
 ) -> Result<PeerServed, crate::fanout::PeerFailure> {
     let body = KnowledgeSearchRequest {
         query_embedding,
         query_text,
         corpora: Some(corpora.clone()),
         limit: Some(limit),
+        documents,
     };
     // Hex-encode the requester id for the `X-Node-Id` header.
     // Matches the format `sovereign_contracts::principal::claimed_node_id`
@@ -548,7 +568,27 @@ fn build_response(
     mut corpora_unavailable: HashSet<String>,
     requested: Option<&[String]>,
     limit: usize,
+    scope: Option<&[Sha256Hash]>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
+    // v0.6 §2.8: under a `documents` filter only hits naming one of its texts
+    // are returned. Local hits are scoped inside the index; this holds a
+    // peer's to the same law, one that predates the filter and searched the
+    // whole corpus included, and drops any hit naming no text.
+    if let Some(scope) = scope {
+        let before = all_results.len();
+        all_results.retain(|r| {
+            r.document
+                .as_ref()
+                .and_then(|d| Sha256Hash::from_hex(&d.text_sha256))
+                .is_some_and(|h| scope.contains(&h))
+        });
+        if all_results.len() < before {
+            tracing::debug!(
+                dropped = before - all_results.len(),
+                "knowledge: hits outside the `documents` scope dropped"
+            );
+        }
+    }
     // Dedupe: keep the highest-scored entry for each (corpus, content).
     all_results.sort_by(|a, b| {
         b.score

@@ -44,6 +44,23 @@ pub mod reasons {
 
     /// Every reason a hit may give for carrying no `document` (§3).
     pub const HIT_ABSENCES: [&str; 3] = [TEXTS_NOT_STORED, TEXT_NOT_STORED, DOCUMENT_UNREADABLE];
+
+    /// A passage's text is not an exact slice of its stored text, so no span
+    /// is given for it (v0.6 §2.6, §2.8).
+    pub const NOT_AN_EXACT_SLICE: &str = "not an exact slice";
+    /// A passage names no stored text it was cut from, so no span is given
+    /// (v0.6 §2.6, §2.8).
+    pub const PASSAGE_NAMES_NO_TEXT: &str = "passage names no text";
+
+    /// Every reason a passage may give for carrying no span (v0.6 §2.6,
+    /// §2.8): the hit absences, and the two of a text that was read.
+    pub const SPAN_ABSENCES: [&str; 5] = [
+        TEXTS_NOT_STORED,
+        TEXT_NOT_STORED,
+        DOCUMENT_UNREADABLE,
+        NOT_AN_EXACT_SLICE,
+        PASSAGE_NAMES_NO_TEXT,
+    ];
 }
 
 /// Context, in code points, a host puts on each side of a span or slice when

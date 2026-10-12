@@ -392,6 +392,25 @@ Output is a bare path, so it substitutes directly: `root="$(svrn path root)"`.
 
 Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `svrn project status` (old name still forwards here).
 
+### `svrn search`
+
+Searches your corpora, or only some texts in them, and prints each hit with
+its source, its text's name and where in that text it stands. It is a client of
+the daemon's knowledge search with the `documents` scope and per-hit ranges of
+`cmnwlth/docs/oicp-v0.6.md` §2.8.
+
+```
+svrn search tide tables                         # every corpus you may read
+svrn search tide tables --corpus <id> ...       # only these corpora
+svrn search tide tables --document <name> ...   # only these texts
+svrn search tide tables --limit 20 --json       # more hits, as JSON
+```
+
+A text's name is the 64-hex `text` line each hit prints; pass it to
+`--document` to search within that text. A hit's range, `at [start, end)`, is
+in code points of its text, and a hit with none says why (`no range: not an
+exact slice`).
+
 ### `svrn verify`
 
 Checks a piece of writing against your corpora, one paragraph at a time, and

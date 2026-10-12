@@ -32,6 +32,11 @@ pub struct KnowledgeSearchRequest {
     pub corpora: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// v0.6 §2.8 (`knowledge:scoped`): the text names (`text_sha256`, 64
+    /// lowercase hex) every hit must be cut from. Empty means any text. Under
+    /// a filter a hit that names no text is never returned.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<String>,
 }
 
 impl KnowledgeSearchRequest {
@@ -130,6 +135,16 @@ pub struct KnowledgeResult {
     /// `document`, and from a host that predates the field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document_absent: Option<String>,
+    /// v0.6 §2.8 (`knowledge:range`): the hit's text as a range of its
+    /// stored text, given only when the chunk, its title header removed, is
+    /// an exact slice of it. `None` beside `span_absent`, and from a host
+    /// that predates the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<crate::evidence::Span>,
+    /// v0.6 §2.8: why this hit carries no `span`, one of
+    /// [`crate::evidence::reasons::SPAN_ABSENCES`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span_absent: Option<String>,
 }
 
 // -----------------------------------------------------------------
@@ -431,6 +446,8 @@ mod tests {
             peer_node_id: None,
             document: None,
             document_absent: None,
+            span: None,
+            span_absent: None,
         };
         let json = serde_json::to_string(&modern).unwrap();
         let back: KnowledgeResult = serde_json::from_str(&json).unwrap();
@@ -533,6 +550,7 @@ mod tests {
             query_text: "q".into(),
             corpora: None,
             limit: None,
+            documents: Vec::new(),
         };
         let v = serde_json::to_value(&req).unwrap();
         assert!(v.get("query_embedding").is_none());

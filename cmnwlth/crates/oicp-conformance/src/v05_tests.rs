@@ -192,6 +192,46 @@ async fn evidence_verify_is_red_against_an_unknown_verdict_and_a_span_off_by_one
 }
 
 #[tokio::test]
+async fn knowledge_range_and_scoped_are_red_against_a_span_off_by_one_and_a_leaking_scope() {
+    use crate::search_checks::{check_knowledge_range, check_knowledge_scoped};
+    let b = bench(Breaks::default()).await;
+    green(&check_knowledge_range(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    green(&check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    assert!(v05_feature_failures(&b.manifest).is_empty());
+    let b = bench(Breaks {
+        exact_off_by_one: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_knowledge_range(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        "the text there says",
+    );
+    let b = bench(Breaks {
+        scope_leaks: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        "is from",
+    );
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "knowledge:document");
+    let f = v05_feature_failures(&m);
+    assert!(
+        f.iter()
+            .any(|x| x == "knowledge:scoped requires knowledge:document"),
+        "{f:?}"
+    );
+    assert!(
+        f.iter()
+            .any(|x| x == "knowledge:range requires knowledge:document"),
+        "{f:?}"
+    );
+}
+
+#[tokio::test]
 async fn the_evidence_checks_say_why_they_could_not_judge() {
     let b = bench(Breaks::default()).await;
     let gone = FixtureState::Unavailable("ingest:recipe not advertised".into());
@@ -200,6 +240,8 @@ async fn the_evidence_checks_say_why_they_could_not_judge() {
         check_evidence_text(&b.host, &b.manifest, &b.lib, &gone).await,
         check_evidence_align(&b.host, &b.manifest, &b.lib, &gone).await,
         crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::search_checks::check_knowledge_range(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::search_checks::check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &gone).await,
     ] {
         assert_eq!(c.status, CheckStatus::Skip, "{}", c.id);
         assert!(c.detail.starts_with("could not judge"), "{}", c.detail);

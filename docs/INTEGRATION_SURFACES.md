@@ -71,7 +71,11 @@ verdicts, the rung that decided, the passages it judged as spans, and an
 `uncalibrated` operating point. Every knowledge-search hit carries
 `document`, its text's record with the metadata the extractor or the recipe
 declared (`knowledge:document`), local and peer-served alike, or names why
-it has none in `document_absent`. Recipes may carry their documents inline
+it has none in `document_absent`. Under v0.6 §2.8 a search may name the texts
+its hits must come from (`documents`, by text name, `knowledge:scoped`), and
+every hit carries `span`, its code-point range of its stored text, or names
+why not in `span_absent` (`knowledge:range`); `svrn search --document` is the
+CLI client. Recipes may carry their documents inline
 (`[acquire] type = "inline"`) so a host that shares no disk with you can
 install them.
 

@@ -192,6 +192,11 @@ async fn apply_v04_enrichment(
         // §3: every local hit carries its text's record
         // (`oicp_evidence::knowledge_results`).
         feats.push(features::KNOWLEDGE_DOCUMENT.to_string());
+        // v0.6 §2.8: search scoped by text name, inside the index
+        // (`oicp_evidence::search_corpus`), and every hit's range of its
+        // text located at serve time (`oicp_evidence::span_of`).
+        feats.push(features::KNOWLEDGE_SCOPED.to_string());
+        feats.push(features::KNOWLEDGE_RANGE.to_string());
         EvidenceEndpoints {
             text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
             align_endpoint: Some("/oicp/v1/align".into()),

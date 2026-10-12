@@ -29,13 +29,10 @@ pub mod reasons {
     pub const CHECKER_DID_NOT_ANSWER: &str = "checker did not answer";
     /// No requested corpus could be read, so nothing was judged against.
     pub const NO_CORPUS_READ: &str = "no corpus read";
-    /// A passage's text is not an exact slice of its stored text, so no span
-    /// is given for it.
-    pub const NOT_AN_EXACT_SLICE: &str = "not an exact slice";
-    /// A passage names no stored text it was cut from, so no span is given.
-    /// A passage whose text or record cannot be read gives v0.5's reason
+    /// A passage's span absences, shared with search's hits (v0.6 §2.8): a
+    /// passage whose text or record cannot be read gives v0.5's reason
     /// instead (`texts not stored`, `text not stored`, `document unreadable`).
-    pub const PASSAGE_NAMES_NO_TEXT: &str = "passage names no text";
+    pub use crate::evidence::reasons::{NOT_AN_EXACT_SLICE, PASSAGE_NAMES_NO_TEXT};
 }
 
 /// A verdict's operating point before any bench has calibrated its cell.

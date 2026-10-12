@@ -61,6 +61,13 @@ pub mod features {
     pub const EVIDENCE_VERIFY: &str = "evidence:verify";
     /// v0.5 §3: knowledge-search hits carry `document`.
     pub const KNOWLEDGE_DOCUMENT: &str = "knowledge:document";
+    /// v0.6 §2.8: knowledge search takes `documents`, the text names its
+    /// hits must be cut from; requires `knowledge:document`.
+    pub const KNOWLEDGE_SCOPED: &str = "knowledge:scoped";
+    /// v0.6 §2.8: every knowledge-search hit carries `span`, its range of
+    /// its stored text, or names why not in `span_absent`; requires
+    /// `knowledge:document`.
+    pub const KNOWLEDGE_RANGE: &str = "knowledge:range";
     /// v0.5 §4: install accepts `recipe_toml`; requires `ingest:v1`.
     pub const INGEST_RECIPE: &str = "ingest:recipe";
     /// v0.5 §5.1: a presented named credential is honoured, and a bogus
@@ -138,6 +145,8 @@ pub mod features {
         EVIDENCE_ALIGN,
         EVIDENCE_VERIFY,
         KNOWLEDGE_DOCUMENT,
+        KNOWLEDGE_SCOPED,
+        KNOWLEDGE_RANGE,
         INGEST_RECIPE,
         AUTH_NAMED_CLIENT,
     ];
