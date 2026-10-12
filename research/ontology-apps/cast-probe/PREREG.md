@@ -101,3 +101,30 @@ recorded resolve_decisions.jsonl and trace, before any build:
 - Gates: the port reproduces the leg's own logged fits and at least 99% of its zones before O is added.
 Bar, fixed now: O is worth building when, replayed, links to the right header record reach at least half of the units
 offered one, Enron mentions served unjudged fall by at least half, and wrong links stay at most 10% of links.
+
+## Amendment 4 (2026-10-12, before any replay of it is computed): fit the estimator under the decider's own model
+
+Reading (amendment 2's replay, amendment 3's party read): `estimate.rs` fits every statement-alternative pair as an
+independent draw from a two-class mixture, while `weigh.rs` decides a statement over its alternatives as competing:
+one of them, or none, is its particular. Under the pair fit a statement with several alternatives agreeing on a source
+counts each as a likely match, so the match class can drift toward what many alternatives share rather than toward
+identity (GVC document_date m .95 fitted against .54 on gold pairs; Ward model_choice weighed +3.0 at chance; on the
+party leg the model's pick of the right Enron record overridden 10 of 11 times). The two halves of one decision use
+two models.
+
+Correction X, one change, generic (every type, every system, no constant): the fit's latent variable is the decider's
+own, per statement one of its alternatives or none. E-step: weigh's posterior (the prior odds per alternative, plus
+each alternative's evidence summed over sources, against none at 0). M-step: each source's m and u from the expected
+matched and unmatched alternatives it spoke on; the prior odds by maximum likelihood under that posterior. Kept from
+estimate.rs: the +1/+2 smoothing, clamps, identical-source groups, m<u pooling, iterations and tolerance. Dropped: the
+global label flip (an alternative is not exchangeable with none). Unchanged: the comparisons, the decider and its bar,
+and when the fit runs (after each document, over its type's statements so far).
+
+Replay, first order, no model, through the gated port (G1/G2 as before), on the six runs/about legs and the party leg.
+Measures per leg: links right / wrong / unjudged before and under X (amendment 2's judging; the party leg's deals by
+the Ward particulars, its company statements by amendment 3's gold companies); per source, the end fit's m and u beside
+the rates on gold-judged pairs (the calibration diagnostic), with their mean absolute difference before and under X.
+Bars, fixed now: X goes to build when (a) on both GVC legs right links gained are at least 10 and at least twice the
+wrong links gained; (b) on every Ward and uv leg (the party leg's deals included) right links lost are at most 2 and
+wrong links gained at most 2; (c) on the party leg's company statements right links are not fewer and the wrong share
+of links is not higher than logged. First order, as amendment 2; the build's end-to-end leg is the test of record.
