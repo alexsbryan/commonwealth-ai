@@ -193,6 +193,29 @@ impl ChatMessage {
     fn with_reasoning(&self, request: &CompletionRequest) -> String {
         with_reasoning(self.reasoning_content.as_deref(), self.as_text(), request)
     }
+
+    /// Drop `prefix`, the assistant message the request ended on
+    /// ([`crate::chat_wire::prefix_as_message`]), from the front of the
+    /// content: the engine's text is the continuation alone. llama-server's
+    /// whole message opens with it, because it parses the generation prompt,
+    /// prefix included, ahead of the output (LS common/chat.cpp:3841-3843);
+    /// its stream does not repeat it (LS server-task.cpp:156-159), so only
+    /// this path strips.
+    pub(crate) fn strip_continued(&mut self, prefix: &str) {
+        let rest = self
+            .content
+            .as_deref()
+            .and_then(|c| c.strip_prefix(prefix))
+            .map(str::to_string);
+        tracing::debug!(
+            target: "oicp_client",
+            stripped = rest.is_some(),
+            "remote: the continued assistant prefix removed from the answer, when it opens it"
+        );
+        if rest.is_some() {
+            self.content = rest;
+        }
+    }
 }
 
 /// Reads one SSE response, a byte chunk at a time.

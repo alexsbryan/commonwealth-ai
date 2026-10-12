@@ -446,3 +446,35 @@ fn what_one_grammar_cannot_carry_is_refused() {
         .build_request(&beside_schema);
     assert!(refused.is_err(), "{refused:?}");
 }
+
+/// THE FAILING INPUT for prompt.assistant-prefix: llama-server copied the
+/// `assistant_prefix` field and never read it, so the model started a fresh
+/// turn and continue-truncated-synthesis restarted instead of continuing.
+/// It takes the prefix as a trailing assistant message, which it continues;
+/// a daemon keeps the extension field its adapter reads.
+#[test]
+fn an_llguidance_host_continues_the_assistant_prefix_as_a_trailing_message() {
+    let mut req = named_request();
+    req.system_message = Some("s".into());
+    req.assistant_prefix = Some("Title:".into());
+    let body = llguidance().build_request(&req).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 3, "{body}");
+    assert_eq!(
+        messages.last(),
+        Some(&json!({"role": "assistant", "content": "Title:"}))
+    );
+    assert!(body.get("assistant_prefix").is_none(), "{body}");
+
+    let daemon = provider().build_request(&req).unwrap();
+    assert_eq!(daemon["assistant_prefix"], "Title:");
+    assert_eq!(daemon["messages"].as_array().unwrap().len(), 2, "{daemon}");
+
+    req.assistant_prefix = Some(String::new());
+    let empty = llguidance().build_request(&req).unwrap();
+    assert_eq!(
+        empty["messages"].as_array().unwrap().len(),
+        2,
+        "an empty prefix continues nothing: {empty}"
+    );
+}

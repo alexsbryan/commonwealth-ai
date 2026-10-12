@@ -399,3 +399,29 @@ async fn an_sse_line_split_across_two_chunks_is_delivered_whole() {
     }
     assert_eq!(text, "hello world");
 }
+
+/// THE FAILING INPUT for prompt.assistant-prefix, response half:
+/// llama-server continues a trailing assistant message and its whole message
+/// opens with that message (LS common/chat.cpp:3841-3843). The engine's text
+/// is the continuation alone, and so is the client's; a daemon, which reads
+/// the extension field, answers without the prefix and is left alone.
+#[tokio::test]
+async fn a_continued_prefix_is_not_repeated_in_the_answer() {
+    use sovereign_contracts::engine_config::GrammarSupport;
+    let url = json_server(json!({
+        "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant",
+            "content": "Title: Paris in spring"}}],
+        "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
+    }))
+    .await;
+    let mut request = ask("name it");
+    request.assistant_prefix = Some("Title:".into());
+    let llama_server = provider(&url).with_grammar(GrammarSupport::Llguidance);
+    let text = llama_server.complete(&request).await.unwrap().text;
+    assert_eq!(text, " Paris in spring");
+    let daemon = provider(&url).complete(&request).await.unwrap().text;
+    assert_eq!(
+        daemon, "Title: Paris in spring",
+        "a daemon's text is its own"
+    );
+}

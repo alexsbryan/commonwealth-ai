@@ -55,6 +55,51 @@ pub(crate) fn request_messages(request: &CompletionRequest) -> Vec<Value> {
     messages
 }
 
+/// The text `request`'s `assistant_prefix` goes to `host` as: a trailing
+/// assistant message, for every host but a Sovereign daemon, which reads the
+/// `assistant_prefix` extension field. llama-server copies that field and
+/// never reads it (LS server-common.cpp:1386-1391); a trailing assistant
+/// message it prefills (`prefill_assistant`, on by default, LS
+/// server-common.cpp:1272-1278): the turns before it are rendered, the
+/// assistant turn is opened, and the message's content is written after it
+/// unclosed, for the model to continue (LS common/chat.cpp:3635-3652, the
+/// Qwen3 form at :1203-1217). The one decider for what the request carries
+/// and what the answer is stripped of ([`crate::ChatMessage::strip_continued`]).
+pub(crate) fn prefix_as_message(request: &CompletionRequest, host: GrammarSupport) -> Option<&str> {
+    if host == GrammarSupport::Sovereign {
+        return None;
+    }
+    request
+        .assistant_prefix
+        .as_deref()
+        .filter(|p| !p.is_empty())
+}
+
+/// Write `request`'s assistant prefix in `host`'s spelling
+/// ([`prefix_as_message`]). After `messages` is on `body`.
+pub(crate) fn write_assistant_prefix(
+    body: &mut Value,
+    request: &CompletionRequest,
+    host: GrammarSupport,
+) {
+    if let Some(prefix) = prefix_as_message(request, host) {
+        tracing::debug!(
+            target: "oicp_client",
+            prefix_chars = prefix.len(),
+            "write_assistant_prefix: sent as a trailing assistant message to continue"
+        );
+        if let Some(messages) = body["messages"].as_array_mut() {
+            messages.push(json!({"role": "assistant", "content": prefix}));
+        }
+    } else if let Some(prefix) = request
+        .assistant_prefix
+        .as_ref()
+        .filter(|_| host == GrammarSupport::Sovereign)
+    {
+        body["assistant_prefix"] = json!(prefix);
+    }
+}
+
 /// Write `request`'s decode constraint (a Lark grammar, the URL and
 /// evidence-id allow-lists) in `host`'s spelling. Call it after the tools and
 /// any `response_format` are on `body`: llama-server takes one `grammar` and

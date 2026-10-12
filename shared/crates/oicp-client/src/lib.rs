@@ -794,9 +794,7 @@ impl RemoteApiProvider {
         if let Some(mode) = request.sampling_mode {
             body["sampling_mode"] = serde_json::json!(mode);
         }
-        if let Some(prefix) = &request.assistant_prefix {
-            body["assistant_prefix"] = serde_json::json!(prefix);
-        }
+        chat_wire::write_assistant_prefix(&mut body, request, self.grammar);
         if let Some(prefix) = &request.cmd_prefix {
             body["cmd_prefix"] = serde_json::json!(prefix);
         }
@@ -1019,8 +1017,14 @@ impl InferenceProvider for RemoteApiProvider {
             .await
             .map_err(|e| Error::Inference(format!("Failed to read API response: {e}")))?;
         chat_wire::observe_wire_response(status, &raw);
-        let chat_response: ChatCompletionResponse = serde_json::from_str(&raw)
+        let mut chat_response: ChatCompletionResponse = serde_json::from_str(&raw)
             .map_err(|e| Error::Inference(format!("Failed to parse API response: {e}")))?;
+        if let (Some(prefix), Some(choice)) = (
+            chat_wire::prefix_as_message(request, self.grammar),
+            chat_response.choices.first_mut(),
+        ) {
+            choice.message.strip_continued(prefix);
+        }
 
         let first_choice = chat_response.choices.first();
         let text = first_choice
