@@ -9,6 +9,8 @@
 //! (`server-task.cpp:462-520`), and an error as one `data:` line carrying
 //! `{"error": …}` with no `[DONE]` after it (`server-context.cpp:4294`).
 
+use std::sync::{Arc, Mutex};
+
 use futures::StreamExt;
 use serde_json::{json, Value};
 use sovereign_contracts::traits::InferenceProvider;
@@ -24,6 +26,41 @@ fn chunk(delta: Value, finish: Option<&str>) -> String {
         "system_fingerprint": "b1", "object": "chat.completion.chunk",
     });
     format!("data: {body}\n\n")
+}
+
+/// llama-server's usage chunk, sent only when the request asked for it.
+fn usage_chunk(prompt: u32, completion: u32) -> String {
+    let body = json!({
+        "choices": [], "created": 1, "id": "chatcmpl-1", "model": "m",
+        "object": "chat.completion.chunk",
+        "usage": {"completion_tokens": completion, "prompt_tokens": prompt,
+                  "total_tokens": prompt + completion},
+    });
+    format!("data: {body}\n\n")
+}
+
+/// A llama-server that streams `chunks`, adds the usage chunk when the
+/// request set `stream_options.include_usage` (as `server-task.cpp:502`
+/// does), ends with `[DONE]`, and keeps every request body it saw.
+async fn sse_server(chunks: Vec<String>) -> (String, Arc<Mutex<Vec<Value>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let s = seen.clone();
+    let chat = move |axum::Json(body): axum::Json<Value>| {
+        let include_usage = body["stream_options"]["include_usage"] == json!(true);
+        s.lock().unwrap().push(body);
+        let mut out = chunks.concat();
+        if include_usage {
+            out.push_str(&usage_chunk(273, 63));
+        }
+        out.push_str("data: [DONE]\n\n");
+        async move {
+            (
+                [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                out,
+            )
+        }
+    };
+    (serve(chat).await, seen)
 }
 
 async fn serve<H, T>(chat: H) -> String
@@ -112,6 +149,39 @@ async fn stream(url: &str, request: &CompletionRequest) -> (String, StreamFrame)
         text,
         terminal.expect("every stream ends in a terminal frame"),
     )
+}
+
+// ── projection.stream-usage ─────────────────────────────────────────────
+
+/// llama-server sends usage on a stream only when asked
+/// (`stream_options.include_usage`); the engine's Finish frame always
+/// carries it.
+#[tokio::test]
+async fn a_streamed_request_asks_for_usage_and_the_finish_frame_carries_it() {
+    let (url, seen) = sse_server(vec![
+        chunk(json!({"content": "hi"}), None),
+        chunk(json!({}), Some("stop")),
+    ])
+    .await;
+    let (text, terminal) = stream(&url, &ask("hello")).await;
+    assert_eq!(text, "hi");
+    assert_eq!(
+        seen.lock().unwrap()[0]["stream_options"],
+        json!({"include_usage": true})
+    );
+    let StreamFrame::Finish { reason, usage } = terminal else {
+        panic!("{terminal:?}")
+    };
+    assert_eq!(reason, FinishReason::Stop);
+    let usage = usage.expect("the usage chunk reaches the Finish frame");
+    assert_eq!(
+        (
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.total_tokens
+        ),
+        (273, 63, 336)
+    );
 }
 
 // ── projection.stream-error ─────────────────────────────────────────────

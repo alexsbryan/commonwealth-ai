@@ -1098,7 +1098,7 @@ impl InferenceProvider for RemoteApiProvider {
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request)?;
-        body["stream"] = serde_json::json!(true);
+        response_wire::ask_to_stream(&mut body);
         chat_wire::observe_wire_request(&body);
 
         let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
@@ -1168,13 +1168,15 @@ impl InferenceProvider for RemoteApiProvider {
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request)?;
-        body["stream"] = serde_json::json!(true);
+        response_wire::ask_to_stream(&mut body);
 
         let response = self
             .send_honouring_shed(|| admitted.post(&url).json(&body), "Remote stream request")
             .await?;
 
-        Ok(Box::pin(response_wire::text_stream(response.bytes_stream())))
+        Ok(Box::pin(response_wire::text_stream(
+            response.bytes_stream(),
+        )))
     }
 
     /// Dispatch requests concurrently via HTTP connection pooling.

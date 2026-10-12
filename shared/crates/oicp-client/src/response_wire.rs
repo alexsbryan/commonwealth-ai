@@ -47,6 +47,15 @@ struct StreamDelta {
     content: Option<String>,
 }
 
+/// Make `body` a streamed request that asks for usage. llama-server, like
+/// OpenAI, sends usage on a stream only when `stream_options.include_usage`
+/// is set (`server-task.cpp:502`); the engine's Finish frame always carries
+/// it (`projection.stream-usage`).
+pub(crate) fn ask_to_stream(body: &mut serde_json::Value) {
+    body["stream"] = serde_json::json!(true);
+    body["stream_options"] = serde_json::json!({"include_usage": true});
+}
+
 /// Reads one SSE response, a byte chunk at a time.
 pub(crate) struct SseReader {
     /// Bytes after the last newline: a line still arriving. Kept as bytes
