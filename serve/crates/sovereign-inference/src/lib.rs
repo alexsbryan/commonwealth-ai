@@ -12,9 +12,6 @@ pub mod fim;
 pub mod gguf_meta;
 pub use sovereign_contracts::gguf_validator;
 pub mod hardware;
-pub mod health;
-pub mod hybrid;
-pub mod json_grammar;
 pub mod llama;
 /// One decision about how much llama.cpp says, applied at every backend
 /// init — the ggml log callback is process-global, so the last init used to
@@ -28,12 +25,9 @@ pub mod remote {
     pub use oicp_client::*;
 }
 pub mod reranker_standalone;
-pub mod router_circuit;
 pub mod rpc_worker_main;
-pub mod selector;
 pub mod served_kind;
 pub mod setup_planner;
-pub mod smoketest;
 pub mod url_constraint;
 pub mod vocab_cache;
 

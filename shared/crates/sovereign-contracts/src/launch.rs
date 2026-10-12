@@ -180,14 +180,9 @@ pub const ADMIN_JOIN_VERB: &str = "join";
 /// first), so a spawner that waits on `/v1/models` has not seen a join.
 pub const JOINED_LINE_PREFIX: &str = "joined ";
 
-// NOTE — the smoketest token is deliberately NOT declared here.
-// `sovereign_inference::smoketest::SMOKETEST_FLAG` already owns it, next to
-// the smoketest implementation, and the desktop re-exports it from there.
-// Declaring a second copy would be the §10.6 smell this module exists to
-// remove. `sovereign-contracts` sits BELOW `sovereign-inference`, so it cannot
-// name that constant; the two are pinned equal by a test in the owner, which
-// sees both (`sovereign_inference::smoketest`,
-// `launch_smoketest_flag_matches_owner`; pb-distribution-setup).
+// NOTE — `--smoketest` has no implementation left: `sovereign_inference::
+// smoketest` was deleted with no caller (es-m1-delete-dead-modules). The token
+// is still parsed so every binary refuses that argv by name.
 
 impl Launch {
     /// Decide what this process is, from argv **excluding** `argv[0]`.
