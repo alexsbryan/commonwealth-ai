@@ -83,3 +83,21 @@ Bars, fixed now: C goes to build when on both GVC legs right links gained are at
 wrong links gained, and on every Ward and uv leg right links lost are at most 2 and wrong links gained at most 2.
 First order: later candidates and records would differ after a changed decision; the build's end-to-end leg is the
 test of record.
+
+## Amendment 3 (2026-10-12, before runs/party exists): the party leg's company decisions, and an overlap source
+
+ec's party slice (919d4fc6b) makes each company mention a particular, offered the header records its message's
+fields name (FieldNamed). Its leg (runs/party/ours/ward-party) is the first record of those decisions. Read, from its
+recorded resolve_decisions.jsonl and trace, before any build:
+- Units: company statements whose words resolve to a gold company C (the Ward scorer's rule, or a shared token or
+  domain stem with C's forms, reported apart); the right record is a seeded header record whose domain is one of
+  C's. Enron mentions (C in the declared `ours` set) are counted apart.
+- R2: the right header record offered. R3: linked when offered; the model's argmax right; weigher overrides.
+- Enron: linked to its header record (then excluded) versus opened (then served, marked unjudged).
+- Arm O, hypothetical, replayed: one more source on each company statement-alternative pair, `name_overlap`, agreeing
+  when the statement's folded word tokens share a token with the alternative's declared identity values (a seeded
+  record's domain split at `.` and `-`, its display name), disagreeing otherwise, silent on alternatives that hold no
+  declared identity value. EM refitted with it by the gated port; zones recomputed, first order.
+- Gates: the port reproduces the leg's own logged fits and at least 99% of its zones before O is added.
+Bar, fixed now: O is worth building when, replayed, links to the right header record reach at least half of the units
+offered one, Enron mentions served unjudged fall by at least half, and wrong links stay at most 10% of links.
