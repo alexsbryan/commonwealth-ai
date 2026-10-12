@@ -114,7 +114,7 @@ fn probe_shipped() -> GpuObservation {
 fn failed(binary: PathBuf, why: String) -> GpuObservation {
     tracing::warn!(target: "gpu_probe", binary = %binary.display(), %why, "GPU probe failed: GPU memory reads as unknown");
     GpuObservation {
-        at: SystemTime::now(),
+        at: sovereign_time::system_now(),
         binary,
         devices: Err(why),
     }
@@ -133,7 +133,7 @@ pub fn probe(binary: &Path) -> GpuObservation {
         Ok(devices) => {
             tracing::info!(target: "gpu_probe", binary = %binary.display(), ?devices, "GPU probe read the shipped server's devices");
             GpuObservation {
-                at: SystemTime::now(),
+                at: sovereign_time::system_now(),
                 binary: binary.to_path_buf(),
                 devices: Ok(devices),
             }

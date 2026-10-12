@@ -32,7 +32,7 @@ fn parse_refuses_what_it_cannot_read() {
 #[test]
 fn halo_reads_124_gb() {
     let seen = GpuObservation {
-        at: SystemTime::now(),
+        at: sovereign_time::system_now(),
         binary: PathBuf::new(),
         devices: parse(HALO),
     };
@@ -51,7 +51,7 @@ fn a_missing_binary_reads_as_unknown_not_zero() {
 #[test]
 fn no_gpu_reads_as_none_not_zero() {
     let seen = GpuObservation {
-        at: SystemTime::now(),
+        at: sovereign_time::system_now(),
         binary: PathBuf::new(),
         devices: Ok(vec![]),
     };
