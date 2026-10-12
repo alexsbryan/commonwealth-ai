@@ -629,7 +629,10 @@ mod tests {
         assert!(request.lark_grammar.is_none());
         let listed = request.tools.expect("tools listed");
         assert_eq!(listed.len(), 2, "the caller's tool plus done");
-        let done = listed.iter().find(|t| t.name == "done").expect("done listed");
+        let done = listed
+            .iter()
+            .find(|t| t.name == "done")
+            .expect("done listed");
         assert_eq!(done.parameters["required"][0], "reason");
         assert!(done.parameters["properties"]["reason"].is_object());
     }
