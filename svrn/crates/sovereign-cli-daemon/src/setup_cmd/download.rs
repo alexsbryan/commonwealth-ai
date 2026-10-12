@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Model download wrappers + progress rendering — extracted from
 //! `setup_cmd` (§3.2). Thin CLI-stderr adapters over the loader's
-//! `download` probe (`sovereign_inference::setup_planner::download_gguf`,
+//! `download` probe (`sovereign_compute::setup_planner::download_gguf`,
 //! reached by exec since pb-distribution-setup).
 
 use std::io::{self, Write as _};
@@ -14,7 +14,7 @@ use sovereign_contracts::gguf_validator::{validate_gguf, GgufExpectation};
 //
 // URL building, resume-aware streaming, GGUF validation, and the
 // HF_TOKEN env helper all live in
-// `sovereign_inference::setup_planner`, the loader's, which this
+// `sovereign_compute::setup_planner`, the loader's, which this
 // crate asks through `super::probe`. The two thin wrappers below
 // adapt that downloader to the CLI's stderr-renderer style — the
 // CLI prints a ╲ progress bar with `print_progress`.

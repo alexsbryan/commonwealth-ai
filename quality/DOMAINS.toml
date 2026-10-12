@@ -11173,6 +11173,12 @@ lines = 297
 note = ""
 
 [[module]]
+path = "serve/crates/sovereign-compute/src/engine_conformance.rs"
+context = "unknown"
+lines = 422
+note = ""
+
+[[module]]
 path = "serve/crates/sovereign-compute/src/distributed_discovery.rs"
 context = "serving"
 lines = 464
@@ -11212,6 +11218,12 @@ note = ""
 path = "serve/crates/sovereign-compute/src/server.rs"
 context = "serving"
 lines = 154
+note = ""
+
+[[module]]
+path = "serve/crates/sovereign-compute/src/setup_planner.rs"
+context = "unknown"
+lines = 717
 note = ""
 
 [[module]]
@@ -11434,6 +11446,12 @@ note = ""
 path = "shared/crates/sovereign-contracts/src/frame.rs"
 context = "kernel"
 lines = 618
+note = ""
+
+[[module]]
+path = "shared/crates/sovereign-contracts/src/gguf_meta.rs"
+context = "unknown"
+lines = 272
 note = ""
 
 [[module]]
@@ -13723,12 +13741,6 @@ lines = 601
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/engine_conformance.rs"
-context = "unknown"
-lines = 422
-note = ""
-
-[[module]]
 path = "serve/crates/sovereign-inference/src/engine_factory.rs"
 context = "unknown"
 lines = 557
@@ -13744,12 +13756,6 @@ note = ""
 path = "serve/crates/sovereign-inference/src/fim.rs"
 context = "unknown"
 lines = 61
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/gguf_meta.rs"
-context = "unknown"
-lines = 272
 note = ""
 
 [[module]]
@@ -13792,12 +13798,6 @@ note = ""
 path = "serve/crates/sovereign-inference/src/rpc_worker_main.rs"
 context = "unknown"
 lines = 363
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/setup_planner.rs"
-context = "unknown"
-lines = 717
 note = ""
 
 [[module]]
