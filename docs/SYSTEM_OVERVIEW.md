@@ -1072,6 +1072,16 @@ structured_output` is how the host is asked for a schema: unset is
 remembered; `tool-use-forced` sends that from the first request, for a host
 that ignores `response_format` rather than refusing it (Anthropic's
 OpenAI-compatible endpoint; `svrn setup --hosted anthropic` writes it).
+The host's answer is read into the embedded engine's shape at the client, by
+rules kept in one module for the message and both streams
+(`oicp-client/src/response_wire.rs`):
+`reasoning_content` goes back into the text as the `<think>` block the engine
+writes (not in front of a structured answer), native tool calls, whole or as
+streamed fragments, become the `<tool_call>` envelope, and a `tool_calls`
+finish reads as `stop`, since the adapter derives `tool_calls` from the text
+for every engine. A streamed request asks for usage (`stream_options`), and a
+stream that fails, by an error chunk or the transport, ends in
+`Finish{Error}`.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers
