@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+use std::path::{Path, PathBuf};
+
+use sovereign_contracts::engine_config::{EmbedInputs, GrammarSupport};
+use sovereign_contracts::setup_config::ModelsSection;
+
+use super::*;
+
+const PRIMARY: &str = "/m/Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf";
+const FAST: &str = "/m/Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf";
+const EMBED: &str = "/m/Qwen3-Embedding-0.6B-Q8_0.gguf";
+
+fn models() -> ModelsSection {
+    ModelsSection {
+        primary: PRIMARY.into(),
+        fast: Some(FAST.into()),
+        embed: EMBED.into(),
+        context_size: Some(65536),
+        fast_context_size: Some(32768),
+        ..Default::default()
+    }
+}
+
+/// The MTP checkpoints declare one draft layer; the embedder declares none.
+fn layers(path: &Path) -> std::io::Result<Option<u32>> {
+    Ok(path.to_string_lossy().contains("MTP").then_some(1))
+}
+
+#[test]
+fn the_preset_serves_each_gguf_by_its_stem_with_mtp_only_where_declared() {
+    // A chat model whose GGUF declares no draft layers gets no drafting.
+    let mut m = models();
+    m.code = Some("/m/Qwen3-Coder-30B-A3B-Q6_K.gguf".into());
+    let preset = RouterPreset::from_models(&m, None, layers).unwrap();
+    let ini = preset.render();
+    assert!(
+        ini.starts_with("version = 1\n\n[*]\nn-gpu-layers = 99\n"),
+        "{ini}"
+    );
+    assert!(ini.contains(
+        "\n[Qwen3.5-4B-UD-MTP-Q6_K_XL]\nmodel = /m/Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf\nctx-size = 32768\n\
+         kv-unified = true\nparallel = 8\nspec-type = draft-mtp\nspec-draft-n-max = 3\n"
+    ), "{ini}");
+    assert!(ini.contains(
+        "\n[Qwen3.6-35B-A3B-MTP-UD-Q6_K]\nmodel = /m/Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf\nctx-size = 65536\n\
+         kv-unified = true\nspec-type = draft-mtp\n"
+    ), "{ini}");
+    assert!(ini.contains(
+        "\n[Qwen3-Embedding-0.6B-Q8_0]\nmodel = /m/Qwen3-Embedding-0.6B-Q8_0.gguf\nctx-size = 8192\n\
+         embedding = true\nbatch-size = 8192\nubatch-size = 8192\n"
+    ), "{ini}");
+    assert!(ini.contains(
+        "\n[Qwen3-Coder-30B-A3B-Q6_K]\nmodel = /m/Qwen3-Coder-30B-A3B-Q6_K.gguf\nctx-size = 65536\n\
+         kv-unified = true\n\n"
+    ), "{ini}");
+    assert_eq!(ini.matches("spec-type").count(), 2, "{ini}");
+    assert_eq!(preset.warm_models().len(), 4);
+}
+
+#[test]
+fn the_remote_half_follows_from_the_preset() {
+    let preset = RouterPreset::from_models(&models(), None, layers).unwrap();
+    let s = preset.engine_section("http://127.0.0.1:4242/v1");
+    assert_eq!(s.endpoint.as_deref(), Some("http://127.0.0.1:4242/v1"));
+    assert_eq!(s.model_id.as_deref(), Some("Qwen3.6-35B-A3B-MTP-UD-Q6_K"));
+    assert_eq!(
+        s.fast_model_id.as_deref(),
+        Some("Qwen3.5-4B-UD-MTP-Q6_K_XL")
+    );
+    assert_eq!(
+        s.embed_model_id.as_deref(),
+        Some("Qwen3-Embedding-0.6B-Q8_0")
+    );
+    assert_eq!(
+        s.context_size, 32768,
+        "the budget the fast model can also hold"
+    );
+    assert_eq!(s.embed_inputs, Some(EmbedInputs::Client));
+    assert_eq!(s.grammar, Some(GrammarSupport::Llguidance));
+}
+
+#[test]
+fn one_gguf_in_two_roles_is_one_entry() {
+    let mut m = models();
+    m.fast = None;
+    m.code = Some(PRIMARY.into());
+    let preset = RouterPreset::from_models(
+        &m,
+        Some(PathBuf::from("/m/Qwen3-Reranker-0.6B.gguf")),
+        layers,
+    )
+    .unwrap();
+    let ini = preset.render();
+    assert_eq!(
+        ini.matches("[Qwen3.6-35B-A3B-MTP-UD-Q6_K]").count(),
+        1,
+        "{ini}"
+    );
+    assert!(ini.contains("[Qwen3-Reranker-0.6B]\nmodel = /m/Qwen3-Reranker-0.6B.gguf\nctx-size = 8192\nreranking = true\n"), "{ini}");
+    assert_eq!(preset.engine_section("http://x/v1").fast_model_id, None);
+}
+
+#[test]
+fn what_the_router_does_not_serve_yet_is_refused_by_name() {
+    let mut m = models();
+    m.extra.insert("coder".into(), "/m/coder.gguf".into());
+    let err = RouterPreset::from_models(&m, None, layers).unwrap_err();
+    assert!(err.contains("[models.extra] (coder)"), "{err}");
+
+    let unreadable =
+        |_: &Path| -> std::io::Result<Option<u32>> { Err(std::io::Error::other("bad magic")) };
+    let err = RouterPreset::from_models(&models(), None, unreadable).unwrap_err();
+    assert!(err.contains("MTP draft layers: bad magic"), "{err}");
+}
+
+#[test]
+fn the_digest_names_the_rendered_preset() {
+    let a = RouterPreset::from_models(&models(), None, layers).unwrap();
+    let b = RouterPreset::from_models(&models(), None, layers).unwrap();
+    assert_eq!(a.digest(), b.digest());
+    let mut m = models();
+    m.context_size = Some(16384);
+    let c = RouterPreset::from_models(&m, None, layers).unwrap();
+    assert_ne!(a.digest(), c.digest());
+}

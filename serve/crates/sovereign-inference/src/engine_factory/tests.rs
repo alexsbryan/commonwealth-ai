@@ -202,6 +202,7 @@ fn the_remote_engine_builds_with_no_weights_and_no_llama_handle() {
         embed_inputs: None,
         grammar: None,
         capture: None,
+        server_binary: None,
     };
     // Deliberately absent paths: if this engine touched a GGUF the
     // build would fail, and that failure is the assertion.
@@ -248,6 +249,7 @@ fn a_separate_embedding_server_is_wired_to_its_own_model() {
         embed_inputs: None,
         grammar: None,
         capture: None,
+        server_binary: None,
     };
     let built = build_engine(&config).expect("split chat/embed builds without I/O");
     assert!(built.llama.is_none());

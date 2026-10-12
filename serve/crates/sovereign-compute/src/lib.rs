@@ -41,6 +41,7 @@ pub mod distributed_respawn;
 pub mod distributed_role;
 pub mod distributed_warm;
 pub mod distribution;
+pub mod llama_router;
 pub mod manager;
 pub mod mock;
 pub mod model_transfer;

@@ -1020,9 +1020,14 @@ OpenAI-compatible servers. Full detail
 `engine_factory::build_engine(&SetupConfig)` is the ONE place `[engine] kind`
 becomes an `Arc<dyn InferenceProvider>`. The vocabulary is one layer down in
 `sovereign-contracts`, so an out-of-tree engine can name the selection without
-naming any implementation. `llama` and `remote` are typed variants; anything
-else is `EngineKind::Custom(name)` resolved through `register_engine`, and an
-unknown id refuses listing what IS registered rather than falling back.
+naming any implementation. `llama`, `remote` and `llama-server` are typed
+variants; anything else is `EngineKind::Custom(name)` resolved through
+`register_engine`, and an unknown id refuses listing what IS registered rather
+than falling back. `llama-server` is a router the node supervises: the factory
+refuses it by name, because its endpoint exists only once serving assembly has
+started the router. Its models come from `[models]` through
+`sovereign_compute::llama_router::RouterPreset`, whose `engine_section` is the
+remote half the factory then builds (svrn-docs ENGINE_SWAP_PLAN.md, step 1).
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.

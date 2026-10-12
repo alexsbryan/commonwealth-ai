@@ -3932,8 +3932,8 @@ had no key that could say otherwise.
   factory sits in `sovereign-inference` because it alone can name both
   `EmbeddedLlamaCpp` (its own) and `oicp-client`'s `RemoteApiProvider` (a
   dependency since the `remote.rs` extraction). No new dependency edges.
-- **Closed set as an enum, open set as a registry** (§2, §4). `llama` and
-  `remote` are typed variants; anything else is `EngineKind::Custom(name)`
+- **Closed set as an enum, open set as a registry** (§2, §4). `llama`,
+  `remote` and `llama-server` are typed variants; anything else is `EngineKind::Custom(name)`
   resolved through `register_engine`. Rust has no safe cross-crate ABI for
   `dyn Trait`, so an in-process third-party engine is always compiled into a
   binary the operator controls — registration in `main()` is the mechanism.

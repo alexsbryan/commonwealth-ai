@@ -40,6 +40,11 @@ pub enum EngineKind {
     /// An OpenAI-compatible HTTP endpoint (`oicp-client`'s
     /// `RemoteApiProvider`). Holds no weights.
     Remote,
+    /// A llama-server router this node runs and supervises, serving the
+    /// GGUFs in `[models]`. It holds the weights, as `Llama` does; it is
+    /// reached the way `Remote` is, through an endpoint and model ids that
+    /// follow from the router and are never configured.
+    LlamaServer,
     /// An engine registered out of tree, selected by name.
     Custom(String),
 }
@@ -51,6 +56,7 @@ impl EngineKind {
         match self {
             Self::Llama => "llama",
             Self::Remote => "remote",
+            Self::LlamaServer => "llama-server",
             Self::Custom(name) => name,
         }
     }
@@ -59,7 +65,7 @@ impl EngineKind {
     /// means the name must be found in the registry, and refused if it
     /// is not — never defaulted.
     pub fn is_builtin(&self) -> bool {
-        matches!(self, Self::Llama | Self::Remote)
+        matches!(self, Self::Llama | Self::Remote | Self::LlamaServer)
     }
 
     /// Does this engine read its chat slots from `[models]`? Every engine
@@ -75,6 +81,7 @@ impl From<String> for EngineKind {
         match s.as_str() {
             "llama" => Self::Llama,
             "remote" => Self::Remote,
+            "llama-server" => Self::LlamaServer,
             _ => Self::Custom(s),
         }
     }
@@ -221,6 +228,11 @@ pub struct EngineSection {
     /// nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capture: Option<std::path::PathBuf>,
+    /// `kind = "llama-server"` only: run this llama-server binary instead of
+    /// the one shipped beside the daemon. A development override; the
+    /// release check is skipped for it and `/status` names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_binary: Option<std::path::PathBuf>,
 }
 
 /// How a host takes a decode constraint. A property of the SERVER: nothing
@@ -289,6 +301,7 @@ impl Default for EngineSection {
             embed_inputs: None,
             grammar: None,
             capture: None,
+            server_binary: None,
         }
     }
 }

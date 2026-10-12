@@ -191,6 +191,15 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
     let built = match &kind {
         EngineKind::Llama => build_llama(config),
         EngineKind::Remote => build_remote(&config.engine),
+        // Its endpoint exists only once its router runs, and the router is a
+        // supervised child that must outlive every reload: serving assembly
+        // starts it and builds the remote half here from the live router's
+        // section (`sovereign_compute::llama_router`).
+        EngineKind::LlamaServer => Err(
+            "[engine] kind = \"llama-server\" is assembled with its router by \
+             sovereign_compute's serving assembly; the factory builds only its remote half"
+                .to_string(),
+        ),
         EngineKind::Custom(name) => {
             let builder = {
                 let guard = registry()
