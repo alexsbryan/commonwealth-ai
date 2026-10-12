@@ -28,7 +28,7 @@ mod serve_loopback;
 mod turn_admission;
 
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use serde::Deserialize;
 
 use sovereign_contracts::error::{Error, Result};
@@ -989,38 +989,6 @@ struct UsageInfo {
     completion_tokens: u32,
 }
 
-// ─── SSE Streaming Types ─────────────────────────────────────
-
-#[derive(Deserialize)]
-struct StreamChunk {
-    #[serde(default)]
-    choices: Vec<StreamChoice>,
-    /// OpenAI emits a final post-DONE chunk carrying token usage on
-    /// some servers (vLLM, recent llama.cpp). `None` on servers that
-    /// don't emit it — the cutoff chip still works via finish_reason
-    /// alone, just without the precise generated-token count.
-    #[serde(default)]
-    usage: Option<UsageInfo>,
-}
-
-#[derive(Deserialize)]
-struct StreamChoice {
-    #[serde(default)]
-    delta: StreamDelta,
-    /// Set on the terminal chunk (and only the terminal chunk in
-    /// OpenAI-compliant servers). Parsed via
-    /// [`FinishReason::from_openai_str`] at the consume site so a
-    /// stray non-OpenAI string (server bug) round-trips to None and
-    /// we synthesise a `Stop` rather than panic.
-    #[serde(default)]
-    finish_reason: Option<String>,
-}
-
-#[derive(Deserialize, Default)]
-struct StreamDelta {
-    content: Option<String>,
-}
-
 // ─── InferenceProvider Implementation ────────────────────────
 
 #[async_trait]
@@ -1126,7 +1094,7 @@ impl InferenceProvider for RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
-        use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
+        use sovereign_contracts::types::StreamFrame;
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request)?;
@@ -1155,68 +1123,39 @@ impl InferenceProvider for RemoteApiProvider {
             async move {
                 use futures::StreamExt;
                 let mut byte_stream = byte_stream;
-                let mut buf = String::new();
+                let mut reader = response_wire::SseReader::new();
                 // The raw stream, kept only while a conformance sink is installed.
                 let mut raw = sovereign_contracts::engine_observe::is_observing().then(String::new);
-                let mut finish_reason: Option<FinishReason> = None;
-                let mut usage: Option<StreamUsage> = None;
-                'outer: while let Some(chunk) = byte_stream.next().await {
-                    let Ok(bytes) = chunk else { continue };
+                while !reader.ended() {
+                    let bytes = match byte_stream.next().await {
+                        Some(Ok(bytes)) => bytes,
+                        Some(Err(e)) => {
+                            reader.fail(format!("the stream broke: {e}"));
+                            break;
+                        }
+                        None => break,
+                    };
                     lap.first("first byte");
-                    buf.push_str(&String::from_utf8_lossy(&bytes));
                     if let Some(raw) = raw.as_mut() {
                         raw.push_str(&String::from_utf8_lossy(&bytes));
                     }
-                    // Process complete lines; leave the tail in buf for
-                    // the next iteration so a chunk-split SSE line
-                    // doesn't drop tokens.
-                    while let Some(pos) = buf.find('\n') {
-                        let line = buf[..pos].trim().to_string();
-                        buf.drain(..=pos);
-                        if line == "data: [DONE]" {
-                            break 'outer;
-                        }
-                        let Some(data) = line.strip_prefix("data: ") else {
-                            continue;
-                        };
-                        let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) else {
-                            continue;
-                        };
-                        if let Some(u) = parsed.usage {
-                            usage = Some(StreamUsage {
-                                prompt_tokens: u.prompt_tokens as u32,
-                                completion_tokens: u.completion_tokens,
-                                total_tokens: u.total_tokens as u32,
-                            });
-                        }
-                        for choice in parsed.choices {
-                            if let Some(text) = choice.delta.content {
-                                lap.first("first frame parsed");
-                                if !text.is_empty()
-                                    && tx.send(StreamFrame::Token(text)).await.is_err()
-                                {
-                                    return;
-                                }
-                            }
-                            if let Some(reason_str) = choice.finish_reason {
-                                finish_reason = FinishReason::from_openai_str(&reason_str);
-                                tracing::debug!(
-                                    finish_reason = %reason_str,
-                                    "remote: stream - terminal finish_reason captured"
-                                );
-                            }
+                    for text in reader.push(&bytes) {
+                        lap.first("first frame parsed");
+                        if tx.send(StreamFrame::Token(text)).await.is_err() {
+                            return;
                         }
                     }
                 }
                 if let Some(raw) = raw {
                     chat_wire::observe_wire_response(status, &raw);
                 }
-                let _ = tx
-                    .send(StreamFrame::Finish {
-                        reason: finish_reason.unwrap_or(FinishReason::Stop),
-                        usage,
-                    })
-                    .await;
+                let (tail, terminal) = reader.finish();
+                for text in tail {
+                    if tx.send(StreamFrame::Token(text)).await.is_err() {
+                        return;
+                    }
+                }
+                let _ = tx.send(terminal).await;
             },
         ));
         Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
@@ -1235,37 +1174,7 @@ impl InferenceProvider for RemoteApiProvider {
             .send_honouring_shed(|| admitted.post(&url).json(&body), "Remote stream request")
             .await?;
 
-        let byte_stream = response.bytes_stream();
-
-        let token_stream = byte_stream.filter_map(|chunk| async move {
-            let bytes = chunk.ok()?;
-            let text = String::from_utf8_lossy(&bytes);
-
-            let mut tokens = Vec::new();
-            for line in text.lines() {
-                let line = line.trim();
-                if line == "data: [DONE]" {
-                    break;
-                }
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
-                        if let Some(content) =
-                            chunk.choices.first().and_then(|c| c.delta.content.clone())
-                        {
-                            tokens.push(content);
-                        }
-                    }
-                }
-            }
-
-            if tokens.is_empty() {
-                None
-            } else {
-                Some(Ok(tokens.join("")))
-            }
-        });
-
-        Ok(Box::pin(token_stream))
+        Ok(Box::pin(response_wire::text_stream(response.bytes_stream())))
     }
 
     /// Dispatch requests concurrently via HTTP connection pooling.
@@ -1483,6 +1392,7 @@ pub struct SplitInferenceProvider {
 mod chat_wire;
 mod forced_choice;
 mod outbound;
+mod response_wire;
 pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal};
 mod shed;
 pub use chat_wire::{openai_function_name, titled_schema, StructuredOutputMode};
