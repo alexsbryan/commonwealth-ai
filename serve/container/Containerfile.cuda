@@ -53,12 +53,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 # need to resolve at link time. `libnccl-dev` provides headers + the
 # static archive for the build stage; the runtime stage adds
 # `libnccl2` for the dlopen path.
+#
+# The webkit/appindicator/rsvg dev packages: workspace-hack pulls tauri (gtk,
+# glib-sys) into every member's build since the hakari move; as in
+# .github/workflows/cli-release.yml "Linux build deps".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       --allow-change-held-packages \
       build-essential cmake git curl ca-certificates pkg-config libssl-dev \
       protobuf-compiler libprotobuf-dev \
       clang libclang-dev llvm-dev lld python3 \
       libnccl-dev libnccl2 \
+      libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # sccache caches rustc + nvcc + cc/c++ output keyed by content hash.

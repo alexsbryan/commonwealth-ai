@@ -45,11 +45,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 #   rocblas-dev        — math libs llama.cpp's GGML_HIP=ON needs at
 #                        link time. The rocm/dev-ubuntu-22.04 base
 #                        image ships the HIP runtime but NOT these.
+#   libwebkit2gtk-4.1-dev /
+#   libappindicator3-dev /
+#   librsvg2-dev       — workspace-hack pulls tauri (gtk, glib-sys) into
+#                        every member's build since the hakari move; as in
+#                        .github/workflows/cli-release.yml "Linux build deps".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git curl ca-certificates pkg-config libssl-dev \
       protobuf-compiler libprotobuf-dev \
       clang libclang-dev llvm-dev lld python3 \
       hipblas-dev rocblas-dev \
+      libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # sccache caches rustc + hipcc + cc/c++ output keyed by content hash.
