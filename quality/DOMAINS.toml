@@ -11437,6 +11437,12 @@ lines = 618
 note = ""
 
 [[module]]
+path = "shared/crates/sovereign-contracts/src/gguf_meta.rs"
+context = "unknown"
+lines = 272
+note = ""
+
+[[module]]
 path = "shared/crates/sovereign-contracts/src/gguf_validator.rs"
 context = "kernel"
 lines = 277
@@ -13744,12 +13750,6 @@ note = ""
 path = "serve/crates/sovereign-inference/src/fim.rs"
 context = "unknown"
 lines = 61
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/gguf_meta.rs"
-context = "unknown"
-lines = 272
 note = ""
 
 [[module]]

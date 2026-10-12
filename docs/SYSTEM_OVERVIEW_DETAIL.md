@@ -4125,7 +4125,7 @@ avoids it). They run fine on GPU. Two layers keep a user's first message from
 hard-crashing the app:
 
 - **Proactive substitution — DECIDER SHIPPED, CALLER OWED (2026-09-11).**
-  `sovereign-inference::gguf_meta::read_architecture` reads
+  `sovereign-contracts::gguf_meta::read_architecture` reads
   `general.architecture` straight from the GGUF header (zero weight load), and
   `cpu_compat::choose_cpu_safe_chat_model` decides `Keep` / `Substitute` /
   `NoSafeModel`. Its one caller was the desktop's boot-time model-compat
