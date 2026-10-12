@@ -20,7 +20,7 @@ use super::RouterPreset;
 use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
 
 /// The binary's name beside the daemon's own executable.
-pub const SERVER_BINARY: &str = "llama-server";
+pub use sovereign_inference::gpu_probe::SERVER_BINARY;
 
 /// The router answers `/health` once it is listening; the models load after.
 const ROUTER_READY: Duration = Duration::from_secs(60);
@@ -77,12 +77,7 @@ pub fn resolve_binary(config: &SetupConfig) -> Result<(PathBuf, BinarySource), S
             )),
         };
     }
-    let beside = std::env::current_exe()
-        .and_then(|p| p.canonicalize())
-        .map_err(|e| format!("locating this executable: {e}"))?
-        .parent()
-        .map(|dir| dir.join(SERVER_BINARY))
-        .ok_or("this executable has no directory")?;
+    let beside = sovereign_inference::gpu_probe::shipped_server_binary()?;
     match beside.is_file() {
         true => Ok((beside, BinarySource::Shipped)),
         false => Err(format!(

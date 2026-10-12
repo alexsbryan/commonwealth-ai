@@ -11,6 +11,7 @@ pub mod evidence_id_constraint;
 pub mod fim;
 pub mod gguf_meta;
 pub use sovereign_contracts::gguf_validator;
+pub mod gpu_probe;
 pub mod hardware;
 pub mod health;
 pub mod hybrid;
