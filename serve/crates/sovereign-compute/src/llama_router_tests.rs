@@ -101,6 +101,35 @@ fn one_gguf_in_two_roles_is_one_entry() {
 }
 
 #[test]
+fn every_role_names_the_model_that_fills_it_embed_and_rerank_included() {
+    let mut m = models();
+    m.code = Some(PRIMARY.into());
+    let preset = RouterPreset::from_models(
+        &m,
+        Some(PathBuf::from("/m/Qwen3-Reranker-0.6B.gguf")),
+        layers,
+    )
+    .unwrap();
+    assert_eq!(
+        preset.roles(),
+        vec![
+            ("primary", "Qwen3.6-35B-A3B-MTP-UD-Q6_K"),
+            ("fast", "Qwen3.5-4B-UD-MTP-Q6_K_XL"),
+            ("code", "Qwen3.6-35B-A3B-MTP-UD-Q6_K"),
+            ("embed", "Qwen3-Embedding-0.6B-Q8_0"),
+            (
+                sovereign_inference::served_kind::RERANK.role,
+                "Qwen3-Reranker-0.6B"
+            ),
+        ]
+    );
+    assert_eq!(
+        preset.path_of("Qwen3-Embedding-0.6B-Q8_0"),
+        Some(Path::new(EMBED))
+    );
+}
+
+#[test]
 fn what_the_router_does_not_serve_yet_is_refused_by_name() {
     let mut m = models();
     m.extra.insert("coder".into(), "/m/coder.gguf".into());

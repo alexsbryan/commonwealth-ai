@@ -73,7 +73,9 @@ pub struct RouterPreset {
     entries: BTreeMap<String, RouterEntry>,
     primary: String,
     fast: Option<String>,
+    code: Option<String>,
     embed: Option<String>,
+    rerank: Option<String>,
 }
 
 fn stem(path: &Path) -> Result<String, String> {
@@ -153,9 +155,10 @@ impl RouterPreset {
             )?),
             false => None,
         };
-        if let Some(code) = &models.code {
-            chat(code, models.effective_context_size(), None)?;
-        }
+        let code = match &models.code {
+            Some(path) => Some(chat(path, models.effective_context_size(), None)?),
+            None => None,
+        };
         let mut encoder = |path: &Path, kind: EntryKind| -> Result<String, String> {
             let name = stem(path)?;
             if entries.contains_key(&name) {
@@ -175,15 +178,48 @@ impl RouterPreset {
             true => None,
             false => Some(encoder(&models.embed, EntryKind::Embed)?),
         };
-        if let Some(path) = rerank {
-            encoder(&path, EntryKind::Rerank)?;
-        }
+        let rerank = match rerank {
+            Some(path) => Some(encoder(&path, EntryKind::Rerank)?),
+            None => None,
+        };
         Ok(Self {
             entries,
             primary,
             fast,
+            code,
             embed,
+            rerank,
         })
+    }
+
+    /// Each slot role this preset fills and the model that fills it, in the
+    /// roles the embedded engine reports residency under (`primary`,
+    /// `fast`, `code`, `embed`, the rerank kind's role). Two roles on one
+    /// GGUF name the same model.
+    pub fn roles(&self) -> Vec<(&'static str, &str)> {
+        [
+            ("primary", Some(&self.primary)),
+            ("fast", self.fast.as_ref()),
+            ("code", self.code.as_ref()),
+            ("embed", self.embed.as_ref()),
+            (
+                sovereign_inference::served_kind::RERANK.role,
+                self.rerank.as_ref(),
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(role, name)| name.map(|n| (role, n.as_str())))
+        .collect()
+    }
+
+    /// The model that fills the primary role.
+    pub fn primary(&self) -> &str {
+        &self.primary
+    }
+
+    /// The GGUF behind a model this preset serves.
+    pub fn path_of(&self, model: &str) -> Option<&Path> {
+        self.entries.get(model).map(|e| e.path.as_path())
     }
 
     /// The `--models-preset` file. Deterministic: sections in name order.

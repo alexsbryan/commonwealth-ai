@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The provider a `kind = "llama-server"` node serves: the remote half built
-//! against the live router, forwarding every method, with the two answers
-//! only the router's owner can give — whose weights these are, and the
-//! router's own lifecycle for `/status`.
+//! against the live router, forwarding every method, with the answers only
+//! the router's owner can give: whose weights these are, the router's own
+//! lifecycle for `/status`, and the host facts the remote half could only
+//! assume (each model's residency, the code model, the trained context;
+//! svrn-docs ENGINE_SWAP_PLAN.md A1).
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -14,17 +16,52 @@ use sovereign_contracts::types::*;
 use sovereign_contracts::{oicp, Result};
 
 use super::live::LiveRouter;
+use super::RouterPreset;
 
-/// The remote half, and the router it talks to.
+/// The remote half, the router it talks to, and the preset this build asked
+/// it to serve.
 pub struct RouterProvider {
     inner: Arc<dyn InferenceProvider>,
     router: Arc<LiveRouter>,
+    preset: RouterPreset,
+    n_ctx_train: Option<u32>,
 }
 
 impl RouterProvider {
-    /// Wrap `inner`, the remote provider built from the router's section.
-    pub fn new(inner: Arc<dyn InferenceProvider>, router: Arc<LiveRouter>) -> Self {
-        Self { inner, router }
+    /// Wrap `inner`, the remote provider built from `preset`'s section of
+    /// `router`. Reads the primary GGUF's trained context from its header;
+    /// one that cannot be read is reported as unknown, never guessed.
+    pub fn new(
+        inner: Arc<dyn InferenceProvider>,
+        router: Arc<LiveRouter>,
+        preset: RouterPreset,
+    ) -> Self {
+        let primary = preset.primary().to_string();
+        let n_ctx_train = match preset.path_of(&primary) {
+            Some(path) => match sovereign_inference::gguf_meta::read_context_length(path) {
+                Ok(n) => n,
+                Err(e) => {
+                    tracing::warn!(target: "llama_router", model = %primary, error = %e, "n_ctx_train unknown: the GGUF header is unreadable");
+                    None
+                }
+            },
+            None => None,
+        };
+        tracing::debug!(target: "llama_router", model = %primary, ?n_ctx_train, "router provider: primary's trained context");
+        Self {
+            inner,
+            router,
+            preset,
+            n_ctx_train,
+        }
+    }
+
+    fn model_for(&self, role: &str) -> Option<&str> {
+        self.preset
+            .roles()
+            .into_iter()
+            .find(|(r, _)| *r == role)
+            .map(|(_, m)| m)
     }
 }
 
@@ -109,16 +146,18 @@ impl InferenceProvider for RouterProvider {
         self.inner.effective_context_size()
     }
 
+    /// The primary GGUF's `<arch>.context_length`, read at build.
     fn n_ctx_train_for_primary(&self) -> Option<u32> {
-        self.inner.n_ctx_train_for_primary()
+        self.n_ctx_train
     }
 
     fn count_tokens(&self, text: &str) -> u32 {
         self.inner.count_tokens(text)
     }
 
+    /// The preset's `[models] code` entry, which the router serves by name.
     fn code_model_id(&self) -> Option<String> {
-        self.inner.code_model_id()
+        self.model_for("code").map(str::to_string)
     }
 
     fn edit_slot_info(&self) -> Option<EditSlotInfo> {
@@ -157,8 +196,26 @@ impl InferenceProvider for RouterProvider {
         self.inner.extras_inventory()
     }
 
+    /// Every role the preset fills, embed and rerank included, resident as
+    /// the router last listed its model in `GET /models`: `loaded` is
+    /// resident, `loading` is transitioning, anything else (or no listing
+    /// yet) is not resident. Sizes are not reported by the router.
     fn resident_slots(&self) -> Vec<ResidentSlot> {
-        self.inner.resident_slots()
+        self.preset
+            .roles()
+            .into_iter()
+            .map(|(role, model)| {
+                let status = self.router.model_status(model);
+                ResidentSlot {
+                    role: role.to_string(),
+                    model_id: model.to_string(),
+                    resident: status.as_deref() == Some("loaded"),
+                    size_bytes: None,
+                    transitioning: status.as_deref() == Some("loading"),
+                    placement: None,
+                }
+            })
+            .collect()
     }
 
     fn decode_evidence(&self) -> Vec<oicp::SlotDecodeEvidence> {
@@ -166,7 +223,9 @@ impl InferenceProvider for RouterProvider {
     }
 
     async fn primary_slot_status(&self) -> Option<ResidentSlot> {
-        self.inner.primary_slot_status().await
+        self.resident_slots()
+            .into_iter()
+            .find(|s| s.role == "primary")
     }
 
     /// The router and each of its models, after whatever the inner

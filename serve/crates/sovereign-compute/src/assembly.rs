@@ -382,9 +382,11 @@ impl ReloadFactory {
             }
         };
 
-        let provider: Arc<dyn InferenceProvider> = match &router {
-            Some(r) => Arc::new(RouterProvider::new(provider, Arc::clone(r))),
-            None => provider,
+        let provider: Arc<dyn InferenceProvider> = match (&router, &plan.router) {
+            (Some(r), Some(preset)) => {
+                Arc::new(RouterProvider::new(provider, Arc::clone(r), preset.clone()))
+            }
+            _ => provider,
         };
 
         Ok(ServingParts {
