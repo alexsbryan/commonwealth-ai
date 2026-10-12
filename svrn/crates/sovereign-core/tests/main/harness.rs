@@ -68,9 +68,10 @@ impl InferenceProvider for DeterministicInference {
             // Plan generation
             r#"{"goal":"test","steps":[{"id":0,"description":"answer","kind":"reason","prompt":"Answer the question","speed":"slow"}],"edges":[]}"#.to_string()
         } else if prompt_lower.contains("how to call a tool")
-            && prompt_lower.contains("[search results for")
+            && matches!(&request.prompt_shape, Some(PromptShape::Conversation { messages })
+                if messages.last().is_some_and(|m| m["role"] == "tool"))
         {
-            // ReasonWithTools: has results — synthesize now
+            // ReasonWithTools: the conversation ends in a tool result — synthesize now
             "Based on what I found, here is the answer. [Source: sep] The knowledge base confirms this.".to_string()
         } else if prompt_lower.contains("how to call a tool")
             && prompt_lower.contains("available tools")
