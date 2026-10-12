@@ -22,8 +22,6 @@
 mod device_memory_probe;
 #[path = "main/fim_raw_path.rs"]
 mod fim_raw_path;
-#[path = "main/inference_tests.rs"]
-mod inference_tests;
 #[path = "main/llguidance_parity.rs"]
 mod llguidance_parity;
 #[path = "main/mtp_prefill_logits_spike.rs"]

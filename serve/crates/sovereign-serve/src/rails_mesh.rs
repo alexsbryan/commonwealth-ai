@@ -450,15 +450,25 @@ pub fn registrations(listen: SocketAddr, member: Option<SocketAddr>) -> Vec<Orig
         listen,
         member,
         sovereign_contracts::launch::RpcServe::from_env(),
-        sovereign_inference::embedded::local_gpu_total_vram_gb(),
+        local_vram_gb(),
     )
+}
+
+/// This node's GPU memory in whole GB from the published GPU probe
+/// (`gpu_probe`, taken at [`join`]). Never spawns. `Ok(None)` is a host with
+/// no GPU; `Err` is unknown, never 0 GB.
+fn local_vram_gb() -> Result<Option<u32>, String> {
+    match sovereign_inference::gpu_probe::published() {
+        Some(seen) => seen.total_vram_gb().map_err(str::to_string),
+        None => Err("no GPU probe has been published in this process".to_string()),
+    }
 }
 
 fn registrations_for(
     listen: SocketAddr,
     member: Option<SocketAddr>,
     rpc: sovereign_contracts::launch::RpcServe,
-    vram_gb: Option<u32>,
+    vram_gb: Result<Option<u32>, String>,
 ) -> Vec<OriginRegistration> {
     let mut out = vec![OriginRegistration {
         alpn: String::from_utf8_lossy(mesh_reach::alpn::ALPN).into_owned(),
@@ -467,7 +477,7 @@ fn registrations_for(
         admit: Admit::Members(Vec::new()),
         framing: Framing::Http,
         ttl_secs: Some(ORIGIN_TTL_SECS),
-        claims: Some(vram_claims(vram_gb)),
+        claims: Some(vram_claims(vram_gb.clone().ok().flatten())),
         namespaces: Vec::new(),
     }];
     match member {
@@ -499,7 +509,7 @@ fn registrations_for(
             // ggml's rpc-server speaks raw bytes, not HTTP.
             framing: Framing::Bytes,
             ttl_secs: Some(ORIGIN_TTL_SECS),
-            claims: Some(anchor_claims(port, rpc.binds_past_loopback())),
+            claims: anchor_claims(port, rpc.binds_past_loopback(), vram_gb),
             namespaces: Vec::new(),
         }),
         _ => {
@@ -509,8 +519,8 @@ fn registrations_for(
     out
 }
 
-/// The VRAM figure serve's loader sees (`local_gpu_total_vram_gb`, the ggml
-/// device total), declared as the one GPU entry cw-rails applies over the
+/// The VRAM figure the shipped llama-server reports ([`local_vram_gb`]),
+/// declared as the one GPU entry cw-rails applies over the
 /// VRAM it measured (phase-b-90 (B)): sysfs sees only the carveout on a
 /// unified-memory APU. No figure, no entry; every other number is zero.
 fn vram_claims(vram_gb: Option<u32>) -> NodeCapabilities {
@@ -530,13 +540,25 @@ fn vram_claims(vram_gb: Option<u32>) -> NodeCapabilities {
 /// The anchor record this node declares through its rpc registration, which
 /// cw-rails merges into its gossiped capabilities (`origins::merge_declared`).
 /// Every other number is zero, as cw-rails' own report is: this declaration
-/// claims the anchor tier and nothing about inference.
-fn anchor_claims(rpc_port: u16, rpc_direct: bool) -> NodeCapabilities {
-    NodeCapabilities {
+/// claims the anchor tier and nothing about inference. An unknown VRAM
+/// figure declares no anchor rather than a CPU-only one.
+fn anchor_claims(
+    rpc_port: u16,
+    rpc_direct: bool,
+    vram_gb: Result<Option<u32>, String>,
+) -> Option<NodeCapabilities> {
+    let vram_gb = match vram_gb {
+        // `0` for a CPU-only anchor, the field's documented reading.
+        Ok(vram_gb) => vram_gb.unwrap_or(0),
+        Err(why) => {
+            warn!(target: TARGET, %why, "GPU memory unknown: the rpc origin declares no anchor record");
+            return None;
+        }
+    };
+    Some(NodeCapabilities {
         anchor: Some(AnchorProfile {
             can_anchor: true,
-            // `0` for a CPU-only anchor, the field's documented reading.
-            vram_gb: sovereign_inference::embedded::local_gpu_total_vram_gb().unwrap_or(0),
+            vram_gb,
             model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
                 .model_id()
                 .map(str::to_string),
@@ -550,7 +572,7 @@ fn anchor_claims(rpc_port: u16, rpc_direct: bool) -> NodeCapabilities {
             rpc_direct,
         }),
         ..zero_claims()
-    }
+    })
 }
 
 /// A declaration with every number zero and no anchor.
@@ -640,6 +662,13 @@ pub async fn join(
             None
         }
     };
+    // The GPU probe, once at startup, before the registrations read it.
+    match tokio::task::spawn_blocking(sovereign_inference::gpu_probe::observe).await {
+        Ok(seen) => info!(target: TARGET, vram_gb = ?seen.total_vram_gb(), "GPU probe published"),
+        Err(e) => {
+            tracing::error!(target: TARGET, error = %e, "the GPU probe panicked; GPU memory reads as unknown")
+        }
+    }
     spawn_registrations(rails_base, listen, member_addr);
 }
 
@@ -696,7 +725,7 @@ async fn member_absence(uri: axum::http::Uri) -> axum::response::Response {
 
 /// Keep every registration in cw-rails' origin table for as long as serve
 /// runs, through the one register/renew loop. The `cwth/http/0` one
-/// re-reads the loader's VRAM figure at every register and renew.
+/// re-reads the published VRAM figure at every register and renew.
 pub fn spawn_registrations(rails_base: &str, listen: SocketAddr, member: Option<SocketAddr>) {
     let http = String::from_utf8_lossy(mesh_reach::alpn::ALPN).into_owned();
     for registration in registrations(listen, member) {
@@ -707,9 +736,9 @@ pub fn spawn_registrations(rails_base: &str, listen: SocketAddr, member: Option<
             (registration.alpn == http).then(|| {
                 Arc::new(|| {
                     Box::pin(async {
-                        let vram_gb = sovereign_inference::embedded::local_gpu_total_vram_gb();
-                        debug!(target: TARGET, ?vram_gb, "declaring the loader's VRAM figure");
-                        vram_claims(vram_gb)
+                        let vram_gb = local_vram_gb();
+                        debug!(target: TARGET, ?vram_gb, "declaring the shipped server's VRAM figure");
+                        vram_claims(vram_gb.ok().flatten())
                     })
                         as std::pin::Pin<
                             Box<dyn std::future::Future<Output = NodeCapabilities> + Send>,

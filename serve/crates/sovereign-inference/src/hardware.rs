@@ -7,7 +7,7 @@
 //! the inference stack to name them. They are re-exported here at the paths
 //! every importer already spells.
 //!
-//! The DETECTION stays: `sysinfo` and the llama.cpp backend device list are
+//! The DETECTION stays: `sysinfo` and the shipped llama-server's devices are
 //! this crate's business. It is a free function rather than
 //! `HardwareProfile::detect` because an inherent `impl` cannot cross a crate
 //! boundary.
@@ -82,21 +82,24 @@ fn detect_gpu() -> (bool, Option<String>, Option<u64>, bool) {
             );
         }
 
-        // Check llama.cpp backend devices for a non-CPU device.
+        // The shipped llama-server's devices (`gpu_probe`). An unknown
+        // reading names no GPU and no memory; the probe warned why.
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
-            let devices = crate::llama::list_llama_ggml_backend_devices();
-            for dev in &devices {
-                if dev.memory_total > 0 && dev.name.to_lowercase() != "cpu" {
-                    return (
-                        true,
-                        Some(dev.name.clone()),
-                        Some(dev.memory_total),
-                        false, // discrete GPU — not unified memory
-                    );
+            let seen = crate::gpu_probe::observed();
+            match seen.first_gpu() {
+                Ok(Some(dev)) => (
+                    true,
+                    Some(dev.name.clone()),
+                    Some(dev.total_bytes),
+                    false, // discrete GPU — not unified memory
+                ),
+                Ok(None) => (false, None, None, false),
+                Err(why) => {
+                    tracing::warn!(target: "gpu_probe", %why, "GPU unknown: hardware detection proceeds with no GPU");
+                    (false, None, None, false)
                 }
             }
-            (false, None, None, false)
         }
     }
 }

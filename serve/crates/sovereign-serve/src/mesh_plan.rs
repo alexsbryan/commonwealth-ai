@@ -89,7 +89,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
     //
     // Rows are keyed by RPC endpoint; the entries with NO endpoint are this
     // host's own local GPU device(s), summed to one figure because the plan
-    // models the host as a single device (matching `local_gpu_total_vram_gb`).
+    // models the host as a single device (matching `gpu_probe::GpuObservation::total_vram_gb`).
     let dev_mem = body
         .get("device_memory")
         .and_then(|d| d.as_array())
