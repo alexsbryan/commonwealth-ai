@@ -24,6 +24,11 @@
 #       the CLI siblings install.sh's verbs exec: `svrn daemon key` (the
 #       API keys) and `svrn corpus snapshot restore` (the legal corpus).
 #       The dispatcher is the default build — no dev-tools verbs.
+#   llama-server, ggml-rpc-server, llama-server.manifest.toml
+#       the server sovereign-onprem runs under kind = "llama-server", from
+#       serve/crates/sovereign-compute/llama-server/build.sh in the host's
+#       default backend. The daemon looks for it beside its own executable
+#       and refuses one whose manifest names another pin.
 
 set -euo pipefail
 
@@ -114,6 +119,13 @@ install -m 0755 "$BIN/sovereign-onprem"     "$KIT/bin/sovereign-onprem"
 install -m 0755 "$BIN/sovereign-cli"        "$KIT/bin/svrn"
 install -m 0755 "$BIN/sovereign-cli-daemon" "$KIT/bin/sovereign-cli-daemon"
 install -m 0755 "$BIN/svrn-ingest"          "$KIT/bin/svrn-ingest"
+
+# build.sh builds for the machine it runs on and cannot cross-compile, so a
+# --target other than the host would ship a server for the wrong machine.
+[ -z "$TARGET" ] || [ "$TARGET" = "$HOST_TRIPLE" ] ||
+    die "--target $TARGET: llama-server's build.sh builds only for the host ($HOST_TRIPLE)"
+say "building llama-server"
+"$REPO_ROOT/serve/crates/sovereign-compute/llama-server/build.sh" --install-dir "$KIT/bin"
 
 # Prove the hardening is in the artifact HERE, rather than discovering it
 # on their box.
