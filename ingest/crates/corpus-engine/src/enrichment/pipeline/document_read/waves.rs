@@ -81,9 +81,19 @@ impl<'a> Levels<'a> {
         Self {
             decided: plan.decided.clone(),
             mentioned,
-            at_document: located.iter().copied().filter(|&k| !decided_name(&plan.kinds[k].subject.name)).collect(),
-            per_particular: located.iter().copied().filter(|&k| decided_name(&plan.kinds[k].subject.name)).collect(),
-            acts: (0..plan.kinds.len()).filter(|&k| !plan.kinds[k].keys.is_empty()).collect(),
+            at_document: located
+                .iter()
+                .copied()
+                .filter(|&k| !decided_name(&plan.kinds[k].subject.name))
+                .collect(),
+            per_particular: located
+                .iter()
+                .copied()
+                .filter(|&k| decided_name(&plan.kinds[k].subject.name))
+                .collect(),
+            acts: (0..plan.kinds.len())
+                .filter(|&k| !plan.kinds[k].keys.is_empty())
+                .collect(),
         }
     }
 }
@@ -105,7 +115,12 @@ pub async fn read(
     let mut documents = Vec::with_capacity(chapter.source_documents.len());
     let mut spent = Spent::default();
     for document in &chapter.source_documents {
-        documents.push(read_document(document, &plan, &levels, policies, classes, infer, &mut spent).await);
+        documents.push(
+            read_document(
+                document, &plan, &levels, policies, classes, infer, &mut spent,
+            )
+            .await,
+        );
     }
     info!(
         chapter = %chapter.chapter_id,
@@ -117,7 +132,9 @@ pub async fn read(
         "document_read/passes: chapter read"
     );
     serde_json::to_string(&json!({ "documents": documents })).map_err(|error| {
-        Error::Serialization(format!("compiled reader envelope cannot be serialized: {error}"))
+        Error::Serialization(format!(
+            "compiled reader envelope cannot be serialized: {error}"
+        ))
     })
 }
 
@@ -163,7 +180,10 @@ async fn read_document(
         particulars: Vec::new(),
     };
     if lines.is_empty() {
-        return outcome(DocumentReadStatus::NothingApplicable, "the document has no text".into());
+        return outcome(
+            DocumentReadStatus::NothingApplicable,
+            "the document has no text".into(),
+        );
     }
     let facts = prefill::facts(document, policies);
     let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
@@ -181,7 +201,12 @@ async fn read_document(
         prefix: opening(&facts, &view),
         body: &raw,
         lines: &lines,
-        asked: lines.iter().zip(&asked_mask).filter(|(_, a)| **a).map(|(l, _)| l).collect(),
+        asked: lines
+            .iter()
+            .zip(&asked_mask)
+            .filter(|(_, a)| **a)
+            .map(|(l, _)| l)
+            .collect(),
         units: act::units(&raw, &lines, &asked_mask),
         candidates: BTreeMap::new(),
     };
@@ -190,14 +215,26 @@ async fn read_document(
     // Level 1: what the document holds, at the document.
     let mut l1: Vec<Job> = Vec::new();
     for t in &levels.decided {
-        l1.push(Job::Enumerate(Enumerate::new(Target::Decided(t), None, t.name.clone())));
+        l1.push(Job::Enumerate(Enumerate::new(
+            Target::Decided(t),
+            None,
+            t.name.clone(),
+        )));
     }
     for t in &levels.mentioned {
-        l1.push(Job::Enumerate(Enumerate::new(Target::Mentioned(t), None, format!("{} named", t.name))));
+        l1.push(Job::Enumerate(Enumerate::new(
+            Target::Mentioned(t),
+            None,
+            format!("{} named", t.name),
+        )));
     }
     for &k in &levels.at_document {
         let decl = plan.kinds[k].decl;
-        l1.push(Job::Enumerate(Enumerate::new(Target::Kind(decl), None, decl.name.clone())));
+        l1.push(Job::Enumerate(Enumerate::new(
+            Target::Kind(decl),
+            None,
+            decl.name.clone(),
+        )));
     }
     run(&d, &mut l1, "particulars", &mut cost).await;
     let enumerated: Vec<Enumerate> = l1
@@ -266,12 +303,18 @@ async fn read_document(
     }
     for &k in &levels.acts {
         let kind = &plan.kinds[k];
-        let Some(t) = levels.decided.iter().position(|o| o.name == kind.subject.name) else {
+        let Some(t) = levels
+            .decided
+            .iter()
+            .position(|o| o.name == kind.subject.name)
+        else {
             continue;
         };
         let found = &abouts[t].particulars;
         let referents: Vec<(Option<(usize, usize)>, Option<&Particular>)> = if found.len() > 1 {
-            (0..found.len()).map(|p| (Some((t, p)), Some(&found[p]))).collect()
+            (0..found.len())
+                .map(|p| (Some((t, p)), Some(&found[p])))
+                .collect()
         } else {
             vec![(found.first().map(|_| (t, 0)), None)]
         };
@@ -303,10 +346,18 @@ async fn read_document(
     let mut per_particular: Vec<(usize, Option<(usize, usize)>)> = Vec::new();
     for &k in &levels.per_particular {
         let kind = &plan.kinds[k];
-        let t = levels.decided.iter().position(|o| o.name == kind.subject.name).expect("per-particular kinds are about a decided type");
+        let t = levels
+            .decided
+            .iter()
+            .position(|o| o.name == kind.subject.name)
+            .expect("per-particular kinds are about a decided type");
         let found = &abouts[t].particulars;
         if found.is_empty() {
-            l2.push(Job::Enumerate(Enumerate::new(Target::Kind(kind.decl), None, kind.decl.name.clone())));
+            l2.push(Job::Enumerate(Enumerate::new(
+                Target::Kind(kind.decl),
+                None,
+                kind.decl.name.clone(),
+            )));
             l2_for.push(None);
             per_particular.push((k, None));
         }
@@ -330,7 +381,8 @@ async fn read_document(
     run(&d, &mut l2, "readings", &mut cost).await;
 
     // What level 2 read: identities, acts, claims per particular.
-    let mut identities: BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>> = BTreeMap::new();
+    let mut identities: BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>> =
+        BTreeMap::new();
     for (t, about) in abouts.iter().enumerate() {
         for p in 0..about.particulars.len() {
             identities.insert((t, p), BTreeMap::new());
@@ -343,15 +395,27 @@ async fn read_document(
         match (job, to) {
             (Job::Field(f), Some(to)) => file(&mut identities, &mut stated, to, f.read),
             (Job::Act(a), _) => {
-                let Some(cited) = a.cited.clone() else { continue };
+                let Some(cited) = a.cited.clone() else {
+                    continue;
+                };
                 let s = stated.len();
                 let mut st = Stated::new(a.kind, a.particular, cited.start, cited.end - 1);
                 st.keyed = a.read;
                 stated.push(st);
-                claim_jobs(plan, &stated[s], s, &d, a.particular.is_none(), &mut l3, &mut l3_for);
+                claim_jobs(
+                    plan,
+                    &stated[s],
+                    s,
+                    &d,
+                    a.particular.is_none(),
+                    &mut l3,
+                    &mut l3_for,
+                );
             }
             (Job::Enumerate(e), _) => {
-                let (k, at) = kind_enums.next().expect("one per-particular enumeration per entry");
+                let (k, at) = kind_enums
+                    .next()
+                    .expect("one per-particular enumeration per entry");
                 for claim in &e.found {
                     let s = stated.len();
                     stated.push(Stated::new(k, at, claim.line - 1, claim.line - 1));
@@ -414,13 +478,29 @@ async fn read_document(
         lines: &lines,
         view: &view,
     };
-    let mut particulars = about::unstated(&about_doc, &levels.decided, &abouts, &stated_about, identities);
-    particulars.extend(mention::particulars(document, policies, &raw, &lines, &levels.mentioned, &mentions));
+    let mut particulars = about::unstated(
+        &about_doc,
+        &levels.decided,
+        &abouts,
+        &stated_about,
+        identities,
+    );
+    particulars.extend(mention::particulars(
+        document,
+        policies,
+        &raw,
+        &lines,
+        &levels.mentioned,
+        &mentions,
+    ));
     info!(document = %id, questions = cost.questions, rounds = cost.rounds, claims = claims.len(), particulars = particulars.len(), "document_read/waves: document read");
     if claims.is_empty() && particulars.is_empty() {
         return outcome(
             DocumentReadStatus::NothingApplicable,
-            format!("the compiled reader found nothing declared ({} questions)", cost.questions),
+            format!(
+                "the compiled reader found nothing declared ({} questions)",
+                cost.questions
+            ),
         );
     }
     DocumentReadOutcome {
@@ -478,13 +558,22 @@ fn claim_jobs<'a>(
         if field.names().iter().all(|n| st.keyed.contains_key(*n)) && !st.keyed.is_empty() {
             continue;
         }
-        jobs.push(Job::Field(Field::new(field, who.clone(), first.start..last.end, item.clone())));
+        jobs.push(Job::Field(Field::new(
+            field,
+            who.clone(),
+            first.start..last.end,
+            item.clone(),
+        )));
         to.push(Some(For::Claim(s)));
     }
     if own_subject {
         for field in &kind.subject_fields {
             jobs.push(Job::Field(Field::new(
-                    field, who.clone(), first.start..last.end, item.clone())));
+                field,
+                who.clone(),
+                first.start..last.end,
+                item.clone(),
+            )));
             to.push(Some(For::Subject(s)));
         }
     }
@@ -499,7 +588,10 @@ fn file(
     match to {
         For::Particular(t, p) => identities.entry((t, p)).or_default().extend(read),
         For::Claim(s) => stated[s].fields.extend(read),
-        For::Subject(s) => stated[s].subject_fields.get_or_insert_with(BTreeMap::new).extend(read),
+        For::Subject(s) => stated[s]
+            .subject_fields
+            .get_or_insert_with(BTreeMap::new)
+            .extend(read),
     }
 }
 
@@ -534,13 +626,37 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         q(forms::count(Target::Decided(&probe))),
         q(forms::count(Target::Mentioned(&probe))),
         q(forms::count(Target::Kind(&probe))),
-        q(forms::line(Target::Decided(&probe), None, &[(1, "first".into())], &window, &["A", "B", NONE])),
-        q(forms::line(Target::Kind(&probe), Some(&who), &[], &window, &["A", "B", NONE])),
+        q(forms::line(
+            Target::Decided(&probe),
+            None,
+            &[(1, "first".into())],
+            &window,
+            &["A", "B", NONE],
+        )),
+        q(forms::line(
+            Target::Kind(&probe),
+            Some(&who),
+            &[],
+            &window,
+            &["A", "B", NONE],
+        )),
         q(forms::choose(&who, &attr, &["A", NONE])),
         q(forms::act(&who, &attr, 0, &["A", NONE])),
         q(forms::act(&who, &attr, 1, &["A", NONE])),
-        q(forms::word_start("head\n", "Line 1: \"first line\"", &["first", "line"], "what", &["A", "B", NONE])),
-        q(forms::word_end("head\n", "Line 1: \"first line\"", &["first", "line"], "what", &["A", "B"])),
+        q(forms::word_start(
+            "head\n",
+            "Line 1: \"first line\"",
+            &["first", "line"],
+            "what",
+            &["A", "B", NONE],
+        )),
+        q(forms::word_end(
+            "head\n",
+            "Line 1: \"first line\"",
+            &["first", "line"],
+            "what",
+            &["A", "B"],
+        )),
         q(forms::cite("Fact: f.", &[], &[])),
     ];
     json!({

@@ -74,7 +74,11 @@ impl Doc<'_> {
     }
 
     /// The asked line the earliest window chose, if any chose one.
-    pub(super) fn chosen_line(&self, answers: &[Answer], item: &str) -> Result<Option<&Line>, String> {
+    pub(super) fn chosen_line(
+        &self,
+        answers: &[Answer],
+        item: &str,
+    ) -> Result<Option<&Line>, String> {
         for (w, (chunk, answer)) in self.asked.chunks(LABELS.len()).zip(answers).enumerate() {
             let labels = with_none(chunk.len());
             let dist = answer.as_ref().map_err(Clone::clone)?;
