@@ -172,6 +172,7 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
         resolve_declared_types(
             &mut atoms,
             &documents,
+            &Default::default(),
             &policies,
             "cases",
             Answerer::Proposed,
@@ -391,6 +392,7 @@ async fn run_open_writer_case(
         resolve_declared_types(
             &mut atoms,
             &documents,
+            &Default::default(),
             &policies,
             "same-anchor",
             Answerer::Model(&infer),
@@ -624,6 +626,7 @@ async fn resolve_local_subjects(
     resolve_declared_types(
         &mut atoms,
         &documents,
+        &Default::default(),
         &policies,
         "local-subjects",
         Answerer::Proposed,

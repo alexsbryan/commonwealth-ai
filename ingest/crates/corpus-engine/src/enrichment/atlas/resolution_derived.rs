@@ -147,6 +147,7 @@ pub fn derive_attributes(
                 outcome,
                 excluded: excluded.into_iter().collect(),
                 unresolved: Vec::new(),
+                unjudged: Vec::new(),
                 replaced,
                 protocol,
                 by: crate::enrichment::atlas::precision::SourcePrecision::new(

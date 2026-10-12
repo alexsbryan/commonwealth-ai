@@ -243,7 +243,9 @@ fn verify_particular(
     index: &TypeIndex,
 ) -> std::result::Result<(), String> {
     let of = particular.subject_type.as_str();
-    if !crate::enrichment::atlas::resolution_records::decides(index, of) {
+    if !crate::enrichment::atlas::resolution_records::decides(index, of)
+        && !crate::enrichment::atlas::resolution_records::decides_mentions(index, of)
+    {
         return Err(format!(
             "`{of}` is not a type RESOLVE decides, so no particular of it is read"
         ));
@@ -256,6 +258,13 @@ fn verify_particular(
             "the line naming it is not an exact passage in document `{}`",
             document.key()
         ));
+    }
+    if let Some(words) = &particular.words {
+        if words.trim().is_empty() || !particular.evidence.contains(words.as_str()) {
+            return Err(format!(
+                "the mention's words {words:?} are not on the line it cites"
+            ));
+        }
     }
     validate_fields(
         &particular.subject_fields,

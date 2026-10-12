@@ -98,15 +98,50 @@ pub(super) struct Candidates {
     pub(super) dropped: usize,
 }
 
-/// What `document` offers a reference to `target`: the records its source
-/// reads here, less the exclusion sets, then the mentions that name no listed
-/// or excluded record.
+/// What `document` offers a reference to `target`, at most one forced
+/// choice's worth ([`listed`]).
 pub(super) fn candidates(
     document: &SourceDocument,
     policies: &OntologyPolicies,
     target: &OntologyTypeDecl,
     mentions: &[Mention],
 ) -> Candidates {
+    let mut all = listed(document, policies, target, mentions);
+    let dropped = all.len().saturating_sub(LABELS.len());
+    all.truncate(LABELS.len());
+    Candidates {
+        shown: all,
+        dropped,
+    }
+}
+
+/// The mentions of `target` that name no record `document`'s fields list or
+/// exclude, as `(line, words)`: those a reference reads by their words alone,
+/// whatever a forced choice's cap shows.
+pub(super) fn unlisted_mentions(
+    document: &SourceDocument,
+    policies: &OntologyPolicies,
+    target: &OntologyTypeDecl,
+    mentions: &[Mention],
+) -> Vec<(usize, String)> {
+    listed(document, policies, target, mentions)
+        .into_iter()
+        .filter_map(|c| match c {
+            Candidate::Mention { line, text } => Some((line, text)),
+            Candidate::Record { .. } => None,
+        })
+        .collect()
+}
+
+/// Everything `document` offers a reference to `target`: the records its
+/// source reads here, less the exclusion sets, then the mentions that name no
+/// listed or excluded record.
+fn listed(
+    document: &SourceDocument,
+    policies: &OntologyPolicies,
+    target: &OntologyTypeDecl,
+    mentions: &[Mention],
+) -> Vec<Candidate> {
     let excluded = policies.derivation.derived.exclusions_of(&target.name);
     let mut all: Vec<Candidate> = Vec::new();
     let mut keys: Vec<String> = Vec::new();
@@ -181,12 +216,7 @@ pub(super) fn candidates(
             text: m.text.clone(),
         });
     }
-    let dropped = all.len().saturating_sub(LABELS.len());
-    all.truncate(LABELS.len());
-    Candidates {
-        shown: all,
-        dropped,
-    }
+    all
 }
 
 /// The Pick question: the field, the statement marked in its passage, and

@@ -29,6 +29,7 @@ use super::resolution::Trajectory;
 use super::resolution_documents::{
     failure, fold_ws, locate, read_stamp, SectionDocuments, SourceDocument,
 };
+use super::resolution_sources::{Participants, SOURCE_EXTRACTOR_ID};
 use super::resolve_records::propose::{
     Proposers, SimilarDocuments, MAX_CANDIDATES, MIN_SIMILARITY, NEIGHBOURS,
 };
@@ -37,17 +38,19 @@ use super::resolve_records::{
     Resolver, Statement,
 };
 use crate::enrichment::ontology::{
-    DocumentStamp, OntologyPolicies, OntologyTypeDecl, TypeIndex, TypeKind,
+    DocumentStamp, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex, TypeKind,
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    about_type, field_readings, supported_values, ABOUT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
-    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    about_type, field_readings, mention_words, supported_values, ABOUT_ATTRIBUTE,
+    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 
 #[path = "resolution_records/local_subjects.rs"]
 mod local_subjects;
+#[path = "resolution_records/mentions.rs"]
+mod mentions;
 #[path = "resolution_records/retire.rs"]
 mod retire;
 use local_subjects::{Assigned, Spot};
@@ -66,6 +69,20 @@ pub fn decides(index: &TypeIndex<'_>, type_name: &str) -> bool {
         matches!(t.kind, TypeKind::Entity | TypeKind::Event)
             && t.identity_criterion.is_some()
             && t.source.is_none()
+    })
+}
+
+/// Whether RESOLVE decides the identity of `type_name`'s *mentions*: an
+/// entity or event type with an `identity_criterion` whose source names only
+/// who took part (a metadata source), so the text names particulars the
+/// source never read. Its records are the source's, seeded under their own
+/// ids, and those its mentions open (`mentions.rs`); a claim about it keeps
+/// 3b's exact binding by its source's key.
+pub fn decides_mentions(index: &TypeIndex<'_>, type_name: &str) -> bool {
+    index.get(type_name).is_some_and(|t| {
+        matches!(t.kind, TypeKind::Entity | TypeKind::Event)
+            && t.identity_criterion.is_some()
+            && matches!(t.source, Some(SourceDecl::Metadata(_)))
     })
 }
 
@@ -129,6 +146,8 @@ pub struct RecordsReport {
     pub calls: u32,
     /// The type's atoms 3a made from Phase-1 sketches, retired.
     pub retired: usize,
+    /// A mentioned type's source records RESOLVE started with (`decides_mentions`).
+    pub seeded: usize,
     /// References to them dropped, by what held each.
     pub dropped: BTreeMap<&'static str, usize>,
     /// Each source's weight as estimated on this corpus and what it carried,
@@ -161,7 +180,11 @@ impl RecordsReport {
             self.settled,
             self.retired,
             fold(&self.dropped),
-        ) + &self
+        ) + &if self.seeded > 0 {
+            format!("; {} source record(s) seeded", self.seeded)
+        } else {
+            String::new()
+        } + &self
             .sources
             .iter()
             .map(|l| format!("\n    source {l}"))
@@ -183,6 +206,7 @@ struct Placed<'d> {
 pub async fn resolve_declared_types(
     atoms: &mut BuildAtoms<'_>,
     documents: &SectionDocuments,
+    participants: &Participants,
     policies: &OntologyPolicies,
     corpus_id: &str,
     answerer: Answerer<'_>,
@@ -194,9 +218,9 @@ pub async fn resolve_declared_types(
         if t.identity_criterion.is_none() {
             continue;
         }
-        if !decides(&index, &t.name) {
+        if !decides(&index, &t.name) && !decides_mentions(&index, &t.name) {
             let why = if t.source.is_some() {
-                "it declares a metadata source".to_string()
+                "it declares a table source".to_string()
             } else {
                 format!("it is a {:?} type", t.kind)
             };
@@ -206,8 +230,8 @@ pub async fn resolve_declared_types(
                 PhaseFailureKind::Other,
                 format!(
                     "`{}` declares an identity_criterion, but {why}: RESOLVE decides only entity \
-                     and event types with no source in the atlas build, so its atoms are decided \
-                     as before",
+                     and event types with no source, or the mentions of one with a metadata \
+                     source, so its atoms are decided as before",
                     t.name
                 ),
             ));
@@ -218,6 +242,7 @@ pub async fn resolve_declared_types(
             t,
             &index,
             documents,
+            participants,
             policies,
             corpus_id,
             answerer,
@@ -243,6 +268,7 @@ async fn resolve_type(
     t: &OntologyTypeDecl,
     index: &TypeIndex<'_>,
     documents: &SectionDocuments,
+    participants: &Participants,
     policies: &OntologyPolicies,
     corpus_id: &str,
     answerer: Answerer<'_>,
@@ -303,11 +329,13 @@ async fn resolve_type(
 
     // One decider: the Phase-1 atoms of the type go first, whatever follows,
     // in either kind a sketch may have named it. The passes reader sketches
-    // no subject, so these come from the general extractor's sketches.
+    // no subject, so these come from the general extractor's sketches. A
+    // source's records are not Phase-1 sketches: they stay, and are seeded.
     let retired: BTreeSet<AtomId> = atoms
         .entities
         .iter()
         .filter(|e| e.entity_type.as_str_repr() == t.name)
+        .filter(|e| e.provenance.extractor_id != SOURCE_EXTRACTOR_ID)
         .map(|e| e.id.clone())
         .chain(
             atoms
@@ -402,12 +430,23 @@ async fn resolve_type(
             });
             placed.len() - 1
         });
-        let Some(start) = placed[k].body.find(&anchor) else {
+        let Some(mut start) = placed[k].body.find(&anchor) else {
             let why = format!("anchor {anchor:?} is not in document `{}`", doc.key);
             unplaced(&mut report, failures, claim, kind, &t.name, why);
             continue;
         };
-        let end = start + anchor.len();
+        let mut end = start + anchor.len();
+        // A mention's statement is its words on its line, so two named on one
+        // line are two statements the question tells apart.
+        if let Some(words) = mention_words(&claim.attributes).map(fold_ws) {
+            let Some(at) = placed[k].body[start..end].find(&words) else {
+                let why = format!("mention {words:?} is not on its line {anchor:?}");
+                unplaced(&mut report, failures, claim, kind, &t.name, why);
+                continue;
+            };
+            start += at;
+            end = start + words.len();
+        }
         let mut keys = BTreeMap::new();
         if let Some(fields) = read_subject_fields_of.get(&i) {
             for key in criterion.keys.iter().chain(t.identity_necessary.iter()) {
@@ -509,6 +548,14 @@ async fn resolve_type(
         declares_thread,
         SimilarDocuments::new(NEIGHBOURS, MAX_CANDIDATES, MIN_SIMILARITY),
     );
+    let seeded = if decides_mentions(index, &t.name) {
+        let seeded = mentions::seed(&mut resolver, atoms, t, index, participants);
+        report.seeded = seeded.atoms.len();
+        proposer = proposer.with_named(seeded.named());
+        seeded
+    } else {
+        mentions::Seeded::default()
+    };
     let mut record_of: HashMap<String, String> = HashMap::new();
     let mut refused: HashMap<String, &'static str> = HashMap::new();
     let mut documents: Vec<(Document<'_>, &[Statement])> = placed
@@ -563,9 +610,15 @@ async fn resolve_type(
         info!(r#type = %t.name, source = %line, "atlas/resolve: source weight estimated on this corpus");
     }
 
-    // Records become the type's atoms, in the type's own kind.
+    // Records become the type's atoms, in the type's own kind; a seeded
+    // record is its source's atom already.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();
     for rec in resolver.records() {
+        if let Some(id) = seeded.atoms.get(&rec.id) {
+            debug!(r#type = %t.name, record = %rec.id, statements = rec.statements.len(), "atlas/resolve: a seeded record keeps its source's atom");
+            atom_of.insert(rec.id.as_str(), id.clone());
+            continue;
+        }
         // A record is opened by a placed statement, so both are there; one
         // that is not is refused, never named or placed by a default.
         let (Some(e), Some(section)) = (rec.evidence.first(), section_of.get(&rec.id)) else {
@@ -671,3 +724,7 @@ mod tests;
 #[cfg(test)]
 #[path = "resolution_records/declared_document_read_tests.rs"]
 mod declared_document_read_tests;
+
+#[cfg(test)]
+#[path = "resolution_records/mentions_tests.rs"]
+mod mentions_tests;

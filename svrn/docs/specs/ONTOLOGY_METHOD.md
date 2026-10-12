@@ -136,8 +136,11 @@ and cut after a stop before whitespace; labels A-Y and no "none", since presence
 code), and the statement is the lines that sentence touches (`act.rs`, `locate.rs`; built 2026-10-12, cite-probe M2
 and its no-none amendment), **Mention** each entity type a read
 reference field targets and no exhaustive source covers (a table source is exhaustive; a metadata source names
-only who took part, so it is not), one choice per asked line then pointed at, a proposal and never a record
-(`mention.rs`), then per statement, each question opening with the declared facts and the whole document
+only who took part, so it is not), one choice per asked line then pointed at, a proposal for Pick (`mention.rs`);
+of a type with an `identity_criterion` and a metadata source, each mention Pick would offer by its words is also a
+statement RESOLVE decides, its words on its line, reading no field, and RESOLVE starts from the source's records
+under their own ids, each offered to the mentions of the documents whose fields name it
+(`resolution_records::decides_mentions`, `resolution_records/mentions.rs`; built 2026-10-12, cast instance 1), then per statement, each question opening with the declared facts and the whole document
 numbered as Locate shows it, the statement named by its lines (never a window around it; `ask.rs` `opening`,
 `statement_words`), **Choose** each closed-valued
 field (the subject's identity fields included) as a distribution over its declared values and "not stated",
@@ -145,7 +148,10 @@ field (the subject's identity fields included) as a distribution over its declar
 reads from this document's fields, plus this document's mentions that name no listed record, less any record in
 a declared exclusion set, a set a declared path drops by, and any mention naming such a record; `pick.rs`; a record
 folding the field holds the record a pick names or nothing, never a mention's words and never a record minted from
-them: a mention stays on the derivation line as a cited unresolved reading, `read_fields.rs`), and Pick the subject whose type has a metadata source
+them: a mention's reading holds the record RESOLVE put the same document's mention of those words on when the
+type's mentions are decided, and otherwise stays on the derivation line as a cited unresolved reading; a held record
+no exclusion set can judge (a condition's attribute absent) is served and marked `unjudged` on its line (operator,
+2026-10-12), `read_fields.rs`), and Pick the subject whose type has a metadata source
 among the records that source reads from this document, its answer written as the subject's identity readings
 (the statement's words rarely write the address that identifies a person: of Ward's 64 commitments, 59 pointed at no
 word and none reached its person, 2026-10-11), and **Point** at each open-valued field

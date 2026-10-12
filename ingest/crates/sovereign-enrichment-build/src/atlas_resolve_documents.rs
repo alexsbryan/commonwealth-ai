@@ -166,6 +166,7 @@ pub(crate) async fn apply(
         let (reports, refused) = resolve_declared_types(
             &mut atoms,
             documents,
+            &inputs.participants,
             policies,
             corpus_id,
             Answerer::Select(infer),

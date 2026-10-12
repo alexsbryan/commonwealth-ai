@@ -107,6 +107,11 @@ pub struct DerivedValue {
     /// Readings of a reference that name no record: kept here, never held.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unresolved: Vec<UnresolvedReading>,
+    /// Records a reference names that the atom holds though their membership
+    /// in an exclusion set over the type is unjudged (a condition's attribute
+    /// absent, `conditions_hold` is `None`): served, and said so here.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unjudged: Vec<String>,
     /// The value the atom held before, when the derivation changed it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replaced: Option<Value>,

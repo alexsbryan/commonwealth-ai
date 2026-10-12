@@ -719,6 +719,7 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         if let Some(from) = inherited {
             line.push_str(&format!(" — inherited from `{from}`"));
         }
+        line.extend(super::validate_layer::mentions_note(p, &t.name));
         notes.push(line);
     }
     let by_kind = |k: TypeKind| {

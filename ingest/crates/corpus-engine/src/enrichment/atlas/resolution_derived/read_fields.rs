@@ -9,8 +9,11 @@
 //! document names in its fields (`Participants`) whose identity values,
 //! joined as Pick shows them, it folds equal to, and is dropped when that
 //! record is in an exclusion set over the type (`exclusions_of`). A reading
-//! that names no such record (a mention) is never held and never minted into
-//! a record: it stays on the derivation line, cited (`UnresolvedReading`).
+//! that names no such record is a mention's words: it counts as the record
+//! RESOLVE put the same document's mention of those words on
+//! (`decides_mentions`). One that names neither is never held and never
+//! minted into a record: it stays on the derivation line, cited
+//! (`UnresolvedReading`).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,7 +30,7 @@ use crate::enrichment::atlas::resolution_sources::key_name;
 use crate::enrichment::ontology::derived::FoldBy;
 use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
+    field_readings, mention_words, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
 };
 
 /// Every `(type, attribute, by)` a declaration folds onto its records.
@@ -60,12 +63,15 @@ struct Folded {
     outcome: DerivedOutcome,
     value: Option<Value>,
     excluded: BTreeSet<String>,
+    unjudged: BTreeSet<String>,
     unresolved: Vec<UnresolvedReading>,
 }
 
 /// The one record of type `of` that document `doc`'s fields name and whose
 /// identity values, joined by a space as a Pick of it gives them, fold equal
-/// to `value`, by its place among the entities; or why there is none.
+/// to `value`, by its place among the entities; failing that, the one record
+/// `doc`'s mention whose words fold equal to `value` is on; or why there is
+/// none. Keyed by the document, never by words across documents.
 fn record_read(
     graph: &Graph<'_>,
     doc: Option<&str>,
@@ -93,10 +99,39 @@ fn record_read(
         })
         .collect();
     match named.len() {
-        1 => Ok(*named.first().unwrap()),
-        0 => Err(format!("no `{of}` the document's fields name is {want:?}")),
+        1 => return Ok(*named.first().unwrap()),
+        0 => {}
+        n => {
+            return Err(format!(
+                "{n} `{of}` records the document's fields name are {want:?}"
+            ))
+        }
+    }
+    // A reading that names no listed record is a mention's words: it holds
+    // the record RESOLVE put that document's mention of them on.
+    let mentioned: BTreeSet<usize> = graph
+        .claims
+        .iter()
+        .zip(&graph.claim_doc)
+        .filter(|(c, d)| c.claim_kind.is_none() && **d == Some(doc))
+        .filter(|(c, _)| {
+            mention_words(&c.attributes)
+                .and_then(fold_identity_value)
+                .is_some_and(|w| w == want)
+        })
+        .filter_map(|(c, _)| graph.entity_at.get(c.subject.as_ref()?.as_str()).copied())
+        .filter(|&i| {
+            let t = graph.entities[i].entity_type.as_str_repr();
+            t == of || graph.index.is_a(t, of)
+        })
+        .collect();
+    match mentioned.len() {
+        1 => Ok(*mentioned.first().unwrap()),
+        0 => Err(format!(
+            "no `{of}` the document's fields name or its text mentions is {want:?}"
+        )),
         n => Err(format!(
-            "{n} `{of}` records the document's fields name are {want:?}"
+            "the document's mentions of {want:?} are on {n} `{of}` records"
         )),
     }
 }
@@ -141,6 +176,7 @@ pub(super) fn derive(
                 let mut read: BTreeMap<String, BTreeSet<Option<String>>> = BTreeMap::new();
                 let mut values: BTreeMap<String, Value> = BTreeMap::new();
                 let mut excluded: BTreeSet<String> = BTreeSet::new();
+                let mut unjudged: BTreeSet<String> = BTreeSet::new();
                 let mut unresolved: Vec<UnresolvedReading> = Vec::new();
                 for &j in graph.about.get(record).into_iter().flatten() {
                     let claim = &graph.claims[j];
@@ -173,6 +209,14 @@ pub(super) fn derive(
                                 debug!(claim = %claim.id.as_str(), attribute = attr, atom = %id, set = %set.id, "atlas/derive: a reference read names a record in an exclusion set; the record does not hold it");
                                 excluded.insert(id);
                                 continue;
+                            }
+                            // D3 (operator, 2026-10-12): a record no set can
+                            // judge is held, and the line says it is unjudged.
+                            if let Some(set) =
+                                exclusions.iter().find(|s| graph.member(s, &node).is_none())
+                            {
+                                debug!(claim = %claim.id.as_str(), attribute = attr, atom = %id, set = %set.id, "atlas/derive: a reference read names a record no exclusion set can judge; the record holds it, marked unjudged");
+                                unjudged.insert(id.clone());
                             }
                             (id.clone(), Value::String(id))
                         }
@@ -208,6 +252,7 @@ pub(super) fn derive(
                     outcome,
                     value,
                     excluded,
+                    unjudged,
                     unresolved,
                 });
             }
@@ -218,6 +263,7 @@ pub(super) fn derive(
             outcome,
             value,
             excluded,
+            unjudged,
             unresolved,
         } in decided
         {
@@ -236,6 +282,7 @@ pub(super) fn derive(
             tally.atoms += 1;
             *tally.outcomes.entry(outcome.label()).or_default() += 1;
             tally.excluded += excluded.len();
+            tally.unjudged += unjudged.len();
             tally.unresolved += unresolved.len();
             debug!(r#type = type_name, attribute = attr, atom = %record, outcome = outcome.label(), by = by.label(), excluded = excluded.len(), unresolved = unresolved.len(), "atlas/derive: a record folds its statements' readings");
             sink(&DerivedValue {
@@ -247,6 +294,7 @@ pub(super) fn derive(
                 outcome,
                 excluded: excluded.into_iter().collect(),
                 unresolved,
+                unjudged: unjudged.into_iter().collect(),
                 replaced,
                 protocol: None,
                 by: SourcePrecision::new(
@@ -255,7 +303,7 @@ pub(super) fn derive(
                 ),
             });
         }
-        info!(r#type = type_name, attribute = attr, by = by.label(), atoms = tally.atoms, outcomes = ?tally.outcomes, excluded = tally.excluded, unresolved = tally.unresolved, "atlas/derive: statements' readings folded");
+        info!(r#type = type_name, attribute = attr, by = by.label(), atoms = tally.atoms, outcomes = ?tally.outcomes, excluded = tally.excluded, unjudged = tally.unjudged, unresolved = tally.unresolved, "atlas/derive: statements' readings folded");
         report.insert(format!("{type_name}.{attr}"), tally);
     }
     Ok(())

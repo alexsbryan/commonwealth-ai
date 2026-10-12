@@ -15,6 +15,7 @@ use crate::enrichment::ontology::DocumentStamp;
 /// then those of similar documents. A record both offer carries both reasons.
 #[derive(Debug)]
 pub struct Proposers {
+    named: Option<FieldNamed>,
     thread: Option<SameThread>,
     similar: SimilarDocuments,
 }
@@ -22,17 +23,28 @@ pub struct Proposers {
 impl Proposers {
     pub fn new(declares_thread: bool, similar: SimilarDocuments) -> Self {
         Self {
+            named: None,
             thread: declares_thread.then(SameThread::default),
             similar,
         }
     }
 
+    /// With the records a document's fields name offered first.
+    pub fn with_named(mut self, named: FieldNamed) -> Self {
+        self.named = Some(named);
+        self
+    }
+
     pub fn propose(&self, doc: Document<'_>) -> Vec<Proposal> {
         let mut out = self
+            .named
+            .as_ref()
+            .map_or_else(Vec::new, |n| n.propose(doc));
+        let thread = self
             .thread
             .as_ref()
             .map_or_else(Vec::new, |t| t.propose(doc));
-        for p in self.similar.propose(doc) {
+        for p in thread.into_iter().chain(self.similar.propose(doc)) {
             match out.iter_mut().find(|q| q.record == p.record) {
                 Some(q) => q.reasons.extend(p.reasons),
                 None => out.push(p),
@@ -52,7 +64,12 @@ impl Proposers {
     pub fn describe(&self) -> String {
         let s = &self.similar;
         format!(
-            "{}similar_documents(neighbours {}, max_candidates {}, min_similarity {})",
+            "{}{}similar_documents(neighbours {}, max_candidates {}, min_similarity {})",
+            if self.named.is_some() {
+                "field_named + "
+            } else {
+                ""
+            },
             if self.thread.is_some() {
                 "same_thread + "
             } else {
@@ -62,6 +79,45 @@ impl Proposers {
             s.max_candidates,
             s.min_similarity
         )
+    }
+}
+
+/// The records a document's own fields name, by document key: a metadata
+/// source's records (`resolution_sources` participants), each with the fields
+/// naming it. Declared structure, never cut to a cost cap; the only proposer
+/// that offers a record before any statement has reached it.
+#[derive(Debug, Default)]
+pub struct FieldNamed {
+    by_doc: HashMap<String, Vec<(String, String)>>,
+}
+
+impl FieldNamed {
+    /// `by_doc`: document key -> (record id, field) for each field naming one.
+    pub fn new(by_doc: HashMap<String, Vec<(String, String)>>) -> Self {
+        Self { by_doc }
+    }
+
+    pub fn propose(&self, doc: Document<'_>) -> Vec<Proposal> {
+        let mut out: Vec<Proposal> = Vec::new();
+        for (record, field) in self.by_doc.get(doc.id).into_iter().flatten() {
+            let reason = Reason::NamedInField {
+                field: field.clone(),
+            };
+            match out.iter_mut().find(|p| p.record == *record) {
+                Some(p) if !p.reasons.contains(&reason) => p.reasons.push(reason),
+                Some(_) => {}
+                None => out.push(Proposal {
+                    record: record.clone(),
+                    reasons: vec![reason],
+                }),
+            }
+        }
+        debug!(
+            document = doc.id,
+            records = out.len(),
+            "atlas/resolve: records the document's fields name"
+        );
+        out
     }
 }
 

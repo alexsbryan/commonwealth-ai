@@ -58,10 +58,20 @@ pub const CLAIM_FIELDS_ATTRIBUTE: &str = "__document_read_fields";
 /// from a [`DocumentReadParticular`]: such a claim declares no claim kind, so
 /// this is where its subject's type is read ([`about_type`]).
 pub const ABOUT_ATTRIBUTE: &str = "__document_read_about";
+/// A mention's words, on the claim projected from a mention particular: its
+/// statement is these words on its line (RESOLVE), and a reference reading
+/// that names them lands on its record (`resolution_derived/read_fields.rs`).
+/// Stays on the claim after RESOLVE, cited by its evidence.
+pub const WORDS_ATTRIBUTE: &str = "__document_read_words";
 
 /// The type a claim projected from a [`DocumentReadParticular`] is about.
 pub fn about_type(attributes: &Map<String, Value>) -> Option<&str> {
     attributes.get(ABOUT_ATTRIBUTE).and_then(Value::as_str)
+}
+
+/// The words a mention particular's claim names its particular by.
+pub fn mention_words(attributes: &Map<String, Value>) -> Option<&str> {
+    attributes.get(WORDS_ATTRIBUTE).and_then(Value::as_str)
 }
 
 /// The value of each supported reading among `fields`, by field.
@@ -119,6 +129,11 @@ pub struct DocumentReadOutcome {
 /// reference, and its identifying fields are read at them. It reaches RESOLVE as a statement of its own, so
 /// the document belongs to the particular's record whether or not a line
 /// states a claim kind.
+///
+/// Or a mention (`document_read/mention.rs`) of a type whose source names
+/// only who took part (`resolution_records::decides_mentions`): its `words`
+/// are the line's own, its statement is those words on that line, and it
+/// reads no field.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct DocumentReadParticular {
@@ -127,6 +142,8 @@ pub struct DocumentReadParticular {
     pub subject_name: String,
     pub evidence: String,
     pub subject_fields: BTreeMap<String, DocumentReadField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub words: Option<String>,
 }
 
 /// One claim refused by evidence verification, with the reason it failed.

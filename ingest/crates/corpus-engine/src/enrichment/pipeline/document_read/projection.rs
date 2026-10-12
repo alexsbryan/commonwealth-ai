@@ -16,7 +16,7 @@ use super::validation;
 use super::{
     supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, ABOUT_ATTRIBUTE,
     CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
-    SUBJECT_FIELDS_ATTRIBUTE,
+    SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
@@ -167,7 +167,8 @@ pub(super) fn project_compatibility_sketches(
 /// A particular no claim is about, as the claim RESOLVE reads: the document
 /// asserts it is about the particular, at the words that first name it. It
 /// declares no claim kind; its type rides on [`ABOUT_ATTRIBUTE`], and its
-/// reference, document and identifying readings as a claim's do.
+/// reference, document and identifying readings as a claim's do. A mention's
+/// words ride on [`WORDS_ATTRIBUTE`].
 fn particular_sketch(
     particular: &DocumentReadParticular,
     document_id: &str,
@@ -185,6 +186,9 @@ fn particular_sketch(
         SOURCE_DOCUMENT_ATTRIBUTE.into(),
         Value::String(document_id.to_string()),
     );
+    if let Some(words) = &particular.words {
+        attributes.insert(WORDS_ATTRIBUTE.into(), Value::String(words.clone()));
+    }
     attributes.insert(
         SUBJECT_FIELDS_ATTRIBUTE.into(),
         serde_json::to_value(&particular.subject_fields).map_err(|error| {

@@ -43,6 +43,35 @@ pub(super) fn layer_warnings(
     }
 }
 
+/// What `recipe validate` says of a metadata-sourced type's mentions in text
+/// (ONTOLOGY_METHOD §Reading, Mention): RESOLVE decides them when the type
+/// declares an `identity_criterion`; a referenced one without leaves them
+/// Pick's proposals, and the line says what would change that.
+pub(super) fn mentions_note(policies: &OntologyPolicies, type_name: &str) -> Option<String> {
+    let index = TypeIndex::from_policies(policies);
+    let t = index.get(type_name)?;
+    if !matches!(t.source, Some(SourceDecl::Metadata(_))) {
+        return None;
+    }
+    if crate::enrichment::atlas::resolution_records::decides_mentions(&index, type_name) {
+        return Some(
+            "; RESOLVE decides its mentions in text under its identity_criterion, starting \
+             from its source's records"
+                .into(),
+        );
+    }
+    let referenced = policies.shape.types.iter().any(|o| {
+        o.attributes
+            .iter()
+            .any(|a| matches!(&a.family, AttrFamily::Ref { of } if of == type_name))
+    });
+    (referenced && t.identity_criterion.is_none()).then(|| {
+        "; its mentions in text stay Pick's proposals and name no record: declare an \
+         identity_criterion for RESOLVE to decide them"
+            .into()
+    })
+}
+
 /// How one declared attribute gets a value on the default path.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum Fill {

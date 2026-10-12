@@ -199,6 +199,7 @@ impl Build {
         let (reports, failures) = resolve_declared_types(
             &mut atoms,
             &documents(),
+            &Default::default(),
             policies,
             CORPUS,
             Answerer::Proposed,

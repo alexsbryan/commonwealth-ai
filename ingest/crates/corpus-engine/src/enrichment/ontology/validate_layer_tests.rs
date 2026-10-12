@@ -300,3 +300,27 @@ fn a_transition_names_its_mover_by_path_and_its_states_from_the_closed_set() {
         );
     }
 }
+
+/// A sourced type a reference targets: without an identity criterion its
+/// mentions stay Pick's proposals and its identity line says what would
+/// change that; with one, the line says RESOLVE decides them.
+#[test]
+fn a_referenced_sourced_type_says_who_decides_its_mentions() {
+    let line = |v: &super::super::OntologyValidation| {
+        v.notes
+            .iter()
+            .find(|n| n.starts_with("identity: party"))
+            .cloned()
+            .expect("party's identity line")
+    };
+    let bare = line(&validated(&fixture()));
+    assert!(bare.contains("stay Pick's proposals"), "{bare}");
+    let decided = line(&validated(&fixture().replace(
+        "name = \"party\"\nkind = \"entity\"\n",
+        "name = \"party\"\nkind = \"entity\"\nidentity_criterion = \"the same party\"\n",
+    )));
+    assert!(
+        decided.contains("RESOLVE decides its mentions"),
+        "{decided}"
+    );
+}

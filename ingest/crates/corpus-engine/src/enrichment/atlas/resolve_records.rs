@@ -328,6 +328,9 @@ pub enum Reason {
     /// TF-IDF cosine between this document and the record's document the
     /// proposer matched it through.
     SimilarDocument { similarity: f32 },
+    /// A field of this document names the record: one a metadata source read
+    /// from it (`resolution_sources`), offered to the document's mentions.
+    NamedInField { field: String },
 }
 
 /// A record a proposer offered, with every reason it was offered for.
@@ -344,13 +347,24 @@ impl Proposal {
             .iter()
             .filter_map(|r| match r {
                 Reason::SimilarDocument { similarity } => Some(*similarity),
-                Reason::SameThread => None,
+                Reason::SameThread | Reason::NamedInField { .. } => None,
             })
             .fold(0.0, f32::max)
     }
 
     pub fn same_thread(&self) -> bool {
         self.reasons.contains(&Reason::SameThread)
+    }
+
+    /// The fields of this document that name the record, if any.
+    pub fn named_in(&self) -> Vec<&str> {
+        self.reasons
+            .iter()
+            .filter_map(|r| match r {
+                Reason::NamedInField { field } => Some(field.as_str()),
+                _ => None,
+            })
+            .collect()
     }
 }
 
@@ -944,6 +958,7 @@ mod estimate;
 mod fields;
 pub mod propose;
 mod read;
+mod seed;
 mod select;
 mod settle;
 mod wave;

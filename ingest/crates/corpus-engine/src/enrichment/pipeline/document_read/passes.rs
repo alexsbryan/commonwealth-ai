@@ -539,7 +539,10 @@ async fn read_document(
         .copied()
         .chain(acts.iter().map(|a| a.particular))
         .collect();
-    let particulars = about::unstated(&doc, &plan.decided, &abouts, &stated, identities);
+    let mut particulars = about::unstated(&doc, &plan.decided, &abouts, &stated, identities);
+    particulars.extend(mention::particulars(
+        document, policies, &raw, &lines, &targets, &mentions,
+    ));
     (
         DocumentReadOutcome {
             document_id: id,

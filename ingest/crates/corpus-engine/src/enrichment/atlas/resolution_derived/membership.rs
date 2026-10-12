@@ -255,6 +255,7 @@ pub fn place_thread_documents(
                 outcome: outcome.clone(),
                 excluded: Vec::new(),
                 unresolved: Vec::new(),
+                unjudged: Vec::new(),
                 replaced,
                 protocol: None,
                 by: SourcePrecision::new(

@@ -169,6 +169,9 @@ pub(super) fn prompt(
 /// Why a candidate was offered, as the model is shown it.
 pub(super) fn reasons(proposal: &Proposal) -> String {
     let mut why: Vec<String> = Vec::new();
+    for field in proposal.named_in() {
+        why.push(format!("named in this document's field `{field}`"));
+    }
     if proposal.same_thread() {
         why.push("same thread".into());
     }

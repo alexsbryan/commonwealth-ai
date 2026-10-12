@@ -5,8 +5,11 @@ use super::*;
 use crate::enrichment::ontology::OntologyV1;
 
 fn declared() -> OntologyPolicies {
-    let ontology: OntologyV1 = toml::from_str(
-        r#"
+    let ontology: OntologyV1 = toml::from_str(DECLARED).unwrap();
+    ontology.into_policies()
+}
+
+const DECLARED: &str = r#"
 [[types]]
 name = "firm"
 kind = "entity"
@@ -34,11 +37,7 @@ where = { site = { suffix = "home.example" } }
 [[paths]]
 id = "outside"
 path = "document / (sender | copied) [!home]"
-"#,
-    )
-    .unwrap();
-    ontology.into_policies()
-}
+"#;
 
 fn mention(line: usize, text: &str) -> Mention {
     Mention {
@@ -257,5 +256,60 @@ async fn a_pick_question_shows_the_whole_document() {
     assert!(
         !window.contains("Quay Market"),
         "the old window already held it: {window}"
+    );
+}
+
+/// A mention of a type whose mentions RESOLVE decides is a particular when
+/// Pick would offer it by its words: one per such mention, its words on its
+/// whole line, reading no field. A mention naming a listed record (Ann) or an
+/// excluded one (Bo) is none, and a type with no criterion gives none.
+#[test]
+fn a_mention_pick_offers_by_its_words_is_a_particular_of_a_decided_type() {
+    let body = "Ann said yes.\nQuay Market and Bo will sign.\nThanks";
+    let doc = input_chapter(&[row(
+        1,
+        "d1",
+        body,
+        r#"{"sender": "Ann <ann@away.example>",
+            "copied": "Bo <bo@desk.home.example>, Cy <cy@away.example>"}"#,
+    )])
+    .source_documents[0]
+        .clone();
+    let raw = doc.raw_body();
+    let lines = super::super::passes::lines(&raw);
+    let mentions = [
+        mention(1, "Ann"),
+        mention(2, "Quay Market"),
+        mention(2, "Bo"),
+    ];
+    let with_criterion: OntologyV1 = toml::from_str(&DECLARED.replace(
+        "identity = [\"site\"]",
+        "identity = [\"site\"]\nidentity_criterion = \"the same firm\"",
+    ))
+    .unwrap();
+    let p = with_criterion.into_policies();
+    let firm = p.type_decl("firm").unwrap();
+    let got = super::super::mention::particulars(&doc, &p, &raw, &lines, &[firm], &mentions);
+    assert_eq!(
+        got,
+        [super::super::DocumentReadParticular {
+            subject_type: "firm".into(),
+            subject_local_ref: "l2:Quay Market".into(),
+            subject_name: "firm l2:Quay Market".into(),
+            evidence: "Quay Market and Bo will sign.".into(),
+            subject_fields: BTreeMap::from([(
+                "site".to_string(),
+                DocumentReadField::Unknown {
+                    reason: "a mention is its words; no field of it is read".into()
+                }
+            )]),
+            words: Some("Quay Market".into()),
+        }]
+    );
+    let p = declared();
+    let firm = p.type_decl("firm").unwrap();
+    assert!(
+        super::super::mention::particulars(&doc, &p, &raw, &lines, &[firm], &mentions).is_empty(),
+        "no criterion: Pick's proposal only"
     );
 }

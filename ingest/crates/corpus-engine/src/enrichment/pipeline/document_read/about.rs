@@ -64,8 +64,14 @@ impl Particular {
     /// Its reference local to the document: where it is first named, never
     /// its place among the particulars found.
     pub(super) fn local_ref(&self) -> String {
-        format!("l{}:{}", self.line, self.words)
+        local_ref(self.line, &self.words)
     }
+}
+
+/// A particular's reference local to its document: the line that first names
+/// it and its words there. About's particulars and Mention's share it.
+pub(super) fn local_ref(line: usize, words: &str) -> String {
+    format!("l{line}:{words}")
 }
 
 /// What one document is about, of one type.
@@ -482,6 +488,7 @@ pub(super) fn unstated(
                 subject_local_ref: local_ref,
                 evidence: d.body[line.start..line.end].to_string(),
                 subject_fields,
+                words: None,
             });
         }
     }
