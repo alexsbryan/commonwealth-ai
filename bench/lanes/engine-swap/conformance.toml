@@ -289,7 +289,7 @@ layer = "decode"
 covers = ["url_allowlist"]
 callers = "deep_research port.rs:495; frontdoor.rs:1931 (opt-in)"
 check = "language parity (decode_allowlist_parity_tests.rs) and no URL outside the list end to end"
-judge = [{ kind = "allowlist-held" }]
+judge = [{ kind = "allowlist-held" }, { kind = "scenario", what = "language parity of the allow-list grammar between the engine's trie and llguidance 1.0.1 (llg-parity, milestone 5)" }]
 when = [{ kind = "complete", url_allowlist = "set" }]
 predict = "pass"
 basis = "measured"
@@ -301,7 +301,7 @@ layer = "decode"
 covers = ["evidence_id_allowlist"]
 callers = "simple.rs:131,140; streaming.rs:2896,2947; frontdoor.rs:2025 (opt-in)"
 check = "as decode.url-allowlist"
-judge = [{ kind = "allowlist-held" }]
+judge = [{ kind = "allowlist-held" }, { kind = "scenario", what = "language parity of the allow-list grammar between the engine's trie and llguidance 1.0.1 (llg-parity, milestone 5)" }]
 when = [{ kind = "complete", evidence_id_allowlist = "set" }]
 predict = "pass"
 basis = "measured"

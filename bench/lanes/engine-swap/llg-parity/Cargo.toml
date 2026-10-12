@@ -1,0 +1,22 @@
+# llg-parity: the server side of the engine conformance battery's llguidance
+# parity (milestone 5). It judges corpus.jsonl under the llguidance llama-server
+# is built with, and writes one scenario verdict per inventory row for
+# `svrn bench engine-conformance judge --scenario`.
+#
+# Standalone on purpose, as cmnwlth/apps/ring-runtime is: `[workspace]` below
+# keeps it out of the repo's workspace, whose Cargo.lock holds the engine's
+# llguidance (1.7.6). The pin is llama.cpp 035e227's own
+# (common/CMakeLists.txt, `GIT_TAG d795912f…`, "v1.0.1").
+[package]
+name = "llg-parity"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[dependencies]
+llguidance = { git = "https://github.com/guidance-ai/llguidance", rev = "d795912fedc7d393de740177ea9ea761e7905774" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace]

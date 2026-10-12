@@ -1,0 +1,288 @@
+{
+ "about": "Grammar and schema sources for the llg-parity corpus. src/llg_parity_corpus_tests.rs reads this, compiles each under the engine's llguidance and writes corpus.jsonl beside it, which bench/lanes/engine-swap/llg-parity judges under llama-server's. Grammars from crates sovereign-inference cannot depend on are copied here with their source; regenerate the corpus when one changes (LLG_PARITY_UPDATE=1).",
+ "grammars": [
+  {
+   "row": "decode.lark",
+   "grammar_id": "raptor-summary",
+   "source": "svrn/crates/sovereign-tools/src/raptor_atlas.rs:1282-1289, verbatim",
+   "lark": "\nstart: \"{\\\"summary\\\": \\\"\" summary \"\\\", \\\"primary_entities\\\": [\" entities \"]}\"\nsummary: NOQUOTE+\nentities: (entity (\", \" entity)*)?\nentity: \"\\\"\" CAP_NAME \"\\\"\"\nNOQUOTE: /[^\"\\\\]/\nCAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n",
+   "inputs": [
+    "{\"summary\": \"A summary.\", \"primary_entities\": [\"Kant\", \"Arthur Schopenhauer\"]}",
+    "{\"summary\": \"A summary.\", \"primary_entities\": []}",
+    "{\"summary\": \"\", \"primary_entities\": []}",
+    "{\"summary\": \"He said \\\"no\\\".\", \"primary_entities\": []}",
+    "{\"summary\": \"x\", \"primary_entities\": [\"kant\"]}",
+    "{\"summary\": \"x\", \"primary_entities\": [\"Kant\",\"Riga\"]}",
+    "{\"summary\": \"x\", \"primary_entities\": [\"O'Neil St. John\"]}",
+    "{\"summary\": \"x\", \"primary_entities\": [\"Kant\"]} ",
+    "{\"summary\":\"x\", \"primary_entities\": []}",
+    "{\"summary\": \"x\ny\", \"primary_entities\": []}"
+   ]
+  },
+  {
+   "row": "decode.lark",
+   "grammar_id": "skeleton-entities",
+   "source": "svrn/crates/sovereign-tools/src/document_asset/skeleton.rs:226-229, verbatim",
+   "lark": "start: line\nline: (entity (\",\" \" \"? entity)*)?\nentity: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n",
+   "inputs": [
+    "",
+    "Kant",
+    "Kant, Riga",
+    "Kant,Riga",
+    "Kant,  Riga",
+    "kant",
+    "Immanuel Kant",
+    "Immanuel  Kant",
+    "Kant,",
+    "Kant ,Riga",
+    "O'Neil St. John, Riga",
+    "Kant\n",
+    "Kant, Riga, Paris, Ada Lovelace"
+   ]
+  },
+  {
+   "row": "decode.lark",
+   "grammar_id": "skeleton-segments-n3",
+   "source": "svrn/crates/sovereign-tools/src/document_asset/skeleton.rs:603-611, rendered at n = 3",
+   "lark": "start: line \"\\n\" line \"\\n\" line\nline: /[0-9]+/ \"|\" /[^|\\n]{1,80}/ \"|\" func\nfunc: \"Introduces\"|\"Develops\"|\"Complicates\"|\"Resolves\"|\"Transitions\"|\"Evidences\"\n",
+   "inputs": [
+    "1|Opening|Introduces\n2|Middle|Develops\n3|End|Resolves",
+    "1|Opening|Introduces\n2|Middle|Develops",
+    "1|Opening|Introduces\n2|Middle|Develops\n3|End|Resolves\n",
+    "1|Opening|Introduces\n2|Middle|Develops\n3|End|Resolves\n4|More|Evidences",
+    "1|TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT|Introduces\n2|b|Develops\n3|c|Resolves",
+    "1|TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT|Introduces\n2|b|Develops\n3|c|Resolves",
+    "1||Introduces\n2|b|Develops\n3|c|Resolves",
+    "1|a|introduces\n2|b|Develops\n3|c|Resolves",
+    "x|a|Introduces\n2|b|Develops\n3|c|Resolves",
+    "10|a b c|Transitions\n200|d|Complicates\n3|e|Evidences",
+    "1|a|Introduces \n2|b|Develops\n3|c|Resolves"
+   ]
+  },
+  {
+   "row": "decode.lark",
+   "grammar_id": "battery-aye-nay",
+   "source": "bench/lanes/engine-swap/cases/synthetic.jsonl (case 78f579404a29)",
+   "lark": "start: \"aye\" | \"nay\"",
+   "inputs": [
+    "aye",
+    "nay",
+    "ay",
+    "ayes",
+    "aye ",
+    "nay\n",
+    "yea",
+    ""
+   ]
+  },
+  {
+   "row": "decode.json-schema",
+   "grammar_id": "context-topic-domain",
+   "source": "svrn/crates/sovereign-core/src/context.rs:394-401 (battery case badf37c6fa67)",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "topic": {
+      "type": "string"
+     },
+     "domain": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "topic",
+     "domain"
+    ]
+   },
+   "inputs": [
+    "{\"topic\": \"a\", \"domain\": \"b\"}",
+    "{\"topic\":\"a\",\"domain\":\"b\"}",
+    "{\n  \"topic\": \"a\",\n  \"domain\": \"b\"\n}",
+    "{\"topic\": \"a\", \"domain\": \"b\", \"extra\": 1}",
+    "{\"topic\": \"a\", \"domain\": \"b\", \"x\": \"y\"}",
+    "{\"domain\": \"b\", \"topic\": \"a\"}",
+    "{\"topic\": \"a\"}",
+    "{\"topic\": \"a\", \"domain\": 1}",
+    " {\"topic\": \"a\", \"domain\": \"b\"}",
+    "{\"topic\": \"a\", \"domain\": \"b\"} "
+   ]
+  },
+  {
+   "row": "decode.json-schema",
+   "grammar_id": "router-intent",
+   "source": "svrn/crates/sovereign-core/src/router.rs:1164-1184",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "intent": {
+      "type": "string",
+      "enum": [
+       "SIMPLE",
+       "LOOKUP",
+       "COMPARISON",
+       "REASONING",
+       "ACTION",
+       "CONATION",
+       "COMMISSION",
+       "EXPRESSIVE",
+       "GENERATIVE",
+       "METALINGUAL"
+      ]
+     }
+    },
+    "required": [
+     "intent"
+    ]
+   },
+   "inputs": [
+    "{\"intent\": \"SIMPLE\"}",
+    "{\"intent\": \"METALINGUAL\"}",
+    "{\"intent\": \"simple\"}",
+    "{\"intent\": \"SIMPLE\", \"rationale\": \"x\"}",
+    "{\"intent\":\"LOOKUP\"}",
+    "{}"
+   ]
+  },
+  {
+   "row": "decode.json-schema",
+   "grammar_id": "router-tool-select",
+   "source": "svrn/crates/sovereign-core/src/router.rs:1201-1210, the enum is the registered tool ids; three stand in",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "tool": {
+      "type": "string",
+      "enum": [
+       "web_search",
+       "calculator",
+       "read_file"
+      ]
+     }
+    },
+    "required": [
+     "tool"
+    ]
+   },
+   "inputs": [
+    "{\"tool\": \"web_search\"}",
+    "{\"tool\": \"web\"}",
+    "{\"tool\": \"calculator\", \"args\": {}}",
+    "{\"tool\": \"read_file\"}"
+   ]
+  },
+  {
+   "row": "decode.json-schema",
+   "grammar_id": "deep-research-query",
+   "source": "svrn/crates/sovereign-core/src/deep_research/port.rs:629-633",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   },
+   "inputs": [
+    "{\"query\": \"kant ethics\"}",
+    "{\"query\": \"q\", \"why\": \"w\"}",
+    "{\"query\": \"\"}",
+    "{\"query\": \"a\\\"b\"}",
+    "{\"query\": \"\\u00e9\"}"
+   ]
+  },
+  {
+   "row": "decode.json-schema",
+   "grammar_id": "document-op-prompts",
+   "source": "svrn/crates/sovereign-core/src/runtime/handlers/document_op.rs:151-158",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "map_prompt": {
+      "type": "string"
+     },
+     "reduce_prompt": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "map_prompt",
+     "reduce_prompt"
+    ]
+   },
+   "inputs": [
+    "{\"map_prompt\": \"m\", \"reduce_prompt\": \"r\"}",
+    "{\"map_prompt\": \"m\", \"reduce_prompt\": \"r\", \"notes\": \"n\"}",
+    "{\"reduce_prompt\": \"r\", \"map_prompt\": \"m\"}"
+   ]
+  },
+  {
+   "row": "decode.json-schema",
+   "grammar_id": "battery-answer",
+   "source": "bench/lanes/engine-swap/cases/synthetic.jsonl (json-schema-open, case f2d5b44d2dcd)",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "answer": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "answer"
+    ]
+   },
+   "inputs": [
+    "{\"answer\": \"Paris\"}",
+    "{\n  \"answer\": \"Paris\"\n}",
+    "{\"answer\": \"Paris\", \"country\": \"France\"}"
+   ]
+  },
+  {
+   "row": "decode.json-schema",
+   "grammar_id": "memory-indices-closed",
+   "source": "svrn/crates/sovereign-core/src/memory.rs:522-529, limit 3; sets additionalProperties itself, the control",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "indices": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 3
+     }
+    },
+    "required": [
+     "indices"
+    ],
+    "additionalProperties": false
+   },
+   "inputs": [
+    "{\"indices\": [0, 2]}",
+    "{\"indices\": []}",
+    "{\"indices\": [0, 1, 2, 3]}",
+    "{\"indices\": [1], \"extra\": true}",
+    "{\"indices\": [1.5]}"
+   ]
+  },
+  {
+   "row": "decode.json-object",
+   "grammar_id": "bare-object",
+   "source": "bench/lanes/engine-swap/cases/synthetic.jsonl (json-object, case 612c860d26ac); response_format json_object callers, inference_adapter.rs:1023",
+   "schema": {
+    "type": "object"
+   },
+   "inputs": [
+    "{}",
+    "{ }",
+    "{\"answer\": \"Paris\"}",
+    "{\n  \"answer\": \"Paris\"\n}",
+    "[]",
+    "\"x\"",
+    "{\"a\": {\"b\": [1, 2]}}"
+   ]
+  }
+ ]
+}

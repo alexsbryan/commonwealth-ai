@@ -5,45 +5,24 @@
 //! whole: every byte allowed, and EOS allowed after the last. The post-hoc
 //! reader `AllowlistLanguage::entries_outside` is held to the same verdicts.
 
-use llguidance::{api::TopLevelGrammar, toktrie::ApproximateTokEnv, Matcher, ParserFactory};
 use sovereign_contracts::decode_allowlist::{llguidance_lark, EVIDENCE_ID, URL};
 
 use crate::evidence_id_constraint::EvidenceIdAllowlistConstraint;
+use crate::llg_whole_string::{Lcg, WholeString};
 use crate::url_constraint::UrlAllowlistConstraint;
 
 fn owned(v: &[&str]) -> Vec<String> {
     v.iter().map(|s| s.to_string()).collect()
 }
 
-struct Grammar {
-    factory: ParserFactory,
-    grammar: TopLevelGrammar,
+/// The URL list the cases below are written against.
+pub(crate) fn test_urls() -> Vec<String> {
+    owned(&["https://a.test/x", "https://a.test/xy", "http://b.test"])
 }
 
-impl Grammar {
-    fn new(lark: String) -> Self {
-        let env = ApproximateTokEnv::single_byte_env();
-        let factory = ParserFactory::new_simple(&env).expect("factory");
-        let grammar = TopLevelGrammar::from_lark(lark.clone());
-        let m = Matcher::new(factory.create_parser(grammar.clone()));
-        assert!(
-            !m.is_error(),
-            "grammar must compile: {:?}\n{lark}",
-            m.get_error()
-        );
-        Self { factory, grammar }
-    }
-
-    fn accepts(&self, text: &[u8]) -> bool {
-        let mut m = Matcher::new(self.factory.create_parser(self.grammar.clone()));
-        for &b in text {
-            if !m.compute_mask().expect("mask").is_allowed(b as u32) {
-                return false;
-            }
-            m.consume_token(b as u32).expect("consume");
-        }
-        m.is_accepting().expect("accepting")
-    }
+/// The evidence-id list the cases below are written against.
+pub(crate) fn test_ids() -> Vec<String> {
+    owned(&["ev-T1-0001", "ev-T2-0010"])
 }
 
 /// Fragments that hit every edge: whole and partial entries of both lists,
@@ -74,25 +53,19 @@ const FRAGMENTS: &[&str] = &[
 ];
 
 /// A fixed-seed walk over [`FRAGMENTS`], so a failure reproduces.
-fn generated(n: usize) -> Vec<String> {
-    let mut state: u64 = 0x9e37_79b9_7f4a_7c15;
-    let mut next = || {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        (state >> 33) as usize
-    };
+pub(crate) fn generated(n: usize) -> Vec<String> {
+    let mut rng = Lcg::new(0x9e37_79b9_7f4a_7c15);
     (0..n)
         .map(|_| {
-            let parts = 1 + next() % 6;
+            let parts = 1 + rng.below(6);
             (0..parts)
-                .map(|_| FRAGMENTS[next() % FRAGMENTS.len()])
+                .map(|_| FRAGMENTS[rng.below(FRAGMENTS.len())])
                 .collect()
         })
         .collect()
 }
 
-fn hand_picked() -> Vec<String> {
+pub(crate) fn hand_picked() -> Vec<String> {
     owned(&[
         "",
         "plain prose with no links",
@@ -130,14 +103,14 @@ fn assert_parity(lists: &[(&str, &[String])], truth: impl Fn(&[u8]) -> bool) {
             _ => (&EVIDENCE_ID, *ids),
         })
         .collect();
-    let g = Grammar::new(llguidance_lark(&langs).expect("non-empty lists"));
+    let g = WholeString::lark(llguidance_lark(&langs).expect("non-empty lists"));
     let mut accepted = 0;
     let cases: Vec<String> = hand_picked().into_iter().chain(generated(3000)).collect();
     for text in &cases {
         let want = truth(text.as_bytes());
         accepted += usize::from(want);
         assert_eq!(
-            g.accepts(text.as_bytes()),
+            g.accepts(text.as_bytes()).expect("matcher"),
             want,
             "grammar and trie disagree on {text:?} (trie says {want})"
         );
@@ -161,7 +134,7 @@ fn assert_parity(lists: &[(&str, &[String])], truth: impl Fn(&[u8]) -> bool) {
 
 #[test]
 fn the_url_grammar_accepts_what_the_url_trie_accepts() {
-    let urls = owned(&["https://a.test/x", "https://a.test/xy", "http://b.test"]);
+    let urls = test_urls();
     assert_parity(&[("url", &urls)], |t| {
         UrlAllowlistConstraint::accepts_whole(&urls, t)
     });
@@ -169,7 +142,7 @@ fn the_url_grammar_accepts_what_the_url_trie_accepts() {
 
 #[test]
 fn the_evidence_grammar_accepts_what_the_evidence_trie_accepts() {
-    let ids = owned(&["ev-T1-0001", "ev-T2-0010"]);
+    let ids = test_ids();
     assert_parity(&[("ev", &ids)], |t| {
         EvidenceIdAllowlistConstraint::accepts_whole(&ids, t)
     });
@@ -179,8 +152,8 @@ fn the_evidence_grammar_accepts_what_the_evidence_trie_accepts() {
 /// evidence handle, so `https://a.test/x[ev-T9-0001]` must be refused.
 #[test]
 fn both_lists_accept_what_both_tries_accept() {
-    let urls = owned(&["https://a.test/x", "https://a.test/xy", "http://b.test"]);
-    let ids = owned(&["ev-T1-0001", "ev-T2-0010"]);
+    let urls = test_urls();
+    let ids = test_ids();
     assert_parity(&[("url", &urls), ("ev", &ids)], |t| {
         UrlAllowlistConstraint::accepts_whole(&urls, t)
             && EvidenceIdAllowlistConstraint::accepts_whole(&ids, t)

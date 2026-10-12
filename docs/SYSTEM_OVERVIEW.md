@@ -1041,7 +1041,11 @@ logprobs, on a context of the slot's own parameters (`embedded/probe.rs`).
 The default refuses, and the wrappers on the daemon's path forward it.
 `bench/lanes/engine-swap/battery.sh` drives the case bank through it per
 target, and `svrn bench engine-conformance judge` holds the records to
-`conformance.toml`.
+`conformance.toml`. Rows whose oracle is a language rather than a record take
+their verdict from `--scenario`: `bench/lanes/engine-swap/llg-parity`, a
+standalone crate pinned to llama-server's llguidance, judges the corpus the
+engine side writes (`llg_parity_corpus_tests.rs`) and emits one verdict per
+row.
 
 **A remote engine off this machine is a third party.** `build_remote` builds
 one shape, `oicp_client::SplitInferenceProvider::engine` (`far_end.rs`), which

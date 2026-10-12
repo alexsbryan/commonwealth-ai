@@ -25,6 +25,8 @@ mod verdict;
 #[cfg(test)]
 mod run_tests;
 #[cfg(test)]
+mod scenario_tests;
+#[cfg(test)]
 mod tests;
 
 use std::path::{Path, PathBuf};
@@ -43,7 +45,7 @@ const HELP: Help = Help {
             "svrn bench engine-conformance run --target <label> --daemon <url> [--server <url>] --cases <jsonl> --out <jsonl> [--only <case-id>]...",
         ),
         HelpSection::Usage(
-            "svrn bench engine-conformance judge --records <jsonl>... [--inventory <toml>] [--out <dir>] [--mutate]",
+            "svrn bench engine-conformance judge --records <jsonl>... [--inventory <toml>] [--scenario <jsonl>] [--out <dir>] [--mutate]",
         ),
         HelpSection::Subcommands(&[
             (
@@ -52,7 +54,7 @@ const HELP: Help = Help {
             ),
             (
                 "judge",
-                "Apply each row's checks to the records, one verdict per row and target pair, beside the prediction. A target run twice is judged only where its two runs agree (A/A). Exit 0 all as predicted, 3 a verdict differs from its prediction, 4 nothing judged. With --mutate, instead perturb one passing cell per check and judge it again: exit 0 every mutation caught, 3 one was missed.",
+                "Apply each row's checks to the records, one verdict per row and target pair, beside the prediction. A target run twice is judged only where its two runs agree (A/A). A row's scenario check takes its verdict from --scenario (one {row, verdict, detail} line per row, as bench/lanes/engine-swap/llg-parity writes), and stays could-not-judge for a row the file does not name. Exit 0 all as predicted, 3 a verdict differs from its prediction, 4 nothing judged. With --mutate, instead perturb one passing cell per check and judge it again: exit 0 every mutation caught, 3 one was missed.",
             ),
         ]),
     ],
@@ -75,6 +77,7 @@ pub async fn cmd_engine_conformance(args: &[String]) -> i32 {
 fn cmd_judge(args: &[String]) -> i32 {
     let mut inventory_path = PathBuf::from(DEFAULT_INVENTORY);
     let mut records_paths = Vec::new();
+    let mut scenario_path = None;
     let mut out = None;
     let mut mutate = false;
     let mut it = args.iter();
@@ -86,6 +89,7 @@ fn cmd_judge(args: &[String]) -> i32 {
         match (arg.as_str(), it.next()) {
             ("--inventory", Some(v)) => inventory_path = v.into(),
             ("--records", Some(v)) => records_paths.push(PathBuf::from(v)),
+            ("--scenario", Some(v)) => scenario_path = Some(PathBuf::from(v)),
             ("--out", Some(v)) => out = Some(PathBuf::from(v)),
             _ => {
                 eprintln!("error: unexpected argument `{arg}`");
@@ -111,15 +115,23 @@ fn cmd_judge(args: &[String]) -> i32 {
             }
         }
     }
+    let scenarios = match scenario_path.as_deref().map(read_scenarios).transpose() {
+        Ok(s) => s.unwrap_or_default(),
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
     tracing::debug!(
         rows = inventory.rows.len(),
         records = records.len(),
+        scenarios = scenarios.len(),
         "engine_conformance: judging"
     );
     if mutate {
         return cmd_mutate(&inventory, &records, out.as_deref());
     }
-    let verdicts = verdict::judge(&inventory, &records);
+    let verdicts = verdict::judge(&inventory, &records, &scenarios);
     if let Some(dir) = out {
         if let Err(e) = write_verdicts(&dir, &verdicts) {
             eprintln!("error: {e}");
@@ -175,6 +187,48 @@ fn cmd_mutate(inventory: &Inventory, records: &[CaseRecord], out: Option<&Path>)
     } else {
         0
     }
+}
+
+/// One line of a `--scenario` file.
+#[derive(serde::Deserialize)]
+struct ScenarioLine {
+    row: String,
+    verdict: String,
+    #[serde(default)]
+    detail: String,
+}
+
+/// Read a `--scenario` file into a verdict per row. A verdict outside
+/// passed, failed and could-not-judge, or a row named twice, is refused.
+fn read_scenarios(path: &Path) -> Result<verdict::Scenarios, String> {
+    let mut scenarios = verdict::Scenarios::new();
+    for line in read_jsonl::<ScenarioLine>(path)? {
+        let detail = format!("scenario: {}", line.detail);
+        let cell = match line.verdict.as_str() {
+            "passed" => check::CellVerdict::Passed,
+            "failed" => check::CellVerdict::Failed {
+                cause: check::FailCause::Differs,
+                detail,
+            },
+            "could-not-judge" => check::CellVerdict::CouldNotJudge(detail),
+            other => {
+                return Err(format!(
+                    "{}: row {}: verdict `{other}` is not passed, failed or could-not-judge",
+                    path.display(),
+                    line.row
+                ))
+            }
+        };
+        tracing::debug!(target: "engine_conformance", row = %line.row, verdict = %line.verdict, "scenario verdict read");
+        if scenarios.insert(line.row.clone(), cell).is_some() {
+            return Err(format!(
+                "{}: row {} appears twice",
+                path.display(),
+                line.row
+            ));
+        }
+    }
+    Ok(scenarios)
 }
 
 /// Read a JSONL file of `T`, one per non-blank line, naming the line that

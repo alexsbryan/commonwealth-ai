@@ -29,7 +29,7 @@ fn output(text: &str) -> Output {
     }
 }
 
-fn is_differs(v: &CellVerdict) -> bool {
+pub(super) fn is_differs(v: &CellVerdict) -> bool {
     matches!(
         v,
         CellVerdict::Failed {
@@ -588,7 +588,7 @@ fn outcomes_decide_before_any_facet_is_read() {
     ));
 }
 
-fn row(id: &str, judge: Vec<Check>, predict: Prediction) -> Row {
+pub(super) fn row(id: &str, judge: Vec<Check>, predict: Prediction) -> Row {
     Row {
         id: id.into(),
         judge,
@@ -597,7 +597,7 @@ fn row(id: &str, judge: Vec<Check>, predict: Prediction) -> Row {
     }
 }
 
-fn case(id: &str, target: &str, row: &str, count: Option<u64>) -> CaseRecord {
+pub(super) fn case(id: &str, target: &str, row: &str, count: Option<u64>) -> CaseRecord {
     CaseRecord {
         case_id: id.into(),
         target: target.into(),
@@ -640,7 +640,7 @@ fn roll_up_fails_on_any_case_and_sets_the_verdict_beside_its_prediction() {
         case("f", "embedded", "half-seen", Some(5)),
         case("f", "llama-server", "half-seen", None),
     ];
-    let verdicts = verdict::judge(&inventory, &records);
+    let verdicts = verdict::judge(&inventory, &records, &Default::default());
     let get = |id: &str| verdicts.iter().find(|v| v.row == id).unwrap();
     assert_eq!(
         (get("same").verdict, get("same").as_predicted),
@@ -679,7 +679,7 @@ fn a_row_with_pairs_compares_only_those_targets() {
         case("a", "embedded", "spec", Some(5)),
         case("a", "llama-server", "spec", Some(9)),
     ];
-    let verdicts = verdict::judge(&inventory, &records);
+    let verdicts = verdict::judge(&inventory, &records, &Default::default());
     assert_eq!(verdicts.len(), 1);
     assert_eq!(
         (verdicts[0].reference.as_str(), verdicts[0].verdict),
@@ -708,7 +708,7 @@ fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
         case("c", "embedded", "count", Some(7)),
         case("c", "llama-server", "count", Some(5)),
     ];
-    let v = &verdict::judge(&inventory, &records)[0];
+    let v = &verdict::judge(&inventory, &records, &Default::default())[0];
     assert_eq!((v.verdict, v.cases, v.failed), ("could-not-judge", 3, 0));
     let detail = v.detail.as_deref().unwrap();
     assert!(
@@ -724,7 +724,7 @@ fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
         .filter(|r| r.case_id == "c")
         .cloned()
         .collect();
-    let v = &verdict::judge(&only_c, &c)[0];
+    let v = &verdict::judge(&only_c, &c, &Default::default())[0];
     assert!(
         v.detail
             .as_deref()
@@ -738,7 +738,7 @@ fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
         case("d", "embedded", "count", Some(5)),
         case("d", "llama-server", "count", Some(5)),
     ];
-    let v = &verdict::judge(&only_c, &first_wins)[0];
+    let v = &verdict::judge(&only_c, &first_wins, &Default::default())[0];
     assert_eq!(v.verdict, "passed", "one run each is judged as before");
 }
 

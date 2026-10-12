@@ -19,6 +19,7 @@
 24	bench/lanes/agent-coding/problems/2.2-group-anagrams/scaffold::tests
 4	bench/lanes/agent-coding/problems/3.2-lights-out/scaffold
 45	bench/lanes/agent-coding/problems/3.2-lights-out/scaffold::tests
+233	bench/lanes/engine-swap/llg-parity
 13142	clients/desktop/src-tauri
 6330	clients/desktop/src-tauri::tests
 9235	clients/desktop/tests/e2e/scripts

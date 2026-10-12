@@ -121,15 +121,7 @@ impl LlguidanceConstraint {
     }
 
     fn with_factory(factory: &ParserFactory, grammar_or_schema: &str) -> Result<Self, LlgError> {
-        let trimmed = grammar_or_schema.trim_start();
-        let grammar = if trimmed.starts_with('{') {
-            let schema: serde_json::Value = serde_json::from_str(trimmed)
-                .map_err(|e| LlgError::ParserCreate(format!("json schema parse: {e}")))?;
-            TopLevelGrammar::from_json_schema(schema)
-        } else {
-            TopLevelGrammar::from_lark(grammar_or_schema.to_string())
-        };
-        let parser = factory.create_parser(grammar);
+        let parser = factory.create_parser(top_level_grammar(grammar_or_schema)?);
         let matcher = Matcher::new(parser);
         if matcher.is_error() {
             return Err(LlgError::ParserCreate(
@@ -189,11 +181,7 @@ impl LlguidanceConstraint {
         schema: &serde_json::Value,
         model: &LlamaModel,
     ) -> Result<Self, LlgError> {
-        let mut walked = schema.clone();
-        default_additional_properties_false(&mut walked);
-        let serialised = serde_json::to_string(&walked)
-            .map_err(|e| LlgError::ParserCreate(format!("serialise walked schema: {e}")))?;
-        Self::new(&serialised, model)
+        Self::new(&engine_schema_text(schema)?, model)
     }
 
     /// Compute the next-token mask. Call once per sampling step
@@ -352,6 +340,31 @@ impl LlguidanceConstraint {
         self.last_mask = None;
         Ok(())
     }
+}
+
+/// The grammar the engine compiles for `grammar_or_schema`, by its first
+/// non-whitespace byte: `{` is a JSON Schema
+/// (`TopLevelGrammar::from_json_schema`), anything else a Lark grammar. The
+/// one decider for both `LlguidanceConstraint::new` and the llg-parity
+/// corpus (`llg_parity_corpus_tests.rs`).
+pub(crate) fn top_level_grammar(grammar_or_schema: &str) -> Result<TopLevelGrammar, LlgError> {
+    let trimmed = grammar_or_schema.trim_start();
+    if trimmed.starts_with('{') {
+        let schema: serde_json::Value = serde_json::from_str(trimmed)
+            .map_err(|e| LlgError::ParserCreate(format!("json schema parse: {e}")))?;
+        Ok(TopLevelGrammar::from_json_schema(schema))
+    } else {
+        Ok(TopLevelGrammar::from_lark(grammar_or_schema.to_string()))
+    }
+}
+
+/// The text the engine compiles for a `structured_output` schema: the schema
+/// after [`default_additional_properties_false`], serialised.
+pub(crate) fn engine_schema_text(schema: &serde_json::Value) -> Result<String, LlgError> {
+    let mut walked = schema.clone();
+    default_additional_properties_false(&mut walked);
+    serde_json::to_string(&walked)
+        .map_err(|e| LlgError::ParserCreate(format!("serialise walked schema: {e}")))
 }
 
 fn trace_enabled() -> bool {

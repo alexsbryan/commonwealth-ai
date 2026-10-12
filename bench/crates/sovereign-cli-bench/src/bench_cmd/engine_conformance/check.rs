@@ -94,8 +94,9 @@ pub enum Check {
         /// Keys compared.
         keys: Vec<String>,
     },
-    /// Judged by a driver scenario that does not exist yet; always
-    /// could-not-judge until it does.
+    /// Judged by a scenario outside the records (e.g. llg-parity): its
+    /// verdict comes from `judge --scenario`, keyed by row id, and is
+    /// could-not-judge for a row without one.
     Scenario {
         /// What the scenario must establish.
         what: String,
@@ -181,7 +182,7 @@ impl Check {
     /// Judge one case. `reference` is `None` for a target-only check.
     pub fn judge(&self, reference: Option<&CaseRecord>, target: &CaseRecord) -> CellVerdict {
         if let Check::Scenario { what } = self {
-            return CellVerdict::CouldNotJudge(format!("no driver scenario yet: {what}"));
+            return CellVerdict::CouldNotJudge(format!("no scenario verdict given: {what}"));
         }
         if self.target_only() {
             return self.judge_alone(target);

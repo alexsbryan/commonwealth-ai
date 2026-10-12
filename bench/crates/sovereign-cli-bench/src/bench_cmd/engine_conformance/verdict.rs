@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use super::check::{CellVerdict, FailCause};
+use super::check::{CellVerdict, Check, FailCause};
 use super::inventory::{Inventory, Prediction, Row};
 use super::record::CaseRecord;
 
@@ -39,11 +39,19 @@ pub struct RowVerdict {
     pub as_predicted: Option<bool>,
 }
 
+/// Scenario verdicts by row id (`judge --scenario`): what a row's
+/// [`Check::Scenario`] comes to on every case of that row.
+pub type Scenarios = BTreeMap<String, CellVerdict>;
+
 /// Judge every row against the records. A target run twice (A/A) is judged
 /// on its first run, and only where its two runs agree under the row's own
 /// pairwise checks: a cell that differs between two runs of one engine says
 /// nothing about the difference between two engines.
-pub fn judge(inventory: &Inventory, records: &[CaseRecord]) -> Vec<RowVerdict> {
+pub fn judge(
+    inventory: &Inventory,
+    records: &[CaseRecord],
+    scenarios: &Scenarios,
+) -> Vec<RowVerdict> {
     let mut by_case: BTreeMap<(&str, &str), &CaseRecord> = BTreeMap::new();
     let mut repeat: BTreeMap<(&str, &str), &CaseRecord> = BTreeMap::new();
     for r in records {
@@ -77,7 +85,7 @@ pub fn judge(inventory: &Inventory, records: &[CaseRecord]) -> Vec<RowVerdict> {
                             });
                     let cell = match unstable {
                         Some(why) => CellVerdict::CouldNotJudge(why),
-                        None => judge_case(row, r, t),
+                        None => judge_case(row, r, t, scenarios.get(&row.id)),
                     };
                     (*case, cell)
                 })
@@ -115,10 +123,21 @@ fn a_a_difference(row: &Row, first: &CaseRecord, second: &CaseRecord) -> Option<
     Some(format!("A/A: two runs of {} differ: {why}", first.target))
 }
 
-fn judge_case(row: &Row, reference: Option<&CaseRecord>, target: &CaseRecord) -> CellVerdict {
+/// Every check on one case. A scenario check takes the row's scenario
+/// verdict when one was given, and stays could-not-judge otherwise.
+fn judge_case(
+    row: &Row,
+    reference: Option<&CaseRecord>,
+    target: &CaseRecord,
+    scenario: Option<&CellVerdict>,
+) -> CellVerdict {
     let mut unjudged = None;
     for check in &row.judge {
-        match check.judge(reference, target) {
+        let cell = match (check, scenario) {
+            (Check::Scenario { .. }, Some(v)) => v.clone(),
+            _ => check.judge(reference, target),
+        };
+        match cell {
             CellVerdict::Passed => {}
             failed @ CellVerdict::Failed { .. } => return failed,
             CellVerdict::CouldNotJudge(why) => {
