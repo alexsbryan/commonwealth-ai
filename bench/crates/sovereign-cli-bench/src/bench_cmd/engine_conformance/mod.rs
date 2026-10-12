@@ -28,6 +28,8 @@ mod run_tests;
 mod scenario_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod upstream_tests;
 
 use std::path::{Path, PathBuf};
 

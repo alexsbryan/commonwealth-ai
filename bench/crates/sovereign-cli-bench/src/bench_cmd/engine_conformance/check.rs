@@ -235,17 +235,29 @@ impl Check {
                 Some("the generated tokens differ, so the projection cannot be isolated".into())
             }
             (Some(_), Some(_)) => None,
-            // A remote target never shows its tokens. The answer text then
-            // stands in for "generated differently", but only where a
-            // generation can move the value: text cannot excuse a text check,
-            // a value one side never reports is a projection gap, and a
-            // prompt count does not depend on what was generated.
+            // A remote target never shows its tokens. The answer text and
+            // its reasoning then stand in for "generated differently", but
+            // only where a generation can move the value: text cannot excuse
+            // a text check, a value one side never reports is a projection
+            // gap, and a prompt count does not depend on what was generated.
             _ => match (&a.output, &b.output) {
-                (Some(x), Some(y)) if x.text != y.text && self.generation_moves(x, y) => Some(
-                    "the answer text differs and the tokens are not observed, so the \
-                         projection cannot be isolated"
-                        .into(),
-                ),
+                (Some(x), Some(y)) if self.generation_moves(x, y) => {
+                    if x.text != y.text {
+                        Some(
+                            "the answer text differs and the tokens are not observed, so \
+                             the projection cannot be isolated"
+                                .into(),
+                        )
+                    } else if x.reasoning != y.reasoning {
+                        Some(
+                            "the reasoning differs and the tokens are not observed, so the \
+                             projection cannot be isolated"
+                                .into(),
+                        )
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             },
         }
@@ -305,10 +317,20 @@ impl Check {
         }
     }
 
+    /// A difference the prompt or the generation explains is no verdict on
+    /// this row; equal values are evidence whatever the generations did, so
+    /// the excuse is asked only after the values differ.
     fn judge_pair(&self, r: &CaseRecord, t: &CaseRecord) -> CellVerdict {
-        if let Some(upstream) = self.upstream_difference(r, t) {
-            return CellVerdict::CouldNotJudge(upstream);
+        let verdict = self.compare(r, t);
+        if matches!(verdict, CellVerdict::Failed { .. }) {
+            if let Some(upstream) = self.upstream_difference(r, t) {
+                return CellVerdict::CouldNotJudge(upstream);
+            }
         }
+        verdict
+    }
+
+    fn compare(&self, r: &CaseRecord, t: &CaseRecord) -> CellVerdict {
         match self {
             Check::PromptIds => {
                 let (a, b) = both!(r, t, prompt_ids);

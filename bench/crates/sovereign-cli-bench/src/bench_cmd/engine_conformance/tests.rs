@@ -40,7 +40,7 @@ pub(super) fn is_differs(v: &CellVerdict) -> bool {
 }
 
 /// Judge `check` on a pair built from two facet sets.
-fn pair(check: &Check, a: Facets, b: Facets) -> CellVerdict {
+pub(super) fn pair(check: &Check, a: Facets, b: Facets) -> CellVerdict {
     check.judge(Some(&rec("embedded", a)), &rec("llama-server", b))
 }
 
@@ -378,72 +378,6 @@ fn a_projection_is_not_blamed_for_an_upstream_difference() {
     assert!(
         is_differs(&pair(&frames, with_usage, f(vec![9], "a"))),
         "whether a frame arrives does not depend on the prompt"
-    );
-}
-
-#[test]
-fn unobserved_tokens_let_the_answer_text_excuse_counts_but_not_absences() {
-    // Equal prompts, no greedy tokens: the remote target's shape.
-    let f = |text: &str, usage: Option<(u64, u64)>, finish: Option<&str>| Facets {
-        prompt_ids: Some(vec![1, 2]),
-        output: Some(Output {
-            text: text.into(),
-            usage: usage.map(|(prompt, completion)| Usage { prompt, completion }),
-            finish: finish.map(str::to_string),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
-    let excused = |v: &CellVerdict| matches!(v, CellVerdict::CouldNotJudge(why) if why.contains("answer text differs"));
-    let (u, n) = (Some((2, 5)), Some((2, 9)));
-    assert!(excused(&pair(
-        &Check::Usage,
-        f("a", u, None),
-        f("b", n, None)
-    )));
-    assert!(is_differs(&pair(
-        &Check::Usage,
-        f("a", u, None),
-        f("a", n, None)
-    )));
-    assert!(
-        is_differs(&pair(&Check::Usage, f("a", u, None), f("b", None, None))),
-        "usage one side never reports is a gap, whatever was generated"
-    );
-    assert!(
-        is_differs(&pair(
-            &Check::Usage,
-            f("a", u, None),
-            f("b", Some((0, 5)), None)
-        )),
-        "a prompt count does not depend on what was generated"
-    );
-    let (stop, length) = (Some("stop"), Some("length"));
-    assert!(excused(&pair(
-        &Check::Finish,
-        f("a", None, stop),
-        f("b", None, length)
-    )));
-    assert!(is_differs(&pair(
-        &Check::Finish,
-        f("a", None, stop),
-        f("a", None, length)
-    )));
-    assert!(
-        is_differs(&pair(&Check::Text, f("a", u, stop), f("b", u, stop))),
-        "the text cannot excuse a check on the text"
-    );
-    let tokens = |mut x: Facets, t: Vec<i64>| {
-        x.greedy_tokens = Some(t);
-        x
-    };
-    assert!(
-        is_differs(&pair(
-            &Check::Usage,
-            tokens(f("a", u, None), vec![7]),
-            tokens(f("b", n, None), vec![7])
-        )),
-        "observed equal tokens outrank the text stand-in"
     );
 }
 
