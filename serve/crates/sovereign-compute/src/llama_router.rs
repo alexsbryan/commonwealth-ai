@@ -326,6 +326,54 @@ impl RouterPreset {
         self.entries.keys().map(String::as_str).collect()
     }
 
+    /// The models that fit together, to warm and to set `--models-max` by:
+    /// the longest run, in the order the embedded preflight sizes its slots
+    /// (primary, fast, embed, code, then the reranker), whose working sets
+    /// `fits` admits (`capacity::check_fit` in production, so the router is
+    /// sized by the one verdict the preflight uses). The rest load on
+    /// demand, the router evicting the least recently used. Never empty: a
+    /// primary too big on its own is still tried, as the embedded engine
+    /// starts on an advisory overcommit.
+    pub fn models_that_fit(
+        &self,
+        fits: impl Fn(&[sovereign_inference::capacity::SlotPlan]) -> bool,
+    ) -> Vec<&str> {
+        let mut order: Vec<&str> = Vec::new();
+        for name in [
+            Some(&self.primary),
+            self.fast.as_ref(),
+            self.embed.as_ref(),
+            self.code.as_ref(),
+            self.rerank.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !order.contains(&name.as_str()) {
+                order.push(name);
+            }
+        }
+        let mut slots = Vec::new();
+        let mut fitting = 0;
+        for name in &order {
+            let e = &self.entries[*name];
+            slots.push(sovereign_inference::capacity::SlotPlan {
+                role: name.to_string(),
+                path: e.path.clone(),
+                // One KV pool per section (kv-unified), `ctx-size` long.
+                n_seq_max: 1,
+                n_ctx: e.ctx,
+            });
+            if !fits(&slots) {
+                break;
+            }
+            fitting += 1;
+        }
+        tracing::debug!(target: "llama_router", fitting, of = order.len(), "preset: models that fit together");
+        order.truncate(fitting.max(1));
+        order
+    }
+
     /// The remote half's section for a router listening at `endpoint_v1`.
     /// `context_size` is one value for every chat model, so it is the
     /// smaller of primary and fast: a budget the fast model can also hold.

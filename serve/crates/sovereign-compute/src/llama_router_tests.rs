@@ -189,7 +189,7 @@ fn fast_and_primary_on_one_gguf_are_one_section_serving_both_roles() {
         .unwrap()
         .render();
     assert!(
-        !ini.contains("sleep-idle"),
+        ini.contains("ctx-size = 65536\nkv-unified = true\nparallel = 8\n"),
         "a pinned role pins the shared section: {ini}"
     );
 }
@@ -272,5 +272,46 @@ fn the_router_models_listing_reads_status_value_and_a_failed_load() {
                 "failed (exit 1)".to_string()
             ),
         ]
+    );
+}
+
+#[test]
+fn the_models_warmed_are_the_longest_run_that_fits_primary_first() {
+    let mut m = models();
+    m.code = Some(PRIMARY.into());
+    let preset = RouterPreset::from_models(
+        &m,
+        Some(PathBuf::from("/m/Qwen3-Reranker-0.6B.gguf")),
+        &idle(),
+        layers,
+    )
+    .unwrap();
+    let all = |_: &[sovereign_inference::capacity::SlotPlan]| true;
+    // The code role names the primary's GGUF, so it is not counted twice.
+    assert_eq!(
+        preset.models_that_fit(all),
+        vec![
+            "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+            "Qwen3.5-4B-UD-MTP-Q6_K_XL",
+            "Qwen3-Embedding-0.6B-Q8_0",
+            "Qwen3-Reranker-0.6B",
+        ]
+    );
+    let two = |s: &[sovereign_inference::capacity::SlotPlan]| s.len() <= 2;
+    assert_eq!(
+        preset.models_that_fit(two),
+        vec!["Qwen3.6-35B-A3B-MTP-UD-Q6_K", "Qwen3.5-4B-UD-MTP-Q6_K_XL"]
+    );
+    // Each model is sized at its own context, one KV pool.
+    let sized_at_their_ctx = |s: &[sovereign_inference::capacity::SlotPlan]| {
+        let ctx: Vec<(u32, u32)> = s.iter().map(|p| (p.n_ctx, p.n_seq_max)).collect();
+        [(65536, 1), (32768, 1)].starts_with(&ctx)
+    };
+    assert_eq!(preset.models_that_fit(sized_at_their_ctx).len(), 2);
+    let none = |_: &[sovereign_inference::capacity::SlotPlan]| false;
+    assert_eq!(
+        preset.models_that_fit(none),
+        vec!["Qwen3.6-35B-A3B-MTP-UD-Q6_K"],
+        "a primary too big alone is still tried"
     );
 }

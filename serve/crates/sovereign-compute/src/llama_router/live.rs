@@ -109,6 +109,30 @@ fn check_build(binary: &Path, source: &BinarySource) -> Result<(), String> {
     Ok(())
 }
 
+/// The preset's models that fit this machine's GPU together
+/// ([`RouterPreset::models_that_fit`]). With no GPU budget to size against
+/// (none, or the probe could not read one) every model is warmed, as
+/// before, and the log says the count was not sized.
+fn warm_within_memory(preset: &RouterPreset) -> Vec<&str> {
+    let hw = sovereign_inference::hardware::detect_hardware();
+    if !hw.gpu_available && !hw.is_unified_memory {
+        tracing::info!(target: "llama_router", "router: no GPU budget to size --models-max against; warming every model");
+        return preset.warm_models();
+    }
+    let warm =
+        preset.models_that_fit(|slots| sovereign_inference::capacity::check_fit(slots, &hw).fits);
+    if warm.len() < preset.warm_models().len() {
+        tracing::warn!(
+            target: "llama_router",
+            ?warm,
+            all = ?preset.warm_models(),
+            vram_gb = hw.effective_vram_gb(),
+            "router: not every model fits together; the rest load on demand, evicting the least recently used"
+        );
+    }
+    warm
+}
+
 fn free_port() -> Result<u16, String> {
     // Bound and released: another process could take it before the router
     // binds, and the router would then fail to start and be restarted.
@@ -133,7 +157,11 @@ impl LiveRouter {
         std::fs::write(&preset_path, preset.render())
             .map_err(|e| format!("writing {}: {e}", preset_path.display()))?;
         let port = free_port()?;
-        let models_max = preset.warm_models().len().to_string();
+        let warm: Vec<String> = warm_within_memory(preset)
+            .iter()
+            .map(|m| m.to_string())
+            .collect();
+        let models_max = warm.len().to_string();
         let args = [
             "--models-preset",
             &preset_path.to_string_lossy(),
@@ -156,6 +184,8 @@ impl LiveRouter {
             port,
             preset = %preset_path.display(),
             digest = %preset.digest(),
+            models_max = %models_max,
+            ?warm,
             "starting the llama-server router"
         );
         let supervisor = Arc::new(Supervisor::new(SupervisorConfig {
@@ -195,7 +225,6 @@ impl LiveRouter {
             let supervisor = Arc::clone(&supervisor);
             async move { supervisor.run().await }
         });
-        let warm: Vec<String> = preset.warm_models().iter().map(|m| m.to_string()).collect();
         let started = runtime.block_on(async {
             live.await_healthy(&mut states).await?;
             live.warm(&warm).await
