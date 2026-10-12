@@ -27,6 +27,8 @@ LABELS, NONE = [chr(c) for c in range(ord("A"), ord("Y") + 1)], "0"  # resolve_r
 SEED = 20261012
 GVC_CAP = {"lost": 100, "hit": 50}
 SYSTEMS = {"ward": ("ours-ward", "crm-ward"), "uv": ("ours-uv", "uv-support"), "gvc": ("ours-gvc", "cdcr-gvc")}
+HEADER_LINE = re.compile(r"^\s*(From|To|Cc|Bcc|Sent|Subject|Date|Re|Fw|Fwd)\s*:", re.I)
+SENTENCE_END = re.compile(r"""[.?!:;"')\]]\s*$""")
 REFERENCE = {"it", "this", "that", "these", "those", "they", "them", "which", "what", "its", "one"}
 
 LOCATE_SYSTEM = (READER / "passes_locate_prompt.md").read_text()
@@ -256,6 +258,22 @@ def q_about(view, n, text, s):
     return T_SYSTEM, u, ["A", NONE]
 
 
+def unit(raw, n):
+    """What the asked line is as a unit of meaning (a measurement of the example, never a reader rule): a header
+    line, a fragment (starts or stops mid-sentence), short (under six words), a paragraph (three or more sentences),
+    or a sentence. Added after the PREREG for reporting only (ec's finding 9fba6f1e: Ward lines are wrap
+    fragments); no bar reads it."""
+    t = raw[n - 1].strip()
+    prev, nxt = (raw[n - 2].strip() if n >= 2 else ""), (raw[n].strip() if n < len(raw) else "")
+    if HEADER_LINE.match(t):
+        return "header"
+    if (prev and not SENTENCE_END.search(prev) and t[:1].islower()) or (nxt and not SENTENCE_END.search(t) and nxt[:1].islower()):
+        return "fragment"
+    if len(t.split()) < 6:
+        return "short"
+    return "paragraph" if len(re.findall(r"[.?!](\s|$)", t)) >= 3 else "sentence"
+
+
 def body(system, user, labels):
     return {"model": MODEL, "temperature": 0, "max_tokens": 16, "think_budget": 0, "thinking": {"type": "disabled"},
             "chat_template_kwargs": {"enable_thinking": False},
@@ -345,6 +363,7 @@ def join():
         views = {d: (facts(rec, docs_text[d][0]), numbered(docs_text[d][1])) for d in {x["doc"] for x in items}}
         for x in items:
             x["text"] = line_text(lines[x["doc"]][x["line"]]["text"], docs_text[x["doc"]][1][x["line"] - 1])
+            x["unit"] = unit(docs_text[x["doc"]][1], x["line"])
         pop[system] = {"kinds": kinds, "subjects": subjects, "items": items, "positives_not_asked": unasked,
                        "documents": len(views), "views": {d: f + v for d, (f, v) in views.items()}}
         c = collections.Counter(x["class"] for x in items)
@@ -356,7 +375,7 @@ def join():
     summary = {s: {"documents": p["documents"], "positives_not_asked": p["positives_not_asked"],
                    "classes": dict(collections.Counter(x["class"] for x in p["items"])),
                    "reference_only": sum(x["reference_only"] for x in p["items"]),
-                   "items": [[x["doc"], x["line"], x["gold"], x["value"], x["class"]] for x in p["items"]]}
+                   "items": [[x["doc"], x["line"], x["gold"], x["value"], x["class"], x["unit"]] for x in p["items"]]}
                for s, p in pop.items()}
     (DATA / "population.json").write_text(json.dumps(summary, indent=1))
     return pop
@@ -500,10 +519,12 @@ def score():
             if valued:
                 r["value_right"] = [sum(o[2] == x["value"] for x, o in valued), len(valued)]
                 r["choose_logged_right_same_lines"] = [sum(x["choose"] == x["value"] for x, _ in chose), len(chose)]
+            r["lost_recovered_by_unit"] = {u: [sum(right(x, o) for x, o in lost if x["unit"] == u), sum(x["unit"] == u for x, _ in lost)]
+                                           for u in sorted({x["unit"] for x, _ in lost})}
             res[arm] = r
             for x, o in outs:
                 rows.append({"system": system, "arm": arm, "doc": x["doc"], "line": x["line"], "gold": x["gold"],
-                             "value": x["value"], "class": x["class"], "p_right": round(o[0], 4),
+                             "value": x["value"], "class": x["class"], "unit": x["unit"], "p_right": round(o[0], 4),
                              "predicted": sorted(o[1]), "predicted_value": o[2], "text": x["text"][:160]})
         report[system] = {"gate": gate, "arms": res}
         print(f"== {system} gate {json.dumps(gate)}")

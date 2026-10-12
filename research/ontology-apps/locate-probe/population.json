@@ -15,728 +15,832 @@
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "10724026-1075852854521-javamail-evans-thyme",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "10724026-1075852854521-javamail-evans-thyme",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "10724026-1075852854521-javamail-evans-thyme",
     10,
     "stage_update",
     "proposal",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "10724026-1075852854521-javamail-evans-thyme",
     22,
     "commitment",
     null,
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "10724026-1075852854521-javamail-evans-thyme",
     50,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "10724026-1075852854521-javamail-evans-thyme",
     57,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "10913795-1075851872519-javamail-evans-thyme",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "10913795-1075851872519-javamail-evans-thyme",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "10913795-1075851872519-javamail-evans-thyme",
     19,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "10913795-1075851872519-javamail-evans-thyme",
     22,
     "commitment",
     null,
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "11942366-1075851877289-javamail-evans-thyme",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "11942366-1075851877289-javamail-evans-thyme",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "11942366-1075851877289-javamail-evans-thyme",
     7,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "11942366-1075851877289-javamail-evans-thyme",
     9,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "11942366-1075851877289-javamail-evans-thyme",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "12218076-1075852851717-javamail-evans-thyme",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "12218076-1075852851717-javamail-evans-thyme",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "12218076-1075852851717-javamail-evans-thyme",
     8,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "paragraph"
    ],
    [
     "12933071-1075852851623-javamail-evans-thyme",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "12933071-1075852851623-javamail-evans-thyme",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "12933071-1075852851623-javamail-evans-thyme",
     11,
     null,
     null,
-    "flagged"
+    "flagged",
+    "fragment"
    ],
    [
     "12933071-1075852851623-javamail-evans-thyme",
     16,
     "stage_update",
     "lead",
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "13329014-1075851877218-javamail-evans-thyme",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "13329014-1075851877218-javamail-evans-thyme",
     8,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "13329014-1075851877218-javamail-evans-thyme",
     13,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "13565254-1075851872610-javamail-evans-thyme",
     6,
     "stage_update",
     "proposal",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "13565254-1075851872610-javamail-evans-thyme",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "13689323-1075855265256-javamail-evans-thyme",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "13689323-1075855265256-javamail-evans-thyme",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "13689323-1075855265256-javamail-evans-thyme",
     13,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "14046120-1075851876742-javamail-evans-thyme",
     7,
     "stage_update",
     "lead",
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "15676368-1075851871838-javamail-evans-thyme",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "15676368-1075851871838-javamail-evans-thyme",
     9,
     "stage_update",
     "lost",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "15676368-1075851871838-javamail-evans-thyme",
     16,
     "stage_update",
     "proposal",
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "17516359-1075851877127-javamail-evans-thyme",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "17516359-1075851877127-javamail-evans-thyme",
     8,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "17516359-1075851877127-javamail-evans-thyme",
     15,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "17720071-1075851876765-javamail-evans-thyme",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "17720071-1075851876765-javamail-evans-thyme",
     12,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "17720071-1075851876765-javamail-evans-thyme",
     17,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "17720071-1075851876765-javamail-evans-thyme",
     22,
     "stage_update",
     "proposal",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "17720071-1075851876765-javamail-evans-thyme",
     24,
     "commitment",
     null,
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "17720071-1075851876765-javamail-evans-thyme",
     27,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "18223248-1075851876967-javamail-evans-thyme",
     14,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "18223248-1075851876967-javamail-evans-thyme",
     15,
     "stage_update",
     "proposal",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "18223248-1075851876967-javamail-evans-thyme",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "18223248-1075851876967-javamail-evans-thyme",
     21,
     "commitment",
     null,
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "18223248-1075851876967-javamail-evans-thyme",
     26,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "18663801-1075851871803-javamail-evans-thyme",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "18663801-1075851871803-javamail-evans-thyme",
     10,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "18663801-1075851871803-javamail-evans-thyme",
     14,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "18868731-1075852850848-javamail-evans-thyme",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "18868731-1075852850848-javamail-evans-thyme",
     13,
     "stage_update",
     "negotiating",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "21938920-1075851858851-javamail-evans-thyme",
     8,
     "stage_update",
     "proposal",
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "21938920-1075851858851-javamail-evans-thyme",
     13,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "21938920-1075851858851-javamail-evans-thyme",
     20,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "21938920-1075851858851-javamail-evans-thyme",
     23,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     14,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     15,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     16,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     17,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     18,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     19,
     "stage_update",
     "won",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     20,
     "stage_update",
     "won",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "23949849-1075852850801-javamail-evans-thyme",
     21,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "24417328-1075851877151-javamail-evans-thyme",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "24417328-1075851877151-javamail-evans-thyme",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "24417328-1075851877151-javamail-evans-thyme",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "24417328-1075851877151-javamail-evans-thyme",
     17,
     "stage_update",
     "lead",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     29,
     "commitment",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     30,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     39,
     "stage_update",
     "lead",
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     66,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     69,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     70,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "26292127-1075851877312-javamail-evans-thyme",
     75,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "27327945-1075852854615-javamail-evans-thyme",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "27327945-1075852854615-javamail-evans-thyme",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "27327945-1075852854615-javamail-evans-thyme",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "27327945-1075852854615-javamail-evans-thyme",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "27327945-1075852854615-javamail-evans-thyme",
     22,
     "stage_update",
     "negotiating",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "30325610-1075851872679-javamail-evans-thyme",
     17,
     "stage_update",
     "lead",
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "30325610-1075851872679-javamail-evans-thyme",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "30325610-1075851872679-javamail-evans-thyme",
     32,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "30908702-1075852851833-javamail-evans-thyme",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "30908702-1075852851833-javamail-evans-thyme",
     6,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "paragraph"
    ],
    [
     "33375611-1075852852291-javamail-evans-thyme",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "33375611-1075852852291-javamail-evans-thyme",
     27,
     "stage_update",
     "proposal",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "3465682-1075852850731-javamail-evans-thyme",
     11,
     "stage_update",
     "lead",
-    "lost"
+    "lost",
+    "paragraph"
    ],
    [
     "3465682-1075852850731-javamail-evans-thyme",
     13,
     "stage_update",
     "negotiating",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "3465682-1075852850731-javamail-evans-thyme",
     14,
     "stage_update",
     "lead",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "3465682-1075852850731-javamail-evans-thyme",
     15,
     "stage_update",
     "lead",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "3465682-1075852850731-javamail-evans-thyme",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "3841251-1075852850876-javamail-evans-thyme",
     7,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "3841251-1075852850876-javamail-evans-thyme",
     16,
     "stage_update",
     "won",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "524931-1075852851646-javamail-evans-thyme",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "524931-1075852851646-javamail-evans-thyme",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "header"
    ],
    [
     "8870055-1075852852403-javamail-evans-thyme",
     7,
     "stage_update",
     "won",
-    "lost"
+    "lost",
+    "sentence"
    ]
   ]
  },
@@ -756,1750 +860,2000 @@
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#ev-1360-xref-astral-sh/uv#4791-20240703T222449Z",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#event-13576450390",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#event-13576450422",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#issuecomment-1947384064",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#issuecomment-1951373250",
     1,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#issuecomment-1951373250",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#issuecomment-1951373250",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#issuecomment-1951373250",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1360#issuecomment-1951392817",
     1,
     "case_state",
     "confirmed",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1395#ev-1395-merged-1433",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1395#ev-1395-merged-1493",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1395#ev-1395-xref-astral-sh/uv#1433-20240216T051426Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1395#ev-1395-xref-astral-sh/uv#1493-20240216T143234Z",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1395#event-11822510361",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1395#event-11828529173",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1396",
     2,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1396",
     3,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1397#event-21302542359",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1397#issuecomment-3601394318",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1401",
     2,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1418",
     2,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1418#issuecomment-1947712396",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419",
     2,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419",
     3,
     null,
     null,
-    "flagged"
+    "flagged",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419#issuecomment-2848698821",
     5,
     "case_state",
     "resolved",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419#issuecomment-2848698821",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419#issuecomment-2849420114",
     2,
     "case_state",
     "resolved",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419#issuecomment-2849420114",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419#issuecomment-2849420114",
     6,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419#issuecomment-2849420114",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1419#issuecomment-2849420114",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1422",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1422#event-21302600714",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1422#issuecomment-3601404683",
     2,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1448",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1448",
     34,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1448",
     39,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1448#event-11825417846",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1448#event-11885067839",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1448#issuecomment-1958573152",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1479#ev-1479-merged-1482",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1479#ev-1479-xref-astral-sh/uv#1482-20240216T120314Z",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1479#event-11828044958",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1479#event-11829558601",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1479#issuecomment-1948260075",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1479#issuecomment-1948269799",
     1,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1492",
     3,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#ev-1495-xref-astral-sh/uv#14628-20250715T145554Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2392824868",
     1,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2504023386",
     1,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2514783450",
     3,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     1,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     13,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     19,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     20,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     21,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     37,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     39,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     53,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     60,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     65,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     72,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     79,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     88,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     92,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     95,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2671880221",
     97,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2684967096",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2684967096",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2684967096",
     8,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2684967096",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2684967096",
     17,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2684967096",
     23,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-2685959773",
     1,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3073898354",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3073898354",
     7,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3073898354",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3073898354",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3073898354",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3073898354",
     32,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3073968309",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3239106973",
     3,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3239106973",
     4,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3646060412",
     5,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3646060412",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1495#issuecomment-3646060412",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1501#ev-1501-merged-1504",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1501#ev-1501-xref-astral-sh/uv#1504-20240216T160332Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1501#event-11830319548",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1501#event-11832544966",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1516#issuecomment-2461068863",
     2,
     "case_state",
     "resolved",
-    "lost"
+    "lost",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1530#ev-1530-merged-2532",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1530#ev-1530-xref-astral-sh/uv#2532-20240319T001419Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1530#event-12161930812",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1530#issuecomment-2002281978",
     1,
     "case_state",
     "confirmed",
-    "lost"
+    "lost",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1530#issuecomment-2005119568",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1549",
     2,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1549",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1571#ev-1571-merged-1707",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1571#ev-1571-xref-astral-sh/uv#1707-20240219T165634Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1571#event-11852727161",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1571#issuecomment-1949642298",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1571#issuecomment-1950300577",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1571#issuecomment-1950300730",
     1,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1572",
     1,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1572",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1572",
     14,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1572",
     18,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1573",
     2,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1573",
     54,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1573",
     61,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1578",
     1,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1578",
     5,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1578",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#ev-1593-merged-1918",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#ev-1593-merged-1982",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#ev-1593-xref-astral-sh/uv#1918-20240223T152944Z",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#ev-1593-xref-astral-sh/uv#1982-20240226T131848Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#event-11906679715",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#event-11908914925",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#event-11976651688",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1593#issuecomment-1962101893",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1598",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1598",
     7,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1609",
     2,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1609",
     13,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1619#ev-1619-merged-2633",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1619#ev-1619-xref-astral-sh/uv#2633-20240325T194142Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1619#issuecomment-1950785962",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1619#issuecomment-2018860447",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1623",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1623",
     14,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1623",
     22,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1623",
     32,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1625",
     10,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1625",
     22,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1625",
     23,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1625",
     30,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#ev-1640-merged-8481",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#ev-1640-xref-astral-sh/uv#8433-20241022T001651Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#ev-1640-xref-astral-sh/uv#8481-20241022T231653Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#event-15192480321",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-1974193733",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2349806090",
     1,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2349806090",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2349806090",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2349806090",
     19,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2349806090",
     21,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2349806090",
     26,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2368352600",
     1,
     "case_state",
     "confirmed",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2371625188",
     1,
     "case_state",
     "confirmed",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2427435444",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2427968989",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1640#issuecomment-2532843534",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1648#ev-1648-merged-1653",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1648#ev-1648-xref-astral-sh/uv#1653-20240218T153133Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1648#event-11841310734",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1648#issuecomment-1951349210",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1648#issuecomment-1951349210",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1657#event-13269043033",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1657#issuecomment-2186976697",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1678#ev-1678-merged-1679",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1678#ev-1678-xref-astral-sh/uv#1679-20240219T023722Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1678#event-11876969367",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1678#issuecomment-1956732546",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1761",
     2,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     3,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     24,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     30,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     31,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     36,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     42,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     45,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     52,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     57,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     58,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1777",
     67,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1783",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1783",
     4,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1783",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1783",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1783",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1804#event-12090599016",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1804#event-12334752730",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1810",
     5,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1810",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1810",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     15,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     26,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     29,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     37,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     44,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     45,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     47,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     58,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     68,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     70,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     73,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     83,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     89,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1828",
     126,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1831",
     2,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1831",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1831",
     19,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1837",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "fragment"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1837",
     9,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     8,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     25,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     34,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     35,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     40,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     44,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     46,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     52,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     57,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     62,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     67,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     69,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     76,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     77,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     79,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     91,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     93,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     114,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     120,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1840",
     124,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1870#event-13208285933",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "short"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1870#issuecomment-1960335012",
     1,
     "case_state",
     "resolved",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1870#issuecomment-2047660288",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1870#issuecomment-2177309018",
     1,
     "case_state",
     "in_progress",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1899",
     2,
     "case_state",
     "reported",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/1943",
     2,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/2077#ev-2077-xref-astral-sh/uv#2352-20240311T080627Z",
     1,
     "case_state",
     "in_progress",
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/2077#issuecomment-1971315709",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "https://github.com/astral-sh/uv/issues/2077#issuecomment-1971579880",
     2,
     null,
     null,
-    "flagged"
+    "flagged",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/2077#issuecomment-1971579880",
     3,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/2077#issuecomment-1972036241",
     1,
     "case_state",
     "confirmed",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/2077#issuecomment-2151122471",
     1,
     "case_state",
     "declined",
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "https://github.com/astral-sh/uv/issues/2077#issuecomment-2666480162",
     7,
     "case_state",
     "reported",
-    "lost"
+    "lost",
+    "sentence"
    ]
   ]
  },
@@ -2519,2100 +2873,2400 @@
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     13,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     14,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     24,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     27,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "0103fecb38fd0263f899b3917555b0d2",
     28,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     1,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     4,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     20,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "07a85009c53e962b417cb8b545c51af9",
     21,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "0b3b5a80431913c99c9776d1accd2906",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "paragraph"
    ],
    [
     "0b3b5a80431913c99c9776d1accd2906",
     6,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "104db82506283933234d28c49929a9cc",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "150f030a0c018862ea5b3b1604231026",
     6,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "150f030a0c018862ea5b3b1604231026",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     6,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     14,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     17,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     18,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     22,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     26,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     32,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "15d09e57d28a5da15051d475d5681c85",
     33,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "18c9c2ab4f33be988e704f7b482b5ed9",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "paragraph"
    ],
    [
     "18c9c2ab4f33be988e704f7b482b5ed9",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "18c9c2ab4f33be988e704f7b482b5ed9",
     6,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "18c9c2ab4f33be988e704f7b482b5ed9",
     7,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "18c9c2ab4f33be988e704f7b482b5ed9",
     9,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "1bebb62822642fe3e81da5f1e750a1e0",
     7,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "1bebb62822642fe3e81da5f1e750a1e0",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "1ddb2825d2518ee2df29ddae2a66c2e9",
     2,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "1ddb2825d2518ee2df29ddae2a66c2e9",
     3,
     null,
     null,
-    "flagged"
+    "flagged",
+    "short"
    ],
    [
     "1ddb2825d2518ee2df29ddae2a66c2e9",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "1ddb2825d2518ee2df29ddae2a66c2e9",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "1ddb2825d2518ee2df29ddae2a66c2e9",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "1ddb2825d2518ee2df29ddae2a66c2e9",
     20,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "1ddb2825d2518ee2df29ddae2a66c2e9",
     22,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "1f5a0cb5862fc782d4a0e466748db618",
     1,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "1f5a0cb5862fc782d4a0e466748db618",
     11,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "1f5a0cb5862fc782d4a0e466748db618",
     14,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "1f5a0cb5862fc782d4a0e466748db618",
     15,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "1f5a0cb5862fc782d4a0e466748db618",
     16,
     "report",
     null,
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "20451ad9563e2c4d870f7fc84d396c89",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "20451ad9563e2c4d870f7fc84d396c89",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "20451ad9563e2c4d870f7fc84d396c89",
     14,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "20451ad9563e2c4d870f7fc84d396c89",
     16,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "20451ad9563e2c4d870f7fc84d396c89",
     23,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2234f0e17887d5296178b85cb1012bea",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "2234f0e17887d5296178b85cb1012bea",
     7,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2234f0e17887d5296178b85cb1012bea",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2234f0e17887d5296178b85cb1012bea",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2234f0e17887d5296178b85cb1012bea",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2234f0e17887d5296178b85cb1012bea",
     17,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2234f0e17887d5296178b85cb1012bea",
     22,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2500ae9282f44f560e3716e4ba117385",
     1,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "2500ae9282f44f560e3716e4ba117385",
     9,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2804a2b0992e09edb4e94ee531889332",
     3,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2804a2b0992e09edb4e94ee531889332",
     5,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "2804a2b0992e09edb4e94ee531889332",
     6,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2804a2b0992e09edb4e94ee531889332",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2804a2b0992e09edb4e94ee531889332",
     10,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2882e636369a3cbbabde4e1dabdbdfab",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2882e636369a3cbbabde4e1dabdbdfab",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2b1f309f668e0781682f523994146b8a",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2b1f309f668e0781682f523994146b8a",
     8,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "2bbecd575f30b22c041e138ad53c45f7",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "2bbecd575f30b22c041e138ad53c45f7",
     10,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2bbecd575f30b22c041e138ad53c45f7",
     11,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2bbecd575f30b22c041e138ad53c45f7",
     14,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2bbecd575f30b22c041e138ad53c45f7",
     15,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "2bbecd575f30b22c041e138ad53c45f7",
     25,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "30a91b897e071a1916f5108a8f7c1698",
     8,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "30a91b897e071a1916f5108a8f7c1698",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "30a91b897e071a1916f5108a8f7c1698",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "30a91b897e071a1916f5108a8f7c1698",
     15,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "30a91b897e071a1916f5108a8f7c1698",
     17,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "316932156a3da5a8b02094f0f1c97ec0",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "33840bbd5a82d9e0643b6d9f34f9d106",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "3a81fc725917cbf89cbfab9775e6ba50",
     2,
     null,
     null,
-    "flagged"
+    "flagged",
+    "short"
    ],
    [
     "3a81fc725917cbf89cbfab9775e6ba50",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "4440cd0bd02b1ebf657260e02627d925",
     9,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "456f3dd976b192f2be0be5d1639cdcc5",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "456f3dd976b192f2be0be5d1639cdcc5",
     9,
     null,
     null,
-    "flagged"
+    "flagged",
+    "fragment"
    ],
    [
     "456f3dd976b192f2be0be5d1639cdcc5",
     15,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "474192e8ed58d492d1bccacae3863c5a",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "474192e8ed58d492d1bccacae3863c5a",
     7,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "474192e8ed58d492d1bccacae3863c5a",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "474192e8ed58d492d1bccacae3863c5a",
     13,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "474192e8ed58d492d1bccacae3863c5a",
     15,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "474192e8ed58d492d1bccacae3863c5a",
     18,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "474192e8ed58d492d1bccacae3863c5a",
     21,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "47cd556677ed22a440ff250b26c27ad9",
     8,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "47cd556677ed22a440ff250b26c27ad9",
     10,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "47cd556677ed22a440ff250b26c27ad9",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "47cd556677ed22a440ff250b26c27ad9",
     13,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "47cd556677ed22a440ff250b26c27ad9",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "48aae1a3e266f1af6cecda03c6048db7",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "48aae1a3e266f1af6cecda03c6048db7",
     12,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "4a3283c9adfa72dec85f6296ce819c9c",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "4a3283c9adfa72dec85f6296ce819c9c",
     7,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "4cb4e8c2adc7e6a6b545d4ff0264bcc3",
     1,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "4cb4e8c2adc7e6a6b545d4ff0264bcc3",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "533dc1a9518e4defd149a1e1c2a40766",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "533dc1a9518e4defd149a1e1c2a40766",
     8,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "533dc1a9518e4defd149a1e1c2a40766",
     9,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "53b97d585a4890c82818045870a999b6",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "53b97d585a4890c82818045870a999b6",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "53b97d585a4890c82818045870a999b6",
     4,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "53b97d585a4890c82818045870a999b6",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "53b97d585a4890c82818045870a999b6",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "53b97d585a4890c82818045870a999b6",
     13,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "5427240fe9a6199c11f4bfa5667ef9a3",
     2,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "5427240fe9a6199c11f4bfa5667ef9a3",
     10,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "5427240fe9a6199c11f4bfa5667ef9a3",
     14,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "5427240fe9a6199c11f4bfa5667ef9a3",
     15,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "5427240fe9a6199c11f4bfa5667ef9a3",
     16,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "5427240fe9a6199c11f4bfa5667ef9a3",
     17,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "5427240fe9a6199c11f4bfa5667ef9a3",
     25,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "54aafae5ecfb4ea7b63b0feb3cc1f804",
     4,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "54aafae5ecfb4ea7b63b0feb3cc1f804",
     7,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "54aafae5ecfb4ea7b63b0feb3cc1f804",
     10,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "54aafae5ecfb4ea7b63b0feb3cc1f804",
     13,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "54aafae5ecfb4ea7b63b0feb3cc1f804",
     14,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "54aafae5ecfb4ea7b63b0feb3cc1f804",
     16,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "54aafae5ecfb4ea7b63b0feb3cc1f804",
     18,
     "report",
     null,
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "5565a2d05c26f71871509eb0f6ce67e9",
     6,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "558c3b514b0c387be30701c97c321a14",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "5a0c56265670498621b7cd2f71e53902",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "5a0c56265670498621b7cd2f71e53902",
     10,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "622e463d4866570f7c682a6543e4e8b0",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "622e463d4866570f7c682a6543e4e8b0",
     6,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "622e463d4866570f7c682a6543e4e8b0",
     15,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "622e463d4866570f7c682a6543e4e8b0",
     17,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "64a97e1b658c9da115893ba2ff4f4f6f",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "662672852b984c058a02869c92096d86",
     1,
     "report",
     null,
-    "lost"
+    "lost",
+    "short"
    ],
    [
     "662672852b984c058a02869c92096d86",
     4,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "662672852b984c058a02869c92096d86",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "7599d2c270380b8c4d56a28eb49d910f",
     13,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "7599d2c270380b8c4d56a28eb49d910f",
     17,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "7599d2c270380b8c4d56a28eb49d910f",
     18,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "772591405acd0c43d28f61c737d563a0",
     10,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "772591405acd0c43d28f61c737d563a0",
     11,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "772591405acd0c43d28f61c737d563a0",
     14,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "772591405acd0c43d28f61c737d563a0",
     17,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "772591405acd0c43d28f61c737d563a0",
     19,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "772591405acd0c43d28f61c737d563a0",
     29,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "7d726113c5779da0c25328489ee6cb5f",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "7d726113c5779da0c25328489ee6cb5f",
     7,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "7d726113c5779da0c25328489ee6cb5f",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "7d726113c5779da0c25328489ee6cb5f",
     11,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "810c1a1ffe404eb28d6bc39dd4f387c6",
     6,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "810c1a1ffe404eb28d6bc39dd4f387c6",
     7,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "810c1a1ffe404eb28d6bc39dd4f387c6",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "810c1a1ffe404eb28d6bc39dd4f387c6",
     13,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "83f004d5abaf3635c902e33e68c76f63",
     1,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8974b84a606f82cac1e7dec3fe72fcba",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8974b84a606f82cac1e7dec3fe72fcba",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "89cd74707f3695461502759237df180d",
     6,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "89cd74707f3695461502759237df180d",
     11,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "89cd74707f3695461502759237df180d",
     12,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     2,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     8,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     17,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     24,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     30,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     34,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     37,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     40,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     41,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     42,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     44,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     45,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     47,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     49,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     53,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "8a82a70b851c000fd66f5871d2a7c32a",
     55,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8aaf0296fc3a08a43aa6ecc1eedecc59",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "8aaf0296fc3a08a43aa6ecc1eedecc59",
     13,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "8aaf0296fc3a08a43aa6ecc1eedecc59",
     14,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "8aaf0296fc3a08a43aa6ecc1eedecc59",
     24,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "90f05cdd91998283674d95244279e798",
     1,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "90f05cdd91998283674d95244279e798",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "90f05cdd91998283674d95244279e798",
     3,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "90f05cdd91998283674d95244279e798",
     23,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "90f05cdd91998283674d95244279e798",
     27,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "91153f512a483bcc383595f6927fd0b5",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "91153f512a483bcc383595f6927fd0b5",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "95e01170da8c0929a442ef28b93be9e1",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "9f47096fc23b0730c1120df0e8d10061",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "9f47096fc23b0730c1120df0e8d10061",
     14,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "9f47096fc23b0730c1120df0e8d10061",
     17,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "9f47096fc23b0730c1120df0e8d10061",
     21,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "a11a696e95ec883a2bdda0a9861ebb09",
     2,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "a11a696e95ec883a2bdda0a9861ebb09",
     3,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "a11a696e95ec883a2bdda0a9861ebb09",
     6,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "a1eac7c03830c460eafd1f57a95aad8f",
     1,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "a1eac7c03830c460eafd1f57a95aad8f",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "a1eac7c03830c460eafd1f57a95aad8f",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "a1eac7c03830c460eafd1f57a95aad8f",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "a1eac7c03830c460eafd1f57a95aad8f",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "a670bf96acee9267204544c8ecda3d10",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "a670bf96acee9267204544c8ecda3d10",
     13,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "a670bf96acee9267204544c8ecda3d10",
     14,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "a670bf96acee9267204544c8ecda3d10",
     15,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "a670bf96acee9267204544c8ecda3d10",
     20,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "a7a093815bffd66a5f2cfc3f035c392f",
     4,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "a7a093815bffd66a5f2cfc3f035c392f",
     7,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "b27405f9afd055f54cdab7c68ccff13e",
     6,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "bc1b3a7f460907712248bf91bb3dad60",
     1,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "bc1b3a7f460907712248bf91bb3dad60",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "be72bc254d808cdf561a42cec76fdeae",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "be72bc254d808cdf561a42cec76fdeae",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "be72bc254d808cdf561a42cec76fdeae",
     9,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "be72bc254d808cdf561a42cec76fdeae",
     12,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "be72bc254d808cdf561a42cec76fdeae",
     14,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     1,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     6,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     11,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     15,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     22,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     24,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     37,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     41,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     51,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     52,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     53,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c657b5e13384a329d6909243da721285",
     65,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c69d14366d741ecd9e55646f5903fe8c",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "c69d14366d741ecd9e55646f5903fe8c",
     5,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c69d14366d741ecd9e55646f5903fe8c",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "c69d14366d741ecd9e55646f5903fe8c",
     10,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "c69d14366d741ecd9e55646f5903fe8c",
     11,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "c8d02ec56d873583e4fb7d9970f8d2dc",
     11,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c8d02ec56d873583e4fb7d9970f8d2dc",
     13,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "c8d02ec56d873583e4fb7d9970f8d2dc",
     17,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "c8d02ec56d873583e4fb7d9970f8d2dc",
     19,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "c8d02ec56d873583e4fb7d9970f8d2dc",
     23,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "d09d10134bc7030ee3e45f840b8e9f9d",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "d09d10134bc7030ee3e45f840b8e9f9d",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "d09d10134bc7030ee3e45f840b8e9f9d",
     7,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "d1f844f36f140bb5da494dbe47b127fd",
     8,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "d1f844f36f140bb5da494dbe47b127fd",
     9,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "d1f844f36f140bb5da494dbe47b127fd",
     10,
     "report",
     null,
-    "lost"
+    "lost",
+    "paragraph"
    ],
    [
     "d1f844f36f140bb5da494dbe47b127fd",
     12,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "d8cd93cc59fc1160f63a40c6cd5ba6e3",
     2,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "d8cd93cc59fc1160f63a40c6cd5ba6e3",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "d8cd93cc59fc1160f63a40c6cd5ba6e3",
     6,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "dfb3aed53fc8a4de2c1295bc74555263",
     4,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "dfb3aed53fc8a4de2c1295bc74555263",
     5,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "dfb3aed53fc8a4de2c1295bc74555263",
     8,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "e162ad62b8a8a18663a885f0b050dc7d",
     3,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "e162ad62b8a8a18663a885f0b050dc7d",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "e162ad62b8a8a18663a885f0b050dc7d",
     16,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "e162ad62b8a8a18663a885f0b050dc7d",
     19,
     "report",
     null,
-    "lost"
+    "lost",
+    "fragment"
    ],
    [
     "e162ad62b8a8a18663a885f0b050dc7d",
     29,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "e162ad62b8a8a18663a885f0b050dc7d",
     30,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "e162ad62b8a8a18663a885f0b050dc7d",
     32,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "e56fec8e36214f810fd580ab08d3e1b5",
     6,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "e56fec8e36214f810fd580ab08d3e1b5",
     7,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "e577d21b7f6fc154b42022aaf582d13f",
     3,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "e577d21b7f6fc154b42022aaf582d13f",
     8,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "e577d21b7f6fc154b42022aaf582d13f",
     9,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "e577d21b7f6fc154b42022aaf582d13f",
     10,
     null,
     null,
-    "clean"
+    "clean",
+    "short"
    ],
    [
     "f03d228accae8f19bab8d465c831e930",
     16,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f123522b3d905fc67cb6f0cc5ba40a64",
     3,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f123522b3d905fc67cb6f0cc5ba40a64",
     15,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "f123522b3d905fc67cb6f0cc5ba40a64",
     17,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f123522b3d905fc67cb6f0cc5ba40a64",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f123522b3d905fc67cb6f0cc5ba40a64",
     22,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f123522b3d905fc67cb6f0cc5ba40a64",
     25,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f123522b3d905fc67cb6f0cc5ba40a64",
     29,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f2aedab9724c967c9a8c38d87d6a39b4",
     6,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "f2aedab9724c967c9a8c38d87d6a39b4",
     11,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "f2aedab9724c967c9a8c38d87d6a39b4",
     15,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "f2aedab9724c967c9a8c38d87d6a39b4",
     18,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f2aedab9724c967c9a8c38d87d6a39b4",
     20,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f2aedab9724c967c9a8c38d87d6a39b4",
     25,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f2b153b06d80107947dbe64693abb899",
     8,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "f2b153b06d80107947dbe64693abb899",
     13,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f6fe00ab356f2779eb7947484abc2204",
     3,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "f6fe00ab356f2779eb7947484abc2204",
     7,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ],
    [
     "f6fe00ab356f2779eb7947484abc2204",
     8,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "f7c7fbcf9514fbd5ac8a908532734696",
     2,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "f7c7fbcf9514fbd5ac8a908532734696",
     5,
     null,
     null,
-    "flagged"
+    "flagged",
+    "sentence"
    ],
    [
     "ff3e1d8a3de2e9c6fc87f832e9478ea5",
     2,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "ff3e1d8a3de2e9c6fc87f832e9478ea5",
     12,
     "report",
     null,
-    "hit"
+    "hit",
+    "sentence"
    ],
    [
     "ff3e1d8a3de2e9c6fc87f832e9478ea5",
     15,
     null,
     null,
-    "clean"
+    "clean",
+    "sentence"
    ],
    [
     "ff3e1d8a3de2e9c6fc87f832e9478ea5",
     18,
     "report",
     null,
-    "lost"
+    "lost",
+    "sentence"
    ]
   ]
  }
