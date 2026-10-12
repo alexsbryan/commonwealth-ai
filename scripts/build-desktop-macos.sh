@@ -186,6 +186,13 @@ if (( UNIVERSAL )); then
     # per-arch, so this path has not been run end to end.
     lipo -create -output "${SIDECAR}-universal-apple-darwin" \
         "${SIDECAR}-aarch64-apple-darwin" "${SIDECAR}-x86_64-apple-darwin"
+    # The server pair too (Metal on arm64, CPU on x86_64). The one manifest
+    # staged is the last arch's; its [build] backend is a record the daemon
+    # does not compare, and the pin both halves were built from is the same.
+    for bin in llama-server ggml-rpc-server; do
+        lipo -create -output "$BIN_DIR/${bin}-universal-apple-darwin" \
+            "$BIN_DIR/${bin}-aarch64-apple-darwin" "$BIN_DIR/${bin}-x86_64-apple-darwin"
+    done
     log "  Staged daemon sidecar for both arches + universal"
 else
     bash scripts/stage-daemon-sidecar.sh "$TARGET"

@@ -8,6 +8,9 @@
 # The daemon sidecar (svt-1), BUILT by scripts/stage-daemon-sidecar.sh
 # rather than fetched — a ~200 MB release artifact of this very workspace.
 /src-tauri/binaries/sovereign-cli-daemon-*
+# The llama-server pair and its manifest, built by the same script (ENGINE_SWAP_PLAN D3).
+/src-tauri/binaries/llama-server*
+/src-tauri/binaries/ggml-rpc-server-*
 
 # Playwright artifacts (chat surface e2e tests).
 /test-results/
