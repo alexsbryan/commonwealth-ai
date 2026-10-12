@@ -36,10 +36,10 @@ use super::corpus_io::{build_manifest_from_corpus_rows, hydrate_corpus_chapters_
 mod contracts;
 #[path = "layer_contract_tests/identity.rs"]
 mod identity;
-#[path = "layer_contract_tests/reader.rs"]
-mod reader;
 #[path = "layer_contract_tests/protocol.rs"]
 mod protocol;
+#[path = "layer_contract_tests/reader.rs"]
+mod reader;
 
 const SHAPES: [&str; 3] = ["mail", "issues", "news"];
 

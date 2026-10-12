@@ -428,7 +428,10 @@ fn validate_protocol_rule(
         );
     }
     if let Some(by) = &rule.by {
-        if !matches!(policies.derivation.derived.get(by), Some(Named::PathDecl(_))) {
+        if !matches!(
+            policies.derivation.derived.get(by),
+            Some(Named::PathDecl(_))
+        ) {
             fail(
                 errors,
                 format!(
