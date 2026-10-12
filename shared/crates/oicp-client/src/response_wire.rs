@@ -25,7 +25,19 @@ use serde::Deserialize;
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::{CompletionRequest, FinishReason, StreamFrame, StreamUsage};
 
-use crate::{ChatMessage, StructuredOutputMode, UsageInfo};
+use crate::{ChatCompletionResponse, ChatMessage, StructuredOutputMode, UsageInfo};
+
+/// Read a non-streaming chat completion off the wire and parse it.
+pub(crate) async fn read_chat(response: reqwest::Response) -> Result<ChatCompletionResponse> {
+    let status = response.status().as_u16();
+    let raw = response
+        .text()
+        .await
+        .map_err(|e| Error::Inference(format!("Failed to read API response: {e}")))?;
+    crate::chat_wire::observe_wire_response(status, &raw);
+    serde_json::from_str(&raw)
+        .map_err(|e| Error::Inference(format!("Failed to parse API response: {e}")))
+}
 
 #[derive(Deserialize)]
 struct StreamChunk {

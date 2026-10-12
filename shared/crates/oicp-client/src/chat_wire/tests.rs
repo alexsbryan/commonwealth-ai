@@ -547,15 +547,34 @@ fn a_schema_goes_out_closed_as_the_engine_compiles_it() {
 
 /// THE FAILING INPUT for decode.tool-choice-named: a named function went to
 /// llama-server, which read it as "auto", so the call was optional and could
-/// be any tool. It is refused there; a daemon, and the string choices, pass.
+/// be any tool. It was refused there; it now goes as "required" over the one
+/// named tool, the spelling the server reads, and the reply is checked for
+/// the call (`call_check`; engine-swap decision 1). A name the list does not
+/// offer is still refused. A daemon, and the string choices, pass unchanged.
 #[test]
-fn a_named_tool_choice_is_refused_where_the_host_would_loosen_it() {
+fn a_named_tool_choice_goes_as_required_over_that_tool_where_the_host_would_loosen_it() {
     let mut req = with_tools(named_request());
+    req.tools
+        .as_mut()
+        .unwrap()
+        .push(sovereign_contracts::types::ToolSchema {
+            name: "read".into(),
+            description: None,
+            parameters: json!({"type": "object"}),
+        });
     req.tool_choice = Some(json!({"type": "function", "function": {"name": "bash"}}));
-    let refused = llguidance().build_request(&req);
-    assert!(refused.is_err(), "{refused:?}");
+    let narrowed = llguidance().build_request(&req).unwrap();
+    assert_eq!(narrowed["tool_choice"], "required", "{narrowed}");
+    let tools = narrowed["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 1, "{narrowed}");
+    assert_eq!(tools[0]["function"]["name"], "bash");
     let daemon = provider().build_request(&req).unwrap();
     assert_eq!(daemon["tool_choice"]["function"]["name"], "bash");
+    assert_eq!(daemon["tools"].as_array().unwrap().len(), 2);
+
+    req.tool_choice = Some(json!({"type": "function", "function": {"name": "absent"}}));
+    let refused = llguidance().build_request(&req);
+    assert!(refused.is_err(), "{refused:?}");
 
     req.tool_choice = Some(json!("required"));
     let body = llguidance().build_request(&req).unwrap();

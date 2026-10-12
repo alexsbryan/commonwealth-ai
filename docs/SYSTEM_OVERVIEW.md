@@ -1045,9 +1045,11 @@ preset role's residency (embed and rerank included) from the polled
 `GET /models`, the code model, and `n_ctx_train` from the primary GGUF's header.
 The binary is `llama-server` beside the daemon's executable, built by
 `serve/crates/sovereign-compute/llama-server/build.sh` from `PIN.toml` there
-(llama.cpp commit, llguidance, each patch by sha256), which writes
-`llama-server.manifest.toml` beside it. The daemon compiles the pin in and
-refuses a shipped binary whose manifest disagrees
+(llama.cpp commit, llguidance, each patch by sha256, the binaries), per
+backend (`--backend vulkan|metal|cpu|rocm|cuda`, defaulting by host) and
+always with RPC, so `ggml-rpc-server` installs beside it, and writes
+`llama-server.manifest.toml` beside both. The daemon compiles the pin in and
+refuses a shipped binary whose manifest disagrees or names a binary not there
 (`llama_router::build_pin::verify`); `[engine] server_binary` overrides the
 binary and skips the check, and `/status` says which ran. The whole path is
 `sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
@@ -1116,8 +1118,10 @@ The request is written in the spelling `[engine] grammar` names
 (`oicp-client/src/chat_wire.rs`). To a llama-server (`llguidance`) an
 `assistant_prefix` goes as a trailing assistant message the server
 continues, and the prefix is cut from the front of the answer as the engine
-leaves it out; a named `tool_choice`, which that server reads as `auto`, is
-refused. To every host, a templated request carries the `enable_thinking` the
+leaves it out; a named `tool_choice`, which that server reads as `auto`,
+goes as `required` with `tools` narrowed to the named one, and a reply to a
+`required` request that calls no offered tool is asked once more, then
+failed naming the miss (`call_check.rs`, non-streaming). To every host, a templated request carries the `enable_thinking` the
 engine renders it with (`CompletionRequest::templated_thinking`, off unless
 asked), a positive think budget also goes as `reasoning_budget_tokens`, and a
 schema goes out closed by the same `additionalProperties` default the engine

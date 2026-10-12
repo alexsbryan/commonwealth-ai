@@ -329,7 +329,7 @@ judge = [{ kind = "tool-calls" }]
 when = [{ kind = "complete", tool_choice_named = "=true" }]
 predict = "fail:silent"
 basis = "read"
-fix = "decided 2026-10-10: the client refuses a named tool_choice the server would downgrade (ARCH 6)"
+fix = "decided 2026-10-12 (engine-swap dec 1, replacing the 2026-10-10 refusal): the client sends a named tool_choice as 'required' with tools narrowed to that one (chat_wire::narrow_tool_choice) and checks the reply for the call, retrying once then failing (call_check)"
 note = "llama-server reads tool_choice as a string; an object warns and becomes 'auto' (LS server-common.cpp:1138, server-common.h:40-52). The embedded engine does not enforce it either; it only changes the prompt path."
 
 [[row]]
