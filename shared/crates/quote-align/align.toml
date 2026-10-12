@@ -6,7 +6,8 @@
 # fails until both move together. The values below are first settings, to be
 # fitted by `svrn bench` (ADDRESSED_TEXT §5.3 step 4), not measurements.
 
-# Keep an alignment only when matched quote tokens / quote tokens reaches
+# Keep an alignment only when quote tokens matched (exactly, or the first word up to its
+# first letter's case) / quote tokens reaches
 # this. The verdict a client draws from the reported differences is its own.
 coverage_floor = 0.7
 
