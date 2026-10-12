@@ -1,0 +1,37 @@
+# engine-swap: the embedded engine to a supervised llama-server, then delete.
+# Plan: ~/dev/svrn-docs/ENGINE_SWAP_PLAN.md (milestones A-G, decisions of
+# 2026-10-11 and 2026-10-12). Launch from the repo root INSIDE the toolbox
+# (`toolbox enter sovereign-vulkan`; `toolbox run` drops RALPH_QUEUE), after
+# checking no other loop is live (`pgrep -f 'ralph.py supervise'`):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue engine-swap \
+#     -- python3 scripts/ralph.py pool --workdir . --queue engine-swap --lanes 3 \
+#     >> ralph/log-engine-swap.txt 2>&1 &
+#
+# Three lanes, as phase-c measured its memory headroom (phase-b-103), with
+# the deployed daemon resident beside them. heavy.txt allows one
+# model-loading row per wave; conflicts.txt keeps rows on the same files out
+# of one wave. HUMAN- rows are the seat's (host grant: restart the daemon,
+# 2026-09-28): the pool parks them and runs on.
+label = "engine-swap"
+session_timeout = 7200
+audit_every = 8
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5-5"
+review = "claude-opus-5-5"
+resolve = "claude-opus-5-5"
+variant = "medium"
+
+[checks]
+# The live router e2e on build.sh's binary (target/debug/llama-server, which a
+# lane's reflink-cloned target carries). Models from the main tree, absolute.
+router-e2e = ["bash", "-c", "SOVEREIGN_MODELS_DIR=/home/alexbryan/dev/commonwealth-ai/sovereign/models ./scripts/with-cargo-lock.sh cargo test -p sovereign-stock --test llama_server_router_e2e -- --ignored --nocapture"]
+# A live run needs 60 GB available beside the deployed daemon (2026-10-09 OOM).
+headroom = ["python3", "-c", "import sys; a=[int(l.split()[1]) for l in open('/proc/meminfo') if l.startswith('MemAvailable')][0]//1048576; print(f'available {a} GB'); sys.exit(0 if a >= 60 else 1)"]
+# No llama-server or ggml-rpc-server running without a sovereign-stock above
+# it: a deployed daemon's own router (after HUMAN-es-host-flip) is not an orphan.
+no-orphans = ["python3", "ralph/next/engine-swap/no_orphans.py"]
+boundary = ["bash", "-c", "cargo xtask boundary-gate; cargo xtask clone-gate; true"]

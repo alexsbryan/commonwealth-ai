@@ -1,0 +1,7 @@
+# engine-swap heavy rows: at most ONE per wave. Every live run in this queue boots
+# its own daemon on small GGUFs (HEADROOM guards memory), so loading a model is
+# not what makes a row heavy here: a row whose BAR is a timing is, because a
+# second lane's live run on the same GPU would skew the reading.
+es-r2-router-parity                       # C16 concurrency, cost.concurrent-fast
+REVIEW-build-es-f2-router-rpc-placement   # D2: decode tok/s at 90% of one device
+es-c2-battery-rejudge                     # the battery's 51 cells against the deployed router, beside no timing row
