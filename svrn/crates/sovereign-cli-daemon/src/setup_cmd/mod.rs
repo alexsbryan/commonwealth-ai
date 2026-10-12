@@ -696,7 +696,7 @@ struct Opts {
 // ─── Model catalog + picker ───────────────────────────────────────
 //
 // Catalog construction (`build_primary_catalog`, `tier_rank`,
-// `resolve_slot`, `SlotKind`) lives in `sovereign_inference::setup_planner`,
+// `resolve_slot`, `SlotKind`) lives in `sovereign_compute::setup_planner`,
 // the loader's; this crate reads its answer through the `plan` probe.
 
 enum Pick {

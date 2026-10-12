@@ -157,9 +157,6 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("svrn/crates/sovereign-tools/src/calendar.rs", Class::OperatorSurface, 1),
 
 
-    // ---- sovereign-inference (InboundOnly: range-resumed model downloads) ----
-    ("serve/crates/sovereign-inference/src/setup_planner.rs", Class::InboundOnly, 1),
-
     // ---- sovereign-gliner (InboundOnly: HuggingFace model download) ----
     ("serve/crates/sovereign-gliner/src/gliner_ner.rs", Class::InboundOnly, 1),
 
@@ -190,6 +187,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // NEW ROW (2026-09-26, phase-b pb-serve-program d2f6e781c): the one kind
     // mount's test posts to a child router it bound on 127.0.0.1:0.
     ("serve/crates/sovereign-compute/src/server.rs", Class::TestOnly, 1),
+    // setup_planner: range-resumed model downloads (InboundOnly), moved from
+    // sovereign-inference at es-m3-move-agnostic.
+    ("serve/crates/sovereign-compute/src/setup_planner.rs", Class::InboundOnly, 1),
 
     // ---- serve, dialed by the svrn daemon (pb-svrn-dials-serve) ----
     // serve_client: the engine-state, served-self, forwarded-GET and reload
