@@ -204,9 +204,12 @@ have (About, Choose, Pick, Point, RESOLVE) in a new order before building anythi
    - For each particular, the act (stage, state) and its fields, asked of the whole message, with system prompts
      that name the declared type and field.
    - Each act asked in two wordings; a disagreement is held, not settled.
-   - Citation after the answer: a ranking of the document's lines, then one forced choice among the top three.
-     Locate's ranking costs its per-line calls (19.7 per Ward document), the cost this plan exists to remove, so
-     b1 is measuring the replacement: sentence units ranked by embedding against the recorded value (M1, pending).
+   - Citation after the answer, with no per-line Locate (19.7 calls per Ward document today). For a report
+     kind, rank sentences by embedding similarity to the answered value's declared description, then one forced
+     choice among the top three: on GVC the gold sentence is in the top three .896 of the time, against .717
+     for Locate's ranking (b1's M1, `cite-probe/`, 7b78f12ab). For an act kind, embeddings fail (Ward 22 of 32
+     against Locate's 24; uv 11 of 30 against 23), so after the act is answered, one forced choice over the
+     document's numbered sentences. That second step is proposed, not yet measured.
    - GVC's reports stay at line level.
 
    Read by error class and cost, beside the line-level run. Not a single bar.
