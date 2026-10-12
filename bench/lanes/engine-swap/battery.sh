@@ -155,7 +155,8 @@ EOF
       # takes none", so the default is what an operator gets. embed_inputs is
       # "server" because "client" takes the embed family from the model id,
       # and mesh-llm names a GGUF by digest: the daemon refuses that config
-      # at boot. The embedding cells then show whether mesh-llm prepares.
+      # at boot. Every slot names the one served model; no embed case is
+      # replayed against this node.
       python3 - "$out/config.before.toml" "$cfg" "$out/mesh-ids.env" <<'EOF'
 import re, sys
 src, dst, ids = sys.argv[1:]
@@ -164,11 +165,11 @@ text = open(src).read()
 engine = f'''[engine]
 kind = "remote"
 endpoint = "http://127.0.0.1:9337/v1"
-model_id = "{id['slow']}"
+model_id = "{id['fast']}"
 fast_model_id = "{id['fast']}"
-embed_model_id = "{id['embed']}"
+embed_model_id = "{id['fast']}"
 embed_inputs = "server"
-context_size = 65536
+context_size = 16384
 '''
 new, n = re.subn(r'(?ms)^\[engine\]\n.*?(?=^\[|\Z)', engine + "\n", text)
 assert n == 1, "exactly one [engine] table"
@@ -190,31 +191,24 @@ mesh_down() {
 }
 
 # Private (no --publish), loopback-bound, no iroh relays. A raw GGUF is served
-# as local-gguf/sha256-<file digest>, so the ids are computed, not guessed.
+# as local-gguf/sha256-<file digest>, so the id is computed, not guessed.
+# Lean by design: the fast model alone, one lane, ctx 16384 (the longest
+# fast-model case is 13,809 prompt tokens). The full three-model node at ctx
+# 65536 and 4 lanes held ~100G (battery-20261011-185216). Replay only the
+# fast-model cases against it (--only); the slow, embed, probe and rerank
+# cases have nothing to answer them here.
 mesh_up() {
-  slow=$(readlink -f "$models/Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf")
   fast=$(readlink -f "$models/Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf")
-  emb=$(readlink -f "$embed")
-  {
-    echo "slow=local-gguf/sha256-$(sha256sum "$slow" | cut -d' ' -f1)"
-    echo "fast=local-gguf/sha256-$(sha256sum "$fast" | cut -d' ' -f1)"
-    echo "embed=local-gguf/sha256-$(sha256sum "$emb" | cut -d' ' -f1)"
-  } > "$out/mesh-ids.env"
-  say "mesh-llm: $meshllm, ids in $out/mesh-ids.env"
+  echo "fast=local-gguf/sha256-$(sha256sum "$fast" | cut -d' ' -f1)" > "$out/mesh-ids.env"
+  say "mesh-llm: $meshllm, fast model only, ids in $out/mesh-ids.env"
   tb sh -c "MESH_LLM_CONFIG='$meshdir/config.toml' MESH_LLM_DATA_DIR='$meshdir/data' '$meshllm' serve \
-    --llama-flavor vulkan --gguf '$slow' --gguf '$fast' --gguf '$emb' --port 9337 --console 3131 \
-    --disable-iroh-relays --bind-ip 127.0.0.1 --ctx-size 65536 > '$out/mesh.log' 2>&1 & echo \$! > '$out/mesh.pid'"
-  # The two chat models gate the run; whether the embedder is served is
-  # recorded, and its cells say so.
-  for k in slow fast; do
-    want=$(sed -n "s/^$k=//p" "$out/mesh-ids.env")
-    i=0; until curl -sf localhost:9337/v1/models | grep -q "$want"; do
-      i=$((i + 1)); [ $i -lt 600 ] || die "mesh-llm did not list $k ($want), see $out/mesh.log"; sleep 1
-    done
+    --llama-flavor vulkan --gguf '$fast' --port 9337 --console 3131 --parallel 1 \
+    --disable-iroh-relays --bind-ip 127.0.0.1 --ctx-size 16384 > '$out/mesh.log' 2>&1 & echo \$! > '$out/mesh.pid'"
+  want=$(sed -n "s/^fast=//p" "$out/mesh-ids.env")
+  i=0; until curl -sf localhost:9337/v1/models | grep -q "$want"; do
+    i=$((i + 1)); [ $i -lt 600 ] || die "mesh-llm did not list the fast model ($want), see $out/mesh.log"; sleep 1
   done
-  want=$(sed -n "s/^embed=//p" "$out/mesh-ids.env")
-  if curl -sf localhost:9337/v1/models | grep -q "$want"; then say "mesh-llm up on :9337, embedder listed"
-  else say "mesh-llm up on :9337, embedder NOT listed"; fi
+  say "mesh-llm up on :9337, $(ps -o rss= -p "$(pgrep -f 'mesh-llm serve' | head -1)" | awk '{printf "%.1fG", $1/1048576}') resident"
 }
 
 # ── the llama-server router, for remote targets ────────────────────────────
