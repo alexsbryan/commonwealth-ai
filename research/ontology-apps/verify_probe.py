@@ -72,7 +72,11 @@ def ask_one(field, passage, wording, root=OUT):
 
 
 def passage_of(pair, lines):
+    """The cited lines. A pair whose lines the leg's scorer could not map ('?') is judged only when its document is
+    one line (cited by code, so that line is the citation); otherwise None, could-not-judge."""
     raw = lines.get(pair["document"], [])
+    if not isinstance(pair["first_line"], int):
+        return raw[0] if len(raw) == 1 else None
     return "\n".join(raw[n - 1] for n in range(pair["first_line"], pair["last_line"] + 1) if 0 < n <= len(raw))
 
 
@@ -81,8 +85,9 @@ def cmd_ask(legs):
         pairs, lines, field = leg_parts(leg)
         n = 0
         for p in pairs:
-            for w in WORDINGS:
-                ask_one(field, passage_of(p, lines), w)
+            text = passage_of(p, lines)
+            for w in WORDINGS if text else ():
+                ask_one(field, text, w)
                 n += 1
         print(f"{leg}: {len(pairs)} pairs, {n} questions", flush=True)
 
@@ -92,7 +97,7 @@ def cmd_gate():
     for leg in LEGS:
         if (RUN / leg / "act-pairs.jsonl").exists():
             pairs, lines, field = leg_parts(leg)
-            items += [(field, passage_of(p, lines)) for p in pairs]
+            items += [(field, t) for p in pairs if (t := passage_of(p, lines))]
     sample = random.Random(L.SEED).sample(items, min(20, len(items)))
     same = sum(ask_one(f, t, "V1")[0] == ask_one(f, t, "V1", root=OUT / "regate")[0] for f, t in sample)
     res = {"re_asked": len(sample), "same": same, "passed": same >= 19}
@@ -112,6 +117,9 @@ def cmd_score():
         spread = collections.defaultdict(collections.Counter)
         for p in pairs:
             text = passage_of(p, lines)
+            if not text:
+                a["could_not_judge"] += 1
+                continue
             got = {w: ask_one(field, text, w)[0] for w in WORDINGS}
             kept = {w: got[w] == p["value"] for w in WORDINGS}
             both = all(kept.values())
@@ -123,7 +131,7 @@ def cmd_score():
             spread[cls][got["V1"]] += 1
             rows.append({"leg": leg, "document": p["document"], "value": p["value"], "gold": p.get("gold"),
                          "right": p["right"], "class": cls, "reread": got, "kept_both": both, "passage": text[:300]})
-        res = {}
+        res = {"could_not_judge": a["could_not_judge"]}
         for cls in ("true", "false", "false_no_particular"):
             n = a[cls]
             if not n:
