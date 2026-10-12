@@ -578,7 +578,8 @@ def score():
         items, res = p["items"], {}
         # the gate: C re-asked against the logged distribution
         agree = dp = judged = 0
-        for x in items:
+        asked_c = [x for x in items if questions(system, p, "C", x)]  # arm D's extra lines are not C's
+        for x in asked_c:
             o = outcome(system, p, "C", x)
             if o is None:
                 continue
@@ -586,12 +587,12 @@ def score():
             logged_best = max(x["logged"], key=x["logged"].get)
             agree += max(o[3], key=o[3].get) == logged_best
             dp += abs(o[3].get(NONE, 0) - x["logged"].get(NONE, 0))
-        gate = {"judged": judged, "of": len(items), "argmax_agree": round(agree / judged, 3) if judged else None,
+        gate = {"judged": judged, "of": len(asked_c), "argmax_agree": round(agree / judged, 3) if judged else None,
                 "mean_abs_dp_none": round(dp / judged, 4) if judged else None}
-        gate["passed"] = bool(judged == len(items) and gate["argmax_agree"] >= 0.95 and gate["mean_abs_dp_none"] <= 0.05)
+        gate["passed"] = bool(judged == len(asked_c) and gate["argmax_agree"] >= 0.95 and gate["mean_abs_dp_none"] <= 0.05)
         for arm in ("C", "P", "V", "Y", "T"):
-            outs = [(x, outcome(system, p, arm, x)) for x in items]
-            if all(o is None for _, o in outs):
+            outs = [(x, outcome(system, p, arm, x)) for x in items if questions(system, p, arm, x)]
+            if not outs or all(o is None for _, o in outs):
                 continue
             if any(o is None for _, o in outs):
                 res[arm] = {"could_not_judge": f"{sum(o is None for _, o in outs)} items unanswered"}
