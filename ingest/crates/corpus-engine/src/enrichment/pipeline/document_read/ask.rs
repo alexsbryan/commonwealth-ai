@@ -21,6 +21,21 @@ use crate::enrichment::atlas::resolve_records::{
 use crate::enrichment::ontology::OntologyTypeDecl;
 use crate::InferenceFn;
 
+/// A statement question's opening: the declared facts, then the document.
+pub(super) fn opening(facts: &str, view: &str) -> String {
+    format!("{facts}{view}\n\n")
+}
+
+/// A statement as its questions name it: its lines and its words.
+pub(super) fn statement_words(words: &str, (a, b): (usize, usize)) -> String {
+    let at = if a == b {
+        format!("line {a}")
+    } else {
+        format!("lines {a}-{b}")
+    };
+    format!("Statement, {at}, its words in [[ ]]: \"[[{words}]]\"")
+}
+
 /// One statement being asked: where it is in the folded body, the raw lines
 /// that are its evidence, and what its document offers a reference.
 pub(super) struct Ask<'q> {
@@ -30,6 +45,10 @@ pub(super) struct Ask<'q> {
     pub(super) document: &'q str,
     pub(super) statement: &'q str,
     pub(super) body: &'q str,
+    /// The whole document, its lines numbered as Locate and Mention show it.
+    pub(super) view: &'q str,
+    /// The first and last of those lines the statement is.
+    pub(super) lines: (usize, usize),
     pub(super) at: Range<usize>,
     pub(super) evidence: &'q str,
     /// Per referenced type, the candidates its document offers (`pick.rs`).
@@ -37,6 +56,18 @@ pub(super) struct Ask<'q> {
 }
 
 impl Ask<'_> {
+    /// What every question about this statement opens with: the document's
+    /// declared facts, then the whole document. A field is read with all of
+    /// it, never a window around the statement.
+    pub(super) fn prefix(&self) -> String {
+        opening(self.facts, self.view)
+    }
+
+    /// The statement, by its lines in the document above, its words in [[ ]].
+    pub(super) fn in_words(&self) -> String {
+        statement_words(&self.body[self.at.clone()], self.lines)
+    }
+
     /// The readings `field` gives: one, or a picked subject's identity fields.
     pub(super) async fn field(
         &self,
@@ -88,11 +119,10 @@ impl Ask<'_> {
                 &owner.description,
                 attr,
                 &labels,
-                self.body,
-                self.at.clone(),
+                &self.in_words(),
                 CHOOSE_PHASE,
             ),
-            self.facts,
+            &self.prefix(),
         );
         *calls += 1;
         match decision_call(self.infer, &prompt, &labels, self.document, self.statement).await {

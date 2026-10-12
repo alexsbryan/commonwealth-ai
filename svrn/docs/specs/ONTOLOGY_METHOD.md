@@ -128,7 +128,9 @@ values and descriptions, the words a line states it in; the system prompt mentio
 shows some), **Mention** each entity type a read
 reference field targets and no exhaustive source covers (a table source is exhaustive; a metadata source names
 only who took part, so it is not), one choice per asked line then pointed at, a proposal and never a record
-(`mention.rs`), then per statement **Choose** each closed-valued
+(`mention.rs`), then per statement, each question opening with the declared facts and the whole document
+numbered as Locate shows it, the statement named by its lines (never a window around it; `ask.rs` `opening`,
+`statement_words`), **Choose** each closed-valued
 field (the subject's identity fields included) as a distribution over its declared values and "not stated",
 **Pick** each reference field from candidates code proposes (the records the referenced type's metadata source
 reads from this document's fields, plus this document's mentions that name no listed record, less any record in

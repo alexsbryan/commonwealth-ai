@@ -24,7 +24,7 @@ use super::ask::Ask;
 use super::passes::{argmax, render};
 use super::DocumentReadField;
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
-use crate::enrichment::atlas::resolve_records::{decision_call, marked_context, LABELS, NONE};
+use crate::enrichment::atlas::resolve_records::{decision_call, LABELS, NONE};
 use crate::enrichment::ontology::{metadata_date, AttrDecl, AttrFamily, OntologyTypeDecl};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
@@ -233,15 +233,16 @@ pub(super) async fn point(
         }
     };
     let head = format!(
-        "Type: {}\nAttribute: {}, {}\n\nStatement, its words in [[ ]]: \"…{}…\"",
+        "Type: {}\nAttribute: {}, {}\n\n{}",
         described(&owner.name, &owner.description),
         described(&attr.name, &attr.description),
         family_words(&attr.family),
-        marked_context(ask.body, ask.at.start, ask.at.end)
+        ask.in_words()
     );
+    let prefix = ask.prefix();
     let pointing = Pointing {
         infer: ask.infer,
-        facts: ask.facts,
+        facts: &prefix,
         head,
         what: format!("the statement's {}", attr.name),
         phase: POINT_PHASE,
@@ -284,8 +285,14 @@ pub(super) async fn point(
 /// The Point question on a fixed sample, for the read contract's fingerprint.
 pub(super) fn contract_sample() -> Value {
     let start = question(
-        "",
-        "Type: type\nAttribute: attribute, words of the statement",
+        &super::ask::opening(
+            "",
+            &super::passes::numbered("words", &super::passes::lines("words")),
+        ),
+        &format!(
+            "Type: type\nAttribute: attribute, words of the statement\n\n{}",
+            super::ask::statement_words("words", (1, 1))
+        ),
         POINT_PHASE,
         "The words, each under a letter:\nA word\n0 none of these words\n",
         "At which word does the statement's attribute start?",

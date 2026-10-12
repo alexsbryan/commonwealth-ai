@@ -121,6 +121,8 @@ async fn a_pick_is_a_candidates_value_cited_where_it_is_named() {
         document: "d1",
         statement: "l1-1",
         body: "We ordered from Quay Market.",
+        view: "",
+        lines: (1, 1),
         at: 0..28,
         evidence: "We ordered from Quay Market.",
         candidates: &offered,
@@ -182,6 +184,8 @@ async fn a_reference_with_no_candidate_is_not_asked() {
         document: "d1",
         statement: "l1-1",
         body: "x",
+        view: "",
+        lines: (1, 1),
         at: 0..1,
         evidence: "x",
         candidates: &none,
@@ -193,4 +197,65 @@ async fn a_reference_with_no_candidate_is_not_asked() {
         "{read:?}"
     );
     assert!(calls == 0 && seen.lock().unwrap().is_empty());
+}
+
+/// Whole text: a Pick question shows the statement in its whole document,
+/// numbered as Locate shows it, so a party the message names far from the
+/// statement is in front of the reader; the window it replaced held only the
+/// statement's neighbourhood.
+#[tokio::test]
+async fn a_pick_question_shows_the_whole_document() {
+    let p = declared();
+    let note = p.type_decl("note").unwrap();
+    let far = "Our client here is Quay Market, for the shop front.";
+    let filler: Vec<String> = (0..12)
+        .map(|i| format!("Line {i} of the thread says nothing about anyone in particular."))
+        .collect();
+    let body = format!(
+        "{far}\n{}\nPlease send them the revised terms.",
+        filler.join("\n")
+    );
+    let lines = super::super::passes::lines(&body);
+    let view = super::super::passes::numbered(&body, &lines);
+    let last = lines.last().unwrap();
+    let offered: BTreeMap<String, Candidates> = [(
+        "firm".to_string(),
+        candidates(
+            &document(),
+            &p,
+            p.type_decl("firm").unwrap(),
+            &[mention(1, "Quay Market")],
+        ),
+    )]
+    .into();
+    let (infer, seen) = scripted(vec![dist(&["A", "B", NONE], "B")]);
+    let ask = Ask {
+        infer: &infer,
+        facts: "",
+        document: "d1",
+        statement: "l14-14",
+        body: &body,
+        view: &view,
+        lines: (last.n, last.n),
+        at: last.start..last.end,
+        evidence: "Please send them the revised terms.",
+        candidates: &offered,
+    };
+    let mut calls = 0;
+    pick(&ask, note, &note.attributes[0], "firm", &mut calls).await;
+    let asked = &seen.lock().unwrap()[0].user;
+    assert!(asked.contains(&format!("1 {far}")), "{asked}");
+    assert!(
+        asked.contains(&format!(
+            "Statement, line {}, its words in [[ ]]: \"[[Please send them the revised terms.]]\"",
+            last.n
+        )),
+        "{asked}"
+    );
+    let window =
+        crate::enrichment::atlas::resolve_records::marked_context(&body, last.start, last.end);
+    assert!(
+        !window.contains("Quay Market"),
+        "the old window already held it: {window}"
+    );
 }

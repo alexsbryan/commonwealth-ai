@@ -135,6 +135,8 @@ fn ask<'a>(
         document: "d",
         statement: "l1-1",
         body: "Our price is 2,400 dollars.",
+        view: "",
+        lines: (1, 1),
         at: 0..27,
         evidence: "Our price is 2,400 dollars.",
         candidates,
@@ -174,7 +176,7 @@ async fn a_pointed_quantity_is_its_number_cited_by_its_words_and_unmeasured() {
     );
     assert!(seen.lock().unwrap()[0]
         .user
-        .starts_with("Type: offer\nAttribute: price, a number, in USD\n\nStatement, its words in [[ ]]: \"…[[Our price is 2,400 dollars.]]…\""));
+        .contains("Type: offer\nAttribute: price, a number, in USD\n\nStatement, line 1, its words in [[ ]]: \"[[Our price is 2,400 dollars.]]\""));
     // Pointed at words with no number: refused for this field alone.
     let (infer, _) = scripted(vec![
         dist(&["A", "B", "C", "D", "E", NONE], "A"),

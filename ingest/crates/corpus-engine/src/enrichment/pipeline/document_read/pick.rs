@@ -30,7 +30,7 @@ use super::DocumentReadField;
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolution_derived::conditions_hold;
 use crate::enrichment::atlas::resolution_sources::{field_records, FieldRecord};
-use crate::enrichment::atlas::resolve_records::{decision_call, marked_context, LABELS, NONE};
+use crate::enrichment::atlas::resolve_records::{decision_call, LABELS, NONE};
 use crate::enrichment::atlas::SourceDocument;
 use crate::enrichment::ontology::derived::SUBJECT;
 use crate::enrichment::ontology::{
@@ -192,11 +192,11 @@ pub(super) fn candidates(
 /// The Pick question: the field, the statement marked in its passage, and
 /// the candidates.
 fn pick_question(
-    facts: &str,
+    prefix: &str,
     owner: &OntologyTypeDecl,
     attr: &AttrDecl,
     of: &str,
-    passage: &str,
+    statement: &str,
     shown: &[Candidate],
     labels: &[&str],
 ) -> ChatPrompt {
@@ -208,7 +208,7 @@ fn pick_question(
         }
     };
     let mut u = format!(
-        "{facts}Type: {}\nAttribute: {}, one {of}\n\nStatement, its words in [[ ]]: \"…{passage}…\"\n\n\
+        "{prefix}Type: {}\nAttribute: {}, one {of}\n\n{statement}\n\n\
          Which {of} does the statement's {} refer to?\n",
         described(&owner.name, &owner.description),
         described(&attr.name, &attr.description),
@@ -320,13 +320,12 @@ async fn chosen<'c>(
         .copied()
         .chain([NONE])
         .collect();
-    let passage = marked_context(ask.body, ask.at.start, ask.at.end);
     let prompt = pick_question(
-        ask.facts,
+        &ask.prefix(),
         owner,
         attr,
         of,
-        &passage,
+        &ask.in_words(),
         &offered.shown,
         &labels,
     );
@@ -386,11 +385,14 @@ pub(super) fn contract_sample() -> Value {
         },
     ];
     let q = pick_question(
-        "",
+        &super::ask::opening(
+            "",
+            &super::passes::numbered("words", &super::passes::lines("words")),
+        ),
         &probe,
         &attr,
         "other",
-        "[[words]]",
+        &super::ask::statement_words("words", (1, 1)),
         &shown,
         &["A", "B", NONE],
     );

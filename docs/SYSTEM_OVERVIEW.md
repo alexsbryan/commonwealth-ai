@@ -644,7 +644,9 @@ question the pipeline asks about a type is a method on the resolved
   numbered line which declared claim kind it states, and Mention which entity
   type a read reference targets it names, pointing at the words (`mention.rs`;
   no type a table source holds). Per statement each field is asked by its
-  declared family (`ask.rs`): Choose a closed value with RESOLVE's READ question,
+  declared family (`ask.rs`), every such question showing the whole document,
+  numbered as Locate shows it, with the statement named by its lines (never a
+  window around it): Choose a closed value with RESOLVE's READ question,
   Point at an open one's start and end words and read the value by the family
   (`point.rs`), Pick a reference among the records the target's metadata source
   reads from this document plus its mentions, less declared exclusion sets

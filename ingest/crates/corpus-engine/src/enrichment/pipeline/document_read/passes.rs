@@ -536,6 +536,7 @@ async fn read_document(
             .or_insert_with(|| pick::candidates(document, policies, t, &[]));
     }
     let folded = Folded::of(&raw);
+    let view = numbered(&raw, &lines);
     let mut claims = Vec::with_capacity(found.len());
     for (kind, span) in &found {
         let kind = &plan.kinds[*kind];
@@ -551,6 +552,8 @@ async fn read_document(
             document: &id,
             statement: &local_ref,
             body: &folded.text,
+            view: &view,
+            lines: (first.n, last.n),
             at,
             evidence: &evidence,
             candidates: &candidates,
@@ -688,7 +691,17 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         description: String::new(),
         values: vec!["value".into()],
     };
-    let choose = choice_question("type", "", &probe, &["A", NONE], body, 0..10, CHOOSE_PHASE);
+    let choose = prefill::carrying(
+        choice_question(
+            "type",
+            "",
+            &probe,
+            &["A", NONE],
+            &super::ask::statement_words(&body[0..10], (1, 1)),
+            CHOOSE_PHASE,
+        ),
+        &super::ask::opening(prefill::FACTS_HEADER, &numbered(body, &lines)),
+    );
     json!({
         "reader": "passes",
         "max_statement_lines": MAX_STATEMENT_LINES,
