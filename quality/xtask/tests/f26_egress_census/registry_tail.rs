@@ -187,6 +187,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // setup_planner: range-resumed model downloads (InboundOnly), moved from
     // sovereign-inference at es-m3-move-agnostic.
     ("serve/crates/sovereign-compute/src/setup_planner.rs", Class::InboundOnly, 1),
+    // llama_router/live: the daemon's own llama-server router on
+    // 127.0.0.1:<port> — warm, follow, and es-r1's `/tokenize`.
+    ("serve/crates/sovereign-compute/src/llama_router/live.rs", Class::LocalDaemon, 3),
 
     // ---- serve, dialed by the svrn daemon (pb-svrn-dials-serve) ----
     // serve_client: the engine-state, served-self, forwarded-GET and reload
