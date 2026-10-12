@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! **The template for swapping in your own inference engine.**
 //!
-//! Run it: `cargo run -p sovereign-inference --example custom_engine`
+//! Run it: `cargo run -p sovereign-compute --example custom_engine`
 //!
 //! This is the whole contract for an engine that is not llama.cpp, executed
 //! end to end against the real types — no mocks of the seam itself. It
@@ -39,6 +39,7 @@ use futures::Stream;
 // `sovereign_contracts::Error`). Aliased so std's two-generic `Result`
 // stays available for `EngineBuilder::build`, which reports a plain
 // operator-facing `String`.
+use sovereign_compute::engine_conformance::{check_serving, check_sync};
 use sovereign_contracts::error::Result as SovResult;
 use sovereign_contracts::setup_config::{EngineSection, SetupConfig};
 use sovereign_contracts::traits::InferenceProvider;
@@ -46,7 +47,6 @@ use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
     StreamFrame,
 };
-use sovereign_inference::engine_conformance::{check_serving, check_sync};
 use sovereign_inference::engine_factory::{
     available_engines, build_engine, register_engine, BuiltEngine, EngineBuilder,
 };
