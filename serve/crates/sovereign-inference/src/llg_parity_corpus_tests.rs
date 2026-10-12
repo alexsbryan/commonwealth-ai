@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sovereign_contracts::decode_allowlist::{llguidance_lark, AllowlistLanguage, EVIDENCE_ID, URL};
+use sovereign_contracts::structured_output::default_additional_properties_false;
 
 use crate::decode_allowlist_parity_tests::{generated, hand_picked, test_ids, test_urls};
 use crate::evidence_id_constraint::EvidenceIdAllowlistConstraint;
@@ -67,9 +68,13 @@ fn wire_lark(lark: &str) -> String {
 }
 
 /// A schema as llama-server built with llguidance compiles it off the chat
-/// path: no rewrite (LS common/json-schema-to-grammar.cpp:1234-1236).
+/// path: the schema the client sends, closed by the decider the engine uses
+/// too (oicp-client `write_structured_output`), with no rewrite of the
+/// server's own (LS common/json-schema-to-grammar.cpp:1234-1236).
 fn wire_schema(schema: &Value) -> String {
-    format!("%llguidance {{}}\nstart: %json {schema}")
+    let mut sent = schema.clone();
+    default_additional_properties_false(&mut sent);
+    format!("%llguidance {{}}\nstart: %json {sent}")
 }
 
 /// Inputs for one grammar: its hand-written cases, then random walks over

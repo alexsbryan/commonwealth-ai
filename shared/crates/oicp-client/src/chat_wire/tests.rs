@@ -521,3 +521,26 @@ fn a_positive_budget_reaches_llama_server_as_reasoning_budget_tokens() {
     let body = llguidance().build_request(&req).unwrap();
     assert!(body.get("reasoning_budget_tokens").is_none(), "{body}");
 }
+
+/// THE FAILING INPUT for decode.json-schema: the schema went to the host as
+/// written, and a host follows JSON Schema, so `{"topic": "x", "extra": 1}`
+/// passed where the engine, which closes declared objects, refused it. The
+/// client sends the schema the engine compiles; an object that declares
+/// nothing stays open on both (C7).
+#[test]
+fn a_schema_goes_out_closed_as_the_engine_compiles_it() {
+    let mut req = named_request();
+    req.structured_output = Some(schema());
+    let body = llguidance().build_request(&req).unwrap();
+    let sent = &body["response_format"]["json_schema"]["schema"];
+    assert_eq!(sent["additionalProperties"], json!(false), "{body}");
+    assert_eq!(sent["required"], json!(["q"]));
+
+    req.structured_output = Some(json!({"type": "object"}));
+    let body = llguidance().build_request(&req).unwrap();
+    assert_eq!(
+        body["response_format"]["json_schema"]["schema"],
+        json!({"type": "object"}),
+        "{body}"
+    );
+}

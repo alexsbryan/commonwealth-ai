@@ -188,6 +188,10 @@ pub mod setup_config;
 pub mod setup_config_iroh;
 pub mod skills;
 pub mod slot_policy;
+/// What a `structured_output` schema means before any engine compiles it:
+/// the closed-object default the embedded engine and the remote client both
+/// apply, so the two constrain the same language.
+pub mod structured_output;
 pub mod tokens;
 pub mod tool_bundle;
 pub mod tool_manifest;

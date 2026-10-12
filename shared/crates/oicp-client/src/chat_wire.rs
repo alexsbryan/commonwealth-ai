@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use sovereign_contracts::decode_allowlist;
 use sovereign_contracts::engine_config::GrammarSupport;
 use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::structured_output::default_additional_properties_false;
 use sovereign_contracts::types::{CompletionRequest, PromptShape};
 use std::sync::atomic::Ordering;
 
@@ -191,12 +192,20 @@ pub(crate) fn write_constraints(
 /// own `title` (JSON Schema's annotation for exactly that, which a grammar
 /// ignores) folded to the alphabet OpenAI accepts for a schema or function
 /// name. Untitled, it is `structured`.
+///
+/// The schema goes out with the closed-object default the embedded engine
+/// compiles it with (`structured_output::default_additional_properties_false`):
+/// a host follows JSON Schema, where an undeclared property is allowed
+/// (`decode.json-schema`).
 pub(crate) fn write_structured_output(
     body: &mut Value,
     schema: &Value,
     mode: StructuredOutputMode,
 ) {
     let name = schema_function_name(schema);
+    let mut closed = schema.clone();
+    default_additional_properties_false(&mut closed);
+    let schema = &closed;
     match mode {
         StructuredOutputMode::JsonSchema => {
             body["response_format"] = json!({
