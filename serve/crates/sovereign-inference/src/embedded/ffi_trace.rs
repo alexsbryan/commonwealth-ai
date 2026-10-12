@@ -384,9 +384,12 @@ mod tests {
         ];
         let mut undeclared = Vec::new();
         let mut unknown_phase = Vec::new();
-        let lines = [("model_slot.rs", MODEL_SLOT_SRC), ("decide_wave.rs", DECIDE_WAVE_SRC)]
-            .into_iter()
-            .flat_map(|(file, src)| src.lines().enumerate().map(move |(n, l)| (file, n, l)));
+        let lines = [
+            ("model_slot.rs", MODEL_SLOT_SRC),
+            ("decide_wave.rs", DECIDE_WAVE_SRC),
+        ]
+        .into_iter()
+        .flat_map(|(file, src)| src.lines().enumerate().map(move |(n, l)| (file, n, l)));
         for (file, n, line) in lines {
             if !is_code_line(line) || !line.contains(".clear_kv_cache()") {
                 continue;

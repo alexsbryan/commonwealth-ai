@@ -491,9 +491,9 @@ pub fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
             age_secs: manifest_age_secs,
             from_cache: manifest_from_cache,
         } = manifest_view;
-        if let Some(feature) = forced_choice_feature.filter(|feature| {
-            !manifest.features.iter().any(|f| f.as_str() == *feature)
-        }) {
+        if let Some(feature) = forced_choice_feature
+            .filter(|feature| !manifest.features.iter().any(|f| f.as_str() == *feature))
+        {
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
                 peer = %peer.name,
@@ -1187,7 +1187,9 @@ mod tests {
             )
         };
         assert!(
-            !run(Some(oicp_types::features::X_FORCED_CHOICE)).ranked.is_empty(),
+            !run(Some(oicp_types::features::X_FORCED_CHOICE))
+                .ranked
+                .is_empty(),
             "the peer serves a single forced choice"
         );
         let wave = run(Some(oicp_types::features::X_FORCED_CHOICE_WAVE));

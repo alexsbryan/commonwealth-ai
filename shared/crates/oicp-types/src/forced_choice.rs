@@ -198,7 +198,10 @@ mod tests {
 
     #[test]
     fn a_wave_round_trips_and_is_not_a_single_forced_choice() {
-        let branches = vec![branch("Line 1?", &["A", "0"]), branch("Line 2?", &["A", "B", "0"])];
+        let branches = vec![
+            branch("Line 1?", &["A", "0"]),
+            branch("Line 2?", &["A", "B", "0"]),
+        ];
         let req = CompletionRequest {
             structured_output: Some(wave(&branches)),
             ..Default::default()
@@ -258,7 +261,10 @@ mod tests {
         d.insert("B".to_string(), 0.00009485963f32);
         let single = answer(&d);
         // Byte for byte the first answer converge-s3's Ward store recorded.
-        assert_eq!(single, "{\"0\":0.9984144,\"A\":0.0014906893,\"B\":0.00009485963}");
+        assert_eq!(
+            single,
+            "{\"0\":0.9984144,\"A\":0.0014906893,\"B\":0.00009485963}"
+        );
         let texts = wave_texts(&wave_answer(&[Ok(d.clone()), Ok(d)])).unwrap();
         assert_eq!(texts, vec![Ok(single.clone()), Ok(single)]);
     }
