@@ -7,7 +7,7 @@
 //! loading: some architectures (Gated DeltaNet / Mamba / RWKV) SIGSEGV inside
 //! ggml's recurrent `SET` op during CPU prefill, and a crash in C is
 //! unrecoverable in-process — so we must know the architecture and refuse the
-//! load pre-flight rather than discover it by crashing. See [`crate::cpu_compat`].
+//! load pre-flight rather than discover it by crashing. See `sovereign_inference::cpu_compat`.
 //!
 //! ## Format
 //!

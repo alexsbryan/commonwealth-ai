@@ -28,7 +28,7 @@
 //!
 //! ```no_run
 //! # use std::sync::Arc;
-//! # use sovereign_inference::engine_conformance::check_sync;
+//! # use sovereign_compute::engine_conformance::check_sync;
 //! # fn f(engine: Arc<dyn sovereign_contracts::traits::InferenceProvider>) {
 //! let violations = check_sync(engine.as_ref());
 //! assert!(violations.is_empty(), "{violations:#?}");
