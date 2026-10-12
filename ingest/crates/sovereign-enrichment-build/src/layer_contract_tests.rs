@@ -120,7 +120,8 @@ impl Fixture {
 /// Everything one run asked, and what it wrote.
 struct Run {
     prompts: Vec<ChatPrompt>,
-    /// atoms.json, edges.json, the RESOLVE decisions and the derived values.
+    /// atoms.json, edges.json, the reported failures, the RESOLVE decisions
+    /// and the derived values.
     files: BTreeMap<&'static str, String>,
 }
 
@@ -191,6 +192,22 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
                     }
                     "document_passes_choose" if choose == Choose::Spread => {
                         spread_pick(prompt, labels.len())
+                    }
+                    // About names a particular on a line the oracle would
+                    // locate (six words or more), the first such line shown,
+                    // and on none otherwise; every other About answer is the
+                    // first label.
+                    "document_passes_about"
+                        if prompt.user.contains("first named or described?") =>
+                    {
+                        prompt
+                            .user
+                            .lines()
+                            .filter_map(|l| {
+                                l.split_once(" line ").and_then(|(_, r)| r.split_once(": "))
+                            })
+                            .position(|(_, text)| text.split_whitespace().count() >= 6)
+                            .unwrap_or(labels.len() - 1)
                     }
                     _ => 0,
                 };
@@ -299,7 +316,13 @@ async fn run_choosing(fixture: &Fixture, asker: Asker, store: &Path, choose: Cho
     .await
     .unwrap();
     let mut files = BTreeMap::new();
-    for name in ["atoms.json", "edges.json", DECISIONS_FILE, DERIVED_FILE] {
+    for name in [
+        "atoms.json",
+        "edges.json",
+        "resolution_failures.json",
+        DECISIONS_FILE,
+        DERIVED_FILE,
+    ] {
         files.insert(
             name,
             std::fs::read_to_string(atlas.join(name)).unwrap_or_default(),

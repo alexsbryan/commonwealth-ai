@@ -421,3 +421,62 @@ async fn a_served_reference_is_a_record_of_its_type_and_a_mention_stays_unresolv
     assert!(served > 0, "no order holds its `client`");
     assert!(unresolved > 0, "the internal note's mention left no trace");
 }
+
+/// About on the default path (ONTOLOGY_METHOD §Reading): a document is a
+/// member of the particular it is about although no line of it states a claim
+/// kind. Tom's thanks quotes a line of his own offer; a quoted line is never
+/// located, so the reply states nothing, but About names the order on that
+/// line, and the order's record holds the reply, cited by the whole line, with
+/// no claim kind of its own and no handoff marker left on it.
+#[tokio::test]
+async fn a_document_no_line_of_which_states_a_claim_kind_is_a_member_of_what_it_is_about() {
+    let mut f = Fixture::load("mail");
+    let (content, _) = f.fields();
+    let quoted = "dollars, including finishing, and we can deliver them by the end of April.";
+    let thanks = f
+        .documents
+        .iter_mut()
+        .find(|d| d["id"] == "q5@alderpine.example")
+        .unwrap();
+    let body = format!("{}\n\n> {quoted}", thanks[&content].as_str().unwrap());
+    thanks.insert(content.clone(), Value::String(body));
+    let run = run(&f).await;
+    assert!(
+        !locates(&run)
+            .iter()
+            .any(|p| in_doc(p, "q5@alderpine.example") && asked_line(p).ends_with(quoted)),
+        "the quoted line is never located"
+    );
+    let atoms = run.atoms();
+    let orders: BTreeSet<&str> = atoms
+        .iter()
+        .filter(|a| a["atom_type"] == "Entity" && a["data"]["entity_type"] == "order")
+        .filter_map(|a| a["data"]["id"].as_str())
+        .collect();
+    let held: Vec<&Value> = atoms
+        .iter()
+        .filter(|a| {
+            a["atom_type"] == "Claim"
+                && a["data"]["evidence"][0]["source_doc_id"] == "q5@alderpine.example"
+        })
+        .collect();
+    assert_eq!(held.len(), 1, "one claim, the order it is about: {held:?}");
+    let claim = &held[0]["data"];
+    assert!(claim["claim_kind"].is_null(), "{claim}");
+    assert!(
+        claim["subject"]
+            .as_str()
+            .is_some_and(|s| orders.contains(s)),
+        "the thanks sits on an order record: {claim}"
+    );
+    assert_eq!(claim["anchor"], format!("> {quoted}"), "{claim}");
+    assert!(
+        claim["attributes"].get("__document_read_about").is_none(),
+        "the handoff marker is RESOLVE's alone: {claim}"
+    );
+    let failures = &run.files["resolution_failures.json"];
+    assert!(
+        !failures.contains("order l3:"),
+        "its subject is left to RESOLVE, never bound by name: {failures}"
+    );
+}

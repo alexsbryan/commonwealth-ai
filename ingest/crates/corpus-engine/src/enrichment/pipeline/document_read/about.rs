@@ -13,15 +13,19 @@
 //! a claim kind: an issue that opens its thread is about a case before any
 //! line says where the case stands (uv #1401, note 0f8f8c6c).
 
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use oicp_types::forced_choice;
 use serde_json::{json, Value};
 use tracing::debug;
 
-use super::ask::{opening, statement_words};
-use super::passes::{argmax, excerpt, numbered, render, Line};
+use super::ask::{opening, statement_words, Ask};
+use super::folded::Folded;
+use super::passes::{argmax, excerpt, numbered, render, Line, Plan};
+use super::pick::Candidates;
 use super::point::{point_span, Pointing};
+use super::{DocumentReadField, DocumentReadParticular};
 use crate::enrichment::atlas::resolve_records::{decision_call, decision_wave, LABELS, NONE};
 use crate::enrichment::ontology::OntologyTypeDecl;
 use crate::enrichment::pipeline::types::ChatPrompt;
@@ -391,8 +395,78 @@ pub(super) async fn particular_of(
     for (t, (of, about)) in types.iter().zip(abouts).enumerate() {
         for (p, named) in about.particulars.iter().enumerate() {
             if !out.contains(&Some((t, p))) {
-                debug!(document = d.document, of = %of.name, particular = %named.local_ref(), "document_read/about: a particular no located statement is about");
+                debug!(document = d.document, of = %of.name, particular = %named.local_ref(), "document_read/about: a particular no located statement is about; it reaches RESOLVE on its own");
             }
+        }
+    }
+    out
+}
+
+/// Each particular's identifying fields, read once at the words that first
+/// name it: the subject fields the first kind about its type declares, each
+/// asked as a statement's are, the particular's line and words in its place.
+pub(super) async fn identities(
+    d: &Doc<'_>,
+    plan: &Plan<'_>,
+    abouts: &[About],
+    folded: &Folded,
+    candidates: &BTreeMap<String, Candidates>,
+    calls: &mut u32,
+) -> BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>> {
+    let mut out = BTreeMap::new();
+    for (t, (of, about)) in plan.decided.iter().zip(abouts).enumerate() {
+        let Some(kind) = plan.kinds.iter().find(|k| k.subject.name == of.name) else {
+            continue;
+        };
+        for (p, named) in about.particulars.iter().enumerate() {
+            let local_ref = named.local_ref();
+            let ask = Ask {
+                infer: d.infer,
+                facts: d.facts,
+                document: d.document,
+                statement: &local_ref,
+                body: &folded.text,
+                view: d.view,
+                lines: (named.line, named.line),
+                at: folded.span(named.span.clone()),
+                evidence: &d.body[named.span.clone()],
+                candidates,
+            };
+            out.insert((t, p), ask.subject_fields(kind, calls).await);
+        }
+    }
+    out
+}
+
+/// The particulars no statement is about (`particular_of`), each with its
+/// identifying fields: what the document is about although no line of it
+/// states a claim kind of it. Each cites the whole line that first names it,
+/// as every reading cites whole lines; its words stay in its reference.
+pub(super) fn unstated(
+    d: &Doc<'_>,
+    types: &[&OntologyTypeDecl],
+    abouts: &[About],
+    particular_of: &[Option<(usize, usize)>],
+    mut identities: BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>>,
+) -> Vec<DocumentReadParticular> {
+    let mut out = Vec::new();
+    for (t, (of, about)) in types.iter().zip(abouts).enumerate() {
+        for (p, named) in about.particulars.iter().enumerate() {
+            if particular_of.contains(&Some((t, p))) {
+                continue;
+            }
+            let Some(subject_fields) = identities.remove(&(t, p)) else {
+                continue;
+            };
+            let local_ref = named.local_ref();
+            let line = &d.lines[named.line - 1];
+            out.push(DocumentReadParticular {
+                subject_type: of.name.clone(),
+                subject_name: format!("{} {local_ref}", of.name),
+                subject_local_ref: local_ref,
+                evidence: d.body[line.start..line.end].to_string(),
+                subject_fields,
+            });
         }
     }
     out

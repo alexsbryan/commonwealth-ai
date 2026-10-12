@@ -14,8 +14,9 @@ use crate::error::{Error, Result};
 use super::schema;
 use super::validation;
 use super::{
-    supported_values, DocumentRead, DocumentReadOutcome, CLAIM_FIELDS_ATTRIBUTE,
-    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, ABOUT_ATTRIBUTE,
+    CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    SUBJECT_FIELDS_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
@@ -155,9 +156,57 @@ pub(super) fn project_compatibility_sketches(
                 attributes,
             });
         }
+        for particular in &outcome.particulars {
+            sketches.push(particular_sketch(particular, &outcome.document_id)?);
+        }
     }
     extraction.claims.extend(sketches);
     Ok(())
+}
+
+/// A particular no claim is about, as the claim RESOLVE reads: the document
+/// asserts it is about the particular, at the words that first name it. It
+/// declares no claim kind; its type rides on [`ABOUT_ATTRIBUTE`], and its
+/// reference, document and identifying readings as a claim's do.
+fn particular_sketch(
+    particular: &DocumentReadParticular,
+    document_id: &str,
+) -> Result<ClaimSketch> {
+    let mut attributes = serde_json::Map::new();
+    attributes.insert(
+        ABOUT_ATTRIBUTE.into(),
+        Value::String(particular.subject_type.clone()),
+    );
+    attributes.insert(
+        LOCAL_REF_ATTRIBUTE.into(),
+        Value::String(particular.subject_local_ref.clone()),
+    );
+    attributes.insert(
+        SOURCE_DOCUMENT_ATTRIBUTE.into(),
+        Value::String(document_id.to_string()),
+    );
+    attributes.insert(
+        SUBJECT_FIELDS_ATTRIBUTE.into(),
+        serde_json::to_value(&particular.subject_fields).map_err(|error| {
+            Error::Serialization(format!(
+                "document-read particular field evidence cannot be serialized: {error}"
+            ))
+        })?,
+    );
+    Ok(ClaimSketch {
+        content: particular.evidence.trim().to_string(),
+        discourse_act: crate::enrichment::pipeline::pipelines::parse_policy::discourse_act_for(
+            crate::enrichment::ontology::Force::Assertive,
+        ),
+        epistemic_status: EpistemicStatus::Attributed,
+        attributed_to: None,
+        quotable_excerpt: Some(particular.evidence.clone()),
+        anchor: particular.evidence.clone(),
+        claim_kind: None,
+        subject: Some(particular.subject_name.clone()),
+        scope: Some(ClaimScope::Universal),
+        attributes,
+    })
 }
 
 #[cfg(test)]

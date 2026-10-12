@@ -27,7 +27,14 @@ pub fn bind_claim_subject<'a>(
     typed_pools: &mut TypedSubjectPools,
     failures: &mut Vec<PhaseFailure>,
 ) -> BoundClaimSubject<'a> {
-    let declared_subject = super::declared_subject_type(policy, sketch.claim_kind.as_deref());
+    // A particular no claim is about declares no claim kind; its type rides
+    // on the sketch (`document_read::about_type`).
+    let declared_subject = super::declared_subject_type(policy, sketch.claim_kind.as_deref())
+        .or_else(|| {
+            crate::enrichment::pipeline::document_read::about_type(&sketch.attributes)
+                .and_then(|of| policy.index().get(of))
+                .map(|decl| decl.name.as_str())
+        });
     let left = declared_subject
         .is_some_and(|ty| super::super::resolution_records::decides(policy.index(), ty));
     let document_read = sketch

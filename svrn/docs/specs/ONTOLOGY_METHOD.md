@@ -150,9 +150,10 @@ decides, whether the document is about none, one or more than one particular of 
 criterion shown), points at where each is first named or described (a line, then its words; at most five), and with
 more than one asks each statement of the type which it is about (`about.rs`); a statement's local reference names
 its particular, never its span, so the statements about one particular reach RESOLVE as one (`local_subjects.rs`)
-and its identifying fields are read once, at its words; a statement about none stays its own (built 2026-10-12,
-repair 2 of the outside review; whether a document is about a particular is asked apart from whether any line
-states a claim kind). Every document of a selected section is read, whatever its
+and its identifying fields are read once, at its words; a statement about none stays its own. Whether a document is
+about a particular is asked apart from whether any line states a claim kind: a particular no statement is about
+reaches RESOLVE as a statement of its own, a claim of no kind citing the line that first names it, so the document
+is a member of its record (built 2026-10-12, repair 2 of the outside review). Every document of a selected section is read, whatever its
 length: the body-word floor (`min_section_body_words`) guards the general extractor from heading-only book
 sections and never applies to documents. A choice decides
 by its argmax and carries its source and that source's precision (C3, `atlas/precision.rs`): `unmeasured`

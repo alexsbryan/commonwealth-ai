@@ -52,6 +52,15 @@ pub const SOURCE_DOCUMENT_ATTRIBUTE: &str = "__document_read_source_document";
 pub const SUBJECT_FIELDS_ATTRIBUTE: &str = "__document_read_subject_fields";
 /// Source-supported claim fields retained beside the flattened compatibility values.
 pub const CLAIM_FIELDS_ATTRIBUTE: &str = "__document_read_fields";
+/// The type of the particular a document is about, on the claim projected
+/// from a [`DocumentReadParticular`]: such a claim declares no claim kind, so
+/// this is where its subject's type is read ([`about_type`]).
+pub const ABOUT_ATTRIBUTE: &str = "__document_read_about";
+
+/// The type a claim projected from a [`DocumentReadParticular`] is about.
+pub fn about_type(attributes: &Map<String, Value>) -> Option<&str> {
+    attributes.get(ABOUT_ATTRIBUTE).and_then(Value::as_str)
+}
 
 /// The value of each supported reading among `fields`, by field.
 pub fn supported_values(fields: &BTreeMap<String, DocumentReadField>) -> Map<String, Value> {
@@ -96,6 +105,26 @@ pub struct DocumentReadOutcome {
     /// the read (never projected) so a refusal is inspectable, not silent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refused: Vec<DocumentReadRefusal>,
+    /// Particulars the document is about that no claim of it is about.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub particulars: Vec<DocumentReadParticular>,
+}
+
+/// A particular a document is about that no claim of the document is about
+/// (`document_read/about.rs`): an issue that opens its thread is about a case
+/// before any line says where the case stands. Its type is one RESOLVE
+/// decides; `evidence` is the line that first names it, its words are in its
+/// reference, and its identifying fields are read at them. It reaches RESOLVE as a statement of its own, so
+/// the document belongs to the particular's record whether or not a line
+/// states a claim kind.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentReadParticular {
+    pub subject_type: String,
+    pub subject_local_ref: String,
+    pub subject_name: String,
+    pub evidence: String,
+    pub subject_fields: BTreeMap<String, DocumentReadField>,
 }
 
 /// One claim refused by evidence verification, with the reason it failed.

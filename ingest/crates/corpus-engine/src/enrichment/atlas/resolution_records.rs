@@ -41,8 +41,8 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, supported_values, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
-    SUBJECT_FIELDS_ATTRIBUTE,
+    about_type, field_readings, supported_values, ABOUT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
+    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 
@@ -232,6 +232,7 @@ pub async fn resolve_declared_types(
     for claim in atoms.claims.iter_mut() {
         claim.attributes.remove(LOCAL_REF_ATTRIBUTE);
         claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE);
+        claim.attributes.remove(ABOUT_ATTRIBUTE);
     }
     (reports, failures)
 }
@@ -260,7 +261,12 @@ async fn resolve_type(
         .filter(|c| c.kind == TypeKind::Claim && c.subject.as_deref() == Some(t.name.as_str()))
         .map(|c| c.name.as_str())
         .collect();
-    let of_kinds = |c: &Claim| c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k));
+    // A claim of a kind about the type, or a particular of it no claim is
+    // about (`about_type`): each is a statement of the type.
+    let of_kinds = |c: &Claim| {
+        c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k))
+            || about_type(&c.attributes) == Some(t.name.as_str())
+    };
     // Reader-local references are transient handoff data. The subject's
     // readings stay on the claim: RESOLVE keys on their supported values.
     let mut read_local_ref_of = HashMap::<usize, String>::new();
@@ -348,9 +354,10 @@ async fn resolve_type(
     let mut spots: Vec<Spot> = Vec::new();
     let mut spot_claims: Vec<(usize, Option<String>)> = Vec::new();
     for (i, claim) in atoms.claims.iter().enumerate() {
-        let Some(kind) = claim.claim_kind.as_deref().filter(|k| kinds.contains(k)) else {
+        if !of_kinds(claim) {
             continue;
-        };
+        }
+        let kind = claim.claim_kind.as_deref().unwrap_or("(about)");
         report.claims += 1;
         // The claim's own document (its read's, stamped on the evidence),
         // or the one its anchor lands in (`locate`).

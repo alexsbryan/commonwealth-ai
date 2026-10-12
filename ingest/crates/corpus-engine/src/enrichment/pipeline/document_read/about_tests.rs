@@ -61,10 +61,11 @@ async fn statements_about_the_one_particular_a_document_is_about_share_its_refer
         pick(&["A", "B", "C", "D", "0"], "A"),
         pick(&["A", "B", "C", "D", "E", "0"], "A"),
         pick(&["A", "B", "C", "D", "E"], "B"),
-        // Line 2's status; the case's number pointed at among its words
-        // ("42"), its project chosen; line 4's status. Nothing else.
-        three("A"),
+        // The case's identity, once, at its words: its number pointed at
+        // ("42"), its project chosen. Then line 2's status and line 4's.
+        // Nothing else.
         pick(&["A", "B", "0"], "B"),
+        three("A"),
         three("A"),
         three("B"),
     ]);
@@ -112,9 +113,9 @@ async fn statements_about_the_one_particular_a_document_is_about_share_its_refer
         prompts[5].user
     );
     assert!(
-        prompts[9].user.contains("[[Issue 42]]"),
+        prompts[8].user.contains("[[Issue 42]]"),
         "the case's fields are asked at its words: {}",
-        prompts[9].user
+        prompts[8].user
     );
 }
 
@@ -146,14 +147,15 @@ async fn statements_of_a_document_about_several_go_to_the_particular_each_is_ask
         three("A"),
         three("B"),
         three("0"),
-        // Line 2: status; issue 7's number ("7") and project.
+        // Issue 7's identity at its words: number ("7"), project; then
+        // issue 9's: number ("9"), project.
+        pick(&["A", "B", "0"], "B"),
         three("A"),
         pick(&["A", "B", "0"], "B"),
         three("A"),
-        // Line 4: status; issue 9's number ("9") and project.
+        // Line 2's status, line 4's.
+        three("A"),
         three("B"),
-        pick(&["A", "B", "0"], "B"),
-        three("A"),
         // Line 6, about none: status, then its own number (not stated) and
         // project (none), as a statement of its own.
         three("B"),
@@ -240,4 +242,106 @@ fn the_about_questions_are_in_the_read_contract_and_generated_from_the_declarati
         q.user
     );
     assert_eq!(q.phase_id.as_deref(), Some(ABOUT_PHASE));
+}
+
+#[tokio::test]
+async fn a_particular_no_statement_is_about_is_carried_and_projected_with_its_type() {
+    let p = policies();
+    let chapter = input_chapter(&[row(1, "doc-1", "Issue 42 install times out\nThanks", "{}")]);
+    let (infer, seen) = scripted(vec![
+        // Locate: neither line states a claim kind.
+        three("0"),
+        three("0"),
+        // About: one case, on line 1, "Issue 42"; its number and project.
+        three("A"),
+        three("A"),
+        pick(&["A", "B", "C", "D", "E", "0"], "A"),
+        pick(&["A", "B", "C", "D", "E"], "B"),
+        pick(&["A", "B", "0"], "B"),
+        three("A"),
+    ]);
+    let classes = LineClasses::of(&chapter.source_documents, &p);
+    let envelope = passes::read(&chapter, &p, &classes, &infer).await.unwrap();
+    let mut extraction = super::super::parse_response(&envelope, &p)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    super::super::validate_and_stamp(&chapter, &p, &mut extraction).unwrap();
+    assert_eq!(seen.lock().unwrap().len(), 8);
+    let outcome = &extraction.document_read.as_ref().unwrap().documents[0];
+    assert_eq!(outcome.status, DocumentReadStatus::Read, "{outcome:?}");
+    assert!(
+        outcome.claims.is_empty() && outcome.refused.is_empty(),
+        "{outcome:?}"
+    );
+    let [particular] = &outcome.particulars[..] else {
+        panic!("one particular: {outcome:?}");
+    };
+    assert_eq!(
+        (
+            particular.subject_type.as_str(),
+            particular.subject_local_ref.as_str(),
+            particular.evidence.as_str()
+        ),
+        ("case", "l1:Issue 42", "Issue 42 install times out"),
+        "it cites the whole line that first names it"
+    );
+    assert!(
+        matches!(&particular.subject_fields["number"], DocumentReadField::Supported { value, .. } if value == "42")
+    );
+    let [sketch] = &extraction.claims[..] else {
+        panic!("one projected claim: {:?}", extraction.claims);
+    };
+    assert_eq!(sketch.claim_kind, None);
+    assert_eq!(
+        crate::enrichment::pipeline::document_read::about_type(&sketch.attributes),
+        Some("case")
+    );
+    assert_eq!(
+        sketch.attributes[crate::enrichment::pipeline::document_read::LOCAL_REF_ATTRIBUTE],
+        "l1:Issue 42"
+    );
+}
+
+#[test]
+fn validation_refuses_a_particular_of_a_type_resolve_does_not_decide_or_cited_off_its_document() {
+    let p = policies();
+    let chapter = input_chapter(&[row(1, "doc-1", "Issue 42 install times out\nThanks", "{}")]);
+    let particular = |of: &str, line: &str| {
+        json!({
+            "subject_type": of, "subject_local_ref": format!("l1:{line}"),
+            "subject_name": format!("{of} l1"), "evidence": line,
+            "subject_fields": {
+                "number": {"status": "unknown", "reason": "not stated"},
+                "project": {"status": "unknown", "reason": "not stated"}
+            }
+        })
+    };
+    let envelope = json!({"documents": [{
+        "document_id": "doc-1", "status": "read",
+        "particulars": [
+            particular("author", "Issue 42 install times out"),
+            particular("case", "Issue 43 install hangs"),
+            particular("case", "Issue 42 install times out"),
+        ]
+    }]})
+    .to_string();
+    let mut extraction = super::super::parse_response(&envelope, &p)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    super::super::validate_and_stamp(&chapter, &p, &mut extraction).unwrap();
+    let outcome = &extraction.document_read.as_ref().unwrap().documents[0];
+    assert_eq!(outcome.particulars.len(), 1, "{outcome:?}");
+    let reasons: Vec<&str> = outcome.refused.iter().map(|r| r.reason.as_str()).collect();
+    assert!(
+        reasons[0].contains("not a type RESOLVE decides")
+            && reasons[1].contains("not an exact passage"),
+        "{reasons:?}"
+    );
+    assert_eq!(
+        extraction.claims.len(),
+        1,
+        "only the kept particular is projected"
+    );
 }

@@ -10,7 +10,7 @@ use std::ops::Range;
 use serde_json::Value;
 use tracing::debug;
 
-use super::passes::{argmax, render, FieldPlan, CHOOSE_PHASE};
+use super::passes::{argmax, render, FieldPlan, KindPlan, CHOOSE_PHASE};
 use super::pick::Candidates;
 use super::prefill;
 use super::DocumentReadField;
@@ -66,6 +66,19 @@ impl Ask<'_> {
     /// The statement, by its lines in the document above, its words in [[ ]].
     pub(super) fn in_words(&self) -> String {
         statement_words(&self.body[self.at.clone()], self.lines)
+    }
+
+    /// The readings of every field `kind` declares of its subject.
+    pub(super) async fn subject_fields(
+        &self,
+        kind: &KindPlan<'_>,
+        calls: &mut u32,
+    ) -> BTreeMap<String, DocumentReadField> {
+        let mut read = BTreeMap::new();
+        for field in &kind.subject_fields {
+            read.extend(self.field(kind.subject, field, calls).await);
+        }
+        read
     }
 
     /// The readings `field` gives: one, or a picked subject's identity fields.

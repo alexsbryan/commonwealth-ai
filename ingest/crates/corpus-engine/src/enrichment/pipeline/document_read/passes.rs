@@ -35,7 +35,7 @@ use super::ask::Ask;
 use super::folded::Folded;
 use super::line_classes::{LineClass, LineClasses};
 use super::{about, mention, pick, point, prefill};
-use super::{DocumentReadClaim, DocumentReadField, DocumentReadOutcome, DocumentReadStatus};
+use super::{DocumentReadClaim, DocumentReadOutcome, DocumentReadStatus};
 use crate::enrichment::atlas::resolution_records::decides;
 use crate::enrichment::atlas::resolve_records::{
     choice_question, decision_call, decision_wave, ClosedAttr, LABELS, NONE,
@@ -446,6 +446,7 @@ async fn read_document(
         reason: Some(reason),
         claims: Vec::new(),
         refused: Vec::new(),
+        particulars: Vec::new(),
     };
     if lines.is_empty() {
         return (
@@ -546,7 +547,7 @@ async fn read_document(
         view: &view,
     };
     let abouts = about::about(&doc, &plan.decided, &mut calls).await;
-    if found.is_empty() {
+    if found.is_empty() && abouts.iter().all(|a| a.particulars.is_empty()) {
         return (
             outcome(
                 DocumentReadStatus::NothingApplicable,
@@ -560,7 +561,14 @@ async fn read_document(
             calls,
         );
     }
-    let kinds: Vec<usize> = found.iter().map(|(k, _)| *k).collect();
+    // The kinds located, and those about a type a particular was found of:
+    // its identifying fields are asked as theirs are, from the same candidates.
+    let mut kinds: Vec<usize> = found.iter().map(|(k, _)| *k).collect();
+    for (of, a) in plan.decided.iter().zip(&abouts) {
+        if !a.particulars.is_empty() {
+            kinds.extend((0..plan.kinds.len()).filter(|&k| plan.kinds[k].subject.name == of.name));
+        }
+    }
     let picked = plan.picked_for(&kinds);
     let targets: Vec<&OntologyTypeDecl> = picked.iter().copied().filter(|t| mentioned(t)).collect();
     let mentions = mention::mentions(
@@ -594,11 +602,9 @@ async fn read_document(
         })
         .collect();
     let particular_of = about::particular_of(&doc, &plan.decided, &abouts, &said, &mut calls).await;
-    // A particular's identifying fields are read once, at its words.
-    let mut read_once: BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>> =
-        BTreeMap::new();
+    let identities = about::identities(&doc, plan, &abouts, &folded, &candidates, &mut calls).await;
     let mut claims = Vec::with_capacity(found.len());
-    for ((kind, span), particular) in found.iter().zip(particular_of) {
+    for ((kind, span), &particular) in found.iter().zip(&particular_of) {
         let kind = &plan.kinds[*kind];
         let (first, last) = (&lines[span.start], &lines[span.end - 1]);
         let evidence = raw[first.start..last.end].to_string();
@@ -628,30 +634,8 @@ async fn read_document(
             fields.extend(ask.field(kind.decl, field, &mut calls).await);
         }
         let subject_fields = match particular {
-            Some(key) if read_once.contains_key(&key) => read_once[&key].clone(),
-            Some((t, p)) => {
-                let named = &abouts[t].particulars[p];
-                let words = &raw[named.span.clone()];
-                let at_words = Ask {
-                    lines: (named.line, named.line),
-                    at: folded.span(named.span.clone()),
-                    evidence: words,
-                    ..ask
-                };
-                let mut read = BTreeMap::new();
-                for field in &kind.subject_fields {
-                    read.extend(at_words.field(kind.subject, field, &mut calls).await);
-                }
-                read_once.insert((t, p), read.clone());
-                read
-            }
-            None => {
-                let mut read = BTreeMap::new();
-                for field in &kind.subject_fields {
-                    read.extend(ask.field(kind.subject, field, &mut calls).await);
-                }
-                read
-            }
+            Some(key) => identities[&key].clone(),
+            None => ask.subject_fields(kind, &mut calls).await,
         };
         claims.push(DocumentReadClaim {
             kind: kind.decl.name.clone(),
@@ -665,6 +649,7 @@ async fn read_document(
             subject_fields,
         });
     }
+    let particulars = about::unstated(&doc, &plan.decided, &abouts, &particular_of, identities);
     (
         DocumentReadOutcome {
             document_id: id,
@@ -672,6 +657,7 @@ async fn read_document(
             reason: None,
             claims,
             refused: Vec::new(),
+            particulars,
         },
         calls,
     )

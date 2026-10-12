@@ -653,7 +653,14 @@ question the pipeline asks about a type is a method on the resolved
   particular's (`l{line}:{words}`), so `local_subjects.rs` joins one
   particular's statements, and the particular's identifying fields are read
   once, at its words. A statement about none keeps its own lines as its
-  reference (`l{a}-{b}`). Per statement each field is asked by its
+  reference (`l{a}-{b}`). A particular no statement is about is carried on the
+  outcome (`DocumentReadParticular`, citing the whole line that first names it;
+  validation refuses one of a type RESOLVE does not decide or cited off its
+  document) and projected as a claim of no kind whose type rides on
+  `ABOUT_ATTRIBUTE` (`document_read::about_type`, read by 3b's subject binding,
+  which leaves it to RESOLVE, and by `resolve_type`, which makes it a statement
+  of the type), so a document is a member of what it is about whether or not a
+  line states a claim kind; the marker is removed after RESOLVE. Per statement each field is asked by its
   declared family (`ask.rs`), every such question showing the whole document,
   numbered as Locate shows it, with the statement named by its lines (never a
   window around it): Choose a closed value with RESOLVE's READ question,
