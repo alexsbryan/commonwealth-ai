@@ -107,8 +107,7 @@ pub async fn align(
         &installed,
     );
 
-    let (targets, mut corpora_unavailable) =
-        requested_corpora(&req.corpora, &readable, "align");
+    let (targets, mut corpora_unavailable) = requested_corpora(&req.corpora, &readable, "align");
 
     let mut corpora: Vec<CorpusTexts> = Vec::new();
     let mut candidates: Vec<(Sha256Hash, Candidate)> = Vec::new();
