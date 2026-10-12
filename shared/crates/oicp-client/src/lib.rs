@@ -1015,15 +1015,7 @@ impl InferenceProvider for RemoteApiProvider {
             }
         }
         let (response, mode) = self.send_chat(&admitted, &url, request).await?;
-
-        let status = response.status().as_u16();
-        let raw = response
-            .text()
-            .await
-            .map_err(|e| Error::Inference(format!("Failed to read API response: {e}")))?;
-        chat_wire::observe_wire_response(status, &raw);
-        let mut chat_response: ChatCompletionResponse = serde_json::from_str(&raw)
-            .map_err(|e| Error::Inference(format!("Failed to parse API response: {e}")))?;
+        let mut chat_response = response_wire::read_chat(response).await?;
         if let (Some(prefix), Some(choice)) = (
             chat_wire::prefix_as_message(request, self.grammar),
             chat_response.choices.first_mut(),
