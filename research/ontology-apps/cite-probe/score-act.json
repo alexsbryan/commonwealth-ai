@@ -114,11 +114,131 @@
     "lines_per_cited": 6.0
    }
   },
-  "U_agreement": {
+  "UW1N": {
+   "commitment": {
+    "hit": 5,
+    "n": 5,
+    "rate": 1.0,
+    "calls_per_item": 2.0,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 5,
+    "lines_per_cited": 1.4
+   },
+   "commitment:informative": {
+    "hit": 5,
+    "n": 5,
+    "rate": 1.0,
+    "calls_per_item": 2.0,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 5,
+    "lines_per_cited": 1.4
+   },
+   "stage_update": {
+    "hit": 17,
+    "n": 32,
+    "rate": 0.531,
+    "calls_per_item": 1.5,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 14,
+    "diag_letters_top3": 24,
+    "lines_per_cited": 1.84
+   },
+   "stage_update:informative": {
+    "hit": 16,
+    "n": 31,
+    "rate": 0.516,
+    "calls_per_item": 1.52,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 13,
+    "diag_letters_top3": 23,
+    "lines_per_cited": 1.71
+   },
+   "stage_update:small": {
+    "hit": 1,
+    "n": 1,
+    "rate": 1.0,
+    "calls_per_item": 1.0,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 1,
+    "diag_letters_top3": 1,
+    "lines_per_cited": 6.0
+   }
+  },
+  "UW2N": {
+   "commitment": {
+    "hit": 5,
+    "n": 5,
+    "rate": 1.0,
+    "calls_per_item": 2.0,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 5,
+    "lines_per_cited": 1.4
+   },
+   "commitment:informative": {
+    "hit": 5,
+    "n": 5,
+    "rate": 1.0,
+    "calls_per_item": 2.0,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 4,
+    "diag_letters_top3": 5,
+    "lines_per_cited": 1.4
+   },
+   "stage_update": {
+    "hit": 20,
+    "n": 32,
+    "rate": 0.625,
+    "calls_per_item": 1.5,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 16,
+    "diag_letters_top3": 24,
+    "lines_per_cited": 2.03
+   },
+   "stage_update:informative": {
+    "hit": 19,
+    "n": 31,
+    "rate": 0.613,
+    "calls_per_item": 1.52,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 15,
+    "diag_letters_top3": 23,
+    "lines_per_cited": 1.9
+   },
+   "stage_update:small": {
+    "hit": 1,
+    "n": 1,
+    "rate": 1.0,
+    "calls_per_item": 1.0,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 1,
+    "diag_letters_top3": 1,
+    "lines_per_cited": 6.0
+   }
+  },
+  "U_agreement_W1_W2": {
    "agree": 35,
    "of": 37,
    "W1_hit_where_agree": 7,
    "W1_hit_where_differ": 1
+  },
+  "U_agreement_W1N_W2N": {
+   "agree": 27,
+   "of": 37,
+   "W1N_hit_where_agree": 21,
+   "W1N_hit_where_differ": 1
   },
   "LW1": {
    "commitment": {
@@ -234,7 +354,7 @@
     "lines_per_cited": 0.0
    }
   },
-  "L_agreement": {
+  "L_agreement_W1_W2": {
    "agree": 35,
    "of": 37,
    "W1_hit_where_agree": 4,
@@ -312,11 +432,87 @@
     "lines_per_cited": 1.0
    }
   },
-  "U_agreement": {
+  "UW1N": {
+   "case_state": {
+    "hit": 99,
+    "n": 125,
+    "rate": 0.792,
+    "calls_per_item": 0.61,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 28,
+    "diag_letters_top3": 41,
+    "lines_per_cited": 1.06
+   },
+   "case_state:informative": {
+    "hit": 11,
+    "n": 33,
+    "rate": 0.333,
+    "calls_per_item": 1.64,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 10,
+    "diag_letters_top3": 19,
+    "lines_per_cited": 1.24
+   },
+   "case_state:small": {
+    "hit": 88,
+    "n": 92,
+    "rate": 0.957,
+    "calls_per_item": 0.24,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 18,
+    "diag_letters_top3": 22,
+    "lines_per_cited": 1.0
+   }
+  },
+  "UW2N": {
+   "case_state": {
+    "hit": 100,
+    "n": 125,
+    "rate": 0.8,
+    "calls_per_item": 0.61,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 29,
+    "diag_letters_top3": 42,
+    "lines_per_cited": 1.06
+   },
+   "case_state:informative": {
+    "hit": 11,
+    "n": 33,
+    "rate": 0.333,
+    "calls_per_item": 1.64,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 10,
+    "diag_letters_top3": 20,
+    "lines_per_cited": 1.24
+   },
+   "case_state:small": {
+    "hit": 89,
+    "n": 92,
+    "rate": 0.967,
+    "calls_per_item": 0.24,
+    "zero": 0,
+    "unanswered": 0,
+    "diag_letters_top1": 19,
+    "diag_letters_top3": 22,
+    "lines_per_cited": 1.0
+   }
+  },
+  "U_agreement_W1_W2": {
    "agree": 112,
    "of": 125,
    "W1_hit_where_agree": 30,
    "W1_hit_where_differ": 3
+  },
+  "U_agreement_W1N_W2N": {
+   "agree": 118,
+   "of": 125,
+   "W1N_hit_where_agree": 96,
+   "W1N_hit_where_differ": 3
   },
   "LW1": {
    "case_state": {
@@ -388,7 +584,7 @@
     "lines_per_cited": 1.0
    }
   },
-  "L_agreement": {
+  "L_agreement_W1_W2": {
    "agree": 115,
    "of": 125,
    "W1_hit_where_agree": 34,
