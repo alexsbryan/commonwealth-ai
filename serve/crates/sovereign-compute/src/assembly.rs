@@ -20,6 +20,9 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_inference::engine_factory;
 use sovereign_inference::served_kind;
 
+use crate::llama_router::live::LiveRouter;
+use crate::llama_router::provider::RouterProvider;
+use crate::llama_router::RouterPreset;
 use crate::manager::{ComputeChildManager, ComputeRoutedProvider, DynamicChildSlot};
 
 /// What a serving process installs, plus the concrete handles its host keeps.
@@ -79,6 +82,8 @@ pub struct ServingPlan {
     pub children: BTreeSet<(String, PathBuf)>,
     /// The embed slot's family.
     pub embed_family: ModelFamily,
+    /// `kind = "llama-server"`: the router's models, as the preset it runs.
+    pub router: Option<RouterPreset>,
 }
 
 /// A refused or failed build: the operator-facing reason, and the plan when
@@ -117,7 +122,9 @@ fn next_edit_fallback_enabled() -> bool {
     )
 }
 
-/// The slot set `config` asks for. Pure apart from its env reads (the fallback above, the served kind's path).
+/// The slot set `config` asks for. Pure apart from its env reads (the
+/// fallback above, the served kind's path) and, for a router, the GGUF
+/// headers its preset reads.
 pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     // Through the accessor, not the field: the refusal it returns names WHY
     // there are no slots (a terminal routes instead; an unconfigured node
@@ -153,6 +160,8 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             in_process.insert(PlannedSlot::Rerank);
         }
         engine_factory::embed_family_for(&models.embed)
+    } else if let (EngineKind::LlamaServer, Some(models)) = (&engine, models) {
+        engine_factory::embed_family_for(&models.embed)
     } else if let Some(path) = config.engine.own_embed_path() {
         in_process.insert(PlannedSlot::Embed);
         engine_factory::embed_family_for(path)
@@ -172,11 +181,20 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             children.insert((spec.name, spec.model));
         }
     }
+    let router = match (&engine, models) {
+        (EngineKind::LlamaServer, Some(models)) => Some(RouterPreset::from_models(
+            models,
+            served_kind::RERANK.model_path(Some(models)),
+            sovereign_inference::gguf_meta::read_mtp_draft_layers,
+        )?),
+        _ => None,
+    };
     Ok(ServingPlan {
         engine,
         in_process,
         children,
         embed_family,
+        router,
     })
 }
 
@@ -188,6 +206,8 @@ pub use sovereign_contracts::rerank_kind::serves_rerank;
 struct LiveCompute {
     children: BTreeSet<(String, PathBuf)>,
     manager: Option<Arc<ComputeChildManager>>,
+    /// The llama-server router the first build started, for a router engine.
+    router: Option<Arc<LiveRouter>>,
 }
 
 /// Builds a serving process's provider, at cold start and again on every
@@ -280,7 +300,54 @@ impl ReloadFactory {
             }
         }
 
-        let (inner, llama, embed_family) = build_in_process(config, models, &plan).map_err(fail)?;
+        // The router, like the children, belongs to the first build and is
+        // re-wrapped by every reload; a reload asking for another preset
+        // refuses by name.
+        let running_router = live.as_ref().and_then(|r| r.router.clone());
+        let asked = plan.router.as_ref().map(RouterPreset::digest);
+        if live.is_some() && running_router.as_ref().map(|r| r.digest().to_string()) != asked {
+            tracing::warn!(
+                target: "llama_router",
+                running = ?running_router.as_ref().map(|r| r.digest()),
+                ?asked,
+                "reload refused: the config asks for another llama-server preset"
+            );
+            return Err(fail(
+                "the running llama-server router serves another preset than this config asks \
+                 for. A reload never restarts the router — restart the daemon to apply a change \
+                 to [models] or [engine] kind."
+                    .to_string(),
+            ));
+        }
+        let started_router = match (&plan.router, &running_router) {
+            (Some(preset), None) => Some(LiveRouter::start(preset, config).map_err(fail)?),
+            _ => None,
+        };
+        let router = running_router.or_else(|| started_router.clone());
+        // The remote half is built from the live router's section; capture,
+        // a property of the node, carries over.
+        let engine_config = match (&router, &plan.router) {
+            (Some(live_router), Some(preset)) => {
+                let mut derived = config.clone();
+                let capture = derived.engine.capture.take();
+                derived.engine = preset.engine_section(&live_router.endpoint_v1());
+                derived.engine.capture = capture;
+                Some(derived)
+            }
+            _ => None,
+        };
+        let built = build_in_process(engine_config.as_ref().unwrap_or(config), models, &plan);
+        let (inner, llama, embed_family) = match built {
+            Ok(parts) => parts,
+            Err(reason) => {
+                // A router this build started must not outlive the build
+                // that failed; the next one would start another.
+                if let Some(r) = &started_router {
+                    r.terminate();
+                }
+                return Err(fail(reason));
+            }
+        };
 
         let mut distributed_primary: Option<Arc<DynamicChildSlot>> = None;
         let provider: Arc<dyn InferenceProvider> = match live.as_ref() {
@@ -309,9 +376,15 @@ impl ReloadFactory {
                 *live = Some(LiveCompute {
                     children: plan.children.clone(),
                     manager,
+                    router: router.clone(),
                 });
                 provider
             }
+        };
+
+        let provider: Arc<dyn InferenceProvider> = match &router {
+            Some(r) => Arc::new(RouterProvider::new(provider, Arc::clone(r))),
+            None => provider,
         };
 
         Ok(ServingParts {

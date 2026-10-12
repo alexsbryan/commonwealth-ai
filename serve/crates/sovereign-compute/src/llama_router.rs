@@ -18,6 +18,9 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
+
+pub mod live;
+pub mod provider;
 use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection, GrammarSupport};
 use sovereign_contracts::setup_config::ModelsSection;
 

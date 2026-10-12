@@ -229,6 +229,7 @@ pub const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      placement=info,\
      mesh.decision=info,\
      compute_child=info,\
+     llama_router=info,\
      sovereign_compute=info,\
      fim=info,\
      next_edit=info,\

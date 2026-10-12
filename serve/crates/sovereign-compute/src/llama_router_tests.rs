@@ -123,3 +123,30 @@ fn the_digest_names_the_rendered_preset() {
     let c = RouterPreset::from_models(&m, None, layers).unwrap();
     assert_ne!(a.digest(), c.digest());
 }
+
+#[test]
+fn the_router_models_listing_reads_status_value_and_a_failed_load() {
+    // The shape `get_router_models` writes (llama.cpp server-models.cpp).
+    let body = serde_json::json!({"data": [
+        {"id": "Qwen3.6-35B-A3B-MTP-UD-Q6_K", "status": {"value": "loaded"}},
+        {"id": "Qwen3-Embedding-0.6B-Q8_0", "status": {"value": "loading"}},
+        {"id": "Qwen3-Reranker-0.6B", "status": {"value": "unloaded", "failed": true, "exit_code": 1}},
+    ]});
+    assert_eq!(
+        live::parse_models(&body),
+        vec![
+            (
+                "Qwen3.6-35B-A3B-MTP-UD-Q6_K".to_string(),
+                "loaded".to_string()
+            ),
+            (
+                "Qwen3-Embedding-0.6B-Q8_0".to_string(),
+                "loading".to_string()
+            ),
+            (
+                "Qwen3-Reranker-0.6B".to_string(),
+                "failed (exit 1)".to_string()
+            ),
+        ]
+    );
+}

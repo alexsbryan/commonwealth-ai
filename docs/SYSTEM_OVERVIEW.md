@@ -1028,6 +1028,11 @@ refuses it by name, because its endpoint exists only once serving assembly has
 started the router. Its models come from `[models]` through
 `sovereign_compute::llama_router::RouterPreset`, whose `engine_section` is the
 remote half the factory then builds (svrn-docs ENGINE_SWAP_PLAN.md, step 1).
+Serving assembly starts the router on its first build (`llama_router::live`,
+a supervised child), warms every preset model until `GET /models` reports
+`loaded`, and re-wraps it on every reload, refusing one whose preset differs;
+`llama_router::provider::RouterProvider` reports it and each model under
+`compute_children` and the node's weights as `OwnWeights`.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.

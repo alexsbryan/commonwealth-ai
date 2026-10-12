@@ -307,7 +307,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
 /// serve's allowlisted targets, without `llama_cpp`, whose level
 /// [`tracing_filter`] decides; a host takes the whole filter from there.
 pub const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
-     sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,\
+     sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,llama_router=info,\
      engine_factory=info,serving_assembly=info,compute_child=info,rails_origins=info,transport=info";
 
 /// serve's log filter when `RUST_LOG` is unset, and the one a distribution
