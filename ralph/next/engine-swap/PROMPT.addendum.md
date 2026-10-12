@@ -24,7 +24,7 @@ depends on that habit, accept the server's behaviour and delete our side; do
 not port the habit. Equivalence with the embedded engine is a stronger
 question than the rows ask. Extend what exists (ARCH principle 11): the
 router, its preset, `RouterProvider`, the supervisor and the served-kind
-registry are the surfaces; a second implementation of any of them stops (§6).
+registry are the surfaces; a second implementation of any of them stops (§6, `ralph-result needs-human`).
 
 <!-- section: facts after=intro -->
 ## 0. Standing facts (do not re-derive)
@@ -67,12 +67,65 @@ registry are the surfaces; a second implementation of any of them stops (§6).
 - SYSTEM_OVERVIEW changes in the same commit as the subsystem it describes
   (ARCH 3).
 
+<!-- section: build -->
+## 3. Building a unit
+
+1. **Site census before any edit, once per row.** The row states facts: a
+   path, a symbol, a count, a site. Verify every one with `ls`, `git grep` or
+   `grep` first, and write the census into your first commit's body. If one is
+   false, stop: §6, with what you found.
+2. Deliver the OUTCOME, commit by commit. Each commit changes ONE dimension
+   (ARCH principle 2: a move, a rename, a behaviour change, never two), passes
+   LINT, and carries the BOUNDARY count when the row lists BOUNDARY. A
+   behaviour change is always its own commit. Nothing the row does not name.
+3. Run CLEAN once (§5); LINT is the unit's first build.
+4. When the outcome is built, run the row's checks once, at the end, in the
+   order written. On a failure: read the log, fix, re-run. Two honest attempts
+   at the same failure and still red: §6.
+5. Commit: `git add` the paths you changed, by name; never `git add -A`, never
+   `target/` or `ralph/log*`. Write the message to `{{log_dir}}/commit-msg.txt`
+   with the Write tool, then `git commit -F {{log_dir}}/commit-msg.txt`, not a
+   heredoc, not `git -c` (neither matches the allowlist). Every commit is
+   `<unit-id>: <one line>`; its body = the `exit=` lines it ran, and the LAST
+   commit's body carries every PLANT's red line and anything the row says to
+   paste.
+6. When the proof is green and every change is committed, end the session
+   with `ralph-result done`. The loop merges your branch and marks the row; you
+   never mark it, and you write no `.done` file. A dirty tree is refused at
+   the call, so you can still commit.
+
+Commit as soon as a coherent piece compiles. A killed session with commits
+resumes; one holding an hour of uncommitted work is lost. When your session
+budget runs low with the outcome unfinished, commit what compiles and end
+with `ralph-result continue <what remains>`: the note opens the next session.
+A run longer than about ten minutes (a full battery, a container build) is
+handed to the loop: `ralph-result await <budget> -- <command>`, and the next
+session is told its exit code and log.
+
+<!-- section: stopping -->
+## 6. Stopping
+
+End every session with exactly one `ralph-result` call:
+- `ralph-result done`: the unit is finished and committed (§3 step 6).
+- `ralph-result continue <note>`: progress committed, more remains.
+- `ralph-result await <budget> -- <cmd>`: a long run the loop holds for you.
+- `ralph-result needs-human [--operator] --package {{log_dir}}/package.md <why>`:
+  a decision the row and the plan do not make. The package is a decision, not a
+  question: (a) the unit id and its row; (b) the exact commands you ran and
+  their ACTUAL output, trimmed; (c) what must be decided, numbered, with
+  file:line. Leave the tree compiling and commit nothing broken. Without
+  `--operator` the charter's director decides it first; add `--operator` when
+  the charter's "Leave these for the operator" list covers it, and name that
+  clause in the package.
+
+Never create `{{control_dir}}/STOP`, `DONE` or `NEEDS_HUMAN.md`; the loop owns them.
+
 <!-- section: lanes after=build -->
 ## Pool lanes and decisions
 
 In a POOL LANE (the note that opens this prompt says so):
-- Edit `{{state}}` only to correct your own row's premises (§6). The pool
-  marks your row after it merges your branch.
+- Edit `{{state}}` only to correct your own row's premises (§6). The loop
+  marks your row after it merges your branch; never mark it yourself.
 - A decision is minted as campaign `engine-swap`:
   `scripts/ralph-decisions.py new engine-swap --subject <unit-id> --who worker`,
   and you write only the file it names. Never run `ralph-decisions.py --write`
@@ -93,7 +146,7 @@ Outside a lane (a REVIEW row in the main tree), mint the same way and run
 | `REVIEW-build-es-` | build the unit (§3); it needs judgment, which is why the stronger model runs it |
 | `REVIEW-audit-es-` | full gate and principles review (§4); the loop inserts one every 8 units |
 | `REVIEW-DEMO-es-` | run the row's command in the MAIN workdir; paste its output; anything but its expected verdict is §6 |
-| `HUMAN-es-` | never do it and never mark it: the seat runs it. If it is the next ready row in a serial loop, write `{{control_dir}}/NEEDS_HUMAN.md` (§6) from the row, then stop |
+| `HUMAN-es-` | never do it and never mark it: the loop holds these for the seat. If you are given one, end with `ralph-result needs-human --operator <the row>` |
 
 <!-- section: checks-queue-1 -->
 | ROUTER-E2E | `scripts/ralph-check.sh router-e2e` — **E2E** on the shipped binary, its own daemon and small models | exit=0, `test result: ok.` with `0 failed`; paste the `booted:` line |
